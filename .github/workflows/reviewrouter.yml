@@ -140,8 +140,9 @@ jobs:
 
       - name: Run ReviewRouter
         if: ${{ steps.pr.outputs.skip_reason != 'fork' }}
-        uses: 777genius/review-router@2e68346d453c0be211af09b1488db7de40aa92c8
+        uses: 777genius/review-router@v1.0.50
         env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
         with:
           GITHUB_TOKEN: ${{ github.token }}
