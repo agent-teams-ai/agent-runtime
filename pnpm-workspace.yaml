@@ -1,0 +1,5 @@
+packages:
+  - "experiments/*"
+allowBuilds:
+  msgpackr-extract: false
+  opencode-ai: true

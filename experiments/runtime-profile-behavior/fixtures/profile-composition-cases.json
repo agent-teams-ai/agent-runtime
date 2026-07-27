@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "description": "Ordered bindings are generic AR inputs. The illustrative source identities are opaque and do not add team semantics to AR.",
+  "input": {
+    "compositionVersion": 1,
+    "layers": [
+      {
+        "bindingId": "binding-01",
+        "sourceIdentity": "user-profile:default",
+        "revisionRef": "revision:user-v1",
+        "entries": [
+          {
+            "target": "setting",
+            "key": "model.preference",
+            "operation": "set",
+            "value": "global-model"
+          },
+          {
+            "target": "resource",
+            "kind": "mcp",
+            "id": "shared",
+            "operation": "upsert",
+            "definitionHash": "sha256:mcp-global",
+            "executable": true,
+            "requiredCapabilities": ["mcp.connect"]
+          },
+          {
+            "target": "resource",
+            "kind": "skill",
+            "id": "review",
+            "operation": "upsert",
+            "definitionHash": "sha256:skill-global",
+            "executable": false,
+            "requiredCapabilities": ["skill.read"]
+          },
+          {
+            "target": "resource",
+            "kind": "plugin",
+            "id": "ambient-plugin",
+            "operation": "upsert",
+            "definitionHash": "sha256:plugin-global",
+            "executable": true,
+            "requiredCapabilities": ["plugin.execute"]
+          }
+        ]
+      },
+      {
+        "bindingId": "binding-02",
+        "sourceIdentity": "workspace-profile:repo-123",
+        "revisionRef": "revision:workspace-v4",
+        "entries": [
+          {
+            "target": "setting",
+            "key": "model.preference",
+            "operation": "set",
+            "value": "workspace-model"
+          },
+          {
+            "target": "resource",
+            "kind": "mcp",
+            "id": "shared",
+            "operation": "upsert",
+            "definitionHash": "sha256:mcp-workspace",
+            "executable": true,
+            "requiredCapabilities": ["mcp.connect"]
+          },
+          {
+            "target": "resource",
+            "kind": "plugin",
+            "id": "ambient-plugin",
+            "operation": "remove"
+          }
+        ]
+      },
+      {
+        "bindingId": "binding-03",
+        "sourceIdentity": "caller-overlay:group-456",
+        "revisionRef": "revision:group-v2",
+        "entries": [
+          {
+            "target": "resource",
+            "kind": "mcp",
+            "id": "shared",
+            "operation": "disable"
+          },
+          {
+            "target": "resource",
+            "kind": "mcp",
+            "id": "group-service",
+            "operation": "upsert",
+            "definitionHash": "sha256:mcp-group",
+            "executable": true,
+            "requiredCapabilities": ["mcp.connect"]
+          }
+        ]
+      },
+      {
+        "bindingId": "binding-04",
+        "sourceIdentity": "caller-overlay:principal-789",
+        "revisionRef": "revision:principal-v7",
+        "entries": [
+          {
+            "target": "resource",
+            "kind": "mcp",
+            "id": "shared",
+            "operation": "upsert",
+            "definitionHash": "sha256:mcp-principal",
+            "executable": true,
+            "requiredCapabilities": ["mcp.connect"]
+          },
+          {
+            "target": "resource",
+            "kind": "skill",
+            "id": "review",
+            "operation": "upsert",
+            "definitionHash": "sha256:skill-principal",
+            "executable": false,
+            "requiredCapabilities": ["skill.read"]
+          }
+        ]
+      },
+      {
+        "bindingId": "binding-05",
+        "sourceIdentity": "invocation-overlay:operation-abc",
+        "revisionRef": "revision:invocation-v1",
+        "entries": [
+          {
+            "target": "setting",
+            "key": "temperature",
+            "operation": "reset"
+          },
+          {
+            "target": "resource",
+            "kind": "hook",
+            "id": "session-start",
+            "operation": "upsert",
+            "definitionHash": "sha256:hook-invocation",
+            "executable": true,
+            "requiredCapabilities": ["hook.execute", "filesystem.write"]
+          }
+        ]
+      }
+    ],
+    "security": {
+      "capabilityGrantRevisionRef": "grant:least-privilege-v3",
+      "runtimePolicyRevisionRef": "policy:runtime-v5",
+      "workspaceTrustRevisionRef": "trust:workspace-v2",
+      "binaryRevisionRef": "binary:opencode-1.18.5",
+      "grantedCapabilities": ["mcp.connect", "skill.read"],
+      "policyAllowedCapabilities": ["filesystem.write", "hook.execute", "mcp.connect", "skill.read"],
+      "providerSupportedCapabilities": ["filesystem.write", "hook.execute", "mcp.connect", "plugin.execute", "skill.read"],
+      "trustedExecutableKinds": ["mcp"]
+    }
+  },
+  "expected": {
+    "modelPreference": "workspace-model",
+    "temperatureState": "provider-default",
+    "sharedMcpHash": "sha256:mcp-principal",
+    "sharedMcpState": "active",
+    "removedPluginState": "removed",
+    "hookState": "blocked",
+    "hookReasons": ["capability-not-granted", "workspace-untrusted"]
+  }
+}

@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 1,
+  "capturedOn": "2026-07-26",
+  "environment": {
+    "node": "24.16.0",
+    "claude": "2.1.199",
+    "codex": "0.142.5",
+    "opencode": "1.18.5",
+    "opencodePrevious": "1.17.20"
+  },
+  "observations": [
+    {
+      "id": "claude.read-only-config",
+      "provider": "claude",
+      "capability": "filesystem",
+      "status": "confirmed",
+      "observation": "Read-only config can serve inspection, but Claude attempts config lock and temporary writes and writes cache outside that root.",
+      "implication": "Materialization must expose a provider-specific writable runtime state even when the profile revision is immutable.",
+      "evidenceRuns": ["2026-07-26T11-27-06-767Z"]
+    },
+    {
+      "id": "claude.credential-status-not-authority",
+      "provider": "claude",
+      "capability": "credentials",
+      "status": "confirmed",
+      "observation": "Copied OAuth and Bedrock, Vertex, or Foundry route selection can report configured or logged-in while an actual request is not usable.",
+      "implication": "Route selection, credential detection, validation, and last verification time are separate states.",
+      "evidenceRuns": ["2026-07-26T10-19-37-389Z", "2026-07-26T10-27-15-142Z"]
+    },
+    {
+      "id": "claude.crash-resume",
+      "provider": "claude",
+      "capability": "lifecycle",
+      "status": "open",
+      "observation": "Authenticated crash and resume was not proven because the available copied OAuth credential was expired.",
+      "implication": "Claude recovery remains a release blocker for its provider conformance suite, not a reason to weaken the generic lifecycle model.",
+      "evidenceRuns": ["2026-07-26T10-27-15-142Z"]
+    },
+    {
+      "id": "claude.managed-policy-refresh",
+      "provider": "claude",
+      "capability": "managed-policy",
+      "status": "confirmed",
+      "observation": "System-managed allowManagedHooksOnly suppressed a user hook while a managed hook executed. policyHelper ran at startup and refresh; startup failure stopped launch, while background failure kept the process alive and retained the last policy.",
+      "implication": "Managed policy is a live authority binding, not profile content. AR must fail closed when no valid authority exists and must not interrupt a session for ordinary preference drift.",
+      "evidenceRuns": ["2026-07-26T13-22-52-839Z"]
+    },
+    {
+      "id": "codex.project-precedence-uses-process-cwd",
+      "provider": "codex",
+      "capability": "configuration",
+      "status": "confirmed",
+      "observation": "Project configuration follows the actual process working directory; the -C argument alone did not select the project layer.",
+      "implication": "The Codex materializer must treat process cwd as protocol-significant launch state.",
+      "evidenceRuns": ["2026-07-26T10-53-53-507Z"]
+    },
+    {
+      "id": "codex.trust-and-skill-discovery-differ",
+      "provider": "codex",
+      "capability": "workspace-trust",
+      "status": "confirmed",
+      "observation": "Native inspection excludes an untrusted project config from the effective layer while project .agents skills remain discoverable.",
+      "implication": "Workspace trust and extension discovery require separate capability enforcement; config trust alone is insufficient.",
+      "evidenceRuns": ["2026-07-26T10-53-53-507Z"]
+    },
+    {
+      "id": "codex.runtime-root-must-be-writable",
+      "provider": "codex",
+      "capability": "filesystem",
+      "status": "confirmed",
+      "observation": "Execution fails with a fully read-only CODEX_HOME because Codex needs installation identity, SQLite state, and temporary files.",
+      "implication": "Use a writable runtime CODEX_HOME with immutable config linked or copied into it and hash-verified.",
+      "evidenceRuns": ["2026-07-26T11-27-06-767Z"]
+    },
+    {
+      "id": "codex.live-config-drift",
+      "provider": "codex",
+      "capability": "configuration",
+      "status": "confirmed",
+      "observation": "The same app-server process immediately observed a changed config file.",
+      "implication": "A pinned session cannot reference mutable ambient Codex config paths.",
+      "evidenceRuns": ["2026-07-26T11-33-17-701Z"]
+    },
+    {
+      "id": "codex.system-requirements-refresh",
+      "provider": "codex",
+      "capability": "managed-policy",
+      "status": "confirmed",
+      "observation": "The same app-server returned changed /etc/codex/requirements.toml constraints on a later configRequirements/read and returned a typed error after the file became invalid.",
+      "implication": "Codex requirements can be re-observed in process, but AR still needs its own authority revision and cannot infer that every active provider operation hot-applied the change.",
+      "evidenceRuns": ["2026-07-26T13-22-52-839Z"]
+    },
+    {
+      "id": "codex.crash-resume-recovers-history",
+      "provider": "codex",
+      "capability": "lifecycle",
+      "status": "confirmed",
+      "observation": "After SIGKILL during a shell execution, five of five new processes resumed the same thread and recovered history.",
+      "implication": "History recovery is supported, but external effects remain outcome-unknown and require reconciliation rather than blind retry.",
+      "evidenceRuns": ["2026-07-26T11-31-10-593Z"]
+    },
+    {
+      "id": "codex.concurrent-profile-signal",
+      "provider": "codex",
+      "capability": "concurrency",
+      "status": "limited",
+      "observation": "Two persisted executions succeeded with a shared writable CODEX_HOME and with isolated roots, using distinct threads.",
+      "implication": "This is a positive compatibility signal, not proof that refresh, cache, or all SQLite races are safe; AR should still isolate mutable session state.",
+      "evidenceRuns": ["2026-07-26T11-13-41-227Z"]
+    },
+    {
+      "id": "opencode.config-precedence",
+      "provider": "opencode",
+      "capability": "configuration",
+      "status": "confirmed",
+      "observation": "Observed order is global, explicit config, project, then OPENCODE_CONFIG_CONTENT for the installed binary.",
+      "implication": "The provider adapter must declare precedence as a BinaryRevision capability rather than a universal core rule.",
+      "evidenceRuns": ["2026-07-26T10-53-53-507Z"]
+    },
+    {
+      "id": "opencode.skill-collision-nondeterminism",
+      "provider": "opencode",
+      "capability": "skills",
+      "status": "confirmed",
+      "observation": "Fifty cold starts selected duplicate skill IDs from project, global, and compatibility sources with varying winners.",
+      "implication": "Ambiguous skill IDs must require an explicit override or fail materialization for this binary capability set.",
+      "evidenceRuns": ["2026-07-26T11-00-08-576Z"]
+    },
+    {
+      "id": "opencode.read-only-config-writable-state",
+      "provider": "opencode",
+      "capability": "filesystem",
+      "status": "confirmed",
+      "observation": "Read-only XDG_CONFIG_HOME with writable data, state, and cache supports inspection and a full ACP prompt.",
+      "implication": "OpenCode materialization can mount an immutable config revision while keeping provider state separate.",
+      "evidenceRuns": ["2026-07-26T11-27-06-767Z"]
+    },
+    {
+      "id": "opencode.acp-v1-negotiation",
+      "provider": "opencode",
+      "capability": "acp",
+      "status": "confirmed",
+      "observation": "OpenCode 1.18.5 negotiated ACP v1, handled session new, list, resume, close, and an authenticated prompt; a v2 request cleanly negotiated v1.",
+      "implication": "ACP v1 is the first adapter; v2 remains side-by-side, negotiated, and feature-flagged.",
+      "evidenceRuns": ["2026-07-26T11-20-33-060Z"]
+    },
+    {
+      "id": "opencode.process-scoped-config",
+      "provider": "opencode",
+      "capability": "configuration",
+      "status": "confirmed",
+      "observation": "An existing ACP process retained its initial config for a newly created session after the file changed.",
+      "implication": "Applying a new OpenCode profile revision requires a process boundary for this binary.",
+      "evidenceRuns": [
+        "2026-07-26T11-33-17-701Z",
+        "2026-07-26T13-22-52-839Z",
+        "2026-07-26T13-25-21-206Z"
+      ]
+    },
+    {
+      "id": "opencode.system-managed-policy-boundary",
+      "provider": "opencode",
+      "capability": "managed-policy",
+      "status": "confirmed",
+      "observation": "Linux /etc/opencode configuration overrode global and project values. An active ACP host retained its original managed revision, a new process loaded the changed revision, and invalid managed JSON blocked the new process.",
+      "implication": "OpenCode 1.18.5 requires a process boundary for managed-policy changes; revocation cannot rely on in-process config reload.",
+      "evidenceRuns": ["2026-07-26T13-22-52-839Z"]
+    },
+    {
+      "id": "opencode.cross-version-resume",
+      "provider": "opencode",
+      "capability": "binary-compatibility",
+      "status": "limited",
+      "observation": "Session resume succeeded from 1.17.20 to 1.18.5 and back using the same session ID.",
+      "implication": "Pin BinaryRevision and allow migration only through an explicit compatibility matrix; this pair does not prove arbitrary upgrades.",
+      "evidenceRuns": ["2026-07-26T11-35-53-162Z"]
+    },
+    {
+      "id": "opencode.ambient-config-mutation",
+      "provider": "opencode",
+      "capability": "filesystem",
+      "status": "confirmed",
+      "observation": "Native inspection added a $schema field directly to writable ambient global and project config files.",
+      "implication": "Deterministic modes must run against a private immutable materialization, never the user's source config files.",
+      "evidenceRuns": ["2026-07-26T11-50-23-080Z"]
+    },
+    {
+      "id": "opencode.shared-state-lock",
+      "provider": "opencode",
+      "capability": "concurrency",
+      "status": "confirmed",
+      "observation": "Concurrent debug config and debug skill processes sharing one mutable OpenCode state root produced database is locked.",
+      "implication": "Separate mutable state roots per runtime instance and serialize operations that intentionally share provider state.",
+      "evidenceRuns": ["2026-07-26T11-48-48-140Z"]
+    },
+    {
+      "id": "opencode.project-plugin-executes-at-startup",
+      "provider": "opencode",
+      "capability": "plugins",
+      "status": "confirmed",
+      "observation": "A synthetic project plugin executed JavaScript at startup and wrote outside the workspace but inside the sandbox.",
+      "implication": "Plugins are executable capabilities requiring explicit trust, grants, sandboxing, and audit; they are not passive profile data.",
+      "evidenceRuns": ["2026-07-26T12-00-23-637Z"]
+    },
+    {
+      "id": "opencode.pure-suppresses-plugin-activation",
+      "provider": "opencode",
+      "capability": "plugins",
+      "status": "confirmed",
+      "observation": "With --pure the project plugin remained visible in resolved config but its initializer did not execute.",
+      "implication": "Discovery and activation are separate states; conformance must verify execution evidence rather than trust config listing alone.",
+      "evidenceRuns": ["2026-07-26T12-00-23-637Z"]
+    },
+    {
+      "id": "claude.session-start-hook-executes",
+      "provider": "claude",
+      "capability": "hooks",
+      "status": "confirmed",
+      "observation": "Claude --init-only executed a configured SessionStart shell hook outside the workspace but inside the sandbox without a model request.",
+      "implication": "Hooks require explicit executable capability grants before provider startup, independent of model tool permissions.",
+      "evidenceRuns": ["2026-07-26T12-00-23-637Z"]
+    },
+    {
+      "id": "opencode.mcp-failure-bounds",
+      "provider": "opencode",
+      "capability": "mcp",
+      "status": "confirmed",
+      "observation": "A missing MCP command and a delayed MCP server were reported separately; the delayed server honored a 500ms provider timeout and the command completed without orphan processes.",
+      "implication": "AR must still enforce outer startup and cancellation deadlines, but provider-level timeout and per-server diagnostics can be normalized.",
+      "evidenceRuns": ["2026-07-26T12-00-23-637Z"]
+    },
+    {
+      "id": "opencode.mcp-cancellation-cleanup",
+      "provider": "opencode",
+      "capability": "mcp",
+      "status": "confirmed",
+      "observation": "A deliberately non-responsive synthetic MCP process was started by OpenCode, then removed with the provider process group when the AR-owned outer deadline expired.",
+      "implication": "AR process custody must own the provider process group and outer deadline; provider MCP timeout alone is not the cleanup authority.",
+      "evidenceRuns": ["2026-07-26T13-37-19-766Z"]
+    },
+    {
+      "id": "opencode.project-skill-relocation",
+      "provider": "opencode",
+      "capability": "skills",
+      "status": "confirmed",
+      "observation": "A project .opencode skill remained discoverable after the synthetic workspace was copied to a new absolute path, with its location rebased to the new workspace.",
+      "implication": "Profile manifests store semantic source bases and relative paths, not fixed host absolute paths.",
+      "evidenceRuns": ["2026-07-26T12-00-23-637Z"]
+    },
+    {
+      "id": "opencode.active-process-survives-config-deletion",
+      "provider": "opencode",
+      "capability": "profile-loss",
+      "status": "confirmed",
+      "observation": "After deleting the active config file, the same ACP process created another session that retained the previously loaded command set.",
+      "implication": "Process continuity can mask missing files; AR must verify pinned materialization independently and cannot infer durability from a healthy provider process.",
+      "evidenceRuns": ["2026-07-26T12-03-52-202Z"]
+    },
+    {
+      "id": "codex.active-process-rejects-corrupt-config",
+      "provider": "codex",
+      "capability": "profile-loss",
+      "status": "confirmed",
+      "observation": "The active app-server returned a configuration-layer parse error on the next config read after config.toml was corrupted.",
+      "implication": "Provider behavior differs; AR must detect corruption, rematerialize the same revision, or block with PROFILE_REVISION_UNAVAILABLE without ambient fallback.",
+      "evidenceRuns": ["2026-07-26T12-03-52-202Z"]
+    }
+  ]
+}
