@@ -5,11 +5,13 @@ Status: accepted for the architecture foundation
 Date: 2026-07-26
 
 Implementation status: production runtime code has not started. Stage A and
-the scoped Stage B foundation spikes are complete after repeated adversarial
-falsification and hardening. Runtime Configuration, Provider Access, and Agent
-Execution foundation code may start. This is not a production-readiness claim:
-provider authentication, production key custody, platform containment,
-power-loss storage, and distributed deployment remain explicit gates.
+the scoped Stage B and Stage C foundation spikes are complete after repeated
+adversarial falsification and hardening. Runtime Configuration, Provider
+Access, and Agent Execution foundation code may start. The Stage C result is
+limited to a synthetic same-host Linux operation seam. This is not a
+production-readiness claim: provider authentication, production key custody,
+platform containment, power-loss storage, and distributed deployment remain
+explicit gates.
 
 ## Context
 
@@ -41,6 +43,8 @@ Stage A results and scoped uncertainties are recorded in
 `docs/spikes/stage-a-profile-foundation-results.md`.
 Stage B results, counterexamples, and remaining gates are recorded in
 `docs/spikes/stage-b-runtime-execution-results.md`.
+Stage C provider/profile and OpenCode operation evidence is recorded in
+`docs/spikes/stage-c-provider-profile-and-opencode-operation-results.md`.
 
 The experiment tree contains candidate implementations that intentionally
 preserve historical behavior. Production code must not import or copy them.
@@ -796,6 +800,39 @@ cross-language contracts, or release readiness.
 
 Stage B is a `GO` for the scoped Linux, local stdio/ACP, SQLite-CAS foundation.
 It does not prove release readiness or replace the gates below.
+
+### Stage C: completed scoped provider and operation evidence
+
+7. **Provider and profile source roundtrip**
+   - two fresh synthetic campaigns preserved the accepted provider/profile
+     source boundary;
+   - the independent verdict was
+     `accepted-with-honest-scoped-partials`;
+   - real provider configuration, credentials, and semantic equivalence remain
+     conformance gates.
+
+8. **OpenCode operation seam**
+   - actual OpenCode `1.18.5` exercised ACP v1 against a synthetic provider
+     across crash reconciliation, revocation, duplicate cancel,
+     cancel/terminal-barrier, and terminal-first flows;
+   - the accepted source pin contained 62 frozen files and a 148-assertion
+     pre-run audit;
+   - one calibration passed 2,313 integrity and 455 semantic assertions, all
+     18 mutation fixtures, the signature-negative comparison, and the exact
+     24-check postflight before an independent read-only `GO`;
+   - final indices 2 and 3 passed independently and converged to normalized
+     projection
+     `ea223488baf264faea4c2cc64cb8237e6c77234a6ca9bff83ce44d100e644848`;
+   - the final campaigns used different signed claims, seeds, manifests, and
+     raw evidence, and the independent final-set audit returned `GO`;
+   - provider process identity, exact loopback authorization, filesystem
+     isolation, durable acceptance projection, late-output redaction, writer
+     drain, and zero live residue were independently checked.
+
+Stage C is a `GO` only for this synthetic, same-host Linux, SQLite, OpenCode
+operation seam. It does not prove real provider behavior, cross-platform
+containment, power-loss storage, distributed execution, Connect replay, or
+production trust custody.
 
 ### Integration gates
 

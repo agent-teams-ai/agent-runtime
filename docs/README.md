@@ -8,13 +8,16 @@ Read documents in this order:
    foundation results, remaining partials, and implementation gates.
 3. `spikes/stage-b-runtime-execution-results.md` - adversarial execution,
    OpenCode bootstrap, credential lifecycle, and combined recovery evidence.
-4. `spikes/stage-d-cross-context-reconciliation-results.md` - collector,
+4. `spikes/stage-c-provider-profile-and-opencode-operation-results.md` -
+   provider/profile roundtrip, OpenCode operation, isolation, cancellation,
+   recovery, and final-campaign evidence.
+5. `spikes/stage-d-cross-context-reconciliation-results.md` - collector,
    hosted ingestion, binding, and preparation consistency evidence.
-5. `spikes/stage-e-security-time-and-idempotency-results.md` - secret
+6. `spikes/stage-e-security-time-and-idempotency-results.md` - secret
    separation, idempotency retention, and clock/expiry evidence.
-6. `spikes/runtime-profile-behavior.md` - provider behavior evidence and
+7. `spikes/runtime-profile-behavior.md` - provider behavior evidence and
    historical hypotheses. It is not an implementation specification.
-7. `../experiments/runtime-profile-behavior/README.md` - experiment status and
+8. `../experiments/runtime-profile-behavior/README.md` - experiment status and
    the candidate behaviors known to be superseded or falsified.
 
 Document status vocabulary:
