@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-28T13:08:56Z",
+  "scope": {
+    "platform": "macOS 15.6.1 build 24G90",
+    "architecture": "arm64",
+    "projects": "synthetic only",
+    "transport": "ACP v1 over stdio",
+    "provider": "deterministic local OpenAI-compatible stub",
+    "ambientUserHomeRead": false,
+    "ambientCredentialsRead": false,
+    "realProviderUsed": false
+  },
+  "binary": {
+    "version": "1.18.8",
+    "releaseAsset": "opencode-darwin-arm64.zip",
+    "releaseAssetSha256": "0fb2e11a819dd97949f0f7e0348e0e0c4fd8c42b3a5ed7aee1f0d437c94b9f0c",
+    "executableSha256": "a5369cfaf8aa89f77e41f154be4644dec3f5adb5e71d0e5cc6c8c7630bd63b0f"
+  },
+  "provenance": {
+    "primaryResultSha256": "acb2a799643e2a583f030549c63cb04b6f6890c27ca3fffe9d0febba857b4cfe",
+    "focusedResultSha256": "12115f87ffb98133f1784ea466fcb9b33e9318df1e1f5b7da1d8da694c3749bd",
+    "primaryHarnessSha256": "8789ec5c98eaff6d198d45362845108dce172f1bbaa841340b7093f3cf0116ca",
+    "focusedHarnessSha256": "c8ee06b1c2064251b8d1adb064429db8703207cd702508ec1d64f8a92ea7616d",
+    "mcpSentinelSha256": "365ae1b49bf7345c6891513a0df4ef87f6fc03ee7e7de54964121f5b8f506e77",
+    "retainedBundle": "macos-opencode-1.18.8-e2e-2026-07-28.tar.gz",
+    "retainedBundleSha256": "cd2872dfc6f49f9245edc81871359dedc3b0af4a7f4caebad2c63ba32e592549",
+    "deepContainmentResultSha256": "25317675755d6c36ae6a09d3aadd5c3bb943ea093f487f37ee6403225a5ff566",
+    "deepEgressResultSha256": "90d1f02e9f83149627888c3c53ad6378208b2cd33a9113c82e8a8e5f67ba6806",
+    "deepVersionStorageResultSha256": "fca311b4be8866a29c7927edb0f37d24cc69330bca04b750d598cabea995dd71",
+    "deepStorageResultSha256": "e1e011ab2d92a24358d643ec7dfa542722b3d4b4f8eecc20df75d44306edcdb9",
+    "appSandboxResultSha256": "84fb7cd315d917cd17bbb6d653d63aa9788d3139c9dfacec0f5f36f78e39c96e",
+    "apfsDeviceLossResultSha256": "61bb49116c52f397baf14095c5299a2c1634c80857fe335ba88a61f5284514d6",
+    "deepRetainedBundle": "macos-opencode-deep-e2e-2026-07-28.tar.gz",
+    "deepRetainedBundleSha256": "d1e37e17a2c3f1ce42c3440aa70b8af4d053b4bff895361e7a40d95b234c2903"
+  },
+  "confirmedFacts": [
+    {
+      "id": "macos-acp-basic",
+      "sample": "3 isolated ACP runs",
+      "fact": "3/3 negotiated ACP v1, reported OpenCode 1.18.8, reached the local provider exactly once, returned the expected marker, and ended with end_turn."
+    },
+    {
+      "id": "macos-native-home-skill",
+      "sample": "1 enabled, 1 external-flags-disabled, and 3 clean HOME runs",
+      "fact": "An OpenCode-native skill under the isolated HOME reached the provider prompt both with and without external-skill disable flags. It was absent in all three clean-HOME runs."
+    },
+    {
+      "id": "macos-same-session-concurrency",
+      "sample": "3 runs, 6 concurrent prompt RPCs",
+      "fact": "Both RPCs returned successfully in every run. Provider request counts were 2, 1, and 1; the second marker was retained in all runs, while the first marker was absent in the two coalesced runs."
+    },
+    {
+      "id": "macos-cancel-after-provider-request",
+      "sample": "1 delayed accepted provider request",
+      "fact": "Cancellation after the provider request arrived returned stopReason cancelled and did not issue a second provider request."
+    },
+    {
+      "id": "macos-crash-resume",
+      "sample": "1 SIGINT and 1 SIGKILL restart",
+      "fact": "2/2 sessions loaded in a new OpenCode process and completed an exact new prompt after the prior process stopped."
+    },
+    {
+      "id": "macos-project-mcp-process-tree",
+      "sample": "1 SIGINT, 1 SIGTERM, and 1 SIGKILL project MCP run",
+      "fact": "OpenCode started the synthetic project MCP twice in every run. Killing only OpenCode terminated the MCP sentinel but left one sentinel child alive after each signal."
+    },
+    {
+      "id": "macos-process-group-cleanup",
+      "sample": "1 dedicated process-group kill",
+      "fact": "Killing the dedicated OpenCode process group terminated the observed MCP sentinel and its inherited child."
+    },
+    {
+      "id": "macos-project-config-disable",
+      "sample": "1 project MCP disabled run",
+      "fact": "OPENCODE_DISABLE_PROJECT_CONFIG=1 prevented every synthetic project MCP start."
+    },
+    {
+      "id": "macos-apfs-path-aliases",
+      "sample": "1 synthetic APFS workspace",
+      "fact": "A workspace symlink read an external file, a workspace hardlink mutated the external inode, case-only paths aliased, and NFC/NFD Unicode filenames aliased on the tested volume."
+    },
+    {
+      "id": "macos-acp-ports",
+      "sample": "1 fixed-port pair and 1 port-zero pair",
+      "fact": "Exactly one fixed-port process remained alive, while both --port 0 processes remained alive after two seconds."
+    },
+    {
+      "id": "macos-sqlite-cold-concurrency",
+      "sample": "5 cold pairs, 10 processes",
+      "fact": "Only 5/10 cold concurrent session-list processes succeeded. Two failed with database-locked errors and three with schema-bootstrap races."
+    },
+    {
+      "id": "macos-sqlite-warm-concurrency",
+      "sample": "1 warm-up plus 5 concurrent pairs",
+      "fact": "The warm-up succeeded and 10/10 warmed concurrent session-list processes succeeded."
+    },
+    {
+      "id": "macos-enospc",
+      "sample": "1 disposable 256 MiB APFS sparse-image sequence",
+      "fact": "Warm operation succeeded, storage pressure left about 6.49 MiB available and produced a typed no-space failure, releasing the filler restored about 266.56 MiB, and the next operation succeeded."
+    },
+    {
+      "id": "macos-process-group-escape",
+      "sample": "1 synthetic sentinel with inherited and detached descendants",
+      "fact": "The inherited child died with the dedicated process group, while a descendant that created a new session and process group survived. Cleanup by the pre-captured descendant ledger then terminated the escaped process."
+    },
+    {
+      "id": "macos-sandbox-exec-egress",
+      "sample": "1 loopback provider and 1 external TCP reachability discriminator",
+      "fact": "A sandbox-exec profile allowed the exact loopback provider and blocked the external endpoint until the 25-second ACP supervisor timeout. macOS marks sandbox-exec deprecated, so this is mechanism evidence rather than a production adapter decision."
+    },
+    {
+      "id": "macos-app-sandbox-network-granularity",
+      "sample": "1 signed App Sandbox helper without network.client and 1 with network.client",
+      "fact": "The signed OpenCode helper without network.client negotiated ACP but could not create a session. With network.client it completed the loopback provider prompt and reached the external discriminator, returning the same protocol-response-failure digest as the unsandboxed control."
+    },
+    {
+      "id": "macos-version-architecture-resume",
+      "sample": "5 cold resume pairs",
+      "fact": "5/5 pairs loaded the existing session and completed a new prompt: arm64 1.18.5 to 1.18.8, arm64 1.18.8 to 1.18.5, Rosetta x64 1.18.5 to 1.18.8, arm64 to Rosetta x64 at 1.18.8, and Rosetta x64 to arm64 at 1.18.8."
+    },
+    {
+      "id": "macos-sqlite-backup-corruption",
+      "sample": "7 synthetic backup, corruption, WAL-loss, and crash scenarios",
+      "fact": "Raw DB/WAL/SHM family restore and checkpointed logical restore both passed integrity, session load, and a new prompt. Removing or corrupting WAL left the base DB integrity check at ok but made the recent session unloadable; corrupting SHM recovered, DB-header corruption recovered from WAL, and full DB replacement was detected."
+    },
+    {
+      "id": "macos-accepted-crash-no-replay",
+      "sample": "1 SIGKILL after the provider accepted a request and before the response",
+      "fact": "The session loaded after restart, load issued no provider request, and an explicit follow-up prompt succeeded. OpenCode did not automatically replay the acceptance-uncertain request."
+    },
+    {
+      "id": "macos-apfs-forced-device-loss",
+      "sample": "1 forced detach and reattach of a disposable APFS sparse image during an accepted prompt",
+      "fact": "Forced detach succeeded and the in-flight RPC timed out. After reattach, SQLite integrity was ok, the same session loaded without a provider request, and an explicit follow-up prompt ended successfully. This was device removal, not physical power loss."
+    }
+  ],
+  "architectureInvariants": [
+    "Use a clean allowlisted HOME for every runtime; external-skill flags do not suppress OpenCode-native global skills.",
+    "Serialize prompts per OpenCode session and do not equate successful ACP RPCs with independent provider dispatches.",
+    "Bind cancellation and reconciliation to provider acceptance rather than ACP send.",
+    "Treat OpenCode PID termination as insufficient process custody on macOS.",
+    "Launch each runtime in a dedicated process group and independently observe descendants; the positive inherited-child result does not prove containment against process-group escape.",
+    "Disable project configuration unless an allowlisted project projection is explicitly required.",
+    "Reject or safely materialize symlinks and hardlinks before launch.",
+    "Canonicalize and collision-check case and Unicode aliases using target-volume behavior.",
+    "Use ACP --port 0 or a separately qualified atomic port lease.",
+    "Fence and serialize cold OpenCode state bootstrap.",
+    "Classify APFS storage pressure independently from provider failure and revalidate state after capacity returns.",
+    "Continuously track descendants independently of process groups; a child can escape by creating a new session and process group.",
+    "Do not use sandbox-exec as the production boundary and do not treat App Sandbox network.client as an endpoint allowlist.",
+    "Keep exact per-operation egress authorization behind a separately qualified network-enforcement adapter or a contained worker boundary.",
+    "Verify the upstream OpenCode asset digest before signing, then attest both the upstream and signed-helper digests.",
+    "Back up SQLite with a checkpointed logical snapshot or an atomic DB/WAL/SHM family snapshot; a base-DB integrity check does not prove recent WAL-backed state is present.",
+    "Reconcile acceptance-uncertain commands by durable command identity and never infer replay safety from a successful session load.",
+    "Treat the five passing version and Rosetta pairs as a bounded compatibility set, not a universal binary policy.",
+    "After abrupt storage-device loss, revalidate the complete state family and reconcile the accepted command before marking the runtime reusable."
+  ],
+  "readiness": {
+    "macosArm64OpenCodeSyntheticDecisionMatrixComplete": false,
+    "productionReleaseReady": false,
+    "remainingGates": [
+      "production macOS endpoint-specific network enforcement and independent qualification",
+      "real-provider and OAuth parity in a disposable isolated profile",
+      "production continuous descendant custody after adversarial process-group and session escape",
+      "physical power-loss and production backup/restore qualification beyond the passing process-crash, forced-device-loss, and corruption matrix",
+      "supported macOS-version policy and physical Intel qualification if Intel is supported"
+    ]
+  },
+  "secrets": {
+    "tokenValuesIncluded": false,
+    "credentialDigestsIncluded": false,
+    "accountIdentifiersIncluded": false,
+    "userProjectContentIncluded": false
+  }
+}

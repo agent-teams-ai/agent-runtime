@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "stage": "M",
+  "status": "accepted-scoped-experimental-evidence",
+  "platform": "hosted-single-host-linux-loopback",
+  "facts": {
+    "campaignCasesPerFinal": 183,
+    "sourceAuditChecks": 314,
+    "comparisonChecks": 58,
+    "transportClosurePairs": 16,
+    "digestPreimages": 84,
+    "authorizationBodyPreimages": 27,
+    "verifiedSignedEnvelopePreimages": 57,
+    "sha256Claims": 223,
+    "unboundSha256Claims": 0,
+    "queuedRotationRevocationExpiryZeroBytes": true,
+    "readOnlyMonotonicTimeView": true,
+    "externalNetworkUsed": false
+  },
+  "invariants": [
+    "signed immutable policy and per-dispatch authorization",
+    "final authorization before request or application bytes",
+    "route, address, TLS, peer, redirect, generation and time binding",
+    "revoked or failed-close transport cannot re-enter the pool",
+    "caller time is never authority"
+  ],
+  "evidence": {
+    "semanticDigest": "8aba7aa8d37437033d83ad445a98afdc7877ec6cccee95ff85b189accd420715",
+    "sourceDigest": "ee91970aec58b2ce9c873b8ed5d90908f29553c8187c6f9666cf33f89b50fee2",
+    "comparison": "PASS",
+    "cryptographicExecutionAttestationClaimed": false
+  },
+  "excluded": [
+    "production gateway",
+    "public DNS and PKI",
+    "kernel egress containment",
+    "real provider traffic or credentials",
+    "multi-host propagation and partitions"
+  ]
+}

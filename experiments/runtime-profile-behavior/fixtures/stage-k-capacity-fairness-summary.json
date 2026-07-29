@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "stage": "K",
+  "status": "accepted-scoped-experimental-evidence",
+  "platform": "hosted-single-host-linux",
+  "database": "PostgreSQL 18.4",
+  "facts": {
+    "concurrentClaims": 32,
+    "granted": 8,
+    "capacityFull": 24,
+    "equalPriorityTenantGrants": [10, 10, 10],
+    "priorityBurstLimit": 3,
+    "mediumGrantedAt": 4,
+    "lowGrantedAt": 8,
+    "quotaRaceCount": 24,
+    "cancelRaceCount": 32,
+    "soakGrants": 300,
+    "soakTenants": 10,
+    "postgresRestartStatePersisted": true,
+    "failureCleanupProbes": ["create", "start"],
+    "residueEmpty": true
+  },
+  "invariants": [
+    "closed idempotent claim, quota, output, and reclaim commands",
+    "authoritative monotonic time",
+    "non-preemptive quota shrink",
+    "reclaim_pending blocks successor capacity",
+    "finite fairness only under stated eligibility assumptions"
+  ],
+  "evidence": {
+    "checksPerFinal": 46,
+    "semanticDigest": "3fa11fcb9457c861c478aeefec22996db36f2b175d66c601760282fba48f2158",
+    "comparison": "CONSISTENT",
+    "cryptographicExecutionAttestationClaimed": false
+  },
+  "excluded": [
+    "production allocator",
+    "real workers",
+    "multi-host partitions and failover",
+    "cryptographic execution attestation"
+  ]
+}

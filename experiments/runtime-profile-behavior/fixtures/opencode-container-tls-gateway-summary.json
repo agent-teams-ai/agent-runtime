@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-28T14:56:48Z",
+  "status": "accepted-scoped-evidence",
+  "scope": {
+    "host": "codex-workers-eu-01",
+    "platform": "Linux 6.8.0-134-generic x86_64",
+    "dockerEngine": "29.6.1",
+    "transport": "ACP v1 over stdio",
+    "workspace": "new synthetic workspace only",
+    "provider": "synthetic OpenAI-compatible HTTPS stub only",
+    "userProjectUsed": false,
+    "realCredentialUsed": false,
+    "realMcpUsed": false,
+    "externalProviderRequestUsed": false
+  },
+  "runtimeClosure": {
+    "openCode": {
+      "version": "1.18.5",
+      "sourceTag": "v1.18.5",
+      "sourceCommit": "e5cc278dec9294a627a7b05f47ce6a564408c1a2",
+      "binarySha256": "78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21"
+    },
+    "ripgrep": {
+      "compatibilityVersion": "15.1.0",
+      "upstreamArchiveSha256": "1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599",
+      "binarySha256": "ebeaf56f8a25e102e9419933423738b3a2a613a444fd749d695e15eba53f71f2",
+      "newerStableObserved": "15.2.0",
+      "policy": "Use the OpenCode source-declared compatibility version for this BinaryRevision; qualify newer dependencies as a new closure rather than silently substituting them."
+    },
+    "baseImage": {
+      "reference": "node:24.18-bookworm-slim",
+      "digest": "sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d"
+    },
+    "runtimeImage": {
+      "reference": "ar-opencode-gateway:1.18.5-synthetic",
+      "imageId": "sha256:50fd62652a96981370f16dbc17e0be05ce92782a75adb465042e3f365e090a20",
+      "user": "65532:65532",
+      "readOnlyRoot": true,
+      "configDirectoryMode": "0555",
+      "configFileMode": "0444"
+    }
+  },
+  "provenance": {
+    "rejectedImmutableConfigResultSha256": "320ab6707ed1e3cf49a3245bf01350a66865d3a926a6855570ee7169c20f01ab",
+    "rejectedMissingRipgrepResultSha256": "1ed8b26684dece8e3cc673c9542b9275c3fcfab6a544c54e3900109931e9b0e6",
+    "acceptedDirectProxyResultSha256": "40f1c44d74240c7fcd112e3dd72e6537296fd47bffacc588d3d638a4385eaecf",
+    "rejectedTlsGatewayV1ResultSha256": "737613e0b2303b0ec35de53ddbdbcad42b473b696b190d2a7f35d2a6f24fad2c",
+    "acceptedGatewaySourcePin": "3d6ba1abdc369c1f0d19a0687cb249fe08e53437e9b000be7ebee0276461bb58",
+    "acceptedGatewaySemanticProjectionSha256": "1c7fbb71692d8d0e745620d7b23c16fa1458b6c0890b715fdd6ae494e7bf2751",
+    "calibrationAuditSha256": "4c94ec0a20e7082d378b58ee5ccb1573a8c3ea94c5590cdf7e6d0f362e24321a",
+    "final1AuditSha256": "debe8d9fad40bbe66516640e1469c040c54692bbb1f790a636228dfaf983f1c6",
+    "final2AuditSha256": "4448930469ec533b44548d8c001e9fb586f5219dcbff641fb0f462acc1f1cf9e",
+    "campaignComparisonSha256": "dc0ce09820b999e66f18616f330c45dbabf21122462342256fe433137517e794",
+    "retainedBundleSha256": "297cf47d3ce479bccdf5b961def442accf2eabb4e4e76c9b8860fc966ec612c1"
+  },
+  "rejectedRevisions": [
+    {
+      "revision": "immutable-config-v8",
+      "reason": "A root-owned read-only XDG config directory lacked the .gitignore file that OpenCode creates during config discovery, so startup failed closed with EROFS."
+    },
+    {
+      "revision": "immutable-config-v9",
+      "reason": "After the config directory was made complete, the cold runtime attempted to download ripgrep 15.1.0 from GitHub because the image did not contain an rg executable."
+    },
+    {
+      "revision": "tls-gateway-v1",
+      "reason": "The first pinned-IP lookup callback did not implement Node's all-address callback shape, so allowed TLS failed. No gateway claim was promoted."
+    },
+    {
+      "revision": "campaign-comparison-v1",
+      "reason": "Three deterministic successful campaigns had byte-identical evidence and therefore could not independently prove freshness. The accepted revision binds a fresh campaign nonce to every gateway evidence record."
+    }
+  ],
+  "accepted": {
+    "directProxyOpenCodeE2E": {
+      "acpProtocolVersion": 1,
+      "agentName": "OpenCode",
+      "agentVersion": "1.18.5",
+      "sessionCreated": true,
+      "stopReason": "end_turn",
+      "markerObserved": true,
+      "processExit": 0,
+      "allowedRuntimeRequests": [
+        "POST http://provider-upstream:8080/v1/chat/completions"
+      ],
+      "runtimeNpmRequests": 0,
+      "runtimeGitHubRequests": 0,
+      "runtimeModelsDevRequests": 0
+    },
+    "applicationTlsGateway": {
+      "campaigns": 3,
+      "casesPerCampaign": 21,
+      "passesPerCampaign": 21,
+      "auditChecksPerCampaign": 24,
+      "auditPassesPerCampaign": 24,
+      "semanticProjectionEqual": true,
+      "frozenSourceEqual": true,
+      "rawEvidenceDistinct": true,
+      "campaignNonces": [
+        "1c4d919f-a51e-49db-bf30-93b339edb589",
+        "bc1aa5a1-5285-41c7-a543-a99bf96d3a83",
+        "f42cba94-5e0d-46b2-bce2-51bda564aa65"
+      ],
+      "rawEvidenceSha256": [
+        "4037be788796f6dfad81cd270f4aae49a591fd37eadb3d9a10e2038eba6e8bca",
+        "8433588220d7964bda0da09e289c0dbe263d3e1b4b5c8669ca05a4c5d7d4f6ec",
+        "c370859cf8574f520ce7b4c232597130420e7eebbf2b66e44ca0f5fed51c95cb"
+      ],
+      "confirmedCases": [
+        "authorized route over TLS with hostname verification",
+        "unauthorized route denied",
+        "generic HTTP proxy denied",
+        "generic CONNECT tunnel denied",
+        "request byte budget enforced before upstream dispatch",
+        "response byte budget enforced",
+        "total upstream time budget enforced",
+        "provider redirect denied",
+        "TLS hostname mismatch rejected",
+        "ten requests stayed on the pinned provider IP despite a duplicate Docker DNS alias",
+        "duplicate-alias attacker received zero requests",
+        "OpenCode ACP session/new and prompt completed through the TLS gateway"
+      ]
+    }
+  },
+  "architectureInvariants": [
+    "The OpenCode runtime image is an immutable BinaryRevision closure: exact OpenCode, compatible helper binaries, complete root-owned configuration, and dependency metadata are prepared before launch.",
+    "Read-only config roots and writable runtime state are separate. Required OpenCode-created metadata is materialized during image preparation rather than allowing runtime package installation.",
+    "Provider containers do not receive a generic outbound tunnel. The provider route targets an application-layer gateway endpoint; generic HTTP proxy and CONNECT paths fail closed.",
+    "The egress gateway owns TLS validation, a trusted DNS/IP decision, route authorization, redirect policy, request and response byte budgets, and total time budget.",
+    "A Docker alias or bridge membership is not upstream identity. The gateway binds the authorized hostname to an attested IP set and still verifies the TLS hostname.",
+    "Every gateway decision and request/response digest is bound to the operation campaign identity without logging bodies or credentials.",
+    "A newer helper release is not silently substituted inside an existing BinaryRevision. It creates a new dependency closure and requires compatibility qualification."
+  ],
+  "readiness": {
+    "syntheticLinuxOpenCodeContainerE2EComplete": true,
+    "syntheticApplicationTlsGatewayMatrixComplete": true,
+    "productionLinuxPlatformReady": false,
+    "remainingGates": [
+      "signed operation-authorization loading and rotation in the production gateway",
+      "public-PKI external DNS resolution, rebinding defense, private/reserved-address rejection, IP rotation, and proxy/load-balancer conformance",
+      "streaming backpressure and post-header byte-budget termination without buffering the complete provider response",
+      "Docker daemon socket protection and trusted-supervisor authorization",
+      "custom seccomp and AppArmor policy, image signature and SBOM enforcement, init, and zombie reaping",
+      "real dedicated OpenCode provider routes and credentials without user projects",
+      "supported OpenCode, helper-binary, kernel, distribution, Docker, and cgroup version policy",
+      "physical power loss and worker-host replacement recovery"
+    ]
+  },
+  "secrets": {
+    "tokenValuesIncluded": false,
+    "credentialDigestsIncluded": false,
+    "accountIdentifiersIncluded": false,
+    "privateTlsKeysIncludedInRetainedBundle": false,
+    "requestBodiesIncluded": false
+  }
+}

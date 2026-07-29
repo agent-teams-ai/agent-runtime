@@ -8,7 +8,8 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "check": "pnpm typecheck && pnpm test",
+    "check": "pnpm architecture:registry && pnpm typecheck && pnpm test",
+    "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
     "spike:inventory": "node experiments/runtime-profile-behavior/src/cli.ts inventory",
     "spike:baseline": "node experiments/runtime-profile-behavior/src/cli.ts baseline",
     "spike:precedence": "node experiments/runtime-profile-behavior/src/cli.ts precedence",

@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "status": "accepted-scoped-experimental-evidence",
+  "date": "2026-07-28",
+  "safety": {
+    "hostedSyntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "ambientCredentialsRead": false,
+    "providerProcessesStarted": false,
+    "providerRequestsMade": false,
+    "realMcpServersStarted": false
+  },
+  "scope": {
+    "physicalHosts": 1,
+    "postgresVersion": "18.4",
+    "dataChecksums": "on",
+    "isolation": "read committed",
+    "experimentalSchemaOnly": true,
+    "realRollingDeploymentUsed": false,
+    "networkPartitionInjected": false,
+    "productionMigrationClaimed": false,
+    "serviceExtractionReadinessClaimed": false
+  },
+  "facts": {
+    "versionSkew": {
+      "oldConsumerAppliedV1": true,
+      "newConsumerAppliedV1WithDeterministicUpcast": true,
+      "oldConsumerAppliedAdditiveV2": true,
+      "newConsumerAppliedV2": true,
+      "unsupportedV3QuarantinedForBothConsumers": true,
+      "validEventAfterPoisonAppliedForBothConsumers": true,
+      "concurrentDuplicateDeliveries": 24,
+      "duplicateReplayApplied": 24
+    },
+    "retirement": {
+      "blockedByActiveConsumer": true,
+      "blockedByUnarchivedEvents": true,
+      "eligibleAfterBothCleared": true
+    },
+    "migration": {
+      "oldReaderReadExpandedRow": true,
+      "oldWriterWorkedBeforeContract": true,
+      "backfilledRows": 2,
+      "oldBinaryLeaseBlockedContract": true,
+      "concurrentClaims": 16,
+      "claimed": 1,
+      "busy": 15,
+      "rowsAfterContract": 3,
+      "oldWriterRejectedAfterContract": true
+    }
+  },
+  "evidence": {
+    "schemaSha256": "2ad0c23feb809c8df6bc470297d343cf63eb37c689b39dfb68f5348084f2ee7b",
+    "harnessSha256": "894aaa01e1183ff54b747acf43a7a1143a507495ca8aa0ee87dabf9921a88396",
+    "verifierSha256": "19fbfbdabc44f124b16b37f70743abd5fc344313eb84a3cb831945083412ac1f",
+    "finalAResultSha256": "8725b2e0a703189bd0cbb4fd0ce4655128990da77af2527d87d1ba79d79f5fc9",
+    "finalAAuditSha256": "872ec5fecc5b5f5ba6d686d99cc70bc54b8e2124e9a7d22cca3646f355804f58",
+    "finalBResultSha256": "e3c1fa25c152649eb1a88e5d913009b1995212acf64e82e0eaf076c076485f6e",
+    "finalBAuditSha256": "dabea47ee6b47ac14e508b0ac23102ea9903fed47fe6f6b086e8aa260e69bdb4",
+    "semanticFactsSha256": "616a028a5dfcaed5710411bbf8b01193d362e15926dfc5374651a763f61653f3",
+    "finalComparisonSha256": "e131d29d5d04808b9438558201dc63ec76c4dcf2823fc971b4c1d6c66f563a6b",
+    "finalAudits": "44/44 GO each"
+  },
+  "remainingGates": [
+    "production event inbox upcaster and migration implementation",
+    "real rolling old and new binary deployment and rollback",
+    "cross-host partition replication and failover",
+    "poison-message operational replay and repair",
+    "backup restore PITR and measured RPO RTO",
+    "cross-adapter and generated-SDK contract tests"
+  ]
+}

@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-28T13:41:30Z",
+  "scope": {
+    "platform": "Linux hosting worker codex-workers-eu-01",
+    "database": "PostgreSQL 18.4, one container on one physical host",
+    "clients": "independent concurrent Node.js client processes",
+    "projects": "synthetic only",
+    "providerRequests": false,
+    "ambientCredentialsRead": false,
+    "multiHost": false,
+    "replicationOrFailover": false,
+    "physicalPowerLoss": false
+  },
+  "databaseImage": {
+    "reference": "postgres:18.4-trixie",
+    "digest": "sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a",
+    "dataChecksums": true,
+    "transactionIsolation": "read committed"
+  },
+  "provenance": {
+    "schemaSha256": "54c53ce47838feaeac638b6b4b2200779484ebd6ca6c0f8a355e60818be3d617",
+    "harnessSha256": "8e4a651b248b91bd5277cd47b1e605204c24db9b12cb8e9b6b4e9bddfc6288d0",
+    "resultSha256": "c40e50bd66b93e4d184c7632298ec04db9d02e39a5557013cca8520b748563ae",
+    "auditScriptSha256": "bb01caed36cebd4c8e4b6f95781725ef7851822f1f9cfc50abfe652c11219e87",
+    "auditResultSha256": "7d734f36cf83d923d3f9d09c40581500846b40e93d605900621775ac9659e4b4",
+    "auditVerdict": "GO",
+    "auditChecks": {
+      "passed": 32,
+      "failed": 0
+    },
+    "retainedBundle": "postgresql-concurrency-2026-07-28.tar.gz",
+    "retainedBundleSha256": "345eeb2a83e2814a4b3730d08418beed15e7e2d62f79f9491186c8e3bd233931"
+  },
+  "crossHostFollowup": {
+    "scope": {
+      "physicalHosts": 2,
+      "localClient": "macOS 15.6.1 arm64 with psql 14.18",
+      "remoteClient": "Linux hosting worker codex-workers-eu-01",
+      "database": "one PostgreSQL 18.4 primary in a private Docker network",
+      "transport": "dedicated loopback SSH forward; no published database port",
+      "fault": "complete termination of the dedicated SSH forwarding process",
+      "excluded": [
+        "PostgreSQL replication or leader failover",
+        "split-brain behavior",
+        "general delay, packet loss, or asymmetric partition",
+        "physical power loss"
+      ]
+    },
+    "provenance": {
+      "harnessSha256": "087ccfe4b1e59e896a2356d286768bf051ad235bcd5ee843578c9eb74ad1b8c0",
+      "resultSha256": "8d852f839dbd25e16e1ddf5df391d165002549293ca83bafed7b3e1cf5d14b44",
+      "auditScriptSha256": "0722ff5a5713963688b526bdda9fa6dcb7baac49015f751ec3531b9f8c6a0c3d",
+      "auditResultSha256": "273b412b2d0f0990a561ed2860a5c847d4190cb62039896a081588b8be325d85",
+      "auditVerdict": "GO",
+      "auditChecks": {
+        "passed": 48,
+        "failed": 0
+      },
+      "retainedBundle": "postgresql-cross-host-2026-07-28.tar.gz",
+      "retainedBundleSha256": "22f7a46f201713a11d3200659c8537b3a48497e0fbc65dc4fa7e871059753091"
+    },
+    "rejectedRevisions": [
+      {
+        "revision": "v1",
+        "reason": "The harness passed literal newline escapes through the SSH shell instead of transporting multiline SQL."
+      },
+      {
+        "revision": "v2",
+        "reason": "One SSH connection per remote database client hit SSH admission limits before the database assertion."
+      },
+      {
+        "revision": "v3",
+        "reason": "The hypothesis that client disconnect during an open transaction guarantees rollback was falsified; the buffered batch still reached COMMIT."
+      },
+      {
+        "revision": "v4",
+        "reason": "The final pg_amcheck gate failed without diagnostic classification."
+      },
+      {
+        "revision": "v5",
+        "reason": "The diagnostic proved pg_amcheck had no relations to check because the synthetic database lacked the amcheck extension."
+      }
+    ],
+    "confirmedFacts": [
+      {
+        "id": "cross-host-command-idempotency",
+        "sample": "16 macOS clients and 16 Linux clients racing one command",
+        "fact": "Exactly one client created the operation and outbox row; 31 returned replay."
+      },
+      {
+        "id": "cross-host-command-conflict",
+        "sample": "8 macOS and 8 Linux clients racing one command ID across two sessions",
+        "fact": "The winning session had eight successful clients, the other session received eight typed conflicts, and exactly one operation existed."
+      },
+      {
+        "id": "cross-host-session-sequence",
+        "sample": "24 macOS and 24 Linux commands for one session",
+        "fact": "The committed session sequence was exactly 1 through 48 without gaps."
+      },
+      {
+        "id": "cross-host-postcommit-loss",
+        "sample": "one SSH transport termination after the row was externally visible but before the macOS client received the response",
+        "fact": "The client failed, retry returned replay, and exactly one operation and outbox row remained."
+      },
+      {
+        "id": "cross-host-inflight-loss",
+        "sample": "one SSH transport termination while the server was sleeping inside a transaction before a buffered COMMIT statement",
+        "fact": "The client failed, but PostgreSQL continued the received batch and committed. Retry returned replay and exactly one operation and outbox row remained."
+      },
+      {
+        "id": "cross-host-final-integrity",
+        "sample": "one pg_amcheck --install-missing after the concurrency and transport-loss matrix",
+        "fact": "The integrity check passed and cleanup left no campaign container, volume, or network."
+      }
+    ]
+  },
+  "confirmedFacts": [
+    {
+      "id": "postgres-startup-readiness-race",
+      "sample": "one rejected v1 campaign and a corrected stable-postmaster gate",
+      "fact": "The official image briefly answered pg_isready from its temporary initialization postmaster before the final postmaster owned the service. Readiness must bind to stable server identity, not the first successful probe."
+    },
+    {
+      "id": "postgres-command-idempotency",
+      "sample": "32 concurrent submissions of one command",
+      "fact": "Exactly one submission created an operation and outbox row; 31 returned replay. Payload and session mismatches failed closed."
+    },
+    {
+      "id": "postgres-cross-session-command-id",
+      "sample": "16 concurrent submissions sharing one command ID across two sessions",
+      "fact": "One session won and eight clients replayed its result; eight clients for the other session received typed conflicts. Exactly one operation and one outbox row existed."
+    },
+    {
+      "id": "postgres-session-sequence",
+      "sample": "48 concurrent unique commands for one session",
+      "fact": "The committed operation sequences were exactly 1 through 48 without gaps and the session counter ended at 48."
+    },
+    {
+      "id": "postgres-timeout-after-commit",
+      "sample": "one client killed after commit and before observing the response",
+      "fact": "Retrying the same command returned replay and retained exactly one operation and one outbox row."
+    },
+    {
+      "id": "postgres-dispatch-fencing",
+      "sample": "16 initial claimers plus expiry, reconciliation, retry, and stale-receipt cases",
+      "fact": "One claimer acquired fence 1 and 15 observed busy. Expiry entered reconcile_required and did not blindly redispatch. An explicit known-not-accepted resolution allowed fence 2; the stale fence and conflicting acceptance receipt were rejected."
+    },
+    {
+      "id": "postgres-transactional-outbox",
+      "sample": "one forced transaction rollback",
+      "fact": "The rollback left zero session, operation, and outbox rows, proving the tested state and publication intent were atomic."
+    },
+    {
+      "id": "postgres-outbox-inbox",
+      "sample": "8 outbox workers over 92 events and 24 duplicate consumer deliveries",
+      "fact": "All 92 events were claimed exactly once by generation; duplicate consumer deliveries produced one side effect. An expired claim was reclaimed and its stale generation was rejected."
+    },
+    {
+      "id": "postgres-process-crash",
+      "sample": "database-container SIGKILL and restart",
+      "fact": "Counts before and after restart remained 93 operations, 93 outbox rows, and one inbox row; pg_amcheck passed and a post-crash write succeeded."
+    },
+    {
+      "id": "postgres-logical-backup-restore",
+      "sample": "one same-server pg_dump and pg_restore cycle",
+      "fact": "Restore retained 94 operations, 94 outbox rows, one inbox row, one side effect, and an equal projection digest."
+    }
+  ],
+  "architectureInvariants": [
+    "Bind database readiness to the stable final postmaster identity rather than the first successful pg_isready response.",
+    "Use one globally unique durable command ID and fail closed when its tenant, session, operation kind, or semantic payload differs.",
+    "Allocate per-session sequence numbers from a locked counter; never derive them with MAX(sequence) + 1.",
+    "Persist aggregate state and its transactional outbox row in one bounded-context transaction.",
+    "Make every integration consumer idempotent with an inbox or equivalent durable command ledger.",
+    "Represent acceptance uncertainty explicitly and require reconciliation before redispatch.",
+    "Bind dispatch receipts and outbox claims to monotonically increasing fences or generations.",
+    "Keep schema and migration ownership per bounded context and forbid cross-context SQL.",
+    "Treat database crash recovery and same-server logical restore as scoped evidence, not proof of multi-host, HA, or disaster-recovery behavior.",
+    "Treat every client disconnect as an unknown commit outcome until the durable command ID is reconciled; disconnect does not imply transaction rollback.",
+    "Use a bounded worker transport or pooled channel rather than one SSH/control connection per database command; the latter hit SSH admission limits before the database."
+  ],
+  "readiness": {
+    "singleHostPostgresqlConcurrencyDecisionMatrixComplete": true,
+    "twoPhysicalHostClientConcurrencyAndLinkLossMatrixComplete": true,
+    "distributedProductionReady": false,
+    "remainingGates": [
+      "PostgreSQL replication, leader failover, split-brain fencing, and measured RPO and RTO",
+      "general delay, packet loss, asymmetric partition, and multi-control-plane or multi-worker orchestration",
+      "off-host backup, restore, and point-in-time recovery",
+      "physical power-loss qualification",
+      "production connection-pool, migration-locking, statement-timeout, and cancellation conformance"
+    ]
+  },
+  "secrets": {
+    "tokenValuesIncluded": false,
+    "credentialDigestsIncluded": false,
+    "accountIdentifiersIncluded": false,
+    "userProjectContentIncluded": false
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "campaign": "macos-claude-tools-hooks-conformance",
+  "date": "2026-07-28",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "syntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "realUserMcpServersUsed": false,
+    "syntheticInProcessMcpUsed": true,
+    "syntheticStdioMcpUsed": true,
+    "existingCliAuthorizationUsed": true,
+    "credentialValuesInspectedOrRetained": false,
+    "rawProviderMessagesRetained": false,
+    "providerSessionIdsRetained": false
+  },
+  "packageClosure": {
+    "claudeAgentSdk": {
+      "version": "0.3.220",
+      "integrity": "sha512-glc7SdwPkOkLw8oxwLo9PKTdLJGqW/PIR4urWXFoRtX9YllwozsEVc5Tc1+EvLSkfrsxPJqQWqOgpjUOQXf1oA=="
+    },
+    "anthropicSdk": {
+      "version": "0.115.0",
+      "integrity": "sha512-BJrFIVyjNuU8lfDyIJTvlRYzgQg+zEl78BxE7fq8esULsGz9IRQvGtW5spq3tydmtjQb/GFdooKGdGsetpx+lQ=="
+    },
+    "mcpSdk": {
+      "version": "1.30.0",
+      "integrity": "sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA=="
+    },
+    "zod": {
+      "version": "4.4.3",
+      "integrity": "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="
+    },
+    "bundledClaudeCode": "2.1.220",
+    "nativeBinarySha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081"
+  },
+  "staticContracts": {
+    "hookTimeoutIsSeconds": true,
+    "preToolCanModifyInput": true,
+    "postToolBatchPresent": true,
+    "postToolFailureHasInterruptFlag": true,
+    "canUseToolHasNoParkDeadline": true,
+    "stdioEnvIsRecord": true,
+    "mcpPerCallTimeoutPresent": true,
+    "strictMcpConfigSupported": true
+  },
+  "scenarios": {
+    "prePostRewriteAndInProcessBoundary": {
+      "initMcpCount": 1,
+      "exactBusinessResult": true,
+      "handlerCalls": 1,
+      "handlerReceivedRewrittenInput": true,
+      "effectContainsRewrittenInput": true,
+      "preOriginalSeen": true,
+      "postRewrittenSeen": true,
+      "postResponseSeen": true,
+      "prePostToolUseIdCorrelated": true,
+      "postBatchObservedSameToolUseId": true,
+      "readOnlyAnnotationDidNotContainHandlerWrite": true,
+      "sandboxDidNotContainInProcessHandler": true,
+      "serverStillConnectedAfterQuery": false,
+      "explicitCloseDisconnectedServer": true,
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "mostRestrictiveParallelPreToolHooks": {
+      "bothMatchingHooksRanInParallelSet": true,
+      "hooksCorrelatedSameToolUseId": true,
+      "denyWonOverAllowAndBareAllowedTool": true,
+      "permissionDeniedHookCalls": 0,
+      "exactBusinessResult": true,
+      "serverStillConnectedAfterQuery": false,
+      "explicitCloseDisconnectedServer": true,
+      "resultSubtypes": [
+        "success"
+      ],
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "allowedToolsShadowsCanUseTool": {
+      "handlerCalls": 1,
+      "callbackCalls": 0,
+      "bareAllowedToolSkippedCanUseTool": true,
+      "effectRecordedDespiteDenyingCallback": true,
+      "shadowWarningObserved": true,
+      "exactBusinessResult": true,
+      "serverStillConnectedAfterQuery": false,
+      "explicitCloseDisconnectedServer": true,
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "unhandledInProcessToolError": {
+      "handlerCalls": 1,
+      "rawExceptionVisibleInProviderStream": true,
+      "postToolUseFailureObserved": true,
+      "failureHookSawRawException": true,
+      "failureDurationPresent": true,
+      "queryContinuedAfterHandlerException": true,
+      "rawProviderMessagesRetained": false,
+      "serverStillConnectedAfterQuery": false,
+      "explicitCloseDisconnectedServer": true,
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "preToolHookTimeout": {
+      "hookCalls": 1,
+      "hookSignalAborted": true,
+      "timeoutBlockedTool": true,
+      "elapsedUnderThirtySeconds": true,
+      "exactBusinessResult": true,
+      "serverStillConnectedAfterQuery": false,
+      "explicitCloseDisconnectedServer": true,
+      "resultSubtypes": [
+        "success"
+      ],
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "interruptDuringPendingPreToolHook": {
+      "hookStartedInTime": true,
+      "hookCalls": 1,
+      "hookSignalAborted": true,
+      "receiptReturned": true,
+      "interruptError": null,
+      "settledWithinTenSeconds": true,
+      "pendingToolDidNotExecute": true,
+      "serverStillConnectedAfterQuery": false,
+      "explicitCloseDisconnectedServer": true,
+      "resultSubtypes": [
+        "error_during_execution"
+      ],
+      "iteratorError": "Error"
+    },
+    "externalStdioEnvironmentAndCleanup": {
+      "initMcpCount": 1,
+      "exactBusinessResult": true,
+      "effectExact": true,
+      "explicitServerEnvPresent": true,
+      "parentEnvInheritedByStdioServer": true,
+      "stdioServerStoppedAfterQuery": true,
+      "aliveBeforeCleanup": false,
+      "aliveAfterCleanup": false,
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "externalStdioAbort": {
+      "toolStartedInTime": true,
+      "iteratorError": "aborted",
+      "resultSubtypes": [],
+      "settledWithinTenSeconds": true,
+      "completionAbsent": true,
+      "stdioServerStoppedAfterAbort": true,
+      "aliveBeforeCleanup": false,
+      "aliveAfterCleanup": false
+    },
+    "externalStdioToolTimeout": {
+      "toolStarted": true,
+      "failureHookCalls": 1,
+      "failureWasInterrupt": false,
+      "failureDurationPresent": true,
+      "exactBusinessResult": true,
+      "elapsedUnderThirtySeconds": true,
+      "completionAbsent": true,
+      "stdioServerStoppedAfterQuery": true,
+      "aliveBeforeCleanup": false,
+      "aliveAfterCleanup": false,
+      "resultSubtypes": [
+        "success"
+      ],
+      "iteratorError": null,
+      "hardTimedOut": false
+    }
+  },
+  "cleanup": {
+    "matchingNativeOrSyntheticMcpProcessLeaks": 0,
+    "rawEffectFilesRemoved": true
+  },
+  "assertions": {
+    "preHookRewriteAndCorrelation": true,
+    "inProcessHandlerOutsideClaudeSandbox": true,
+    "mostRestrictiveHookWins": true,
+    "canUseToolShadowingConfirmed": true,
+    "rawHandlerExceptionNeedsRedaction": true,
+    "preToolTimeoutFailsClosed": true,
+    "interruptCancelsPendingHookAndTool": true,
+    "inProcessMcpClosedByQuery": true,
+    "stdioEnvOverlayInheritanceConfirmed": true,
+    "stdioAbortStopsEffectAndProcess": true,
+    "stdioTimeoutStopsEffectAndProcess": true,
+    "noProcessLeak": true,
+    "cleanupComplete": true
+  }
+}

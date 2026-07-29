@@ -23,6 +23,11 @@
 >
 > Machine-readable observations remain useful. Any model or recommendation in
 > this file that conflicts with ADR-0001 is superseded.
+>
+> The later OpenCode `1.18.5`/`1.18.8` hosting conformance matrix is recorded
+> in `docs/spikes/opencode-hosting-e2e-results.md`. It is the current evidence
+> source for OpenCode concurrency, cancellation, OAuth, process-tree,
+> filesystem, retry, and storage behavior.
 
 Status: evidence complete for the initial Claude, Codex, and OpenCode matrix.
 This document is retained as ADR input and behavior evidence, not as a public
@@ -371,6 +376,8 @@ Machine-readable observations and run IDs are in
 `experiments/runtime-profile-behavior/fixtures/provider-behavior-matrix.json`.
 Confirmed invariants and open decisions are separated in
 `experiments/runtime-profile-behavior/fixtures/confirmed-invariants.json`.
+The redacted OpenCode hosting E2E matrix is in
+`experiments/runtime-profile-behavior/fixtures/opencode-hosting-e2e-summary.json`.
 Compact evidence promoted from the selected host runs is in
 `redacted-trace-summaries.json`; `redacted-trace-selection.json` records its
 inputs. The promotion step omits raw stdout, stderr, environments, and

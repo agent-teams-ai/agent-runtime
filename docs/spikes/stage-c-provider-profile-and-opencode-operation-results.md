@@ -222,14 +222,139 @@ The evidence supports these scoped boundaries:
 The scratch harness is evidence, not production code, and must not be copied as
 an implementation.
 
+## Post-stage OpenCode conformance follow-up
+
+The later hosting-only OpenCode E2E matrix is recorded in
+`docs/spikes/opencode-hosting-e2e-results.md`. Its machine-readable redacted
+summary is
+`experiments/runtime-profile-behavior/fixtures/opencode-hosting-e2e-summary.json`.
+
+That follow-up used OpenCode `1.18.5` and `1.18.8`, deterministic provider
+faults, and a disposable real ChatGPT OAuth grant in synthetic workspaces. It
+confirmed the Stage C ownership model while adding native counterexamples for
+same-session concurrency, early cancellation, output drain, session ownership,
+MCP and skill discovery, filesystem indirection, descendant cleanup, OAuth
+generation races, dependency egress, retry storms, SQLite pressure, and
+upgrade/rollback.
+
+The frozen Stage C source, campaigns, and accepted projections remain
+unchanged. The follow-up narrows some OpenCode-specific partials; it does not
+upgrade Stage C into a production-readiness claim.
+
+## Post-stage Linux containment and egress follow-up
+
+The hosted Linux matrix is recorded in
+`docs/spikes/linux-nonroot-containment-egress-results.md`. Its machine-readable
+redacted summary is
+`experiments/runtime-profile-behavior/fixtures/linux-nonroot-containment-egress-summary.json`.
+
+Three campaigns plus an independent 50-of-50 audit confirmed that a non-root,
+zero-capability runtime with read-only root, no-new-privileges, seccomp,
+AppArmor, explicit resource limits, and cgroup-v2 custody left no observed
+survivor after timed stop or forced kill, even when a child created a new
+process group and session.
+
+The same campaigns proved that an internal Docker bridge is not an endpoint
+allowlist: a deliberately attached unauthorized peer was reachable every
+time. The provider-facing network must contain only a per-operation egress
+gateway, which enforces the signed destination and budget.
+
+This closes the scoped container/cgroup custody question on the tested worker.
+External TLS/DNS gateway policy, Docker-daemon custody, custom profiles, image
+trust, init/zombie behavior, platform versions, and end-to-end OpenCode in
+that boundary remain gates.
+
+## Post-stage PostgreSQL concurrency follow-up
+
+The later single-host PostgreSQL matrix is recorded in
+`docs/spikes/postgresql-concurrency-results.md`. Its machine-readable redacted
+summary is
+`experiments/runtime-profile-behavior/fixtures/postgresql-concurrency-summary.json`.
+
+The final PostgreSQL `18.4` single-host campaign passed an independent
+32-of-32 audit over command idempotency, cross-session conflicts, locked
+sequence allocation, timeout-after-commit replay, dispatch fencing, acceptance
+reconciliation, transactional outbox, idempotent inbox, process crash, and
+same-server logical restore. A two-physical-host macOS/Linux client follow-up
+passed 48 of 48 checks over the same-command race, cross-session conflict,
+gap-free sequence allocation, and complete SSH-link loss.
+
+The link-loss evidence proves that disconnect does not imply transaction
+rollback: PostgreSQL may continue a buffered batch and commit after the client
+has failed. Durable command reconciliation is mandatory. General delay,
+packet loss, asymmetric partitions, multi-worker orchestration, HA/failover,
+split-brain fencing, off-host PITR, physical power loss, and production
+pool/migration behavior remain gates.
+
+## Post-stage Connect replay follow-up
+
+The local Node Connect matrix is recorded in
+`docs/spikes/connect-replay-results.md`. Its machine-readable redacted summary
+is `experiments/runtime-profile-behavior/fixtures/connect-replay-summary.json`.
+
+Connect `2.1.2` over HTTP/1.1 and HTTP/2 passed an independent 55-of-55 audit
+covering timeout after durable acceptance, explicit cursor resume after
+socket/session loss, at-least-once redelivery after an uncheckpointed event,
+typed expired/forged/wrong-stream/ahead cursors, HTTP/2 GOAWAY, and bounded
+transport cleanup.
+
+The slow-consumer case also falsified an unsafe assumption: while the client
+paused, the server generator produced the full 8 MiB sample on both protocols.
+AR must enforce its own per-subscriber byte/event budgets instead of treating
+Connect backpressure as that budget.
+
+This closes only the local Node contract. TLS/proxy/load-balancer/service-mesh,
+browser/mobile SDK, multi-host drain, production persistence/retention,
+cursor-key rotation, and resource-soak behavior remain gates.
+
+## Post-stage macOS Keychain custody follow-up
+
+The disposable file-backed Keychain matrix is recorded in
+`docs/spikes/macos-keychain-custody-results.md`. Its machine-readable redacted
+summary is
+`experiments/runtime-profile-behavior/fixtures/macos-keychain-custody-summary.json`.
+
+The accepted campaign passed an independent 39-of-39 audit. It falsified the
+assumed secure create mode by observing `0644`, proved that a backup can retain
+an older usable credential generation after live rotation, and showed that
+concurrent Keychain updates are not a generation-CAS mechanism.
+
+The scoped result makes Keychain a local secret-byte adapter behind
+`KeyProvider`, while Provider Access owns credential generation, refresh
+fencing, and durable CAS. An ad-hoc signed `SecItem` follow-up qualified only
+the deprecated custom file-keychain path and falsified reliable no-UI locked
+access there. Data Protection Keychain integration from the signed helper,
+access-group and locked-session behavior, backup invalidation, crypto-erasure,
+and external KMS or off-host trust custody remain gates.
+
 ## Remaining production gates
 
 The following remain unresolved and block broader release claims:
 
-- real OpenCode, Codex, and Claude credentials and provider conformance;
-- macOS and Windows process, filesystem, and network containment;
-- physical power loss, `ENOSPC`, corruption, backup, and restore behavior;
-- PostgreSQL and distributed concurrency;
-- Connect replay, reconnect, timeout-after-acceptance, and SDK conformance;
-- external KMS or off-host trust anchor;
-- binary upgrade, rollback, and active-session compatibility.
+- real Codex and Claude credentials and provider conformance, plus any
+  additional supported OpenCode accounts and routes;
+- Linux end-to-end OpenCode in the accepted non-root container/cgroup
+  boundary, external TLS/DNS egress gateway policy, Docker-daemon custody,
+  custom seccomp/AppArmor and image trust, init/zombie behavior, and the
+  supported platform matrix; scoped descendant custody and same-network
+  egress evidence is complete;
+- macOS production endpoint-specific network enforcement and continuous
+  descendant custody after the confirmed process-group/session escape,
+  isolated real-provider parity, broader macOS versions, and physical Intel if
+  supported; full Windows process, filesystem, and network containment;
+- physical power loss, migration, and production backup/restore behavior; the
+  follow-up covers scoped OpenCode `ENOSPC`, process crash, forced disposable
+  APFS detach/reattach, atomic family and logical restore, and corruption
+  recovery;
+- PostgreSQL multi-host partitions, replication/leader failover, split-brain
+  fencing, off-host PITR, and measured RPO/RTO; scoped single-host concurrency,
+  fencing, process crash, same-server restore, and two-physical-host
+  client/link-loss behavior are complete;
+- external Connect TLS/proxy/load-balancer/service-mesh, browser/mobile SDK,
+  multi-host drain, production persistence/retention, cursor-key rotation, and
+  resource-soak conformance; the scoped local Node matrix is complete;
+- production `KeyProvider` and external KMS or off-host trust anchor; the
+  disposable macOS file-backed Keychain storage matrix is complete, but signed
+  `SecItem`, Provider Access CAS, backup invalidation, and crypto-erasure are
+  not;
+- binary policy beyond the tested OpenCode `1.18.5` and `1.18.8` resume pair.

@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "campaign": "macos-claude-session-store-conformance",
+  "date": "2026-07-28",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "syntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "realMcpServersUsed": false,
+    "existingCliAuthorizationUsed": true,
+    "credentialValuesInspectedOrRetained": false,
+    "rawProviderMessagesRetained": false,
+    "rawTranscriptEntriesRetained": false
+  },
+  "package": {
+    "name": "@anthropic-ai/claude-agent-sdk",
+    "version": "0.3.220",
+    "npmIntegrity": "sha512-glc7SdwPkOkLw8oxwLo9PKTdLJGqW/PIR4urWXFoRtX9YllwozsEVc5Tc1+EvLSkfrsxPJqQWqOgpjUOQXf1oA==",
+    "nativeBinarySha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081",
+    "bundledCliVersion": "2.1.220"
+  },
+  "staticContracts": {
+    "alphaApi": true,
+    "requiredAppendAndLoad": true,
+    "entriesAreOpaque": true,
+    "sdkDoesNotHashLoadedEntries": true,
+    "appendRetryDocumented": true,
+    "optionalDeleteIsNoop": true,
+    "listSubkeysNeededForSubagents": true,
+    "loadTimeoutOptionPresent": true,
+    "localFirstDualWrite": true
+  },
+  "scenarios": {
+    "restoreFromStoreAfterLocalDeletion": {
+      "initialExact": true,
+      "initialSessionIdMatched": true,
+      "localDeletedBeforeRestore": true,
+      "storeAppendCalls": 8,
+      "storeLoadCalls": 3,
+      "storeCapturedMainKey": true,
+      "storeEntryCountPositive": true,
+      "restoredExactOriginalToken": true,
+      "localDeletedAfterRestore": true,
+      "storeDeleteCalled": true,
+      "storeEmptyAfterDelete": true,
+      "iteratorErrors": [
+        null,
+        null
+      ]
+    },
+    "loadedTranscriptIntegrity": {
+      "sdkAcceptedModifiedOpaqueEntries": true,
+      "originalTokenNotReturned": true,
+      "iteratorError": null,
+      "rawEntriesRetained": false
+    },
+    "projectKeyScopesStoreLookup": {
+      "differentCwdResultSubtypes": [
+        "error_during_execution"
+      ],
+      "differentCwdIteratorError": "session_not_found",
+      "differentCwdDidNotLoadOriginalSession": true
+    },
+    "ambiguousAppendRetry": {
+      "exactBusinessResult": true,
+      "appendAttemptedMoreThanOnce": true,
+      "duplicateUuidRedeliveryObserved": true,
+      "mirrorErrorCount": 0,
+      "iteratorError": null
+    },
+    "exhaustedAppendFailure": {
+      "exactBusinessResult": true,
+      "appendAttempts": 12,
+      "mirrorErrorCount": 4,
+      "threeAttemptsPerFailedBatch": true,
+      "mirrorErrorObserved": true,
+      "localTranscriptSurvived": true,
+      "iteratorError": null
+    },
+    "loadTimeout": {
+      "elapsedMs": 302,
+      "failedBeforeInit": true,
+      "noProviderResult": true,
+      "iteratorError": "load_timeout"
+    },
+    "continueRequiresListing": {
+      "failedBeforeInit": true,
+      "noProviderResult": true,
+      "iteratorError": "listing_capability_missing"
+    },
+    "persistFalseConflict": {
+      "failedBeforeInit": true,
+      "noProviderResult": true,
+      "iteratorError": "persist_session_conflict"
+    },
+    "checkpointConflict": {
+      "failedBeforeInit": true,
+      "noProviderResult": true,
+      "iteratorError": "checkpoint_conflict"
+    }
+  },
+  "cleanup": {
+    "localNativeProcessLeaks": 0,
+    "rawStoresCleared": true,
+    "knownLocalSessionsDeleted": true
+  },
+  "assertions": {
+    "restoreAfterLocalDeletion": true,
+    "externalStoreStillCwdScoped": true,
+    "loadedEntriesNeedExternalIntegrity": true,
+    "retryRequiresIdempotentAppend": true,
+    "exhaustedMirrorFailureIsNonFatal": true,
+    "loadTimeoutFailsBeforeProvider": true,
+    "continueFailsWithoutListing": true,
+    "invalidCombinationsFailBeforeProvider": true,
+    "noNativeProcessLeak": true,
+    "cleanupComplete": true
+  }
+}

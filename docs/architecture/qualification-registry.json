@@ -1,0 +1,788 @@
+{
+  "$schema": "./qualification-registry.schema.json",
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-29",
+  "matchingPolicy": {
+    "default": "unqualified",
+    "dimensionRule": "exact-match-all-dimensions",
+    "entryValueRule": "target-token-equals-one-observed-token-per-dimension",
+    "wildcardsAllowed": false,
+    "promotionRule": "explicit-evidence-and-readiness-update"
+  },
+  "qualificationLevels": [
+    "unqualified",
+    "scoped",
+    "implementation",
+    "deployment"
+  ],
+  "entries": [
+    {
+      "id": "stage-a-profile-foundation",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["synthetic-profile-model"],
+        "platform": ["hosted-linux"],
+        "credentialRoute": ["none-synthetic"],
+        "transport": ["in-process-synthetic"],
+        "failureDomain": ["single-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-a-profile-foundation-results.md",
+          "sha256": "6a90188c51756265e371dfbf5263d09cdf47ef659c2aa3a2bbe3380cedbe5b64"
+        }
+      ],
+      "readinessSections": ["Profiles, settings, and environment"],
+      "limitations": ["Architecture evidence with scoped partials, not provider or deployment qualification."]
+    },
+    {
+      "id": "stage-b-runtime-execution",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["opencode"],
+        "binaryClosure": ["fixture-pinned-opencode-runtime"],
+        "platform": ["hosted-linux-network-isolated"],
+        "credentialRoute": ["synthetic"],
+        "transport": ["process-stdio-synthetic"],
+        "failureDomain": ["single-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-b-runtime-execution-results.md",
+          "sha256": "605d7dfb0cb987782048957dad436084affd6673ea861e021f37dad5dde30cd8"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents"],
+      "limitations": ["Synthetic provider path and single-host lifecycle only."]
+    },
+    {
+      "id": "stage-c-provider-profile-opencode-operation",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["opencode"],
+        "binaryClosure": ["fixture-pinned-opencode-runtime"],
+        "platform": ["hosted-linux"],
+        "credentialRoute": ["synthetic"],
+        "transport": ["opencode-operation-seam"],
+        "failureDomain": ["single-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-c-provider-profile-and-opencode-operation-results.md",
+          "sha256": "74490b82389dd66b28ea87f5da6e9e6ff803cb20d892a15dd89f6f9dbf276e32"
+        }
+      ],
+      "readinessSections": ["Profiles, settings, and environment", "Execution, tools, and child agents"],
+      "limitations": ["Local provider stub and synthetic credentials; no broad provider qualification."]
+    },
+    {
+      "id": "stage-d-cross-context-reconciliation",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["synthetic-cross-context-model"],
+        "platform": ["hosted-linux"],
+        "credentialRoute": ["none-synthetic"],
+        "transport": ["in-process-command-event"],
+        "failureDomain": ["single-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-d-cross-context-reconciliation-results.md",
+          "sha256": "d95a69d049201a383ddea69a74a183e7627ae513a308f04b9a57d1b6658e89f0"
+        }
+      ],
+      "readinessSections": ["Persistence, contracts, and service extraction"],
+      "limitations": ["Synthetic cross-context lanes; remote adapters and production stores remain unqualified."]
+    },
+    {
+      "id": "stage-e-security-time-idempotency",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["synthetic-security-model"],
+        "platform": ["hosted-linux"],
+        "credentialRoute": ["synthetic"],
+        "transport": ["in-process-synthetic"],
+        "failureDomain": ["single-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-e-security-time-and-idempotency-results.md",
+          "sha256": "ff749b019b9f05abc3758fc891b3f599e15de8efe07898b529131a84e60b9b70"
+        }
+      ],
+      "readinessSections": ["Cross-cutting authority invariants", "Provider access and key custody"],
+      "limitations": ["Synthetic secrets, clocks and effect adapters only."]
+    },
+    {
+      "id": "opencode-hosting-e2e",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["opencode"],
+        "binaryClosure": [
+          "opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
+          "opencode@1.18.8#8179ed5ef819eb5a11310ceeb7a4e30e2ecbf29b1486ea06531f8b8375003972"
+        ],
+        "platform": ["hosted-linux"],
+        "credentialRoute": ["disposable-chatgpt-oauth"],
+        "transport": ["opencode-acp", "provider-fault-stub"],
+        "failureDomain": ["single-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/opencode-hosting-e2e-results.md",
+          "sha256": "78f0ed621647dc8935f2d801cddc66f5b8ecc0276f5aec211f0a0be92a059815"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/opencode-hosting-e2e-summary.json",
+          "sha256": "efdb9caf86efae6dcb29529a84eb65a26b33ec42d837635afba71ac85579bf89"
+        }
+      ],
+      "readinessSections": ["Provider access and key custody", "Execution, tools, and child agents"],
+      "limitations": ["Exact OpenCode revisions and disposable OAuth route only; no production account or deployment qualification."]
+    },
+    {
+      "id": "linux-nonroot-containment-egress",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["synthetic-container-custody-probe"],
+        "platform": ["hosted-linux-container-cgroup-v2"],
+        "credentialRoute": ["none-synthetic"],
+        "transport": ["docker-internal-network"],
+        "failureDomain": ["single-host-container"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/linux-nonroot-containment-egress-results.md",
+          "sha256": "83e408cc68b24a375b33e8fe2c03c257af5ca96adf268c3be923afa06a8dfae6"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/linux-nonroot-containment-egress-summary.json",
+          "sha256": "42a7d88ca647712ff7f056f9fa4833c6c9679179fb9feabca1937ffb5d0fa5ee"
+        }
+      ],
+      "readinessSections": ["Platform containment and binary policy"],
+      "limitations": ["Synthetic containers on one worker; same-network reachability is a retained negative, not an allowlist."]
+    },
+    {
+      "id": "opencode-container-tls-gateway",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["opencode"],
+        "binaryClosure": ["fixture-pinned-opencode-container-closure"],
+        "platform": ["hosted-linux-container"],
+        "credentialRoute": ["synthetic"],
+        "transport": ["synthetic-tls-gateway"],
+        "failureDomain": ["single-host-container"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/opencode-container-tls-gateway-results.md",
+          "sha256": "8d8c48bc25a14c15d7b03f47bff68775976de0b4bac68e738ed78bb8bfca2d5d"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json",
+          "sha256": "6dbc6ca165ca9ff26ac7bb56ff049a7af05b81521d5b82414725a0af904a2d60"
+        }
+      ],
+      "readinessSections": ["Platform containment and binary policy"],
+      "limitations": ["Synthetic PKI and gateway; no public DNS, public PKI or production proxy path."]
+    },
+    {
+      "id": "opencode-macos-conformance",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["opencode"],
+        "binaryClosure": ["opencode@1.18.8#a5369cfaf8aa89f77e41f154be4644dec3f5adb5e71d0e5cc6c8c7630bd63b0f"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["synthetic"],
+        "transport": ["local-process-stdio"],
+        "failureDomain": ["single-macos-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/opencode-macos-conformance-results.md",
+          "sha256": "d41e97f688323e6f3ac4506fd8c5eb0a344aaa066fa1d1c7b992964b61edb9be"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/opencode-macos-e2e-summary.json",
+          "sha256": "fa86a84143d3fc901d1c789c1adfd67cc768340ea2b0821ad749ac23f907a03c"
+        }
+      ],
+      "readinessSections": ["Platform containment and binary policy"],
+      "limitations": ["Partial Apple Silicon platform evidence; endpoint egress and continuous descendant custody remain unqualified."]
+    },
+    {
+      "id": "macos-keychain-custody",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["signed-synthetic-keychain-helper"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["disposable-file-backed-keychain"],
+        "transport": ["security-framework-local"],
+        "failureDomain": ["single-macos-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-keychain-custody-results.md",
+          "sha256": "85fff3703771f934df91ce9243c4b86a5108971ad202bb01de2291309c376978"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-keychain-custody-summary.json",
+          "sha256": "8abc7a67fe0c0f88814bf72f67ae3f6e8fb111e37d325bcc96386ca3b083231d"
+        }
+      ],
+      "readinessSections": ["Provider access and key custody"],
+      "limitations": ["Disposable deprecated file-backed Keychain behavior, not production Data Protection Keychain or KMS custody."]
+    },
+    {
+      "id": "macos-codex-claude-cli",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["codex", "claude"],
+        "binaryClosure": ["fixture-pinned-codex-claude-cli-pair"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["local-cli-stdio"],
+        "failureDomain": ["single-macos-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-codex-claude-cli-conformance-results.md",
+          "sha256": "4458c3a87c9d9f728f2fb6bde1c89855d55b2afa74d1802ae1d6011eee81c9dc"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-codex-claude-cli-summary.json",
+          "sha256": "c11a29c8e4b513442f771ed0599ccfe332bf47dc50228df6b010d36fb61c1dc7"
+        }
+      ],
+      "readinessSections": ["Profiles, settings, and environment", "Execution, tools, and child agents"],
+      "limitations": ["Exact local binary pair and existing login only; not hosted or production credential qualification."]
+    },
+    {
+      "id": "macos-codex-app-server",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["codex"],
+        "binaryClosure": ["fixture-pinned-codex-app-server"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["jsonl-stdio"],
+        "failureDomain": ["single-macos-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-codex-app-server-conformance-results.md",
+          "sha256": "05c65131185a47b51dbf45e716422361b2a8dfc4d87176ad25733690fc618f8b"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-codex-app-server-summary.json",
+          "sha256": "d9e6552a179843a95762df1cd8cc042cbfb19d483a57bd57796d9b5009e11d91"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents"],
+      "limitations": ["Stable stdio subset and single host only; broad App Server API remains outside the qualified port."]
+    },
+    {
+      "id": "macos-codex-app-server-effects",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["codex"],
+        "binaryClosure": ["fixture-pinned-codex-app-server"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["jsonl-stdio"],
+        "failureDomain": ["single-macos-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-codex-app-server-effects-results.md",
+          "sha256": "970093771868511a9f8d45f629aa19b5d8ec86880432fb76bd5958b444725779"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-codex-app-server-effects-summary.json",
+          "sha256": "0a9a42ac21807875127a441e00774f06f785b23f77331cf7c980ec24f76af0e6"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents"],
+      "limitations": ["Scoped local effect lifecycle; no remote controller failover or production effect broker."]
+    },
+    {
+      "id": "macos-claude-agent-sdk",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["claude"],
+        "binaryClosure": ["fixture-pinned-claude-agent-sdk"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["claude-agent-sdk"],
+        "failureDomain": ["single-macos-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-claude-agent-sdk-conformance-results.md",
+          "sha256": "09017fbf382d73f448478267b65ccb51aa1f1bd055751ada1cddca72e6ef7ba6"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-claude-agent-sdk-summary.json",
+          "sha256": "46a1fa81e2beb659a91f0d8cd600ae4e6221effd7d93edea559e3f0f1b0ea1e6"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents"],
+      "limitations": ["Exact local SDK closure and macOS sandbox behavior only."]
+    },
+    {
+      "id": "macos-claude-session-store",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["claude"],
+        "binaryClosure": ["fixture-pinned-claude-agent-sdk"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["claude-session-store"],
+        "failureDomain": ["single-macos-host-local-mirror"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-claude-session-store-conformance-results.md",
+          "sha256": "86b4f1a5de018e5d82ed4b988325607b0bf26aeafa33415de93d18f81e3724cb"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-claude-session-store-summary.json",
+          "sha256": "2a41f68f1e8efd64e83771d0e5490a31e638fb564c7a6f449baea0b71b2116c4"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents", "Persistence, contracts, and service extraction"],
+      "limitations": ["Local and synthetic mirror behavior; multi-host durable store remains unqualified."]
+    },
+    {
+      "id": "macos-claude-tools-hooks",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["claude"],
+        "binaryClosure": ["fixture-pinned-claude-agent-sdk"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["in-process-tools", "synthetic-mcp-stdio"],
+        "failureDomain": ["single-macos-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-claude-tools-hooks-conformance-results.md",
+          "sha256": "9503155abaf6e272a533094738282aca7c591e72d10a034e883e2683156ba2cc"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-claude-tools-hooks-summary.json",
+          "sha256": "b9d3f59ed8694adab199638e7680592db0d404dff700e2ec80c20b1a38d03458"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents"],
+      "limitations": ["Synthetic MCP and exact hook surfaces only; effect handlers are not a production containment boundary."]
+    },
+    {
+      "id": "macos-claude-mcp-failure",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["claude"],
+        "binaryClosure": ["fixture-pinned-claude-agent-sdk"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["synthetic-mcp-stdio"],
+        "failureDomain": ["single-macos-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-claude-mcp-failure-conformance-results.md",
+          "sha256": "7d4c5ad7f35a4d3a1c4796fe73cf57855dfb4f95b380e2f05e38049f7f93de6e"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-claude-mcp-failure-summary.json",
+          "sha256": "a21ad5a36810b22d47bf97bda043e265614c05dd12c3710726f652150a4e1b73"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents"],
+      "limitations": ["Synthetic MCP retry/crash paths on one host; remote tool-host partitions remain unqualified."]
+    },
+    {
+      "id": "macos-claude-subagent-parallel",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["claude"],
+        "binaryClosure": ["fixture-pinned-claude-agent-sdk"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["claude-agent-sdk-in-process"],
+        "failureDomain": ["single-macos-host-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-claude-subagent-parallel-results.md",
+          "sha256": "5d1bb59726c15c1d6f7fbe43369572d2b74234a63166bf703354e52a61527b6d"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-claude-subagent-parallel-summary.json",
+          "sha256": "b2d25c8ec4f0d1ae319204d1c6f5b1877504973b66e7ec3e8bcb8087c0037929"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents"],
+      "limitations": ["Scoped programmatic-child behavior; provider grouping is not capacity or custody authority."]
+    },
+    {
+      "id": "macos-claude-subagent-stdio",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["claude"],
+        "binaryClosure": ["fixture-pinned-claude-agent-sdk"],
+        "platform": ["macos-apple-silicon"],
+        "credentialRoute": ["local-preauthenticated-user-session"],
+        "transport": ["external-stdio-child"],
+        "failureDomain": ["single-macos-host-one-or-two-processes"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/macos-claude-subagent-stdio-results.md",
+          "sha256": "a2a501d9c851c49654c9f28d00db1d46926c42fd9375ff6ec0eb5727ddc502ed"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-claude-subagent-stdio-summary.json",
+          "sha256": "3a58b6f963bc7fc5a2ba9d82e4e9a22d1470d276f89c3b74884d7860ed52b462"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-claude-subagent-roster-summary.json",
+          "sha256": "f65e12d0a82ca811aa9971535ffadfef52e52fee3d0547868632df30f50cb607"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/macos-claude-subagent-dual-stdio-summary.json",
+          "sha256": "2d12330c5af74c1bda1aad8a36381a89cab2bf15890e1eac1b7182c7dca8b16f"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents"],
+      "limitations": ["Same-host stdio only; roster and provider grouping do not replace AR authorization/admission."]
+    },
+    {
+      "id": "postgresql-concurrency-recovery",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["postgresql@18.4"],
+        "platform": ["hosted-linux-db", "macos-client"],
+        "credentialRoute": ["synthetic-database-role"],
+        "transport": ["postgresql-client", "ssh-link-loss"],
+        "failureDomain": ["single-db-host-two-client-hosts"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/postgresql-concurrency-results.md",
+          "sha256": "2e5bd87852c35b6713573dd2701023ee21874fecda10393738f0c1297c5e1604"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/postgresql-concurrency-summary.json",
+          "sha256": "4cf5c17e58fcc6c1895a329c58cd7c0b093816be6cd6d01e8aa8ee54967cdbe3"
+        }
+      ],
+      "readinessSections": ["Persistence, contracts, and service extraction"],
+      "limitations": ["No HA leader failover, asymmetric partition, PITR or production pool qualification."]
+    },
+    {
+      "id": "connect-replay-timeout",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["node-connect@2.1.2"],
+        "platform": ["local-node-loopback"],
+        "credentialRoute": ["none-synthetic"],
+        "transport": ["connect-http1", "connect-http2"],
+        "failureDomain": ["single-host-transport"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/connect-replay-results.md",
+          "sha256": "b14d5eacf2b97f049033d432d6b23e884e9530351b8dbd31d179f028c852c149"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/connect-replay-summary.json",
+          "sha256": "0f7679ef76f07343c5f83e134b38477a5f4e2c35d1b649afa493d89e54d7b48c"
+        }
+      ],
+      "readinessSections": ["Persistence, contracts, and service extraction"],
+      "limitations": ["Loopback Node transport only; external TLS, proxies, SDK parity and production retention remain unqualified."]
+    },
+    {
+      "id": "stage-f-authority-lease-custody",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["postgresql-contract-model@18.4"],
+        "platform": ["hosted-linux"],
+        "credentialRoute": ["synthetic-database-role"],
+        "transport": ["postgresql-client-process-race"],
+        "failureDomain": ["single-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-f-authority-lease-custody-results.md",
+          "sha256": "26fe667c1496783df6c8dc0110b384d60b5aa0e120cefef38a62560502110c72"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-f-authority-lease-custody-summary.json",
+          "sha256": "79e206e2632998917f6ae2ba33cd3cd325e38c571f750e61d1d5a8a60be47047"
+        }
+      ],
+      "readinessSections": ["Execution, tools, and child agents", "Capacity and control-plane scaling"],
+      "limitations": ["Contract model and single-host PostgreSQL races; no real workers or provider effects."]
+    },
+    {
+      "id": "stage-g-profile-environment-contracts",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["synthetic-profile-contract-model"],
+        "platform": ["hosted-linux"],
+        "credentialRoute": ["none-synthetic"],
+        "transport": ["in-process-deterministic-fuzz"],
+        "failureDomain": ["single-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-g-profile-environment-contracts-results.md",
+          "sha256": "9cc6e763c34c00bc52d335321352de7bf60c426e16f1235cd162acf8462a8fc4"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-g-profile-environment-contracts-summary.json",
+          "sha256": "2fb05899bfee0be540c940472f7f51c456c0c273a6f23785f9f54212deb30464"
+        }
+      ],
+      "readinessSections": ["Profiles, settings, and environment"],
+      "limitations": ["Synthetic deterministic model; native collectors and real provider classifiers remain unqualified."]
+    },
+    {
+      "id": "stage-h-version-skew-migration",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["postgresql-contract-model@18.4"],
+        "platform": ["hosted-linux"],
+        "credentialRoute": ["synthetic-database-role"],
+        "transport": ["postgresql-event-contract"],
+        "failureDomain": ["single-host-rolling-version-model"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-h-version-skew-migration-results.md",
+          "sha256": "9fe29a34be2760b9b388306b552f640d35237b972191297ec0a1a1ec60a75322"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-h-version-skew-migration-summary.json",
+          "sha256": "1a50113b70679482cafe7d3c549553e901a66d9e4767f716f4a223089bd99482"
+        }
+      ],
+      "readinessSections": ["Persistence, contracts, and service extraction"],
+      "limitations": ["Contract model only; production old/new binaries, broker and rollback operations remain unqualified."]
+    },
+    {
+      "id": "stage-i-streaming-egress",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["node-http1-synthetic-gateway"],
+        "platform": ["hosted-linux-loopback"],
+        "credentialRoute": ["none-synthetic"],
+        "transport": ["http1-loopback-stream"],
+        "failureDomain": ["single-host-transport"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-i-streaming-egress-results.md",
+          "sha256": "d7a13a6999ababdf69d1686a70bfd6a7e7f9853d72acd6060942e5fe5a5bb1b6"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-i-streaming-egress-summary.json",
+          "sha256": "26822290f1faca5cc56f7fd6c29a9c4c4b5806c3374f8e4b0a8e9227761e532e"
+        }
+      ],
+      "readinessSections": ["Platform containment and binary policy"],
+      "limitations": ["Loopback HTTP/1 synthetic upstream only; no external provider, TLS or proxy path."]
+    },
+    {
+      "id": "stage-j-storage-failure-recovery",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["postgresql@18.4"],
+        "platform": ["hosted-linux-loopback-ext4"],
+        "credentialRoute": ["synthetic-database-role"],
+        "transport": ["local-postgresql"],
+        "failureDomain": ["single-host-storage"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-j-storage-failure-recovery-results.md",
+          "sha256": "6f5d00ada4a1698932f35e02da26f01c3db3ddd714ed1209290130c214fe3499"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-j-storage-failure-recovery-summary.json",
+          "sha256": "8a645a03ba867cae72e8c71545230d554cd72f6deec3c722e6bab7ef2d5236a8"
+        }
+      ],
+      "readinessSections": ["Persistence, contracts, and service extraction"],
+      "limitations": ["Loopback ext4 and same-host restore; no physical power loss, off-host DR or production storage topology."]
+    },
+    {
+      "id": "stage-k-capacity-fairness",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["postgresql-capacity-contract-model@18.4"],
+        "platform": ["hosted-single-host-linux"],
+        "credentialRoute": ["synthetic-database-role"],
+        "transport": ["postgresql-client-concurrency"],
+        "failureDomain": ["single-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-k-capacity-fairness-results.md",
+          "sha256": "a5219a0bedac1946b488ded1265cfcf6fcc37703cf0745182d1fc452526037ea"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-k-capacity-fairness-summary.json",
+          "sha256": "e5e46f1f2aa77ae6560cadfc0ad6643385672d7948c30dddb548633ca173f428"
+        }
+      ],
+      "readinessSections": ["Capacity and control-plane scaling"],
+      "limitations": ["One physical host and contract allocator; no real workers, multi-host partitions or production fairness soak."]
+    },
+    {
+      "id": "stage-l-postgresql-failover",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["postgresql@18.4"],
+        "platform": ["hosted-single-physical-host-linux"],
+        "credentialRoute": ["synthetic-database-replication-role"],
+        "transport": ["postgresql-streaming-replication"],
+        "failureDomain": ["three-nodes-one-physical-host"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-l-postgres-failover-results.md",
+          "sha256": "f1bdce8d77474314373c969923857c228327491c7ec6ef62cc200d587fe177ff"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-l-postgres-failover-summary.json",
+          "sha256": "eb0d41a419723cc2a8afab8c52ffbb4b53d33da70959f198feee0514561e5f2d"
+        }
+      ],
+      "readinessSections": ["Persistence, contracts, and service extraction"],
+      "limitations": ["All database nodes shared one physical host; no production HA manager, STONITH, PITR or measured RPO/RTO."]
+    },
+    {
+      "id": "stage-m-egress-policy",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["node-signed-egress-model-v14"],
+        "platform": ["hosted-single-host-linux-loopback"],
+        "credentialRoute": ["synthetic-signing-keys"],
+        "transport": ["http1-loopback", "http2-loopback"],
+        "failureDomain": ["single-host-transport"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-m-egress-policy-results.md",
+          "sha256": "07c64ea9f9577249e762fa00c84561b94dba3381f1d818f80350b96d18465887"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-m-egress-policy-summary.json",
+          "sha256": "a075abe99e23468e65cc34cbafda788b06ab44a6476db56ad66cfbfe4c66db2e"
+        }
+      ],
+      "readinessSections": ["Cross-cutting authority invariants", "Platform containment and binary policy"],
+      "limitations": ["Synthetic loopback only; no public DNS/PKI, kernel egress containment, production proxy or provider traffic."]
+    },
+    {
+      "id": "stage-n-binary-revision",
+      "qualification": "scoped",
+      "dimensions": {
+        "provider": ["provider-neutral"],
+        "binaryClosure": ["synthetic-complete-executable-closure-v12"],
+        "platform": ["hosted-linux-deterministic-model"],
+        "credentialRoute": ["synthetic-signing-keys"],
+        "transport": ["in-process-lifecycle-model"],
+        "failureDomain": ["single-process"]
+      },
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/stage-n-binary-revision-results.md",
+          "sha256": "e08a3e55d0882c5545e0f8d60c348948f48b5db7f4bdd1d4a2ec41bf8963a499"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/stage-n-binary-revision-summary.json",
+          "sha256": "2c5b5974e57aa8f00ac0c9edf7f52b92dd5f91846b54d13ef49391ecc67e7491"
+        }
+      ],
+      "readinessSections": ["Cross-cutting authority invariants", "Platform containment and binary policy"],
+      "limitations": ["Deterministic model only; no real artifact store, KMS, database, worker fleet or provider binaries."]
+    }
+  ]
+}

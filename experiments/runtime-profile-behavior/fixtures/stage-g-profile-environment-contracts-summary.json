@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "status": "accepted-scoped-experimental-evidence",
+  "date": "2026-07-28",
+  "safety": {
+    "hostedSyntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "ambientUserConfigsRead": false,
+    "ambientCredentialsRead": false,
+    "providerProcessesStarted": false,
+    "providerRequestsMade": false,
+    "realMcpServersStarted": false
+  },
+  "scope": {
+    "pureContractModel": true,
+    "syntheticTargetCanonicalizers": true,
+    "nativeWindowsBehaviorClaimed": false,
+    "nativeMacosBehaviorClaimed": false,
+    "providerClassifierConformanceClaimed": false,
+    "crossLanguageCanonicalizationClaimed": false,
+    "productionImplementationClaimed": false
+  },
+  "facts": {
+    "settings": {
+      "randomizedPermutationsPerRun": 5000,
+      "distinctSemanticResults": 1,
+      "winner": "explicit",
+      "callerPrecedenceRejected": true,
+      "ambiguousCompositeKeyRejected": true
+    },
+    "resources": {
+      "truthTableCases": 9,
+      "removeRevealsLower": true,
+      "disableSuppressesLower": true,
+      "upsertReenables": true
+    },
+    "instructions": {
+      "randomizedPermutationsPerRun": 3000,
+      "distinctSemanticResults": 1,
+      "replaceThenAppend": [
+        "workspace",
+        "explicit"
+      ],
+      "disableThenAppend": [
+        "explicit"
+      ],
+      "resetToDefault": [
+        "default"
+      ],
+      "conflictAndBudgetsRejected": true
+    },
+    "environment": {
+      "ambientValueIgnored": true,
+      "secretBytesAbsent": true,
+      "windowsCaseCollisionRejected": true,
+      "unicodeCollisionRejected": true,
+      "badValueIdentityRejected": true,
+      "unknownKeyRejected": true,
+      "syntheticWindowsPathNegativesRejected": true
+    },
+    "profileRevision": {
+      "reviewedRevision": "profile-r1",
+      "mutableHeadAfterReview": "profile-r2",
+      "activatedReviewedRevision": "profile-r1",
+      "unavailableRevisionRejectedWithoutFallback": true
+    },
+    "extensionClassifier": {
+      "requiredFieldCount": 8,
+      "everyMissingFieldRejected": true,
+      "unknownFieldRejected": true,
+      "unknownVersionRejected": true
+    }
+  },
+  "evidence": {
+    "harnessSha256": "1d875af6a979db27d6e688599bf47d2255968347d68d6f1aeed5d30cdf15b711",
+    "verifierSha256": "a16979c12a13f89f99927fb79811d893b6d6aba40c192e8c76156be986ebf726",
+    "finalAResultSha256": "9e4fb621e21100bee8f2b609d04be5527c1d070a7b866faaf33703fb6d9cba25",
+    "finalAAuditSha256": "c69d48083f18a10b0d17607fd57472032010aa06f0c233fb3a1127e0dace2d93",
+    "finalBResultSha256": "9bc5fdbdf92beafc3373844c9edb4348435a878bc7ed74cc96ea4040c2abb227",
+    "finalBAuditSha256": "067ee34ce4953fc9825d9bdcced2b45aaa74b7aaff6c74cf5545cf822e1e75eb",
+    "semanticFactsSha256": "1a71b523f5c03753a71d5a570d7f60f6d3a387aeb724499ef1098b804ef76e8f",
+    "finalAudits": "38/38 GO each"
+  },
+  "remainingGates": [
+    "production resolver materializer and classifiers",
+    "real provider fixtures",
+    "native Windows and macOS behavior",
+    "cross-language canonicalization",
+    "signed manifest and artifact-store integration",
+    "stale-review UX"
+  ]
+}

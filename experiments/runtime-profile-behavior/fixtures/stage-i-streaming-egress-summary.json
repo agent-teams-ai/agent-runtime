@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "status": "accepted-scoped-experimental-evidence",
+  "date": "2026-07-28",
+  "safety": {
+    "hostedSyntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "ambientCredentialsRead": false,
+    "agentProcessesStarted": false,
+    "providerProcessesStarted": false,
+    "providerRequestsMade": false,
+    "realMcpServersStarted": false,
+    "externalNetworkUsed": false
+  },
+  "scope": {
+    "loopbackOnly": true,
+    "nodeHttp1Only": true,
+    "syntheticGatewayAndUpstream": true,
+    "tlsUsed": false,
+    "publicDnsUsed": false,
+    "externalProxyOrLoadBalancerUsed": false,
+    "productionGatewayClaimed": false
+  },
+  "facts": {
+    "requestBudget": {
+      "requestBytes": 131072,
+      "budgetBytes": 65536,
+      "status": 413,
+      "upstreamDispatches": 0
+    },
+    "responseBudget": {
+      "budgetBytes": 131072,
+      "preheaderStatus": 502,
+      "postheaderStatusRemained": 200,
+      "postheaderStreamAborted": true,
+      "postheaderBytesForwarded": 131072,
+      "postheaderDecision": "response_budget_exceeded_after_headers"
+    },
+    "timeoutAndDisconnect": {
+      "postheaderTimeoutAborted": true,
+      "clientDisconnectCancelledUpstream": true,
+      "partialUpstreamClassifiedIncomplete": true
+    },
+    "backpressure": {
+      "streamBytes": 4194304,
+      "completed": true,
+      "gatewayPauseCount": 63,
+      "runtimeWritableHighWaterMark": 65536,
+      "maxWritableLength": 65544
+    },
+    "concurrency": {
+      "streams": 24,
+      "completed": 24,
+      "distinctReceiptIds": 24
+    },
+    "cleanup": {
+      "openSockets": 0,
+      "listeningServers": 0
+    }
+  },
+  "evidence": {
+    "rejectedV1SourceSha256": "1d61d70d0be2e288c5e0f5aef8936582dc81f42265901823b75899b68169db6c",
+    "rejectedV1ResultSha256": "12df52b683f235cf53ac0fd23498de37b7459739349a8617d0de157d391b3ac0",
+    "rejectedV2SourceSha256": "cb4b5971e90a7a38b070699a0a8ec903b54148aa68f43249df23670ead4e9309",
+    "rejectedV2ResultSha256": "89502cd7310784c81ba8386d5a91642a9d66e9d4ba5156b49fd546fc82c323bd",
+    "acceptedV3SourceSha256": "45adece42dc9d235f220a942ccdfe6bb9383c63673cee64d9a0e81ae21ac19fe",
+    "verifierSha256": "fe462d591e6d619cbfb0dc7b72b009006211a7b584f816df8095c036ec7015bf",
+    "finalAResultSha256": "8af0a2c4979523674394073e45bef450f8ea6d4651fc0d4e55785c0776d5667f",
+    "finalAAuditSha256": "2cf00aa6e3e12d50429d90431565ebc56c75617a07f39f70cdf1b4ce1ed5a996",
+    "finalBResultSha256": "9001be92489f3301d88c32f4175c255fca85c6055f6e99167100954be6a93273",
+    "finalBAuditSha256": "0173cd8df26a807e87e8de3e1553a91b50f66720f6622e8085394363d7cc9ac9",
+    "semanticFactsSha256": "07bc78bf97f290d72c932d08694b387412c752a549481a26b5c50e17306232fd",
+    "finalComparisonSha256": "735878ee64eedc3aca2e072aa7091be2276a1d91bcb9ca392c6a2d77266e56f9",
+    "finalAudits": "37/37 GO each"
+  },
+  "remainingGates": [
+    "production signed policy and receipt implementation",
+    "public PKI TLS DNS rebinding and IP rotation",
+    "external proxy load balancer and HTTP2",
+    "real provider and SDK streaming behavior",
+    "multi-tenant long-duration soak",
+    "worker crash and reconnect during partial streams"
+  ]
+}
