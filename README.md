@@ -5,6 +5,14 @@ Provider-neutral managed runtime for launching and controlling coding agents
 ## Architecture
 
 Start with `docs/README.md` for the canonical reading order and ADR status.
+The complementary architecture foundation is indexed in
+[`docs/architecture/README.md`](docs/architecture/README.md), including:
+
+- [Accepted architecture foundation](docs/architecture/architecture-foundation.md)
+- [Execution generation model](docs/architecture/execution-generation-model.md)
+- [Communication boundaries](docs/architecture/communication-boundaries.md)
+- [OpenCode integration](docs/architecture/opencode-integration.md)
+
 Promoted evidence links are in
 `docs/architecture/evidence-traceability.md`. Exact target qualification is in
 the fail-closed machine-readable
