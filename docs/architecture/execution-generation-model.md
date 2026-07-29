@@ -1,6 +1,7 @@
 # Execution Generation Model
 
-Status: accepted domain model; wire schemas remain open ADRs.
+Status: accepted domain model as amended by ADR-0001 and ADR-0002; wire
+schemas remain open ADRs.
 
 ## Purpose
 
@@ -56,17 +57,19 @@ Execution output and custody use its revision and fence. Independent session
 metadata, configuration, and other control-plane changes use the
 `RuntimeSession` revision and are not blocked by the execution fence.
 
-`ExecutionGeneration` is an internal domain entity owned by the session
-execution-authority boundary. Historical generation records may be stored
-separately, but only `SessionExecutionAuthority` may activate or retire a
-generation.
+`ExecutionGeneration` is an internal domain entity and immutable historical
+record owned by the session execution-authority boundary. Historical rows may
+be normalized and queried separately, but only `SessionExecutionAuthority`
+may activate or retire the current generation.
 
-`ProviderRuntimeInstance` has its own lifecycle and process fence. It may be
-shared by several runtime sessions. A provider runtime instance is never
-identified only by PID:
+`ProviderHostInstance` has its own lifecycle and process fence. It may be
+shared only if a future provider-, binary-, platform-, and
+containment-specific policy is separately qualified. V1 does not reuse one
+provider host instance across tenants, runtime sessions, or credential
+generations. A provider host instance is never identified only by PID:
 
 ```text
-ProviderRuntimeInstanceId
+ProviderHostInstanceId
 ProviderRuntimeBootIdentity
 optional diagnostic PID
 ```
@@ -146,7 +149,7 @@ proven:
 same authority owner
 same SessionExecutionFence
 same ProviderSessionBinding revision
-same ProviderRuntimeInstanceId
+same ProviderHostInstanceId
 same ProviderRuntimeBootIdentity
 no successful competing takeover
 ```
@@ -197,11 +200,12 @@ accepted
 dispatching
 provider_accepted | acceptance_uncertain
 active | waiting_for_interaction
-succeeded | failed | cancelled | outcome_unknown
+reconcile_required
+succeeded | failed | cancelled | outcome_indeterminate
 ```
 
 The exact representation may use orthogonal state dimensions instead of one
-enum.
+enum. `reconcile_required` is durable and nonterminal.
 
 An operation may span multiple execution generations when provider work can be
 reattached or resumed without repeating the input. A long-lived generation may
@@ -212,9 +216,14 @@ Generation replacement never automatically re-dispatches an operation:
 - `not_dispatched` may be dispatched when its durable intent is still valid;
 - `provider_accepted` must reconcile or reattach without repeating input;
 - `acceptance_uncertain` must reconcile before a recovery decision;
-- inability to prove a safe continuation becomes `outcome_unknown` or another
-  explicit terminal recovery outcome;
+- inability to prove a safe continuation remains `reconcile_required` until
+  the effect is resolved or the strict ADR-0002 containment, cutoff, output,
+  receipt, and no-retry requirements permit `outcome_indeterminate`;
 - a new caller request creates a new operation.
+
+`outcome_indeterminate` never asserts that an effect failed or did not occur.
+It permanently blocks retry and authority resurrection. If containment remains
+uncertain, the operation cannot use this terminal state.
 
 `OperationDispatchRecord` is visible only to AR application and infrastructure
 code. It supports outbox dispatch, dispatcher ownership, idempotency,
@@ -228,7 +237,7 @@ Feed scopes are separate:
 ```text
 control feed    RuntimeSession
 output feed     ExecutionGeneration output namespace + channel
-process logs    ProviderRuntimeInstance
+process logs    ProviderHostInstance
 artifact feed   Artifact identity with session/operation correlation
 ```
 

@@ -1,6 +1,12 @@
 # Architecture
 
-This directory records accepted architectural decisions for Agent Runtime.
+This directory records supporting architecture for Agent Runtime. Normative
+ownership and recovery decisions are in `docs/decisions/`.
+
+The documents in this directory and ADR-0001 were authored on parallel sibling
+branches. ADR-0002 reconciles them. These documents remain accepted only as
+amended by ADR-0001 and ADR-0002; they are not an independent competing source
+of truth.
 
 Documents:
 
@@ -16,7 +22,8 @@ Documents:
 
 Decision status:
 
-- `accepted`: implementation must follow the decision.
+- `accepted`: implementation follows the decision together with every
+  applicable normative ADR;
 - `provisional`: direction is accepted, but a dedicated ADR must settle details.
 - `deferred`: intentionally excluded from the first implementation.
 - `open`: no decision has been made.
