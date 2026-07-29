@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "campaign": "macos-claude-subagent-parallel-conformance",
+  "date": "2026-07-28",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "syntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "realMcpServersUsed": false,
+    "existingCliAuthorizationUsed": true,
+    "credentialValuesInspectedOrRetained": false,
+    "globalSettingsLoaded": false,
+    "rawProviderMessagesRetained": false,
+    "providerSessionAgentAndToolIdsRetained": false
+  },
+  "runtimeClosure": {
+    "agentSdkVersion": "0.3.220",
+    "agentSdkIntegrity": "sha512-glc7SdwPkOkLw8oxwLo9PKTdLJGqW/PIR4urWXFoRtX9YllwozsEVc5Tc1+EvLSkfrsxPJqQWqOgpjUOQXf1oA==",
+    "nativePackageVersion": "0.3.220",
+    "nativePackageIntegrity": "sha512-7VxlbEosK7DODiOnsjoVd0DSJzbnaPrM2jelMHI0y8zx1UnLS3WC6EFUXbvy74F2sXqEznh2tzn7EKWInaRN6Q==",
+    "nativeBinarySha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081",
+    "sdkTypesSha256": "b415fbff96b9f754bca6e7113c4bf3d278a76e453be1264e9bd1acb9c0b2a836"
+  },
+  "scenarios": {
+    "parallelAndSessionStore": {
+      "run": {
+        "initSeen": true,
+        "claudeCodeVersion": "2.1.220",
+        "initToolCount": 2,
+        "resultSubtypes": [
+          "success",
+          "success",
+          "success"
+        ],
+        "exactMarkerObserved": true,
+        "modelUsageCount": 2,
+        "iteratorError": null,
+        "hardTimedOut": false,
+        "agentToolUseCount": 2,
+        "mcpToolUseCount": 2,
+        "toolResultBlockCount": 4,
+        "forwardedAssistantCount": 4,
+        "forwardedUserCount": 2,
+        "distinctParentToolUseIdCount": 2,
+        "structuredAgentResultCount": 4,
+        "permissionDeniedMessageCount": 0,
+        "permissionDeniedMessageHasAgentId": false
+      },
+      "effects": {
+        "invocationCount": 0,
+        "effectCount": 0,
+        "effectLabels": [],
+        "distinctOperationKeyCount": 0,
+        "callsOverlapped": false
+      },
+      "observations": {
+        "distinctAgentIdCount": 2,
+        "agentTypes": [
+          "alpha",
+          "beta"
+        ],
+        "subagentStartCount": 2,
+        "subagentStopCount": 0,
+        "everyStartedAgentStopped": false,
+        "childPreToolCount": 0,
+        "childPostToolCount": 0,
+        "childPostFailureCount": 0,
+        "childPostBatchCount": 0,
+        "childPermissionCallCount": 0,
+        "childPermissionDecisions": [],
+        "everyChildToolHasAgentId": false,
+        "everyChildPermissionHasAgentId": false,
+        "subagentStartPrecedesChildTool": true,
+        "permissionDeniedHookCount": 0,
+        "permissionDeniedHookHasAgentId": false
+      },
+      "store": {
+        "appendCallCount": 22,
+        "mainAppendCallCount": 14,
+        "subagentAppendCallCount": 8,
+        "distinctSubagentSubpathCount": 2,
+        "allSubpathsHaveExpectedShape": true,
+        "listSubkeysCallCount": 1,
+        "resumeMainLoadCount": 1,
+        "resumeSubagentLoadCount": 2,
+        "listedSubagentCount": 2,
+        "everyListedSubagentHasMessages": true,
+        "resumeExactMarker": true,
+        "resumeIteratorError": null,
+        "firstLocalDelete": "deleted",
+        "secondLocalDelete": "Error"
+      },
+      "server": {
+        "connectedAfterQuery": false,
+        "disconnectedAfterExplicitClose": true
+      }
+    },
+    "deniedChild": {
+      "run": {
+        "initSeen": true,
+        "claudeCodeVersion": "2.1.220",
+        "initToolCount": 2,
+        "resultSubtypes": [
+          "success"
+        ],
+        "exactMarkerObserved": true,
+        "modelUsageCount": 2,
+        "iteratorError": null,
+        "hardTimedOut": false,
+        "agentToolUseCount": 1,
+        "mcpToolUseCount": 1,
+        "toolResultBlockCount": 2,
+        "forwardedAssistantCount": 2,
+        "forwardedUserCount": 2,
+        "distinctParentToolUseIdCount": 1,
+        "structuredAgentResultCount": 2,
+        "permissionDeniedMessageCount": 0,
+        "permissionDeniedMessageHasAgentId": false
+      },
+      "observations": {
+        "distinctAgentIdCount": 1,
+        "agentTypes": [
+          "blocked"
+        ],
+        "subagentStartCount": 1,
+        "subagentStopCount": 1,
+        "everyStartedAgentStopped": true,
+        "childPreToolCount": 1,
+        "childPostToolCount": 0,
+        "childPostFailureCount": 0,
+        "childPostBatchCount": 1,
+        "childPermissionCallCount": 1,
+        "childPermissionDecisions": [
+          "deny"
+        ],
+        "everyChildToolHasAgentId": true,
+        "everyChildPermissionHasAgentId": true,
+        "subagentStartPrecedesChildTool": true,
+        "permissionDeniedHookCount": 0,
+        "permissionDeniedHookHasAgentId": false
+      },
+      "handlerInvocationCount": 0,
+      "effectAbsentBefore": true,
+      "effectAbsentAfter": true,
+      "server": {
+        "connectedAfterQuery": false,
+        "disconnectedAfterExplicitClose": true
+      }
+    },
+    "abortedChild": {
+      "run": {
+        "initSeen": true,
+        "claudeCodeVersion": "2.1.220",
+        "initToolCount": 2,
+        "resultSubtypes": [],
+        "exactMarkerObserved": false,
+        "modelUsageCount": 0,
+        "iteratorError": "aborted",
+        "hardTimedOut": false,
+        "agentToolUseCount": 1,
+        "mcpToolUseCount": 1,
+        "toolResultBlockCount": 2,
+        "forwardedAssistantCount": 2,
+        "forwardedUserCount": 2,
+        "distinctParentToolUseIdCount": 1,
+        "structuredAgentResultCount": 1,
+        "permissionDeniedMessageCount": 0,
+        "permissionDeniedMessageHasAgentId": false
+      },
+      "observations": {
+        "distinctAgentIdCount": 1,
+        "agentTypes": [
+          "slow"
+        ],
+        "subagentStartCount": 1,
+        "subagentStopCount": 0,
+        "everyStartedAgentStopped": false,
+        "childPreToolCount": 1,
+        "childPostToolCount": 0,
+        "childPostFailureCount": 0,
+        "childPostBatchCount": 0,
+        "childPermissionCallCount": 1,
+        "childPermissionDecisions": [
+          "allow"
+        ],
+        "everyChildToolHasAgentId": true,
+        "everyChildPermissionHasAgentId": true,
+        "subagentStartPrecedesChildTool": true,
+        "permissionDeniedHookCount": 0,
+        "permissionDeniedHookHasAgentId": false
+      },
+      "effectStarted": true,
+      "abortIssuedAfterStart": true,
+      "iteratorSettledWithinTenSeconds": true,
+      "settleElapsedBucket": "1s_to_10s",
+      "delayedEffectAfterAbort": true,
+      "handlerInvocationCount": 1,
+      "server": {
+        "connectedAfterQuery": false,
+        "disconnectedAfterExplicitClose": true
+      }
+    }
+  },
+  "cleanup": {
+    "matchingScratchProcessLeaks": 0,
+    "rawEffectFilesRemoved": true
+  },
+  "assertions": {
+    "programmaticSubagentsExecuted": false,
+    "siblingCallsActuallyOverlapped": false,
+    "childLineageProjected": false,
+    "sharedProviderOperationKeyDidNotDedupe": false,
+    "subagentTreeMirrored": true,
+    "subagentTreeReloadedOnResume": true,
+    "childPolicyDenialFailedClosed": false,
+    "parentAbortOutcomeObserved": true,
+    "noScratchProcessLeak": true,
+    "cleanupComplete": true
+  }
+}

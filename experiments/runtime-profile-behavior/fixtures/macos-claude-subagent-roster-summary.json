@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "campaign": "macos-claude-subagent-roster-conformance",
+  "date": "2026-07-28",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "syntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "existingCliAuthorizationUsed": true,
+    "credentialValuesInspectedOrRetained": false,
+    "globalSettingsLoaded": false,
+    "rawProviderMessagesRetained": false,
+    "providerSessionAgentAndToolIdsRetained": false
+  },
+  "runtimeClosure": {
+    "agentSdkVersion": "0.3.220",
+    "nativePackageVersion": "0.3.220",
+    "nativeBinarySha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081",
+    "sdkTypesSha256": "b415fbff96b9f754bca6e7113c4bf3d278a76e453be1264e9bd1acb9c0b2a836",
+    "sdkToolTypesSha256": "aa765ef4053d51d36c9f93b2717f8ae5810375075b6b38eb377f69378f6edb24"
+  },
+  "run": {
+    "initSeen": true,
+    "claudeCodeVersion": "2.1.220",
+    "agentToolUseCount": 4,
+    "toolResultBlockCount": 4,
+    "resultSubtypes": [
+      "success"
+    ],
+    "exactMarkerObserved": false,
+    "permissionDeniedMessageCount": 0,
+    "iteratorError": null,
+    "hardTimedOut": false
+  },
+  "roster": {
+    "configuredProgrammaticAgentTypes": [
+      "alpha"
+    ],
+    "requestedAgentTypes": [
+      "alpha",
+      "general-purpose"
+    ],
+    "allowedRequestCount": 3,
+    "deniedRequestCount": 1,
+    "permissionCallbackAgentTypes": [],
+    "startedAgentTypes": [
+      "alpha",
+      "alpha",
+      "alpha"
+    ],
+    "stoppedAgentTypes": [
+      "alpha",
+      "alpha",
+      "alpha"
+    ],
+    "permissionDeniedHookCount": 0,
+    "permissionDeniedMessageCount": 0
+  },
+  "cleanup": {
+    "matchingScratchProcessLeaks": 0
+  },
+  "assertions": {
+    "unlistedAgentRequestObserved": true,
+    "unlistedAgentDeniedBeforeSpawn": true,
+    "listedAgentStartedAndStopped": true,
+    "onlyListedAgentReachedPermissionCallback": false,
+    "parentCompleted": false,
+    "noScratchProcessLeak": true
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-28T14:16:18Z",
+  "status": "accepted-scoped-evidence",
+  "scope": {
+    "host": "codex-workers-eu-01",
+    "kernel": "Linux 6.8.0-134-generic x86_64",
+    "dockerEngine": "29.6.1",
+    "cgroup": "v2 with systemd driver",
+    "syntheticContainersOnly": true,
+    "userProjectUsed": false,
+    "realCredentialUsed": false
+  },
+  "image": {
+    "reference": "node:24.18-bookworm-slim",
+    "digest": "sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d"
+  },
+  "provenance": {
+    "rejectedV1HarnessSha256": "597465eb4dbbe756df589e4300772b414df80ac5fef0775bf2b1de96671e3e74",
+    "acceptedHarnessSha256": "dd486e1b0cb5574691f90747f06ad47c5eb2435eb3681868b9bf67b2c203241b",
+    "resultV8Sha256": "ecf82273416fc2ba8644fea01df52ab2075d719d60b90a9370b861977937c1f2",
+    "resultV9Sha256": "723f3f8ceaf22e4846cf6dce7313aa86f51ed8df24c33f42ac1ce3118ba88408",
+    "resultV10Sha256": "723f3f8ceaf22e4846cf6dce7313aa86f51ed8df24c33f42ac1ce3118ba88408",
+    "independentAuditScriptSha256": "c317f03741cac7d8f969d1982c9526e67eba5f6ba09d482805a0049cdd85b14e",
+    "independentAuditResultSha256": "e4f6f5a6b25b244b80cfd71943516b2bb42e23dcfdb7b1eea3ddb6b5d3a3dc89",
+    "retainedBundleSha256": "18c64019e67a7fbdf4ee3ac2335533dc1ee0bc2cda226b6e43255ca5d2a4b266"
+  },
+  "rejectedRevisions": [
+    {
+      "revision": "v1",
+      "reason": "The harness requested a ps output field format that Docker top did not accept; no custody claim was promoted."
+    }
+  ],
+  "accepted": {
+    "repetitions": 3,
+    "independentAudit": "50/50 GO",
+    "providerIdentity": {
+      "uid": 65532,
+      "gid": 65532,
+      "effectiveCapabilities": "0000000000000000",
+      "noNewPrivileges": true,
+      "seccompMode": 2,
+      "seccompFilters": 1,
+      "appArmor": "docker-default (enforce)"
+    },
+    "runtimeLimits": {
+      "readOnlyRoot": true,
+      "rootWriteBlocked": true,
+      "pidsLimit": 32,
+      "memoryBytes": 100663296,
+      "nanoCpus": 500000000,
+      "networkModeForCustody": "none"
+    },
+    "custody": {
+      "detachedChildCreatedNewProcessGroupAndSession": true,
+      "gracefulStopObservedHostPids": 2,
+      "gracefulStopSurvivors": 0,
+      "gracefulStopCgroupResidue": 0,
+      "forcedKillObservedHostPids": 2,
+      "forcedKillSurvivors": 0
+    },
+    "pidPressure": [
+      {
+        "attempts": 80,
+        "successes": 6,
+        "failures": 74
+      },
+      {
+        "attempts": 80,
+        "successes": 9,
+        "failures": 71
+      },
+      {
+        "attempts": 80,
+        "successes": 9,
+        "failures": 71
+      }
+    ],
+    "egress": {
+      "internalNetwork": true,
+      "allowedSyntheticEndpointSucceeded": true,
+      "wrongPortBlocked": true,
+      "externalHttpsBlocked": true,
+      "externalDnsResolved": false,
+      "unauthorizedSameNetworkPeerReachable": true
+    }
+  },
+  "architectureInvariants": [
+    "The provider runs non-root with zero effective capabilities, no-new-privileges, read-only root, seccomp, AppArmor, and explicit PID, memory, and CPU limits.",
+    "A trusted worker supervisor owns the complete container/cgroup lifecycle; process-group custody alone is insufficient.",
+    "Tenant-controlled code never receives the Docker socket or daemon API.",
+    "A Docker bridge is a connectivity boundary, not an endpoint allowlist: every attached peer exposes all listening ports to other peers.",
+    "Provider containers attach only to a per-operation egress gateway network; the gateway enforces the signed host, port, protocol, DNS, and byte/time budget.",
+    "No provider, database, broker, control plane, or sibling worker shares the provider-facing bridge unless explicitly required and authorized."
+  ],
+  "readiness": {
+    "linuxNonRootContainerCustodyMatrixComplete": true,
+    "linuxInternalNetworkCounterexampleComplete": true,
+    "productionLinuxPlatformReady": false,
+    "remainingGates": [
+      "OpenCode end-to-end regression in the accepted container boundary",
+      "external TLS and DNS egress gateway allowlist conformance",
+      "Docker daemon socket protection and trusted-supervisor authorization",
+      "custom seccomp and AppArmor policy plus image-signature enforcement",
+      "init and zombie-reaping behavior",
+      "kernel, distribution, Docker, and cgroup-version support matrix",
+      "physical power loss and worker-host replacement recovery"
+    ]
+  }
+}

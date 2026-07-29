@@ -1,0 +1,41 @@
+{
+  "name": "@vioxen/agent-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "check": "pnpm architecture:registry && pnpm typecheck && pnpm test",
+    "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
+    "spike:inventory": "node experiments/runtime-profile-behavior/src/cli.ts inventory",
+    "spike:baseline": "node experiments/runtime-profile-behavior/src/cli.ts baseline",
+    "spike:precedence": "node experiments/runtime-profile-behavior/src/cli.ts precedence",
+    "spike:stability": "node experiments/runtime-profile-behavior/src/cli.ts stability",
+    "spike:credentials": "node experiments/runtime-profile-behavior/src/cli.ts credentials",
+    "spike:e2e": "node experiments/runtime-profile-behavior/src/cli.ts e2e",
+    "spike:lifecycle": "node experiments/runtime-profile-behavior/src/cli.ts lifecycle",
+    "spike:acp": "node experiments/runtime-profile-behavior/src/cli.ts acp",
+    "spike:filesystem": "node experiments/runtime-profile-behavior/src/cli.ts filesystem",
+    "spike:drift": "node experiments/runtime-profile-behavior/src/cli.ts drift",
+    "spike:binary": "node experiments/runtime-profile-behavior/src/cli.ts binary",
+    "spike:legacy": "node experiments/runtime-profile-behavior/src/cli.ts legacy",
+    "spike:extensions": "node experiments/runtime-profile-behavior/src/cli.ts extensions",
+    "spike:profile-loss": "node experiments/runtime-profile-behavior/src/cli.ts profile-loss",
+    "spike:managed-policy": "node experiments/runtime-profile-behavior/src/cli.ts managed-policy",
+    "spike:promote-traces": "node experiments/runtime-profile-behavior/src/features/evidence/promote-redacted-traces.ts",
+    "test": "node --test experiments/runtime-profile-behavior/test/*.test.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@agentclientprotocol/sdk": "1.3.0",
+    "@opencode-ai/plugin": "1.18.5",
+    "@types/node": "24.13.3",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "opencode-ai": "1.18.5",
+    "opencode-previous": "npm:opencode-ai@1.17.20",
+    "zod": "4.4.3"
+  }
+}

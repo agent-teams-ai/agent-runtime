@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "campaign": "macos-codex-appserver-effects-conformance",
+  "date": "2026-07-28",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "syntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "realMcpServersUsed": false,
+    "existingCliAuthorizationUsed": true,
+    "credentialValuesInspectedOrRetained": false,
+    "rawProviderMessagesRetained": false,
+    "providerThreadOrTurnIdsRetained": false,
+    "globalConfigLoaded": false
+  },
+  "runtimeClosure": {
+    "codexVersion": "0.145.0",
+    "codexNpmIntegrity": "sha512-/PSPSFujjjmiyVFvG2yu/grOFhsWdokTH8t2KGWhXSo/M5n/dIDsnbsnO82/7bLtIoDuzQf7ATBUMWqPWQINlQ==",
+    "nativePackageVersion": "0.145.0-darwin-arm64",
+    "nativePackageIntegrity": "sha512-h6aQ0UxnaP8mIM/9/qPAH9MNkRliJo88toq1T36IxNM2L5JSU0TFamu+MZn7YkFgDsrp0RfiI+97Tm8AVVxqtA==",
+    "nativeBinarySha256": "1da3f4e0e96028b8a771814293c3033dafd1971f943f6c7e79b0897fe705f590",
+    "generatedV2SchemaSha256": "28a83febaf288d71ff2bd924ca07413c412894e4c66ab1dfc0733145c04214ba",
+    "generatedSchemaTitle": "CodexAppServerProtocolV2"
+  },
+  "initialization": {
+    "userAgent": "ar_synthetic_effect_conformance/0.145.0 (Mac OS 15.6.1; arm64) unknown (ar_synthetic_effect_conformance; 0.1.0)",
+    "platformFamily": "unix",
+    "platformOs": "macos"
+  },
+  "scenarios": {
+    "shellSuccess": {
+      "turnStatus": "completed",
+      "exactAgentMarkerObserved": true,
+      "commandStartedCount": 1,
+      "commandCompletedCount": 1,
+      "commandStatuses": [
+        "completed"
+      ],
+      "commandExitCodes": [
+        0
+      ],
+      "commandDurationsPresent": [
+        true
+      ],
+      "commandAggregatedOutputBytes": [
+        0
+      ],
+      "fileChangeStartedCount": 0,
+      "fileChangeCompletedCount": 0,
+      "fileChangeStatuses": [],
+      "fileChangeKinds": [],
+      "fileChangeBasenames": [],
+      "outputDeltaCount": 0,
+      "outputDeltaBytes": 0,
+      "lastOutputDeltaSequence": null,
+      "lastCommandCompletedSequence": 23,
+      "lastFileChangeCompletedSequence": null,
+      "turnCompletedSequence": 37,
+      "effectExact": true,
+      "structuredCommandCompleted": true
+    },
+    "patchSuccess": {
+      "turnStatus": "completed",
+      "exactAgentMarkerObserved": true,
+      "commandStartedCount": 0,
+      "commandCompletedCount": 0,
+      "commandStatuses": [],
+      "commandExitCodes": [],
+      "commandDurationsPresent": [],
+      "commandAggregatedOutputBytes": [],
+      "fileChangeStartedCount": 1,
+      "fileChangeCompletedCount": 1,
+      "fileChangeStatuses": [
+        "completed"
+      ],
+      "fileChangeKinds": [
+        "add"
+      ],
+      "fileChangeBasenames": [
+        "patch-effect.txt"
+      ],
+      "outputDeltaCount": 0,
+      "outputDeltaBytes": 0,
+      "lastOutputDeltaSequence": null,
+      "lastCommandCompletedSequence": null,
+      "lastFileChangeCompletedSequence": 50,
+      "turnCompletedSequence": 66,
+      "effectExact": true,
+      "structuredFileChangeCompleted": true,
+      "targetBasenameProjected": true
+    },
+    "failedShellWithCommittedEffect": {
+      "turnStatus": "completed",
+      "exactAgentMarkerObserved": true,
+      "commandStartedCount": 1,
+      "commandCompletedCount": 1,
+      "commandStatuses": [
+        "failed"
+      ],
+      "commandExitCodes": [
+        23
+      ],
+      "commandDurationsPresent": [
+        true
+      ],
+      "commandAggregatedOutputBytes": [
+        0
+      ],
+      "fileChangeStartedCount": 0,
+      "fileChangeCompletedCount": 0,
+      "fileChangeStatuses": [],
+      "fileChangeKinds": [],
+      "fileChangeBasenames": [],
+      "outputDeltaCount": 0,
+      "outputDeltaBytes": 0,
+      "lastOutputDeltaSequence": null,
+      "lastCommandCompletedSequence": 93,
+      "lastFileChangeCompletedSequence": null,
+      "turnCompletedSequence": 108,
+      "effectExistsDespiteFailure": true,
+      "structuredFailureObserved": true
+    },
+    "outputDrain": {
+      "turnStatus": "completed",
+      "exactAgentMarkerObserved": true,
+      "commandStartedCount": 1,
+      "commandCompletedCount": 1,
+      "commandStatuses": [
+        "completed"
+      ],
+      "commandExitCodes": [
+        0
+      ],
+      "commandDurationsPresent": [
+        true
+      ],
+      "commandAggregatedOutputBytes": [
+        21504
+      ],
+      "fileChangeStartedCount": 0,
+      "fileChangeCompletedCount": 0,
+      "fileChangeStatuses": [],
+      "fileChangeKinds": [],
+      "fileChangeBasenames": [],
+      "outputDeltaCount": 3,
+      "outputDeltaBytes": 21504,
+      "lastOutputDeltaSequence": 131,
+      "lastCommandCompletedSequence": 134,
+      "lastFileChangeCompletedSequence": null,
+      "turnCompletedSequence": 145,
+      "effectExact": true,
+      "outputObserved": true,
+      "outputBeforeCommandAndTurnTerminal": true,
+      "lateOutputDeltaCount": 0
+    },
+    "clientUserMessageIdReplay": {
+      "firstStatus": "completed",
+      "secondAccepted": true,
+      "secondStatus": "completed",
+      "secondErrorCode": null,
+      "firstAndSecondTurnIdsDistinct": true,
+      "effectCount": 2,
+      "duplicateEffectObserved": true,
+      "duplicateRequestRejected": false
+    },
+    "serializedSameThread": {
+      "firstStatus": "completed",
+      "secondStatus": "completed",
+      "bothExactMarkers": true,
+      "secondStartedAfterFirstCompleted": true,
+      "effectOrderExact": true
+    },
+    "toolInterrupt": {
+      "effectStarted": true,
+      "interruptResponseEmptyObject": true,
+      "terminalStatus": "interrupted",
+      "settledWithinTenSeconds": true,
+      "delayedFinishedEffectAbsent": true,
+      "commandCompletedCount": 0,
+      "commandStatuses": [],
+      "commandExitCodes": []
+    },
+    "crashAfterEffect": {
+      "effectCommitted": true,
+      "terminalBeforeCrash": false,
+      "crashExitSignal": "SIGKILL",
+      "delayedAfterSleepEffectAbsent": true,
+      "resumeInstructionSourceCount": 0,
+      "persistedProjection": {
+        "turnCount": 1,
+        "statuses": [
+          "interrupted"
+        ],
+        "commandItems": []
+      },
+      "recoveryAccepted": true,
+      "recoveryStatus": "completed",
+      "recoveryExactMarker": true,
+      "recoveryErrorCode": null,
+      "resumeForcedSignal": null
+    }
+  },
+  "cleanup": {
+    "authCopyUnchanged": true,
+    "mainExitCode": 0,
+    "mainForcedSignal": null,
+    "matchingScratchProcessLeaks": 0,
+    "rawEffectFilesRemoved": true
+  },
+  "assertions": {
+    "structuredShellSuccess": true,
+    "structuredPatchSuccess": true,
+    "failedCommandCanStillCommitEffect": true,
+    "outputDrainedBeforeTerminal": true,
+    "clientMessageReplayBehaviorObserved": true,
+    "explicitSerializationWorks": true,
+    "interruptStopsDelayedEffect": true,
+    "crashOutcomeReconciled": true,
+    "authCopyUnchanged": true,
+    "noScratchProcessLeak": true,
+    "cleanupComplete": true
+  }
+}

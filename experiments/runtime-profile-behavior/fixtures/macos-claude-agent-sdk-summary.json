@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "campaign": "macos-claude-agent-sdk-conformance",
+  "date": "2026-07-28",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "syntheticWorkspacesOnly": true,
+    "realUserProjectsUsed": false,
+    "realMcpServersUsed": false,
+    "realHooksUsed": false,
+    "existingCliAuthorizationUsed": true,
+    "credentialValuesInspectedOrRetained": false,
+    "rawProviderMessagesRetained": false
+  },
+  "package": {
+    "name": "@anthropic-ai/claude-agent-sdk",
+    "version": "0.3.220",
+    "expectedVersionMatched": true,
+    "npmIntegrity": "sha512-glc7SdwPkOkLw8oxwLo9PKTdLJGqW/PIR4urWXFoRtX9YllwozsEVc5Tc1+EvLSkfrsxPJqQWqOgpjUOQXf1oA==",
+    "nativePackageVersion": "0.3.220",
+    "nativeBinarySha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081",
+    "bundledCliExpectedVersion": "2.1.220",
+    "nodeEngine": ">=18.0.0"
+  },
+  "staticContracts": {
+    "envReplacementDocumented": true,
+    "persistSessionFalseSupported": true,
+    "externalSessionStoreSupported": true,
+    "settingSourcesIsolationSupported": true,
+    "strictMcpConfigSupported": true,
+    "customProcessSpawnerSupported": true,
+    "queryInterruptSupported": true,
+    "interruptReceiptSupportedByTypes": true,
+    "sandboxFailClosedSupported": true,
+    "removedV2SessionApiAbsent": true
+  },
+  "scenarios": {
+    "strictIsolation": {
+      "init": {
+        "claudeCodeVersion": "2.1.220",
+        "toolsCount": 0,
+        "mcpCount": 0,
+        "skillsCount": 16,
+        "pluginsCount": 0,
+        "permissionMode": "dontAsk",
+        "capabilities": [
+          "interrupt_receipt_v1",
+          "interrupt_cancel_queued_v1",
+          "msg_lifecycle_v1"
+        ]
+      },
+      "resultSubtypes": [
+        "success"
+      ],
+      "exactBusinessResult": true,
+      "canaryObserved": false,
+      "modelUsageCounts": [
+        2
+      ],
+      "rateLimitEventObserved": true,
+      "fullyDrained": true,
+      "iteratorError": null
+    },
+    "macosAuthorizationEnvironment": {
+      "userVariablePresentRunSucceeded": true,
+      "userVariableOmittedResultSubtypes": [
+        "success"
+      ],
+      "userVariableOmittedBusinessResult": false,
+      "userVariableOmittedModelUsageCounts": [
+        0
+      ],
+      "userVariableOmittedIteratorError": "not_logged_in",
+      "successResultObservedBeforeIteratorError": true
+    },
+    "projectInstructionOptIn": {
+      "init": {
+        "claudeCodeVersion": "2.1.220",
+        "toolsCount": 0,
+        "mcpCount": 0,
+        "skillsCount": 16,
+        "pluginsCount": 0,
+        "permissionMode": "dontAsk",
+        "capabilities": [
+          "interrupt_receipt_v1",
+          "interrupt_cancel_queued_v1",
+          "msg_lifecycle_v1"
+        ]
+      },
+      "resultSubtypes": [
+        "success"
+      ],
+      "exactBusinessResult": true,
+      "canaryObserved": true,
+      "modelUsageCounts": [
+        2
+      ],
+      "rateLimitEventObserved": true,
+      "fullyDrained": true,
+      "iteratorError": null
+    },
+    "allowedToolsIsNotToolVisibility": {
+      "exactBusinessResult": true,
+      "initToolCount": 29,
+      "emptyAllowedToolsStillExposedTools": true,
+      "iteratorError": null
+    },
+    "defaultEnvironmentInheritance": {
+      "syntheticAmbientReachedSpawnBoundary": true,
+      "spawnEnvironmentKeyCount": 77,
+      "childWasReplacedWithSafeAllowlist": true,
+      "exactBusinessResult": true,
+      "iteratorError": null
+    },
+    "providerSuccessIsNotEffectReceipt": {
+      "resultSubtypes": [
+        "success"
+      ],
+      "claimedExactCompletion": false,
+      "fileExists": false,
+      "iteratorError": null
+    },
+    "independentConcurrency": {
+      "bothExact": true,
+      "wallClockIntervalsOverlapped": true,
+      "modelUsageCounts": [
+        [
+          2
+        ],
+        [
+          2
+        ]
+      ],
+      "iteratorErrors": [
+        null,
+        null
+      ]
+    },
+    "cwdScopedResume": {
+      "initialExact": true,
+      "sameCwdRememberedExactToken": true,
+      "crossCwdResultSubtypes": [
+        "error_during_execution"
+      ],
+      "crossCwdIteratorError": "session_not_found_for_cwd",
+      "crossCwdDidNotResume": true,
+      "resultSessionIdsMatchedRequestedId": true,
+      "sessionIdRetainedInEvidence": false,
+      "syntheticPersistedSessionDeleted": true,
+      "iteratorErrors": [
+        null,
+        null,
+        "session_not_found_for_cwd"
+      ]
+    },
+    "macosNativeSandbox": {
+      "cliVersion": "2.1.220",
+      "toolSurfaceCount": 1,
+      "resultSubtypes": [
+        "success"
+      ],
+      "syntheticCredentialScrubbed": true,
+      "outsideWriteBlocked": true,
+      "iteratorError": null
+    },
+    "interruptLeavesQueuedInput": {
+      "toolUseSeen": true,
+      "secondQueued": true,
+      "capabilities": {
+        "interruptReceiptV1": true,
+        "interruptCancelQueuedV1": true
+      },
+      "receiptReturned": true,
+      "receiptIncludesSecond": true,
+      "receiptStillQueuedCount": 1,
+      "resultSubtypes": [
+        "error_during_execution",
+        "success"
+      ],
+      "secondExecutedExactly": true,
+      "iteratorError": null
+    },
+    "abortController": {
+      "toolUseSeen": true,
+      "resultSubtypes": [],
+      "iteratorError": "aborted",
+      "settledWithinTenSecondsAfterAbort": true,
+      "proofAbsent": true,
+      "totalDurationUnderSixtySeconds": true
+    }
+  },
+  "cleanup": {
+    "leakedNativeCliProcesses": 0,
+    "syntheticSessionDeleted": true
+  },
+  "assertions": {
+    "sdkVersionMatched": true,
+    "bundledCliVersionMatched": true,
+    "strictSurface": true,
+    "projectSourceObservable": true,
+    "allowedToolsTrapConfirmed": true,
+    "ambientInheritanceConfirmed": true,
+    "concurrentIsolationConfirmed": true,
+    "sameCwdResumeConfirmed": true,
+    "crossCwdScopeConfirmed": true,
+    "sandboxContainmentConfirmed": true,
+    "queuedInterruptHazardConfirmed": true,
+    "abortStoppedEffect": true,
+    "noNativeProcessLeak": true
+  }
+}

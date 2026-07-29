@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "campaign": "macos-claude-mcp-failure-conformance",
+  "date": "2026-07-28",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "syntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "realUserMcpServersUsed": false,
+    "existingCliAuthorizationUsed": true,
+    "credentialValuesInspectedOrRetained": false,
+    "rawProviderMessagesRetained": false,
+    "providerSessionIdsRetained": false
+  },
+  "packageClosure": {
+    "claudeAgentSdk": {
+      "version": "0.3.220",
+      "integrity": "sha512-glc7SdwPkOkLw8oxwLo9PKTdLJGqW/PIR4urWXFoRtX9YllwozsEVc5Tc1+EvLSkfrsxPJqQWqOgpjUOQXf1oA=="
+    },
+    "anthropicSdk": {
+      "version": "0.115.0",
+      "integrity": "sha512-BJrFIVyjNuU8lfDyIJTvlRYzgQg+zEl78BxE7fq8esULsGz9IRQvGtW5spq3tydmtjQb/GFdooKGdGsetpx+lQ=="
+    },
+    "mcpSdk": {
+      "version": "1.30.0",
+      "integrity": "sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA=="
+    },
+    "zod": {
+      "version": "4.4.3",
+      "integrity": "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="
+    },
+    "bundledClaudeCode": "2.1.220",
+    "nativeBinarySha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081"
+  },
+  "scenarios": {
+    "nonIdempotentRetry": {
+      "exactBusinessResult": true,
+      "twoToolCallsObserved": true,
+      "sameOperationKeyOnBothCalls": true,
+      "distinctToolUseIds": true,
+      "oneFailureThenOneSuccess": true,
+      "effectCount": 2,
+      "duplicateEffectObserved": true,
+      "serverStartCount": 1,
+      "resultSubtypes": [
+        "success"
+      ],
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "idempotentRetry": {
+      "exactBusinessResult": true,
+      "twoToolCallsObserved": true,
+      "sameOperationKeyOnBothCalls": true,
+      "distinctToolUseIds": true,
+      "oneFailureThenOneSuccess": true,
+      "effectCount": 1,
+      "idempotentEffectExactlyOnce": true,
+      "resultSubtypes": [
+        "success"
+      ],
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "crashAfterEffectBeforeResult": {
+      "exactBusinessResult": true,
+      "exactlyOneToolCall": true,
+      "failureHookObserved": true,
+      "failureDurationPresent": true,
+      "failureNotClassifiedAsInterrupt": true,
+      "effectCommittedExactlyOnce": true,
+      "noPostToolSuccess": true,
+      "serverExitedBeforeResult": true,
+      "resultSubtypes": [
+        "success"
+      ],
+      "iteratorError": null,
+      "hardTimedOut": false
+    },
+    "abortWithDetachedDescendant": {
+      "descendantStarted": true,
+      "settledWithinTenSeconds": true,
+      "serverStoppedAfterAbort": true,
+      "delayedDescendantEffectAfterAbort": true,
+      "descendantAliveAfterServerStopped": true,
+      "descendantIdentityMatched": true,
+      "descendantAliveAfterCleanup": false,
+      "failureHookObserved": false,
+      "failureClassifiedAsInterrupt": false,
+      "resultSubtypes": [],
+      "iteratorError": "aborted",
+      "hardTimedOut": false
+    }
+  },
+  "cleanup": {
+    "matchingNativeServerOrDescendantProcessLeaks": 0,
+    "rawEffectFilesRemoved": true
+  },
+  "assertions": {
+    "retryCanDuplicateEffect": true,
+    "idempotencyKeyPreventsDuplicateEffect": true,
+    "failureDoesNotProveNoEffect": true,
+    "sdkAbortDoesNotContainDetachedDescendant": true,
+    "exactSyntheticDescendantCleaned": true,
+    "noProcessLeak": true,
+    "cleanupComplete": true
+  }
+}

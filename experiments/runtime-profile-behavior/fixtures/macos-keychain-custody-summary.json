@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-28T13:57:21Z",
+  "status": "accepted-scoped-evidence",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "storage": "disposable file-backed keychains under /tmp",
+    "loginKeychainAccessed": false,
+    "realCredentialUsed": false,
+    "userProjectUsed": false,
+    "secretIncludedInResult": false
+  },
+  "provenance": {
+    "harnessSha256": "f3f833f2a0e40cefa80bd9e65ae9c07934df63a675df693daab7669308a3ccb2",
+    "resultSha256": "a6f57ba1a95e5cd4582e62b73e55909ca1d14585896d2cbfde48f71c4112949e",
+    "independentAuditScriptSha256": "91ce1a503a7e9325fb6ddb45154055f6e378f5cf0e650f4dcedab98c40e3370a",
+    "independentAuditResultSha256": "417bb5bfa5fd781061874e7b6acfb6f09431f9efca8643eeaa05dcefabf2ee0b",
+    "retainedBundleSha256": "1847e5ca801bc63943571df4c97ca7ecf1a89caeb835b6a6d048c0a2b4a251e8"
+  },
+  "rejectedRevisions": [
+    {
+      "revision": "v1",
+      "resultSha256": "fcce5467c69aea26995904ee1a46b38d425871f08f7da609530c7cfc2f0c6b21",
+      "reason": "The disposable file-backed keychain was created with mode 0644, falsifying the assumed 0600 default."
+    },
+    {
+      "revision": "v2",
+      "resultSha256": "01c87f8dd74a8a0a1180c3336881d92d52cec25e73462b762a0bcd0a683f7b60",
+      "reason": "Combining headless secret rotation with access-control mutation hung and exceeded the command deadline."
+    }
+  ],
+  "confirmedFacts": {
+    "defaultFileMode": "0644",
+    "enforcedCurrentFileMode": "0600",
+    "enforcedBackupFileMode": "0600",
+    "wrongPasswordRejected": true,
+    "correctUnlockAndReadSucceeded": true,
+    "lockedBackupOpenedWithSamePassword": true,
+    "backupRetainedGeneration": "generation-1",
+    "currentAfterRotationRetainedGeneration": "generation-2",
+    "concurrentUpdateAttempts": 8,
+    "concurrentUpdateSuccesses": 2,
+    "concurrentUpdateFailures": 6,
+    "finalValueWasOneSuccessfulUpdate": true,
+    "expectedGenerationCasAvailableThroughTestedCli": false,
+    "currentAndBackupDifferedAfterRotation": true,
+    "exactCleanupSucceeded": true,
+    "independentAudit": "39/39 GO"
+  },
+  "securityFrameworkFollowUp": {
+    "scope": "SecItem over a disposable custom file-backed keychain from an ad-hoc signed command-line harness",
+    "dataProtectionKeychain": false,
+    "provisioningProfile": false,
+    "accessGroupEntitlement": false,
+    "loginKeychainAccessed": false,
+    "rejectedRevisions": [
+      "v1 used kSecUseKeychain for a query instead of kSecMatchSearchList and returned errSecItemNotFound",
+      "v2 and v3 locked-keychain reads spawned SecurityAgent and exceeded 30 seconds despite two no-UI mechanisms"
+    ],
+    "acceptedRepetitions": 3,
+    "acceptedAudit": "31/31 GO",
+    "sourceSha256": "f4dcb9c4988c0ef0e367b3a918d1c552bb4afb079a4964a7f114d99b23cfa38c",
+    "adHocSignedBinarySha256": "bfaa1f2ba867a629233c5c84342651e68280720fc2ab32843b9c7a287e945764",
+    "resultSha256": "93761842d0561f2bcf3803f70bb48697bbdc7189f200b493bc41b9f81c214b20",
+    "auditScriptSha256": "6c0acf59671bfc1ce152cc13c9276f12bcdebf2d5fd2b443dd7868fcde839f61",
+    "auditResultSha256": "6a08117283eb3c6c118dfaeecd83390d538bce3bbe7c90a105ec73df4c1314f7",
+    "retainedBundleSha256": "797b91e2111daf8b50d7ea55a133dd086bf21c800627c92dcd4ac05506c16cec",
+    "confirmed": [
+      "SecItem add, copy, and update succeeded without placing secret bytes in command arguments",
+      "wrong unlock was rejected and correct unlock succeeded",
+      "the copied keychain retained the prior generation",
+      "custom file-backed keychain management still requires deprecated SecKeychain APIs",
+      "locked no-UI access was not qualified"
+    ]
+  },
+  "architectureInvariants": [
+    "Production macOS secret access targets the Data Protection Keychain through a signed Security.framework KeyProvider adapter, not security CLI arguments or a legacy custom file-backed keychain.",
+    "Keychain stores secret bytes but does not own CredentialGeneration or compare-and-swap semantics.",
+    "Provider Access owns durable credential generation, refresh fencing, and CAS metadata.",
+    "Agent Runtime file-backed keychains and retained backups require explicit 0600 enforcement and attestation.",
+    "Access-control mutation is a separately qualified operation from unattended secret rotation.",
+    "A retained backup can preserve an older secret generation, so crypto-erasure and backup invalidation are separate processes."
+  ],
+  "readiness": {
+    "macosDisposableKeychainDecisionMatrixComplete": true,
+    "productionKeyCustodyReady": false,
+    "remainingGates": [
+      "Data Protection Keychain SecItem integration from a signed app-like helper with a provisioning-authorized access group",
+      "ACL, reboot, locked-session, and user-presence behavior",
+      "Provider Access generation CAS and refresh-race integration",
+      "crypto-erasure and backup invalidation",
+      "external KMS or off-host trust anchor"
+    ]
+  }
+}

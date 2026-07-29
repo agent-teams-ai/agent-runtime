@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "campaign": "macos-claude-subagent-stdio-conformance",
+  "date": "2026-07-28",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "syntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "realMcpServersUsed": false,
+    "existingCliAuthorizationUsed": true,
+    "credentialValuesInspectedOrRetained": false,
+    "globalSettingsLoaded": false,
+    "rawProviderMessagesRetained": false,
+    "providerSessionAgentToolAndProcessIdsRetained": false
+  },
+  "runtimeClosure": {
+    "agentSdkVersion": "0.3.220",
+    "agentSdkIntegrity": "sha512-glc7SdwPkOkLw8oxwLo9PKTdLJGqW/PIR4urWXFoRtX9YllwozsEVc5Tc1+EvLSkfrsxPJqQWqOgpjUOQXf1oA==",
+    "nativePackageVersion": "0.3.220",
+    "nativePackageIntegrity": "sha512-7VxlbEosK7DODiOnsjoVd0DSJzbnaPrM2jelMHI0y8zx1UnLS3WC6EFUXbvy74F2sXqEznh2tzn7EKWInaRN6Q==",
+    "mcpSdkVersion": "1.30.0",
+    "mcpSdkIntegrity": "sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==",
+    "nativeBinarySha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081",
+    "sdkTypesSha256": "b415fbff96b9f754bca6e7113c4bf3d278a76e453be1264e9bd1acb9c0b2a836",
+    "externalServerSha256": "2f10aeca9620814b0d340a06e25bf3ce58a6733501222b7b6e7ae561bb2575aa"
+  },
+  "scenarios": {
+    "parallelSiblings": {
+      "run": {
+        "initSeen": true,
+        "claudeCodeVersion": "2.1.220",
+        "initToolCount": 2,
+        "resultSubtypes": [
+          "success",
+          "success",
+          "success"
+        ],
+        "exactMarkerObserved": true,
+        "iteratorError": null,
+        "hardTimedOut": false,
+        "agentToolUseCount": 3,
+        "mcpToolUseCount": 2,
+        "toolResultBlockCount": 5,
+        "forwardedAssistantCount": 5,
+        "forwardedUserCount": 3,
+        "distinctParentToolUseIdCount": 3
+      },
+      "observations": {
+        "distinctAgentIdCount": 3,
+        "agentTypes": [
+          "alpha",
+          "beta",
+          "general-purpose"
+        ],
+        "subagentStartCount": 3,
+        "subagentStopCount": 3,
+        "everyStartedAgentStopped": true,
+        "childPreToolCount": 2,
+        "childPostToolCount": 2,
+        "childPostFailureCount": 0,
+        "childPostBatchCount": 2,
+        "childPermissionCallCount": 2,
+        "everyChildToolHasAgentId": true,
+        "everyChildPermissionHasAgentId": true
+      },
+      "toolHost": {
+        "callStartCount": 2,
+        "callEndCount": 2,
+        "callLabels": [
+          "alpha",
+          "beta"
+        ],
+        "distinctOperationKeyCount": 1,
+        "distinctServerProcessCount": 1,
+        "callsOverlapped": false,
+        "effectCount": 2,
+        "effectLabels": [
+          "alpha",
+          "beta"
+        ],
+        "everyServerStoppedAfterQuery": true,
+        "forcedCleanupCount": 0
+      }
+    },
+    "abortedChild": {
+      "run": {
+        "initSeen": true,
+        "claudeCodeVersion": "2.1.220",
+        "initToolCount": 1,
+        "resultSubtypes": [],
+        "exactMarkerObserved": false,
+        "iteratorError": "aborted",
+        "hardTimedOut": false,
+        "agentToolUseCount": 1,
+        "mcpToolUseCount": 1,
+        "toolResultBlockCount": 0,
+        "forwardedAssistantCount": 1,
+        "forwardedUserCount": 1,
+        "distinctParentToolUseIdCount": 1
+      },
+      "observations": {
+        "distinctAgentIdCount": 1,
+        "agentTypes": [
+          "slow"
+        ],
+        "subagentStartCount": 1,
+        "subagentStopCount": 0,
+        "everyStartedAgentStopped": false,
+        "childPreToolCount": 1,
+        "childPostToolCount": 0,
+        "childPostFailureCount": 0,
+        "childPostBatchCount": 0,
+        "childPermissionCallCount": 1,
+        "everyChildToolHasAgentId": true,
+        "everyChildPermissionHasAgentId": true
+      },
+      "effectStarted": true,
+      "iteratorSettledWithinTenSeconds": true,
+      "settleElapsedBucket": "1s_to_10s",
+      "delayedEffectAfterAbort": false,
+      "toolHost": {
+        "callStartCount": 1,
+        "callEndCount": 0,
+        "distinctServerProcessCount": 1,
+        "everyServerStoppedAfterAbort": true,
+        "forcedCleanupCount": 0
+      }
+    }
+  },
+  "cleanup": {
+    "matchingScratchProcessLeaks": 0,
+    "rawFilesRemoved": true
+  },
+  "assertions": {
+    "stdioParallelHandlersDelivered": true,
+    "stdioSiblingCallsActuallyOverlapped": false,
+    "stdioChildLineageProjected": false,
+    "sharedOperationKeyDidNotDedupe": true,
+    "stdioParentAbortPreventedDelayedEffect": true,
+    "stdioProcessesStopped": true,
+    "noScratchProcessLeak": true,
+    "cleanupComplete": true
+  }
+}

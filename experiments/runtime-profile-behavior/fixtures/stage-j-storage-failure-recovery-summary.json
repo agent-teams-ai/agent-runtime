@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "status": "accepted-scoped-experimental-evidence",
+  "date": "2026-07-28",
+  "safety": {
+    "hostedSyntheticWorkspaceOnly": true,
+    "dedicatedLoopbackImageOnly": true,
+    "realUserProjectsUsed": false,
+    "ambientCredentialsRead": false,
+    "agentProcessesStarted": false,
+    "providerProcessesStarted": false,
+    "providerRequestsMade": false,
+    "realMcpServersStarted": false,
+    "preExistingDockerResourcesMutated": false
+  },
+  "scope": {
+    "physicalHosts": 1,
+    "filesystem": "ext4",
+    "loopbackImageBytes": 402653184,
+    "postgresVersion": "18.4",
+    "dataChecksums": "on",
+    "databaseProcessSigkillInjected": true,
+    "syntheticEnospcInjected": true,
+    "offlineRelationCorruptionInjected": true,
+    "physicalPowerLossInjected": false,
+    "offHostBackupUsed": false,
+    "replicationOrFailoverUsed": false,
+    "productionDisasterRecoveryClaimed": false
+  },
+  "facts": {
+    "enospc": {
+      "availableUnderPressureBytes": 2097152,
+      "emergencyReserveBytes": 33554432,
+      "transactionFailedWithNoSpaceClass": true,
+      "stateRevisionRolledBack": true,
+      "stateDigestUnchanged": true,
+      "outboxRolledBack": true,
+      "writeSucceededAfterRecovery": true
+    },
+    "sigkillRecovery": {
+      "newPostmasterObserved": true,
+      "projectionPreserved": true,
+      "pgAmcheckPassed": true
+    },
+    "corruption": {
+      "relationBytes": 2932736,
+      "readFailed": true,
+      "pgAmcheckFailed": true,
+      "checksumOrPageErrorClassified": true
+    },
+    "restore": {
+      "projectionMatches": true,
+      "pgAmcheckPassed": true
+    },
+    "cleanup": {
+      "containers": 0,
+      "mounts": 0,
+      "loopDevices": 0,
+      "workDirectories": 0
+    }
+  },
+  "evidence": {
+    "sourceSha256": "6104285ec2734b00b138c86c3df827aa35b5b03428dd4f19fc4e021df5b3374a",
+    "verifierSha256": "9b4490b4ea30e07946463659b33e95b50095e6086e1328406526a914f9e01838",
+    "comparatorSha256": "4d9e1adc1daa46162d01ad28cfaa70df8cb219856621fdcfdb3c5ef59b10089d",
+    "finalAResultSha256": "85558c88a8931315205f7a9b79d63dae2eb2929d4cd2766e08de22d218df0c02",
+    "finalAAuditSha256": "241b17fc7788a40a6c32d25bfba9d0ed70037efd1b870272789f6a1592c7926c",
+    "finalBResultSha256": "6a4f16a5f420988b1ea9607cd6b1731b5da635c7e9e2db472de132fc23cdf914",
+    "finalBAuditSha256": "d8d1002f6372d1d7f13184a97f82fb11e084c5cb76b33a95582288e76e6d5ab8",
+    "semanticProjectionSha256": "0b5b884b5df41512f157a5e92fda4b54a7058027a4d386b0e821259db9899224",
+    "finalComparisonSha256": "68bfc0da62404ab091e4c6eb35eaea4dcac81f72030ded593edd820e49259862",
+    "finalAudits": "38/38 GO each"
+  },
+  "remainingGates": [
+    "production watermark reserve custody alerting and admission",
+    "physical power loss and worker replacement",
+    "off-host encrypted backup restore and key loss",
+    "PITR replication failover and split-brain fencing",
+    "measured RPO RTO and recurring DR drills",
+    "supported storage platform and database matrix"
+  ]
+}

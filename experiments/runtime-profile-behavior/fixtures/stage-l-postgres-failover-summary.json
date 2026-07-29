@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "stage": "L",
+  "status": "accepted-scoped-experimental-evidence",
+  "platform": "hosted-single-physical-host-linux",
+  "database": "PostgreSQL 18.4",
+  "facts": {
+    "nodesPerCluster": 3,
+    "negativeSplitBrainAcceptedDivergentWrites": true,
+    "remoteApplyObserved": true,
+    "quorumLossSyncRepWaitObserved": true,
+    "unknownCommitReconciled": true,
+    "fenceBeforePromotion": true,
+    "formerPrimaryRejoinedWithPgRewind": true,
+    "rejoinedOnNewTimeline": true,
+    "leastPrivilegeReplicationIdentity": true,
+    "residueEmpty": true
+  },
+  "evidence": {
+    "checksPerFinal": 67,
+    "semanticDigest": "a9ff2b535191d1bcc1091ec238e5cffbc9f2e36f8759926a88d0a44b9f74e72b",
+    "comparison": "PASS"
+  },
+  "excluded": [
+    "multi-physical-host failure domain",
+    "production HA manager and STONITH",
+    "PITR and measured RPO/RTO",
+    "production connection pool and proxy"
+  ]
+}

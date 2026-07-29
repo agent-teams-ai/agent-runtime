@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qualification-registry.schema.json",
+  "title": "Agent Runtime qualification registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "matchingPolicy",
+    "qualificationLevels",
+    "entries"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date"
+    },
+    "matchingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default",
+        "dimensionRule",
+        "entryValueRule",
+        "wildcardsAllowed",
+        "promotionRule"
+      ],
+      "properties": {
+        "default": {
+          "const": "unqualified"
+        },
+        "dimensionRule": {
+          "const": "exact-match-all-dimensions"
+        },
+        "entryValueRule": {
+          "const": "target-token-equals-one-observed-token-per-dimension"
+        },
+        "wildcardsAllowed": {
+          "const": false
+        },
+        "promotionRule": {
+          "const": "explicit-evidence-and-readiness-update"
+        }
+      }
+    },
+    "qualificationLevels": {
+      "type": "array",
+      "const": [
+        "unqualified",
+        "scoped",
+        "implementation",
+        "deployment"
+      ]
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "exactTokens": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!\\*$|any$|all$).+"
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "human-report",
+            "redacted-summary"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(docs/spikes/|experiments/runtime-profile-behavior/fixtures/).+"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "qualification",
+        "dimensions",
+        "evidence",
+        "readinessSections",
+        "limitations"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "qualification": {
+          "enum": [
+            "unqualified",
+            "scoped",
+            "implementation",
+            "deployment"
+          ]
+        },
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "binaryClosure",
+            "platform",
+            "credentialRoute",
+            "transport",
+            "failureDomain"
+          ],
+          "properties": {
+            "provider": {
+              "$ref": "#/$defs/exactTokens"
+            },
+            "binaryClosure": {
+              "$ref": "#/$defs/exactTokens"
+            },
+            "platform": {
+              "$ref": "#/$defs/exactTokens"
+            },
+            "credentialRoute": {
+              "$ref": "#/$defs/exactTokens"
+            },
+            "transport": {
+              "$ref": "#/$defs/exactTokens"
+            },
+            "failureDomain": {
+              "$ref": "#/$defs/exactTokens"
+            }
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "readinessSections": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

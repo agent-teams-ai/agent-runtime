@@ -1,0 +1,468 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-28T15:30:00Z",
+  "status": "accepted-scoped-evidence",
+  "provenance": {
+    "retainedBundleSha256": "4b2de8673ff5c44b2094ce18c06ffc785b44f7c0917421967c7224ac6c9fec3f",
+    "bundledSummarySha256": "bc4d5bf29c5991985021bf49ddf79c7800d52d79aa3514ea809cc348bab1382f"
+  },
+  "scope": {
+    "host": "user-authorized local macOS host",
+    "platform": "macOS 15.6.1 build 24G90 arm64",
+    "workspaces": "two new synthetic Git repositories only",
+    "userProjectUsed": false,
+    "existingUserCliAuthorizationUsed": true,
+    "credentialValueInspected": false,
+    "dedicatedTestAccountUsed": false,
+    "realMcpUsed": false,
+    "externalFirstPartyProviderCallsUsed": true,
+    "userConfigExecutionAllowed": false
+  },
+  "runtimeClosure": {
+    "codex": {
+      "installedVersion": "0.144.1",
+      "installedDarwinArm64BinarySha256": "29915529b97697def1a957b0505e770aa6a45744435d62fc263e98d7619e167a",
+      "testedLatestVersion": "0.145.0",
+      "testedLatestNpmIntegrity": "sha512-/PSPSFujjjmiyVFvG2yu/grOFhsWdokTH8t2KGWhXSo/M5n/dIDsnbsnO82/7bLtIoDuzQf7ATBUMWqPWQINlQ==",
+      "testedLatestDarwinArm64BinarySha256": "1da3f4e0e96028b8a771814293c3033dafd1971f943f6c7e79b0897fe705f590",
+      "testedLatestCodeModeHostSha256": "c75e27ea296ede4025959e4f66772c283261f28d95b1f27be4d8ef07aabe9bce",
+      "testedLatestBundledRipgrepSha256": "a326a1fb48074202e9ad41e4cd1e389eeea372c8c6f7d7e80da81176d5d9430e",
+      "testedLatestBundledZshSha256": "b69893d9da08786211bac0862212e26a8a31af24eb77da21692671c58d388b8d"
+    },
+    "claudeCode": {
+      "installedVersion": "2.1.205",
+      "installedDarwinArm64BinarySha256": "33e28624c5ae84f2bd7d2d8761e5d2e77997ba965cb11b6448de6b6e2c566f9c",
+      "testedLatestVersion": "2.1.220",
+      "testedLatestNpmIntegrity": "sha512-ogBrvwkqF9f8okmnXKxmRNHuvtFxFEffe5pWdqOV3iQDxlUOKirFqnyWC7NGXXnDA4WkkbPH8pvSbwyCR2Auyw==",
+      "testedLatestDarwinArm64BinarySha256": "8addc857f3fe64d5a0368af9ee50321b50afb4a6918ba3ef018ab84f5dbbe081"
+    }
+  },
+  "accepted": {
+    "codex": {
+      "installedSmoke": {
+        "eventSequence": [
+          "thread.started",
+          "turn.started",
+          "item.completed",
+          "turn.completed"
+        ],
+        "result": "CODEX_SYNTHETIC_E2E_7F3A9C",
+        "nonMessageItemCount": 0,
+        "usageKeys": [
+          "cached_input_tokens",
+          "input_tokens",
+          "output_tokens",
+          "reasoning_output_tokens"
+        ]
+      },
+      "latestSmoke": {
+        "eventSequence": [
+          "thread.started",
+          "turn.started",
+          "item.completed",
+          "turn.completed"
+        ],
+        "result": "CODEX_LATEST_01450_5D2E8A",
+        "nonMessageItemCount": 0,
+        "usageKeys": [
+          "cache_write_input_tokens",
+          "cached_input_tokens",
+          "input_tokens",
+          "output_tokens",
+          "reasoning_output_tokens"
+        ]
+      },
+      "latestConcurrentIndependentRuns": [
+        {
+          "eventSequence": [
+            "thread.started",
+            "turn.started",
+            "item.completed",
+            "turn.completed"
+          ],
+          "result": "CODEX_CONCURRENT_A_2C410D",
+          "nonMessageItemCount": 0,
+          "usageKeys": [
+            "cache_write_input_tokens",
+            "cached_input_tokens",
+            "input_tokens",
+            "output_tokens",
+            "reasoning_output_tokens"
+          ]
+        },
+        {
+          "eventSequence": [
+            "thread.started",
+            "turn.started",
+            "item.completed",
+            "turn.completed"
+          ],
+          "result": "CODEX_CONCURRENT_B_9F72A1",
+          "nonMessageItemCount": 0,
+          "usageKeys": [
+            "cache_write_input_tokens",
+            "cached_input_tokens",
+            "input_tokens",
+            "output_tokens",
+            "reasoning_output_tokens"
+          ]
+        }
+      ],
+      "persistedThreadCreatedInWorkspaceA": {
+        "eventSequence": [
+          "thread.started",
+          "turn.started",
+          "item.completed",
+          "turn.completed"
+        ],
+        "result": "CODEX_FIRST_OK",
+        "nonMessageItemCount": 0,
+        "usageKeys": [
+          "cached_input_tokens",
+          "input_tokens",
+          "output_tokens",
+          "reasoning_output_tokens"
+        ]
+      },
+      "explicitThreadIdResumedFromWorkspaceB": {
+        "eventSequence": [
+          "thread.started",
+          "turn.started",
+          "item.completed",
+          "turn.completed"
+        ],
+        "result": "CODEX_RESUME_A91D6B",
+        "nonMessageItemCount": 0,
+        "usageKeys": [
+          "cached_input_tokens",
+          "input_tokens",
+          "output_tokens",
+          "reasoning_output_tokens"
+        ]
+      },
+      "instructionPolicy": {
+        "ignoreRulesStillLoadedAgentsMd": true,
+        "projectDocMaxBytesZeroSuppressedAgentsMd": true
+      },
+      "readOnlyWriteDenial": {
+        "targetAbsent": true,
+        "stderrContainedSandboxRejection": true,
+        "structuredJsonFailureEventCount": 0
+      }
+    },
+    "claudeCode": {
+      "installedSmoke": {
+        "result": "CLAUDE_SYNTHETIC_E2E_42B7D1",
+        "subtype": "success",
+        "stopReason": "end_turn",
+        "numTurns": 1,
+        "totalCostUsd": 0.0300857,
+        "modelUsageKeys": [
+          "claude-haiku-4-5-20251001",
+          "claude-sonnet-5"
+        ],
+        "webSearchRequests": 0,
+        "permissionDenialCount": 0
+      },
+      "installedPromptSuggestionsDisabledSmoke": {
+        "result": "CLAUDE_NO_SUGGESTION_6C18EF",
+        "subtype": "success",
+        "stopReason": "end_turn",
+        "numTurns": 1,
+        "totalCostUsd": 0.0083088,
+        "modelUsageKeys": [
+          "claude-haiku-4-5-20251001",
+          "claude-sonnet-5"
+        ],
+        "webSearchRequests": 0,
+        "permissionDenialCount": 0
+      },
+      "latestSmoke": {
+        "result": "CLAUDE_LATEST_21220_91E4C2",
+        "subtype": "success",
+        "stopReason": "end_turn",
+        "numTurns": 1,
+        "totalCostUsd": 0.0240657,
+        "modelUsageKeys": [
+          "claude-sonnet-5"
+        ],
+        "webSearchRequests": 0,
+        "permissionDenialCount": 0
+      },
+      "latestConcurrentIndependentRuns": [
+        {
+          "result": "CLAUDE_CONCURRENT_A_7B190E",
+          "subtype": "success",
+          "stopReason": "end_turn",
+          "numTurns": 1,
+          "totalCostUsd": 0.0342114,
+          "modelUsageKeys": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-5"
+          ],
+          "webSearchRequests": 0,
+          "permissionDenialCount": 0
+        },
+        {
+          "result": "CLAUDE_CONCURRENT_B_C45D82",
+          "subtype": "success",
+          "stopReason": "end_turn",
+          "numTurns": 1,
+          "totalCostUsd": 0.0204597,
+          "modelUsageKeys": [
+            "claude-sonnet-5"
+          ],
+          "webSearchRequests": 0,
+          "permissionDenialCount": 0
+        }
+      ],
+      "safeModeWorkspaceClaudeMdCanaries": [
+        {
+          "result": "NO_WORKSPACE_INSTRUCTION",
+          "subtype": "success",
+          "stopReason": "end_turn",
+          "numTurns": 1,
+          "totalCostUsd": 0.007786800000000001,
+          "modelUsageKeys": [
+            "claude-sonnet-5"
+          ],
+          "webSearchRequests": 0,
+          "permissionDenialCount": 0
+        },
+        {
+          "result": "NO_WORKSPACE_INSTRUCTION",
+          "subtype": "success",
+          "stopReason": "end_turn",
+          "numTurns": 1,
+          "totalCostUsd": 0.013377400000000001,
+          "modelUsageKeys": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-5"
+          ],
+          "webSearchRequests": 0,
+          "permissionDenialCount": 0
+        }
+      ],
+      "streamJsonMathContracts": {
+        "installed": {
+          "result": "421",
+          "subtype": "success",
+          "stopReason": "end_turn",
+          "numTurns": 1,
+          "totalCostUsd": 0.007849,
+          "modelUsageKeys": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-5"
+          ],
+          "webSearchRequests": 0,
+          "permissionDenialCount": 0,
+          "eventSequence": [
+            "system:init",
+            "system:status",
+            "rate_limit_event",
+            "stream_event:message_start",
+            "stream_event:content_block_start",
+            "stream_event:content_block_delta",
+            "user",
+            "assistant",
+            "stream_event:content_block_stop",
+            "stream_event:message_delta",
+            "stream_event:message_stop",
+            "result:success"
+          ],
+          "userReplayCount": 1,
+          "toolBlockCount": 0,
+          "initMetadataCounts": {
+            "tools": 0,
+            "mcpServers": 0,
+            "plugins": 22,
+            "skills": 16,
+            "agents": 4,
+            "slashCommands": 41
+          }
+        },
+        "latest": {
+          "result": "421",
+          "subtype": "success",
+          "stopReason": "end_turn",
+          "numTurns": 1,
+          "totalCostUsd": 0.0128106,
+          "modelUsageKeys": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-5"
+          ],
+          "webSearchRequests": 0,
+          "permissionDenialCount": 0,
+          "eventSequence": [
+            "system:init",
+            "system:status",
+            "user",
+            "stream_event:message_start",
+            "stream_event:content_block_start",
+            "stream_event:content_block_delta",
+            "rate_limit_event",
+            "assistant",
+            "stream_event:content_block_stop",
+            "stream_event:message_delta",
+            "stream_event:message_stop",
+            "result:success"
+          ],
+          "userReplayCount": 1,
+          "toolBlockCount": 0,
+          "initMetadataCounts": {
+            "tools": 0,
+            "mcpServers": 0,
+            "plugins": 22,
+            "skills": 16,
+            "agents": 4,
+            "slashCommands": 42
+          }
+        },
+        "userReplayOrderingEqual": false
+      },
+      "noToolsBypassWriteCounterexample": {
+        "protocolSubtype": "success",
+        "textualWriteClaimObserved": true,
+        "targetAbsent": true
+      },
+      "rejectedExactMarkerBusinessContracts": [
+        {
+          "version": "2.1.205",
+          "protocolSubtype": "success",
+          "expectedBusinessResultObserved": false,
+          "userReplayCount": 1
+        },
+        {
+          "version": "2.1.220",
+          "protocolSubtype": "success",
+          "expectedBusinessResultObserved": false,
+          "userReplayCount": 1
+        }
+      ],
+      "modelUsageMultiplicityObserved": {
+        "oneModelInSomeRuns": true,
+        "twoModelsInSomeRuns": true,
+        "promptSuggestionsFalseDidNotGuaranteeOneModel": true
+      },
+      "safeModeInitMetadataObservation": {
+        "toolsCount": 0,
+        "mcpServersCount": 0,
+        "configuredPluginSkillAgentMetadataStillEnumerated": true,
+        "namesAndPathsRetained": false
+      }
+    },
+    "cancellation": {
+      "matrix": [
+        {
+          "provider": "codex",
+          "round": 1,
+          "interrupt_after_ms": 1500,
+          "interrupt_sent": true,
+          "forced_signal": null,
+          "exit_code": 1,
+          "exit_signal": null,
+          "duration_ms": 1529,
+          "stdout_bytes": 101,
+          "stderr_lines": 1,
+          "json_parse_errors": 0,
+          "event_names": [
+            "thread.started",
+            "turn.started"
+          ],
+          "final_event_count": 0
+        },
+        {
+          "provider": "claude",
+          "round": 1,
+          "interrupt_after_ms": 1500,
+          "interrupt_sent": true,
+          "forced_signal": null,
+          "exit_code": 0,
+          "exit_signal": null,
+          "duration_ms": 2032,
+          "stdout_bytes": 6422,
+          "stderr_lines": 0,
+          "json_parse_errors": 0,
+          "event_names": [
+            "system:init",
+            "system:status",
+            "user",
+            "result:error_during_execution"
+          ],
+          "final_event_count": 1
+        },
+        {
+          "provider": "codex",
+          "round": 2,
+          "interrupt_after_ms": 1500,
+          "interrupt_sent": true,
+          "forced_signal": null,
+          "exit_code": 1,
+          "exit_signal": null,
+          "duration_ms": 1526,
+          "stdout_bytes": 101,
+          "stderr_lines": 1,
+          "json_parse_errors": 0,
+          "event_names": [
+            "thread.started",
+            "turn.started"
+          ],
+          "final_event_count": 0
+        },
+        {
+          "provider": "claude",
+          "round": 2,
+          "interrupt_after_ms": 1500,
+          "interrupt_sent": true,
+          "forced_signal": null,
+          "exit_code": 0,
+          "exit_signal": null,
+          "duration_ms": 2030,
+          "stdout_bytes": 6422,
+          "stderr_lines": 0,
+          "json_parse_errors": 0,
+          "event_names": [
+            "system:init",
+            "system:status",
+            "user",
+            "result:error_during_execution"
+          ],
+          "final_event_count": 1
+        }
+      ],
+      "descendantProcessLeakObserved": false,
+      "providerSideCancellationProven": false
+    }
+  },
+  "architectureInvariants": [
+    "Codex and Claude use provider-specific anti-corruption adapters behind one Agent Execution port; their exit and terminal-event semantics are not interchangeable.",
+    "Operation success requires a verified business/effect receipt. Process exit zero, provider subtype success, or model text alone is insufficient.",
+    "Provider accounting consumes observed usage and modelUsage records. One agent turn is not assumed to equal one model request.",
+    "Workspace instruction inheritance is an explicit authorized profile policy. It is never inferred from cwd or session identity; accepted instruction bytes are snapshotted and digested.",
+    "A Codex launch that must suppress AGENTS.md sets project_doc_max_bytes=0; --ignore-rules only suppresses execpolicy .rules files.",
+    "Provider stderr and structured output are captured as separate bounded streams because Codex JSONL did not expose the observed sandbox rejection as a structured failure event.",
+    "Claude stream telemetry is allowlist-projected. Safe mode removed tools and MCP and ignored the workspace CLAUDE.md canary, but init still enumerated configured plugin, skill, and agent metadata.",
+    "Provider session IDs and cwd are routing hints, not authorization. Resume is validated against tenant, RuntimeSession, workspace grant, credential generation, and custody fence before forwarding.",
+    "Existing user CLI authorization may be imported only through an explicit local-authorized flow. Hosted production uses dedicated credential custody and generation CAS."
+  ],
+  "readiness": {
+    "scopedLocalMacosCliConformanceComplete": true,
+    "productionCodexAdapterReady": false,
+    "productionClaudeAdapterReady": false,
+    "remainingGates": [
+      "Codex App Server protocol, cancellation acknowledgement, tool lifecycle, concurrent operation fencing, and output-drain conformance",
+      "Claude Agent SDK or long-lived stream-json session, cancellation acknowledgement, tool lifecycle, concurrent operation fencing, and output-drain conformance",
+      "provider-side cancellation and billable-work reconciliation after local process termination",
+      "dedicated non-user test accounts, credential refresh/revocation generation CAS, and production KeyProvider custody",
+      "macOS production descendant containment and endpoint-specific egress enforcement",
+      "supported binary closure upgrade, rollback, and schema compatibility policy beyond the tested pairs"
+    ]
+  },
+  "secrets": {
+    "rawAuthValuesIncluded": false,
+    "authDigestsIncluded": false,
+    "accountIdentifiersIncluded": false,
+    "rawProviderPayloadsIncludedInRetainedBundle": false,
+    "temporaryCodexAuthCopyUnchangedBeforeDeletion": true
+  }
+}

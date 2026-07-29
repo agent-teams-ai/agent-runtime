@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "stage": "N",
+  "status": "accepted-scoped-experimental-evidence",
+  "model": "deterministic-contract-model",
+  "facts": {
+    "closureRoles": ["helper", "config", "adapter", "classifier", "projector", "codec"],
+    "closedComponentAndClosureShapes": true,
+    "sessionPinnedToClosure": true,
+    "assignmentOwnsLeaseAndRoot": true,
+    "terminalReplayCannotRestoreAuthority": true,
+    "headGenerationCas": true,
+    "collectedTombstoneImmutable": true,
+    "privateAuthorityState": true,
+    "exactCompositionGraph": true,
+    "authoritativeMonotonicTime": true
+  },
+  "evidence": {
+    "checksPerFinal": 285,
+    "semanticDigest": "a16eb73c17a33d0badb793c3b2c5d6ff660716b61d15a75a073c68cab37b0eed",
+    "factsOracle": "01ed77680b3cc97639d9f6146c13d988cd9ce8d51b04333994ea409bfa274441",
+    "comparison": "GO",
+    "cryptographicExecutionAttestationClaimed": false
+  },
+  "excluded": [
+    "real database threads and transactions",
+    "real artifact store and KMS",
+    "real worker fleet and provider binaries",
+    "production rollout readiness"
+  ]
+}

@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-28T16:15:00Z",
+  "status": "accepted-scoped-evidence",
+  "provenance": {
+    "retainedBundleSha256": "a8f1ce90d899a8488fbd07d53131dca8ab750d3db00e1f904a5feaf3ca544019",
+    "bundledSummarySha256": "d943e3a4da9acf3232eb781671e5a2c3fdd5a2c2ad209b9975c0bd7f222371ec"
+  },
+  "scope": {
+    "platform": "macOS 15.6.1 build 24G90 arm64",
+    "transport": "Codex App Server stable JSONL over stdio",
+    "workspaces": "two new synthetic Git repositories only",
+    "userProjectUsed": false,
+    "existingUserCliAuthorizationUsed": true,
+    "credentialValueInspected": false,
+    "realMcpUsed": false,
+    "externalFirstPartyProviderCallsUsed": true,
+    "experimentalApiEnabledForMainCampaign": false
+  },
+  "runtimeClosure": {
+    "installed": {
+      "version": "0.144.1",
+      "darwinArm64BinarySha256": "29915529b97697def1a957b0505e770aa6a45744435d62fc263e98d7619e167a",
+      "generatedV2SchemaBundleSha256": "3e391f0e9fbe35cb842a1c80caf98b12ad8a4952ecd020d814cfccb1d77123ee",
+      "generatedSchemaFileCount": 267
+    },
+    "latest": {
+      "version": "0.145.0",
+      "darwinArm64BinarySha256": "1da3f4e0e96028b8a771814293c3033dafd1971f943f6c7e79b0897fe705f590",
+      "generatedV2SchemaBundleSha256": "26e2ad0d98135ea0962fb21233dd29e3c81a5f411f8ed8d4f28da8311adfff98",
+      "generatedSchemaFileCount": 273
+    },
+    "schemaComparison": {
+      "addedFiles": [
+        "v2/AppsInstalledParams.json",
+        "v2/AppsInstalledResponse.json",
+        "v2/AppsReadParams.json",
+        "v2/AppsReadResponse.json",
+        "v2/EnvironmentConnectionNotification.json",
+        "v2/RawResponseCompletedNotification.json"
+      ],
+      "removedFileCount": 0,
+      "changedSharedFileCount": 58,
+      "selectedCoreSurfaceObservation": "No removed top-level property, required field, or enum value was observed in ThreadStart, ThreadResume, TurnStart, TurnCompleted, or ItemCompleted schemas; 0.145.0 added audio-related enum values."
+    }
+  },
+  "accepted": {
+    "handshake": {
+      "preInitializeError": {
+        "code": -32600,
+        "message": "Not initialized"
+      },
+      "repeatedInitializeError": {
+        "code": -32600,
+        "message": "Already initialized"
+      },
+      "platformFamily": "unix",
+      "platformOs": "macos"
+    },
+    "environment": {
+      "defaultInheritedSyntheticAmbientCanary": true,
+      "inheritNoneRemovedSyntheticAmbientCanary": true
+    },
+    "commandExecReadOnly": {
+      "exitCode": 1,
+      "targetAbsent": true,
+      "structuredResponse": true
+    },
+    "instructionSources": {
+      "projectDocMaxBytesZeroCount": 0,
+      "projectDocMaxBytes32768Count": 1,
+      "enabledSourceKind": "AGENTS.md"
+    },
+    "installedSmoke": {
+      "exactMarkerObserved": true,
+      "turnCompletedObserved": true
+    },
+    "latestSmoke": {
+      "exactMarkerObserved": true,
+      "turnStatus": "completed"
+    },
+    "latestDifferentThreadConcurrency": {
+      "threadCount": 2,
+      "exactIndependentMarkersObserved": true,
+      "statuses": [
+        "completed",
+        "completed"
+      ]
+    },
+    "latestReadOnlyModelWrite": {
+      "turnStatus": "completed",
+      "targetAbsent": true,
+      "patchRejectionOnStderr": true,
+      "completedItemTypes": [
+        "agentMessage",
+        "userMessage"
+      ],
+      "structuredPatchFailureItemObserved": false
+    },
+    "latestTurnInterrupt": {
+      "interruptResponseEmptyObject": true,
+      "terminalStatus": "interrupted"
+    },
+    "latestSameThreadOverlapCounterexample": {
+      "firstTurnStartAccepted": true,
+      "secondTurnStartAccepted": true,
+      "firstTurnStartedNotificationObserved": true,
+      "secondTurnStartedNotificationObserved": false,
+      "firstTurnTerminalStatus": "interrupted",
+      "secondTurnTerminalNotificationObserved": false,
+      "secondTurnInterruptErrorCode": -32600,
+      "secondTurnInterruptReportedFirstTurnStillActive": true
+    },
+    "latestCrossWorkspaceResume": {
+      "resumedFromDifferentCwd": true,
+      "priorContextObserved": true,
+      "exactMarkerObserved": true,
+      "turnStatus": "completed",
+      "instructionSourceCount": 0
+    },
+    "privacy": {
+      "unsolicitedAccountRateLimitsNotificationObserved": true,
+      "accountValuesRetained": false,
+      "notificationMethodCounts": [
+        {
+          "method": "account/rateLimits/updated",
+          "count": 5
+        },
+        {
+          "method": "item/agentMessage/delta",
+          "count": 88
+        },
+        {
+          "method": "item/completed",
+          "count": 9
+        },
+        {
+          "method": "item/started",
+          "count": 9
+        },
+        {
+          "method": "remoteControl/status/changed",
+          "count": 1
+        },
+        {
+          "method": "thread/started",
+          "count": 5
+        },
+        {
+          "method": "thread/status/changed",
+          "count": 10
+        },
+        {
+          "method": "thread/tokenUsage/updated",
+          "count": 5
+        },
+        {
+          "method": "turn/completed",
+          "count": 5
+        },
+        {
+          "method": "turn/started",
+          "count": 5
+        }
+      ]
+    },
+    "processCleanup": {
+      "defaultEnvironmentProbeExit": 0,
+      "strictEnvironmentProbeExit": 0,
+      "mainExit": 0,
+      "resumeExit": 0,
+      "forcedSignalUsed": false,
+      "matchingProcessLeakObservedAfterCampaign": false
+    }
+  },
+  "rejectedHypotheses": [
+    {
+      "hypothesis": "A successful turn/start response means that same-thread turn was accepted for execution.",
+      "result": "rejected",
+      "evidence": "The second overlapping turn/start returned a turn, but emitted neither turn/started nor turn/completed. Its interrupt returned -32600 and reported the first turn as still active after the first interrupted terminal notification."
+    },
+    {
+      "hypothesis": "App Server stable item events make every model tool denial structured.",
+      "result": "rejected",
+      "evidence": "The read-only patch denial appeared on stderr and in agent text, while completed item events contained only userMessage and agentMessage."
+    },
+    {
+      "hypothesis": "App Server subprocesses are safe from ambient environment inheritance by default.",
+      "result": "rejected",
+      "evidence": "A synthetic non-secret ambient variable was visible under the default policy and absent with shell_environment_policy.inherit=none."
+    }
+  ],
+  "architectureInvariants": [
+    "Agent Execution serializes turn/start per provider thread and never relies on the provider to reject or queue same-thread overlap safely.",
+    "A turn/start response is a provider observation, not AR acceptance. AR requires turn/started plus a terminal event or an explicit reconcile_required outcome.",
+    "Every provider operation is fenced by RuntimeOperation and ExecutionGeneration before dispatch; provider thread and turn IDs are routing hints only.",
+    "App Server runs behind a provider-specific anti-corruption adapter over a pinned generated schema revision.",
+    "Unknown additive notifications and fields are tolerated, but only allowlisted projections cross bounded-context or public event boundaries.",
+    "account/rateLimits/updated is tenant-private Provider Access data and is not copied into general logs or public RuntimeOperation events.",
+    "Subprocess environment inheritance is default-deny with shell_environment_policy.inherit=none plus an explicit typed allowlist.",
+    "thread/shellCommand, raw filesystem methods, config writes, plugin installs, OAuth login, and other broad App Server methods are not exposed through the Agent Execution port.",
+    "Structured command/exec results, provider notifications, stderr diagnostics, and verified filesystem/effect receipts remain separate evidence streams."
+  ],
+  "readiness": {
+    "scopedLocalMacosAppServerCoreComplete": true,
+    "productionCodexAdapterReady": false,
+    "remainingGates": [
+      "same-thread overlap fail-closed implementation and regression coverage in the AR adapter",
+      "successful and failed shell, patch, and tool lifecycle projection with output drain and crash recovery",
+      "provider-side cancellation and billable-work reconciliation after turn/interrupt",
+      "long-duration concurrency, backpressure, restart, and in-flight resume soak",
+      "dedicated non-user test account and credential refresh/revocation generation CAS",
+      "supported generated-schema compatibility, upgrade, and rollback policy beyond 0.144.1 and 0.145.0"
+    ]
+  },
+  "secrets": {
+    "rawAuthValuesIncluded": false,
+    "authDigestsIncluded": false,
+    "accountIdentifiersIncluded": false,
+    "accountRateLimitValuesIncluded": false,
+    "rawProviderPayloadsIncludedInRetainedBundle": false,
+    "temporaryCodexAuthCopyUnchangedBeforeDeletion": true
+  }
+}

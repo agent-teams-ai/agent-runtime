@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-28T13:51:03Z",
+  "scope": {
+    "platform": "macOS 15.6.1 arm64",
+    "network": "loopback only",
+    "protocols": [
+      "Connect over HTTP/1.1",
+      "Connect over HTTP/2 cleartext"
+    ],
+    "syntheticDataOnly": true,
+    "providerRequests": false,
+    "ambientCredentialsRead": false,
+    "userProjectsUsed": false,
+    "excluded": [
+      "TLS termination and external load balancers",
+      "browser and mobile SDKs",
+      "multi-host proxy or service-mesh behavior",
+      "production persistence adapter"
+    ]
+  },
+  "dependencies": {
+    "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-node": "2.1.2",
+    "@bufbuild/protobuf": "2.13.0"
+  },
+  "provenance": {
+    "harnessSha256": "adf87a8f7771289cc2d1ba3d9c01a92257ddfea007d5ac644d8ee204699d8dd9",
+    "protoSha256": "3cb311ff4d0fec78b7912c99898e5c9ca9fa63d12892b85352dc4ddb49d79090",
+    "generatedSchemaSha256": "420cd0b1100e2860cbd25e8274557522a0d79999e159af859736a2ffb39ccffc",
+    "packageLockSha256": "085cc3c98afa5c4864f4331f4474b5b6b9576034819346a4452ce9dc86bd7813",
+    "resultSha256": "ee00ecb79bc3d7047e89bcd2734da6256d75e24e114884b6a0ef8f29e2ea4136",
+    "auditScriptSha256": "53208764b6856e8cc3c2806d706ff5de2681354c80775ded411556fff133ebf0",
+    "auditResultSha256": "12c757cdfb9288b79885c1f3e288f0be09cfb272f78c27bc0c92d2381740d8a0",
+    "auditVerdict": "GO",
+    "auditChecks": {
+      "passed": 55,
+      "failed": 0
+    },
+    "productionDependencyAudit": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "retainedBundle": "connect-replay-2026-07-28.tar.gz",
+    "retainedBundleSha256": "07a60c53161f9781911ef46b889e056d214054aa3648d85b365d9843894a1c68"
+  },
+  "rejectedRevisions": [
+    {
+      "revision": "v1",
+      "reason": "The bounded runtime completed no promotable result because an HTTP/1.1 connection remained in CLOSE_WAIT/FIN_WAIT_2 and server cleanup did not finish."
+    }
+  ],
+  "confirmedFacts": [
+    {
+      "id": "connect-timeout-after-commit",
+      "sample": "one HTTP/1.1 and one HTTP/2 unary request",
+      "fact": "Both clients received DeadlineExceeded after the command had committed; both handlers observed abort, retry returned replay, and one command remained."
+    },
+    {
+      "id": "connect-stream-drop",
+      "sample": "one HTTP/1.1 socket drop and one HTTP/2 session drop after event 3 of 10",
+      "fact": "The stream surfaced an error and did not auto-resubscribe. An explicit request using the last durable cursor returned exactly events 4 through 10."
+    },
+    {
+      "id": "connect-uncheckpointed-redelivery",
+      "sample": "one uncheckpointed event on each protocol",
+      "fact": "Reconnecting from the previous durable cursor redelivered the same stable event ID on both protocols."
+    },
+    {
+      "id": "connect-cursor-errors",
+      "sample": "expired, forged, wrong-stream, and ahead cursors on both protocols",
+      "fact": "All eight cases failed with the expected Connect code and a typed CursorErrorDetail reason."
+    },
+    {
+      "id": "connect-slow-consumer-buffering",
+      "sample": "128 events of 65536 bytes on each protocol",
+      "fact": "While the client paused after its first event, the server generator produced all 128 events on both protocols. Cancellation arrived after production completed, so built-in transport backpressure did not impose an application memory budget for this sample."
+    },
+    {
+      "id": "connect-http2-goaway",
+      "sample": "one idle HTTP/2 GOAWAY followed by a new unary command",
+      "fact": "The pinned 2.1.2 client opened a usable successor session and the next command succeeded."
+    }
+  ],
+  "architectureInvariants": [
+    "A unary timeout is an unknown command outcome; retry only with the same durable command ID and semantic fingerprint.",
+    "Connect does not own stream replay. SDKs explicitly reconnect with a durable opaque cursor.",
+    "Event delivery is at least once across an uncheckpointed reconnect; consumers deduplicate by stable event ID and persist the cursor only with their projection.",
+    "Bind opaque cursors cryptographically to tenant, stream, projection version, retention epoch, and sequence.",
+    "Return typed expired, forged, wrong-stream, and ahead cursor errors without silently resetting to latest.",
+    "Enforce per-subscriber queued-event and queued-byte budgets in the application layer; do not treat transport backpressure as the budget.",
+    "Bound and attest connection/session cleanup; an RPC ending does not prove every transport handle closed.",
+    "HTTP/2 GOAWAY recovery is adapter behavior, not command replay authority."
+  ],
+  "readiness": {
+    "localNodeConnectReplayDecisionMatrixComplete": true,
+    "connectProductionReady": false,
+    "remainingGates": [
+      "TLS termination, reverse proxy, load balancer, and service-mesh interruption behavior",
+      "browser, mobile, and generated public SDK parity",
+      "multi-host Connect transport and deployment drain",
+      "production persistence adapter, retention compaction, and cursor-key rotation",
+      "long-duration slow-consumer and resource-limit soak"
+    ]
+  },
+  "secrets": {
+    "tokenValuesIncluded": false,
+    "credentialDigestsIncluded": false,
+    "accountIdentifiersIncluded": false,
+    "userProjectContentIncluded": false
+  }
+}

@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "invariants": [
+    {
+      "id": "RP-001",
+      "status": "confirmed",
+      "statement": "CredentialBinding is separate from RuntimeProfile and RuntimeProfileRevision."
+    },
+    {
+      "id": "RP-002",
+      "status": "confirmed",
+      "statement": "A runtime session pins one immutable ResolvedProfileManifest and one BinaryRevision."
+    },
+    {
+      "id": "RP-003",
+      "status": "confirmed",
+      "statement": "Domain and application layers never know provider config paths, HOME/XDG/CODEX_HOME layouts, or provider DTOs."
+    },
+    {
+      "id": "RP-004",
+      "status": "confirmed",
+      "statement": "The orchestrator supplies opaque profile and credential references; AR resolves and materializes them."
+    },
+    {
+      "id": "RP-005",
+      "status": "confirmed",
+      "statement": "Profile revision identity uses canonical semantic source identity, precedence, content hashes, and materializer version; it excludes mtime and absolute host paths."
+    },
+    {
+      "id": "RP-006",
+      "status": "confirmed",
+      "statement": "Immutable profile files, mutable provider state, credentials, shared caches, and binary installations are separate resources with separate lifecycles."
+    },
+    {
+      "id": "RP-007",
+      "status": "confirmed",
+      "statement": "Mutable provider state is not shared between independent runtime instances; shared credential use does not imply shared state."
+    },
+    {
+      "id": "RP-008",
+      "status": "confirmed",
+      "statement": "Each provider and BinaryRevision materializes its own filesystem and environment layout behind a narrow application port."
+    },
+    {
+      "id": "RP-009",
+      "status": "confirmed",
+      "statement": "Deterministic modes never launch a provider against writable user source config; providers receive a private materialization."
+    },
+    {
+      "id": "RP-010",
+      "status": "confirmed",
+      "statement": "Config parsing uses provider-native introspection or a real format parser; regex JSONC parsing is forbidden."
+    },
+    {
+      "id": "RP-011",
+      "status": "confirmed",
+      "statement": "Source scanning fails closed on unreadable, changing, unsupported, or truncated input and reports typed diagnostics."
+    },
+    {
+      "id": "RP-012",
+      "status": "confirmed",
+      "statement": "Ambiguous extension IDs are resolved before provider launch by a deterministic declared layer order; if the source adapter cannot suppress losing copies safely, materialization requires an explicit winner or fails closed."
+    },
+    {
+      "id": "RP-013",
+      "status": "confirmed",
+      "statement": "ACP is a preferred provider-facing adapter, not the AR domain model or lifecycle authority."
+    },
+    {
+      "id": "RP-014",
+      "status": "confirmed",
+      "statement": "ACP v1 and v2 adapters are versioned separately; v2 is negotiated and feature-flagged until stable and conformant."
+    },
+    {
+      "id": "RP-015",
+      "status": "confirmed",
+      "statement": "Profile preparation is staged, idempotent, content-addressed, and atomically published; provider execution never observes a partially prepared revision."
+    },
+    {
+      "id": "RP-016",
+      "status": "confirmed",
+      "statement": "Provider processes never perform concurrent writes to one mutable state root unless a provider-specific serialized lane explicitly owns it."
+    },
+    {
+      "id": "RP-017",
+      "status": "confirmed",
+      "statement": "Plugins, hooks, MCP servers, and executable skill assets are executable capabilities, not passive profile fields; activation requires explicit trust, grants, sandboxing, and audit."
+    },
+    {
+      "id": "RP-018",
+      "status": "confirmed",
+      "statement": "Extension discovery, materialization, and activation are separate observable states; listing an extension does not prove it executed or was blocked."
+    },
+    {
+      "id": "RP-019",
+      "status": "confirmed",
+      "statement": "Every external process started by a profile has bounded startup and operation deadlines, cancellation cleanup, and typed per-extension failure evidence."
+    },
+    {
+      "id": "RP-020",
+      "status": "confirmed",
+      "statement": "Relative profile resources retain an explicit semantic base and are rebased during materialization instead of embedding host absolute paths in revision identity."
+    },
+    {
+      "id": "RP-021",
+      "status": "confirmed",
+      "statement": "A provider materialization directory is a disposable derivative; the authoritative revision is a manifest plus verified content-addressed artifacts."
+    },
+    {
+      "id": "RP-022",
+      "status": "confirmed",
+      "statement": "A durable runtime-session reference or materialization lease prevents garbage collection of its pinned profile revision and artifacts."
+    },
+    {
+      "id": "RP-023",
+      "status": "confirmed",
+      "statement": "Missing or corrupt materialization is rebuilt from the same revision artifacts; missing authoritative artifacts produce PROFILE_REVISION_UNAVAILABLE and never fall back to ambient or latest config."
+    },
+    {
+      "id": "RP-024",
+      "status": "confirmed",
+      "statement": "AR receives generic ordered profile bindings and never interprets orchestrator business scopes such as team, teammate, task, or board."
+    },
+    {
+      "id": "RP-025",
+      "status": "confirmed",
+      "statement": "Profile composition can request behavior and executable resources but cannot grant capabilities; activation is bounded by separately revisioned grants, runtime policy, workspace trust, and BinaryRevision support."
+    },
+    {
+      "id": "RP-026",
+      "status": "confirmed",
+      "statement": "An active RuntimeSession pins its immutable RuntimeProfileRevision. Ordinary preference or binary availability drift affects automatic capture for a future session and never interrupts the active session."
+    },
+    {
+      "id": "RP-027",
+      "status": "confirmed",
+      "statement": "Admin-managed and AR runtime policy are represented by a renewable and revocable AuthorityPolicyBinding, never copied into RuntimeProfileRevision or its artifacts."
+    },
+    {
+      "id": "RP-028",
+      "status": "confirmed",
+      "statement": "A provider may keep one execution generation across an authority revision only when hot enforcement is proven for that BinaryRevision; unknown, unavailable, or restart-scoped enforcement fails closed and may require a successor generation."
+    },
+    {
+      "id": "RP-029",
+      "status": "confirmed",
+      "statement": "A profile revision consists of an ArtifactClosure plus explicit ExternalDependencyBindings. PATH executables, absolute files, packages, and shell semantics never become reproducible merely because the config bytes were captured."
+    },
+    {
+      "id": "RP-030",
+      "status": "confirmed",
+      "statement": "Provider ACLs classify credential-bearing fields before persistence. Known secrets become opaque CredentialBindings; unknown secret-shaped or inline credential values fail closed and never enter profile artifacts or evidence."
+    },
+    {
+      "id": "RP-031",
+      "status": "confirmed",
+      "statement": "AR owns the outer lifecycle and process group for provider-started hooks, plugins, and MCP servers; cancellation and timeout conformance must prove descendant cleanup."
+    },
+    {
+      "id": "RP-032",
+      "status": "confirmed",
+      "statement": "Profile capture uses bounded stable reads and rejects symlinks, hard links, special files, source replacement, traversal outside the artifact root, and silent truncation."
+    }
+  ],
+  "openDecisions": [
+    {
+      "id": "RP-OD-001",
+      "question": "Should the default onboarding mode be inherited_snapshot or an explicitly weaker ambient_live compatibility mode?"
+    },
+    {
+      "id": "RP-OD-002",
+      "question": "What are the exact team, agent, and session override semantics, including tombstones and intentional duplicate resolution?"
+    },
+    {
+      "id": "RP-OD-003",
+      "question": "Does RuntimeProfile remain a feature in agent-execution or become a bounded context after independent catalog, sharing, and policy lifecycle appears?"
+    },
+    {
+      "id": "RP-OD-004",
+      "question": "Which binary compatibility evidence is required before a pinned session may upgrade or roll back?"
+    },
+    {
+      "id": "RP-OD-005",
+      "question": "Which ProfileArtifactStore adapters ship first: local filesystem CAS and hosted object storage, or a database-backed small-artifact adapter as well?"
+    }
+  ],
+  "candidateDecisions": [
+    {
+      "id": "RP-CD-001",
+      "status": "proposed",
+      "question": "Should v1 use the tested ordered binding reducer with explicit set/reset and upsert/disable/remove operations, while forbidding generic deep merge of provider-native fragments?",
+      "evidence": "profile-composition-cases.json and profile-composition.test.ts"
+    },
+    {
+      "id": "RP-CD-002",
+      "status": "proposed",
+      "question": "Should v1 expose follow-current as automatic immutable capture at each new RuntimeSession, explicit-profile and isolated modes, while deferring ambient_live entirely?",
+      "evidence": "managed-policy run 2026-07-26T13-22-52-839Z, profile drift runs, and authority-binding conformance tests"
+    }
+  ]
+}

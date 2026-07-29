@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "status": "accepted-scoped-experimental-evidence",
+  "date": "2026-07-28",
+  "safety": {
+    "hostedSyntheticWorkspaceOnly": true,
+    "realUserProjectsUsed": false,
+    "ambientCredentialsRead": false,
+    "providerProcessesStarted": false,
+    "providerRequestsMade": false,
+    "realMcpServersStarted": false
+  },
+  "scope": {
+    "physicalHosts": 1,
+    "postgresVersion": "18.4",
+    "dataChecksums": "on",
+    "isolation": "read committed",
+    "clientProcessResponseLossInjected": true,
+    "databaseProcessCrashInjected": false,
+    "networkPartitionInjected": false,
+    "providerConformanceClaimed": false,
+    "productionImplementationClaimed": false
+  },
+  "facts": {
+    "launchTicket": {
+      "concurrentConsumes": 32,
+      "claimed": 1,
+      "statusOnlyConsumes": 31,
+      "conflictingReplays": 16,
+      "concurrentStarts": 32,
+      "startClaims": 1,
+      "statusOnlyStarts": 31,
+      "unknownCommitRetry": "status_only"
+    },
+    "invocation": {
+      "concurrentAdmissions": 32,
+      "admitted": 1,
+      "replayed": 31,
+      "budgetChargedOnce": true,
+      "concurrentDispatchClaims": 16,
+      "dispatchClaims": 1,
+      "expiredRevokedAndCutoffRejected": true
+    },
+    "capacity": {
+      "concurrentRenewals": 24,
+      "renewed": 1,
+      "stale": 23,
+      "unknownCommitRetry": "stale",
+      "lossClosedOutput": true,
+      "regrantBlockedUntilContainment": true,
+      "implicitSuccessorRejected": true,
+      "successorGeneration": 2,
+      "successorFence": 2
+    },
+    "effect": {
+      "concurrentClaims": 24,
+      "claimed": 1,
+      "busy": 23,
+      "blindRetryBlocked": true,
+      "crossGenerationReplay": "committed_replay",
+      "fingerprintAndResultConflictsRejected": true
+    },
+    "childCustody": {
+      "expiredRevokedAndMismatchedClaimsRejected": true,
+      "concurrentEffectiveCalls": 24,
+      "effective": 1,
+      "statusOnly": 23,
+      "unknownCommitRetry": "status_only"
+    },
+    "receiptBarrier": {
+      "mediatedRequiresExactEffectReceipts": true,
+      "containedRequiresExactContainmentReceipt": true
+    }
+  },
+  "evidence": {
+    "schemaSha256": "8506d2d95850fc57d393f3d92943b22271f99d681715fa691330601a76c48835",
+    "harnessSha256": "1050ba6d6e0bb12ff7ed502ddfaab8035dd569e4505e9d0ed3b519f5ca01a2be",
+    "verifierSha256": "7f9ec3481ae35bb15a8bbdee9a6731a2558351efcfa60b890c3bca9a428faa5a",
+    "finalAResultSha256": "a430d83aedda3a95844f6e5ddebdbd7ce221a230ec57cb63ab84c3c2e3389f72",
+    "finalAAuditSha256": "33a75aaffb0f31cd90ef39f5b034dbf2b70c6d21d4124fa135635ea077eb1c81",
+    "finalBResultSha256": "def35f6225345bc510d151e6493a1a6507a4d4a5c478990efdde204f361036f8",
+    "finalBAuditSha256": "49fed8e858b65964bd6d58f5b79a8ab590e2221d1377409d0f4ae1a6e2a94ea8",
+    "semanticFactsSha256": "08ccbc0f4cc63369813ef3cbe4abb7ce39f2c94e1eda8972a268f4d6a8c01c58",
+    "finalAudits": "46/46 GO each"
+  },
+  "remainingGates": [
+    "production implementation and migrations",
+    "real worker and provider process crash",
+    "PostgreSQL partition replication failover and PITR",
+    "cross-host controllers and long-duration soak",
+    "real provider and platform enforcement"
+  ]
+}
