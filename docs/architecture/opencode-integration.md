@@ -1,6 +1,7 @@
 # OpenCode Integration
 
-Status: accepted architectural direction; detailed state machines remain ADRs.
+Status: accepted architectural direction as amended by ADR-0001 and ADR-0002;
+detailed state machines remain ADRs.
 
 ## Decision
 
@@ -129,7 +130,8 @@ ambiguous operation is reconciled.
 - After reconnect or suspected gaps, native history/status reconciliation
   repairs the canonical AR feed.
 - ACP client filesystem, terminal, tool, MCP, and permission callbacks pass
-  through scoped runtime-environment capabilities.
+  through scoped Agent Execution capabilities backed by Runtime Security
+  decisions where authorization is required.
 - Unsupported content is rejected explicitly or preserved as a typed artifact;
   it is not silently dropped.
 
@@ -149,7 +151,10 @@ ambiguous operation is reconciled.
 
 - Permission and elicitation are separate domain concepts.
 - A permission decision stores revision, capability scope hash, expiry,
-  authority evidence reference, and active execution fence.
+  authority evidence reference, public execution epoch, and authority
+  revision. The internal generation identity and private execution fence
+  remain inside Agent Execution and are revalidated there immediately before
+  enforcement.
 - Decision acceptance and provider enforcement are separate durable stages.
 - An enforcement timeout becomes `uncertain`; trying several provider
   endpoints after timeout is prohibited.

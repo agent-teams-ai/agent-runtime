@@ -2,10 +2,9 @@
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain and dependency decisions are in
-`decisions/0001-runtime-profile-and-activation-boundaries.md`. Evidence
-promotion is in `architecture/evidence-traceability.md`. Exact scoped target
-matches and evidence hashes are in
+The canonical domain and dependency decisions are in ADR-0001 and ADR-0002.
+Evidence promotion is in `architecture/evidence-traceability.md`. Exact scoped
+target matches and evidence hashes are in
 `architecture/qualification-registry.json`. This document owns the mutable list
 of qualified scope and remaining gates.
 
@@ -308,11 +307,121 @@ Remaining:
   rollback, drain, compatibility, retention, GC and deprecation policy;
 - off-host backup/restore and physical corruption/power-loss campaigns.
 
+## Hosted tenancy and tenant retirement
+
+Foundation accepted:
+
+- single-user, multi-user, dedicated single-tenant hosted, and shared
+  multi-tenant hosted are different deployment scopes;
+- the domain remains tenant-scoped even when the first hosted deployment is
+  dedicated single-tenant;
+- internal `TenantId` values are opaque, globally unique, and never reused;
+- AR is a participant, not the product owner, of tenant/account lifecycle,
+  legal hold, export, and compliance policy;
+- each bounded context owns disposition of its data; cross-context deletion
+  SQL or a universal deletion repository is forbidden;
+- full tenant retirement is deferred, but storage ownership and
+  resurrection-prevention cannot be designed away.
+
+Remaining before a dedicated hosted tenant can claim retirement:
+
+- complete versioned inventory of stores, backups, logs, external sinks,
+  provider state, worker residue, and keys;
+- verified destruction of its complete deployment, storage namespace, worker
+  residue, provider state where supported, and key namespace;
+- backup/restore policy and evidence that retired authority cannot be reopened;
+- honest `unsupported` or `unknown` results for external provider deletion.
+
+Remaining before shared multi-tenant retirement qualification:
+
+- versioned data inventory for every table, object namespace, cache, journal,
+  DLQ, provider-state path, transcript, output, log, backup, and key;
+- idempotent owner-local disposition commands and receipts;
+- concurrent write/freeze, stale-region, offline-worker, CAS/GC, provider
+  timeout, and restore-resurrection campaigns;
+- legal-hold, export, backup retention, object-version, and cryptographic
+  erasure policy when the product promises those capabilities;
+- cross-tenant proof that deleting one tenant cannot delete, reveal, or provide
+  an existence oracle for another tenant's data.
+
+No tenant-retirement path is currently implementation or deployment qualified.
+
+## Reconciliation and operator controls
+
+Foundation accepted:
+
+- reconciliation is owner-local domain correctness; no central reconciliation
+  bounded context owns or assigns another aggregate's truth;
+- Agent Execution owns operation, semantic-effect, authority, host,
+  containment, output, and terminal-barrier reconciliation;
+- a shared Operator Case projection is rebuildable and read-only;
+- projections contain only redacted summaries, opaque owner references, and
+  digests, never raw evidence, user content, secrets, private fences, or
+  internal generation identities;
+- `reconcile_required` is durable and nonterminal;
+- `outcome_indeterminate` is a distinct truthful terminal result allowed only
+  after cutoff, output fencing, containment assurance, exact closure receipts,
+  and permanent no-retry tombstones;
+- provider adapters publish typed observations and capability manifests, while
+  the owner evaluates evidence through a pinned policy revision;
+- only a qualified authoritative-negative observation can prove
+  `known_not_accepted` and authorize a successor attempt;
+- there are no generic force-outcome/retry commands or direct operator SQL;
+- operator commands are typed, revision-bound, evidence-bound, idempotent, and
+  recorded with owner state, a local audit receipt, and outbox atomically;
+- break-glass is a separate emergency channel limited to authority-reducing
+  fence, revoke, stop, quarantine, and admission-disable actions.
+
+Remaining before implementation qualification:
+
+- state, effect-ledger, terminal-requirement, evidence, command, capability,
+  audit, and projection contracts plus migrations;
+- property tests for all terminal and forbidden transitions;
+- concurrent claims, lost response after commit, exact replay, stale
+  revision/generation/fence, reordered inbox/outbox, conflicting evidence, and
+  tombstone restore tests;
+- tenant, target, audience, proposal, and evidence-digest substitution;
+- capability replay/expiry/key-revocation/clock-rollback, approver
+  separation-of-duty, audit-unavailable, and partitioned-writer negatives;
+- deterministic Operator Case rebuild and proof that projection lag cannot
+  authorize mutation.
+
+Remaining before dedicated hosted single-tenant operation:
+
+- real reconciliation probes and capability manifests for every enabled
+  provider/binary pair;
+- operator API, normal JIT capability issuance, local and off-host immutable
+  audit, and production descendant containment;
+- lost-response, provider-retention, late-output, KMS, identity, and audit-sink
+  outage drills;
+- minimal safe-direction break-glass.
+
+Remaining before shared multi-tenant operation:
+
+- tenant scope and support-role redaction in every evidence, journal,
+  projection, query, cache, artifact, output, log, and operator capability;
+- RBAC plus resource/policy attributes, dual control for high-risk recovery,
+  per-tenant queues/limits, and cross-tenant substitution/leakage campaigns.
+
+Remaining before multi-host operation:
+
+- independent external fencing of stale database, controller, worker, and
+  client routes;
+- physical-host asymmetric partition and stale-primary campaigns;
+- globally consistent capability consumption, off-host audit recovery, and
+  restore/PITR/failover drills;
+- a qualified hardware-backed offline containment issuer only if the operating
+  model requires emergency action while normal identity/KMS control is down.
+
+No provider-specific reconciliation or break-glass path is currently
+implementation or deployment qualified.
+
 ## Release rule
 
 A release claim names the exact provider adapter, binary closure, platform,
 credential route, storage topology, transport topology, and qualified failure
 domains. Passing another row or a synthetic adapter never fills an unnamed
-dimension. A multi-user release additionally requires the cross-tenant
-isolation gate for every enabled storage, cache, artifact, provider-state,
-execution, transcript, output, event, logging, and adapter path.
+dimension. A shared multi-tenant release additionally requires the
+cross-tenant isolation gate for every enabled storage, cache, artifact,
+provider-state, execution, transcript, output, event, logging, projection,
+operator, and adapter path.
