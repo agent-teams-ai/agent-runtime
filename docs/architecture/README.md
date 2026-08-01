@@ -5,8 +5,8 @@ ownership and recovery decisions are in `docs/decisions/`.
 
 The documents in this directory and ADR-0001 were authored on parallel sibling
 branches. ADR-0002 reconciles them. These documents remain accepted only as
-amended by ADR-0001 and ADR-0002; they are not an independent competing source
-of truth.
+amended by ADR-0001, ADR-0002, and ADR-0003; they are not an independent
+competing source of truth.
 
 Documents:
 

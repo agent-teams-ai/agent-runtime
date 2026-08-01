@@ -2,7 +2,8 @@
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain and dependency decisions are in ADR-0001 and ADR-0002.
+The canonical domain and dependency decisions are in ADR-0001, ADR-0002, and
+ADR-0003.
 Evidence promotion is in `architecture/evidence-traceability.md`. Exact scoped
 target matches and evidence hashes are in
 `architecture/qualification-registry.json`. This document owns the mutable list
@@ -370,7 +371,19 @@ Foundation accepted:
 - operator commands are typed, revision-bound, evidence-bound, idempotent, and
   recorded with owner state, a local audit receipt, and outbox atomically;
 - break-glass is a separate emergency channel limited to authority-reducing
-  fence, revoke, stop, quarantine, and admission-disable actions.
+  fence, revoke, stop, quarantine, and admission-disable actions;
+- operation cutoff, session cutoff, runtime-scope suspension, and scope
+  disposition have separate consistency boundaries;
+- admission fencing, canonical-output fencing, provider containment, and
+  effect reconciliation are orthogonal authoritative dimensions;
+- technically `not_required` containment requires exact qualified operation
+  capabilities plus receipt evidence; product policy may strengthen but never
+  weaken the technical requirement;
+- AR blocks exact operation, effect, and opaque external-effect identities but
+  does not infer business-effect equivalence between different identities;
+- scope disposition executes an immutable normalized technical plan with one
+  effective action per category, deterministic ordering, exact receipts, and
+  cryptographic erasure only for a proven exclusive key scope.
 
 Remaining before implementation qualification:
 
@@ -384,7 +397,12 @@ Remaining before implementation qualification:
 - capability replay/expiry/key-revocation/clock-rollback, approver
   separation-of-duty, audit-unavailable, and partitioned-writer negatives;
 - deterministic Operator Case rebuild and proof that projection lag cannot
-  authorize mutation.
+  authorize mutation;
+- target-specific cutoff commands, typed predecessor-barrier evidence, durable
+  receipt query/feed contracts, and normalized disposition-plan contracts;
+- ADR-0003 conformance cases for target races, delayed output, policy-only
+  containment, external-effect identity, scope fan-out, disposition ordering,
+  key-scope proof, and restore resurrection.
 
 Remaining before dedicated hosted single-tenant operation:
 
