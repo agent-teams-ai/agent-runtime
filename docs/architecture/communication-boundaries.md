@@ -1,7 +1,7 @@
 # Communication Boundaries
 
-Status: accepted architectural direction as amended by ADR-0001 and ADR-0002;
-detailed protocols remain open ADRs.
+Status: accepted architectural direction as amended by ADR-0001, ADR-0002, and
+ADR-0003; detailed protocols remain open ADRs.
 
 ## Purpose
 

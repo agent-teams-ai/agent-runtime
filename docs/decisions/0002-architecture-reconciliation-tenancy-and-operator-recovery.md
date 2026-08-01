@@ -9,6 +9,10 @@ ADR resolves conflicting foundation documents and defines implementation
 boundaries. It does not qualify a provider, deployment, operator control, or
 tenant-retirement workflow.
 
+ADR-0003 later refines target-specific cutoff, predecessor barriers,
+business-effect identity ownership, and runtime-scope disposition. Where those
+semantics differ, ADR-0003 is the controlling refinement.
+
 ## Context
 
 Two architecture lines were created independently:
@@ -25,8 +29,9 @@ Neither superseded the other. They first appeared together after merge commit
 observation, and quality-boundary decisions, but their five bounded contexts
 and some execution semantics conflicted with the evidence-hardened ADR-0001.
 
-This ADR reconciles the two lines. ADR-0001 and ADR-0002 are normative.
-Supporting architecture documents are accepted only as amended by these ADRs.
+This ADR reconciles the two lines. ADR-0001, ADR-0002, and their later accepted
+refinements are normative. Supporting architecture documents are accepted only
+as amended by those ADRs.
 
 ## Decision
 

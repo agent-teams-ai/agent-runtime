@@ -1,11 +1,11 @@
 # Accepted Architecture Foundation
 
-Status: accepted as amended by ADR-0001 and ADR-0002
+Status: accepted as amended by ADR-0001, ADR-0002, and ADR-0003
 
 This document and ADR-0001 were created on parallel sibling branches. ADR-0002
 reconciles their terminology and ownership. The module, dependency, API,
 protocol, and quality rules below remain accepted; bounded-context and
-execution-authority ownership follows the two normative ADRs.
+execution-authority ownership follows the normative ADRs.
 
 ## Product boundary
 

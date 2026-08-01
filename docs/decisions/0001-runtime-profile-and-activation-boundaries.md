@@ -8,6 +8,10 @@ ADR-0002 reconciles this ADR with the independently authored architecture
 foundation documents. Where terminology or ownership differs, ADR-0002 is the
 later normative decision.
 
+ADR-0003 further refines target-specific cutoff, predecessor barriers,
+business-effect identity ownership, and runtime-scope disposition. Where those
+semantics differ, ADR-0003 is the later normative decision.
+
 Implementation status: production runtime code has not started. The
 architecture foundation is accepted, but production and multi-host readiness
 remain explicitly unqualified. Evidence promotion is tracked in
