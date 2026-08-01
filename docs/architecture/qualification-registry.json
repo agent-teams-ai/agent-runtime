@@ -1,7 +1,7 @@
 {
   "$schema": "./qualification-registry.schema.json",
   "schemaVersion": 1,
-  "generatedAt": "2026-07-29",
+  "generatedAt": "2026-08-01",
   "matchingPolicy": {
     "default": "unqualified",
     "dimensionRule": "exact-match-all-dimensions",
@@ -63,7 +63,7 @@
       "qualification": "scoped",
       "dimensions": {
         "provider": ["opencode"],
-        "binaryClosure": ["fixture-pinned-opencode-runtime"],
+        "binaryClosure": ["opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21"],
         "platform": ["hosted-linux"],
         "credentialRoute": ["synthetic"],
         "transport": ["opencode-operation-seam"],
@@ -73,11 +73,11 @@
         {
           "kind": "human-report",
           "path": "docs/spikes/stage-c-provider-profile-and-opencode-operation-results.md",
-          "sha256": "74490b82389dd66b28ea87f5da6e9e6ff803cb20d892a15dd89f6f9dbf276e32"
+          "sha256": "da3ff7959d0678db64c54555f4ffc6fcd260dac2ec089fb1d71372c3743e0eb4"
         }
       ],
       "readinessSections": ["Profiles, settings, and environment", "Execution, tools, and child agents"],
-      "limitations": ["Local provider stub and synthetic credentials; no broad provider qualification."]
+      "limitations": ["Exact frozen pin 83e0b3e71208d99ec13c9d73644623a3b68ead374dd355f30591b556e9b3bd49 on the hosted Linux worker with synthetic provider/configuration/credentials only; no OAuth, real inference, MCP, other OS/provider/version, external egress/TLS, physical power-loss/storage recovery, multi-host concurrency, production KMS, or complete cancellation-interleaving qualification."]
     },
     {
       "id": "stage-d-cross-context-reconciliation",
