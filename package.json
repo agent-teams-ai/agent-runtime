@@ -2,10 +2,12 @@
   "name": "@vioxen/agent-runtime",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.18.0",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.18.0 <25",
+    "pnpm": "11.18.0"
   },
   "scripts": {
     "check": "pnpm architecture:registry && pnpm typecheck && pnpm test",

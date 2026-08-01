@@ -4,6 +4,10 @@ Status: accepted for the architecture foundation
 
 Date: 2026-07-26
 
+ADR-0002 reconciles this ADR with the independently authored architecture
+foundation documents. Where terminology or ownership differs, ADR-0002 is the
+later normative decision.
+
 Implementation status: production runtime code has not started. The
 architecture foundation is accepted, but production and multi-host readiness
 remain explicitly unqualified. Evidence promotion is tracked in
@@ -419,13 +423,17 @@ Domain identities and aggregate roots:
 - `SessionExecutionAuthority`: the single strong-consistency boundary for the
   active session slot, current generation authority, cutoff revision, and
   canonical-output acceptance fence;
-- `ExecutionGeneration`: one continuous execution-authority generation;
 - `ProviderHostInstance`: provider host identity plus process boot identity;
-- `RuntimeOperation`: durable unit of requested runtime work.
+- `RuntimeOperation`: durable unit of requested runtime work;
+- effect-ledger entry rooted at `(TenantId, EffectId)`.
+
+`ExecutionGeneration` is an entity and immutable historical record activated
+or retired only by `SessionExecutionAuthority`.
 
 Durable process managers and application state:
 
 - `RuntimeActivationProcess`;
+- `ExecutionReconciliationProcess`;
 - recovery and revocation-enforcement processes;
 - provider bootstrap lifecycle;
 - workspace-access and execution-resource reservations.
@@ -842,11 +850,12 @@ requested
 -> accepted
 -> executing
 -> completing
--> succeeded | failed | cancelled
+-> succeeded | failed | cancelled | outcome_indeterminate
 
 any nonterminal state
 -> reconcile_required
 -> executing | completing | succeeded | failed | cancelled
+   | outcome_indeterminate
 ```
 
 `succeeded` requires the provider terminal observation, proven output-drain
@@ -856,6 +865,13 @@ status, `SubagentStop`, or transport completion is never sufficient alone.
 `reconcile_required` is durable and nonterminal; it cannot be hidden by retry,
 cleanup, or timeout. `failed` and `cancelled` are terminal only after every
 possibly accepted command and effect has a verified disposition; otherwise
+the operation remains `reconcile_required`.
+
+`outcome_indeterminate` is a truthful terminal result for irreducible
+uncertainty. It requires authority cutoff, canonical-output fencing,
+containment assurance, exact closure receipts, and permanent no-retry
+tombstones for unknown semantic effects. It never means that an effect failed
+or did not occur. If execution or descendant containment is still uncertain,
 the operation remains `reconcile_required`.
 
 Every state transition follows:
@@ -1459,19 +1475,20 @@ are designed only after the domain and recovery transitions stabilize.
 | `CredentialGeneration` | immutable entity/version inside `CredentialBinding` | Provider Access |
 | `RuntimeSession` | aggregate root | Agent Execution |
 | `SessionExecutionAuthority` | aggregate root and output-authority consistency boundary | Agent Execution |
-| `ExecutionGeneration` | aggregate root | Agent Execution |
+| `ExecutionGeneration` | entity and immutable history inside `SessionExecutionAuthority` | Agent Execution |
 | `ProviderHostInstance` | aggregate root | Agent Execution |
 | `BinaryRevision` | immutable complete executable closure identity | Agent Execution / Host Custody |
 | binary rollout head and lifecycle registry | private aggregate/application state | Agent Execution / Host Custody |
 | worker binary assignment root and lease | authority-bearing lifecycle state | Agent Execution / Host Custody |
 | `RuntimeOperation` | aggregate root | Agent Execution |
-| `EffectId` and effect ledger entry | durable semantic identity/entity | Agent Execution |
+| `EffectId` and effect ledger entry | durable semantic identity and aggregate root scoped by tenant | Agent Execution |
 | execution admission and capacity binding | application decision/receipt | Agent Execution |
 | `CapacityLeaseMonitor` | durable application process | Agent Execution |
 | `WorkspaceWriteLease` | dedicated fenced application capability | Agent Execution |
 | `ChildCustodyTransferReceipt` | immutable custody-transfer evidence | Agent Execution |
 | `ChildCustodyTransferProcess` | durable process manager | Agent Execution |
 | `RuntimeActivationProcess` | durable process manager | Agent Execution |
+| `ExecutionReconciliationProcess` | durable owner-local process manager, not a source of truth | Agent Execution |
 | recovery/revocation enforcement | durable process managers | Agent Execution |
 | preparation/materialization receipts | technical evidence/read models | Agent Execution |
 

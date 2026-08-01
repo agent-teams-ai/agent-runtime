@@ -1,6 +1,7 @@
 # Communication Boundaries
 
-Status: accepted architectural direction; detailed protocols remain open ADRs.
+Status: accepted architectural direction as amended by ADR-0001 and ADR-0002;
+detailed protocols remain open ADRs.
 
 ## Purpose
 
@@ -88,8 +89,12 @@ orchestration event. An ACP session is not an Agent Runtime session.
 - Provider replay is separate from Agent Runtime durable feed replay.
 - Ordering guarantees are explicit per feed or aggregate; there is no implied
   global order.
-- Commands are idempotent within a declared window and expose uncertain
-  outcomes for reconciliation after transport failure.
+- Commands expose uncertain outcomes for reconciliation after transport
+  failure. Authority- and effect-bearing identities retain a terminal receipt
+  or tombstone for at least their full retry, restore, provider-replay, and
+  resurrection-prevention horizon. Expiry of an ordinary query or transport
+  deduplication window never makes an old semantic effect safe to execute
+  again.
 - Unknown permission outcomes and unregistered protocol extensions fail
   closed.
 - Authentication, authorization, tenant and workspace scope, redaction,

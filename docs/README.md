@@ -4,6 +4,10 @@ Read documents in this order:
 
 1. `decisions/0001-runtime-profile-and-activation-boundaries.md` - canonical
    accepted profile, security, access, and activation boundaries.
+   Immediately after it, read
+   `decisions/0002-architecture-reconciliation-tenancy-and-operator-recovery.md`
+   - the reconciliation of the parallel foundation documents, hosted-tenancy
+   vocabulary, owner-local recovery model, and phased operator controls.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
@@ -116,10 +120,11 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. ADR-0001 and the promoted-rule column of the traceability matrix are
-normative. Readiness status is intentionally separate and cannot change domain
-ownership. A spike's `Remaining gates` section is historical as of that
-campaign; `architecture/readiness.md` is the current gate register.
+of truth. ADR-0001, ADR-0002, and the promoted-rule column of the traceability
+matrix are normative. Supporting architecture documents are accepted only as
+amended by the ADRs. Readiness status is intentionally separate and cannot
+change domain ownership. A spike's `Remaining gates` section is historical as
+of that campaign; `architecture/readiness.md` is the current gate register.
 
 Qualification lookup is fail closed. A target must match every dimension in
 `architecture/qualification-registry.json` exactly. An omitted combination is

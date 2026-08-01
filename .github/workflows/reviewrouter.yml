@@ -39,12 +39,14 @@ jobs:
           head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
           head_repo="$(jq -r '.head.repo.full_name' <<<"$pr_json")"
           changed_lines="$(jq -r '(.additions // 0) + (.deletions // 0)' <<<"$pr_json")"
-          if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
-            echo "skip_reason=fork" >> "$GITHUB_OUTPUT"
-          fi
-          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
-          echo "changed_lines=$changed_lines" >> "$GITHUB_OUTPUT"
+          {
+            if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+              echo "skip_reason=fork"
+            fi
+            echo "number=$PR_NUMBER"
+            echo "head_sha=$head_sha"
+            echo "changed_lines=$changed_lines"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Size guard
         id: size_guard
@@ -102,7 +104,7 @@ jobs:
 
       - name: Checkout pull request code
         if: ${{ steps.pr.outputs.skip_reason != 'fork' }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ steps.pr.outputs.head_sha }}
           fetch-depth: 0
@@ -110,9 +112,9 @@ jobs:
 
       - name: Setup Node.js
         if: ${{ steps.pr.outputs.skip_reason != 'fork' }}
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "24"
+          node-version-file: .node-version
 
       - name: Install Codex CLI
         if: ${{ steps.pr.outputs.skip_reason != 'fork' }}
@@ -140,7 +142,7 @@ jobs:
 
       - name: Run ReviewRouter
         if: ${{ steps.pr.outputs.skip_reason != 'fork' }}
-        uses: 777genius/review-router@v1.0.50
+        uses: 777genius/review-router@9865137c5c864d70cd204e8dcd2f0c6987abb009 # v1.0.50
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}

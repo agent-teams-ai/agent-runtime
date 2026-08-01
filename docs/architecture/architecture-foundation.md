@@ -1,6 +1,11 @@
 # Accepted Architecture Foundation
 
-Status: accepted
+Status: accepted as amended by ADR-0001 and ADR-0002
+
+This document and ADR-0001 were created on parallel sibling branches. ADR-0002
+reconciles their terminology and ownership. The module, dependency, API,
+protocol, and quality rules below remain accepted; bounded-context and
+execution-authority ownership follows the two normative ADRs.
 
 ## Product boundary
 
@@ -47,35 +52,45 @@ folder template are prohibited.
 
 ## Initial bounded contexts
 
-### `agent-execution`
+### `runtime-configuration`
 
-Owns `RuntimeSession`, `RuntimeOperation`, provider session bindings, technical
-dispatch, execution custody, cancellation, reattachment, and recovery.
+Owns portable non-secret profile definitions, immutable revisions, source
+capture, composition, compiled plans, provenance, and profile artifact roots.
 
-### `runtime-interaction`
+### `runtime-security`
 
-Owns runtime permission requests, permission enforcement state, and runtime
-elicitation. Product approvals are not part of this context.
+Owns capability and workspace-trust policies, source and invocation
+authorization decisions, egress authorization, revocation decisions, and
+exceptional operator-capability policy.
 
-### `runtime-observation`
+### `provider-access`
 
-Owns durable control feeds, output feeds, artifacts, process logs, and usage
-observations. It preserves provenance and source quality.
-
-### `provider-connectivity`
-
-Owns provider account connection, credential references and generations,
+Owns provider accounts, credential references and generations, routes,
 authentication flows, provider catalogs, and provider capability facts.
 
-### `runtime-environment`
+### `agent-execution`
 
-Owns runtime distribution installation, activation and rollback, compatibility
-certification, managed profiles, runtime instances, workspace grants, and tool
-server materialization.
+Owns runtime sessions and operations, execution authority and generations,
+provider hosts, technical dispatch and effect identity, custody, cancellation,
+reattachment, recovery, canonical output, and terminal publication.
 
-`runtime-capacity` is deferred. It may become a bounded context when account
-pools, quotas, remote workers, multi-tenancy, or allocation leases introduce an
-independent lifecycle.
+The earlier `runtime-interaction` concept remains an explicit collaboration:
+Agent Execution owns permission/elicitation request lifecycle and technical
+enforcement; Runtime Security owns the authorization decision.
+
+The earlier `runtime-observation` concept remains a rebuildable read-only
+projection and a set of owner-local publication modules. It may own query
+schemas, indexes, retention, and presentation, but never operation/effect truth
+or canonical-output acceptance.
+
+The earlier `runtime-environment` concept remains application/adaptor
+vocabulary split across profile compilation, authorization, credential
+binding, host custody, compatibility, materialization, and workspace
+enforcement. It is not a shared domain owner.
+
+`runtime-capacity` remains a typed Agent Execution port. It becomes a bounded
+context only when resource-pool truth, scheduling, quotas, or allocation
+lifecycle evolve independently.
 
 ## Feature structure
 
@@ -157,9 +172,10 @@ input for provider execution. It may survive a provider restart and span
 multiple execution generations. A long-lived execution generation may process
 multiple sequential runtime operations.
 
-`ProviderRuntimeInstance` identifies a managed process, shared daemon, or
-remote runtime instance using an AR instance identity and boot identity. PID is
-diagnostic metadata only. `ProviderInvocationRef` is an optional opaque
+`ProviderHostInstance` identifies a managed process, daemon, or remote runtime
+custody target using an AR instance identity and boot identity. PID is
+diagnostic metadata only. The earlier `ProviderRuntimeInstance` name is not a
+second identity or owner. `ProviderInvocationRef` is an optional opaque
 provider run or turn identity.
 
 `OperationDispatchRecord` records a technical attempt to perform an external
