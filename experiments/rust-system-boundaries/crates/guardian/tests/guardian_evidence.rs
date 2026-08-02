@@ -190,7 +190,7 @@ fn mismatched_birth_identity() -> serde_json::Value {
 
 #[cfg(windows)]
 fn process_is_dead(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, STILL_ACTIVE};
     use windows_sys::Win32::System::Threading::{
         GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
     };
@@ -198,12 +198,20 @@ fn process_is_dead(pid: u32) -> bool {
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if handle.is_null() {
-            return true;
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
+                return true;
+            }
+            panic!("cannot verify whether Windows process {pid} exited: {error}");
         }
         let mut exit_code = 0;
         let queried = GetExitCodeProcess(handle, &mut exit_code) != 0;
+        let error = (!queried).then(std::io::Error::last_os_error);
         CloseHandle(handle);
-        !queried || exit_code != STILL_ACTIVE as u32
+        if let Some(error) = error {
+            panic!("cannot verify whether Windows process {pid} exited: {error}");
+        }
+        exit_code != STILL_ACTIVE as u32
     }
 }
 
@@ -314,6 +322,45 @@ fn suspended_job_assignment_precedes_immediate_descendant_creation() {
     );
 
     drop(guardian);
+    wait_until(Duration::from_secs(2), || process_is_dead(root_pid));
+    wait_until(Duration::from_secs(2), || process_is_dead(descendant_pid));
+}
+
+#[cfg(windows)]
+#[test]
+fn job_accounting_proves_cleanup_when_descendant_pid_evidence_is_missing() {
+    let temp = TempDir::new().expect("temporary root");
+    let mut guardian = Guardian::open(temp.path(), fixture_child()).expect("guardian opens");
+    let spawned = assert_result(guardian.dispatch(spawn_request(
+        "spawn-job-accounting",
+        "job-accounting-1",
+        "fence-job-accounting",
+        false,
+    )));
+    let root_pid = match spawned {
+        GuardianResult::Spawned { observation } => observation.pid.expect("fixture root PID"),
+        other => panic!("unexpected spawn result: {other:?}"),
+    };
+    let descendant_path = temp
+        .path()
+        .join("operations/job-accounting-1/descendant.pid");
+    wait_until(Duration::from_secs(2), || descendant_path.exists());
+    let descendant_pid = fs::read_to_string(&descendant_path)
+        .expect("descendant PID reads")
+        .trim()
+        .parse::<u32>()
+        .expect("numeric descendant PID");
+    fs::remove_file(&descendant_path).expect("test removes non-authoritative descendant evidence");
+
+    let terminated = assert_result(guardian.dispatch(terminate_request(
+        "terminate-job-accounting",
+        "job-accounting-1",
+        "fence-job-accounting",
+    )));
+    assert!(
+        matches!(terminated, GuardianResult::Terminated { .. }),
+        "Job Object accounting must prove the complete tree without a PID-file shortcut: {terminated:?}"
+    );
     wait_until(Duration::from_secs(2), || process_is_dead(root_pid));
     wait_until(Duration::from_secs(2), || process_is_dead(descendant_pid));
 }

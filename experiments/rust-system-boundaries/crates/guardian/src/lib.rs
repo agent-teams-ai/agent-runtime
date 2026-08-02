@@ -1352,12 +1352,25 @@ pub fn current_process_birth_identity() -> Result<ProcessBirthIdentity, Guardian
 
 fn process_liveness(pid: u32, expected: &ProcessBirthIdentity) -> ProcessLiveness {
     match process_birth_identity(pid) {
-        Ok(actual) if actual == *expected && process_is_alive(pid) => ProcessLiveness::VerifiedLive,
-        Ok(actual) if actual == *expected => ProcessLiveness::Gone,
+        Ok(actual) if actual == *expected => match process_is_alive_for_reconciliation(pid) {
+            Ok(true) => ProcessLiveness::VerifiedLive,
+            Ok(false) => ProcessLiveness::Gone,
+            Err(_) => ProcessLiveness::Unverified,
+        },
         Ok(_) => ProcessLiveness::IdentityChanged,
         Err(error) if process_identity_error_means_gone(&error) => ProcessLiveness::Gone,
         Err(_) => ProcessLiveness::Unverified,
     }
+}
+
+#[cfg(windows)]
+fn process_is_alive_for_reconciliation(pid: u32) -> Result<bool, GuardianError> {
+    windows_process_is_alive(pid)
+}
+
+#[cfg(not(windows))]
+fn process_is_alive_for_reconciliation(pid: u32) -> Result<bool, GuardianError> {
+    Ok(process_is_alive(pid))
 }
 
 #[cfg(unix)]
@@ -1872,7 +1885,7 @@ fn fail_closed_windows_containment(
     cause: GuardianError,
 ) -> GuardianError {
     let (cleanup_verified, cleanup_detail) = match job {
-        Some(job) => close_windows_job_and_verify(child, job, record),
+        Some(job) => close_windows_job_and_verify(child, job),
         None => match kill_windows_child_only(child) {
             Ok(()) => (true, "suspended root exit was verified".to_owned()),
             Err(error) => (
@@ -1901,61 +1914,64 @@ fn fail_closed_windows_containment(
 }
 
 #[cfg(windows)]
-fn close_windows_job_and_verify(
-    child: &mut Child,
-    mut job: WindowsJobObject,
-    record: &CustodyRecord,
-) -> (bool, String) {
+fn close_windows_job_and_verify(child: &mut Child, mut job: WindowsJobObject) -> (bool, String) {
     let termination_error = job.terminate().err();
-    // KILL_ON_JOB_CLOSE is the fallback containment operation. Closing before
-    // waiting prevents a partial API failure from holding the final kill
-    // capability behind an unbounded child wait.
-    drop(job);
+    let termination_succeeded = termination_error.is_none();
+    // Successful TerminateJobObject is not enough on its own. Keep the handle
+    // open and observe the Job's authoritative active-membership accounting
+    // before claiming that a tree has exited. A missing fixture PID file is
+    // deliberately not evidence of a terminated descendant.
+    let accounting_error = if termination_error.is_none() {
+        job.wait_for_empty(Duration::from_secs(1)).err()
+    } else {
+        None
+    };
 
     // A failure can happen after the Job Object exists but before the root is
-    // assigned to it. Terminating/closing that empty Job Object cannot affect
-    // the still-suspended root, so always use direct root termination as the
-    // final fail-closed fallback. If assignment did succeed, the Job Object
-    // remains responsible for every descendant and the direct call is benign.
+    // assigned to it. In that state an empty Job proves nothing about the
+    // suspended root, so always use direct root termination as the final
+    // fallback. If assignment did succeed, this direct call is benign.
     let root_cleanup_error = kill_windows_child_only(child).err();
+    let child_exit_error = wait_for_child_exit(child).err();
 
-    match wait_for_windows_fixture_tree_exit(child, record) {
-        Ok(()) => (
-            true,
-            match (termination_error, root_cleanup_error) {
-                (Some(job_error), Some(root_error)) => format!(
-                    "Job Object closure and direct root fallback verified root/tree exit after TerminateJobObject failed: {job_error}; direct root termination also reported: {root_error}"
-                ),
-                (Some(job_error), None) => format!(
-                    "Job Object closure and direct root fallback verified root/tree exit after TerminateJobObject failed: {job_error}"
-                ),
-                (None, Some(root_error)) => format!(
-                    "Job Object termination/closure verified root/tree exit after direct root termination reported: {root_error}"
-                ),
-                (None, None) => {
-                    "Job Object termination/closure and direct root fallback verified root/tree exit"
-                        .to_owned()
-                }
-            },
-        ),
-        Err(wait_error) => (
-            false,
-            match (termination_error, root_cleanup_error) {
-                (Some(job_error), Some(root_error)) => format!(
-                    "TerminateJobObject failed: {job_error}; Job Object was closed; direct root termination reported: {root_error}; root/tree exit remained unverified: {wait_error}"
-                ),
-                (Some(job_error), None) => format!(
-                    "TerminateJobObject failed: {job_error}; Job Object was closed and direct root fallback ran; root/tree exit remained unverified: {wait_error}"
-                ),
-                (None, Some(root_error)) => format!(
-                    "Job Object termination returned success, but direct root termination reported: {root_error}; root/tree exit remained unverified: {wait_error}"
-                ),
-                (None, None) => format!(
-                    "Job Object termination/closure and direct root fallback completed, but root/tree exit remained unverified: {wait_error}"
-                ),
-            },
-        ),
+    // KILL_ON_JOB_CLOSE remains the final containment action when the primary
+    // operation or verification failed. It cannot be independently observed
+    // after the last handle is closed, therefore it is intentionally not a
+    // success condition.
+    drop(job);
+
+    let cleanup_verified =
+        termination_succeeded && accounting_error.is_none() && child_exit_error.is_none();
+
+    let mut details = Vec::new();
+    match termination_error.as_ref() {
+        Some(error) => details.push(format!(
+            "TerminateJobObject failed: {error}; KILL_ON_JOB_CLOSE ran only as an unverified fail-closed fallback"
+        )),
+        None => details.push("TerminateJobObject succeeded".to_owned()),
     }
+    match accounting_error {
+        Some(error) => details.push(format!(
+            "Job Object active-membership accounting did not prove an empty tree: {error}"
+        )),
+        None if termination_succeeded => {
+            details.push("Job Object accounting observed zero active processes".to_owned())
+        }
+        None => {}
+    }
+    match child_exit_error {
+        Some(error) => details.push(format!(
+            "root child exit remained unverified after cleanup: {error}"
+        )),
+        None => details.push("root child exit was observed".to_owned()),
+    }
+    if let Some(error) = root_cleanup_error {
+        details.push(format!(
+            "direct root fallback reported: {error}; Job Object accounting remains the tree proof"
+        ));
+    }
+
+    (cleanup_verified, details.join("; "))
 }
 
 #[cfg(windows)]
@@ -2020,36 +2036,6 @@ fn resume_suspended_primary_thread(process_id: u32) -> Result<(), GuardianError>
         if let Some(error) = resume_error {
             return Err(error);
         }
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn windows_fixture_descendant_pid(record: &CustodyRecord) -> Option<u32> {
-    fs::read_to_string(&record.descendant_pid_path)
-        .ok()?
-        .trim()
-        .parse::<u32>()
-        .ok()
-}
-
-#[cfg(windows)]
-fn wait_for_windows_fixture_tree_exit(
-    child: &mut Child,
-    record: &CustodyRecord,
-) -> Result<(), GuardianError> {
-    wait_for_child_exit(child)?;
-    let Some(descendant_pid) = windows_fixture_descendant_pid(record) else {
-        return Ok(());
-    };
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while process_is_alive(descendant_pid) {
-        if std::time::Instant::now() >= deadline {
-            return Err(GuardianError::SpawnFailed(
-                "Windows Job Object cleanup did not terminate the fixture descendant".to_owned(),
-            ));
-        }
-        thread::sleep(Duration::from_millis(10));
     }
     Ok(())
 }
@@ -2120,7 +2106,7 @@ fn cleanup_spawned_process(
     {
         match containment {
             Some(LiveContainment::WindowsJobObject(job)) => {
-                let (verified, detail) = close_windows_job_and_verify(child, job, _record);
+                let (verified, detail) = close_windows_job_and_verify(child, job);
                 let evidence_stage = if verified {
                     WindowsContainmentEvidenceStage::CleanupCompleted
                 } else {
@@ -2214,10 +2200,10 @@ fn terminate_live_process(
 #[cfg(windows)]
 fn terminate_live_process(
     mut live: LiveProcess,
-    record: &CustodyRecord,
+    _record: &CustodyRecord,
 ) -> Result<(), GuardianError> {
     let LiveContainment::WindowsJobObject(job) = live.containment;
-    let (verified, detail) = close_windows_job_and_verify(&mut live.child, job, record);
+    let (verified, detail) = close_windows_job_and_verify(&mut live.child, job);
     if !verified {
         return Err(GuardianError::SpawnFailed(format!(
             "Windows live-process termination could not be verified: {detail}"
@@ -2409,21 +2395,47 @@ fn process_is_alive(pid: u32) -> bool {
 }
 
 #[cfg(windows)]
-fn process_is_alive(pid: u32) -> bool {
+fn windows_process_is_alive(pid: u32) -> Result<bool, GuardianError> {
     use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
     use windows_sys::Win32::System::Threading::{
         GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
     };
+
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if handle.is_null() {
-            return false;
+            let error = io::Error::last_os_error();
+            if windows_open_process_error_means_gone(&error) {
+                return Ok(false);
+            }
+            return Err(GuardianError::Io(error));
         }
         let mut exit_code = 0;
-        let success = GetExitCodeProcess(handle, &mut exit_code) != 0;
+        let queried_exit_code = if GetExitCodeProcess(handle, &mut exit_code) != 0 {
+            Ok(exit_code)
+        } else {
+            Err(io::Error::last_os_error())
+        };
         CloseHandle(handle);
-        success && exit_code == STILL_ACTIVE as u32
+        windows_exit_code_means_active(queried_exit_code, STILL_ACTIVE as u32)
     }
+}
+
+#[cfg(windows)]
+fn windows_open_process_error_means_gone(error: &io::Error) -> bool {
+    use windows_sys::Win32::Foundation::ERROR_INVALID_PARAMETER;
+
+    error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32)
+}
+
+#[cfg(windows)]
+fn windows_exit_code_means_active(
+    exit_code: Result<u32, io::Error>,
+    still_active: u32,
+) -> Result<bool, GuardianError> {
+    exit_code
+        .map(|exit_code| exit_code == still_active)
+        .map_err(GuardianError::Io)
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -2491,6 +2503,45 @@ impl WindowsJobObject {
         }
         Ok(())
     }
+
+    fn active_process_count(&self) -> Result<u32, GuardianError> {
+        use std::mem::size_of;
+        use windows_sys::Win32::System::JobObjects::{
+            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JobObjectBasicAccountingInformation,
+            QueryInformationJobObject,
+        };
+
+        unsafe {
+            let mut accounting = JOBOBJECT_BASIC_ACCOUNTING_INFORMATION::default();
+            if QueryInformationJobObject(
+                self.handle,
+                JobObjectBasicAccountingInformation,
+                &mut accounting as *mut _ as *mut _,
+                size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>() as u32,
+                std::ptr::null_mut(),
+            ) == 0
+            {
+                return Err(GuardianError::Io(io::Error::last_os_error()));
+            }
+            Ok(accounting.ActiveProcesses)
+        }
+    }
+
+    fn wait_for_empty(&self, timeout: Duration) -> Result<(), GuardianError> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let active_processes = self.active_process_count()?;
+            if active_processes == 0 {
+                return Ok(());
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(GuardianError::SpawnFailed(format!(
+                    "Job Object still has {active_processes} active process(es) after bounded cleanup"
+                )));
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -2518,5 +2569,28 @@ mod tests {
                     .expect("custody state parses");
             assert_eq!(persisted["value"], value);
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_process_query_errors_are_not_treated_as_process_exit() {
+        use windows_sys::Win32::Foundation::{
+            ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER, STILL_ACTIVE,
+        };
+
+        let access_denied = io::Error::from_raw_os_error(ERROR_ACCESS_DENIED as i32);
+        assert!(
+            !windows_open_process_error_means_gone(&access_denied),
+            "ACCESS_DENIED must remain an unverified process-query outcome"
+        );
+        assert!(
+            windows_exit_code_means_active(Err(access_denied), STILL_ACTIVE as u32).is_err(),
+            "GetExitCodeProcess failures must remain unverified"
+        );
+        let missing_process = io::Error::from_raw_os_error(ERROR_INVALID_PARAMETER as i32);
+        assert!(
+            windows_open_process_error_means_gone(&missing_process),
+            "only OpenProcess(ERROR_INVALID_PARAMETER) is a verified missing PID"
+        );
     }
 }
