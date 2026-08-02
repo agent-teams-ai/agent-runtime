@@ -92,6 +92,58 @@ fn process_is_dead(pid: u32) -> bool {
 }
 
 #[cfg(unix)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ObservedProcessIdentity {
+    platform_boot: String,
+    started_at: u64,
+    started_at_subsecond: u64,
+}
+
+#[cfg(target_os = "linux")]
+fn observed_process_identity(pid: u32) -> Option<ObservedProcessIdentity> {
+    let platform_boot = fs::read_to_string("/proc/sys/kernel/random/boot_id")
+        .ok()?
+        .trim()
+        .to_owned();
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let closing_parenthesis = stat.rfind(')')?;
+    let started_at = stat[closing_parenthesis + 1..]
+        .split_whitespace()
+        .nth(19)?
+        .parse::<u64>()
+        .ok()?;
+    Some(ObservedProcessIdentity {
+        platform_boot,
+        started_at,
+        started_at_subsecond: 0,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn observed_process_identity(pid: u32) -> Option<ObservedProcessIdentity> {
+    use std::mem::size_of;
+
+    let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+    let read = unsafe {
+        libc::proc_pidinfo(
+            pid as libc::c_int,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            &mut info as *mut _ as *mut libc::c_void,
+            size_of::<libc::proc_bsdinfo>() as libc::c_int,
+        )
+    };
+    if read != size_of::<libc::proc_bsdinfo>() as libc::c_int {
+        return None;
+    }
+    Some(ObservedProcessIdentity {
+        platform_boot: "macos-boot-session".to_owned(),
+        started_at: info.pbi_start_tvsec,
+        started_at_subsecond: info.pbi_start_tvusec,
+    })
+}
+
+#[cfg(unix)]
 fn identity_stalling_fixture(root: &Path) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
 
@@ -534,13 +586,34 @@ fn explicit_fence_advance_rebinds_custody_and_rejects_the_old_fence() {
 fn post_spawn_identity_failure_kills_the_synthetic_child_before_returning() {
     let temp = TempDir::new().expect("temporary root");
     let fixture = identity_stalling_fixture(temp.path());
-    let mut guardian = Guardian::open(temp.path(), fixture).expect("guardian opens");
-    let result = assert_result(guardian.dispatch(spawn_request(
-        "spawn-stalled",
-        "stalled-identity",
-        "fence-stalled",
-        false,
-    )));
+    let root = temp.path().to_path_buf();
+    let dispatch = thread::spawn(move || {
+        let mut guardian = Guardian::open(&root, fixture).expect("guardian opens");
+        let result = assert_result(guardian.dispatch(spawn_request(
+            "spawn-stalled",
+            "stalled-identity",
+            "fence-stalled",
+            false,
+        )));
+        let reconciliation = guardian.reconcile("stalled-identity");
+        (result, reconciliation)
+    });
+
+    let pid_path = temp.path().join("operations/stalled-identity/stalled.pid");
+    wait_until(Duration::from_secs(2), || {
+        fs::read_to_string(&pid_path)
+            .ok()
+            .and_then(|value| value.trim().parse::<u32>().ok())
+            .and_then(observed_process_identity)
+            .is_some()
+    });
+    let pid = fs::read_to_string(&pid_path)
+        .expect("stalled child PID")
+        .trim()
+        .parse::<u32>()
+        .expect("numeric stalled child PID");
+    let identity = observed_process_identity(pid).expect("stalled child birth identity");
+    let (result, reconciliation) = dispatch.join().expect("Guardian dispatch thread joins");
     assert!(matches!(
         result,
         GuardianResult::Rejected {
@@ -548,18 +621,13 @@ fn post_spawn_identity_failure_kills_the_synthetic_child_before_returning() {
             ..
         }
     ));
-    let pid_path = temp.path().join("operations/stalled-identity/stalled.pid");
-    wait_until(Duration::from_secs(2), || pid_path.exists());
-    let pid = fs::read_to_string(pid_path)
-        .expect("stalled child PID")
-        .trim()
-        .parse::<u32>()
-        .expect("numeric stalled child PID");
-    wait_until(Duration::from_secs(2), || process_is_dead(pid));
     assert!(matches!(
-        guardian.reconcile("stalled-identity"),
+        reconciliation,
         GuardianResult::ReconcileLaunchUncertain { .. }
     ));
+    wait_until(Duration::from_secs(2), || {
+        observed_process_identity(pid).as_ref() != Some(&identity)
+    });
 }
 
 #[cfg(unix)]

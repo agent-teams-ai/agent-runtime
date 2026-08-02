@@ -23,7 +23,7 @@ const MANIFEST_FILE: &str = "release-manifest.json";
 const ACTIVE_FILE: &str = "active-generation.json";
 const TRANSACTION_FILE: &str = "activation-transaction.json";
 const HEALTH_MAX_BYTES: usize = 16 * 1024;
-const DEFAULT_HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
+const DEFAULT_HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[cfg(unix)]
 const POSIX_ENOENT: i32 = 2;
@@ -870,8 +870,7 @@ fn wait_for_health_witness(
         }
         match listener.accept() {
             Ok((stream, _)) => {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                let witness = read_health_witness(stream, remaining)?;
+                let witness = read_health_witness(stream, deadline)?;
                 verify_health_witness(&witness, child, expected, expected_nonce)?;
                 return Ok(());
             }
@@ -888,21 +887,30 @@ fn wait_for_health_witness(
 
 fn read_health_witness(
     mut stream: TcpStream,
-    timeout: Duration,
+    deadline: Instant,
 ) -> Result<HealthWitness, SupervisorError> {
-    stream.set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;
+    stream.set_nonblocking(false)?;
     let mut length = [0_u8; 4];
-    read_health_frame(&mut stream, &mut length)?;
+    read_health_frame(&mut stream, &mut length, deadline)?;
     let length = u32::from_be_bytes(length) as usize;
     if length > HEALTH_MAX_BYTES {
         return Err(SupervisorError::HealthWitnessTooLarge);
     }
     let mut bytes = vec![0_u8; length];
-    read_health_frame(&mut stream, &mut bytes)?;
+    read_health_frame(&mut stream, &mut bytes, deadline)?;
     serde_json::from_slice(&bytes).map_err(|_| SupervisorError::HealthWitnessMalformed)
 }
 
-fn read_health_frame(stream: &mut TcpStream, bytes: &mut [u8]) -> Result<(), SupervisorError> {
+fn read_health_frame(
+    stream: &mut TcpStream,
+    bytes: &mut [u8],
+    deadline: Instant,
+) -> Result<(), SupervisorError> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err(SupervisorError::HealthWitnessReadTimeout);
+    }
+    stream.set_read_timeout(Some(remaining))?;
     stream.read_exact(bytes).map_err(|error| {
         if matches!(
             error.kind(),

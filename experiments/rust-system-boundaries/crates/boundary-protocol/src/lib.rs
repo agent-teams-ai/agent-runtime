@@ -10,6 +10,7 @@ use std::io::{self, BufRead, Write};
 
 pub const CURRENT_PROTOCOL_VERSION: u16 = 2;
 pub const MINIMUM_PROTOCOL_VERSION: u16 = 1;
+pub const HANDSHAKE_VERSION: u16 = 1;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
 pub const MAX_OVERSIZED_FRAME_DRAIN_BYTES: usize = MAX_FRAME_BYTES;
 
@@ -17,6 +18,9 @@ pub const MAX_OVERSIZED_FRAME_DRAIN_BYTES: usize = MAX_FRAME_BYTES;
 #[serde(rename_all = "snake_case")]
 pub enum ProtocolErrorCode {
     UnsupportedVersion,
+    UnsupportedHandshakeVersion,
+    NoMutualVersion,
+    NegotiatedVersionMismatch,
     UnsupportedFeature,
     MalformedFrame,
     FrameTooLarge,
@@ -78,6 +82,196 @@ pub struct ResponseEnvelope<T> {
     pub result: T,
 }
 
+/// Frozen wire DTOs. These types intentionally do not import the canonical
+/// request or response model, so an N-1 fixture remains meaningful even after
+/// the current protocol evolves.
+pub mod frozen {
+    pub mod v1 {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct RequestEnvelope {
+            pub protocol_version: u16,
+            pub request_id: String,
+            pub command: Command,
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
+        pub enum Command {
+            Spawn {
+                operation_id: String,
+                opaque_fence: String,
+                fixture_mode: String,
+            },
+            Query {
+                operation_id: String,
+            },
+            Terminate {
+                operation_id: String,
+                opaque_fence: String,
+            },
+            InspectContainment {},
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct ResponseEnvelope {
+            pub protocol_version: u16,
+            pub request_id: Option<String>,
+            pub result: Result,
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
+        pub enum Result {
+            Accepted {
+                operation_id: String,
+                custody_state: String,
+            },
+            Rejected {
+                code: String,
+                detail: String,
+            },
+        }
+    }
+}
+
+/// Current protocol DTOs. Version 2 is intentionally a separate schema from
+/// the frozen N-1 types rather than an extended alias of them.
+pub mod current {
+    pub mod v2 {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct RequestEnvelope {
+            pub protocol_version: u16,
+            pub request_id: String,
+            pub command: Command,
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
+        pub enum Command {
+            Spawn {
+                operation_id: String,
+                opaque_fence: String,
+                fixture_mode: String,
+                drop_response: bool,
+            },
+            Query {
+                operation_id: String,
+            },
+            Terminate {
+                operation_id: String,
+                opaque_fence: String,
+            },
+            AdvanceFence {
+                operation_id: String,
+                current_opaque_fence: String,
+                next_opaque_fence: String,
+            },
+            InspectContainment {},
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        pub struct ResponseEnvelope {
+            pub protocol_version: u16,
+            pub request_id: Option<String>,
+            pub result: Result,
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
+        pub enum Result {
+            Accepted {
+                operation_id: String,
+                custody_state: String,
+                execution_id: Option<String>,
+            },
+            Rejected {
+                code: String,
+                detail: String,
+            },
+        }
+    }
+}
+
+/// A version-neutral handshake request. The selected protocol version governs
+/// every subsequent request and response on that connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientHello {
+    pub supported_protocol_versions: Vec<u16>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NegotiatedProtocol {
+    protocol_version: u16,
+}
+
+impl NegotiatedProtocol {
+    pub fn version(self) -> u16 {
+        self.protocol_version
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServerHelloOutcome {
+    Accepted(NegotiatedProtocol),
+    Rejected {
+        code: ProtocolErrorCode,
+        detail: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompatibilityResponse {
+    pub protocol_version: u16,
+    pub request_id: Option<String>,
+    pub result: CompatibilityResult,
+}
+
+/// Deliberately provider-neutral response witness used by the compatibility
+/// spike. `execution_id` is opaque technical correlation, not a provider ID.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompatibilityResult {
+    Accepted {
+        operation_id: String,
+        custody_state: String,
+        execution_id: Option<String>,
+    },
+    Rejected {
+        code: String,
+        detail: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
+enum ClientHelloFrame {
+    ProtocolHello {
+        handshake_version: u16,
+        supported_protocol_versions: Vec<u16>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
+enum ServerHelloFrame {
+    ProtocolHelloAck {
+        handshake_version: u16,
+        selected_protocol_version: u16,
+    },
+    ProtocolHelloRejected {
+        handshake_version: u16,
+        code: ProtocolErrorCode,
+        detail: String,
+    },
+}
+
 /// The caller must close the stream after `Fatal`; no later frame is trusted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReadRequest {
@@ -85,63 +279,10 @@ pub enum ReadRequest {
     Fatal(ProtocolError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct V1RequestEnvelope {
-    protocol_version: u16,
-    request_id: String,
-    command: V1GuardianCommand,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
-enum V1GuardianCommand {
-    Spawn {
-        operation_id: String,
-        opaque_fence: String,
-        fixture_mode: String,
-    },
-    Query {
-        operation_id: String,
-    },
-    Terminate {
-        operation_id: String,
-        opaque_fence: String,
-    },
-    InspectContainment {},
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct V2RequestEnvelope {
-    protocol_version: u16,
-    request_id: String,
-    command: V2GuardianCommand,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
-enum V2GuardianCommand {
-    Spawn {
-        operation_id: String,
-        opaque_fence: String,
-        fixture_mode: String,
-        drop_response: bool,
-    },
-    Query {
-        operation_id: String,
-    },
-    Terminate {
-        operation_id: String,
-        opaque_fence: String,
-    },
-    AdvanceFence {
-        operation_id: String,
-        current_opaque_fence: String,
-        next_opaque_fence: String,
-    },
-    InspectContainment {},
-}
+type V1RequestEnvelope = frozen::v1::RequestEnvelope;
+type V1GuardianCommand = frozen::v1::Command;
+type V2RequestEnvelope = current::v2::RequestEnvelope;
+type V2GuardianCommand = current::v2::Command;
 
 #[derive(Serialize)]
 struct V1ResponseEnvelope<'a, T> {
@@ -259,18 +400,344 @@ pub fn validate_protocol_version(version: u16) -> Result<(), ProtocolError> {
     }
 }
 
-pub fn decode_request(frame: &[u8]) -> Result<RequestEnvelope, ProtocolError> {
+/// Encodes the version-neutral first frame of a new connection. No request or
+/// response payload is accepted until the server selects one common version.
+pub fn encode_client_hello(hello: &ClientHello) -> Result<Vec<u8>, ProtocolError> {
+    validate_client_versions(&hello.supported_protocol_versions)?;
+    encode_frame(&ClientHelloFrame::ProtocolHello {
+        handshake_version: HANDSHAKE_VERSION,
+        supported_protocol_versions: hello.supported_protocol_versions.clone(),
+    })
+}
+
+/// Decodes a closed-world handshake request without consulting the current
+/// request schema or Guardian's canonical command model.
+pub fn decode_client_hello(frame: &[u8]) -> Result<ClientHello, ProtocolError> {
+    let frame: ClientHelloFrame = decode_frame(frame)?;
+    let ClientHelloFrame::ProtocolHello {
+        handshake_version,
+        supported_protocol_versions,
+    } = frame;
+    if handshake_version != HANDSHAKE_VERSION {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::UnsupportedHandshakeVersion,
+            detail: "the handshake schema version is not supported",
+        });
+    }
+    validate_client_versions(&supported_protocol_versions)?;
+    Ok(ClientHello {
+        supported_protocol_versions,
+    })
+}
+
+/// The server always selects the highest supported mutual version. An offered
+/// future version is allowed, but never selected by a server that does not
+/// explicitly support it.
+pub fn negotiate_protocol(hello: &ClientHello) -> Result<NegotiatedProtocol, ProtocolError> {
+    validate_client_versions(&hello.supported_protocol_versions)?;
+    let selected = hello
+        .supported_protocol_versions
+        .iter()
+        .copied()
+        .filter(|version| validate_protocol_version(*version).is_ok())
+        .max()
+        .ok_or(ProtocolError {
+            code: ProtocolErrorCode::NoMutualVersion,
+            detail: "the client and server have no mutually supported protocol version",
+        })?;
+    Ok(NegotiatedProtocol {
+        protocol_version: selected,
+    })
+}
+
+pub fn encode_server_hello_ack(negotiated: NegotiatedProtocol) -> Result<Vec<u8>, ProtocolError> {
+    validate_protocol_version(negotiated.version())?;
+    encode_frame(&ServerHelloFrame::ProtocolHelloAck {
+        handshake_version: HANDSHAKE_VERSION,
+        selected_protocol_version: negotiated.version(),
+    })
+}
+
+/// A typed handshake rejection is safe to return before a protocol version is
+/// selected. It carries only protocol metadata, never runtime details.
+pub fn encode_server_hello_rejection(error: &ProtocolError) -> Result<Vec<u8>, ProtocolError> {
+    encode_frame(&ServerHelloFrame::ProtocolHelloRejected {
+        handshake_version: HANDSHAKE_VERSION,
+        code: error.code,
+        detail: error.detail.to_owned(),
+    })
+}
+
+pub fn decode_server_hello(
+    frame: &[u8],
+    client_hello: &ClientHello,
+) -> Result<ServerHelloOutcome, ProtocolError> {
+    validate_client_versions(&client_hello.supported_protocol_versions)?;
+    let frame: ServerHelloFrame = decode_frame(frame)?;
+    match frame {
+        ServerHelloFrame::ProtocolHelloAck {
+            handshake_version,
+            selected_protocol_version,
+        } => {
+            if handshake_version != HANDSHAKE_VERSION {
+                return Err(ProtocolError {
+                    code: ProtocolErrorCode::UnsupportedHandshakeVersion,
+                    detail: "the server acknowledgement uses an unsupported handshake schema version",
+                });
+            }
+            validate_protocol_version(selected_protocol_version)?;
+            if !client_hello
+                .supported_protocol_versions
+                .contains(&selected_protocol_version)
+            {
+                return Err(ProtocolError {
+                    code: ProtocolErrorCode::NegotiatedVersionMismatch,
+                    detail: "the server selected a version the client did not offer",
+                });
+            }
+            Ok(ServerHelloOutcome::Accepted(NegotiatedProtocol {
+                protocol_version: selected_protocol_version,
+            }))
+        }
+        ServerHelloFrame::ProtocolHelloRejected {
+            handshake_version,
+            code,
+            detail,
+        } => {
+            if handshake_version != HANDSHAKE_VERSION {
+                return Err(ProtocolError {
+                    code: ProtocolErrorCode::UnsupportedHandshakeVersion,
+                    detail: "the server rejection uses an unsupported handshake schema version",
+                });
+            }
+            Ok(ServerHelloOutcome::Rejected { code, detail })
+        }
+    }
+}
+
+/// Validates a server acknowledgement from a client's point of view. The
+/// acknowledgement must select exactly one version the client actually offered.
+pub fn decode_server_hello_ack(
+    frame: &[u8],
+    client_hello: &ClientHello,
+) -> Result<NegotiatedProtocol, ProtocolError> {
+    match decode_server_hello(frame, client_hello)? {
+        ServerHelloOutcome::Accepted(negotiated) => Ok(negotiated),
+        ServerHelloOutcome::Rejected { code, .. } => Err(ProtocolError {
+            code,
+            detail: "the server rejected protocol negotiation",
+        }),
+    }
+}
+
+/// Reads a request only after a connection has negotiated a version. A request
+/// that carries another version is rejected instead of silently downgrading or
+/// upgrading the connection.
+pub fn decode_negotiated_request(
+    frame: &[u8],
+    negotiated: NegotiatedProtocol,
+) -> Result<RequestEnvelope, ProtocolError> {
+    let request = decode_request(frame)?;
+    ensure_negotiated_version(request.protocol_version, negotiated)?;
+    Ok(request)
+}
+
+/// Projects a request only when it is compatible with the selected connection
+/// protocol. This prevents a caller from mixing v1 and v2 frames on one stream.
+pub fn project_negotiated_request(
+    request: &RequestEnvelope,
+    negotiated: NegotiatedProtocol,
+) -> Result<Vec<u8>, ProtocolError> {
+    ensure_negotiated_version(request.protocol_version, negotiated)?;
+    project_request(request)
+}
+
+pub fn project_compatibility_response(
+    response: &CompatibilityResponse,
+) -> Result<Vec<u8>, ProtocolError> {
+    validate_protocol_version(response.protocol_version)?;
+    match response.protocol_version {
+        1 => {
+            let result = match &response.result {
+                CompatibilityResult::Accepted {
+                    operation_id,
+                    custody_state,
+                    ..
+                } => frozen::v1::Result::Accepted {
+                    operation_id: operation_id.clone(),
+                    custody_state: custody_state.clone(),
+                },
+                CompatibilityResult::Rejected { code, detail } => frozen::v1::Result::Rejected {
+                    code: code.clone(),
+                    detail: detail.clone(),
+                },
+            };
+            encode_frame(&frozen::v1::ResponseEnvelope {
+                protocol_version: 1,
+                request_id: response.request_id.clone(),
+                result,
+            })
+        }
+        2 => {
+            let result = match &response.result {
+                CompatibilityResult::Accepted {
+                    operation_id,
+                    custody_state,
+                    execution_id,
+                } => current::v2::Result::Accepted {
+                    operation_id: operation_id.clone(),
+                    custody_state: custody_state.clone(),
+                    execution_id: execution_id.clone(),
+                },
+                CompatibilityResult::Rejected { code, detail } => current::v2::Result::Rejected {
+                    code: code.clone(),
+                    detail: detail.clone(),
+                },
+            };
+            encode_frame(&current::v2::ResponseEnvelope {
+                protocol_version: 2,
+                request_id: response.request_id.clone(),
+                result,
+            })
+        }
+        _ => unreachable!("validated protocol versions are exhaustive"),
+    }
+}
+
+pub fn project_negotiated_compatibility_response(
+    response: &CompatibilityResponse,
+    negotiated: NegotiatedProtocol,
+) -> Result<Vec<u8>, ProtocolError> {
+    ensure_negotiated_version(response.protocol_version, negotiated)?;
+    project_compatibility_response(response)
+}
+
+/// Decodes the independently frozen response schema selected for a connection.
+/// It never deserializes an N-1 fixture through the current v2 DTO.
+pub fn decode_negotiated_compatibility_response(
+    frame: &[u8],
+    negotiated: NegotiatedProtocol,
+) -> Result<CompatibilityResponse, ProtocolError> {
+    let value = decode_frame_value(frame)?;
+    let response_version = value
+        .get("protocol_version")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|value| u16::try_from(value).ok())
+        .ok_or_else(malformed_error)?;
+    ensure_negotiated_version(response_version, negotiated)?;
+    match response_version {
+        1 => serde_json::from_value::<frozen::v1::ResponseEnvelope>(value)
+            .map(compatibility_response_from_v1)
+            .map_err(|_| malformed_error()),
+        2 => serde_json::from_value::<current::v2::ResponseEnvelope>(value)
+            .map(compatibility_response_from_v2)
+            .map_err(|_| malformed_error()),
+        _ => unreachable!("validated protocol versions are exhaustive"),
+    }
+}
+
+fn validate_client_versions(versions: &[u16]) -> Result<(), ProtocolError> {
+    if versions.is_empty() {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::MalformedFrame,
+            detail: "the handshake must offer at least one protocol version",
+        });
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    if versions.iter().any(|version| !seen.insert(*version)) {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::MalformedFrame,
+            detail: "the handshake must not offer a protocol version more than once",
+        });
+    }
+    Ok(())
+}
+
+fn ensure_negotiated_version(
+    frame_version: u16,
+    negotiated: NegotiatedProtocol,
+) -> Result<(), ProtocolError> {
+    validate_protocol_version(frame_version)?;
+    if frame_version != negotiated.version() {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::NegotiatedVersionMismatch,
+            detail: "the frame protocol version does not match the negotiated connection version",
+        });
+    }
+    Ok(())
+}
+
+fn encode_frame<T: Serialize>(value: &T) -> Result<Vec<u8>, ProtocolError> {
+    let bytes = serde_json::to_vec(value).map_err(|_| malformed_error())?;
+    if bytes.len() > MAX_FRAME_BYTES {
+        return Err(frame_too_large_error());
+    }
+    Ok(bytes)
+}
+
+fn decode_frame<T: for<'de> Deserialize<'de>>(frame: &[u8]) -> Result<T, ProtocolError> {
+    serde_json::from_value(decode_frame_value(frame)?).map_err(|_| malformed_error())
+}
+
+fn decode_frame_value(frame: &[u8]) -> Result<serde_json::Value, ProtocolError> {
     if frame.len() > MAX_FRAME_BYTES {
         return Err(frame_too_large_error());
     }
-
     let frame = std::str::from_utf8(frame).map_err(|_| ProtocolError {
         code: ProtocolErrorCode::MalformedFrame,
         detail: "frame is not valid UTF-8",
     })?;
     let frame = frame.strip_suffix('\n').unwrap_or(frame);
-    let value = serde_json::from_str::<serde_json::Value>(frame).map_err(|_| malformed_error())?;
-    decode_request_value(value)
+    serde_json::from_str::<serde_json::Value>(frame).map_err(|_| malformed_error())
+}
+
+fn compatibility_response_from_v1(response: frozen::v1::ResponseEnvelope) -> CompatibilityResponse {
+    let result = match response.result {
+        frozen::v1::Result::Accepted {
+            operation_id,
+            custody_state,
+        } => CompatibilityResult::Accepted {
+            operation_id,
+            custody_state,
+            execution_id: None,
+        },
+        frozen::v1::Result::Rejected { code, detail } => {
+            CompatibilityResult::Rejected { code, detail }
+        }
+    };
+    CompatibilityResponse {
+        protocol_version: response.protocol_version,
+        request_id: response.request_id,
+        result,
+    }
+}
+
+fn compatibility_response_from_v2(
+    response: current::v2::ResponseEnvelope,
+) -> CompatibilityResponse {
+    let result = match response.result {
+        current::v2::Result::Accepted {
+            operation_id,
+            custody_state,
+            execution_id,
+        } => CompatibilityResult::Accepted {
+            operation_id,
+            custody_state,
+            execution_id,
+        },
+        current::v2::Result::Rejected { code, detail } => {
+            CompatibilityResult::Rejected { code, detail }
+        }
+    };
+    CompatibilityResponse {
+        protocol_version: response.protocol_version,
+        request_id: response.request_id,
+        result,
+    }
+}
+
+pub fn decode_request(frame: &[u8]) -> Result<RequestEnvelope, ProtocolError> {
+    decode_request_value(decode_frame_value(frame)?)
 }
 
 /// Projects the canonical request into its frozen protocol-version DTO.
@@ -550,6 +1017,14 @@ mod tests {
     const V1_SPAWN_GOLDEN: &str = include_str!("../tests/fixtures/v1-spawn.json");
     const V2_SPAWN_GOLDEN: &str = include_str!("../tests/fixtures/v2-spawn.json");
     const V2_ADVANCE_FENCE_GOLDEN: &str = include_str!("../tests/fixtures/v2-advance-fence.json");
+    const V1_CLIENT_HELLO_GOLDEN: &str = include_str!("../tests/fixtures/v1-client-hello.json");
+    const V1_SERVER_HELLO_ACK_GOLDEN: &str =
+        include_str!("../tests/fixtures/v1-server-hello-ack.json");
+    const V1_SPAWN_RESPONSE_GOLDEN: &str = include_str!("../tests/fixtures/v1-spawn-response.json");
+    const V2_CLIENT_HELLO_GOLDEN: &str = include_str!("../tests/fixtures/v2-client-hello.json");
+    const V2_SERVER_HELLO_ACK_GOLDEN: &str =
+        include_str!("../tests/fixtures/v2-server-hello-ack.json");
+    const V2_SPAWN_RESPONSE_GOLDEN: &str = include_str!("../tests/fixtures/v2-spawn-response.json");
 
     fn inspect_frame(version: u16) -> String {
         format!(
@@ -642,6 +1117,203 @@ mod tests {
                 .expect_err("v1 cannot project v2-only response suppression")
                 .code,
             ProtocolErrorCode::UnsupportedFeature
+        );
+    }
+
+    #[test]
+    fn frozen_v1_client_and_current_v2_server_project_both_directions() {
+        let hello = decode_client_hello(V1_CLIENT_HELLO_GOLDEN.as_bytes())
+            .expect("frozen v1 hello must decode independently");
+        assert_eq!(
+            encode_client_hello(&hello).expect("v1 hello projects"),
+            golden_bytes(V1_CLIENT_HELLO_GOLDEN)
+        );
+        let server_session = negotiate_protocol(&hello).expect("v2 server selects v1");
+        assert_eq!(server_session.version(), 1);
+        assert_eq!(
+            encode_server_hello_ack(server_session).expect("v1 acknowledgement projects"),
+            golden_bytes(V1_SERVER_HELLO_ACK_GOLDEN)
+        );
+        let client_session = decode_server_hello_ack(V1_SERVER_HELLO_ACK_GOLDEN.as_bytes(), &hello)
+            .expect("v1 client accepts selected version");
+        assert_eq!(client_session, server_session);
+
+        let frozen_request: frozen::v1::RequestEnvelope =
+            serde_json::from_str(V1_SPAWN_GOLDEN.trim_end())
+                .expect("v1 request fixture must not need current DTOs");
+        assert_eq!(frozen_request.protocol_version, 1);
+        let request = decode_negotiated_request(V1_SPAWN_GOLDEN.as_bytes(), server_session)
+            .expect("v2 server accepts the frozen v1 request");
+        assert_eq!(
+            project_negotiated_request(&request, server_session)
+                .expect("server reprojects the v1 request"),
+            golden_bytes(V1_SPAWN_GOLDEN)
+        );
+
+        // The v2 server may have a newer opaque execution correlation, but it
+        // must project a response that the frozen v1 client can parse exactly.
+        let server_response = CompatibilityResponse {
+            protocol_version: 1,
+            request_id: Some("spawn-v1".to_owned()),
+            result: CompatibilityResult::Accepted {
+                operation_id: "operation-1".to_owned(),
+                custody_state: "live".to_owned(),
+                execution_id: Some("execution-1".to_owned()),
+            },
+        };
+        let response_wire =
+            project_negotiated_compatibility_response(&server_response, server_session)
+                .expect("v2 server projects a v1 response");
+        assert_eq!(response_wire, golden_bytes(V1_SPAWN_RESPONSE_GOLDEN));
+        let frozen_response: frozen::v1::ResponseEnvelope = serde_json::from_slice(&response_wire)
+            .expect("frozen v1 response fixture must not need current DTOs");
+        assert_eq!(
+            frozen_response,
+            serde_json::from_str(V1_SPAWN_RESPONSE_GOLDEN.trim_end())
+                .expect("v1 response golden parses independently")
+        );
+        assert_eq!(
+            decode_negotiated_compatibility_response(&response_wire, client_session)
+                .expect("v1 client decodes v2 server projection"),
+            CompatibilityResponse {
+                protocol_version: 1,
+                request_id: Some("spawn-v1".to_owned()),
+                result: CompatibilityResult::Accepted {
+                    operation_id: "operation-1".to_owned(),
+                    custody_state: "live".to_owned(),
+                    execution_id: None,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn current_v2_client_and_server_preserve_the_current_response_schema() {
+        let hello =
+            decode_client_hello(V2_CLIENT_HELLO_GOLDEN.as_bytes()).expect("v2 hello decodes");
+        let session = negotiate_protocol(&hello).expect("v2 server selects v2");
+        assert_eq!(session.version(), CURRENT_PROTOCOL_VERSION);
+        assert_eq!(
+            encode_server_hello_ack(session).expect("v2 acknowledgement projects"),
+            golden_bytes(V2_SERVER_HELLO_ACK_GOLDEN)
+        );
+        assert_eq!(
+            decode_server_hello_ack(V2_SERVER_HELLO_ACK_GOLDEN.as_bytes(), &hello)
+                .expect("v2 client accepts acknowledgement"),
+            session
+        );
+        let current_request: current::v2::RequestEnvelope =
+            serde_json::from_str(V2_SPAWN_GOLDEN.trim_end())
+                .expect("current v2 request schema parses directly");
+        assert_eq!(current_request.protocol_version, CURRENT_PROTOCOL_VERSION);
+
+        let request = decode_negotiated_request(V2_SPAWN_GOLDEN.as_bytes(), session)
+            .expect("v2 request decodes in the v2 session");
+        assert_eq!(
+            project_negotiated_request(&request, session).expect("v2 request projects"),
+            golden_bytes(V2_SPAWN_GOLDEN)
+        );
+        let response = CompatibilityResponse {
+            protocol_version: CURRENT_PROTOCOL_VERSION,
+            request_id: Some("spawn-v2".to_owned()),
+            result: CompatibilityResult::Accepted {
+                operation_id: "operation-1".to_owned(),
+                custody_state: "live".to_owned(),
+                execution_id: Some("execution-1".to_owned()),
+            },
+        };
+        let response_wire = project_negotiated_compatibility_response(&response, session)
+            .expect("v2 response projects");
+        assert_eq!(response_wire, golden_bytes(V2_SPAWN_RESPONSE_GOLDEN));
+        let current_response: current::v2::ResponseEnvelope =
+            serde_json::from_slice(&response_wire).expect("current v2 response parses");
+        assert_eq!(
+            current_response,
+            serde_json::from_str(V2_SPAWN_RESPONSE_GOLDEN.trim_end())
+                .expect("v2 response golden parses")
+        );
+        assert_eq!(
+            decode_negotiated_compatibility_response(&response_wire, session)
+                .expect("v2 response decodes"),
+            response
+        );
+    }
+
+    #[test]
+    fn negotiation_and_version_mixing_fail_closed() {
+        let unsupported = ClientHello {
+            supported_protocol_versions: vec![CURRENT_PROTOCOL_VERSION + 1],
+        };
+        let unsupported_wire = encode_client_hello(&unsupported)
+            .expect("a future client may advertise an unsupported version");
+        let unsupported_hello = decode_client_hello(&unsupported_wire)
+            .expect("the server decodes the closed-world handshake shape");
+        let rejection = negotiate_protocol(&unsupported_hello)
+            .expect_err("unsupported-only offer must be rejected");
+        assert_eq!(rejection.code, ProtocolErrorCode::NoMutualVersion);
+        let rejection_wire = encode_server_hello_rejection(&rejection)
+            .expect("rejection has a typed handshake frame");
+        assert_eq!(
+            decode_server_hello(&rejection_wire, &unsupported_hello)
+                .expect("client receives the typed rejection"),
+            ServerHelloOutcome::Rejected {
+                code: ProtocolErrorCode::NoMutualVersion,
+                detail: "the client and server have no mutually supported protocol version"
+                    .to_owned(),
+            }
+        );
+        assert_eq!(
+            decode_server_hello_ack(&rejection_wire, &unsupported_hello)
+                .expect_err("ack-only client helper propagates a typed rejection")
+                .code,
+            ProtocolErrorCode::NoMutualVersion
+        );
+        assert_eq!(
+            decode_client_hello(
+                br#"{"kind":"protocol_hello","handshake_version":1,"supported_protocol_versions":[1,1]}"#,
+            )
+            .expect_err("duplicate offers must fail closed")
+            .code,
+            ProtocolErrorCode::MalformedFrame
+        );
+        assert_eq!(
+            decode_client_hello(
+                br#"{"kind":"protocol_hello","handshake_version":1,"supported_protocol_versions":[1],"unexpected":true}"#,
+            )
+            .expect_err("unknown handshake fields must fail closed")
+            .code,
+            ProtocolErrorCode::MalformedFrame
+        );
+
+        let v1_hello =
+            decode_client_hello(V1_CLIENT_HELLO_GOLDEN.as_bytes()).expect("v1 hello decodes");
+        let v1_session = negotiate_protocol(&v1_hello).expect("v1 session negotiates");
+        assert_eq!(
+            decode_negotiated_request(V2_SPAWN_GOLDEN.as_bytes(), v1_session)
+                .expect_err("v2 request on a v1 connection must fail")
+                .code,
+            ProtocolErrorCode::NegotiatedVersionMismatch
+        );
+        assert_eq!(
+            decode_negotiated_compatibility_response(
+                V2_SPAWN_RESPONSE_GOLDEN.as_bytes(),
+                v1_session,
+            )
+            .expect_err("v2 response on a v1 connection must fail")
+            .code,
+            ProtocolErrorCode::NegotiatedVersionMismatch
+        );
+        assert!(
+            serde_json::from_str::<frozen::v1::ResponseEnvelope>(
+                V2_SPAWN_RESPONSE_GOLDEN.trim_end()
+            )
+            .is_err()
+        );
+        assert_eq!(
+            decode_server_hello_ack(V2_SERVER_HELLO_ACK_GOLDEN.as_bytes(), &v1_hello,)
+                .expect_err("server cannot select a version the v1 client did not offer")
+                .code,
+            ProtocolErrorCode::NegotiatedVersionMismatch
         );
     }
 

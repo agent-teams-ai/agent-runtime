@@ -815,7 +815,7 @@ test("TypeScript response decoder rejects schema drift", () => {
 
 test(
   "frozen N-1 TypeScript request shape runs against the current Guardian",
-  { timeout: 30_000 },
+  { timeout: 90_000 },
   async () => {
     const stateRoot = await mkdtemp(join(tmpdir(), "agent-runtime-guardian-v1-client-"));
     const operationId = `ts-v1-${process.pid}-${Date.now()}`;

@@ -6,6 +6,7 @@ on:
       - experiments/rust-system-boundaries/**
       - .github/workflows/rust-system-boundaries.yml
       - .github/workflows/rust-system-boundaries-release-drill.yml
+      - docs/spikes/rust-system-boundaries-production-gates.md
       - .node-version
   push:
     branches:
@@ -15,6 +16,7 @@ on:
       - experiments/rust-system-boundaries/**
       - .github/workflows/rust-system-boundaries.yml
       - .github/workflows/rust-system-boundaries-release-drill.yml
+      - docs/spikes/rust-system-boundaries-production-gates.md
       - .node-version
   workflow_dispatch:
 
@@ -97,5 +99,5 @@ jobs:
         working-directory: experiments/rust-system-boundaries
         run: cargo test --locked --workspace --all-targets --manifest-path Cargo.toml
 
-      - name: Test TypeScript to Rust Guardian boundary
-        run: node --test experiments/rust-system-boundaries/client/guardian-conformance.test.ts
+      - name: Test TypeScript to Rust boundaries
+        run: pnpm spike:rust-boundaries:client
