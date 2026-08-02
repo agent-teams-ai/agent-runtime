@@ -77,6 +77,8 @@ const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
 #[cfg(windows)]
 const WINDOWS_ERROR_INVALID_PARAMETER: i32 = 87;
 #[cfg(windows)]
+const WINDOWS_STILL_ACTIVE: u32 = 259;
+#[cfg(windows)]
 const BCRYPT_USE_SYSTEM_PREFERRED_RNG: u32 = 0x0000_0002;
 
 #[cfg(windows)]
@@ -104,6 +106,8 @@ unsafe extern "system" {
         kernel: *mut WindowsFileTime,
         user: *mut WindowsFileTime,
     ) -> i32;
+    #[link_name = "GetExitCodeProcess"]
+    fn get_exit_code_process(handle: *mut std::ffi::c_void, exit_code: *mut u32) -> i32;
     #[link_name = "CloseHandle"]
     fn close_handle(handle: *mut std::ffi::c_void) -> i32;
 }
@@ -569,16 +573,13 @@ impl Supervisor {
     }
 
     /// Diagnostic helper for the spike tests. It never authorizes a process;
-    /// it only proves whether an observed PID still has the same birth value.
+    /// it only proves whether an observed PID still has the same birth value
+    /// and represents a process that has not exited.
     pub fn observation_is_live(
         &self,
         observation: &HostObservation,
     ) -> Result<bool, SupervisorError> {
-        match process_birth_identity(observation.pid) {
-            Ok(actual) => Ok(actual == observation.birth_identity),
-            Err(error) if process_identity_error_means_gone(&error) => Ok(false),
-            Err(error) => Err(error),
-        }
+        process_observation_is_live(observation)
     }
 
     pub fn recover(&self) -> Result<(), SupervisorError> {
@@ -1155,6 +1156,11 @@ fn process_birth_identity(pid: u32) -> Result<ProcessBirthIdentity, SupervisorEr
 
 #[cfg(windows)]
 fn process_birth_identity(pid: u32) -> Result<ProcessBirthIdentity, SupervisorError> {
+    windows_process_observation(pid).map(|(identity, _)| identity)
+}
+
+#[cfg(windows)]
+fn windows_process_observation(pid: u32) -> Result<(ProcessBirthIdentity, bool), SupervisorError> {
     unsafe {
         let handle = open_process(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if handle.is_null() {
@@ -1164,20 +1170,41 @@ fn process_birth_identity(pid: u32) -> Result<ProcessBirthIdentity, SupervisorEr
         let mut exit = WindowsFileTime::default();
         let mut kernel = WindowsFileTime::default();
         let mut user = WindowsFileTime::default();
-        let read = get_process_times(handle, &mut creation, &mut exit, &mut kernel, &mut user);
-        let error = if read == 0 {
-            Some(io::Error::last_os_error())
-        } else {
-            None
-        };
+        let times_read =
+            get_process_times(handle, &mut creation, &mut exit, &mut kernel, &mut user);
+        let times_error = (times_read == 0).then(io::Error::last_os_error);
+        let mut exit_code = 0_u32;
+        let exit_code_read = get_exit_code_process(handle, &mut exit_code);
+        let exit_code_error = (exit_code_read == 0).then(io::Error::last_os_error);
         close_handle(handle);
-        if let Some(error) = error {
+        if let Some(error) = times_error.or(exit_code_error) {
             return Err(SupervisorError::Io(error));
         }
-        Ok(ProcessBirthIdentity::WindowsCreationTime {
-            filetime_100ns: u64::from(creation.dw_low_date_time)
-                | (u64::from(creation.dw_high_date_time) << 32),
-        })
+        Ok((
+            ProcessBirthIdentity::WindowsCreationTime {
+                filetime_100ns: u64::from(creation.dw_low_date_time)
+                    | (u64::from(creation.dw_high_date_time) << 32),
+            },
+            exit_code == WINDOWS_STILL_ACTIVE,
+        ))
+    }
+}
+
+#[cfg(windows)]
+fn process_observation_is_live(observation: &HostObservation) -> Result<bool, SupervisorError> {
+    match windows_process_observation(observation.pid) {
+        Ok((actual, active)) => Ok(active && actual == observation.birth_identity),
+        Err(error) if process_identity_error_means_gone(&error) => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(not(windows))]
+fn process_observation_is_live(observation: &HostObservation) -> Result<bool, SupervisorError> {
+    match process_birth_identity(observation.pid) {
+        Ok(actual) => Ok(actual == observation.birth_identity),
+        Err(error) if process_identity_error_means_gone(&error) => Ok(false),
+        Err(error) => Err(error),
     }
 }
 
