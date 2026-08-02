@@ -106,12 +106,15 @@ fn fault_injection_recovers_without_promoting_an_interrupted_generation() {
             Err(SupervisorError::FaultInjected(actual_fault)) if actual_fault == fault_point
         ));
 
-        let restarted = Supervisor::open(&supervisor_root).expect("restarted supervisor opens");
-        restarted
+        assert!(matches!(
+            Supervisor::open(&supervisor_root),
+            Err(SupervisorError::SupervisorAlreadyOwned)
+        ));
+        supervisor
             .recover()
-            .expect("rollback-only recovery succeeds");
+            .expect("the lifetime owner performs rollback-only recovery");
         assert_eq!(
-            restarted
+            supervisor
                 .inspect_active()
                 .expect("inspect succeeds")
                 .expect("old remains active")
@@ -141,6 +144,7 @@ fn inspect_recovers_every_crashed_activation_phase_after_the_lock_is_released() 
             EnsureOptions::default(),
         )
         .expect("old generation activates");
+    drop(supervisor);
     let driver = env!("CARGO_BIN_EXE_supervisor-driver");
 
     for phase in [
@@ -180,6 +184,7 @@ fn inspect_recovers_every_crashed_activation_phase_after_the_lock_is_released() 
             !supervisor_root.join("activation-transaction.json").exists(),
             "inspect must finalize recovery for {phase}"
         );
+        drop(recovered);
     }
 }
 

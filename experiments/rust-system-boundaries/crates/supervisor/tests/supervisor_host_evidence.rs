@@ -428,6 +428,10 @@ fn failed_candidate_kill_or_wait_retains_custody_until_reconciliation() {
             1,
             "failed {cleanup_fault:?} must retain the exact Child handle"
         );
+        assert!(matches!(
+            Supervisor::open(&supervisor_root),
+            Err(SupervisorError::SupervisorAlreadyOwned)
+        ));
 
         let candidate_witness = serde_json::from_str::<HealthWitness>(
             fs::read_to_string(&boot_log)
@@ -466,4 +470,113 @@ fn failed_candidate_kill_or_wait_retains_custody_until_reconciliation() {
             initial_host
         );
     }
+}
+
+#[test]
+fn rejected_health_with_failed_cleanup_retains_unverified_child_custody() {
+    let temp = TempDir::new().expect("temporary root");
+    let supervisor_root = temp.path().join("supervisor");
+    let release_root = temp.path().join("release");
+    let boot_log = temp.path().join("rejected-candidate.log");
+    let key = fixture_key();
+    let anchor = TrustAnchor::from_signing_key(&key);
+    release(&release_root, "1.0.0", &key);
+
+    let supervisor = Supervisor::open(&supervisor_root).expect("supervisor opens");
+    let result = supervisor.ensure(
+        &release_root,
+        &anchor,
+        &HostLaunch::with_extra_args([
+            "--mode",
+            "stale-nonce",
+            "--boot-log-path",
+            boot_log.to_str().expect("UTF-8 boot log path"),
+        ]),
+        EnsureOptions {
+            candidate_cleanup_fault: Some(CandidateCleanupFault::Kill),
+            ..EnsureOptions::default()
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(SupervisorError::CandidateCleanupFailed { .. })
+    ));
+    assert_eq!(
+        supervisor.pending_cleanup_count(),
+        1,
+        "a child rejected before RunningHost construction must retain its exact handle"
+    );
+    assert!(matches!(
+        Supervisor::open(&supervisor_root),
+        Err(SupervisorError::SupervisorAlreadyOwned)
+    ));
+
+    let candidate_witness = serde_json::from_str::<HealthWitness>(
+        &fs::read_to_string(&boot_log).expect("candidate boot log reads"),
+    )
+    .expect("candidate boot record parses");
+    let candidate_observation = HostObservation {
+        generation_id: candidate_witness.generation_id,
+        generation_digest: candidate_witness.generation_digest,
+        pid: candidate_witness.pid,
+        birth_identity: candidate_witness.birth_identity,
+    };
+
+    supervisor
+        .ensure(
+            &release_root,
+            &anchor,
+            &HostLaunch::default(),
+            EnsureOptions::default(),
+        )
+        .expect("the owner reconciles the rejected child before retrying activation");
+    assert_eq!(supervisor.pending_cleanup_count(), 0);
+    assert!(
+        !supervisor
+            .observation_is_live(&candidate_observation)
+            .expect("rejected candidate identity inspection succeeds")
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_exit_code_259_is_observed_as_exited() {
+    let temp = TempDir::new().expect("temporary root");
+    let supervisor_root = temp.path().join("supervisor");
+    let release_root = temp.path().join("release");
+    let boot_log = temp.path().join("exit-259.log");
+    let key = fixture_key();
+    let anchor = TrustAnchor::from_signing_key(&key);
+    release(&release_root, "1.0.0", &key);
+
+    let supervisor = Supervisor::open(&supervisor_root).expect("supervisor opens");
+    supervisor
+        .ensure(
+            &release_root,
+            &anchor,
+            &HostLaunch::with_extra_args([
+                "--mode",
+                "exit-259-after-report",
+                "--boot-log-path",
+                boot_log.to_str().expect("UTF-8 boot log path"),
+            ]),
+            EnsureOptions::default(),
+        )
+        .expect("candidate reports health before exiting with code 259");
+    let witness = serde_json::from_str::<HealthWitness>(
+        &fs::read_to_string(&boot_log).expect("candidate boot log reads"),
+    )
+    .expect("candidate boot record parses");
+    let observation = HostObservation {
+        generation_id: witness.generation_id,
+        generation_digest: witness.generation_digest,
+        pid: witness.pid,
+        birth_identity: witness.birth_identity,
+    };
+
+    wait_until(WITNESS_TIMEOUT, || {
+        !supervisor
+            .observation_is_live(&observation)
+            .expect("Windows wait-state inspection succeeds")
+    });
 }

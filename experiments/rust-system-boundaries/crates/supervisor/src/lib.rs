@@ -10,18 +10,20 @@ use base64::Engine;
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const MANIFEST_FILE: &str = "release-manifest.json";
 const ACTIVE_FILE: &str = "active-generation.json";
 const TRANSACTION_FILE: &str = "activation-transaction.json";
+const OWNER_LOCK_FILE: &str = "supervisor-owner.lock";
 const HEALTH_MAX_BYTES: usize = 16 * 1024;
 const DEFAULT_HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -75,9 +77,15 @@ unsafe extern "C" {
 #[cfg(windows)]
 const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
 #[cfg(windows)]
+const PROCESS_SYNCHRONIZE: u32 = 0x0010_0000;
+#[cfg(windows)]
 const WINDOWS_ERROR_INVALID_PARAMETER: i32 = 87;
 #[cfg(windows)]
-const WINDOWS_STILL_ACTIVE: u32 = 259;
+const WINDOWS_WAIT_OBJECT_0: u32 = 0;
+#[cfg(windows)]
+const WINDOWS_WAIT_TIMEOUT: u32 = 258;
+#[cfg(windows)]
+const WINDOWS_WAIT_FAILED: u32 = u32::MAX;
 #[cfg(windows)]
 const BCRYPT_USE_SYSTEM_PREFERRED_RNG: u32 = 0x0000_0002;
 
@@ -106,8 +114,8 @@ unsafe extern "system" {
         kernel: *mut WindowsFileTime,
         user: *mut WindowsFileTime,
     ) -> i32;
-    #[link_name = "GetExitCodeProcess"]
-    fn get_exit_code_process(handle: *mut std::ffi::c_void, exit_code: *mut u32) -> i32;
+    #[link_name = "WaitForSingleObject"]
+    fn wait_for_single_object(handle: *mut std::ffi::c_void, milliseconds: u32) -> u32;
     #[link_name = "CloseHandle"]
     fn close_handle(handle: *mut std::ffi::c_void) -> i32;
 }
@@ -339,6 +347,7 @@ pub enum SupervisorError {
         cleanup: Box<SupervisorError>,
     },
     PendingCandidateCleanupFailed(Box<SupervisorError>),
+    SupervisorAlreadyOwned,
     InjectedCandidateCleanupFailure(CandidateCleanupFault),
     FaultInjected(FaultPoint),
     CorruptTransaction,
@@ -417,6 +426,12 @@ impl std::fmt::Display for SupervisorError {
                 formatter,
                 "a previously failed candidate Host cleanup is still pending: {cleanup}"
             ),
+            Self::SupervisorAlreadyOwned => {
+                write!(
+                    formatter,
+                    "this process already owns the Supervisor state root"
+                )
+            }
             Self::InjectedCandidateCleanupFailure(point) => {
                 write!(
                     formatter,
@@ -461,18 +476,31 @@ struct RunningHost {
 #[derive(Debug)]
 pub struct Supervisor {
     root: PathBuf,
+    owner_root: PathBuf,
+    _owner_lock: File,
     running_host: Mutex<Option<RunningHost>>,
-    pending_cleanup_hosts: Mutex<Vec<RunningHost>>,
+    pending_cleanup_children: Mutex<Vec<Child>>,
 }
 
 impl Supervisor {
     pub fn open(root: impl Into<PathBuf>) -> Result<Self, SupervisorError> {
         let root = root.into();
         fs::create_dir_all(root.join("generations"))?;
+        let root = fs::canonicalize(root)?;
+        register_process_owner(&root)?;
+        let owner_lock = match open_and_lock_owner(&root) {
+            Ok(lock) => lock,
+            Err(error) => {
+                unregister_process_owner(&root);
+                return Err(error);
+            }
+        };
         Ok(Self {
-            root,
+            root: root.clone(),
+            owner_root: root,
+            _owner_lock: owner_lock,
             running_host: Mutex::new(None),
-            pending_cleanup_hosts: Mutex::new(Vec::new()),
+            pending_cleanup_children: Mutex::new(Vec::new()),
         })
     }
 
@@ -517,7 +545,7 @@ impl Supervisor {
         self.write_transaction(&transaction)?;
         self.inject_fault(options, FaultPoint::AfterStaged)?;
 
-        let candidate_host = self.spawn_and_verify_host(&candidate, host_launch)?;
+        let candidate_host = self.spawn_and_verify_host(&candidate, host_launch, options)?;
         if let Err(error) = self.inject_fault(options, FaultPoint::BeforePreviousHostTermination) {
             return Err(self.cleanup_candidate_after_error(candidate_host, error, options));
         }
@@ -609,7 +637,7 @@ impl Supervisor {
     /// Diagnostic evidence only. A non-zero value blocks every operation that
     /// could launch another Host until exact-handle cleanup succeeds.
     pub fn pending_cleanup_count(&self) -> usize {
-        self.pending_cleanup_hosts
+        self.pending_cleanup_children
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())
             .len()
@@ -656,7 +684,7 @@ impl Supervisor {
         if let Some(mut stale_host) = running_host.take() {
             terminate_host(&mut stale_host)?;
         }
-        let host = self.spawn_and_verify_host(active, host_launch)?;
+        let host = self.spawn_and_verify_host(active, host_launch, EnsureOptions::default())?;
         let observation = host.observation.clone();
         *running_host = Some(host);
         Ok(observation)
@@ -666,6 +694,7 @@ impl Supervisor {
         &self,
         active: &ActiveGeneration,
         host_launch: &HostLaunch,
+        options: EnsureOptions,
     ) -> Result<RunningHost, SupervisorError> {
         let artifact_path = self.staged_artifact_path(active)?;
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -690,8 +719,7 @@ impl Supervisor {
         let birth_identity = match process_birth_identity(child.id()) {
             Ok(identity) => identity,
             Err(error) => {
-                let _ = terminate_child(&mut child);
-                return Err(error);
+                return Err(self.cleanup_child_after_error(child, error, options));
             }
         };
         let observation = HostObservation {
@@ -708,8 +736,7 @@ impl Supervisor {
             host_launch.health_timeout,
         );
         if let Err(error) = witness_result {
-            let _ = terminate_child(&mut child);
-            return Err(error);
+            return Err(self.cleanup_child_after_error(child, error, options));
         }
         Ok(RunningHost { observation, child })
     }
@@ -846,7 +873,16 @@ impl Supervisor {
 
     fn cleanup_candidate_after_error(
         &self,
-        mut candidate: RunningHost,
+        candidate: RunningHost,
+        activation: SupervisorError,
+        options: EnsureOptions,
+    ) -> SupervisorError {
+        self.cleanup_child_after_error(candidate.child, activation, options)
+    }
+
+    fn cleanup_child_after_error(
+        &self,
+        mut child: Child,
         activation: SupervisorError,
         options: EnsureOptions,
     ) -> SupervisorError {
@@ -855,25 +891,25 @@ impl Supervisor {
                 SupervisorError::InjectedCandidateCleanupFailure(CandidateCleanupFault::Kill),
             ),
             Some(CandidateCleanupFault::Wait) => {
-                let kill_result = match candidate.child.try_wait() {
+                let kill_result = match child.try_wait() {
                     Ok(Some(_)) => Ok(()),
-                    Ok(None) => candidate.child.kill().map_err(SupervisorError::Io),
+                    Ok(None) => child.kill().map_err(SupervisorError::Io),
                     Err(error) => Err(SupervisorError::Io(error)),
                 };
                 kill_result.and(Err(SupervisorError::InjectedCandidateCleanupFailure(
                     CandidateCleanupFault::Wait,
                 )))
             }
-            None => terminate_host(&mut candidate),
+            None => terminate_child(&mut child),
         };
 
         match cleanup {
             Ok(()) => activation,
             Err(cleanup) => {
-                self.pending_cleanup_hosts
+                self.pending_cleanup_children
                     .lock()
                     .unwrap_or_else(|poison| poison.into_inner())
-                    .push(candidate);
+                    .push(child);
                 SupervisorError::CandidateCleanupFailed {
                     activation: Box::new(activation),
                     cleanup: Box::new(cleanup),
@@ -884,22 +920,21 @@ impl Supervisor {
 
     fn reconcile_pending_cleanup_hosts(&self) -> Result<(), SupervisorError> {
         let mut pending = self
-            .pending_cleanup_hosts
+            .pending_cleanup_children
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         let mut first_error = None;
-        let mut index = 0;
-        while index < pending.len() {
-            match terminate_host(&mut pending[index]) {
-                Ok(()) => {
-                    pending.swap_remove(index);
-                }
+        let mut still_pending = Vec::with_capacity(pending.len());
+        for mut child in pending.drain(..) {
+            match terminate_child(&mut child) {
+                Ok(()) => {}
                 Err(error) => {
                     first_error.get_or_insert(error);
-                    index += 1;
+                    still_pending.push(child);
                 }
             }
         }
+        *pending = still_pending;
         match first_error {
             Some(error) => Err(SupervisorError::PendingCandidateCleanupFailed(Box::new(
                 error,
@@ -918,14 +953,48 @@ impl Drop for Supervisor {
         if let Some(mut host) = running_host.take() {
             let _ = terminate_host(&mut host);
         }
-        let pending_cleanup_hosts = self
-            .pending_cleanup_hosts
+        let pending_cleanup_children = self
+            .pending_cleanup_children
             .get_mut()
             .unwrap_or_else(|poison| poison.into_inner());
-        for host in pending_cleanup_hosts {
-            let _ = terminate_host(host);
+        for child in pending_cleanup_children {
+            let _ = terminate_child(child);
         }
+        unregister_process_owner(&self.owner_root);
     }
+}
+
+fn process_owned_roots() -> &'static Mutex<HashSet<PathBuf>> {
+    static OWNED_ROOTS: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    OWNED_ROOTS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn register_process_owner(root: &Path) -> Result<(), SupervisorError> {
+    let mut owned = process_owned_roots()
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    if !owned.insert(root.to_owned()) {
+        return Err(SupervisorError::SupervisorAlreadyOwned);
+    }
+    Ok(())
+}
+
+fn unregister_process_owner(root: &Path) {
+    process_owned_roots()
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .remove(root);
+}
+
+fn open_and_lock_owner(root: &Path) -> Result<File, SupervisorError> {
+    let lock = File::options()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(root.join(OWNER_LOCK_FILE))?;
+    lock.lock()?;
+    Ok(lock)
 }
 
 #[derive(Debug)]
@@ -1254,7 +1323,11 @@ fn process_birth_identity(pid: u32) -> Result<ProcessBirthIdentity, SupervisorEr
 #[cfg(windows)]
 fn windows_process_observation(pid: u32) -> Result<(ProcessBirthIdentity, bool), SupervisorError> {
     unsafe {
-        let handle = open_process(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        let handle = open_process(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        );
         if handle.is_null() {
             return Err(SupervisorError::Io(io::Error::last_os_error()));
         }
@@ -1265,19 +1338,28 @@ fn windows_process_observation(pid: u32) -> Result<(ProcessBirthIdentity, bool),
         let times_read =
             get_process_times(handle, &mut creation, &mut exit, &mut kernel, &mut user);
         let times_error = (times_read == 0).then(io::Error::last_os_error);
-        let mut exit_code = 0_u32;
-        let exit_code_read = get_exit_code_process(handle, &mut exit_code);
-        let exit_code_error = (exit_code_read == 0).then(io::Error::last_os_error);
+        let wait_result = wait_for_single_object(handle, 0);
+        let wait_error = (wait_result == WINDOWS_WAIT_FAILED).then(io::Error::last_os_error);
         close_handle(handle);
-        if let Some(error) = times_error.or(exit_code_error) {
+        if let Some(error) = times_error.or(wait_error) {
             return Err(SupervisorError::Io(error));
         }
+        let is_live = match wait_result {
+            WINDOWS_WAIT_TIMEOUT => true,
+            WINDOWS_WAIT_OBJECT_0 => false,
+            value => {
+                return Err(SupervisorError::Io(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("WaitForSingleObject returned unexpected process state {value}"),
+                )));
+            }
+        };
         Ok((
             ProcessBirthIdentity::WindowsCreationTime {
                 filetime_100ns: u64::from(creation.dw_low_date_time)
                     | (u64::from(creation.dw_high_date_time) << 32),
             },
-            exit_code == WINDOWS_STILL_ACTIVE,
+            is_live,
         ))
     }
 }

@@ -76,13 +76,16 @@ fn main() {
         }
         "wrong-birth" => witness.birth_identity = changed_birth_identity(witness.birth_identity),
         "no-report" => loop_until_crash(crash_path.as_deref()),
-        "exit-after-report" => {}
+        "exit-after-report" | "exit-259-after-report" => {}
         value => panic!("unsupported synthetic Host mode: {value}"),
     }
 
     publish_health_witness(&health_endpoint, &witness);
-    if mode == "exit-after-report" {
+    if matches!(mode.as_str(), "exit-after-report" | "exit-259-after-report") {
         thread::sleep(Duration::from_millis(100));
+        if mode == "exit-259-after-report" {
+            std::process::exit(259);
+        }
         return;
     }
     loop_until_crash(crash_path.as_deref());

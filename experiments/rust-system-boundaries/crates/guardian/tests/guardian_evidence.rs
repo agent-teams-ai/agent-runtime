@@ -190,13 +190,19 @@ fn mismatched_birth_identity() -> serde_json::Value {
 
 #[cfg(windows)]
 fn process_is_dead(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, STILL_ACTIVE};
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, ERROR_INVALID_PARAMETER, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    };
     use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, WaitForSingleObject,
     };
 
     unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        let handle = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        );
         if handle.is_null() {
             let error = std::io::Error::last_os_error();
             if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
@@ -204,14 +210,17 @@ fn process_is_dead(pid: u32) -> bool {
             }
             panic!("cannot verify whether Windows process {pid} exited: {error}");
         }
-        let mut exit_code = 0;
-        let queried = GetExitCodeProcess(handle, &mut exit_code) != 0;
-        let error = (!queried).then(std::io::Error::last_os_error);
+        let wait_result = WaitForSingleObject(handle, 0);
+        let error = (wait_result == WAIT_FAILED).then(std::io::Error::last_os_error);
         CloseHandle(handle);
         if let Some(error) = error {
             panic!("cannot verify whether Windows process {pid} exited: {error}");
         }
-        exit_code != STILL_ACTIVE as u32
+        match wait_result {
+            WAIT_OBJECT_0 => true,
+            WAIT_TIMEOUT => false,
+            value => panic!("unexpected Windows process wait result: {value}"),
+        }
     }
 }
 

@@ -2396,13 +2396,17 @@ fn process_is_alive(pid: u32) -> bool {
 
 #[cfg(windows)]
 fn windows_process_is_alive(pid: u32) -> Result<bool, GuardianError> {
-    use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_FAILED};
     use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, WaitForSingleObject,
     };
 
     unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        let handle = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        );
         if handle.is_null() {
             let error = io::Error::last_os_error();
             if windows_open_process_error_means_gone(&error) {
@@ -2410,14 +2414,14 @@ fn windows_process_is_alive(pid: u32) -> Result<bool, GuardianError> {
             }
             return Err(GuardianError::Io(error));
         }
-        let mut exit_code = 0;
-        let queried_exit_code = if GetExitCodeProcess(handle, &mut exit_code) != 0 {
-            Ok(exit_code)
+        let wait_result = WaitForSingleObject(handle, 0);
+        let queried_state = if wait_result != WAIT_FAILED {
+            Ok(wait_result)
         } else {
             Err(io::Error::last_os_error())
         };
         CloseHandle(handle);
-        windows_exit_code_means_active(queried_exit_code, STILL_ACTIVE as u32)
+        windows_wait_state_means_active(queried_state)
     }
 }
 
@@ -2429,13 +2433,19 @@ fn windows_open_process_error_means_gone(error: &io::Error) -> bool {
 }
 
 #[cfg(windows)]
-fn windows_exit_code_means_active(
-    exit_code: Result<u32, io::Error>,
-    still_active: u32,
+fn windows_wait_state_means_active(
+    wait_state: Result<u32, io::Error>,
 ) -> Result<bool, GuardianError> {
-    exit_code
-        .map(|exit_code| exit_code == still_active)
-        .map_err(GuardianError::Io)
+    use windows_sys::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
+
+    match wait_state.map_err(GuardianError::Io)? {
+        WAIT_TIMEOUT => Ok(true),
+        WAIT_OBJECT_0 => Ok(false),
+        value => Err(GuardianError::Io(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("WaitForSingleObject returned unexpected process state {value}"),
+        ))),
+    }
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -2574,9 +2584,13 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_process_query_errors_are_not_treated_as_process_exit() {
-        use windows_sys::Win32::Foundation::{
-            ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER, STILL_ACTIVE,
-        };
+        use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER};
+        use windows_sys::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
+
+        assert!(windows_wait_state_means_active(Ok(WAIT_TIMEOUT)).expect("timeout means live"));
+        assert!(
+            !windows_wait_state_means_active(Ok(WAIT_OBJECT_0)).expect("signaled means exited")
+        );
 
         let access_denied = io::Error::from_raw_os_error(ERROR_ACCESS_DENIED as i32);
         assert!(
@@ -2584,8 +2598,8 @@ mod tests {
             "ACCESS_DENIED must remain an unverified process-query outcome"
         );
         assert!(
-            windows_exit_code_means_active(Err(access_denied), STILL_ACTIVE as u32).is_err(),
-            "GetExitCodeProcess failures must remain unverified"
+            windows_wait_state_means_active(Err(access_denied)).is_err(),
+            "WaitForSingleObject failures must remain unverified"
         );
         let missing_process = io::Error::from_raw_os_error(ERROR_INVALID_PARAMETER as i32);
         assert!(
