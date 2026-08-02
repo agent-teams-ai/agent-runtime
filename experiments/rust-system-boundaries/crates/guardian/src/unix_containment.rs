@@ -174,6 +174,18 @@ pub struct LinuxWorkloadIdentity {
 #[cfg(target_os = "linux")]
 impl LinuxWorkloadIdentity {
     pub fn new(uid: u32, gid: u32) -> io::Result<Self> {
+        if uid == libc::uid_t::MAX {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "workload UID cannot use the setresuid unchanged-credential sentinel",
+            ));
+        }
+        if gid == libc::gid_t::MAX {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "workload GID cannot use the setresgid unchanged-credential sentinel",
+            ));
+        }
         let uid = libc::uid_t::try_from(uid).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,

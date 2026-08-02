@@ -555,6 +555,19 @@ fn linux_pidfd_closes_the_identity_check_to_signal_race_but_not_tree_containment
 
 #[cfg(target_os = "linux")]
 #[test]
+fn linux_workload_identity_rejects_unchanged_credential_sentinels() {
+    assert!(LinuxWorkloadIdentity::new(libc::uid_t::MAX, 1000).is_err());
+    assert!(LinuxWorkloadIdentity::new(1000, libc::gid_t::MAX).is_err());
+    assert_eq!(
+        LinuxWorkloadIdentity::new(1000, 1000)
+            .expect("ordinary non-sentinel workload identity is valid")
+            .uid(),
+        1000
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn linux_cgroup_v2_gate_fails_closed_without_a_host_owned_delegated_leaf() {
     // Keep the destructive cgroup.kill path compiled without ever applying it
     // to the host's shared cgroup hierarchy during a test.
