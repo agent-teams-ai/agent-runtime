@@ -279,9 +279,16 @@ pub enum FaultBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandidateCleanupFault {
+    Kill,
+    Wait,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EnsureOptions {
     pub fault_point: Option<FaultPoint>,
     pub fault_behavior: FaultBehavior,
+    pub candidate_cleanup_fault: Option<CandidateCleanupFault>,
 }
 
 impl Default for EnsureOptions {
@@ -289,6 +296,7 @@ impl Default for EnsureOptions {
         Self {
             fault_point: None,
             fault_behavior: FaultBehavior::ReturnError,
+            candidate_cleanup_fault: None,
         }
     }
 }
@@ -330,6 +338,8 @@ pub enum SupervisorError {
         activation: Box<SupervisorError>,
         cleanup: Box<SupervisorError>,
     },
+    PendingCandidateCleanupFailed(Box<SupervisorError>),
+    InjectedCandidateCleanupFailure(CandidateCleanupFault),
     FaultInjected(FaultPoint),
     CorruptTransaction,
 }
@@ -403,6 +413,16 @@ impl std::fmt::Display for SupervisorError {
                 formatter,
                 "activation failed ({activation}) and candidate Host cleanup also failed ({cleanup})"
             ),
+            Self::PendingCandidateCleanupFailed(cleanup) => write!(
+                formatter,
+                "a previously failed candidate Host cleanup is still pending: {cleanup}"
+            ),
+            Self::InjectedCandidateCleanupFailure(point) => {
+                write!(
+                    formatter,
+                    "candidate Host cleanup fault injected at {point:?}"
+                )
+            }
             Self::FaultInjected(point) => write!(formatter, "fault injected at {point:?}"),
             Self::CorruptTransaction => write!(formatter, "activation transaction is corrupt"),
         }
@@ -442,6 +462,7 @@ struct RunningHost {
 pub struct Supervisor {
     root: PathBuf,
     running_host: Mutex<Option<RunningHost>>,
+    pending_cleanup_hosts: Mutex<Vec<RunningHost>>,
 }
 
 impl Supervisor {
@@ -451,6 +472,7 @@ impl Supervisor {
         Ok(Self {
             root,
             running_host: Mutex::new(None),
+            pending_cleanup_hosts: Mutex::new(Vec::new()),
         })
     }
 
@@ -463,6 +485,7 @@ impl Supervisor {
     ) -> Result<ActiveGeneration, SupervisorError> {
         let lock = self.acquire_lock()?;
         self.recover_locked()?;
+        self.reconcile_pending_cleanup_hosts()?;
         let verified = verify_release(release_root, trust_anchor)?;
         let candidate = ActiveGeneration {
             generation_id: format!(
@@ -496,34 +519,34 @@ impl Supervisor {
 
         let candidate_host = self.spawn_and_verify_host(&candidate, host_launch)?;
         if let Err(error) = self.inject_fault(options, FaultPoint::BeforePreviousHostTermination) {
-            return Err(cleanup_candidate_after_error(candidate_host, error));
+            return Err(self.cleanup_candidate_after_error(candidate_host, error, options));
         }
 
         if let Some(previous_host) = running_host.as_mut()
             && let Err(error) = terminate_host(previous_host)
         {
-            return Err(cleanup_candidate_after_error(candidate_host, error));
+            return Err(self.cleanup_candidate_after_error(candidate_host, error, options));
         }
         running_host.take();
 
         if let Err(error) = self.write_active(&candidate) {
-            return Err(cleanup_candidate_after_error(candidate_host, error));
+            return Err(self.cleanup_candidate_after_error(candidate_host, error, options));
         }
         if let Err(error) = self.inject_fault(
             options,
             FaultPoint::AfterActivePointerWriteBeforePhaseUpdate,
         ) {
-            return Err(cleanup_candidate_after_error(candidate_host, error));
+            return Err(self.cleanup_candidate_after_error(candidate_host, error, options));
         }
         transaction.phase = ActivationPhase::ActivePointerWritten;
         if let Err(error) = self.write_transaction(&transaction) {
-            return Err(cleanup_candidate_after_error(candidate_host, error));
+            return Err(self.cleanup_candidate_after_error(candidate_host, error, options));
         }
         if let Err(error) = self.inject_fault(options, FaultPoint::AfterPhaseUpdateBeforeCommit) {
-            return Err(cleanup_candidate_after_error(candidate_host, error));
+            return Err(self.cleanup_candidate_after_error(candidate_host, error, options));
         }
         if let Err(error) = self.remove_transaction() {
-            return Err(cleanup_candidate_after_error(candidate_host, error));
+            return Err(self.cleanup_candidate_after_error(candidate_host, error, options));
         }
 
         running_host.replace(candidate_host);
@@ -540,6 +563,7 @@ impl Supervisor {
     ) -> Result<HostObservation, SupervisorError> {
         let lock = self.acquire_lock()?;
         self.recover_locked()?;
+        self.reconcile_pending_cleanup_hosts()?;
         let active = self
             .inspect_active_locked()?
             .ok_or(SupervisorError::StagedGenerationMismatch)?;
@@ -580,6 +604,15 @@ impl Supervisor {
         observation: &HostObservation,
     ) -> Result<bool, SupervisorError> {
         process_observation_is_live(observation)
+    }
+
+    /// Diagnostic evidence only. A non-zero value blocks every operation that
+    /// could launch another Host until exact-handle cleanup succeeds.
+    pub fn pending_cleanup_count(&self) -> usize {
+        self.pending_cleanup_hosts
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .len()
     }
 
     pub fn recover(&self) -> Result<(), SupervisorError> {
@@ -810,15 +843,87 @@ impl Supervisor {
         }
         Ok(())
     }
+
+    fn cleanup_candidate_after_error(
+        &self,
+        mut candidate: RunningHost,
+        activation: SupervisorError,
+        options: EnsureOptions,
+    ) -> SupervisorError {
+        let cleanup = match options.candidate_cleanup_fault {
+            Some(CandidateCleanupFault::Kill) => Err(
+                SupervisorError::InjectedCandidateCleanupFailure(CandidateCleanupFault::Kill),
+            ),
+            Some(CandidateCleanupFault::Wait) => {
+                let kill_result = match candidate.child.try_wait() {
+                    Ok(Some(_)) => Ok(()),
+                    Ok(None) => candidate.child.kill().map_err(SupervisorError::Io),
+                    Err(error) => Err(SupervisorError::Io(error)),
+                };
+                kill_result.and(Err(SupervisorError::InjectedCandidateCleanupFailure(
+                    CandidateCleanupFault::Wait,
+                )))
+            }
+            None => terminate_host(&mut candidate),
+        };
+
+        match cleanup {
+            Ok(()) => activation,
+            Err(cleanup) => {
+                self.pending_cleanup_hosts
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner())
+                    .push(candidate);
+                SupervisorError::CandidateCleanupFailed {
+                    activation: Box::new(activation),
+                    cleanup: Box::new(cleanup),
+                }
+            }
+        }
+    }
+
+    fn reconcile_pending_cleanup_hosts(&self) -> Result<(), SupervisorError> {
+        let mut pending = self
+            .pending_cleanup_hosts
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let mut first_error = None;
+        let mut index = 0;
+        while index < pending.len() {
+            match terminate_host(&mut pending[index]) {
+                Ok(()) => {
+                    pending.swap_remove(index);
+                }
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                    index += 1;
+                }
+            }
+        }
+        match first_error {
+            Some(error) => Err(SupervisorError::PendingCandidateCleanupFailed(Box::new(
+                error,
+            ))),
+            None => Ok(()),
+        }
+    }
 }
 
 impl Drop for Supervisor {
     fn drop(&mut self) {
-        let Ok(running_host) = self.running_host.get_mut() else {
-            return;
-        };
+        let running_host = self
+            .running_host
+            .get_mut()
+            .unwrap_or_else(|poison| poison.into_inner());
         if let Some(mut host) = running_host.take() {
             let _ = terminate_host(&mut host);
+        }
+        let pending_cleanup_hosts = self
+            .pending_cleanup_hosts
+            .get_mut()
+            .unwrap_or_else(|poison| poison.into_inner());
+        for host in pending_cleanup_hosts {
+            let _ = terminate_host(host);
         }
     }
 }
@@ -1009,19 +1114,6 @@ fn host_is_live(host: &mut RunningHost) -> Result<bool, SupervisorError> {
 
 fn terminate_host(host: &mut RunningHost) -> Result<(), SupervisorError> {
     terminate_child(&mut host.child)
-}
-
-fn cleanup_candidate_after_error(
-    mut candidate: RunningHost,
-    activation: SupervisorError,
-) -> SupervisorError {
-    match terminate_host(&mut candidate) {
-        Ok(()) => activation,
-        Err(cleanup) => SupervisorError::CandidateCleanupFailed {
-            activation: Box::new(activation),
-            cleanup: Box::new(cleanup),
-        },
-    }
 }
 
 fn terminate_child(child: &mut Child) -> Result<(), SupervisorError> {

@@ -66,6 +66,7 @@ fn main() {
                 } else {
                     FaultBehavior::ReturnError
                 },
+                candidate_cleanup_fault: None,
             },
         )
     });

@@ -1,6 +1,7 @@
 use boundary_supervisor::{
-    EnsureOptions, FaultPoint, HealthWitness, HealthWitnessRejection, HostLaunch, HostObservation,
-    Supervisor, SupervisorError, TrustAnchor, write_fixture_release_with_artifact,
+    CandidateCleanupFault, EnsureOptions, FaultPoint, HealthWitness, HealthWitnessRejection,
+    HostLaunch, HostObservation, Supervisor, SupervisorError, TrustAnchor,
+    write_fixture_release_with_artifact,
 };
 use ed25519_dalek::SigningKey;
 use std::fs;
@@ -376,4 +377,93 @@ fn activation_failure_after_old_host_stops_leaves_no_candidate_and_recovers_old_
         .ensure_active_host(&HostLaunch::default())
         .expect("previous generation restarts after rollback");
     assert_eq!(recovered.generation_id, initial_host.generation_id);
+}
+
+#[test]
+fn failed_candidate_kill_or_wait_retains_custody_until_reconciliation() {
+    let temp = TempDir::new().expect("temporary root");
+    let supervisor_root = temp.path().join("supervisor");
+    let initial_release = temp.path().join("initial");
+    let update_release = temp.path().join("update");
+    let boot_log = temp.path().join("cleanup-candidates.log");
+    let key = fixture_key();
+    let anchor = TrustAnchor::from_signing_key(&key);
+    release(&initial_release, "1.0.0", &key);
+    release(&update_release, "2.0.0", &key);
+
+    let supervisor = Supervisor::open(&supervisor_root).expect("supervisor opens");
+    supervisor
+        .ensure(
+            &initial_release,
+            &anchor,
+            &HostLaunch::default(),
+            EnsureOptions::default(),
+        )
+        .expect("initial generation activates");
+    let initial_host = supervisor
+        .inspect_active_host()
+        .expect("initial Host inspection succeeds")
+        .expect("initial Host is live");
+
+    for cleanup_fault in [CandidateCleanupFault::Kill, CandidateCleanupFault::Wait] {
+        let result = supervisor.ensure(
+            &update_release,
+            &anchor,
+            &HostLaunch::with_extra_args([
+                "--boot-log-path",
+                boot_log.to_str().expect("UTF-8 boot log path"),
+            ]),
+            EnsureOptions {
+                fault_point: Some(FaultPoint::BeforePreviousHostTermination),
+                candidate_cleanup_fault: Some(cleanup_fault),
+                ..EnsureOptions::default()
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(SupervisorError::CandidateCleanupFailed { .. })
+        ));
+        assert_eq!(
+            supervisor.pending_cleanup_count(),
+            1,
+            "failed {cleanup_fault:?} must retain the exact Child handle"
+        );
+
+        let candidate_witness = serde_json::from_str::<HealthWitness>(
+            fs::read_to_string(&boot_log)
+                .expect("candidate boot log reads")
+                .lines()
+                .last()
+                .expect("candidate boot record exists"),
+        )
+        .expect("candidate boot record parses");
+        let candidate_observation = HostObservation {
+            generation_id: candidate_witness.generation_id,
+            generation_digest: candidate_witness.generation_digest,
+            pid: candidate_witness.pid,
+            birth_identity: candidate_witness.birth_identity,
+        };
+
+        supervisor
+            .ensure(
+                &initial_release,
+                &anchor,
+                &HostLaunch::default(),
+                EnsureOptions::default(),
+            )
+            .expect("next activation attempt reconciles pending cleanup first");
+        assert_eq!(supervisor.pending_cleanup_count(), 0);
+        wait_until(WITNESS_TIMEOUT, || {
+            !supervisor
+                .observation_is_live(&candidate_observation)
+                .expect("candidate identity inspection succeeds")
+        });
+        assert_eq!(
+            supervisor
+                .inspect_active_host()
+                .expect("active Host inspection succeeds")
+                .expect("previous Host remains live"),
+            initial_host
+        );
+    }
 }
