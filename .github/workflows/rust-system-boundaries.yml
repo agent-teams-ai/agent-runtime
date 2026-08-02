@@ -112,10 +112,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          workload_uid="$(id -u)"
+          workload_gid="$(id -g)"
+          [[ "$workload_uid" =~ ^[1-9][0-9]*$ ]]
+          [[ "$workload_gid" =~ ^[1-9][0-9]*$ ]]
           test "$(stat --file-system --format=%T /sys/fs/cgroup)" = 'cgroup2fs'
           root="/sys/fs/cgroup/agent-runtime-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          sudo mkdir --mode=0700 "$root"
+          sudo install --directory --owner=root --group=root --mode=0700 "$root"
           printf 'root=%s\n' "$root" >> "$GITHUB_OUTPUT"
+          printf 'workload_uid=%s\n' "$workload_uid" >> "$GITHUB_OUTPUT"
+          printf 'workload_gid=%s\n' "$workload_gid" >> "$GITHUB_OUTPUT"
+          test "$(sudo stat --format='%u:%g:%a' "$root")" = '0:0:700'
           sudo test -f "$root/cgroup.procs"
           sudo test -w "$root/cgroup.procs"
           sudo test -f "$root/cgroup.kill"
@@ -130,6 +137,8 @@ jobs:
         shell: bash
         env:
           AGENT_RUNTIME_CGROUP_V2_E2E_ROOT: ${{ steps.linux_cgroup.outputs.root }}
+          AGENT_RUNTIME_CGROUP_V2_E2E_WORKLOAD_UID: ${{ steps.linux_cgroup.outputs.workload_uid }}
+          AGENT_RUNTIME_CGROUP_V2_E2E_WORKLOAD_GID: ${{ steps.linux_cgroup.outputs.workload_gid }}
         run: |
           set -euo pipefail
 
@@ -139,8 +148,10 @@ jobs:
             "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}" \
             "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" \
             "AGENT_RUNTIME_CGROUP_V2_E2E_ROOT=$AGENT_RUNTIME_CGROUP_V2_E2E_ROOT" \
+            "AGENT_RUNTIME_CGROUP_V2_E2E_WORKLOAD_UID=$AGENT_RUNTIME_CGROUP_V2_E2E_WORKLOAD_UID" \
+            "AGENT_RUNTIME_CGROUP_V2_E2E_WORKLOAD_GID=$AGENT_RUNTIME_CGROUP_V2_E2E_WORKLOAD_GID" \
             cargo test --locked --test unix_containment_evidence \
-              linux_cgroup_v2_e2e_proves_atomic_placement_tree_kill_and_orphan_scan \
+              linux_cgroup_v2_e2e_proves_atomic_placement_privilege_drop_tree_kill_and_orphan_scan \
               -- --ignored --exact
 
       - name: Clean up Linux cgroup v2 evidence root
@@ -160,9 +171,25 @@ jobs:
               exit 1
               ;;
           esac
+          [[ "$root" =~ ^/sys/fs/cgroup/agent-runtime-e2e-[0-9]+-[0-9]+$ ]]
           if ! sudo test -d "$root"; then
             exit 0
           fi
+          test "$(sudo stat --format='%u:%g:%a' "$root")" = '0:0:700'
+
+          # Kill through the trusted, fresh root first. This covers every
+          # descendant even when the Rust assertion failed before its local
+          # RAII cleanup ran. The fixed namespace and ownership checks above
+          # make this safe against a broadened cleanup target.
+          sudo sh -c 'printf "1\\n" > "$1/cgroup.kill"' cleanup-cgroup-root "$root"
+          for _ in $(seq 1 100); do
+            if [ "$(sudo awk '$1 == "populated" { print $2 }' "$root/cgroup.events")" = '0' ]; then
+              break
+            fi
+            sleep 0.05
+          done
+          test "$(sudo awk '$1 == "populated" { print $2 }' "$root/cgroup.events")" = '0'
+          test -z "$(sudo cat "$root/cgroup.procs")"
 
           while IFS= read -r -d '' leaf; do
             leaf_name="${leaf##*/}"
@@ -173,6 +200,7 @@ jobs:
                 exit 1
                 ;;
             esac
+            [[ "$leaf" =~ ^/sys/fs/cgroup/agent-runtime-e2e-[0-9]+-[0-9]+/guardian-e2e-[0-9]+-[0-9]+$ ]]
             sudo sh -c 'printf "1\\n" > "$1/cgroup.kill"' cleanup-cgroup-leaf "$leaf"
             for _ in $(seq 1 100); do
               if [ "$(sudo awk '$1 == "populated" { print $2 }' "$leaf/cgroup.events")" = '0' ]; then

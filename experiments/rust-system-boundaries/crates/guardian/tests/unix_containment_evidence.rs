@@ -12,10 +12,15 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use unix_containment::{is_process_alive, process_group_id, session_id, signal_process_group};
 
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(target_os = "macos")]
 use unix_containment::UnixContainmentGate;
 #[cfg(target_os = "linux")]
-use unix_containment::{LinuxCgroupV2Blocker, LinuxCgroupV2Tree, LinuxPidFd, UnixContainmentGate};
+use unix_containment::{
+    LinuxCgroupV2Blocker, LinuxCgroupV2Child, LinuxCgroupV2Tree, LinuxPidFd, LinuxWorkloadIdentity,
+    UnixContainmentGate,
+};
 
 fn escape_fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_fixture-setsid-escape"))
@@ -66,6 +71,9 @@ impl IsolatedCgroupLeaf {
             std::process::id()
         ));
         fs::create_dir(&path).expect("Host creates a fresh dedicated cgroup leaf");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
+            .expect("Host makes the dedicated leaf private before it launches a workload");
+        assert_root_owned_private_cgroup_directory(&path, "dedicated cgroup leaf");
         let tree = match LinuxCgroupV2Tree::open_new_host_owned_leaf(&path) {
             Ok(tree) => tree,
             Err(error) => {
@@ -102,6 +110,87 @@ impl IsolatedCgroupLeaf {
 }
 
 #[cfg(target_os = "linux")]
+struct CgroupWorkload {
+    leaf: IsolatedCgroupLeaf,
+    root: Option<LinuxCgroupV2Child>,
+}
+
+#[cfg(target_os = "linux")]
+impl CgroupWorkload {
+    fn spawn(
+        fixture: &Path,
+        arguments: &[&std::ffi::OsStr],
+        identity: LinuxWorkloadIdentity,
+    ) -> Self {
+        let leaf = IsolatedCgroupLeaf::create();
+        let root = leaf
+            .tree()
+            .spawn_exec_atomically_as_workload(fixture, arguments, identity)
+            .expect(
+                "trusted clone3 launcher must place the workload before dropping credentials and exec",
+            );
+        Self {
+            leaf,
+            root: Some(root),
+        }
+    }
+
+    fn tree(&self) -> &LinuxCgroupV2Tree {
+        self.leaf.tree()
+    }
+
+    fn leaf_path(&self) -> &Path {
+        &self.leaf.path
+    }
+
+    fn root_process_id(&self) -> u32 {
+        self.root
+            .as_ref()
+            .expect("workload root remains under test custody")
+            .process_id()
+    }
+
+    fn kill_and_reap(&mut self) -> std::io::Result<()> {
+        self.tree().kill_tree()?;
+        let Some(root) = self.root.as_mut() else {
+            return Ok(());
+        };
+        if !root.wait_for_exit(Duration::from_secs(5))? {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "cgroup.kill did not allow the direct workload child to be reaped",
+            ));
+        }
+        self.root = None;
+        Ok(())
+    }
+
+    fn remove_empty(&mut self) {
+        assert!(
+            self.root.is_none(),
+            "the direct workload child must be explicitly reaped before leaf removal"
+        );
+        self.leaf.remove_empty();
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for CgroupWorkload {
+    fn drop(&mut self) {
+        if self.root.is_none() {
+            return;
+        }
+        // A failed assertion must not leave an escaped fixture behind. The
+        // cgroup descriptor selects the exact fresh leaf; the direct child is
+        // then reaped before `IsolatedCgroupLeaf` performs its final scan.
+        let _ = self.leaf.tree().kill_tree();
+        if let Some(root) = self.root.as_mut() {
+            let _ = root.wait_for_exit(Duration::from_secs(5));
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
 impl Drop for IsolatedCgroupLeaf {
     fn drop(&mut self) {
         let Some(tree) = self.tree.take() else {
@@ -122,10 +211,21 @@ fn isolated_cgroup_test_root() -> PathBuf {
     let root = std::env::var_os("AGENT_RUNTIME_CGROUP_V2_E2E_ROOT")
         .map(PathBuf::from)
         .expect("ignored cgroup v2 evidence requires AGENT_RUNTIME_CGROUP_V2_E2E_ROOT");
+    assert!(root.is_absolute(), "E2E root must be an absolute path");
+    let supplied_metadata = fs::symlink_metadata(&root)
+        .expect("explicit E2E root must already exist and must not be a symlink");
+    assert!(
+        supplied_metadata.file_type().is_dir() && !supplied_metadata.file_type().is_symlink(),
+        "E2E root must be a direct directory, never a symlink"
+    );
     let canonical_cgroup_root = fs::canonicalize("/sys/fs/cgroup")
         .expect("Linux cgroup v2 mount must be available for this explicit E2E");
     let canonical_root = fs::canonicalize(&root)
         .expect("explicit E2E root must already exist and must not be a symlink");
+    assert_eq!(
+        root, canonical_root,
+        "E2E root must be canonical so the Host and workload name the same cgroup namespace object"
+    );
     assert_eq!(
         canonical_root.parent(),
         Some(canonical_cgroup_root.as_path()),
@@ -135,10 +235,8 @@ fn isolated_cgroup_test_root() -> PathBuf {
         .file_name()
         .and_then(std::ffi::OsStr::to_str)
         .expect("E2E root name is valid UTF-8");
-    assert!(
-        root_name.starts_with("agent-runtime-e2e-"),
-        "E2E root must use the dedicated agent-runtime-e2e-* namespace"
-    );
+    assert_valid_e2e_root_name(root_name);
+    assert_root_owned_private_cgroup_directory(&canonical_root, "E2E root");
     assert!(
         fs::read_dir(&canonical_root)
             .expect("E2E root directory reads")
@@ -160,6 +258,122 @@ fn isolated_cgroup_test_root() -> PathBuf {
     );
     drop(root_tree);
     canonical_root
+}
+
+#[cfg(target_os = "linux")]
+fn assert_valid_e2e_root_name(root_name: &str) {
+    let Some(suffix) = root_name.strip_prefix("agent-runtime-e2e-") else {
+        panic!("E2E root must use the dedicated agent-runtime-e2e-<run>-<attempt> namespace");
+    };
+    let mut parts = suffix.split('-');
+    let Some(run_id) = parts.next() else {
+        panic!("E2E root must contain a numeric workflow run ID");
+    };
+    let Some(attempt) = parts.next() else {
+        panic!("E2E root must contain a numeric workflow attempt");
+    };
+    assert!(
+        parts.next().is_none()
+            && !run_id.is_empty()
+            && !attempt.is_empty()
+            && run_id.bytes().all(|byte| byte.is_ascii_digit())
+            && attempt.bytes().all(|byte| byte.is_ascii_digit()),
+        "E2E root must use exactly agent-runtime-e2e-<numeric-run>-<numeric-attempt>"
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn assert_root_owned_private_cgroup_directory(path: &Path, description: &str) {
+    let metadata = fs::symlink_metadata(path).expect("cgroup directory metadata reads");
+    assert!(
+        metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
+        "{description} must be a direct directory, never a symlink"
+    );
+    assert_eq!(metadata.uid(), 0, "{description} must be owned by root");
+    assert_eq!(
+        metadata.gid(),
+        0,
+        "{description} must have root group ownership"
+    );
+    assert_eq!(
+        metadata.mode() & 0o077,
+        0,
+        "{description} must not grant group or world access"
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn workload_identity() -> LinuxWorkloadIdentity {
+    // The CI step intentionally runs the trusted launcher as root. The target
+    // identity is captured before sudo, so it proves the fixture did not keep
+    // the launcher's user, group, or supplementary authority.
+    assert_eq!(
+        unsafe { libc::getuid() },
+        0,
+        "trusted launcher must run as root"
+    );
+    assert_eq!(
+        unsafe { libc::geteuid() },
+        0,
+        "trusted launcher must be effective root"
+    );
+    let uid = required_u32_environment("AGENT_RUNTIME_CGROUP_V2_E2E_WORKLOAD_UID");
+    let gid = required_u32_environment("AGENT_RUNTIME_CGROUP_V2_E2E_WORKLOAD_GID");
+    assert_ne!(
+        uid, 0,
+        "workload UID must prove the fixture lost root authority"
+    );
+    assert_ne!(
+        gid, 0,
+        "workload GID must prove the fixture lost root authority"
+    );
+    LinuxWorkloadIdentity::new(uid, gid).expect("workflow UID and GID fit Linux credential types")
+}
+
+#[cfg(target_os = "linux")]
+fn required_u32_environment(name: &str) -> u32 {
+    std::env::var(name)
+        .unwrap_or_else(|_| panic!("ignored cgroup evidence requires {name}"))
+        .parse::<u32>()
+        .unwrap_or_else(|_| panic!("{name} must be a decimal UID or GID"))
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_workload_observation_root(identity: LinuxWorkloadIdentity) -> TempDir {
+    let observation_root = TempDir::new().expect("temporary fixture observation root");
+    let path = observation_root.path();
+    let c_path = std::ffi::CString::new(path.as_os_str().as_encoded_bytes())
+        .expect("temporary fixture observation path contains no NUL");
+    // SAFETY: the test owns this empty temporary directory and root is the
+    // trusted launcher. The fixture needs one private, non-cgroup directory
+    // where it can publish synthetic evidence after credentials are dropped.
+    assert_eq!(
+        unsafe { libc::chown(c_path.as_ptr(), identity.uid(), identity.gid()) },
+        0,
+        "fixture observation directory ownership changes"
+    );
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+        .expect("fixture observation directory becomes private to the workload");
+    let metadata = fs::metadata(path).expect("fixture observation metadata reads");
+    assert_eq!(metadata.uid(), identity.uid());
+    assert_eq!(metadata.gid(), identity.gid());
+    assert_eq!(metadata.mode() & 0o777, 0o700);
+    observation_root
+}
+
+#[cfg(target_os = "linux")]
+fn namespace_identifier(namespace: &str) -> u32 {
+    let target =
+        fs::read_link(format!("/proc/self/ns/{namespace}")).expect("Linux namespace link reads");
+    let target = target.to_str().expect("Linux namespace link is UTF-8");
+    let expected_prefix = format!("{namespace}:[");
+    let value = target
+        .strip_prefix(&expected_prefix)
+        .and_then(|value| value.strip_suffix(']'))
+        .expect("Linux namespace link has expected name and inode format");
+    value
+        .parse::<u32>()
+        .expect("Linux namespace inode fits the evidence format")
 }
 
 #[cfg(target_os = "linux")]
@@ -366,14 +580,26 @@ fn linux_cgroup_v2_gate_fails_closed_without_a_host_owned_delegated_leaf() {
 #[cfg(target_os = "linux")]
 #[test]
 #[ignore = "requires an explicit, isolated cgroup v2 test root"]
-fn linux_cgroup_v2_e2e_proves_atomic_placement_tree_kill_and_orphan_scan() {
-    let mut leaf = IsolatedCgroupLeaf::create();
+fn linux_cgroup_v2_e2e_proves_atomic_placement_privilege_drop_tree_kill_and_orphan_scan() {
+    let identity = workload_identity();
     // A cgroup filesystem accepts only its kernel control files, so fixture
     // observation and stop paths must remain outside the dedicated leaf.
-    let observation_root = TempDir::new().expect("temporary fixture observation root");
+    let observation_root = prepare_workload_observation_root(identity);
     let ready_path = observation_root.path().join("fixture.ready");
     let stop_path = observation_root.path().join("fixture.stop");
     let fixture = escape_fixture();
+    let root = isolated_cgroup_test_root();
+    let parent_cgroup_procs_path = root.join("cgroup.procs");
+    assert_eq!(
+        fs::canonicalize(
+            parent_cgroup_procs_path
+                .parent()
+                .expect("parent cgroup path")
+        )
+        .expect("parent cgroup path canonicalizes"),
+        root,
+        "the fixture receives only the validated parent cgroup namespace path"
+    );
     let arguments = [
         std::ffi::OsString::from("--mode"),
         std::ffi::OsString::from("cgroup-root"),
@@ -381,15 +607,14 @@ fn linux_cgroup_v2_e2e_proves_atomic_placement_tree_kill_and_orphan_scan() {
         ready_path.clone().into_os_string(),
         std::ffi::OsString::from("--stop-path"),
         stop_path.into_os_string(),
+        std::ffi::OsString::from("--parent-cgroup-procs-path"),
+        parent_cgroup_procs_path.into_os_string(),
     ];
     let argument_refs = arguments
         .iter()
         .map(std::ffi::OsString::as_os_str)
         .collect::<Vec<_>>();
-    let mut root = leaf
-        .tree()
-        .spawn_exec_atomically(&fixture, &argument_refs)
-        .expect("clone3 must place the synthetic root in the cgroup before exec");
+    let mut workload = CgroupWorkload::spawn(&fixture, &argument_refs, identity);
 
     wait_until(Duration::from_secs(5), || ready_path.exists());
     let status = read_status(&ready_path);
@@ -397,27 +622,53 @@ fn linux_cgroup_v2_e2e_proves_atomic_placement_tree_kill_and_orphan_scan() {
     let descendant_pid = *status
         .get("descendant_pid")
         .expect("setsid descendant PID is published");
-    assert_eq!(root.process_id(), root_pid);
+    assert_eq!(workload.root_process_id(), root_pid);
     assert_eq!(status.get("root_pgid"), Some(&root_pid));
     assert_eq!(status.get("root_sid"), Some(&root_pid));
     assert_eq!(status.get("descendant_pgid"), Some(&descendant_pid));
     assert_eq!(status.get("descendant_sid"), Some(&descendant_pid));
+    assert_eq!(status.get("root_uid"), Some(&identity.uid()));
+    assert_eq!(status.get("root_euid"), Some(&identity.uid()));
+    assert_eq!(status.get("root_gid"), Some(&identity.gid()));
+    assert_eq!(status.get("root_egid"), Some(&identity.gid()));
+    assert_eq!(
+        status.get("root_supplementary_group_count"),
+        Some(&0),
+        "the trusted launcher must clear supplementary groups before exec"
+    );
+    assert_eq!(
+        status.get("cgroup_namespace_inode"),
+        Some(&namespace_identifier("cgroup")),
+        "the workload must observe the Host's cgroup namespace"
+    );
+    assert_eq!(
+        status.get("mount_namespace_inode"),
+        Some(&namespace_identifier("mnt")),
+        "the workload must observe the Host's cgroup mount namespace"
+    );
+    assert!(
+        matches!(
+            status.get("parent_cgroup_write_errno"),
+            Some(error) if *error == libc::EACCES as u32 || *error == libc::EPERM as u32
+        ),
+        "the unprivileged workload must actively receive permission denied when it tries to move itself into the parent cgroup"
+    );
 
-    let mut members = leaf
+    let mut members = workload
         .tree()
         .member_process_ids()
         .expect("cgroup member scan succeeds");
     members.sort_unstable();
     assert_eq!(members, vec![root_pid, descendant_pid]);
 
-    let cgroup_root_name = leaf
-        .path
+    let cgroup_root_name = workload
+        .leaf_path()
         .parent()
         .and_then(Path::file_name)
         .and_then(std::ffi::OsStr::to_str)
         .expect("dedicated root name is available");
-    let leaf_name = leaf
-        .path
+    let leaf_name = workload
+        .leaf_path()
         .file_name()
         .and_then(std::ffi::OsStr::to_str)
         .expect("dedicated leaf name is available");
@@ -425,29 +676,26 @@ fn linux_cgroup_v2_e2e_proves_atomic_placement_tree_kill_and_orphan_scan() {
     assert_eq!(unified_cgroup_path(root_pid), expected_membership);
     assert_eq!(unified_cgroup_path(descendant_pid), expected_membership);
 
-    leaf.tree()
-        .kill_tree()
-        .expect("cgroup.kill terminates the dedicated tree");
+    workload
+        .kill_and_reap()
+        .expect("cgroup.kill terminates and reaps the direct tree root");
     assert!(
-        root.wait_for_exit(Duration::from_secs(5))
-            .expect("direct child wait succeeds"),
-        "the direct child must be reaped after cgroup.kill"
-    );
-    assert!(
-        leaf.tree()
+        workload
+            .tree()
             .wait_until_empty(Duration::from_secs(5))
             .expect("post-kill cgroup scan succeeds"),
         "cgroup.events and cgroup.procs must both become empty"
     );
     assert!(
-        leaf.tree()
+        workload
+            .tree()
             .member_process_ids()
             .expect("final orphan scan succeeds")
             .is_empty(),
         "a setsid descendant must not survive as an orphan in the cgroup"
     );
     wait_until(Duration::from_secs(5), || !is_process_alive(descendant_pid));
-    leaf.remove_empty();
+    workload.remove_empty();
 }
 
 #[cfg(target_os = "macos")]

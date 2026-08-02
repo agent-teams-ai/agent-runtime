@@ -157,6 +157,47 @@ pub struct LinuxCgroupV2Child {
     reaped: bool,
 }
 
+/// Credentials applied by the trusted `clone3` launcher in its child branch
+/// before it executes an untrusted workload.
+///
+/// The launcher must enter the cgroup while it still has the Host's authority,
+/// then discard every supplementary group followed by its real, effective, and
+/// saved GID and UID. This ordering prevents workload code from ever running
+/// with authority to move itself into a different cgroup.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LinuxWorkloadIdentity {
+    uid: libc::uid_t,
+    gid: libc::gid_t,
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxWorkloadIdentity {
+    pub fn new(uid: u32, gid: u32) -> io::Result<Self> {
+        let uid = libc::uid_t::try_from(uid).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "workload UID does not fit the platform uid_t",
+            )
+        })?;
+        let gid = libc::gid_t::try_from(gid).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "workload GID does not fit the platform gid_t",
+            )
+        })?;
+        Ok(Self { uid, gid })
+    }
+
+    pub fn uid(self) -> u32 {
+        self.uid
+    }
+
+    pub fn gid(self) -> u32 {
+        self.gid
+    }
+}
+
 #[cfg(target_os = "linux")]
 impl LinuxCgroupV2Tree {
     pub fn open_new_host_owned_leaf(root: &std::path::Path) -> Result<Self, LinuxCgroupV2Blocker> {
@@ -258,14 +299,27 @@ impl LinuxCgroupV2Tree {
         }
     }
 
-    /// Starts one executable directly inside this tree using
-    /// `clone3(CLONE_INTO_CGROUP)`. There is deliberately no fallback to
-    /// `fork` plus a later write to `cgroup.procs`: such a fallback would
-    /// reintroduce the pre-containment escape window this evidence guards.
-    pub fn spawn_exec_atomically(
+    /// Starts an executable directly inside this tree, then drops to the
+    /// supplied workload identity before the executable has a chance to run.
+    ///
+    /// This is deliberately implemented in the `clone3` child branch rather
+    /// than through `Command` pre-exec hooks: the cgroup placement and all
+    /// authority reduction happen before `execv`, with no runnable workload
+    /// interval in the Host's parent cgroup or with Host credentials.
+    pub fn spawn_exec_atomically_as_workload(
         &self,
         executable: &Path,
         arguments: &[&std::ffi::OsStr],
+        identity: LinuxWorkloadIdentity,
+    ) -> io::Result<LinuxCgroupV2Child> {
+        self.spawn_exec_atomically_with_identity(executable, arguments, identity)
+    }
+
+    fn spawn_exec_atomically_with_identity(
+        &self,
+        executable: &Path,
+        arguments: &[&std::ffi::OsStr],
+        identity: LinuxWorkloadIdentity,
     ) -> io::Result<LinuxCgroupV2Child> {
         let executable = os_str_to_c_string(executable.as_os_str())?;
         let mut argument_storage = Vec::with_capacity(arguments.len() + 1);
@@ -300,6 +354,13 @@ impl LinuxCgroupV2Tree {
             return Err(io::Error::last_os_error());
         }
         if result == 0 {
+            if !drop_to_workload_identity(identity) {
+                // Credential setup failure must never fall back to an
+                // elevated exec. `_exit` is async-signal-safe here.
+                unsafe {
+                    libc::_exit(126);
+                }
+            }
             // SAFETY: executable and argument_pointers were prepared before
             // clone3, form a null-terminated argv vector, and remain valid in
             // the child address space until execv replaces it.
@@ -347,6 +408,34 @@ impl LinuxCgroupV2Tree {
             io::ErrorKind::InvalidData,
             "cgroup.events did not contain populated state",
         ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn drop_to_workload_identity(identity: LinuxWorkloadIdentity) -> bool {
+    // SAFETY: this is the post-clone child. Use direct Linux syscalls rather
+    // than libc's credential wrappers, which may coordinate with threads in a
+    // normal process. Every argument is scalar or a null pointer for an empty
+    // group list; no Rust allocation, locking, or workload code runs here.
+    unsafe {
+        libc::syscall(
+            libc::SYS_setgroups,
+            0_usize,
+            std::ptr::null::<libc::gid_t>(),
+        ) == 0
+            && libc::syscall(
+                libc::SYS_setresgid,
+                identity.gid,
+                identity.gid,
+                identity.gid,
+            ) == 0
+            && libc::syscall(
+                libc::SYS_setresuid,
+                identity.uid,
+                identity.uid,
+                identity.uid,
+            ) == 0
+            && libc::syscall(libc::SYS_prctl, libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0
     }
 }
 
