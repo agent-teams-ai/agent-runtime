@@ -85,6 +85,19 @@ fn supplementary_group_count() -> u32 {
 }
 
 #[cfg(target_os = "linux")]
+fn no_new_privs() -> u32 {
+    // SAFETY: PR_GET_NO_NEW_PRIVS reads a process-local kernel flag without
+    // changing process state.
+    let value = unsafe { libc::prctl(libc::PR_GET_NO_NEW_PRIVS) };
+    assert!(
+        value >= 0,
+        "synthetic no_new_privs reads: {}",
+        std::io::Error::last_os_error()
+    );
+    value as u32
+}
+
+#[cfg(target_os = "linux")]
 fn parent_cgroup_write_permission_errno(parent_cgroup_procs_path: &Path) -> i32 {
     let mut control = match OpenOptions::new()
         .write(true)
@@ -211,7 +224,7 @@ fn main() {
             write_atomically(
                 &ready_path,
                 format!(
-                    "root_pid={}\nroot_pgid={}\nroot_sid={}\nroot_uid={}\nroot_euid={}\nroot_gid={}\nroot_egid={}\nroot_supplementary_group_count={}\nparent_cgroup_write_errno={parent_cgroup_write_errno}\ncgroup_namespace_inode={}\nmount_namespace_inode={}\ndescendant_pid={descendant_pid}\ndescendant_pgid={descendant_pgid}\ndescendant_sid={descendant_sid}\n",
+                    "root_pid={}\nroot_pgid={}\nroot_sid={}\nroot_uid={}\nroot_euid={}\nroot_gid={}\nroot_egid={}\nroot_supplementary_group_count={}\nno_new_privs={}\nparent_cgroup_write_errno={parent_cgroup_write_errno}\ncgroup_namespace_inode={}\nmount_namespace_inode={}\ndescendant_pid={descendant_pid}\ndescendant_pgid={descendant_pgid}\ndescendant_sid={descendant_sid}\n",
                     std::process::id(),
                     unsafe { libc::getpgrp() },
                     unsafe { libc::getsid(0) },
@@ -220,6 +233,7 @@ fn main() {
                     unsafe { libc::getgid() },
                     unsafe { libc::getegid() },
                     supplementary_group_count(),
+                    no_new_privs(),
                     namespace_inode("cgroup"),
                     namespace_inode("mnt"),
                 ),

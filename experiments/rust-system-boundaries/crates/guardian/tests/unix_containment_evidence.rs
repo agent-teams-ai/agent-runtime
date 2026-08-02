@@ -637,6 +637,11 @@ fn linux_cgroup_v2_e2e_proves_atomic_placement_privilege_drop_tree_kill_and_orph
         "the trusted launcher must clear supplementary groups before exec"
     );
     assert_eq!(
+        status.get("no_new_privs"),
+        Some(&1),
+        "the fixture must independently observe PR_GET_NO_NEW_PRIVS=1 after exec"
+    );
+    assert_eq!(
         status.get("cgroup_namespace_inode"),
         Some(&namespace_identifier("cgroup")),
         "the workload must observe the Host's cgroup namespace"
