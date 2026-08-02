@@ -119,9 +119,11 @@ jobs:
           test "$(stat --file-system --format=%T /sys/fs/cgroup)" = 'cgroup2fs'
           root="/sys/fs/cgroup/agent-runtime-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           sudo install --directory --owner=root --group=root --mode=0700 "$root"
-          printf 'root=%s\n' "$root" >> "$GITHUB_OUTPUT"
-          printf 'workload_uid=%s\n' "$workload_uid" >> "$GITHUB_OUTPUT"
-          printf 'workload_gid=%s\n' "$workload_gid" >> "$GITHUB_OUTPUT"
+          {
+            printf 'root=%s\n' "$root"
+            printf 'workload_uid=%s\n' "$workload_uid"
+            printf 'workload_gid=%s\n' "$workload_gid"
+          } >> "$GITHUB_OUTPUT"
           test "$(sudo stat --format='%u:%g:%a' "$root")" = '0:0:700'
           sudo test -f "$root/cgroup.procs"
           sudo test -w "$root/cgroup.procs"
