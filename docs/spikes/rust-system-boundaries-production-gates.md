@@ -120,6 +120,12 @@ fails after the previous Host stopped, the candidate must also be terminated;
 recovery may restart the previous generation but may never leave two live
 generations registered as active.
 
+The evidence Supervisor holds an exclusive owner lock for its complete
+lifetime. Cleanup failure before or after health verification retains the exact
+child handle and prevents another instance from bypassing reconciliation while
+that owner is alive. Production qualification additionally requires durable
+startup reconciliation for a Supervisor crash inside that cleanup window.
+
 The campaign must exercise stale and replayed readiness, an old generation
 answering for a candidate, healthy-then-crash, timeout, partial startup,
 concurrent ensure, every activation crash point, failed rollback health, and
@@ -206,5 +212,6 @@ identity, removal of supplementary groups, `no_new_privs`, denial of an active
 parent-cgroup escape attempt, hostile `setsid` descendant termination, and an
 empty orphan scan for that exact runner target. It does not close the
 production Linux target matrix or real-provider custody gate. Candidate cleanup
-custody is retained only in Supervisor memory in this spike; durable
-reconciliation across a Supervisor crash remains a production requirement.
+custody is retained under a lifetime-exclusive Supervisor owner but remains
+in-memory in this spike; durable reconciliation across a Supervisor crash
+remains a production requirement.

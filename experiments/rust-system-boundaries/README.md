@@ -45,6 +45,7 @@ caller's CAS, revisions, inbox/outbox, leases, fences, and reconciliation.**
 | Evidence | Pass condition | Fail-closed result |
 | --- | --- | --- |
 | Concurrent Supervisor ensure | Eight separate OS processes select one exact active generation; the synthetic Host witness converges eight callers on one generation/PID | A lock, state-write, manifest, artifact, or health error rejects activation; no guessed active version |
+| Supervisor lifetime custody | One process owns a state root for the complete `Supervisor` lifetime; a second in-process instance rejects and another process waits for owner release | A failed candidate cleanup retains the exact child handle under that owner, and no second instance can bypass the pending cleanup while the owner remains alive |
 | Interrupted activation | Typed faults and real separate-process aborts cover after staging, after active-pointer write before phase update, and after phase update before commit; every surviving transaction restores the prior exact generation | Corrupt transaction is rejected, never inferred; an unfinalized candidate is never promoted |
 | Generation-bound health | Supervisor launches the staged Host and verifies a fresh nonce, generation, artifact and executable digests, PID, OS birth identity, and continued liveness before activation | Silent, stale, replayed, wrong-generation, wrong-binary, wrong-identity, or exited candidates remain unpromoted and preserve the prior generation |
 | Release integrity | External fixture trust anchor verifies Ed25519 manifest signature and canonical SHA-256 artifact; artifact file names and generation versions are validated as single safe components before staging paths exist | Signature, digest, or unsafe component rejects before staging |
@@ -114,10 +115,15 @@ identity remains mandatory; missing or ambiguous tree evidence fails closed.
   It tests local state-transition recovery, not power-loss durability; `fsync`,
   filesystem-specific atomicity, and production updater behavior remain out of
   scope for this spike.
-- Failed candidate cleanup retains the exact child handle and blocks a new
-  activation until reconciliation succeeds. That custody is in memory in this
-  spike; production still needs durable startup reconciliation after the
-  Supervisor itself crashes during candidate cleanup.
+- Failed candidate cleanup, including rejection before `RunningHost` exists,
+  retains the exact child handle and blocks a new activation until
+  reconciliation succeeds. A lifetime owner lock prevents another Supervisor
+  instance from bypassing that in-memory custody while the owner remains alive.
+  Production still needs durable startup reconciliation after the Supervisor
+  itself crashes during candidate cleanup.
+- Windows liveness uses a zero-time wait on a synchronized process handle, not
+  `GetExitCodeProcess`; exit code `259` is therefore observed as exited rather
+  than confused with the legacy `STILL_ACTIVE` value.
 - Supervisor health is generation-bound, but the synthetic nonce is passed as
   a process argument and is not confidential from a hostile same-user process.
   Production needs a protected one-use IPC challenge and safe Supervisor
