@@ -324,8 +324,16 @@ fn partial_windows_containment_failures_kill_the_fixture_and_record_cleanup_evid
             .as_u64()
             .expect("root PID in evidence") as u32;
         let stages = evidence_stages(&evidence);
-        assert_eq!(stages.first(), Some(&"created_suspended"));
-        assert_eq!(stages.last(), Some(&"cleanup_completed"));
+        assert_eq!(
+            stages.first(),
+            Some(&"created_suspended"),
+            "fault point {fault:?} ({operation_id}) wrote unexpected evidence: {evidence:#}"
+        );
+        assert_eq!(
+            stages.last(),
+            Some(&"cleanup_completed"),
+            "fault point {fault:?} ({operation_id}) left cleanup unverified: {evidence:#}"
+        );
         wait_until(Duration::from_secs(2), || process_is_dead(root_pid));
 
         let descendant_path = temp
