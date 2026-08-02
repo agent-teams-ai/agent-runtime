@@ -1,0 +1,99 @@
+name: Rust System Boundaries
+
+on:
+  pull_request:
+    paths:
+      - experiments/rust-system-boundaries/**
+      - .github/workflows/rust-system-boundaries.yml
+      - .node-version
+  push:
+    branches:
+      - main
+      - spike/rust-system-boundaries
+    paths:
+      - experiments/rust-system-boundaries/**
+      - .github/workflows/rust-system-boundaries.yml
+      - .node-version
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-system-boundaries-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+
+      - name: Install and verify the experiment's Rust toolchain
+        working-directory: experiments/rust-system-boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          toolchain_file='rust-toolchain.toml'
+          toolchain="$(sed -nE 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' "$toolchain_file")"
+          profile="$(sed -nE 's/^[[:space:]]*profile[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' "$toolchain_file")"
+          components_csv="$(sed -nE 's/^[[:space:]]*components[[:space:]]*=[[:space:]]*\[(.*)\][[:space:]]*$/\1/p' "$toolchain_file" | tr -d '[:space:]"')"
+
+          for value in "$toolchain" "$profile" "$components_csv"; do
+            test -n "$value"
+            test "$(printf '%s\n' "$value" | wc -l | tr -d ' ')" = '1'
+          done
+
+          IFS=',' read -r -a components <<< "$components_csv"
+          install_args=("$toolchain" --profile "$profile")
+          for component in "${components[@]}"; do
+            test -n "$component"
+            install_args+=(--component "$component")
+          done
+
+          rustup toolchain install "${install_args[@]}"
+
+          active_toolchain="$(rustup show active-toolchain | sed -n '1s/ .*//p')"
+          case "$active_toolchain" in
+            "$toolchain"|"$toolchain"-*) ;;
+            *)
+              echo "rust-toolchain.toml selected $toolchain, but rustup activated $active_toolchain" >&2
+              exit 1
+              ;;
+          esac
+
+          rustup run "$toolchain" rustc --version --verbose
+          rustup run "$toolchain" cargo --version
+
+      - name: Check formatting
+        working-directory: experiments/rust-system-boundaries
+        run: cargo fmt --manifest-path Cargo.toml --all -- --check
+
+      - name: Lint workspace
+        working-directory: experiments/rust-system-boundaries
+        run: cargo clippy --locked --workspace --all-targets --manifest-path Cargo.toml -- -D warnings
+
+      - name: Test workspace
+        working-directory: experiments/rust-system-boundaries
+        run: cargo test --locked --workspace --all-targets --manifest-path Cargo.toml
+
+      - name: Test TypeScript to Rust Guardian boundary
+        run: node --test experiments/rust-system-boundaries/client/guardian-conformance.test.ts

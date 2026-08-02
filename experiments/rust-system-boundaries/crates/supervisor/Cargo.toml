@@ -1,0 +1,18 @@
+[package]
+name = "boundary-supervisor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+atomic-state-file = { path = "../atomic-state-file" }
+base64.workspace = true
+boundary-protocol = { path = "../boundary-protocol" }
+ed25519-dalek.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

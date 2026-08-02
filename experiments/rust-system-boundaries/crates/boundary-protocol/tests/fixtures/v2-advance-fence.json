@@ -1,0 +1,1 @@
+{"protocol_version":2,"request_id":"advance-v2","command":{"kind":"advance_fence","operation_id":"operation-1","current_opaque_fence":"fence-a","next_opaque_fence":"fence-b"}}

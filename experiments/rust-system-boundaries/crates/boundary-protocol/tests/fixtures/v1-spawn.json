@@ -1,0 +1,1 @@
+{"protocol_version":1,"request_id":"spawn-v1","command":{"kind":"spawn","operation_id":"operation-1","opaque_fence":"fence-a","fixture_mode":"tree"}}
