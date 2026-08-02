@@ -954,10 +954,17 @@ fn verify_health_witness(
     if child.try_wait()?.is_some() {
         return Err(SupervisorError::HostExitedBeforeHealth);
     }
-    if process_birth_identity(expected.pid)? != expected.birth_identity {
-        return Err(SupervisorError::HealthWitnessRejected(
-            HealthWitnessRejection::ProcessIdentityChanged,
-        ));
+    match process_birth_identity(expected.pid) {
+        Ok(actual) if actual == expected.birth_identity => {}
+        Ok(_) => {
+            return Err(SupervisorError::HealthWitnessRejected(
+                HealthWitnessRejection::ProcessIdentityChanged,
+            ));
+        }
+        Err(error) if process_identity_error_means_gone(&error) => {
+            return Err(SupervisorError::HostExitedBeforeHealth);
+        }
+        Err(error) => return Err(error),
     }
     Ok(())
 }
@@ -966,7 +973,11 @@ fn host_is_live(host: &mut RunningHost) -> Result<bool, SupervisorError> {
     if host.child.try_wait()?.is_some() {
         return Ok(false);
     }
-    Ok(process_birth_identity(host.observation.pid)? == host.observation.birth_identity)
+    match process_birth_identity(host.observation.pid) {
+        Ok(actual) => Ok(actual == host.observation.birth_identity),
+        Err(error) if process_identity_error_means_gone(&error) => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 fn terminate_host(host: &mut RunningHost) -> Result<(), SupervisorError> {
