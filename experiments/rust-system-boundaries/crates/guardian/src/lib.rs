@@ -934,6 +934,18 @@ impl Guardian {
             terminate_live_process(live, &record)
         } else {
             let reconciliation = self.reconcile_record(&record);
+            #[cfg(windows)]
+            let reconciliation = if reconciliation == Reconciliation::VerifiedLive
+                && wait_for_custody_process_gone(&record, Duration::from_secs(1))
+            {
+                // Job closure after the previous Guardian exits is
+                // asynchronous. Reconcile its bounded completion before
+                // concluding that a restarted Guardian lacks termination
+                // authority for a still-live process.
+                self.reconcile_record(&record)
+            } else {
+                reconciliation
+            };
             if reconciliation != Reconciliation::VerifiedLive {
                 return reconciliation_result(&record, reconciliation);
             }

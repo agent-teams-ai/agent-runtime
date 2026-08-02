@@ -88,7 +88,7 @@ fn supplementary_group_count() -> u32 {
 fn no_new_privs() -> u32 {
     // SAFETY: PR_GET_NO_NEW_PRIVS reads a process-local kernel flag without
     // changing process state.
-    let value = unsafe { libc::prctl(libc::PR_GET_NO_NEW_PRIVS) };
+    let value = unsafe { libc::prctl(libc::PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) };
     assert!(
         value >= 0,
         "synthetic no_new_privs reads: {}",

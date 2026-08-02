@@ -634,7 +634,10 @@ fn explicit_fence_advance_rebinds_custody_and_rejects_the_old_fence() {
     #[cfg(unix)]
     assert!(matches!(terminated, GuardianResult::Terminated { .. }));
     #[cfg(windows)]
-    assert!(matches!(terminated, GuardianResult::ReconcileGone { .. }));
+    assert!(
+        matches!(terminated, GuardianResult::ReconcileGone { .. }),
+        "unexpected restarted Windows termination result: {terminated:?}"
+    );
 }
 
 #[cfg(unix)]
