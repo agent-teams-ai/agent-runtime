@@ -43,6 +43,7 @@ fn main() {
     let fault_point = match optional_argument("--crash-at").as_deref() {
         None => None,
         Some("after_staged") => Some(FaultPoint::AfterStaged),
+        Some("before_previous_host_termination") => Some(FaultPoint::BeforePreviousHostTermination),
         Some("after_active_pointer_write_before_phase_update") => {
             Some(FaultPoint::AfterActivePointerWriteBeforePhaseUpdate)
         }

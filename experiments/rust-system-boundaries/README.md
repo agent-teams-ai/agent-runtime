@@ -56,7 +56,7 @@ caller's CAS, revisions, inbox/outbox, leases, fences, and reconciliation.**
 | Crash/orphan recovery | Restarted Guardian rechecks custody nonce plus OS birth identity and may terminate only after proof matches; Linux identity includes boot ID; the TypeScript client verifies root and descendant PIDs are gone | PID alone yields `identity_unverified`; missing launch proof remains explicit `launch_uncertain` and never triggers blind respawn |
 | Ambiguous spawn response | Fixture starts once, intentionally drops its first reply; the TypeScript caller crashes and restarts Guardian, then reconciles by operation identity | A second spawn is prevented by operation identity; no blind retry |
 | Protocol skew | Independently frozen v1 request/response DTOs and current v2 DTOs negotiate the highest mutual version; TypeScript clients exercise both projections and version-mixing rejects | Unsupported versions reject during handshake; the selected version is immutable and no best-effort parse or downgrade occurs |
-| Unix containment | The evidence harness proves process-group escape through `setsid`, stable per-process Linux signaling through `pidfd`, and fail-closed admission for a Host-owned delegated cgroup v2 leaf | Hostile Linux tree custody requires cgroup v2 plus pidfd; hostile macOS custody remains explicitly unsupported rather than silently downgraded to `killpg` |
+| Unix containment | The evidence harness proves process-group escape through `setsid`, stable per-process Linux signaling through `pidfd`, and fail-closed rejection when no verified delegated cgroup v2 leaf exists | Hostile Linux tree custody requires a separate positive campaign for Host-created cgroup v2 admission, atomic placement, `cgroup.kill`, and orphan scanning; hostile macOS custody remains explicitly unsupported rather than silently downgraded to `killpg` |
 | Signed evidence drill | Exact source ref, commit digest, archive SHA-256, and GitHub/Sigstore bundle are verified; non-main refs remain explicitly untrusted evidence | No branch attestation is treated as a trusted-main or production release claim |
 | Windows containment | Windows creates the root suspended, creates a `KILL_ON_JOB_CLOSE` Job Object, assigns the root, then resumes it; five partial-failure points and Guardian crash verify bounded cleanup and tree exit | No fixture instruction or descendant runs before Job assignment; incomplete cleanup remains typed evidence and fails closed |
 
@@ -91,8 +91,11 @@ identity remains mandatory; missing or ambiguous tree evidence fails closed.
 - POSIX process groups are deliberately weaker than a cgroup or Job Object; the
   harness now demonstrates a real `setsid` escape. Linux `pidfd` closes the
   identity-to-signal race only for one process. Hostile tree custody still
-  requires Host-created cgroup v2 admission and atomic placement. macOS has no
-  equivalent proof in this spike and remains unsupported for hostile custody.
+  requires a positive Host-created cgroup v2 campaign covering atomic placement,
+  `cgroup.kill`, crash recovery, and orphan scanning. The current cgroup adapter
+  is compiled and its missing/invalid-root paths fail closed, but it is not
+  positive containment evidence. macOS has no equivalent proof in this spike
+  and remains unsupported for hostile custody.
 - A crash before the fixture publishes its identity witness remains
   `launch_uncertain`. The Guardian refuses blind retry, but the spike does not
   prove automatic recovery of every possible pre-witness orphan window.

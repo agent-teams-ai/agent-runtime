@@ -88,6 +88,7 @@ fn fault_injection_recovers_without_promoting_an_interrupted_generation() {
 
     for fault_point in [
         FaultPoint::AfterStaged,
+        FaultPoint::BeforePreviousHostTermination,
         FaultPoint::AfterActivePointerWriteBeforePhaseUpdate,
         FaultPoint::AfterPhaseUpdateBeforeCommit,
     ] {

@@ -53,12 +53,15 @@ fn main() {
     let mode = optional_argument("--mode").unwrap_or_else(|| "ready".to_owned());
     let crash_path = optional_argument("--crash-path").map(PathBuf::from);
     if let Some(boot_log_path) = optional_argument("--boot-log-path") {
+        let mut record =
+            serde_json::to_vec(&witness).expect("synthetic Host boot record serializes");
+        record.push(b'\n');
         OpenOptions::new()
             .create(true)
             .append(true)
             .open(boot_log_path)
             .expect("synthetic Host boot log opens")
-            .write_all(format!("{}\n", witness.pid).as_bytes())
+            .write_all(&record)
             .expect("synthetic Host boot log writes");
     }
 

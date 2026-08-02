@@ -1,6 +1,6 @@
 use boundary_supervisor::{
-    EnsureOptions, HealthWitnessRejection, HostLaunch, Supervisor, SupervisorError, TrustAnchor,
-    write_fixture_release_with_artifact,
+    EnsureOptions, FaultPoint, HealthWitness, HealthWitnessRejection, HostLaunch, HostObservation,
+    Supervisor, SupervisorError, TrustAnchor, write_fixture_release_with_artifact,
 };
 use ed25519_dalek::SigningKey;
 use std::fs;
@@ -156,6 +156,48 @@ fn generation_bound_health_rejects_stale_and_wrong_witnesses_then_recovers_and_r
         "a stale nonce must not replace the live Host"
     );
 
+    let replacement_fault = supervisor.ensure(
+        &update_release,
+        &anchor,
+        &HostLaunch::with_extra_args(["--boot-log-path", boot_log.as_str()]),
+        EnsureOptions {
+            fault_point: Some(FaultPoint::BeforePreviousHostTermination),
+            ..EnsureOptions::default()
+        },
+    );
+    assert!(matches!(
+        replacement_fault,
+        Err(SupervisorError::FaultInjected(
+            FaultPoint::BeforePreviousHostTermination
+        ))
+    ));
+    assert_eq!(
+        supervisor
+            .inspect_active_host()
+            .expect("active Host inspection succeeds after replacement fault")
+            .expect("previous Host remains live after replacement fault"),
+        recovered_host
+    );
+    let candidate_witness = fs::read_to_string(&boot_log)
+        .expect("boot log reads after replacement fault")
+        .lines()
+        .last()
+        .map(serde_json::from_str::<HealthWitness>)
+        .expect("candidate boot record exists")
+        .expect("candidate boot record parses");
+    let candidate_observation = HostObservation {
+        generation_id: candidate_witness.generation_id,
+        generation_digest: candidate_witness.generation_digest,
+        pid: candidate_witness.pid,
+        birth_identity: candidate_witness.birth_identity,
+    };
+    assert!(
+        !supervisor
+            .observation_is_live(&candidate_observation)
+            .expect("candidate identity inspection succeeds"),
+        "a failed replacement must not leave its healthy candidate alive"
+    );
+
     let silent_candidate = supervisor.ensure(
         &update_release,
         &anchor,
@@ -242,4 +284,96 @@ fn generation_bound_health_rejects_stale_and_wrong_witnesses_then_recovers_and_r
             .expect("replaced Host identity inspection succeeds"),
         "successful replacement must stop the prior Host"
     );
+}
+
+#[test]
+fn activation_failure_after_old_host_stops_leaves_no_candidate_and_recovers_old_generation() {
+    let temp = TempDir::new().expect("temporary root");
+    let supervisor_root = temp.path().join("supervisor");
+    let initial_release = temp.path().join("initial");
+    let update_release = temp.path().join("update");
+    let boot_log = temp.path().join("candidate-boots.log");
+    let key = fixture_key();
+    let anchor = TrustAnchor::from_signing_key(&key);
+    release(&initial_release, "1.0.0", &key);
+    release(&update_release, "2.0.0", &key);
+
+    let supervisor = Supervisor::open(&supervisor_root).expect("supervisor opens");
+    supervisor
+        .ensure(
+            &initial_release,
+            &anchor,
+            &HostLaunch::default(),
+            EnsureOptions::default(),
+        )
+        .expect("initial generation activates");
+    let initial_host = supervisor
+        .inspect_active_host()
+        .expect("initial Host inspection succeeds")
+        .expect("initial Host is live");
+
+    let result = supervisor.ensure(
+        &update_release,
+        &anchor,
+        &HostLaunch::with_extra_args([
+            "--boot-log-path",
+            boot_log.to_str().expect("UTF-8 boot log path"),
+        ]),
+        EnsureOptions {
+            fault_point: Some(FaultPoint::AfterActivePointerWriteBeforePhaseUpdate),
+            ..EnsureOptions::default()
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(SupervisorError::FaultInjected(
+            FaultPoint::AfterActivePointerWriteBeforePhaseUpdate
+        ))
+    ));
+
+    let candidate_witness = serde_json::from_str::<HealthWitness>(
+        fs::read_to_string(&boot_log)
+            .expect("candidate boot log reads")
+            .lines()
+            .last()
+            .expect("candidate boot record exists"),
+    )
+    .expect("candidate boot record parses");
+    let candidate_observation = HostObservation {
+        generation_id: candidate_witness.generation_id,
+        generation_digest: candidate_witness.generation_digest,
+        pid: candidate_witness.pid,
+        birth_identity: candidate_witness.birth_identity,
+    };
+    assert!(
+        !supervisor
+            .observation_is_live(&initial_host)
+            .expect("old Host identity inspection succeeds"),
+        "the previous Host must be stopped before active-pointer mutation"
+    );
+    assert!(
+        !supervisor
+            .observation_is_live(&candidate_observation)
+            .expect("candidate Host identity inspection succeeds"),
+        "the candidate must be stopped when active-pointer mutation fails"
+    );
+    assert!(
+        supervisor
+            .inspect_active_host()
+            .expect("failed activation inspection succeeds")
+            .is_none(),
+        "a failed replacement cannot leave either generation registered as live"
+    );
+    assert_eq!(
+        supervisor
+            .inspect_active()
+            .expect("active generation inspection succeeds")
+            .expect("previous generation is restored")
+            .version,
+        "1.0.0"
+    );
+    let recovered = supervisor
+        .ensure_active_host(&HostLaunch::default())
+        .expect("previous generation restarts after rollback");
+    assert_eq!(recovered.generation_id, initial_host.generation_id);
 }

@@ -113,7 +113,12 @@ real candidate-process proof. The Supervisor creates the candidate and a
 one-use private challenge channel. Readiness must echo the exact generation,
 artifact digest, boot nonce, protocol version, PID, and process birth identity.
 The Supervisor verifies continued custody and liveness before atomically
-publishing the active generation.
+publishing the active generation. A healthy candidate has no active authority.
+If replacement of a live generation cannot stop the previous Host, the
+candidate must be terminated and activation fails. If a later activation step
+fails after the previous Host stopped, the candidate must also be terminated;
+recovery may restart the previous generation but may never leave two live
+generations registered as active.
 
 The campaign must exercise stale and replayed readiness, an old generation
 answering for a candidate, healthy-then-crash, timeout, partial startup,

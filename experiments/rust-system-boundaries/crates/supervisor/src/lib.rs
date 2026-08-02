@@ -263,6 +263,7 @@ pub struct HealthWitness {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaultPoint {
     AfterStaged,
+    BeforePreviousHostTermination,
     AfterActivePointerWriteBeforePhaseUpdate,
     AfterPhaseUpdateBeforeCommit,
 }
@@ -306,7 +307,10 @@ pub enum SupervisorError {
     InvalidTrustAnchor,
     InvalidSignatureEncoding,
     InvalidSignature,
-    ArtifactDigestMismatch { expected: String, actual: String },
+    ArtifactDigestMismatch {
+        expected: String,
+        actual: String,
+    },
     UnsafeArtifactFileName,
     UnsafeVersion,
     MalformedArtifactDigest,
@@ -318,6 +322,10 @@ pub enum SupervisorError {
     HealthWitnessTooLarge,
     HealthWitnessMalformed,
     HealthWitnessRejected(HealthWitnessRejection),
+    CandidateCleanupFailed {
+        activation: Box<SupervisorError>,
+        cleanup: Box<SupervisorError>,
+    },
     FaultInjected(FaultPoint),
     CorruptTransaction,
 }
@@ -384,6 +392,13 @@ impl std::fmt::Display for SupervisorError {
                     "candidate Host health witness was rejected: {reason:?}"
                 )
             }
+            Self::CandidateCleanupFailed {
+                activation,
+                cleanup,
+            } => write!(
+                formatter,
+                "activation failed ({activation}) and candidate Host cleanup also failed ({cleanup})"
+            ),
             Self::FaultInjected(point) => write!(formatter, "fault injected at {point:?}"),
             Self::CorruptTransaction => write!(formatter, "activation transaction is corrupt"),
         }
@@ -475,36 +490,39 @@ impl Supervisor {
         self.write_transaction(&transaction)?;
         self.inject_fault(options, FaultPoint::AfterStaged)?;
 
-        let mut candidate_host = self.spawn_and_verify_host(&candidate, host_launch)?;
+        let candidate_host = self.spawn_and_verify_host(&candidate, host_launch)?;
+        if let Err(error) = self.inject_fault(options, FaultPoint::BeforePreviousHostTermination) {
+            return Err(cleanup_candidate_after_error(candidate_host, error));
+        }
+
+        if let Some(previous_host) = running_host.as_mut()
+            && let Err(error) = terminate_host(previous_host)
+        {
+            return Err(cleanup_candidate_after_error(candidate_host, error));
+        }
+        running_host.take();
+
         if let Err(error) = self.write_active(&candidate) {
-            let _ = terminate_host(&mut candidate_host);
-            return Err(error);
+            return Err(cleanup_candidate_after_error(candidate_host, error));
         }
         if let Err(error) = self.inject_fault(
             options,
             FaultPoint::AfterActivePointerWriteBeforePhaseUpdate,
         ) {
-            let _ = terminate_host(&mut candidate_host);
-            return Err(error);
+            return Err(cleanup_candidate_after_error(candidate_host, error));
         }
         transaction.phase = ActivationPhase::ActivePointerWritten;
         if let Err(error) = self.write_transaction(&transaction) {
-            let _ = terminate_host(&mut candidate_host);
-            return Err(error);
+            return Err(cleanup_candidate_after_error(candidate_host, error));
         }
         if let Err(error) = self.inject_fault(options, FaultPoint::AfterPhaseUpdateBeforeCommit) {
-            let _ = terminate_host(&mut candidate_host);
-            return Err(error);
+            return Err(cleanup_candidate_after_error(candidate_host, error));
         }
         if let Err(error) = self.remove_transaction() {
-            let _ = terminate_host(&mut candidate_host);
-            return Err(error);
+            return Err(cleanup_candidate_after_error(candidate_host, error));
         }
 
-        let previous_host = running_host.replace(candidate_host);
-        if let Some(mut previous_host) = previous_host {
-            terminate_host(&mut previous_host)?;
-        }
+        running_host.replace(candidate_host);
         drop(running_host);
         drop(lock);
         Ok(candidate)
@@ -990,6 +1008,19 @@ fn host_is_live(host: &mut RunningHost) -> Result<bool, SupervisorError> {
 
 fn terminate_host(host: &mut RunningHost) -> Result<(), SupervisorError> {
     terminate_child(&mut host.child)
+}
+
+fn cleanup_candidate_after_error(
+    mut candidate: RunningHost,
+    activation: SupervisorError,
+) -> SupervisorError {
+    match terminate_host(&mut candidate) {
+        Ok(()) => activation,
+        Err(cleanup) => SupervisorError::CandidateCleanupFailed {
+            activation: Box::new(activation),
+            cleanup: Box::new(cleanup),
+        },
+    }
 }
 
 fn terminate_child(child: &mut Child) -> Result<(), SupervisorError> {
