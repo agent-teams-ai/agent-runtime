@@ -17,6 +17,7 @@
   },
   "include": [
     "experiments/runtime-profile-behavior/src/**/*.ts",
-    "experiments/runtime-profile-behavior/test/**/*.ts"
+    "experiments/runtime-profile-behavior/test/**/*.ts",
+    "experiments/rust-system-boundaries/client/**/*.ts"
   ]
 }

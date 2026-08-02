@@ -28,6 +28,8 @@
     "spike:profile-loss": "node experiments/runtime-profile-behavior/src/cli.ts profile-loss",
     "spike:managed-policy": "node experiments/runtime-profile-behavior/src/cli.ts managed-policy",
     "spike:promote-traces": "node experiments/runtime-profile-behavior/src/features/evidence/promote-redacted-traces.ts",
+    "spike:rust-boundaries": "cargo test --locked --manifest-path experiments/rust-system-boundaries/Cargo.toml --workspace --all-targets",
+    "spike:rust-boundaries:client": "node --test --test-concurrency=1 experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
     "test": "node --test experiments/runtime-profile-behavior/test/*.test.ts",
     "typecheck": "tsgo --noEmit"
   },

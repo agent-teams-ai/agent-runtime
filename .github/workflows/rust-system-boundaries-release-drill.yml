@@ -1,0 +1,421 @@
+name: Rust Boundary Provenance Evidence Drill
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/rust-system-boundaries
+    paths:
+      - experiments/rust-system-boundaries/**
+      - .github/workflows/rust-system-boundaries-release-drill.yml
+
+concurrency:
+  group: rust-system-boundaries-release-drill-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-evidence:
+    name: Build evidence archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      archive_name: ${{ steps.package.outputs.archive_name }}
+      archive_sha256: ${{ steps.package.outputs.archive_sha256 }}
+      evidence_scope: ${{ steps.source.outputs.evidence_scope }}
+      source_ref: ${{ steps.source.outputs.source_ref }}
+      source_revision: ${{ steps.source.outputs.source_revision }}
+    steps:
+      - name: Checkout exact workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify checked-out source and classify evidence
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_ref="$GITHUB_REF"
+          source_revision="$GITHUB_SHA"
+          actual_revision="$(git rev-parse HEAD)"
+
+          test "$actual_revision" = "$source_revision"
+          test "$(git rev-parse "${source_revision}^{commit}")" = "$source_revision"
+
+          case "$source_ref" in
+            refs/heads/main)
+              test "$GITHUB_REF_TYPE" = 'branch'
+              test "$GITHUB_REF_NAME" = 'main'
+              evidence_scope='trusted-main-attestation'
+              ;;
+            refs/heads/*)
+              evidence_scope='untrusted-branch-evidence-only'
+              ;;
+            *)
+              evidence_scope='untrusted-non-branch-evidence-only'
+              ;;
+          esac
+
+          {
+            printf 'source_ref=%s\n' "$source_ref"
+            printf 'source_revision=%s\n' "$source_revision"
+            printf 'evidence_scope=%s\n' "$evidence_scope"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install and verify the experiment's Rust toolchain
+        id: toolchain
+        working-directory: experiments/rust-system-boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          toolchain_file='rust-toolchain.toml'
+          toolchain="$(sed -nE 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' "$toolchain_file")"
+          profile="$(sed -nE 's/^[[:space:]]*profile[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' "$toolchain_file")"
+          components_csv="$(sed -nE 's/^[[:space:]]*components[[:space:]]*=[[:space:]]*\[(.*)\][[:space:]]*$/\1/p' "$toolchain_file" | tr -d '[:space:]"')"
+
+          for value in "$toolchain" "$profile" "$components_csv"; do
+            test -n "$value"
+            test "$(printf '%s\n' "$value" | wc -l | tr -d ' ')" = '1'
+          done
+
+          IFS=',' read -r -a components <<< "$components_csv"
+          install_args=("$toolchain" --profile "$profile")
+          for component in "${components[@]}"; do
+            test -n "$component"
+            install_args+=(--component "$component")
+          done
+
+          rustup toolchain install "${install_args[@]}"
+
+          active_toolchain="$(rustup show active-toolchain | sed -n '1s/ .*//p')"
+          case "$active_toolchain" in
+            "$toolchain"|"$toolchain"-*) ;;
+            *)
+              echo "rust-toolchain.toml selected $toolchain, but rustup activated $active_toolchain" >&2
+              exit 1
+              ;;
+          esac
+
+          rustup run "$toolchain" rustc --version --verbose
+          rustup run "$toolchain" cargo --version
+          printf 'toolchain=%s\n' "$toolchain" >> "$GITHUB_OUTPUT"
+
+      - name: Build the two release evidence binaries
+        working-directory: experiments/rust-system-boundaries
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/rust-system-boundaries-target
+        run: |
+          set -euo pipefail
+
+          cargo build \
+            --locked \
+            --release \
+            --manifest-path Cargo.toml \
+            -p boundary-supervisor \
+            -p execution-guardian \
+            --bin supervisor-driver \
+            --bin spike-guardian
+
+      - name: Package and verify the deterministic evidence archive
+        id: package
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/rust-system-boundaries-target
+          EVIDENCE_SCOPE: ${{ steps.source.outputs.evidence_scope }}
+          SOURCE_REF: ${{ steps.source.outputs.source_ref }}
+          SOURCE_REVISION: ${{ steps.source.outputs.source_revision }}
+        run: |
+          set -euo pipefail
+
+          manifest='experiments/rust-system-boundaries/Cargo.toml'
+          protocol_source='experiments/rust-system-boundaries/crates/boundary-protocol/src/lib.rs'
+          toolchain_file='experiments/rust-system-boundaries/rust-toolchain.toml'
+          archive_name="rust-system-boundaries-evidence-${SOURCE_REVISION}.tar.gz"
+          archive_path="${RUNNER_TEMP}/${archive_name}"
+          evidence_root="${RUNNER_TEMP}/rust-system-boundaries-evidence"
+          expected_paths="${RUNNER_TEMP}/rust-system-boundaries-archive-contents.txt"
+          actual_paths="${RUNNER_TEMP}/rust-system-boundaries-archive-contents.actual.txt"
+          artifact_name="rust-system-boundaries-evidence-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          protocol_current="$(sed -nE 's/^pub const CURRENT_PROTOCOL_VERSION: u16 = ([0-9]+);$/\1/p' "$protocol_source")"
+          protocol_minimum="$(sed -nE 's/^pub const MINIMUM_PROTOCOL_VERSION: u16 = ([0-9]+);$/\1/p' "$protocol_source")"
+          workspace_version="$(sed -nE 's/^version = "([^"]+)"$/\1/p' "$manifest")"
+          rust_toolchain="$(sed -nE 's/^channel = "([^"]+)"$/\1/p' "$toolchain_file")"
+          source_date_epoch="$(git show -s --format=%ct "$SOURCE_REVISION")"
+
+          for value in "$protocol_current" "$protocol_minimum"; do
+            test -n "$value"
+            case "$value" in
+              *[!0-9]*) exit 1 ;;
+            esac
+          done
+          test -n "$workspace_version"
+          test -n "$rust_toolchain"
+          test -n "$SOURCE_REF"
+          test -n "$SOURCE_REVISION"
+          test -n "$EVIDENCE_SCOPE"
+
+          rm -rf "$evidence_root" "$archive_path" "${archive_path}.sha256"
+          mkdir -p "$evidence_root/bin" "$evidence_root/metadata"
+
+          install -m 0755 "$CARGO_TARGET_DIR/release/supervisor-driver" \
+            "$evidence_root/bin/supervisor-driver"
+          install -m 0755 "$CARGO_TARGET_DIR/release/spike-guardian" \
+            "$evidence_root/bin/spike-guardian"
+          cp "$toolchain_file" "$evidence_root/metadata/rust-toolchain.toml"
+          cp 'experiments/rust-system-boundaries/Cargo.lock' "$evidence_root/metadata/Cargo.lock"
+
+          jq -n \
+            --arg schema 'agent-teams.rust-system-boundaries.evidence-manifest/v1' \
+            --arg purpose 'non-production build-provenance evidence drill' \
+            --arg evidence_scope "$EVIDENCE_SCOPE" \
+            --arg source_ref "$SOURCE_REF" \
+            --arg source_revision "$SOURCE_REVISION" \
+            --arg rust_toolchain "$rust_toolchain" \
+            --arg workspace_version "$workspace_version" \
+            --arg transport 'closed-world-ndjson' \
+            --argjson current_protocol_version "$protocol_current" \
+            --argjson minimum_protocol_version "$protocol_minimum" \
+            --argjson max_frame_bytes 65536 \
+            '{
+              schema: $schema,
+              purpose: $purpose,
+              evidence_scope: $evidence_scope,
+              source_ref: $source_ref,
+              source_revision: $source_revision,
+              rust_toolchain: $rust_toolchain,
+              workspace_version: $workspace_version,
+              protocol: {
+                transport: $transport,
+                current_version: $current_protocol_version,
+                minimum_version: $minimum_protocol_version,
+                max_frame_bytes: $max_frame_bytes
+              },
+              binaries: ["supervisor-driver", "spike-guardian"]
+            }' > "$evidence_root/metadata/evidence-manifest.json"
+
+          (
+            cd "$evidence_root"
+            LC_ALL=C find bin metadata -type f -print0 \
+              | LC_ALL=C sort -z \
+              | xargs -0 sha256sum
+          ) > "$evidence_root/SHA256SUMS"
+          (
+            cd "$evidence_root"
+            sha256sum --check SHA256SUMS
+          )
+
+          SOURCE_DATE_EPOCH="$source_date_epoch" \
+            tar --sort=name \
+              --mtime="@${source_date_epoch}" \
+              --owner=0 \
+              --group=0 \
+              --numeric-owner \
+              --format=posix \
+              -C "$RUNNER_TEMP" \
+              -cf - rust-system-boundaries-evidence \
+              | gzip -n > "$archive_path"
+
+          cat > "$expected_paths" <<'EOF'
+          rust-system-boundaries-evidence/
+          rust-system-boundaries-evidence/SHA256SUMS
+          rust-system-boundaries-evidence/bin/
+          rust-system-boundaries-evidence/bin/spike-guardian
+          rust-system-boundaries-evidence/bin/supervisor-driver
+          rust-system-boundaries-evidence/metadata/
+          rust-system-boundaries-evidence/metadata/Cargo.lock
+          rust-system-boundaries-evidence/metadata/evidence-manifest.json
+          rust-system-boundaries-evidence/metadata/rust-toolchain.toml
+          EOF
+          tar -tzf "$archive_path" | LC_ALL=C sort > "$actual_paths"
+          LC_ALL=C sort "$expected_paths" > "${expected_paths}.sorted"
+          diff -u "${expected_paths}.sorted" "$actual_paths"
+          if tar -tzf "$archive_path" | grep -Eiq '(^|/)(fixture|secret|private|target)(/|$)|\.key$'; then
+            echo 'archive unexpectedly contains fixture, secret, private, or target material' >&2
+            exit 1
+          fi
+
+          archive_sha256="$(sha256sum "$archive_path" | awk '{print $1}')"
+          printf '%s  %s\n' "$archive_sha256" "$archive_name" > "${archive_path}.sha256"
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum --check "${archive_name}.sha256"
+          )
+
+          {
+            printf 'artifact_name=%s\n' "$artifact_name"
+            printf 'archive_name=%s\n' "$archive_name"
+            printf 'archive_path=%s\n' "$archive_path"
+            printf 'archive_sha256=%s\n' "$archive_sha256"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload short-retention evidence archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: |
+            ${{ steps.package.outputs.archive_path }}
+            ${{ steps.package.outputs.archive_path }}.sha256
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+          include-hidden-files: false
+
+  attest-evidence:
+    name: Attest exact-ref evidence archive
+    needs: build-evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout exact evidence source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Download evidence archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.build-evidence.outputs.artifact_name }}
+          path: ${{ runner.temp }}/rust-system-boundaries-attestation
+
+      - name: Verify exact source, scope, and evidence archive
+        id: evidence
+        shell: bash
+        env:
+          ARCHIVE_NAME: ${{ needs.build-evidence.outputs.archive_name }}
+          ARCHIVE_SHA256: ${{ needs.build-evidence.outputs.archive_sha256 }}
+          EVIDENCE_SCOPE: ${{ needs.build-evidence.outputs.evidence_scope }}
+          SOURCE_REF: ${{ needs.build-evidence.outputs.source_ref }}
+          SOURCE_REVISION: ${{ needs.build-evidence.outputs.source_revision }}
+        run: |
+          set -euo pipefail
+
+          test "$SOURCE_REF" = "$GITHUB_REF"
+          test "$SOURCE_REVISION" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+
+          case "$SOURCE_REF:$EVIDENCE_SCOPE" in
+            refs/heads/main:trusted-main-attestation) ;;
+            refs/heads/*:untrusted-branch-evidence-only) ;;
+            *:untrusted-non-branch-evidence-only) ;;
+            *)
+              echo "source ref and evidence scope disagree" >&2
+              exit 1
+              ;;
+          esac
+
+          evidence_dir="${RUNNER_TEMP}/rust-system-boundaries-attestation"
+          archive_path="${evidence_dir}/${ARCHIVE_NAME}"
+          checksum_path="${archive_path}.sha256"
+          test -s "$archive_path"
+          test -s "$checksum_path"
+
+          actual_sha256="$(sha256sum "$archive_path" | awk '{print $1}')"
+          test "$actual_sha256" = "$ARCHIVE_SHA256"
+          (
+            cd "$evidence_dir"
+            sha256sum --check "$(basename "$checksum_path")"
+          )
+
+          tar -xOzf "$archive_path" \
+            rust-system-boundaries-evidence/metadata/evidence-manifest.json \
+            | jq -e \
+              --arg source_ref "$SOURCE_REF" \
+              --arg source_revision "$SOURCE_REVISION" \
+              --arg evidence_scope "$EVIDENCE_SCOPE" \
+              '
+                .schema == "agent-teams.rust-system-boundaries.evidence-manifest/v1" and
+                .evidence_scope == $evidence_scope and
+                .source_ref == $source_ref and
+                .source_revision == $source_revision
+              ' > /dev/null
+
+          printf 'archive_path=%s\n' "$archive_path" >> "$GITHUB_OUTPUT"
+          printf 'archive_sha256=%s\n' "$actual_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Generate exact-ref GitHub and Sigstore provenance
+        id: attest
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: ${{ steps.evidence.outputs.archive_path }}
+          create-storage-record: false
+          show-summary: true
+
+      - name: Verify exact-ref attestation claims
+        shell: bash
+        env:
+          ARCHIVE_PATH: ${{ steps.evidence.outputs.archive_path }}
+          ARCHIVE_SHA256: ${{ steps.evidence.outputs.archive_sha256 }}
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REF: ${{ needs.build-evidence.outputs.source_ref }}
+          SOURCE_REVISION: ${{ needs.build-evidence.outputs.source_revision }}
+        run: |
+          set -euo pipefail
+
+          test -s "$ARCHIVE_PATH"
+          test -s "$ATTESTATION_BUNDLE"
+          test "$(sha256sum "$ARCHIVE_PATH" | awk '{print $1}')" = "$ARCHIVE_SHA256"
+
+          gh attestation verify "$ARCHIVE_PATH" \
+            --bundle "$ATTESTATION_BUNDLE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rust-system-boundaries-release-drill.yml" \
+            --source-ref "$SOURCE_REF" \
+            --source-digest "$SOURCE_REVISION" \
+            --deny-self-hosted-runners
+
+      - name: Write exact-ref verification instructions
+        shell: bash
+        env:
+          ARCHIVE_NAME: ${{ needs.build-evidence.outputs.archive_name }}
+          ARCHIVE_SHA256: ${{ steps.evidence.outputs.archive_sha256 }}
+          ARTIFACT_NAME: ${{ needs.build-evidence.outputs.artifact_name }}
+          EVIDENCE_SCOPE: ${{ needs.build-evidence.outputs.evidence_scope }}
+          SOURCE_REF: ${{ needs.build-evidence.outputs.source_ref }}
+          SOURCE_REVISION: ${{ needs.build-evidence.outputs.source_revision }}
+        run: |
+          {
+            if test "$EVIDENCE_SCOPE" = 'trusted-main-attestation'; then
+              printf '%s\n\n' '## Trusted-main provenance evidence'
+            else
+              printf '%s\n\n' '## Signed untrusted-ref provenance evidence'
+              printf '%s\n' 'This signature proves the exact branch and commit shown below.'
+              printf '%s\n\n' 'It is not a trusted-main or release claim.'
+            fi
+            printf '%s\n' 'This workflow remains a non-production evidence drill. It does not'
+            printf '%s\n' 'publish a release, tag, package, platform signature, notarization,'
+            printf '%s\n\n' 'KMS custody, or production signing claim.'
+            printf "Source ref: \`%s\`\n" "$SOURCE_REF"
+            printf "Source revision: \`%s\`\n" "$SOURCE_REVISION"
+            printf "Archive SHA-256: \`%s\`\n\n" "$ARCHIVE_SHA256"
+            printf '%s\n' '```sh'
+            printf 'gh run download %s --repo %s \\\n' "$GITHUB_RUN_ID" "$GITHUB_REPOSITORY"
+            printf '  --name %s \\\n' "$ARTIFACT_NAME"
+            printf '%s\n' '  --dir ./rust-system-boundaries-evidence'
+            printf '%s\n' 'cd ./rust-system-boundaries-evidence'
+            printf 'sha256sum --check %s.sha256\n' "$ARCHIVE_NAME"
+            printf 'gh attestation verify %s \\\n' "$ARCHIVE_NAME"
+            printf '  --repo %s \\\n' "$GITHUB_REPOSITORY"
+            printf '  --signer-workflow %s/.github/workflows/rust-system-boundaries-release-drill.yml \\\n' \
+              "$GITHUB_REPOSITORY"
+            printf '  --source-ref "%s" \\\n' "$SOURCE_REF"
+            printf '  --source-digest "%s" \\\n' "$SOURCE_REVISION"
+            printf '%s\n' '  --deny-self-hosted-runners'
+            printf 'tar -tzf %s\n' "$ARCHIVE_NAME"
+            printf '%s\n' '```'
+          } >> "$GITHUB_STEP_SUMMARY"
