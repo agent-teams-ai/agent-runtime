@@ -6,6 +6,7 @@ use boundary_supervisor::{
 use ed25519_dalek::SigningKey;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -432,6 +433,27 @@ fn failed_candidate_kill_or_wait_retains_custody_until_reconciliation() {
             Supervisor::open(&supervisor_root),
             Err(SupervisorError::SupervisorAlreadyOwned)
         ));
+        let mut contender = Command::new(env!("CARGO_BIN_EXE_supervisor-driver"))
+            .args([
+                "--root",
+                supervisor_root.to_str().expect("UTF-8 supervisor root"),
+                "--release",
+                initial_release.to_str().expect("UTF-8 initial release"),
+                "--trust-anchor",
+                &anchor.to_base64(),
+            ])
+            .spawn()
+            .expect("cross-process Supervisor contender starts");
+        thread::sleep(Duration::from_millis(150));
+        assert!(
+            contender
+                .try_wait()
+                .expect("contender status inspection succeeds")
+                .is_none(),
+            "a second process must remain blocked while pending cleanup retains owner custody"
+        );
+        contender.kill().expect("blocked contender terminates");
+        contender.wait().expect("blocked contender is reaped");
 
         let candidate_witness = serde_json::from_str::<HealthWitness>(
             fs::read_to_string(&boot_log)
