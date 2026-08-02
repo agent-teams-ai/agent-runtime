@@ -9,7 +9,7 @@ use std::env;
 #[cfg(unix)]
 use std::fs;
 #[cfg(unix)]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::process::{Command, Stdio};
 #[cfg(unix)]
@@ -31,7 +31,7 @@ fn argument(name: &str) -> String {
 }
 
 #[cfg(unix)]
-fn wait_for_stop(stop_path: &PathBuf) {
+fn wait_for_stop(stop_path: &Path) {
     while !stop_path.exists() {
         thread::sleep(Duration::from_millis(10));
     }
