@@ -101,7 +101,10 @@ const asProtocolVersions = (value: unknown, context: string): number[] => {
   if (
     !Array.isArray(value) ||
     value.length === 0 ||
-    value.some((version) => version !== 1 && version !== 2) ||
+    value.length > 32 ||
+    value.some(
+      (version) => !Number.isInteger(version) || (version as number) < 1 || (version as number) > 65_535,
+    ) ||
     new Set(value).size !== value.length
   ) {
     throw new Error(`${context} must be an array of protocol versions`);
@@ -351,6 +354,17 @@ test("current client rejects a declared downgrade even when the frame is otherwi
         },
       ),
     /highest version both sides explicitly support/,
+  );
+});
+
+test("current client accepts a future server that selects the highest mutual version", () => {
+  parseHelloAck(
+    '{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":2,"server_supported_protocol_versions":[3,2,1]}',
+    {
+      handshakeVersion: 2,
+      clientVersions: [2, 1],
+      selectedVersion: 2,
+    },
   );
 });
 

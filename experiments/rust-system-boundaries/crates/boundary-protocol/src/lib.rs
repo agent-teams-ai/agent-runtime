@@ -17,6 +17,7 @@ pub const SERVER_SUPPORTED_PROTOCOL_VERSIONS: &[u16] =
     &[CURRENT_PROTOCOL_VERSION, MINIMUM_PROTOCOL_VERSION];
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
 pub const MAX_OVERSIZED_FRAME_DRAIN_BYTES: usize = MAX_FRAME_BYTES;
+pub const MAX_ADVERTISED_PROTOCOL_VERSIONS: usize = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -446,10 +447,10 @@ fn validate_client_hello(hello: &ClientHello) -> Result<(), ProtocolError> {
 }
 
 fn validate_server_versions(versions: &[u16]) -> Result<(), ProtocolError> {
-    if versions.is_empty() {
+    if versions.is_empty() || versions.len() > MAX_ADVERTISED_PROTOCOL_VERSIONS {
         return Err(ProtocolError {
             code: ProtocolErrorCode::MalformedFrame,
-            detail: "the server acknowledgement must declare at least one protocol version",
+            detail: "the server acknowledgement must declare a bounded, non-empty protocol version set",
         });
     }
     let mut seen = std::collections::BTreeSet::new();
@@ -459,8 +460,11 @@ fn validate_server_versions(versions: &[u16]) -> Result<(), ProtocolError> {
             detail: "the server acknowledgement must not declare a version more than once",
         });
     }
-    for version in versions {
-        validate_protocol_version(*version)?;
+    if versions.contains(&0) {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::MalformedFrame,
+            detail: "protocol version zero is reserved and cannot be advertised",
+        });
     }
     Ok(())
 }
@@ -774,10 +778,10 @@ pub fn decode_negotiated_compatibility_response(
 }
 
 fn validate_client_versions(versions: &[u16]) -> Result<(), ProtocolError> {
-    if versions.is_empty() {
+    if versions.is_empty() || versions.len() > MAX_ADVERTISED_PROTOCOL_VERSIONS {
         return Err(ProtocolError {
             code: ProtocolErrorCode::MalformedFrame,
-            detail: "the handshake must offer at least one protocol version",
+            detail: "the handshake must offer a bounded, non-empty protocol version set",
         });
     }
     let mut seen = std::collections::BTreeSet::new();
@@ -785,6 +789,12 @@ fn validate_client_versions(versions: &[u16]) -> Result<(), ProtocolError> {
         return Err(ProtocolError {
             code: ProtocolErrorCode::MalformedFrame,
             detail: "the handshake must not offer a protocol version more than once",
+        });
+    }
+    if versions.contains(&0) {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::MalformedFrame,
+            detail: "protocol version zero is reserved and cannot be offered",
         });
     }
     Ok(())
@@ -1473,6 +1483,16 @@ mod tests {
     fn current_handshake_rejects_downgrade_and_missing_capability_evidence() {
         let hello =
             decode_client_hello(V2_CLIENT_HELLO_GOLDEN.as_bytes()).expect("v2 hello decodes");
+
+        assert_eq!(
+            decode_server_hello_ack(
+                br#"{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":2,"server_supported_protocol_versions":[3,2,1]}"#,
+                &hello,
+            )
+            .expect("a future server may negotiate the highest version understood by this client")
+            .version(),
+            CURRENT_PROTOCOL_VERSION
+        );
 
         assert_eq!(
             decode_server_hello_ack(
