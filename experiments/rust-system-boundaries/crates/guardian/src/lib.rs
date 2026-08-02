@@ -1866,28 +1866,26 @@ fn inject_windows_containment_fault(
 #[cfg(windows)]
 fn fail_closed_windows_containment(
     child: &mut Child,
-    mut job: Option<WindowsJobObject>,
+    job: Option<WindowsJobObject>,
     record: &CustodyRecord,
     stage: &str,
     cause: GuardianError,
 ) -> GuardianError {
-    let cleanup = match job.as_mut() {
-        Some(job) => match job.terminate() {
-            Ok(()) => wait_for_windows_fixture_tree_exit(child, record),
-            Err(error) => Err(error),
+    let (cleanup_verified, cleanup_detail) = match job {
+        Some(job) => close_windows_job_and_verify(child, job, record),
+        None => match kill_windows_child_only(child) {
+            Ok(()) => (true, "suspended root exit was verified".to_owned()),
+            Err(error) => (
+                false,
+                format!("suspended root exit was unverified: {error}"),
+            ),
         },
-        None => kill_child_only(child),
     };
 
-    let (evidence_stage, cleanup_detail) = match cleanup {
-        Ok(()) => (
-            WindowsContainmentEvidenceStage::CleanupCompleted,
-            "cleanup completed and the fixture root/tree exit was verified".to_owned(),
-        ),
-        Err(error) => (
-            WindowsContainmentEvidenceStage::CleanupUnverified,
-            format!("cleanup could not be verified: {error}"),
-        ),
+    let evidence_stage = if cleanup_verified {
+        WindowsContainmentEvidenceStage::CleanupCompleted
+    } else {
+        WindowsContainmentEvidenceStage::CleanupUnverified
     };
     let evidence_detail = format!("stage={stage}; cause={cause}; {cleanup_detail}");
     let evidence_write =
@@ -1900,6 +1898,42 @@ fn fail_closed_windows_containment(
     GuardianError::SpawnFailed(format!(
         "Windows containment failed at {stage}: {cause}; {cleanup_detail}{evidence_suffix}"
     ))
+}
+
+#[cfg(windows)]
+fn close_windows_job_and_verify(
+    child: &mut Child,
+    mut job: WindowsJobObject,
+    record: &CustodyRecord,
+) -> (bool, String) {
+    let termination_error = job.terminate().err();
+    // KILL_ON_JOB_CLOSE is the fallback containment operation. Closing before
+    // waiting prevents a partial API failure from holding the final kill
+    // capability behind an unbounded child wait.
+    drop(job);
+
+    match wait_for_windows_fixture_tree_exit(child, record) {
+        Ok(()) => (
+            true,
+            match termination_error {
+                Some(error) => format!(
+                    "Job Object closure verified root/tree exit after TerminateJobObject failed: {error}"
+                ),
+                None => "Job Object termination and closure verified root/tree exit".to_owned(),
+            },
+        ),
+        Err(wait_error) => (
+            false,
+            match termination_error {
+                Some(error) => format!(
+                    "TerminateJobObject failed: {error}; Job Object was closed; root/tree exit remained unverified: {wait_error}"
+                ),
+                None => format!(
+                    "Job Object termination returned success, then closure left root/tree exit unverified: {wait_error}"
+                ),
+            },
+        ),
+    }
 }
 
 #[cfg(windows)]
@@ -2063,11 +2097,31 @@ fn cleanup_spawned_process(
     #[cfg(windows)]
     {
         match containment {
-            Some(LiveContainment::WindowsJobObject(mut job)) => {
-                job.terminate()?;
-                wait_for_child_exit(child)
+            Some(LiveContainment::WindowsJobObject(job)) => {
+                let (verified, detail) = close_windows_job_and_verify(child, job, _record);
+                let evidence_stage = if verified {
+                    WindowsContainmentEvidenceStage::CleanupCompleted
+                } else {
+                    WindowsContainmentEvidenceStage::CleanupUnverified
+                };
+                let evidence = append_windows_containment_evidence(
+                    _record,
+                    child.id(),
+                    evidence_stage,
+                    &format!("post-spawn initialization cleanup: {detail}"),
+                );
+                match (verified, evidence) {
+                    (true, Ok(())) => Ok(()),
+                    (true, Err(error)) => Err(GuardianError::SpawnFailed(format!(
+                        "post-spawn cleanup succeeded but containment evidence write failed: {error}"
+                    ))),
+                    (false, Ok(())) => Err(GuardianError::SpawnFailed(detail)),
+                    (false, Err(error)) => Err(GuardianError::SpawnFailed(format!(
+                        "{detail}; containment evidence write also failed: {error}"
+                    ))),
+                }
             }
-            None => kill_child_only(child),
+            None => kill_windows_child_only(child),
         }
     }
 
@@ -2079,6 +2133,7 @@ fn cleanup_spawned_process(
     }
 }
 
+#[cfg(not(windows))]
 fn kill_child_only(child: &mut Child) -> Result<(), GuardianError> {
     if child.try_wait()?.is_none() {
         child.kill()?;
@@ -2089,8 +2144,25 @@ fn kill_child_only(child: &mut Child) -> Result<(), GuardianError> {
 
 #[cfg(windows)]
 fn wait_for_child_exit(child: &mut Child) -> Result<(), GuardianError> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    loop {
+        if child.try_wait()?.is_some() {
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(GuardianError::SpawnFailed(
+                "Windows child process did not exit within the bounded cleanup timeout".to_owned(),
+            ));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(windows)]
+fn kill_windows_child_only(child: &mut Child) -> Result<(), GuardianError> {
     if child.try_wait()?.is_none() {
-        let _ = child.wait()?;
+        child.kill()?;
+        wait_for_child_exit(child)?;
     }
     Ok(())
 }
@@ -2120,11 +2192,15 @@ fn terminate_live_process(
 #[cfg(windows)]
 fn terminate_live_process(
     mut live: LiveProcess,
-    _record: &CustodyRecord,
+    record: &CustodyRecord,
 ) -> Result<(), GuardianError> {
-    let LiveContainment::WindowsJobObject(job) = &mut live.containment;
-    job.terminate()?;
-    let _ = live.child.wait();
+    let LiveContainment::WindowsJobObject(job) = live.containment;
+    let (verified, detail) = close_windows_job_and_verify(&mut live.child, job, record);
+    if !verified {
+        return Err(GuardianError::SpawnFailed(format!(
+            "Windows live-process termination could not be verified: {detail}"
+        )));
+    }
     for reader in live.readers.drain(..) {
         let _ = reader.join();
     }
