@@ -192,10 +192,21 @@ fn linux_pidfd_closes_the_identity_check_to_signal_race_but_not_tree_containment
             .expect("pidfd exit poll succeeds"),
         "pidfd must observe the exact target exit"
     );
-    let after_exit = pidfd
-        .send_signal(libc::SIGKILL)
-        .expect_err("a pidfd for an exited process must never target a later reused PID");
-    assert_eq!(after_exit.raw_os_error(), Some(libc::ESRCH));
+    // poll() becomes readable when the task exits, which can precede reaping.
+    // A pidfd may still accept a no-op signal while its target is a zombie, so
+    // wait for ESRCH rather than incorrectly treating the first readable poll
+    // as proof that the kernel has released the task identity.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        match pidfd.send_signal(libc::SIGKILL) {
+            Err(error) if error.raw_os_error() == Some(libc::ESRCH) => break,
+            Ok(()) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+            Ok(()) => panic!(
+                "a pidfd target remained unreaped; cannot prove post-reaping stable identity semantics"
+            ),
+            Err(error) => panic!("pidfd signal failed unexpectedly after exit: {error}"),
+        }
+    }
     assert!(
         is_process_alive(tree.leaf_pid),
         "pidfd protects one process identity; it must not be misrepresented as process-tree containment"
