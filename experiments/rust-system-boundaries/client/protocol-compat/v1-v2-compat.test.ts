@@ -21,6 +21,8 @@ const protocolServer =
     "debug",
     `protocol-compat-server${executableExtension}`,
   );
+const EXCHANGE_TIMEOUT_MS = 10_000;
+const PROCESS_CLEANUP_TIMEOUT_MS = 2_000;
 
 type FrozenV1AcceptedResponse = {
   kind: "accepted";
@@ -45,11 +47,31 @@ const v1Hello =
 const v1Request =
   '{"protocol_version":1,"request_id":"v1-request","command":{"kind":"spawn","operation_id":"operation-v1","opaque_fence":"fence-v1","fixture_mode":"tree"}}';
 const v2Hello =
-  '{"kind":"protocol_hello","handshake_version":1,"supported_protocol_versions":[2,1]}';
+  '{"kind":"protocol_hello","handshake_version":2,"supported_protocol_versions":[2,1]}';
 const v2Request =
   '{"protocol_version":2,"request_id":"v2-request","command":{"kind":"spawn","operation_id":"operation-v2","opaque_fence":"fence-v2","fixture_mode":"tree","drop_response":false}}';
 const unsupportedHello =
-  '{"kind":"protocol_hello","handshake_version":1,"supported_protocol_versions":[3]}';
+  '{"kind":"protocol_hello","handshake_version":2,"supported_protocol_versions":[3]}';
+
+type HelloExpectation = {
+  handshakeVersion: 1 | 2;
+  clientVersions: readonly number[];
+  selectedVersion: 1 | 2;
+};
+
+type ExchangeOptions = {
+  command?: string;
+  args?: readonly string[];
+  timeoutMs?: number;
+  onSpawn?: (child: ChildProcessWithoutNullStreams) => void;
+};
+
+type ExchangeResult = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+};
 
 let buildPromise: Promise<void> | undefined;
 
@@ -75,19 +97,54 @@ const asStringOrNull = (value: unknown, context: string): string | null => {
   return value;
 };
 
-const parseHelloAck = (line: string, expectedVersion: 1 | 2): void => {
+const asProtocolVersions = (value: unknown, context: string): number[] => {
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((version) => version !== 1 && version !== 2) ||
+    new Set(value).size !== value.length
+  ) {
+    throw new Error(`${context} must be an array of protocol versions`);
+  }
+  return value;
+};
+
+const parseHelloAck = (line: string, expected: HelloExpectation): void => {
   const value = asRecord(JSON.parse(line) as unknown, "protocol hello acknowledgement");
   assertExactKeys(
     value,
-    ["kind", "handshake_version", "selected_protocol_version"],
+    expected.handshakeVersion === 1
+      ? ["kind", "handshake_version", "selected_protocol_version"]
+      : [
+          "kind",
+          "handshake_version",
+          "selected_protocol_version",
+          "server_supported_protocol_versions",
+        ],
     "protocol hello acknowledgement",
   );
   assert.equal(value.kind, "protocol_hello_ack");
-  assert.equal(value.handshake_version, 1);
-  assert.equal(value.selected_protocol_version, expectedVersion);
+  assert.equal(value.handshake_version, expected.handshakeVersion);
+  assert.equal(value.selected_protocol_version, expected.selectedVersion);
+
+  if (expected.handshakeVersion === 2) {
+    const serverVersions = asProtocolVersions(
+      value.server_supported_protocol_versions,
+      "server-supported protocol versions",
+    );
+    const highestMutual = Math.max(
+      ...expected.clientVersions.filter((version) => serverVersions.includes(version)),
+    );
+    assert.ok(Number.isFinite(highestMutual), "current handshake requires a mutual version");
+    assert.equal(
+      value.selected_protocol_version,
+      highestMutual,
+      "current handshake must select the highest version both sides explicitly support",
+    );
+  }
 };
 
-const parseHelloRejection = (line: string): void => {
+const parseHelloRejection = (line: string, handshakeVersion: 1 | 2): void => {
   const value = asRecord(JSON.parse(line) as unknown, "protocol hello rejection");
   assertExactKeys(
     value,
@@ -95,7 +152,7 @@ const parseHelloRejection = (line: string): void => {
     "protocol hello rejection",
   );
   assert.equal(value.kind, "protocol_hello_rejected");
-  assert.equal(value.handshake_version, 1);
+  assert.equal(value.handshake_version, handshakeVersion);
   assert.equal(value.code, "no_mutual_version");
   assert.equal(typeof value.detail, "string");
 };
@@ -173,25 +230,75 @@ const buildServer = async (): Promise<void> => {
   await buildPromise;
 };
 
-const exchange = async (frames: readonly string[]): Promise<readonly string[]> => {
+const withTimeout = async <T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  description: string,
+): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${description} timed out`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+};
+
+const runExchange = async (
+  frames: readonly string[],
+  options: ExchangeOptions = {},
+): Promise<ExchangeResult> => {
   await buildServer();
-  const child = spawn(protocolServer, [], {
+  const child = spawn(options.command ?? protocolServer, options.args ?? [], {
     cwd: experimentDirectory,
     stdio: ["pipe", "pipe", "pipe"],
   }) as ChildProcessWithoutNullStreams;
+  options.onSpawn?.(child);
   const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
   child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
   child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-  const completion = new Promise<number | null>((resolveCompletion, rejectCompletion) => {
-    child.once("error", rejectCompletion);
-    child.once("exit", (code) => resolveCompletion(code));
-  });
-  child.stdin.end(`${frames.join("\n")}\n`);
-  const code = await completion;
-  assert.equal(code, 0, Buffer.concat(stderrChunks).toString("utf8"));
-  return Buffer.concat(stdoutChunks)
-    .toString("utf8")
+  const completion = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+    (resolveCompletion, rejectCompletion) => {
+      child.once("error", rejectCompletion);
+      child.once("close", (code, signal) => resolveCompletion({ code, signal }));
+    },
+  );
+  try {
+    child.stdin.end(`${frames.join("\n")}\n`);
+    const exit = await withTimeout(
+      completion,
+      options.timeoutMs ?? EXCHANGE_TIMEOUT_MS,
+      "protocol compatibility exchange",
+    );
+    return {
+      ...exit,
+      stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+      stderr: Buffer.concat(stderrChunks).toString("utf8"),
+    };
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGKILL");
+      await withTimeout(
+        completion.catch(() => undefined),
+        PROCESS_CLEANUP_TIMEOUT_MS,
+        "protocol compatibility child cleanup",
+      ).catch(() => undefined);
+    }
+  }
+};
+
+const exchange = async (frames: readonly string[]): Promise<readonly string[]> => {
+  const result = await runExchange(frames);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.signal, null, result.stderr);
+  return result.stdout
     .trim()
     .split("\n")
     .filter((line) => line.length > 0);
@@ -200,7 +307,11 @@ const exchange = async (frames: readonly string[]): Promise<readonly string[]> =
 test("frozen v1 client and current v2 server negotiate and project both directions", async () => {
   const frames = await exchange([v1Hello, v1Request]);
   assert.equal(frames.length, 2);
-  parseHelloAck(frames[0]!, 1);
+  parseHelloAck(frames[0]!, {
+    handshakeVersion: 1,
+    clientVersions: [1],
+    selectedVersion: 1,
+  });
   const response = parseFrozenV1Response(frames[1]!);
   assert.equal(response.request_id, "v1-request");
   assert.equal(response.result.operation_id, "operation-v1");
@@ -211,7 +322,11 @@ test("frozen v1 client and current v2 server negotiate and project both directio
 test("current v2 client retains the current response-only execution correlation", async () => {
   const frames = await exchange([v2Hello, v2Request]);
   assert.equal(frames.length, 2);
-  parseHelloAck(frames[0]!, 2);
+  parseHelloAck(frames[0]!, {
+    handshakeVersion: 2,
+    clientVersions: [2, 1],
+    selectedVersion: 2,
+  });
   const response = parseCurrentV2Response(frames[1]!);
   assert.equal(response.request_id, "v2-request");
   assert.equal(response.result.operation_id, "operation-v2");
@@ -221,5 +336,47 @@ test("current v2 client retains the current response-only execution correlation"
 test("unsupported protocol versions receive a typed negotiation rejection", async () => {
   const frames = await exchange([unsupportedHello]);
   assert.equal(frames.length, 1);
-  parseHelloRejection(frames[0]!);
+  parseHelloRejection(frames[0]!, 2);
+});
+
+test("current client rejects a declared downgrade even when the frame is otherwise valid", () => {
+  assert.throws(
+    () =>
+      parseHelloAck(
+        '{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":1,"server_supported_protocol_versions":[2,1]}',
+        {
+          handshakeVersion: 2,
+          clientVersions: [2, 1],
+          selectedVersion: 1,
+        },
+      ),
+    /highest version both sides explicitly support/,
+  );
+});
+
+test("compatibility server rejects an oversized first frame without unbounded read", async () => {
+  const result = await runExchange(["x".repeat(64 * 1024 + 1)]);
+  assert.notEqual(result.code, 0);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /FrameTooLarge|frame exceeds|frame limit/);
+});
+
+test("exchange times out and terminates a nonresponsive compatibility peer", async () => {
+  let child: ChildProcessWithoutNullStreams | undefined;
+  await assert.rejects(
+    runExchange([v2Hello], {
+      command: process.execPath,
+      args: ["-e", "process.stdin.resume(); setInterval(() => {}, 1_000);"],
+      timeoutMs: 50,
+      onSpawn: (spawned) => {
+        child = spawned;
+      },
+    }),
+    /protocol compatibility exchange timed out/,
+  );
+  assert.ok(child !== undefined, "test peer was started");
+  assert.ok(
+    child.exitCode !== null || child.signalCode !== null,
+    "timed-out peer was terminated during cleanup",
+  );
 });

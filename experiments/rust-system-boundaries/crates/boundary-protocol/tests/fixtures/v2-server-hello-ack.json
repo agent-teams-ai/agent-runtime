@@ -1,1 +1,1 @@
-{"kind":"protocol_hello_ack","handshake_version":1,"selected_protocol_version":2}
+{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":2,"server_supported_protocol_versions":[2,1]}

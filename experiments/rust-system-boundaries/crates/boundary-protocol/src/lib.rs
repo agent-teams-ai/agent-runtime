@@ -10,7 +10,11 @@ use std::io::{self, BufRead, Write};
 
 pub const CURRENT_PROTOCOL_VERSION: u16 = 2;
 pub const MINIMUM_PROTOCOL_VERSION: u16 = 1;
-pub const HANDSHAKE_VERSION: u16 = 1;
+pub const CURRENT_HANDSHAKE_VERSION: u16 = 2;
+pub const MINIMUM_HANDSHAKE_VERSION: u16 = 1;
+pub const FROZEN_V1_HANDSHAKE_VERSION: u16 = 1;
+pub const SERVER_SUPPORTED_PROTOCOL_VERSIONS: &[u16] =
+    &[CURRENT_PROTOCOL_VERSION, MINIMUM_PROTOCOL_VERSION];
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
 pub const MAX_OVERSIZED_FRAME_DRAIN_BYTES: usize = MAX_FRAME_BYTES;
 
@@ -204,6 +208,7 @@ pub mod current {
 /// every subsequent request and response on that connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientHello {
+    pub handshake_version: u16,
     pub supported_protocol_versions: Vec<u16>,
 }
 
@@ -264,6 +269,8 @@ enum ServerHelloFrame {
     ProtocolHelloAck {
         handshake_version: u16,
         selected_protocol_version: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        server_supported_protocol_versions: Option<Vec<u16>>,
     },
     ProtocolHelloRejected {
         handshake_version: u16,
@@ -276,6 +283,15 @@ enum ServerHelloFrame {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReadRequest {
     Frame(Result<RequestEnvelope, ProtocolError>),
+    Fatal(ProtocolError),
+}
+
+/// A bounded NDJSON frame before it is projected into a request schema. This
+/// is used for connection handshakes, which deliberately precede request
+/// decoding but must retain the same allocation and drain limits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReadFrame {
+    Frame(Result<Vec<u8>, ProtocolError>),
     Fatal(ProtocolError),
 }
 
@@ -400,12 +416,69 @@ pub fn validate_protocol_version(version: u16) -> Result<(), ProtocolError> {
     }
 }
 
+fn validate_handshake_version(version: u16) -> Result<(), ProtocolError> {
+    if (MINIMUM_HANDSHAKE_VERSION..=CURRENT_HANDSHAKE_VERSION).contains(&version) {
+        Ok(())
+    } else {
+        Err(ProtocolError {
+            code: ProtocolErrorCode::UnsupportedHandshakeVersion,
+            detail: "the handshake schema version is not supported",
+        })
+    }
+}
+
+fn validate_client_hello(hello: &ClientHello) -> Result<(), ProtocolError> {
+    validate_handshake_version(hello.handshake_version)?;
+    validate_client_versions(&hello.supported_protocol_versions)?;
+
+    // The frozen v1 handshake has no server capability evidence. Restricting
+    // it to the only v1 protocol makes a downgrade impossible within that
+    // legacy shape. Current clients use handshake v2 below.
+    if hello.handshake_version == FROZEN_V1_HANDSHAKE_VERSION
+        && hello.supported_protocol_versions.as_slice() != [MINIMUM_PROTOCOL_VERSION]
+    {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::MalformedFrame,
+            detail: "the frozen v1 handshake may only offer protocol version 1",
+        });
+    }
+    Ok(())
+}
+
+fn validate_server_versions(versions: &[u16]) -> Result<(), ProtocolError> {
+    if versions.is_empty() {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::MalformedFrame,
+            detail: "the server acknowledgement must declare at least one protocol version",
+        });
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    if versions.iter().any(|version| !seen.insert(*version)) {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::MalformedFrame,
+            detail: "the server acknowledgement must not declare a version more than once",
+        });
+    }
+    for version in versions {
+        validate_protocol_version(*version)?;
+    }
+    Ok(())
+}
+
+fn highest_mutual_version(client_versions: &[u16], server_versions: &[u16]) -> Option<u16> {
+    client_versions
+        .iter()
+        .copied()
+        .filter(|version| server_versions.contains(version))
+        .max()
+}
+
 /// Encodes the version-neutral first frame of a new connection. No request or
 /// response payload is accepted until the server selects one common version.
 pub fn encode_client_hello(hello: &ClientHello) -> Result<Vec<u8>, ProtocolError> {
-    validate_client_versions(&hello.supported_protocol_versions)?;
+    validate_client_hello(hello)?;
     encode_frame(&ClientHelloFrame::ProtocolHello {
-        handshake_version: HANDSHAKE_VERSION,
+        handshake_version: hello.handshake_version,
         supported_protocol_versions: hello.supported_protocol_versions.clone(),
     })
 }
@@ -418,28 +491,23 @@ pub fn decode_client_hello(frame: &[u8]) -> Result<ClientHello, ProtocolError> {
         handshake_version,
         supported_protocol_versions,
     } = frame;
-    if handshake_version != HANDSHAKE_VERSION {
-        return Err(ProtocolError {
-            code: ProtocolErrorCode::UnsupportedHandshakeVersion,
-            detail: "the handshake schema version is not supported",
-        });
-    }
-    validate_client_versions(&supported_protocol_versions)?;
-    Ok(ClientHello {
+    let hello = ClientHello {
+        handshake_version,
         supported_protocol_versions,
-    })
+    };
+    validate_client_hello(&hello)?;
+    Ok(hello)
 }
 
 /// The server always selects the highest supported mutual version. An offered
 /// future version is allowed, but never selected by a server that does not
 /// explicitly support it.
 pub fn negotiate_protocol(hello: &ClientHello) -> Result<NegotiatedProtocol, ProtocolError> {
-    validate_client_versions(&hello.supported_protocol_versions)?;
-    let selected = hello
-        .supported_protocol_versions
+    validate_client_hello(hello)?;
+    let selected = SERVER_SUPPORTED_PROTOCOL_VERSIONS
         .iter()
         .copied()
-        .filter(|version| validate_protocol_version(*version).is_ok())
+        .filter(|version| hello.supported_protocol_versions.contains(version))
         .max()
         .ok_or(ProtocolError {
             code: ProtocolErrorCode::NoMutualVersion,
@@ -450,11 +518,24 @@ pub fn negotiate_protocol(hello: &ClientHello) -> Result<NegotiatedProtocol, Pro
     })
 }
 
-pub fn encode_server_hello_ack(negotiated: NegotiatedProtocol) -> Result<Vec<u8>, ProtocolError> {
+pub fn encode_server_hello_ack(
+    client_hello: &ClientHello,
+    negotiated: NegotiatedProtocol,
+) -> Result<Vec<u8>, ProtocolError> {
+    validate_client_hello(client_hello)?;
     validate_protocol_version(negotiated.version())?;
+    if negotiate_protocol(client_hello)? != negotiated {
+        return Err(ProtocolError {
+            code: ProtocolErrorCode::NegotiatedVersionMismatch,
+            detail: "the server acknowledgement must select the highest mutual protocol version",
+        });
+    }
     encode_frame(&ServerHelloFrame::ProtocolHelloAck {
-        handshake_version: HANDSHAKE_VERSION,
+        handshake_version: client_hello.handshake_version,
         selected_protocol_version: negotiated.version(),
+        server_supported_protocol_versions: (client_hello.handshake_version
+            == CURRENT_HANDSHAKE_VERSION)
+            .then(|| SERVER_SUPPORTED_PROTOCOL_VERSIONS.to_vec()),
     })
 }
 
@@ -462,27 +543,49 @@ pub fn encode_server_hello_ack(negotiated: NegotiatedProtocol) -> Result<Vec<u8>
 /// selected. It carries only protocol metadata, never runtime details.
 pub fn encode_server_hello_rejection(error: &ProtocolError) -> Result<Vec<u8>, ProtocolError> {
     encode_frame(&ServerHelloFrame::ProtocolHelloRejected {
-        handshake_version: HANDSHAKE_VERSION,
+        handshake_version: FROZEN_V1_HANDSHAKE_VERSION,
         code: error.code,
         detail: error.detail.to_owned(),
     })
 }
 
+pub fn encode_server_hello_rejection_for_client(
+    client_hello: &ClientHello,
+    error: &ProtocolError,
+) -> Result<Vec<u8>, ProtocolError> {
+    validate_client_hello(client_hello)?;
+    encode_frame(&ServerHelloFrame::ProtocolHelloRejected {
+        handshake_version: client_hello.handshake_version,
+        code: error.code,
+        detail: error.detail.to_owned(),
+    })
+}
+
+/// Current-handshake capability evidence prevents an accidental or intercepted
+/// downgrade only when the surrounding transport protects peer identity and
+/// frame integrity. Transport authentication remains outside this wire spike.
 pub fn decode_server_hello(
     frame: &[u8],
     client_hello: &ClientHello,
 ) -> Result<ServerHelloOutcome, ProtocolError> {
-    validate_client_versions(&client_hello.supported_protocol_versions)?;
-    let frame: ServerHelloFrame = decode_frame(frame)?;
+    validate_client_hello(client_hello)?;
+    let frame_value = decode_frame_value(frame)?;
+    let server_capability_evidence_present = frame_value
+        .as_object()
+        .is_some_and(|frame| frame.contains_key("server_supported_protocol_versions"));
+    let frame: ServerHelloFrame =
+        serde_json::from_value(frame_value).map_err(|_| malformed_error())?;
     match frame {
         ServerHelloFrame::ProtocolHelloAck {
             handshake_version,
             selected_protocol_version,
+            server_supported_protocol_versions,
         } => {
-            if handshake_version != HANDSHAKE_VERSION {
+            validate_handshake_version(handshake_version)?;
+            if handshake_version != client_hello.handshake_version {
                 return Err(ProtocolError {
                     code: ProtocolErrorCode::UnsupportedHandshakeVersion,
-                    detail: "the server acknowledgement uses an unsupported handshake schema version",
+                    detail: "the server acknowledgement does not match the client handshake schema version",
                 });
             }
             validate_protocol_version(selected_protocol_version)?;
@@ -495,6 +598,39 @@ pub fn decode_server_hello(
                     detail: "the server selected a version the client did not offer",
                 });
             }
+
+            match client_hello.handshake_version {
+                FROZEN_V1_HANDSHAKE_VERSION => {
+                    if server_capability_evidence_present {
+                        return Err(ProtocolError {
+                            code: ProtocolErrorCode::MalformedFrame,
+                            detail: "the frozen v1 acknowledgement must not contain server capability evidence",
+                        });
+                    }
+                }
+                CURRENT_HANDSHAKE_VERSION => {
+                    let server_versions = server_supported_protocol_versions.ok_or(ProtocolError {
+                        code: ProtocolErrorCode::NegotiatedVersionMismatch,
+                        detail: "the current handshake acknowledgement is missing server capability evidence",
+                    })?;
+                    validate_server_versions(&server_versions)?;
+                    let expected = highest_mutual_version(
+                        &client_hello.supported_protocol_versions,
+                        &server_versions,
+                    )
+                    .ok_or(ProtocolError {
+                        code: ProtocolErrorCode::NoMutualVersion,
+                        detail: "the server acknowledgement has no protocol version in common with the client",
+                    })?;
+                    if selected_protocol_version != expected {
+                        return Err(ProtocolError {
+                            code: ProtocolErrorCode::NegotiatedVersionMismatch,
+                            detail: "the server acknowledgement did not select the highest mutual protocol version",
+                        });
+                    }
+                }
+                _ => unreachable!("validated handshake versions are exhaustive"),
+            }
             Ok(ServerHelloOutcome::Accepted(NegotiatedProtocol {
                 protocol_version: selected_protocol_version,
             }))
@@ -504,10 +640,11 @@ pub fn decode_server_hello(
             code,
             detail,
         } => {
-            if handshake_version != HANDSHAKE_VERSION {
+            validate_handshake_version(handshake_version)?;
+            if handshake_version != client_hello.handshake_version {
                 return Err(ProtocolError {
                     code: ProtocolErrorCode::UnsupportedHandshakeVersion,
-                    detail: "the server rejection uses an unsupported handshake schema version",
+                    detail: "the server rejection does not match the client handshake schema version",
                 });
             }
             Ok(ServerHelloOutcome::Rejected { code, detail })
@@ -764,9 +901,10 @@ pub fn encode_response<T: Serialize>(
     writer.flush()
 }
 
-/// Reads one NDJSON request. Once an oversized frame exceeds the finite drain
-/// allowance, callers must close the connection after receiving `Fatal`.
-pub fn read_next_request(reader: &mut impl BufRead) -> io::Result<Option<ReadRequest>> {
+/// Reads one bounded NDJSON frame before it is interpreted as a particular
+/// wire schema. Once an oversized frame exceeds the finite drain allowance,
+/// callers must close the connection after receiving `Fatal`.
+pub fn read_next_frame(reader: &mut impl BufRead) -> io::Result<Option<ReadFrame>> {
     let mut frame = Vec::with_capacity(MAX_FRAME_BYTES);
     let mut received_any = false;
     let mut oversized = false;
@@ -778,9 +916,9 @@ pub fn read_next_request(reader: &mut impl BufRead) -> io::Result<Option<ReadReq
             return if !received_any {
                 Ok(None)
             } else if oversized {
-                Ok(Some(ReadRequest::Frame(Err(frame_too_large_error()))))
+                Ok(Some(ReadFrame::Frame(Err(frame_too_large_error()))))
             } else {
-                Ok(Some(ReadRequest::Frame(decode_request(&frame))))
+                Ok(Some(ReadFrame::Frame(Ok(frame))))
             };
         }
         received_any = true;
@@ -795,7 +933,7 @@ pub fn read_next_request(reader: &mut impl BufRead) -> io::Result<Option<ReadReq
                 frame.extend_from_slice(&available[..payload_len]);
                 reader.consume(payload_len + usize::from(completed));
                 if completed {
-                    return Ok(Some(ReadRequest::Frame(decode_request(&frame))));
+                    return Ok(Some(ReadFrame::Frame(Ok(frame))));
                 }
                 continue;
             }
@@ -809,11 +947,11 @@ pub fn read_next_request(reader: &mut impl BufRead) -> io::Result<Option<ReadReq
             reader.consume(consumed_payload);
 
             if excess > allowed {
-                return Ok(Some(ReadRequest::Fatal(frame_drain_limit_error())));
+                return Ok(Some(ReadFrame::Fatal(frame_drain_limit_error())));
             }
             if completed {
                 reader.consume(1);
-                return Ok(Some(ReadRequest::Frame(Err(frame_too_large_error()))));
+                return Ok(Some(ReadFrame::Frame(Err(frame_too_large_error()))));
             }
             continue;
         }
@@ -825,13 +963,23 @@ pub fn read_next_request(reader: &mut impl BufRead) -> io::Result<Option<ReadReq
         drained_oversized_bytes += allowed;
 
         if payload_len > allowed {
-            return Ok(Some(ReadRequest::Fatal(frame_drain_limit_error())));
+            return Ok(Some(ReadFrame::Fatal(frame_drain_limit_error())));
         }
         if completed {
             reader.consume(1);
-            return Ok(Some(ReadRequest::Frame(Err(frame_too_large_error()))));
+            return Ok(Some(ReadFrame::Frame(Err(frame_too_large_error()))));
         }
     }
+}
+
+/// Reads one NDJSON request. The handshake and request paths share the exact
+/// same bounded reader so an unauthenticated first frame cannot bypass limits.
+pub fn read_next_request(reader: &mut impl BufRead) -> io::Result<Option<ReadRequest>> {
+    Ok(read_next_frame(reader)?.map(|frame| match frame {
+        ReadFrame::Frame(Ok(frame)) => ReadRequest::Frame(decode_request(&frame)),
+        ReadFrame::Frame(Err(error)) => ReadRequest::Frame(Err(error)),
+        ReadFrame::Fatal(error) => ReadRequest::Fatal(error),
+    }))
 }
 
 impl Serialize for RequestEnvelope {
@@ -1131,7 +1279,7 @@ mod tests {
         let server_session = negotiate_protocol(&hello).expect("v2 server selects v1");
         assert_eq!(server_session.version(), 1);
         assert_eq!(
-            encode_server_hello_ack(server_session).expect("v1 acknowledgement projects"),
+            encode_server_hello_ack(&hello, server_session).expect("v1 acknowledgement projects"),
             golden_bytes(V1_SERVER_HELLO_ACK_GOLDEN)
         );
         let client_session = decode_server_hello_ack(V1_SERVER_HELLO_ACK_GOLDEN.as_bytes(), &hello)
@@ -1194,7 +1342,7 @@ mod tests {
         let session = negotiate_protocol(&hello).expect("v2 server selects v2");
         assert_eq!(session.version(), CURRENT_PROTOCOL_VERSION);
         assert_eq!(
-            encode_server_hello_ack(session).expect("v2 acknowledgement projects"),
+            encode_server_hello_ack(&hello, session).expect("v2 acknowledgement projects"),
             golden_bytes(V2_SERVER_HELLO_ACK_GOLDEN)
         );
         assert_eq!(
@@ -1242,6 +1390,7 @@ mod tests {
     #[test]
     fn negotiation_and_version_mixing_fail_closed() {
         let unsupported = ClientHello {
+            handshake_version: CURRENT_HANDSHAKE_VERSION,
             supported_protocol_versions: vec![CURRENT_PROTOCOL_VERSION + 1],
         };
         let unsupported_wire = encode_client_hello(&unsupported)
@@ -1251,8 +1400,9 @@ mod tests {
         let rejection = negotiate_protocol(&unsupported_hello)
             .expect_err("unsupported-only offer must be rejected");
         assert_eq!(rejection.code, ProtocolErrorCode::NoMutualVersion);
-        let rejection_wire = encode_server_hello_rejection(&rejection)
-            .expect("rejection has a typed handshake frame");
+        let rejection_wire =
+            encode_server_hello_rejection_for_client(&unsupported_hello, &rejection)
+                .expect("rejection has a typed handshake frame");
         assert_eq!(
             decode_server_hello(&rejection_wire, &unsupported_hello)
                 .expect("client receives the typed rejection"),
@@ -1309,11 +1459,66 @@ mod tests {
             )
             .is_err()
         );
+        let v1_ack_selecting_v2 =
+            br#"{"kind":"protocol_hello_ack","handshake_version":1,"selected_protocol_version":2}"#;
         assert_eq!(
-            decode_server_hello_ack(V2_SERVER_HELLO_ACK_GOLDEN.as_bytes(), &v1_hello,)
+            decode_server_hello_ack(v1_ack_selecting_v2, &v1_hello)
                 .expect_err("server cannot select a version the v1 client did not offer")
                 .code,
             ProtocolErrorCode::NegotiatedVersionMismatch
+        );
+    }
+
+    #[test]
+    fn current_handshake_rejects_downgrade_and_missing_capability_evidence() {
+        let hello =
+            decode_client_hello(V2_CLIENT_HELLO_GOLDEN.as_bytes()).expect("v2 hello decodes");
+
+        assert_eq!(
+            decode_server_hello_ack(
+                br#"{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":1,"server_supported_protocol_versions":[2,1]}"#,
+                &hello,
+            )
+            .expect_err("a current server cannot select v1 when v2 is mutual")
+            .code,
+            ProtocolErrorCode::NegotiatedVersionMismatch
+        );
+        assert_eq!(
+            decode_server_hello_ack(
+                br#"{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":2}"#,
+                &hello,
+            )
+            .expect_err("the current handshake requires explicit server capability evidence")
+            .code,
+            ProtocolErrorCode::NegotiatedVersionMismatch
+        );
+        assert_eq!(
+            decode_server_hello_ack(
+                br#"{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":2,"server_supported_protocol_versions":[1]}"#,
+                &hello,
+            )
+            .expect_err("the selected version must be supported by the declaring server")
+            .code,
+            ProtocolErrorCode::NegotiatedVersionMismatch
+        );
+        assert_eq!(
+            decode_client_hello(
+                br#"{"kind":"protocol_hello","handshake_version":1,"supported_protocol_versions":[2,1]}"#,
+            )
+            .expect_err("the frozen v1 handshake cannot advertise a downgrade-prone version set")
+            .code,
+            ProtocolErrorCode::MalformedFrame
+        );
+        let frozen_v1_hello =
+            decode_client_hello(V1_CLIENT_HELLO_GOLDEN.as_bytes()).expect("v1 hello decodes");
+        assert_eq!(
+            decode_server_hello_ack(
+                br#"{"kind":"protocol_hello_ack","handshake_version":1,"selected_protocol_version":1,"server_supported_protocol_versions":null}"#,
+                &frozen_v1_hello,
+            )
+            .expect_err("the frozen v1 acknowledgement cannot be silently extended")
+            .code,
+            ProtocolErrorCode::MalformedFrame
         );
     }
 
@@ -1378,6 +1583,37 @@ mod tests {
             panic!("valid frame must decode after bounded drain");
         };
         assert_eq!(request.request_id, "request-1");
+    }
+
+    #[test]
+    fn generic_frame_reader_bounds_handshakes_before_schema_decoding() {
+        let mut bytes = vec![b'x'; MAX_FRAME_BYTES + 128];
+        bytes.push(b'\n');
+        bytes.extend_from_slice(inspect_frame(CURRENT_PROTOCOL_VERSION).as_bytes());
+        bytes.push(b'\n');
+        let mut reader = BufReader::with_capacity(97, Cursor::new(bytes));
+
+        assert!(matches!(
+            read_next_frame(&mut reader)
+                .expect("oversized handshake frame read")
+                .expect("a frame must be present"),
+            ReadFrame::Frame(Err(ProtocolError {
+                code: ProtocolErrorCode::FrameTooLarge,
+                ..
+            }))
+        ));
+        let ReadFrame::Frame(Ok(frame)) = read_next_frame(&mut reader)
+            .expect("valid raw frame read")
+            .expect("a frame must be present")
+        else {
+            panic!("valid raw frame must survive the bounded drain");
+        };
+        assert_eq!(
+            decode_request(&frame)
+                .expect("valid raw frame decodes after bounded drain")
+                .request_id,
+            "request-1"
+        );
     }
 
     #[test]

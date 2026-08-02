@@ -2,21 +2,22 @@
 //! starting a provider process or importing Guardian's runtime result model.
 
 use boundary_protocol::{
-    ClientHello, CompatibilityResponse, CompatibilityResult, GuardianCommand, RequestEnvelope,
-    decode_client_hello, decode_negotiated_request, encode_server_hello_ack,
-    encode_server_hello_rejection, negotiate_protocol, project_negotiated_compatibility_response,
+    ClientHello, CompatibilityResponse, CompatibilityResult, GuardianCommand, ReadFrame,
+    RequestEnvelope, decode_client_hello, decode_negotiated_request, encode_server_hello_ack,
+    encode_server_hello_rejection, encode_server_hello_rejection_for_client, negotiate_protocol,
+    project_negotiated_compatibility_response, read_next_frame,
 };
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
-fn read_required_line(reader: &mut impl BufRead) -> io::Result<Vec<u8>> {
-    let mut line = Vec::new();
-    if reader.read_until(b'\n', &mut line)? == 0 {
-        return Err(io::Error::new(
+fn read_required_frame(reader: &mut impl BufRead) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    match read_next_frame(reader)? {
+        Some(ReadFrame::Frame(Ok(frame))) => Ok(frame),
+        Some(ReadFrame::Frame(Err(error)) | ReadFrame::Fatal(error)) => Err(Box::new(error)),
+        None => Err(Box::new(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             "expected a protocol frame",
-        ));
+        ))),
     }
-    Ok(line)
 }
 
 fn write_frame(writer: &mut impl Write, frame: &[u8]) -> io::Result<()> {
@@ -41,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut reader = BufReader::new(stdin.lock());
     let mut writer = BufWriter::new(stdout.lock());
 
-    let client_hello: ClientHello = match decode_client_hello(&read_required_line(&mut reader)?) {
+    let client_hello: ClientHello = match decode_client_hello(&read_required_frame(&mut reader)?) {
         Ok(hello) => hello,
         Err(error) => {
             write_frame(&mut writer, &encode_server_hello_rejection(&error)?)?;
@@ -51,13 +52,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let negotiated = match negotiate_protocol(&client_hello) {
         Ok(negotiated) => negotiated,
         Err(error) => {
-            write_frame(&mut writer, &encode_server_hello_rejection(&error)?)?;
+            write_frame(
+                &mut writer,
+                &encode_server_hello_rejection_for_client(&client_hello, &error)?,
+            )?;
             return Ok(());
         }
     };
-    write_frame(&mut writer, &encode_server_hello_ack(negotiated)?)?;
+    write_frame(
+        &mut writer,
+        &encode_server_hello_ack(&client_hello, negotiated)?,
+    )?;
 
-    let request = decode_negotiated_request(&read_required_line(&mut reader)?, negotiated)?;
+    let request = decode_negotiated_request(&read_required_frame(&mut reader)?, negotiated)?;
     let response = CompatibilityResponse {
         protocol_version: negotiated.version(),
         request_id: Some(request.request_id.clone()),

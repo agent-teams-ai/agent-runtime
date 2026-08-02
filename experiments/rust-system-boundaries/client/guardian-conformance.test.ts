@@ -252,6 +252,25 @@ const parseResponse = (line: string): ResponseEnvelope => {
   };
 };
 
+const assertResponseMatchesRequest = (
+  request: RequestEnvelope,
+  response: ResponseEnvelope,
+): void => {
+  const uncorrelatedProtocolRejection =
+    response.request_id === null && response.result.status === "protocol_rejected";
+  assert.ok(
+    uncorrelatedProtocolRejection || response.request_id === request.request_id,
+    "response request_id must match request unless decoding rejected the envelope before correlation",
+  );
+  if (!uncorrelatedProtocolRejection) {
+    assert.equal(
+      response.protocol_version,
+      request.protocol_version,
+      "a correlated Guardian response must use the request protocol version",
+    );
+  }
+};
+
 const within = async <T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -371,12 +390,7 @@ class GuardianClient {
   async request(request: RequestEnvelope, timeoutMs = RESPONSE_TIMEOUT_MS): Promise<ResponseEnvelope> {
     await this.send(request);
     const response = await this.nextResponse(timeoutMs, `response for ${request.request_id}`);
-    const uncorrelatedProtocolRejection =
-      response.request_id === null && response.result.status === "protocol_rejected";
-    assert.ok(
-      uncorrelatedProtocolRejection || response.request_id === request.request_id,
-      "response request_id must match request unless decoding rejected the envelope before correlation",
-    );
+    assertResponseMatchesRequest(request, response);
     return response;
   }
 
@@ -810,6 +824,21 @@ test("TypeScript response decoder rejects schema drift", () => {
         }),
       ),
     /closed-world schema/,
+  );
+
+  const mismatchedCorrelatedResponse = parseResponse(
+    JSON.stringify({
+      ...valid,
+      protocol_version: 1,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertResponseMatchesRequest(
+        inspectRequest("inspect", CURRENT_PROTOCOL_VERSION),
+        mismatchedCorrelatedResponse,
+      ),
+    /must use the request protocol version/,
   );
 });
 
