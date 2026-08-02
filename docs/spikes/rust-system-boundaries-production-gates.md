@@ -140,11 +140,12 @@ N-1 client -> N-1 server
 ```
 
 Negotiation completes before an authority-bearing command. The selected
-version is immutable for the connection. Unknown versions, malformed frames,
-schema drift, response-only drift, downgrade after command acceptance, and
-missing required capabilities fail closed. Compatibility must cover success,
-typed failure, streaming, cancellation, dropped response, reconciliation, and
-terminal shutdown.
+version is immutable for the connection. Unknown advertised versions may be
+ignored only while selecting a known mutual version; no mutual version,
+malformed frames, schema drift, response-only drift, downgrade after command
+acceptance, and missing required capabilities fail closed. Compatibility must
+cover success, typed failure, streaming, cancellation, dropped response,
+reconciliation, and terminal shutdown.
 
 `RUST-N-N1-ROLLBACK` uses packaged binaries and persisted synthetic custody
 state, not an in-memory codec test. It upgrades N-1 to N under live synthetic
@@ -199,4 +200,11 @@ The Rust spike supports continuing production design for both components. All
 gates in this document remain open. In particular, the current GitHub
 attestation proves exact branch evidence only; it is not macOS notarization,
 Windows Authenticode, production key custody, complete N/N-1 compatibility, or
-production rollback qualification.
+production rollback qualification. The synthetic `ubuntu-24.04` campaign does
+prove atomic cgroup v2 placement, pre-exec reduction to the non-root runner
+identity, removal of supplementary groups, `no_new_privs`, denial of an active
+parent-cgroup escape attempt, hostile `setsid` descendant termination, and an
+empty orphan scan for that exact runner target. It does not close the
+production Linux target matrix or real-provider custody gate. Candidate cleanup
+custody is retained only in Supervisor memory in this spike; durable
+reconciliation across a Supervisor crash remains a production requirement.

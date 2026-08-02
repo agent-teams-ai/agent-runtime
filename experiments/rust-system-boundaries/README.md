@@ -55,8 +55,8 @@ caller's CAS, revisions, inbox/outbox, leases, fences, and reconciliation.**
 | Fence and request replay | Caller-driven fence advancement persists the new opaque fence; the once-valid old fence is then rejected; same request is exact replay; conflicting request/operation IDs reject | No duplicate process is created and Guardian never decides fence authority |
 | Crash/orphan recovery | Restarted Guardian rechecks custody nonce plus OS birth identity and may terminate only after proof matches; Linux identity includes boot ID; the TypeScript client verifies root and descendant PIDs are gone | PID alone yields `identity_unverified`; missing launch proof remains explicit `launch_uncertain` and never triggers blind respawn |
 | Ambiguous spawn response | Fixture starts once, intentionally drops its first reply; the TypeScript caller crashes and restarts Guardian, then reconciles by operation identity | A second spawn is prevented by operation identity; no blind retry |
-| Protocol skew | Independently frozen v1 request/response DTOs and current v2 DTOs negotiate the highest mutual version; TypeScript clients exercise both projections and version-mixing rejects | Unsupported versions reject during handshake; the selected version is immutable and no best-effort parse or downgrade occurs |
-| Unix containment | The evidence harness proves process-group escape through `setsid`, stable per-process Linux signaling through `pidfd`, and fail-closed rejection when no verified delegated cgroup v2 leaf exists | Hostile Linux tree custody requires a separate positive campaign for Host-created cgroup v2 admission, atomic placement, `cgroup.kill`, and orphan scanning; hostile macOS custody remains explicitly unsupported rather than silently downgraded to `killpg` |
+| Protocol skew | Independently frozen v1 request/response DTOs and current v2 DTOs negotiate the highest mutual version; a current client ignores unknown future advertisements and selects its highest known mutual version; TypeScript clients exercise both projections and version-mixing rejects | No mutual version rejects during handshake; the selected version is immutable and no best-effort parse or post-selection downgrade occurs |
+| Unix containment | The evidence harness proves process-group escape through `setsid`, stable per-process Linux signaling through `pidfd`, fail-closed rejection without a verified delegated cgroup v2 leaf, and an isolated Ubuntu runner campaign using `clone3(CLONE_INTO_CGROUP)`, pre-exec credential reduction, `cgroup.kill`, and a final orphan scan | The workload runs as the non-root runner identity with no supplementary groups and `no_new_privs`; its active parent-cgroup escape attempt must be denied; the pass qualifies only that exact synthetic GitHub `ubuntu-24.04` target |
 | Signed evidence drill | Exact source ref, commit digest, archive SHA-256, and GitHub/Sigstore bundle are verified; non-main refs remain explicitly untrusted evidence | No branch attestation is treated as a trusted-main or production release claim |
 | Windows containment | Windows creates the root suspended, creates a `KILL_ON_JOB_CLOSE` Job Object, assigns the root, then resumes it; five partial-failure points and Guardian crash verify bounded cleanup and tree exit | No fixture instruction or descendant runs before Job assignment; incomplete cleanup remains typed evidence and fails closed |
 
@@ -70,9 +70,11 @@ finite 64 KiB oversize-drain allowance. The schema has explicit
 `protocol_version`, `request_id`, frozen v1/v2 request projections, typed
 command variants, and typed errors. It is deliberately language-neutral.
 The protocol crate proves per-connection negotiation and independently frozen
-v1 request/response parsing against the v2 compatibility server. The spike
-Guardian still uses its legacy per-frame entrypoint; making handshake mandatory
-there and selecting the final production encoding remain integration work.
+v1 request/response parsing against the v2 compatibility server. A current
+client also accepts bounded, well-formed future version advertisements and
+selects the highest mutually implemented version. The spike Guardian still
+uses its legacy per-frame entrypoint; making handshake mandatory there and
+selecting the final production encoding remain integration work.
 
 ## Custody evidence and recovery
 
@@ -90,12 +92,15 @@ identity remains mandatory; missing or ambiguous tree evidence fails closed.
 
 - POSIX process groups are deliberately weaker than a cgroup or Job Object; the
   harness now demonstrates a real `setsid` escape. Linux `pidfd` closes the
-  identity-to-signal race only for one process. Hostile tree custody still
-  requires a positive Host-created cgroup v2 campaign covering atomic placement,
-  `cgroup.kill`, crash recovery, and orphan scanning. The current cgroup adapter
-  is compiled and its missing/invalid-root paths fail closed, but it is not
-  positive containment evidence. macOS has no equivalent proof in this spike
-  and remains unsupported for hostile custody.
+  identity-to-signal race only for one process. The isolated `ubuntu-24.04`
+  workflow now proves Host-created cgroup v2 admission, atomic placement before
+  fixture execution, removal of supplementary groups, reduction to the non-root
+  runner UID/GID, `no_new_privs`, denial of an active parent-cgroup escape,
+  `cgroup.kill`, and an empty post-kill member scan for its exact synthetic
+  target. This does not qualify other kernels, distributions, deployment
+  privileges, real provider binaries, or production crash recovery. macOS has
+  no equivalent proof in this spike and remains unsupported for hostile
+  custody.
 - A crash before the fixture publishes its identity witness remains
   `launch_uncertain`. The Guardian refuses blind retry, but the spike does not
   prove automatic recovery of every possible pre-witness orphan window.
@@ -109,6 +114,10 @@ identity remains mandatory; missing or ambiguous tree evidence fails closed.
   It tests local state-transition recovery, not power-loss durability; `fsync`,
   filesystem-specific atomicity, and production updater behavior remain out of
   scope for this spike.
+- Failed candidate cleanup retains the exact child handle and blocks a new
+  activation until reconciliation succeeds. That custody is in memory in this
+  spike; production still needs durable startup reconciliation after the
+  Supervisor itself crashes during candidate cleanup.
 - Supervisor health is generation-bound, but the synthetic nonce is passed as
   a process argument and is not confidential from a hostile same-user process.
   Production needs a protected one-use IPC challenge and safe Supervisor
