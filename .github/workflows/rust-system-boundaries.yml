@@ -100,4 +100,7 @@ jobs:
         run: cargo test --locked --workspace --all-targets --manifest-path Cargo.toml
 
       - name: Test TypeScript to Rust boundaries
-        run: pnpm spike:rust-boundaries:client
+        run: >-
+          node --test --test-concurrency=1
+          experiments/rust-system-boundaries/client/guardian-conformance.test.ts
+          experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts
