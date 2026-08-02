@@ -48,6 +48,8 @@ const v1Request =
   '{"protocol_version":1,"request_id":"v1-request","command":{"kind":"spawn","operation_id":"operation-v1","opaque_fence":"fence-v1","fixture_mode":"tree"}}';
 const v2Hello =
   '{"kind":"protocol_hello","handshake_version":2,"supported_protocol_versions":[2,1]}';
+const futureV3ClientHello =
+  '{"kind":"protocol_hello","handshake_version":2,"supported_protocol_versions":[3,2,1]}';
 const v2Request =
   '{"protocol_version":2,"request_id":"v2-request","command":{"kind":"spawn","operation_id":"operation-v2","opaque_fence":"fence-v2","fixture_mode":"tree","drop_response":false}}';
 const unsupportedHello =
@@ -336,6 +338,19 @@ test("current v2 client retains the current response-only execution correlation"
   assert.equal(response.result.execution_id, "compatibility-execution-1");
 });
 
+test("current server accepts a bounded future client advertisement and selects its highest known mutual version", async () => {
+  const frames = await exchange([futureV3ClientHello, v2Request]);
+  assert.equal(frames.length, 2);
+  parseHelloAck(frames[0]!, {
+    handshakeVersion: 2,
+    clientVersions: [3, 2, 1],
+    selectedVersion: 2,
+  });
+  const response = parseCurrentV2Response(frames[1]!);
+  assert.equal(response.request_id, "v2-request");
+  assert.equal(response.result.operation_id, "operation-v2");
+});
+
 test("unsupported protocol versions receive a typed negotiation rejection", async () => {
   const frames = await exchange([unsupportedHello]);
   assert.equal(frames.length, 1);
@@ -357,7 +372,7 @@ test("current client rejects a declared downgrade even when the frame is otherwi
   );
 });
 
-test("current client accepts a future server that selects the highest mutual version", () => {
+test("current client accepts a bounded future server advertisement and keeps the highest mutual version", () => {
   parseHelloAck(
     '{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":2,"server_supported_protocol_versions":[3,2,1]}',
     {

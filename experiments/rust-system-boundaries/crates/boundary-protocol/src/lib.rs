@@ -428,9 +428,21 @@ fn validate_handshake_version(version: u16) -> Result<(), ProtocolError> {
     }
 }
 
-fn validate_client_hello(hello: &ClientHello) -> Result<(), ProtocolError> {
+/// A locally constructed hello is a closed-world claim. The current client
+/// must not advertise a protocol version it cannot actually encode or decode.
+fn validate_outbound_client_hello(hello: &ClientHello) -> Result<(), ProtocolError> {
+    validate_inbound_client_hello(hello)?;
+    for version in &hello.supported_protocol_versions {
+        validate_protocol_version(*version)?;
+    }
+    Ok(())
+}
+
+/// A peer's hello is bounded but forward-compatible: a current server can
+/// safely ignore a future version while selecting its highest known mutual one.
+fn validate_inbound_client_hello(hello: &ClientHello) -> Result<(), ProtocolError> {
     validate_handshake_version(hello.handshake_version)?;
-    validate_client_versions(&hello.supported_protocol_versions)?;
+    validate_bounded_advertised_protocol_versions(&hello.supported_protocol_versions)?;
 
     // The frozen v1 handshake has no server capability evidence. Restricting
     // it to the only v1 protocol makes a downgrade impossible within that
@@ -446,27 +458,10 @@ fn validate_client_hello(hello: &ClientHello) -> Result<(), ProtocolError> {
     Ok(())
 }
 
-fn validate_server_versions(versions: &[u16]) -> Result<(), ProtocolError> {
-    if versions.is_empty() || versions.len() > MAX_ADVERTISED_PROTOCOL_VERSIONS {
-        return Err(ProtocolError {
-            code: ProtocolErrorCode::MalformedFrame,
-            detail: "the server acknowledgement must declare a bounded, non-empty protocol version set",
-        });
-    }
-    let mut seen = std::collections::BTreeSet::new();
-    if versions.iter().any(|version| !seen.insert(*version)) {
-        return Err(ProtocolError {
-            code: ProtocolErrorCode::MalformedFrame,
-            detail: "the server acknowledgement must not declare a version more than once",
-        });
-    }
-    if versions.contains(&0) {
-        return Err(ProtocolError {
-            code: ProtocolErrorCode::MalformedFrame,
-            detail: "protocol version zero is reserved and cannot be advertised",
-        });
-    }
-    Ok(())
+/// Server capability evidence is inbound peer data, so retain bounded,
+/// well-formed future-version advertisements for mutual-version selection.
+fn validate_inbound_server_advertisement(versions: &[u16]) -> Result<(), ProtocolError> {
+    validate_bounded_advertised_protocol_versions(versions)
 }
 
 fn highest_mutual_version(client_versions: &[u16], server_versions: &[u16]) -> Option<u16> {
@@ -480,15 +475,15 @@ fn highest_mutual_version(client_versions: &[u16], server_versions: &[u16]) -> O
 /// Encodes the version-neutral first frame of a new connection. No request or
 /// response payload is accepted until the server selects one common version.
 pub fn encode_client_hello(hello: &ClientHello) -> Result<Vec<u8>, ProtocolError> {
-    validate_client_hello(hello)?;
+    validate_outbound_client_hello(hello)?;
     encode_frame(&ClientHelloFrame::ProtocolHello {
         handshake_version: hello.handshake_version,
         supported_protocol_versions: hello.supported_protocol_versions.clone(),
     })
 }
 
-/// Decodes a closed-world handshake request without consulting the current
-/// request schema or Guardian's canonical command model.
+/// Decodes a bounded, forward-compatible peer handshake request without
+/// consulting the current request schema or Guardian's canonical command model.
 pub fn decode_client_hello(frame: &[u8]) -> Result<ClientHello, ProtocolError> {
     let frame: ClientHelloFrame = decode_frame(frame)?;
     let ClientHelloFrame::ProtocolHello {
@@ -499,7 +494,7 @@ pub fn decode_client_hello(frame: &[u8]) -> Result<ClientHello, ProtocolError> {
         handshake_version,
         supported_protocol_versions,
     };
-    validate_client_hello(&hello)?;
+    validate_inbound_client_hello(&hello)?;
     Ok(hello)
 }
 
@@ -507,7 +502,7 @@ pub fn decode_client_hello(frame: &[u8]) -> Result<ClientHello, ProtocolError> {
 /// future version is allowed, but never selected by a server that does not
 /// explicitly support it.
 pub fn negotiate_protocol(hello: &ClientHello) -> Result<NegotiatedProtocol, ProtocolError> {
-    validate_client_hello(hello)?;
+    validate_inbound_client_hello(hello)?;
     let selected = SERVER_SUPPORTED_PROTOCOL_VERSIONS
         .iter()
         .copied()
@@ -526,7 +521,7 @@ pub fn encode_server_hello_ack(
     client_hello: &ClientHello,
     negotiated: NegotiatedProtocol,
 ) -> Result<Vec<u8>, ProtocolError> {
-    validate_client_hello(client_hello)?;
+    validate_inbound_client_hello(client_hello)?;
     validate_protocol_version(negotiated.version())?;
     if negotiate_protocol(client_hello)? != negotiated {
         return Err(ProtocolError {
@@ -557,7 +552,7 @@ pub fn encode_server_hello_rejection_for_client(
     client_hello: &ClientHello,
     error: &ProtocolError,
 ) -> Result<Vec<u8>, ProtocolError> {
-    validate_client_hello(client_hello)?;
+    validate_inbound_client_hello(client_hello)?;
     encode_frame(&ServerHelloFrame::ProtocolHelloRejected {
         handshake_version: client_hello.handshake_version,
         code: error.code,
@@ -572,7 +567,7 @@ pub fn decode_server_hello(
     frame: &[u8],
     client_hello: &ClientHello,
 ) -> Result<ServerHelloOutcome, ProtocolError> {
-    validate_client_hello(client_hello)?;
+    validate_outbound_client_hello(client_hello)?;
     let frame_value = decode_frame_value(frame)?;
     let server_capability_evidence_present = frame_value
         .as_object()
@@ -617,7 +612,7 @@ pub fn decode_server_hello(
                         code: ProtocolErrorCode::NegotiatedVersionMismatch,
                         detail: "the current handshake acknowledgement is missing server capability evidence",
                     })?;
-                    validate_server_versions(&server_versions)?;
+                    validate_inbound_server_advertisement(&server_versions)?;
                     let expected = highest_mutual_version(
                         &client_hello.supported_protocol_versions,
                         &server_versions,
@@ -777,24 +772,24 @@ pub fn decode_negotiated_compatibility_response(
     }
 }
 
-fn validate_client_versions(versions: &[u16]) -> Result<(), ProtocolError> {
+fn validate_bounded_advertised_protocol_versions(versions: &[u16]) -> Result<(), ProtocolError> {
     if versions.is_empty() || versions.len() > MAX_ADVERTISED_PROTOCOL_VERSIONS {
         return Err(ProtocolError {
             code: ProtocolErrorCode::MalformedFrame,
-            detail: "the handshake must offer a bounded, non-empty protocol version set",
+            detail: "protocol version advertisements must be bounded and non-empty",
         });
     }
     let mut seen = std::collections::BTreeSet::new();
     if versions.iter().any(|version| !seen.insert(*version)) {
         return Err(ProtocolError {
             code: ProtocolErrorCode::MalformedFrame,
-            detail: "the handshake must not offer a protocol version more than once",
+            detail: "protocol version advertisements must not contain duplicates",
         });
     }
     if versions.contains(&0) {
         return Err(ProtocolError {
             code: ProtocolErrorCode::MalformedFrame,
-            detail: "protocol version zero is reserved and cannot be offered",
+            detail: "protocol version zero is reserved and cannot be advertised",
         });
     }
     Ok(())
@@ -1398,15 +1393,60 @@ mod tests {
     }
 
     #[test]
-    fn negotiation_and_version_mixing_fail_closed() {
-        let unsupported = ClientHello {
+    fn outbound_hello_is_closed_world_while_inbound_advertisements_are_forward_compatible() {
+        let current_client = ClientHello {
             handshake_version: CURRENT_HANDSHAKE_VERSION,
-            supported_protocol_versions: vec![CURRENT_PROTOCOL_VERSION + 1],
+            supported_protocol_versions: vec![CURRENT_PROTOCOL_VERSION, MINIMUM_PROTOCOL_VERSION],
         };
-        let unsupported_wire = encode_client_hello(&unsupported)
-            .expect("a future client may advertise an unsupported version");
-        let unsupported_hello = decode_client_hello(&unsupported_wire)
-            .expect("the server decodes the closed-world handshake shape");
+        let current_client_wire =
+            encode_client_hello(&current_client).expect("current client hello encodes");
+        assert_eq!(
+            decode_client_hello(&current_client_wire).expect("server decodes current hello"),
+            current_client
+        );
+
+        let unknown_outbound = ClientHello {
+            handshake_version: CURRENT_HANDSHAKE_VERSION,
+            supported_protocol_versions: vec![
+                CURRENT_PROTOCOL_VERSION + 1,
+                CURRENT_PROTOCOL_VERSION,
+                MINIMUM_PROTOCOL_VERSION,
+            ],
+        };
+        assert_eq!(
+            encode_client_hello(&unknown_outbound)
+                .expect_err("current client must not advertise an unknown version")
+                .code,
+            ProtocolErrorCode::UnsupportedVersion
+        );
+
+        let future_peer = decode_client_hello(
+            br#"{"kind":"protocol_hello","handshake_version":2,"supported_protocol_versions":[3,2,1]}"#,
+        )
+        .expect("server accepts a bounded future peer advertisement");
+        assert_eq!(
+            negotiate_protocol(&future_peer)
+                .expect("server selects its highest known mutual version")
+                .version(),
+            CURRENT_PROTOCOL_VERSION
+        );
+        assert_eq!(
+            decode_server_hello_ack(
+                br#"{"kind":"protocol_hello_ack","handshake_version":2,"selected_protocol_version":2,"server_supported_protocol_versions":[3,2,1]}"#,
+                &current_client,
+            )
+            .expect("current client accepts a bounded future server advertisement")
+            .version(),
+            CURRENT_PROTOCOL_VERSION
+        );
+    }
+
+    #[test]
+    fn negotiation_and_version_mixing_fail_closed() {
+        let unsupported_hello = decode_client_hello(
+            br#"{"kind":"protocol_hello","handshake_version":2,"supported_protocol_versions":[3]}"#,
+        )
+        .expect("the server accepts a bounded future hello before negotiation");
         let rejection = negotiate_protocol(&unsupported_hello)
             .expect_err("unsupported-only offer must be rejected");
         assert_eq!(rejection.code, ProtocolErrorCode::NoMutualVersion);
@@ -1414,19 +1454,9 @@ mod tests {
             encode_server_hello_rejection_for_client(&unsupported_hello, &rejection)
                 .expect("rejection has a typed handshake frame");
         assert_eq!(
-            decode_server_hello(&rejection_wire, &unsupported_hello)
-                .expect("client receives the typed rejection"),
-            ServerHelloOutcome::Rejected {
-                code: ProtocolErrorCode::NoMutualVersion,
-                detail: "the client and server have no mutually supported protocol version"
-                    .to_owned(),
-            }
-        );
-        assert_eq!(
-            decode_server_hello_ack(&rejection_wire, &unsupported_hello)
-                .expect_err("ack-only client helper propagates a typed rejection")
-                .code,
-            ProtocolErrorCode::NoMutualVersion
+            serde_json::from_slice::<serde_json::Value>(&rejection_wire)
+                .expect("rejection frame is JSON")["handshake_version"],
+            serde_json::json!(CURRENT_HANDSHAKE_VERSION)
         );
         assert_eq!(
             decode_client_hello(
