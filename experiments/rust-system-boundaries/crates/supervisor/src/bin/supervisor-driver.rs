@@ -1,4 +1,6 @@
-use boundary_supervisor::{EnsureOptions, FaultBehavior, FaultPoint, Supervisor, TrustAnchor};
+use boundary_supervisor::{
+    EnsureOptions, FaultBehavior, FaultPoint, HostLaunch, Supervisor, TrustAnchor,
+};
 use std::env;
 use std::path::PathBuf;
 
@@ -48,9 +50,14 @@ fn main() {
         Some(value) => panic!("unsupported crash phase: {value}"),
     };
     let result = Supervisor::open(root).and_then(|supervisor| {
+        let host_launch = optional_argument("--host-mode")
+            .map_or_else(HostLaunch::default, |mode| {
+                HostLaunch::with_extra_args(["--mode", mode.as_str()])
+            });
         supervisor.ensure(
             &release,
             &anchor,
+            &host_launch,
             EnsureOptions {
                 fault_point,
                 fault_behavior: if fault_point.is_some() {
@@ -58,7 +65,6 @@ fn main() {
                 } else {
                     FaultBehavior::ReturnError
                 },
-                ..EnsureOptions::default()
             },
         )
     });

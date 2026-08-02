@@ -1,6 +1,6 @@
 use boundary_supervisor::{
-    EnsureOptions, FaultPoint, HealthCheck, Supervisor, SupervisorError, TrustAnchor,
-    write_fixture_release,
+    EnsureOptions, FaultPoint, HostLaunch, Supervisor, SupervisorError, TrustAnchor,
+    write_fixture_release_with_artifact,
 };
 use ed25519_dalek::SigningKey;
 use std::fs;
@@ -12,8 +12,19 @@ fn fixture_key() -> SigningKey {
     SigningKey::from_bytes(&[0x5a; 32])
 }
 
-fn release(root: &Path, version: &str, body: &[u8], key: &SigningKey) {
-    write_fixture_release(root, version, body, key).expect("fixture release must be writable");
+fn synthetic_host_file_name() -> &'static str {
+    if cfg!(windows) {
+        "synthetic-host.exe"
+    } else {
+        "synthetic-host"
+    }
+}
+
+fn release(root: &Path, version: &str, key: &SigningKey) {
+    let binary = fs::read(env!("CARGO_BIN_EXE_synthetic_host"))
+        .expect("compiled synthetic Host binary must be readable");
+    write_fixture_release_with_artifact(root, version, synthetic_host_file_name(), &binary, key)
+        .expect("fixture release must be writable");
 }
 
 #[test]
@@ -22,7 +33,7 @@ fn concurrent_separate_process_ensure_selects_exactly_one_generation() {
     let release_root = temp.path().join("release");
     let supervisor_root = temp.path().join("supervisor");
     let key = fixture_key();
-    release(&release_root, "1.0.0", b"fixture runtime bytes", &key);
+    release(&release_root, "1.0.0", &key);
     let anchor = TrustAnchor::from_signing_key(&key).to_base64();
     let driver = env!("CARGO_BIN_EXE_supervisor-driver");
 
@@ -63,11 +74,16 @@ fn fault_injection_recovers_without_promoting_an_interrupted_generation() {
     let new_release = temp.path().join("new");
     let key = fixture_key();
     let anchor = TrustAnchor::from_signing_key(&key);
-    release(&old_release, "1.0.0", b"old", &key);
-    release(&new_release, "2.0.0", b"new", &key);
+    release(&old_release, "1.0.0", &key);
+    release(&new_release, "2.0.0", &key);
     let supervisor = Supervisor::open(&supervisor_root).expect("supervisor opens");
     supervisor
-        .ensure(&old_release, &anchor, EnsureOptions::default())
+        .ensure(
+            &old_release,
+            &anchor,
+            &HostLaunch::default(),
+            EnsureOptions::default(),
+        )
         .expect("old generation activates");
 
     for fault_point in [
@@ -78,8 +94,8 @@ fn fault_injection_recovers_without_promoting_an_interrupted_generation() {
         let result = supervisor.ensure(
             &new_release,
             &anchor,
+            &HostLaunch::default(),
             EnsureOptions {
-                health_check: HealthCheck::Pass,
                 fault_point: Some(fault_point),
                 ..EnsureOptions::default()
             },
@@ -113,11 +129,16 @@ fn inspect_recovers_every_crashed_activation_phase_after_the_lock_is_released() 
     let new_release = temp.path().join("new");
     let key = fixture_key();
     let anchor = TrustAnchor::from_signing_key(&key);
-    release(&old_release, "1.0.0", b"old", &key);
-    release(&new_release, "2.0.0", b"new", &key);
+    release(&old_release, "1.0.0", &key);
+    release(&new_release, "2.0.0", &key);
     let supervisor = Supervisor::open(&supervisor_root).expect("supervisor opens");
     supervisor
-        .ensure(&old_release, &anchor, EnsureOptions::default())
+        .ensure(
+            &old_release,
+            &anchor,
+            &HostLaunch::default(),
+            EnsureOptions::default(),
+        )
         .expect("old generation activates");
     let driver = env!("CARGO_BIN_EXE_supervisor-driver");
 
@@ -134,6 +155,8 @@ fn inspect_recovers_every_crashed_activation_phase_after_the_lock_is_released() 
                 new_release.to_str().expect("UTF-8 path"),
                 "--trust-anchor",
                 &anchor.to_base64(),
+                "--host-mode",
+                "exit-after-report",
                 "--crash-at",
                 phase,
             ])
@@ -160,61 +183,42 @@ fn inspect_recovers_every_crashed_activation_phase_after_the_lock_is_released() 
 }
 
 #[test]
-fn health_failure_rolls_back_and_active_version_is_exactly_inspectable() {
-    let temp = TempDir::new().expect("temporary root");
-    let supervisor_root = temp.path().join("supervisor");
-    let good_release = temp.path().join("good");
-    let bad_release = temp.path().join("bad");
-    let key = fixture_key();
-    let anchor = TrustAnchor::from_signing_key(&key);
-    release(&good_release, "1.0.0", b"good", &key);
-    release(&bad_release, "2.0.0", b"bad", &key);
-    let supervisor = Supervisor::open(&supervisor_root).expect("supervisor opens");
-    supervisor
-        .ensure(&good_release, &anchor, EnsureOptions::default())
-        .expect("good generation activates");
-
-    let result = supervisor.ensure(
-        &bad_release,
-        &anchor,
-        EnsureOptions {
-            health_check: HealthCheck::Fail,
-            fault_point: None,
-            ..EnsureOptions::default()
-        },
-    );
-    assert!(matches!(result, Err(SupervisorError::HealthCheckFailed)));
-    let active = supervisor
-        .inspect_active()
-        .expect("inspect succeeds")
-        .expect("good remains active");
-    assert_eq!(active.version, "1.0.0");
-}
-
-#[test]
 fn signed_manifest_and_artifact_tampering_are_rejected() {
     let temp = TempDir::new().expect("temporary root");
     let release_root = temp.path().join("release");
     let key = fixture_key();
     let anchor = TrustAnchor::from_signing_key(&key);
-    release(&release_root, "1.0.0", b"fixture bytes", &key);
+    release(&release_root, "1.0.0", &key);
     let supervisor = Supervisor::open(temp.path().join("supervisor")).expect("supervisor opens");
 
-    fs::write(release_root.join("fixture-runtime.bin"), b"tampered bytes")
-        .expect("tamper fixture artifact");
-    let artifact_result = supervisor.ensure(&release_root, &anchor, EnsureOptions::default());
+    fs::write(
+        release_root.join(synthetic_host_file_name()),
+        b"tampered bytes",
+    )
+    .expect("tamper fixture artifact");
+    let artifact_result = supervisor.ensure(
+        &release_root,
+        &anchor,
+        &HostLaunch::default(),
+        EnsureOptions::default(),
+    );
     assert!(matches!(
         artifact_result,
         Err(SupervisorError::ArtifactDigestMismatch { .. })
     ));
 
-    release(&release_root, "1.0.0", b"fixture bytes", &key);
+    release(&release_root, "1.0.0", &key);
     let manifest_path = release_root.join("release-manifest.json");
     let tampered = fs::read_to_string(&manifest_path)
         .expect("manifest reads")
         .replace("1.0.0", "9.9.9");
     fs::write(manifest_path, tampered).expect("tamper manifest");
-    let manifest_result = supervisor.ensure(&release_root, &anchor, EnsureOptions::default());
+    let manifest_result = supervisor.ensure(
+        &release_root,
+        &anchor,
+        &HostLaunch::default(),
+        EnsureOptions::default(),
+    );
     assert!(matches!(
         manifest_result,
         Err(SupervisorError::InvalidSignature)
@@ -233,7 +237,7 @@ fn unsafe_manifest_components_and_malformed_digests_are_rejected_before_staging(
     let release_root = temp.path().join("release");
     let key = fixture_key();
     let anchor = TrustAnchor::from_signing_key(&key);
-    release(&release_root, "1.0.0", b"fixture bytes", &key);
+    release(&release_root, "1.0.0", &key);
     let supervisor = Supervisor::open(temp.path().join("supervisor")).expect("supervisor opens");
     let manifest_path = release_root.join("release-manifest.json");
     let original = fs::read(&manifest_path).expect("fixture manifest reads");
@@ -299,7 +303,7 @@ fn unsafe_manifest_components_and_malformed_digests_are_rejected_before_staging(
         assert_eq!(
             supervisor.generation_count().expect("count succeeds"),
             0,
-            "malformed digest must fail before staging"
+            "malformed digest must fail before a staging path exists"
         );
     }
 }
@@ -324,6 +328,11 @@ fn manifest_value_error(
     )
     .expect("tampered fixture manifest writes");
     supervisor
-        .ensure(release_root, anchor, EnsureOptions::default())
+        .ensure(
+            release_root,
+            anchor,
+            &HostLaunch::default(),
+            EnsureOptions::default(),
+        )
         .expect_err("unsafe manifest must fail")
 }
