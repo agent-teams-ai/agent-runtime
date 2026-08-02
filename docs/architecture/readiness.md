@@ -2,8 +2,8 @@
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain and dependency decisions are in ADR-0001, ADR-0002, and
-ADR-0003.
+The canonical domain and dependency decisions are in ADR-0001, ADR-0002,
+ADR-0003, and ADR-0004.
 Evidence promotion is in `architecture/evidence-traceability.md`. Exact scoped
 target matches and evidence hashes are in
 `architecture/qualification-registry.json`. This document owns the mutable list
@@ -399,10 +399,14 @@ Remaining before implementation qualification:
 - deterministic Operator Case rebuild and proof that projection lag cannot
   authorize mutation;
 - target-specific cutoff commands, typed predecessor-barrier evidence, durable
-  receipt query/feed contracts, and normalized disposition-plan contracts;
+  receipt query/feed contracts, pre-materialization dispatch-prevention guards,
+  and normalized disposition-plan contracts;
 - ADR-0003 conformance cases for target races, delayed output, policy-only
   containment, external-effect identity, scope fan-out, disposition ordering,
-  key-scope proof, and restore resurrection.
+  key-scope proof, and restore resurrection;
+- ADR-0004 conformance cases for pre-materialization prevention, negative-guard
+  retention and restore, dispatch ordering, and automated external-effect
+  identity enforcement.
 
 Remaining before dedicated hosted single-tenant operation:
 

@@ -1,7 +1,7 @@
 # Communication Boundaries
 
-Status: accepted architectural direction as amended by ADR-0001, ADR-0002, and
-ADR-0003; detailed protocols remain open ADRs.
+Status: accepted architectural direction as amended by ADR-0001, ADR-0002,
+ADR-0003, and ADR-0004; detailed protocols remain open ADRs.
 
 ## Purpose
 
@@ -95,6 +95,10 @@ orchestration event. An ACP session is not an Agent Runtime session.
   resurrection-prevention horizon. Expiry of an ordinary query or transport
   deduplication window never makes an old semantic effect safe to execute
   again.
+- A target-specific prevention request may durably fence an original operation
+  command before that command materializes a RuntimeOperation. Original command
+  acceptance, the negative guard, and dispatch claim serialize in one Agent
+  Execution authority store; target absence alone is not prevention evidence.
 - Unknown permission outcomes and unregistered protocol extensions fail
   closed.
 - Authentication, authorization, tenant and workspace scope, redaction,
