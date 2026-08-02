@@ -1912,24 +1912,46 @@ fn close_windows_job_and_verify(
     // capability behind an unbounded child wait.
     drop(job);
 
+    // A failure can happen after the Job Object exists but before the root is
+    // assigned to it. Terminating/closing that empty Job Object cannot affect
+    // the still-suspended root, so always use direct root termination as the
+    // final fail-closed fallback. If assignment did succeed, the Job Object
+    // remains responsible for every descendant and the direct call is benign.
+    let root_cleanup_error = kill_windows_child_only(child).err();
+
     match wait_for_windows_fixture_tree_exit(child, record) {
         Ok(()) => (
             true,
-            match termination_error {
-                Some(error) => format!(
-                    "Job Object closure verified root/tree exit after TerminateJobObject failed: {error}"
+            match (termination_error, root_cleanup_error) {
+                (Some(job_error), Some(root_error)) => format!(
+                    "Job Object closure and direct root fallback verified root/tree exit after TerminateJobObject failed: {job_error}; direct root termination also reported: {root_error}"
                 ),
-                None => "Job Object termination and closure verified root/tree exit".to_owned(),
+                (Some(job_error), None) => format!(
+                    "Job Object closure and direct root fallback verified root/tree exit after TerminateJobObject failed: {job_error}"
+                ),
+                (None, Some(root_error)) => format!(
+                    "Job Object termination/closure verified root/tree exit after direct root termination reported: {root_error}"
+                ),
+                (None, None) => {
+                    "Job Object termination/closure and direct root fallback verified root/tree exit"
+                        .to_owned()
+                }
             },
         ),
         Err(wait_error) => (
             false,
-            match termination_error {
-                Some(error) => format!(
-                    "TerminateJobObject failed: {error}; Job Object was closed; root/tree exit remained unverified: {wait_error}"
+            match (termination_error, root_cleanup_error) {
+                (Some(job_error), Some(root_error)) => format!(
+                    "TerminateJobObject failed: {job_error}; Job Object was closed; direct root termination reported: {root_error}; root/tree exit remained unverified: {wait_error}"
                 ),
-                None => format!(
-                    "Job Object termination returned success, then closure left root/tree exit unverified: {wait_error}"
+                (Some(job_error), None) => format!(
+                    "TerminateJobObject failed: {job_error}; Job Object was closed and direct root fallback ran; root/tree exit remained unverified: {wait_error}"
+                ),
+                (None, Some(root_error)) => format!(
+                    "Job Object termination returned success, but direct root termination reported: {root_error}; root/tree exit remained unverified: {wait_error}"
+                ),
+                (None, None) => format!(
+                    "Job Object termination/closure and direct root fallback completed, but root/tree exit remained unverified: {wait_error}"
                 ),
             },
         ),
