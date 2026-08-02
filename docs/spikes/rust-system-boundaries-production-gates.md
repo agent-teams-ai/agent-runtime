@@ -2,6 +2,13 @@
 
 Status: proposed fail-closed qualification plan
 
+Current disposition:
+
+- `SPIKE PROVEN`: scoped feasibility evidence is retained in
+  `experiments/rust-system-boundaries/evidence/main-aa76858-evidence.json`.
+- `PRODUCTION GATE OPEN`: every gate in this document remains unqualified until
+  its exact target has independently accepted, retained evidence.
+
 Companion evidence:
 `experiments/rust-system-boundaries/README.md`
 
@@ -203,8 +210,9 @@ valid result.
 ## Current disposition
 
 The Rust spike supports continuing production design for both components. All
-gates in this document remain open. In particular, the current GitHub
-attestation proves exact branch evidence only; it is not macOS notarization,
+gates in this document remain open. The `main@aa76858` GitHub/Sigstore
+attestation proves trusted-main provenance for a short-retention,
+non-production evidence archive; it is not macOS notarization,
 Windows Authenticode, production key custody, complete N/N-1 compatibility, or
 production rollback qualification. The synthetic `ubuntu-24.04` campaign does
 prove atomic cgroup v2 placement, pre-exec reduction to the non-root runner

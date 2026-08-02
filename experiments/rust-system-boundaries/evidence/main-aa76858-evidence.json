@@ -1,0 +1,133 @@
+{
+  "schema": "agent-teams.rust-system-boundaries.evidence-record/v1",
+  "recordId": "main-aa76858",
+  "disposition": {
+    "spike": "proven",
+    "production": "unqualified"
+  },
+  "source": {
+    "ref": "refs/heads/main",
+    "revision": "aa7685867d5ccbaba7b4eb0f873566f46d676945",
+    "pullRequest": "https://github.com/agent-teams-ai/agent-runtime/pull/16",
+    "mergedAt": "2026-08-02T16:16:17Z"
+  },
+  "runs": {
+    "qualityGate": {
+      "id": 30756251841,
+      "workflow": "CI",
+      "event": "push",
+      "result": "success",
+      "url": "https://github.com/agent-teams-ai/agent-runtime/actions/runs/30756251841"
+    },
+    "boundaryMatrix": {
+      "id": 30756251844,
+      "workflow": "Rust System Boundaries",
+      "event": "push",
+      "result": "success",
+      "url": "https://github.com/agent-teams-ai/agent-runtime/actions/runs/30756251844",
+      "jobs": [
+        {
+          "runner": "ubuntu-24.04",
+          "jobId": 91518790399,
+          "result": "success",
+          "url": "https://github.com/agent-teams-ai/agent-runtime/actions/runs/30756251844/job/91518790399"
+        },
+        {
+          "runner": "macos-15",
+          "jobId": 91518790372,
+          "result": "success",
+          "url": "https://github.com/agent-teams-ai/agent-runtime/actions/runs/30756251844/job/91518790372"
+        },
+        {
+          "runner": "windows-2025",
+          "jobId": 91518790393,
+          "result": "success",
+          "url": "https://github.com/agent-teams-ai/agent-runtime/actions/runs/30756251844/job/91518790393"
+        }
+      ]
+    },
+    "provenance": {
+      "id": 30757104630,
+      "workflow": "Rust Boundary Provenance Evidence Drill",
+      "event": "workflow_dispatch",
+      "result": "success",
+      "url": "https://github.com/agent-teams-ai/agent-runtime/actions/runs/30757104630",
+      "evidenceScope": "trusted-main-attestation",
+      "archive": {
+        "name": "rust-system-boundaries-evidence-aa7685867d5ccbaba7b4eb0f873566f46d676945.tar.gz",
+        "sha256": "f38d580570a198fb23fd8becca00f2c9994334488474c6ebe3e367179cf7b4e8",
+        "artifactRetentionDays": 3
+      }
+    }
+  },
+  "assertions": [
+    {
+      "id": "SUPERVISOR-LIFETIME-CUSTODY",
+      "result": "passed",
+      "evidence": [
+        "A lifetime owner lock excludes another process while pending cleanup retains the exact child handle."
+      ]
+    },
+    {
+      "id": "SUPERVISOR-GENERATION-HEALTH",
+      "result": "passed",
+      "evidence": [
+        "Synthetic Host readiness binds generation, artifact and executable digests, nonce, PID, process birth identity, and liveness."
+      ]
+    },
+    {
+      "id": "GUARDIAN-AMBIGUOUS-SPAWN",
+      "result": "passed",
+      "evidence": [
+        "A dropped first response is reconciled by operation identity without a duplicate spawn."
+      ]
+    },
+    {
+      "id": "LINUX-CGROUP-CUSTODY",
+      "result": "passed",
+      "evidence": [
+        "ubuntu-24.04 proves atomic cgroup v2 placement, privilege reduction, denied parent escape, cgroup.kill, and an empty orphan scan."
+      ]
+    },
+    {
+      "id": "LINUX-CREDENTIAL-SENTINELS",
+      "result": "passed",
+      "evidence": [
+        "uid_t::MAX and gid_t::MAX are rejected before setresuid or setresgid can interpret them as unchanged credentials."
+      ]
+    },
+    {
+      "id": "WINDOWS-ATOMIC-JOB-CUSTODY",
+      "result": "passed",
+      "evidence": [
+        "windows-2025 proves suspended creation, Job Object assignment before resume, bounded partial-failure cleanup, and owner-loss reconciliation."
+      ]
+    },
+    {
+      "id": "WINDOWS-EXIT-259-LIVENESS",
+      "result": "passed",
+      "evidence": [
+        "Zero-time process-handle wait treats an exited process with code 259 as exited rather than STILL_ACTIVE."
+      ]
+    },
+    {
+      "id": "PROTOCOL-CLOSED-WORLD-SKEW",
+      "result": "passed",
+      "evidence": [
+        "Frozen v1 and current v2 clients and responses negotiate the highest mutual implemented version and reject version mixing."
+      ]
+    }
+  ],
+  "safety": {
+    "syntheticFixturesOnly": true,
+    "providerInvocations": false,
+    "networkCallsFromHarness": false,
+    "credentialsAccessed": false,
+    "userProjectsAccessed": false
+  },
+  "limitations": [
+    "The record is feasibility evidence, not production qualification.",
+    "The archive is retained for three days; production evidence retention remains open.",
+    "Hostile macOS custody, real providers, production signing, notarization, Authenticode, durable Supervisor crash reconciliation, and packaged N/N-1 rollback remain open gates."
+  ]
+}
