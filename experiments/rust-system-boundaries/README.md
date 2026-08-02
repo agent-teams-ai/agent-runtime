@@ -3,6 +3,19 @@
 Status: isolated evidence spike. It is not production code, an ADR, or a
 production-qualification claim.
 
+Disposition:
+
+- `SPIKE PROVEN`: the scoped synthetic Supervisor/Guardian assertions in the
+  pass/fail matrix have passed on their declared targets.
+- `PRODUCTION GATE OPEN`: the spike does not qualify a distributed binary,
+  hostile macOS profile, real provider, production updater, signing chain, or
+  supported platform matrix.
+
+The canonical merged baseline is the strict machine-readable
+[`main@aa76858` evidence record](evidence/main-aa76858-evidence.json). Production
+gates remain in
+[`docs/spikes/rust-system-boundaries-production-gates.md`](../../docs/spikes/rust-system-boundaries-production-gates.md).
+
 Run the complete synthetic suite from the repository root:
 
 ```sh
@@ -58,6 +71,7 @@ caller's CAS, revisions, inbox/outbox, leases, fences, and reconciliation.**
 | Ambiguous spawn response | Fixture starts once, intentionally drops its first reply; the TypeScript caller crashes and restarts Guardian, then reconciles by operation identity | A second spawn is prevented by operation identity; no blind retry |
 | Protocol skew | Independently frozen v1 request/response DTOs and current v2 DTOs negotiate the highest mutual version; a current client ignores unknown future advertisements and selects its highest known mutual version; TypeScript clients exercise both projections and version-mixing rejects | No mutual version rejects during handshake; the selected version is immutable and no best-effort parse or post-selection downgrade occurs |
 | Unix containment | The evidence harness proves process-group escape through `setsid`, stable per-process Linux signaling through `pidfd`, fail-closed rejection without a verified delegated cgroup v2 leaf, and an isolated Ubuntu runner campaign using `clone3(CLONE_INTO_CGROUP)`, pre-exec credential reduction, `cgroup.kill`, and a final orphan scan | The workload runs as the non-root runner identity with no supplementary groups and `no_new_privs`; its active parent-cgroup escape attempt must be denied; the pass qualifies only that exact synthetic GitHub `ubuntu-24.04` target |
+| Credential sentinel rejection | Linux workload identity rejects `uid_t::MAX` and `gid_t::MAX` before `setresuid`/`setresgid` | The unchanged-credential sentinel can never turn a requested privilege drop into a successful no-op |
 | Signed evidence drill | Exact source ref, commit digest, archive SHA-256, and GitHub/Sigstore bundle are verified; non-main refs remain explicitly untrusted evidence | No branch attestation is treated as a trusted-main or production release claim |
 | Windows containment | Windows creates the root suspended, creates a `KILL_ON_JOB_CLOSE` Job Object, assigns the root, then resumes it; five partial-failure points and Guardian crash verify bounded cleanup and tree exit | No fixture instruction or descendant runs before Job assignment; incomplete cleanup remains typed evidence and fails closed |
 

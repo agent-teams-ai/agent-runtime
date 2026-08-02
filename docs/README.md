@@ -112,9 +112,15 @@ Read documents in this order:
 33. `spikes/stage-n-binary-revision-results.md` - complete binary closure,
    compatibility, activation, assignment, rollback, retention, GC, replay,
    clock, and private-state evidence.
-34. `spikes/runtime-profile-behavior.md` - provider behavior evidence and
+34. `../experiments/rust-system-boundaries/README.md` - synthetic Rust Local
+   Supervisor and Execution Guardian feasibility evidence, exact fail-closed
+   scope, and platform limitations. This is not production qualification.
+35. `spikes/rust-system-boundaries-production-gates.md` - proposed closed-world
+   production qualification gates for platform custody, generation health,
+   protocol compatibility, signing, provenance, and rollback.
+36. `spikes/runtime-profile-behavior.md` - provider behavior evidence and
    historical hypotheses. It is not an implementation specification.
-35. `../experiments/runtime-profile-behavior/README.md` - experiment status and
+37. `../experiments/runtime-profile-behavior/README.md` - experiment status and
    the candidate behaviors known to be superseded or falsified.
 
 Document status vocabulary:

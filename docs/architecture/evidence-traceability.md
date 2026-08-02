@@ -46,6 +46,21 @@ route, or failure domain.
 | `spikes/stage-m-egress-policy-results.md` | hosted synthetic loopback signed policy, HTTP/1.1/HTTP/2 dispatch, transport closure, time, and digest-oracle campaigns | Runtime Security owns exact egress authorization; the gateway revalidates route, address, TLS, peer, redirect, generation and time at dispatch before bytes; revoked or failed-close transports cannot be reused; the gateway is an adapter, not a context. |
 | `spikes/stage-n-binary-revision-results.md` | hosted deterministic complete binary closure, compatibility, activation, assignment, rollback, retention, GC, replay, clock, and encapsulation | `BinaryRevision` identifies the complete immutable executable closure; Host Custody owns mutable head/assignment/lifecycle roots; sessions pin closure IDs; terminal replay cannot resurrect authority; mutable lifecycle is not a new bounded context. |
 
+## Non-promoted feasibility evidence
+
+The Rust system-boundary campaign is intentionally outside the promoted-rule
+table and qualification registry. Its
+[`main@aa76858` evidence record](../../experiments/rust-system-boundaries/evidence/main-aa76858-evidence.json)
+and [experiment report](../../experiments/rust-system-boundaries/README.md)
+prove scoped technical feasibility for a Rust Local Supervisor and Execution
+Guardian. They do not qualify a production target, promote a new domain owner,
+or close any gate in
+[`rust-system-boundaries-production-gates.md`](../spikes/rust-system-boundaries-production-gates.md).
+
+This separation is deliberate: adding the campaign to the normative table
+would require an exact qualification-registry target and would incorrectly
+turn feasibility evidence into an architecture or production claim.
+
 ## Promotion discipline
 
 - Spike status never changes a domain owner implicitly.

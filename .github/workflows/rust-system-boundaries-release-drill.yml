@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - spike/rust-system-boundaries
     paths:
       - experiments/rust-system-boundaries/**

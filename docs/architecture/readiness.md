@@ -272,6 +272,18 @@ proof of effortless extraction.
 
 ## Platform containment and binary policy
 
+Scoped feasibility evidence, not production qualification:
+
+- Rust Local Supervisor and Execution Guardian passed the synthetic
+  Linux/macOS/Windows boundary matrix on `main@aa76858`; the immutable source
+  and run references are recorded in
+  `experiments/rust-system-boundaries/evidence/main-aa76858-evidence.json`;
+- the same revision has a trusted-main GitHub/Sigstore provenance attestation
+  for its non-production evidence archive;
+- `SPIKE PROVEN` does not imply `PRODUCTION QUALIFIED`;
+  `PRODUCTION GATE OPEN` applies to every gate in
+  `docs/spikes/rust-system-boundaries-production-gates.md`.
+
 Scoped qualified:
 
 - synthetic Linux non-root container/cgroup custody and application gateway;
