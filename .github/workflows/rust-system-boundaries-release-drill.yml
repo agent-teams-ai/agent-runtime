@@ -2,6 +2,12 @@ name: Rust Boundary Provenance Evidence Drill
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - spike/rust-system-boundaries
+    paths:
+      - experiments/rust-system-boundaries/**
+      - .github/workflows/rust-system-boundaries-release-drill.yml
 
 concurrency:
   group: rust-system-boundaries-release-drill-${{ github.ref }}
