@@ -27,6 +27,10 @@ use std::fs::File;
 use std::io::{Read, Write};
 #[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(target_os = "linux")]
+use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnixContainmentGate {
@@ -140,6 +144,19 @@ pub struct LinuxCgroupV2Tree {
     directory: File,
 }
 
+/// A directly spawned child whose initial cgroup membership was selected by
+/// `clone3(CLONE_INTO_CGROUP)`, before the child had a chance to execute
+/// workload code.
+///
+/// This type is evidence-only. It gives the caller a `waitpid` handle for the
+/// direct child; it is not a general-purpose process supervisor.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub struct LinuxCgroupV2Child {
+    process_id: u32,
+    reaped: bool,
+}
+
 #[cfg(target_os = "linux")]
 impl LinuxCgroupV2Tree {
     pub fn open_new_host_owned_leaf(root: &std::path::Path) -> Result<Self, LinuxCgroupV2Blocker> {
@@ -198,6 +215,198 @@ impl LinuxCgroupV2Tree {
         )?;
         kill_control.write_all(b"1\n")
     }
+
+    /// Lists every thread-group leader that currently belongs to this exact
+    /// cgroup. Reading through the retained directory FD prevents a later
+    /// pathname replacement from changing the object being inspected.
+    pub fn member_process_ids(&self) -> io::Result<Vec<u32>> {
+        let mut contents = String::new();
+        open_cgroup_control_file(
+            &self.directory,
+            "cgroup.procs",
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        )?
+        .read_to_string(&mut contents)?;
+
+        contents
+            .lines()
+            .map(|line| {
+                line.parse::<u32>().map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("cgroup.procs contained a non-PID value: {line:?}"),
+                    )
+                })
+            })
+            .collect()
+    }
+
+    /// Waits until both cgroup v2's `populated` state and its explicit member
+    /// list are empty. The two observations guard different failure modes: a
+    /// stale process list is not enough, and a bare lifecycle bit is not an
+    /// orphan scan.
+    pub fn wait_until_empty(&self, timeout: Duration) -> io::Result<bool> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if !self.is_populated()? && self.member_process_ids()?.is_empty() {
+                return Ok(true);
+            }
+            if Instant::now() >= deadline {
+                return Ok(false);
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// Starts one executable directly inside this tree using
+    /// `clone3(CLONE_INTO_CGROUP)`. There is deliberately no fallback to
+    /// `fork` plus a later write to `cgroup.procs`: such a fallback would
+    /// reintroduce the pre-containment escape window this evidence guards.
+    pub fn spawn_exec_atomically(
+        &self,
+        executable: &Path,
+        arguments: &[&std::ffi::OsStr],
+    ) -> io::Result<LinuxCgroupV2Child> {
+        let executable = os_str_to_c_string(executable.as_os_str())?;
+        let mut argument_storage = Vec::with_capacity(arguments.len() + 1);
+        argument_storage.push(executable.clone());
+        for argument in arguments {
+            argument_storage.push(os_str_to_c_string(argument)?);
+        }
+        let mut argument_pointers = argument_storage
+            .iter()
+            .map(|argument| argument.as_ptr())
+            .collect::<Vec<_>>();
+        argument_pointers.push(std::ptr::null());
+
+        let mut clone_arguments: libc::clone_args = unsafe { std::mem::zeroed() };
+        clone_arguments.flags = CLONE_INTO_CGROUP;
+        clone_arguments.exit_signal = libc::SIGCHLD as u64;
+        clone_arguments.cgroup = self.directory.as_raw_fd() as u64;
+
+        // SAFETY: clone_arguments contains only the documented clone3 fields,
+        // the cgroup FD belongs to this verified v2 directory, and all argv
+        // pointers remain valid across the syscall. The child takes the
+        // async-signal-safe exec-or-exit path below without touching Rust
+        // allocator state after the clone.
+        let result = unsafe {
+            libc::syscall(
+                libc::SYS_clone3,
+                std::ptr::addr_of!(clone_arguments),
+                std::mem::size_of::<libc::clone_args>(),
+            )
+        };
+        if result < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if result == 0 {
+            // SAFETY: executable and argument_pointers were prepared before
+            // clone3, form a null-terminated argv vector, and remain valid in
+            // the child address space until execv replaces it.
+            unsafe {
+                libc::execv(executable.as_ptr(), argument_pointers.as_ptr());
+                libc::_exit(127);
+            }
+        }
+
+        Ok(LinuxCgroupV2Child {
+            process_id: result as u32,
+            reaped: false,
+        })
+    }
+
+    fn is_populated(&self) -> io::Result<bool> {
+        let mut events = String::new();
+        open_cgroup_control_file(
+            &self.directory,
+            "cgroup.events",
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        )?
+        .read_to_string(&mut events)?;
+
+        for line in events.lines() {
+            let mut fields = line.split_whitespace();
+            if fields.next() != Some("populated") {
+                continue;
+            }
+            return match (fields.next(), fields.next()) {
+                (Some("0"), None) => Ok(false),
+                (Some("1"), None) => Ok(true),
+                (Some(value), None) => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("cgroup.events contained an invalid populated value: {value:?}"),
+                )),
+                _ => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "cgroup.events contained a malformed populated line",
+                )),
+            };
+        }
+
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "cgroup.events did not contain populated state",
+        ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxCgroupV2Child {
+    pub fn process_id(&self) -> u32 {
+        self.process_id
+    }
+
+    /// Reaps the direct child after a bounded wait. Descendants intentionally
+    /// are not waited by PID: they are checked by the cgroup member scan so a
+    /// `setsid()` escape cannot hide them from the evidence.
+    pub fn wait_for_exit(&mut self, timeout: Duration) -> io::Result<bool> {
+        if self.reaped {
+            return Ok(true);
+        }
+
+        let deadline = Instant::now() + timeout;
+        loop {
+            let mut status = 0;
+            // SAFETY: process_id is a direct child created by clone3 in this
+            // process, status points to initialized writable storage, and
+            // WNOHANG does not alter unrelated children.
+            let result = unsafe {
+                libc::waitpid(self.process_id as libc::pid_t, &mut status, libc::WNOHANG)
+            };
+            if result == self.process_id as libc::pid_t {
+                self.reaped = true;
+                return Ok(true);
+            }
+            if result == 0 {
+                if Instant::now() >= deadline {
+                    return Ok(false);
+                }
+                std::thread::sleep(Duration::from_millis(10));
+                continue;
+            }
+            if result < 0 {
+                let error = io::Error::last_os_error();
+                if error.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+            unreachable!("waitpid returned an impossible positive PID");
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+const CLONE_INTO_CGROUP: u64 = 1_u64 << 33;
+
+#[cfg(target_os = "linux")]
+fn os_str_to_c_string(value: &std::ffi::OsStr) -> io::Result<std::ffi::CString> {
+    std::ffi::CString::new(value.as_encoded_bytes()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cgroup fixture path or argument contains NUL",
+        )
+    })
 }
 
 #[cfg(target_os = "linux")]

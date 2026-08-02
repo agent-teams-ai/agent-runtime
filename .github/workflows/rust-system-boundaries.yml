@@ -104,3 +104,87 @@ jobs:
           node --test --test-concurrency=1
           experiments/rust-system-boundaries/client/guardian-conformance.test.ts
           experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts
+
+      - name: Provision an isolated Linux cgroup v2 evidence root
+        if: matrix.runner == 'ubuntu-24.04'
+        id: linux_cgroup
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$(stat --file-system --format=%T /sys/fs/cgroup)" = 'cgroup2fs'
+          root="/sys/fs/cgroup/agent-runtime-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sudo mkdir --mode=0700 "$root"
+          printf 'root=%s\n' "$root" >> "$GITHUB_OUTPUT"
+          sudo test -f "$root/cgroup.procs"
+          sudo test -w "$root/cgroup.procs"
+          sudo test -f "$root/cgroup.kill"
+          sudo test -w "$root/cgroup.kill"
+          test "$(sudo awk '$1 == "populated" { print $2 }' "$root/cgroup.events")" = '0'
+          test -z "$(sudo cat "$root/cgroup.procs")"
+          test -z "$(sudo find "$root" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+
+      - name: Prove Linux cgroup v2 hostile-tree containment
+        if: matrix.runner == 'ubuntu-24.04'
+        working-directory: experiments/rust-system-boundaries
+        shell: bash
+        env:
+          AGENT_RUNTIME_CGROUP_V2_E2E_ROOT: ${{ steps.linux_cgroup.outputs.root }}
+        run: |
+          set -euo pipefail
+
+          sudo env \
+            "PATH=$PATH" \
+            "HOME=$HOME" \
+            "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}" \
+            "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" \
+            "AGENT_RUNTIME_CGROUP_V2_E2E_ROOT=$AGENT_RUNTIME_CGROUP_V2_E2E_ROOT" \
+            cargo test --locked --test unix_containment_evidence \
+              linux_cgroup_v2_e2e_proves_atomic_placement_tree_kill_and_orphan_scan \
+              -- --ignored --exact
+
+      - name: Clean up Linux cgroup v2 evidence root
+        if: ${{ always() && matrix.runner == 'ubuntu-24.04' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          root='${{ steps.linux_cgroup.outputs.root }}'
+          if [ -z "$root" ]; then
+            exit 0
+          fi
+          case "$root" in
+            /sys/fs/cgroup/agent-runtime-e2e-[0-9]*-[0-9]*) ;;
+            *)
+              echo "refusing to clean an unexpected cgroup path: $root" >&2
+              exit 1
+              ;;
+          esac
+          if ! sudo test -d "$root"; then
+            exit 0
+          fi
+
+          while IFS= read -r -d '' leaf; do
+            leaf_name="${leaf##*/}"
+            case "$leaf_name" in
+              guardian-e2e-[0-9]*-[0-9]*) ;;
+              *)
+                echo "refusing to clean an unexpected cgroup leaf: $leaf" >&2
+                exit 1
+                ;;
+            esac
+            sudo sh -c 'printf "1\\n" > "$1/cgroup.kill"' cleanup-cgroup-leaf "$leaf"
+            for _ in $(seq 1 100); do
+              if [ "$(sudo awk '$1 == "populated" { print $2 }' "$leaf/cgroup.events")" = '0' ]; then
+                break
+              fi
+              sleep 0.05
+            done
+            test "$(sudo awk '$1 == "populated" { print $2 }' "$leaf/cgroup.events")" = '0'
+            test -z "$(sudo cat "$leaf/cgroup.procs")"
+            sudo rmdir "$leaf"
+          done < <(sudo find "$root" -mindepth 1 -maxdepth 1 -type d -print0)
+
+          test "$(sudo awk '$1 == "populated" { print $2 }' "$root/cgroup.events")" = '0'
+          test -z "$(sudo cat "$root/cgroup.procs")"
+          sudo rmdir "$root"
