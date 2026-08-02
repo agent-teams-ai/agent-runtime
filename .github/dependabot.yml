@@ -1,0 +1,37 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Kyiv
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: opencode-previous
+    groups:
+      opencode-qualified-closure:
+        patterns:
+          - "@opencode-ai/plugin"
+          - opencode-ai
+      development-minor-and-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+        exclude-patterns:
+          - "@opencode-ai/plugin"
+          - opencode-ai
+          - opencode-previous
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Kyiv
+    open-pull-requests-limit: 10
