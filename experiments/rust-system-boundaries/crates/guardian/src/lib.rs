@@ -151,6 +151,22 @@ pub enum GuardianError {
     SpawnFailed(String),
 }
 
+/// Deterministic fault points for the Windows debug-test hook.
+///
+/// The hook itself is not compiled into release builds and is not part of the
+/// Guardian wire protocol. Each point exercises the real suspended-process
+/// cleanup path.
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[doc(hidden)]
+pub enum WindowsContainmentFaultPoint {
+    AfterSuspendedCreate,
+    AfterJobCreate,
+    AfterJobAssignment,
+    BeforeResume,
+    AfterResume,
+}
+
 impl std::fmt::Display for GuardianError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -455,6 +471,8 @@ pub struct Guardian {
     records: BTreeMap<String, CustodyRecord>,
     request_cache: BTreeMap<String, CachedRequest>,
     live: BTreeMap<String, LiveProcess>,
+    #[cfg(all(windows, debug_assertions))]
+    windows_containment_fault: Option<WindowsContainmentFaultPoint>,
 }
 
 impl Guardian {
@@ -470,7 +488,38 @@ impl Guardian {
         fixture_child: impl Into<PathBuf>,
         capture_limit: usize,
     ) -> Result<Self, GuardianError> {
-        let root = root.into();
+        Self::open_inner(
+            root.into(),
+            fixture_child.into(),
+            capture_limit,
+            #[cfg(all(windows, debug_assertions))]
+            None,
+        )
+    }
+
+    #[cfg(all(windows, debug_assertions))]
+    #[doc(hidden)]
+    pub fn open_with_windows_containment_fault(
+        root: impl Into<PathBuf>,
+        fixture_child: impl Into<PathBuf>,
+        fault: WindowsContainmentFaultPoint,
+    ) -> Result<Self, GuardianError> {
+        Self::open_inner(
+            root.into(),
+            fixture_child.into(),
+            DEFAULT_CAPTURE_LIMIT,
+            Some(fault),
+        )
+    }
+
+    fn open_inner(
+        root: PathBuf,
+        fixture_child: PathBuf,
+        capture_limit: usize,
+        #[cfg(all(windows, debug_assertions))] windows_containment_fault: Option<
+            WindowsContainmentFaultPoint,
+        >,
+    ) -> Result<Self, GuardianError> {
         let state_root_lock = acquire_state_root_lock(&root)?;
         let custody_root = root.join("custody");
         fs::create_dir_all(&custody_root)?;
@@ -500,11 +549,13 @@ impl Guardian {
         let mut guardian = Self {
             _state_root_lock: state_root_lock,
             root,
-            fixture_child: fixture_child.into(),
+            fixture_child,
             capture_limit,
             records,
             request_cache: BTreeMap::new(),
             live: BTreeMap::new(),
+            #[cfg(all(windows, debug_assertions))]
+            windows_containment_fault,
         };
         guardian.recover_launching_records()?;
         guardian.rebuild_request_cache()?;
@@ -1025,7 +1076,20 @@ impl Guardian {
         let mut child = command.spawn().map_err(GuardianError::Io)?;
         let mut containment = None;
         let initialized = (|| -> Result<_, GuardianError> {
-            containment = Some(attach_containment(&mut child, pre_spawn_report)?);
+            #[cfg(windows)]
+            {
+                containment = Some(attach_containment(
+                    &mut child,
+                    pre_spawn_report,
+                    record,
+                    #[cfg(debug_assertions)]
+                    self.windows_containment_fault,
+                )?);
+            }
+            #[cfg(not(windows))]
+            {
+                containment = Some(attach_containment(&mut child, pre_spawn_report)?);
+            }
             let birth_identity = process_birth_identity(child.id())?;
             wait_for_identity(
                 &record.identity_path,
@@ -1478,6 +1542,12 @@ fn configure_containment(command: &mut Command) -> Result<ContainmentReport, Gua
 
 #[cfg(windows)]
 fn configure_containment(_command: &mut Command) -> Result<ContainmentReport, GuardianError> {
+    use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+
+    // std preserves its normal quoting and pipe setup, while this flag makes
+    // CreateProcessW return before any fixture code can create descendants.
+    _command.creation_flags(CREATE_SUSPENDED);
     Ok(host_containment_report())
 }
 
@@ -1508,9 +1578,160 @@ fn attach_containment(
 fn attach_containment(
     child: &mut Child,
     _report: ContainmentReport,
+    record: &CustodyRecord,
+    #[cfg(debug_assertions)] fault: Option<WindowsContainmentFaultPoint>,
 ) -> Result<LiveContainment, GuardianError> {
-    let mut job = WindowsJobObject::create()?;
-    job.assign(child)?;
+    let pid = child.id();
+    if let Err(error) = verify_windows_child_is_suspended(child, record) {
+        return Err(fail_closed_windows_containment(
+            child,
+            None,
+            record,
+            "verify_suspended_before_assignment",
+            error,
+        ));
+    }
+    if let Err(error) = inject_windows_containment_fault(
+        #[cfg(debug_assertions)]
+        fault,
+        WindowsContainmentFaultPoint::AfterSuspendedCreate,
+    ) {
+        return Err(fail_closed_windows_containment(
+            child,
+            None,
+            record,
+            "after_suspended_create",
+            error,
+        ));
+    }
+
+    let mut job = match WindowsJobObject::create() {
+        Ok(job) => job,
+        Err(error) => {
+            return Err(fail_closed_windows_containment(
+                child,
+                None,
+                record,
+                "create_job_object",
+                error,
+            ));
+        }
+    };
+    if let Err(error) = append_windows_containment_evidence(
+        record,
+        pid,
+        WindowsContainmentEvidenceStage::JobCreated,
+        "KILL_ON_JOB_CLOSE Job Object created while root remains suspended",
+    ) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "record_job_created",
+            error,
+        ));
+    }
+    if let Err(error) = inject_windows_containment_fault(
+        #[cfg(debug_assertions)]
+        fault,
+        WindowsContainmentFaultPoint::AfterJobCreate,
+    ) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "after_job_create",
+            error,
+        ));
+    }
+
+    if let Err(error) = job.assign(child) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "assign_process_to_job",
+            error,
+        ));
+    }
+    if let Err(error) = append_windows_containment_evidence(
+        record,
+        pid,
+        WindowsContainmentEvidenceStage::AssignedToJob,
+        "suspended root was assigned to KILL_ON_JOB_CLOSE Job Object",
+    ) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "record_job_assignment",
+            error,
+        ));
+    }
+    if let Err(error) = inject_windows_containment_fault(
+        #[cfg(debug_assertions)]
+        fault,
+        WindowsContainmentFaultPoint::AfterJobAssignment,
+    ) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "after_job_assignment",
+            error,
+        ));
+    }
+    if let Err(error) = inject_windows_containment_fault(
+        #[cfg(debug_assertions)]
+        fault,
+        WindowsContainmentFaultPoint::BeforeResume,
+    ) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "before_resume",
+            error,
+        ));
+    }
+
+    if let Err(error) = resume_suspended_primary_thread(pid) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "resume_primary_thread",
+            error,
+        ));
+    }
+    if let Err(error) = append_windows_containment_evidence(
+        record,
+        pid,
+        WindowsContainmentEvidenceStage::Resumed,
+        "primary thread resumed only after Job Object assignment",
+    ) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "record_resumed",
+            error,
+        ));
+    }
+    if let Err(error) = inject_windows_containment_fault(
+        #[cfg(debug_assertions)]
+        fault,
+        WindowsContainmentFaultPoint::AfterResume,
+    ) {
+        return Err(fail_closed_windows_containment(
+            child,
+            Some(job),
+            record,
+            "after_resume",
+            error,
+        ));
+    }
+
     Ok(LiveContainment::WindowsJobObject(job))
 }
 
@@ -1520,6 +1741,261 @@ fn attach_containment(
     _report: ContainmentReport,
 ) -> Result<LiveContainment, GuardianError> {
     Ok(LiveContainment::Unsupported)
+}
+
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum WindowsContainmentEvidenceStage {
+    CreatedSuspended,
+    JobCreated,
+    AssignedToJob,
+    Resumed,
+    CleanupCompleted,
+    CleanupUnverified,
+}
+
+#[cfg(windows)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WindowsContainmentEvidenceEntry {
+    stage: WindowsContainmentEvidenceStage,
+    identity_path_present: bool,
+    descendant_pid_path_present: bool,
+    detail: String,
+}
+
+#[cfg(windows)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WindowsContainmentEvidence {
+    schema_version: u16,
+    custody_id: String,
+    process_id: u32,
+    entries: Vec<WindowsContainmentEvidenceEntry>,
+}
+
+#[cfg(windows)]
+fn windows_containment_evidence_path(record: &CustodyRecord) -> Result<PathBuf, GuardianError> {
+    let operation_root = record.identity_path.parent().ok_or_else(|| {
+        GuardianError::SpawnFailed("fixture identity path has no operation directory".to_owned())
+    })?;
+    Ok(operation_root.join("windows-containment-evidence.json"))
+}
+
+#[cfg(windows)]
+fn append_windows_containment_evidence(
+    record: &CustodyRecord,
+    process_id: u32,
+    stage: WindowsContainmentEvidenceStage,
+    detail: &str,
+) -> Result<(), GuardianError> {
+    let path = windows_containment_evidence_path(record)?;
+    let mut evidence = match fs::read(&path) {
+        Ok(bytes) => {
+            serde_json::from_slice::<WindowsContainmentEvidence>(&bytes).map_err(|_| {
+                GuardianError::SpawnFailed(
+                    "Windows containment evidence is corrupt and cannot be extended".to_owned(),
+                )
+            })?
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => WindowsContainmentEvidence {
+            schema_version: 1,
+            custody_id: record.custody_id.clone(),
+            process_id,
+            entries: Vec::new(),
+        },
+        Err(error) => return Err(GuardianError::Io(error)),
+    };
+    if evidence.schema_version != 1
+        || evidence.custody_id != record.custody_id
+        || evidence.process_id != process_id
+    {
+        return Err(GuardianError::SpawnFailed(
+            "Windows containment evidence does not match the active custody attempt".to_owned(),
+        ));
+    }
+    evidence.entries.push(WindowsContainmentEvidenceEntry {
+        stage,
+        identity_path_present: record.identity_path.exists(),
+        descendant_pid_path_present: record.descendant_pid_path.exists(),
+        detail: detail.to_owned(),
+    });
+    write_json_atomically(&path, &evidence)
+}
+
+#[cfg(windows)]
+fn verify_windows_child_is_suspended(
+    child: &mut Child,
+    record: &CustodyRecord,
+) -> Result<(), GuardianError> {
+    if record.identity_path.exists() || record.descendant_pid_path.exists() {
+        return Err(GuardianError::SpawnFailed(
+            "a Windows fixture emitted execution evidence before Job Object assignment".to_owned(),
+        ));
+    }
+    if child.try_wait()?.is_some() {
+        return Err(GuardianError::SpawnFailed(
+            "a Windows fixture exited before Job Object assignment".to_owned(),
+        ));
+    }
+    append_windows_containment_evidence(
+        record,
+        child.id(),
+        WindowsContainmentEvidenceStage::CreatedSuspended,
+        "CREATE_SUSPENDED returned before the fixture emitted root or descendant evidence",
+    )
+}
+
+#[cfg(windows)]
+fn inject_windows_containment_fault(
+    #[cfg(debug_assertions)] fault: Option<WindowsContainmentFaultPoint>,
+    point: WindowsContainmentFaultPoint,
+) -> Result<(), GuardianError> {
+    #[cfg(debug_assertions)]
+    if fault == Some(point) {
+        return Err(GuardianError::SpawnFailed(format!(
+            "debug test injected Windows containment failure at {point:?}"
+        )));
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = point;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn fail_closed_windows_containment(
+    child: &mut Child,
+    mut job: Option<WindowsJobObject>,
+    record: &CustodyRecord,
+    stage: &str,
+    cause: GuardianError,
+) -> GuardianError {
+    let cleanup = match job.as_mut() {
+        Some(job) => match job.terminate() {
+            Ok(()) => wait_for_windows_fixture_tree_exit(child, record),
+            Err(error) => Err(error),
+        },
+        None => kill_child_only(child),
+    };
+
+    let (evidence_stage, cleanup_detail) = match cleanup {
+        Ok(()) => (
+            WindowsContainmentEvidenceStage::CleanupCompleted,
+            "cleanup completed and the fixture root/tree exit was verified".to_owned(),
+        ),
+        Err(error) => (
+            WindowsContainmentEvidenceStage::CleanupUnverified,
+            format!("cleanup could not be verified: {error}"),
+        ),
+    };
+    let evidence_detail = format!("stage={stage}; cause={cause}; {cleanup_detail}");
+    let evidence_write =
+        append_windows_containment_evidence(record, child.id(), evidence_stage, &evidence_detail);
+    let evidence_suffix = match evidence_write {
+        Ok(()) => String::new(),
+        Err(error) => format!("; containment evidence write also failed: {error}"),
+    };
+
+    GuardianError::SpawnFailed(format!(
+        "Windows containment failed at {stage}: {cause}; {cleanup_detail}{evidence_suffix}"
+    ))
+}
+
+#[cfg(windows)]
+fn resume_suspended_primary_thread(process_id: u32) -> Result<(), GuardianError> {
+    use std::mem::size_of;
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
+    };
+    use windows_sys::Win32::System::Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME};
+
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        if snapshot == INVALID_HANDLE_VALUE {
+            return Err(GuardianError::Io(io::Error::last_os_error()));
+        }
+
+        let mut entry = THREADENTRY32 {
+            dwSize: size_of::<THREADENTRY32>() as u32,
+            ..Default::default()
+        };
+        let mut thread_id = None;
+        if Thread32First(snapshot, &mut entry) != 0 {
+            loop {
+                if entry.th32OwnerProcessID == process_id
+                    && thread_id.replace(entry.th32ThreadID).is_some()
+                {
+                    CloseHandle(snapshot);
+                    return Err(GuardianError::SpawnFailed(
+                        "suspended Windows fixture exposed more than one thread before resume"
+                            .to_owned(),
+                    ));
+                }
+                entry.dwSize = size_of::<THREADENTRY32>() as u32;
+                if Thread32Next(snapshot, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snapshot);
+
+        let thread_id = thread_id.ok_or_else(|| {
+            GuardianError::SpawnFailed(
+                "suspended Windows fixture primary thread was not discoverable".to_owned(),
+            )
+        })?;
+        let thread = OpenThread(THREAD_SUSPEND_RESUME, 0, thread_id);
+        if thread.is_null() {
+            return Err(GuardianError::Io(io::Error::last_os_error()));
+        }
+        let previous_suspend_count = ResumeThread(thread);
+        let resume_error = if previous_suspend_count == u32::MAX {
+            Some(GuardianError::Io(io::Error::last_os_error()))
+        } else if previous_suspend_count != 1 {
+            Some(GuardianError::SpawnFailed(format!(
+                "suspended Windows fixture primary thread had unexpected suspend count {previous_suspend_count}"
+            )))
+        } else {
+            None
+        };
+        CloseHandle(thread);
+        if let Some(error) = resume_error {
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn windows_fixture_descendant_pid(record: &CustodyRecord) -> Option<u32> {
+    fs::read_to_string(&record.descendant_pid_path)
+        .ok()?
+        .trim()
+        .parse::<u32>()
+        .ok()
+}
+
+#[cfg(windows)]
+fn wait_for_windows_fixture_tree_exit(
+    child: &mut Child,
+    record: &CustodyRecord,
+) -> Result<(), GuardianError> {
+    wait_for_child_exit(child)?;
+    let Some(descendant_pid) = windows_fixture_descendant_pid(record) else {
+        return Ok(());
+    };
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    while process_is_alive(descendant_pid) {
+        if std::time::Instant::now() >= deadline {
+            return Err(GuardianError::SpawnFailed(
+                "Windows Job Object cleanup did not terminate the fixture descendant".to_owned(),
+            ));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    Ok(())
 }
 
 fn host_containment_report() -> ContainmentReport {
@@ -1539,7 +2015,7 @@ fn host_containment_report() -> ContainmentReport {
             mechanism: ContainmentMechanism::WindowsJobObject,
             qualified_for_bounded_fixture: true,
             limitation: Some(
-                "The spike assigns the disposable fixture to a Job Object before it releases descendant creation and records its GetProcessTimes creation value. A restarted Guardian cannot recover a closed Job Object handle.".to_owned(),
+                "The spike creates the disposable fixture suspended, assigns it to a KILL_ON_JOB_CLOSE Job Object, and resumes it only after assignment. A restarted Guardian cannot recover a closed Job Object handle.".to_owned(),
             ),
         };
     }

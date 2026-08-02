@@ -1,6 +1,8 @@
 use boundary_protocol::{
     CURRENT_PROTOCOL_VERSION, GuardianCommand, RequestEnvelope, ResponseEnvelope,
 };
+#[cfg(all(windows, debug_assertions))]
+use execution_guardian::WindowsContainmentFaultPoint;
 use execution_guardian::{
     ContainmentMechanism, DispatchOutcome, Guardian, GuardianErrorCode, GuardianResult,
 };
@@ -153,6 +155,26 @@ fn process_is_dead(pid: u32) -> bool {
     }
 }
 
+#[cfg(windows)]
+fn windows_containment_evidence(root: &Path, operation_id: &str) -> serde_json::Value {
+    let path = root
+        .join("operations")
+        .join(operation_id)
+        .join("windows-containment-evidence.json");
+    serde_json::from_slice(&fs::read(path).expect("Windows containment evidence reads"))
+        .expect("Windows containment evidence parses")
+}
+
+#[cfg(windows)]
+fn evidence_stages(evidence: &serde_json::Value) -> Vec<&str> {
+    evidence["entries"]
+        .as_array()
+        .expect("evidence entries")
+        .iter()
+        .map(|entry| entry["stage"].as_str().expect("evidence stage"))
+        .collect()
+}
+
 #[test]
 fn fixture_tree_streams_bounded_output_and_full_tree_terminates() {
     let temp = TempDir::new().expect("temporary root");
@@ -193,6 +215,139 @@ fn fixture_tree_streams_bounded_output_and_full_tree_terminates() {
         let parent_pid = observation.pid.expect("live fixture PID");
         wait_until(Duration::from_secs(2), || process_is_dead(parent_pid));
         wait_until(Duration::from_secs(2), || process_is_dead(descendant_pid));
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn suspended_job_assignment_precedes_immediate_descendant_creation() {
+    let temp = TempDir::new().expect("temporary root");
+    let mut guardian = Guardian::open(temp.path(), fixture_child()).expect("guardian opens");
+    let spawned = assert_result(guardian.dispatch(spawn_request(
+        "spawn-suspended-job",
+        "suspended-job-1",
+        "fence-suspended-job",
+        false,
+    )));
+    let root_pid = match spawned {
+        GuardianResult::Spawned { observation } => observation.pid.expect("fixture root PID"),
+        other => panic!("unexpected spawn result: {other:?}"),
+    };
+    let descendant_path = temp
+        .path()
+        .join("operations/suspended-job-1/descendant.pid");
+    wait_until(Duration::from_secs(2), || descendant_path.exists());
+    let descendant_pid = fs::read_to_string(&descendant_path)
+        .expect("descendant PID reads")
+        .trim()
+        .parse::<u32>()
+        .expect("numeric descendant PID");
+
+    let evidence = windows_containment_evidence(temp.path(), "suspended-job-1");
+    let entries = evidence["entries"].as_array().expect("evidence entries");
+    let suspended = entries
+        .iter()
+        .find(|entry| entry["stage"] == "created_suspended")
+        .expect("suspended-create evidence");
+    assert_eq!(suspended["identity_path_present"], false);
+    assert_eq!(suspended["descendant_pid_path_present"], false);
+    assert_eq!(
+        evidence_stages(&evidence),
+        vec![
+            "created_suspended",
+            "job_created",
+            "assigned_to_job",
+            "resumed"
+        ]
+    );
+
+    drop(guardian);
+    wait_until(Duration::from_secs(2), || process_is_dead(root_pid));
+    wait_until(Duration::from_secs(2), || process_is_dead(descendant_pid));
+}
+
+#[cfg(all(windows, debug_assertions))]
+#[test]
+fn partial_windows_containment_failures_kill_the_fixture_and_record_cleanup_evidence() {
+    let cases = [
+        (
+            "after-suspended-create",
+            WindowsContainmentFaultPoint::AfterSuspendedCreate,
+            false,
+        ),
+        (
+            "after-job-create",
+            WindowsContainmentFaultPoint::AfterJobCreate,
+            false,
+        ),
+        (
+            "after-job-assignment",
+            WindowsContainmentFaultPoint::AfterJobAssignment,
+            false,
+        ),
+        (
+            "before-resume",
+            WindowsContainmentFaultPoint::BeforeResume,
+            false,
+        ),
+        (
+            "after-resume",
+            WindowsContainmentFaultPoint::AfterResume,
+            true,
+        ),
+    ];
+
+    for (operation_id, fault, may_create_descendant) in cases {
+        let temp = TempDir::new().expect("temporary root");
+        let mut guardian =
+            Guardian::open_with_windows_containment_fault(temp.path(), fixture_child(), fault)
+                .expect("Guardian opens");
+        let result = assert_result(guardian.dispatch(spawn_request(
+            &format!("spawn-{operation_id}"),
+            operation_id,
+            "fault-fence",
+            false,
+        )));
+        assert!(
+            matches!(
+                result,
+                GuardianResult::Rejected {
+                    code: GuardianErrorCode::Internal,
+                    ..
+                }
+            ),
+            "fault point {fault:?} must reject the start after cleanup: {result:?}"
+        );
+
+        let evidence = windows_containment_evidence(temp.path(), operation_id);
+        let root_pid = evidence["process_id"]
+            .as_u64()
+            .expect("root PID in evidence") as u32;
+        let stages = evidence_stages(&evidence);
+        assert_eq!(stages.first(), Some(&"created_suspended"));
+        assert_eq!(stages.last(), Some(&"cleanup_completed"));
+        wait_until(Duration::from_secs(2), || process_is_dead(root_pid));
+
+        let descendant_path = temp
+            .path()
+            .join("operations")
+            .join(operation_id)
+            .join("descendant.pid");
+        if !may_create_descendant {
+            assert!(
+                !descendant_path.exists(),
+                "a fixture cannot create a descendant before the suspended root is resumed"
+            );
+            continue;
+        }
+        if descendant_path.exists() {
+            let descendant_pid = fs::read_to_string(descendant_path)
+                .expect("descendant PID reads")
+                .trim()
+                .parse::<u32>()
+                .expect("numeric descendant PID");
+            wait_until(Duration::from_secs(2), || process_is_dead(descendant_pid));
+        }
     }
 }
 
@@ -792,4 +947,39 @@ fn ambiguous_spawn_response_is_reconciled_without_a_blind_second_spawn() {
     );
     drop(guardian.stdin);
     assert!(guardian.child.wait().expect("guardian exits").success());
+}
+
+#[cfg(windows)]
+#[test]
+fn guardian_process_crash_closes_the_job_and_reaps_the_immediate_descendant() {
+    let temp = TempDir::new().expect("temporary root");
+    let mut guardian = GuardianProcess::start(temp.path());
+    guardian.send(&spawn_request(
+        "spawn-crash-containment",
+        "crash-containment-1",
+        "fence-crash-containment",
+        false,
+    ));
+    let root_pid = match guardian.receive().result {
+        GuardianResult::Spawned { observation } => observation.pid.expect("fixture root PID"),
+        other => panic!("unexpected spawn result: {other:?}"),
+    };
+    let descendant_path = temp
+        .path()
+        .join("operations/crash-containment-1/descendant.pid");
+    wait_until(Duration::from_secs(2), || descendant_path.exists());
+    let descendant_pid = fs::read_to_string(descendant_path)
+        .expect("descendant PID reads")
+        .trim()
+        .parse::<u32>()
+        .expect("numeric descendant PID");
+
+    guardian.child.kill().expect("Guardian process terminates");
+    let status = guardian.child.wait().expect("Guardian process exits");
+    assert!(
+        !status.success(),
+        "test must terminate the Guardian process"
+    );
+    wait_until(Duration::from_secs(2), || process_is_dead(root_pid));
+    wait_until(Duration::from_secs(2), || process_is_dead(descendant_pid));
 }
