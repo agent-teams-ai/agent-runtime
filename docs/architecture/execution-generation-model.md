@@ -1,7 +1,7 @@
 # Execution Generation Model
 
-Status: accepted domain model as amended by ADR-0001, ADR-0002, and ADR-0003;
-wire schemas remain open ADRs.
+Status: accepted domain model as amended by ADR-0001, ADR-0002, ADR-0003, and
+ADR-0004; wire schemas remain open ADRs.
 
 ## Purpose
 

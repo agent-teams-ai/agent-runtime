@@ -10,7 +10,10 @@ Read documents in this order:
    vocabulary, owner-local recovery model, and phased operator controls. Then
    read `decisions/0003-runtime-cutoff-barriers-and-scope-disposition.md` - the
    target-specific cutoff boundaries, orthogonal predecessor barriers, exact
-   effect-identity boundary, and normalized scope-disposition rules.
+   effect-identity boundary, and normalized scope-disposition rules. Then read
+   `decisions/0004-pre-materialization-dispatch-prevention.md` - the durable
+   negative operation-intent guard, dispatch ordering, anti-resurrection, and
+   automated external-effect identity requirements.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
@@ -123,9 +126,9 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. ADR-0001, ADR-0002, ADR-0003, and the promoted-rule column of the
-traceability matrix are normative. Supporting architecture documents are
-accepted only as amended by the ADRs. Readiness status is intentionally
+of truth. ADR-0001, ADR-0002, ADR-0003, ADR-0004, and the promoted-rule column
+of the traceability matrix are normative. Supporting architecture documents
+are accepted only as amended by the ADRs. Readiness status is intentionally
 separate and cannot change domain ownership. A spike's `Remaining gates`
 section is historical as of that campaign; `architecture/readiness.md` is the
 current gate register.

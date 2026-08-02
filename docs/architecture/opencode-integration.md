@@ -1,7 +1,7 @@
 # OpenCode Integration
 
-Status: accepted architectural direction as amended by ADR-0001, ADR-0002, and
-ADR-0003; detailed state machines remain ADRs.
+Status: accepted architectural direction as amended by ADR-0001, ADR-0002,
+ADR-0003, and ADR-0004; detailed state machines remain ADRs.
 
 ## Decision
 

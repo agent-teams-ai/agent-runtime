@@ -1,6 +1,6 @@
 # Accepted Architecture Foundation
 
-Status: accepted as amended by ADR-0001, ADR-0002, and ADR-0003
+Status: accepted as amended by ADR-0001, ADR-0002, ADR-0003, and ADR-0004
 
 This document and ADR-0001 were created on parallel sibling branches. ADR-0002
 reconciles their terminology and ownership. The module, dependency, API,
