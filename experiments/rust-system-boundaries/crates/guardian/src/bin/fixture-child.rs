@@ -2,7 +2,7 @@ use execution_guardian::{ProcessBirthIdentity, current_process_birth_identity};
 use serde::Serialize;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -47,6 +47,15 @@ fn spawn_leaf() -> std::process::Child {
         .expect("synthetic leaf starts")
 }
 
+fn write_descendant_pid(path: &Path, process_id: u32) {
+    let temporary_path = path.with_extension(format!("tmp-{process_id}"));
+    fs::write(&temporary_path, process_id.to_string()).expect("descendant PID writes");
+    // A containment failure can interrupt the fixture immediately after the
+    // leaf starts. Publish its PID atomically so Guardian evidence observes a
+    // complete identifier or no identifier, never a partial file.
+    fs::rename(&temporary_path, path).expect("descendant PID publishes atomically");
+}
+
 fn main() {
     let mode = argument("--mode");
     if mode == "leaf" {
@@ -73,7 +82,7 @@ fn main() {
         // Job Object. Creating the descendant before the root's identity
         // witness makes that ordering observable in the executable spike.
         let child = spawn_leaf();
-        fs::write(&descendant_pid_path, child.id().to_string()).expect("descendant PID writes");
+        write_descendant_pid(&descendant_pid_path, child.id());
         child
     };
     fs::write(
@@ -96,7 +105,7 @@ fn main() {
             thread::sleep(Duration::from_millis(10));
         }
         let child = spawn_leaf();
-        fs::write(&descendant_pid_path, child.id().to_string()).expect("descendant PID writes");
+        write_descendant_pid(&descendant_pid_path, child.id());
         child
     };
     #[cfg(unix)]
