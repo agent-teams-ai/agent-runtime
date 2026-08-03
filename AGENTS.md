@@ -21,5 +21,11 @@ Guardrails:
   orchestrator domain models.
 - `pnpm check` runs only synthetic, disposable tests. Provider spike commands
   are separate and require explicit scope and safety review.
-- Do not add `@agent-teams/engineering-foundation` until its registry package
-  has been published and adoption is performed as a dedicated change.
+
+Verification workflow:
+
+- Run `pnpm check:changed` during implementation for Foundation-routed feedback
+  on the current Git delta.
+- Run `pnpm check:fast` before handoff.
+- Run the authoritative `pnpm check` before opening or merging a pull request.
+- A passing changed-file or fast check never replaces the complete gate.
