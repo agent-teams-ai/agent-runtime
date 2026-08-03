@@ -3,3 +3,5 @@ packages:
 allowBuilds:
   msgpackr-extract: false
   opencode-ai: true
+minimumReleaseAgeExclude:
+  - "@agent-teams/engineering-foundation"
