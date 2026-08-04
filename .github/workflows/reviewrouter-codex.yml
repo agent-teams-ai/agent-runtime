@@ -89,7 +89,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: ReviewRouter Codex OAuth refresh
-        uses: 777genius/review-router@626739854b5c67d94b3f0118738c106b4a232c41
+        uses: 777genius/review-router@e6e363a95b90b35a6d6b1ccdbf9933fa8811a3aa
         with:
           mode: codex-oauth-refresh
           api-url: "https://api.reviewrouter.site"
