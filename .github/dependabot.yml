@@ -7,7 +7,7 @@ updates:
       interval: daily
       time: "06:00"
       timezone: Europe/Kyiv
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
     ignore:
       - dependency-name: "@types/node"
         update-types:
@@ -34,4 +34,4 @@ updates:
       interval: daily
       time: "06:00"
       timezone: Europe/Kyiv
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
