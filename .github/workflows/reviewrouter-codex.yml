@@ -53,7 +53,7 @@ jobs:
       issues: write
       pull-requests: write
       statuses: write
-    uses: agent-teams-ai/.github/.github/workflows/reviewrouter-reusable.yml@0cb2fc11d001cd93f847199285f796da188f7ad8
+    uses: agent-teams-ai/.github/.github/workflows/reviewrouter-reusable.yml@b6d21f15ceeb81cde664cc72daa10154254751f2
     with:
       pr_number: ${{ needs.resolve.outputs.number }}
       review_drafts: ${{ vars.REVIEW_ROUTER_REVIEW_DRAFTS == 'true' }}
