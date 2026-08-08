@@ -11,7 +11,7 @@ policies:
   developmentOnlyPackages:
     - "@agent-teams/engineering-foundation"
     - "@types/node"
-    - "@typescript/native-preview"
     - oxlint
+    - typescript
   exactRegistryDevelopmentOnlyPackages:
     - "@agent-teams/engineering-foundation"

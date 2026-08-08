@@ -4,6 +4,7 @@ workspace:
   manifest: pnpm-workspace.yaml
 governedRoots:
   - experiments
+  - scripts/foundation
 boundaries:
   - id: experiments.typescript-evidence
     roots:
@@ -27,6 +28,21 @@ boundaries:
         - node:readline
         - node:test
         - node:timers/promises
+        - node:url
+        - node:util
+      runtimeReferences: []
+  - id: tooling.foundation-scaffolding
+    roots:
+      - scripts/foundation
+    entrypoints: []
+    allow:
+      boundaries: []
+      packages: []
+      builtins:
+        - node:child_process
+        - node:fs/promises
+        - node:os
+        - node:path
         - node:url
         - node:util
       runtimeReferences: []

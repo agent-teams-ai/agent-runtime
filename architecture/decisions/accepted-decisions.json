@@ -21,6 +21,11 @@
       "id": "ADR-0004",
       "path": "docs/decisions/0004-pre-materialization-dispatch-prevention.md",
       "immutableDigest": "sha256:ebe1510cba80693c5b6ec6215bde2ff827578b1428e0fafc8a7e8d40531f06da"
+    },
+    {
+      "id": "ADR-0005",
+      "path": "docs/decisions/0005-runtime-context-package-identities.md",
+      "immutableDigest": "sha256:42a7daa1702053ec2cc4190dd73dfb4afae7fade77a2b8ab1992c947a57253d9"
     }
   ]
 }

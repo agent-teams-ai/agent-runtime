@@ -8,7 +8,7 @@ compositions:
         id: foundation.node-typescript-pnpm-esm
         contractVersion: 1
       parameters:
-        tsconfigBase: tsconfig.json
+        tsconfigBase: architecture/foundation/scaffold-tsconfig.json
     recipe:
       ref:
         id: foundation.node-typescript-library-boundary
@@ -22,5 +22,5 @@ compositions:
           allowedStatuses:
             - accepted
           documentRoots:
-            - docs/architecture/package-authority
+            - docs/decisions
     policies: []

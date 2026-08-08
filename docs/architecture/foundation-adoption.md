@@ -18,7 +18,7 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 | `governance.architecture-decisions` | enabled | Stable ADR frontmatter, lifecycle index, and immutable accepted baseline |
 | `quality.suppression-governance` | enabled | Inline suppressions require exact, expiring AR-owned waivers; security and access-control suppressions are non-waivable |
 | TypeScript and Oxlint presets | enabled | Node correctness plus the agreed production and test maintainability budgets |
-| deterministic scaffolding | configured | Four accepted bounded-context package targets are bound to the machine-resolvable owner manifest backed by ADR-0002; Apply remains an explicit reviewed implementation action |
+| deterministic scaffolding | configured and consumer-qualified | Four exact bounded-context package identities are owned by immutable ADR-0005; synthetic Plan, Apply, and generated-package checks are blocking |
 | `package.public-api-compatibility` | gated | Enable when an independently consumed TypeScript package has release-owned API evidence |
 | `contract.protobuf-evolution` | gated | Enable when AR accepts its first Published Language Protobuf module and released descriptor |
 | `contract.json-schema-releases` | gated | The qualification registry schema is repository-internal; enable only if a JSON Schema becomes an independently supported contract |
@@ -39,7 +39,8 @@ forbidden.
 
 ## Bounded-context scaffolding
 
-The approved catalog contains exactly the four initial contexts from ADR-0002:
+The approved catalog contains exactly the four initial contexts from ADR-0002
+with the package identities accepted by ADR-0005:
 Runtime Configuration, Runtime Security, Provider Access, and Agent Execution.
 The generic recipe creates only a private TypeScript package boundary. It does
 not invent features, layers, dependencies, or DDD abstractions.
@@ -56,8 +57,9 @@ journal is never removed by hand.
 
 ## Upgrade rule
 
-Agent Runtime pins the latest reviewed Foundation release exactly through the
-pnpm catalog. Foundation-owned contracts have one current identity, `v1`, under
+Agent Runtime pins the latest reviewed Foundation release as an exact root
+development dependency. Foundation-owned contracts have one current identity,
+`v1`, under
 Foundation ADR-0019. Before independent production adoption, a breaking
 correction updates that sole `v1` plus every known consumer in one coordinated
 release and adoption wave. External tool versions, product protocol versions,

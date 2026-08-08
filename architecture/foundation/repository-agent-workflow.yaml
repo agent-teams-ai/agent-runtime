@@ -17,6 +17,10 @@ changedChecks:
     script: typecheck
     extensions: [.ts, .tsx, .mts, .cts]
     passPaths: false
+  - id: test
+    script: test
+    extensions: [.ts, .tsx, .mts, .cts]
+    passPaths: false
   - id: rust-boundaries
     script: spike:rust-boundaries
     extensions: [.rs, .toml, .lock]
@@ -25,9 +29,12 @@ fullScanPaths:
   - .oxlintrc.json
   - .github/workflows
   - architecture/foundation
+  - architecture/decisions
+  - docs
   - docs/architecture/qualification-registry.json
   - foundation.config.yaml
   - package.json
   - pnpm-lock.yaml
   - pnpm-workspace.yaml
+  - scripts/foundation
   - tsconfig.json
