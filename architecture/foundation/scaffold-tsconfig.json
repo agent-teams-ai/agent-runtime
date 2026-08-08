@@ -1,13 +1,10 @@
 {
-  "extends": "./architecture/foundation/scaffold-tsconfig.json",
+  "extends": "@agent-teams/engineering-foundation/presets/typescript/node.json",
   "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "erasableSyntaxOnly": true,
     "forceConsistentCasingInFileNames": true,
     "lib": ["ES2024"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "noEmit": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
@@ -15,10 +12,5 @@
     "target": "ES2024",
     "types": ["node"],
     "verbatimModuleSyntax": true
-  },
-  "include": [
-    "experiments/runtime-profile-behavior/src/**/*.ts",
-    "experiments/runtime-profile-behavior/test/**/*.ts",
-    "experiments/rust-system-boundaries/client/**/*.ts"
-  ]
+  }
 }

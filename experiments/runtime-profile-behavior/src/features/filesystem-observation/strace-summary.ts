@@ -30,7 +30,7 @@ const pathsFromLine = (line: string): readonly string[] => {
 };
 
 const sorted = (values: Set<string>): readonly string[] =>
-  [...values].sort((left, right) => left.localeCompare(right));
+  [...values].toSorted((left, right) => left.localeCompare(right));
 
 const addRedacted = (
   target: Set<string>,
@@ -91,7 +91,7 @@ export const summarizeStraceFiles = async (
   const prefix = basename(tracePrefix);
   const files = (await readdir(directory))
     .filter((name) => name === prefix || name.startsWith(`${prefix}.`))
-    .sort();
+    .toSorted();
   const aggregate = {
     readPaths: new Set<string>(),
     writePaths: new Set<string>(),

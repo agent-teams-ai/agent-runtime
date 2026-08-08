@@ -156,7 +156,9 @@ const crashAfterThreadStarted = async () => {
 const results = [];
 for (let iteration = 0; iteration < repetitions; iteration += 1) {
   const crashed = await crashAfterThreadStarted();
-  await new Promise((resolve) => setTimeout(resolve, 250));
+  await new Promise((resolve) => {
+    setTimeout(resolve, 250);
+  });
   const marker = `runtime-profile-crash-resume-${iteration}-ok`;
   const resumed =
     crashed.threadId === undefined

@@ -1,3 +1,10 @@
+---
+id: ADR-0001
+status: accepted
+supersedes: []
+superseded_by: []
+---
+
 # ADR-0001: Runtime profile and activation boundaries
 
 Status: accepted for the architecture foundation

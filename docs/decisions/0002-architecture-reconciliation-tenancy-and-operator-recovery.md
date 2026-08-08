@@ -1,3 +1,10 @@
+---
+id: ADR-0002
+status: accepted
+supersedes: []
+superseded_by: []
+---
+
 # ADR-0002: Architecture reconciliation, tenancy, and operator recovery
 
 Status: accepted for the architecture foundation

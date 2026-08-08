@@ -16,7 +16,9 @@ const waitForExit = async (pid: number): Promise<boolean> => {
       }
       throw error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
   }
   return false;
 };

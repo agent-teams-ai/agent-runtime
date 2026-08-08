@@ -132,12 +132,16 @@ let longLivedClosed = false;
 longLived.once("close", () => {
   longLivedClosed = true;
 });
-await new Promise((resolve) => setTimeout(resolve, 4_000));
+await new Promise((resolve) => {
+  setTimeout(resolve, 4_000);
+});
 const startupHelperCalls = (await readFile(helperLog, "utf8"))
   .split("\n")
   .filter(Boolean).length;
 await writeFile(helperMode, "fail", { mode: 0o600 });
-await new Promise((resolve) => setTimeout(resolve, 58_000));
+await new Promise((resolve) => {
+  setTimeout(resolve, 58_000);
+});
 const refreshHelperCalls = (await readFile(helperLog, "utf8"))
   .split("\n")
   .filter(Boolean).length;

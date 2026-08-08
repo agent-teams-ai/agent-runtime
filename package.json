@@ -10,15 +10,20 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm foundation:check && pnpm architecture:registry && pnpm typecheck && pnpm test",
+    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm architecture:registry && pnpm typecheck && pnpm lint && pnpm test",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm foundation:check && pnpm architecture:registry && pnpm typecheck",
+    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm architecture:registry && pnpm typecheck && pnpm lint",
     "foundation:assert-dev-only": "agent-teams-foundation assert-dev-only",
     "foundation:assert-registry": "agent-teams-foundation assert-registry",
     "foundation:attach": "agent-teams-foundation attach",
     "foundation:check": "agent-teams-foundation check && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry",
     "foundation:detach": "agent-teams-foundation detach",
     "foundation:status": "agent-teams-foundation status",
+    "foundation:scaffold:plan": "agent-teams-foundation scaffold-plan --config architecture/foundation/scaffolding.yaml",
+    "foundation:scaffold:check": "node scripts/foundation/verify-scaffolding.mjs",
+    "foundation:scaffold:recover": "agent-teams-foundation scaffold-recover",
+    "lint": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config .",
+    "lint:changed": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config --format agent --no-error-on-unmatched-pattern",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
     "spike:inventory": "node experiments/runtime-profile-behavior/src/cli.ts inventory",
     "spike:baseline": "node experiments/runtime-profile-behavior/src/cli.ts baseline",
@@ -39,17 +44,20 @@
     "spike:rust-boundaries": "cargo test --locked --manifest-path experiments/rust-system-boundaries/Cargo.toml --workspace --all-targets",
     "spike:rust-boundaries:client": "node --test --test-concurrency=1 experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
     "spike:rust-boundaries:evidence": "node --test experiments/runtime-profile-behavior/test/rust-system-boundary-evidence.test.ts",
-    "test": "node --test experiments/runtime-profile-behavior/test/*.test.ts",
-    "typecheck": "tsgo --noEmit"
+    "test": "node --test --test-concurrency=1 experiments/runtime-profile-behavior/test/*.test.ts experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@agent-teams/engineering-foundation": "0.5.0",
-    "@agentclientprotocol/sdk": "1.3.0",
-    "@opencode-ai/plugin": "1.18.5",
-    "@types/node": "24.13.3",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "opencode-ai": "1.18.5",
-    "opencode-previous": "npm:opencode-ai@1.17.20",
-    "zod": "4.4.3"
+    "@agent-teams/engineering-foundation": "0.9.0",
+    "@agentclientprotocol/sdk": "catalog:",
+    "@opencode-ai/plugin": "catalog:",
+    "@types/node": "catalog:",
+    "opencode-ai": "catalog:",
+    "opencode-previous": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
   }
 }

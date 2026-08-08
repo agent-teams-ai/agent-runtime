@@ -1,4 +1,3 @@
-import { join } from "node:path";
 
 import { runCommand } from "../process-execution/run-command.ts";
 import type {
@@ -14,7 +13,7 @@ const record = (value: unknown): Record<string, unknown> =>
     : {};
 
 const sortedKeys = (value: unknown): readonly string[] =>
-  Object.keys(record(value)).sort();
+  Object.keys(record(value)).toSorted();
 
 const summarizeConfig = (stdout: string): ResolvedConfigSummary => {
   const value = record(JSON.parse(stdout));
@@ -53,7 +52,7 @@ const summarizeSkills = (stdout: string): readonly SkillSummary[] => {
       marker: marker(item.content),
       location: typeof item.location === "string" ? item.location : null,
     }))
-    .sort((left, right) => left.id.localeCompare(right.id));
+    .toSorted((left, right) => left.id.localeCompare(right.id));
 };
 
 const safeHostEnvironment = (): NodeJS.ProcessEnv => {

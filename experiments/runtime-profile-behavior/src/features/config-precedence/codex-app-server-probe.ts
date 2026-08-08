@@ -175,12 +175,12 @@ process.stdout.write(
           type: name.type,
           file: name.file,
           profile: name.profile,
-          configKeys: Object.keys(layerConfig).sort(),
+          configKeys: Object.keys(layerConfig).toSorted(),
         };
       }),
       originKeys: Object.keys(
         (configResult.origins ?? {}) as Record<string, unknown>,
-      ).sort(),
+      ).toSorted(),
       skills: selectedSkills,
       skillErrors: skillEntry.errors,
       hooks,

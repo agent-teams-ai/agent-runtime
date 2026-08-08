@@ -1,3 +1,10 @@
+---
+id: ADR-0004
+status: accepted
+supersedes: []
+superseded_by: []
+---
+
 # ADR-0004: Pre-materialization dispatch prevention
 
 Status: accepted for the architecture foundation

@@ -26,7 +26,7 @@ test("Rust boundary evidence remains closed, indexed, and non-production", async
   const record = rustBoundaryEvidenceRecordV1.parse(JSON.parse(recordSource));
   assert.equal(record.source.revision, "aa7685867d5ccbaba7b4eb0f873566f46d676945");
   assert.deepEqual(
-    record.runs.boundaryMatrix.jobs.map(({ runner }) => runner).sort(),
+    record.runs.boundaryMatrix.jobs.map(({ runner }) => runner).toSorted(),
     ["macos-15", "ubuntu-24.04", "windows-2025"],
   );
   assert.deepEqual(record.disposition, {

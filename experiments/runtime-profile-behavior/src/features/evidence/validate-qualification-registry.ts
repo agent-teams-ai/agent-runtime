@@ -68,8 +68,8 @@ const exactKeys = (
   expected: readonly string[],
   label: string,
 ): void => {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
+  const actual = Object.keys(value).toSorted();
+  const wanted = [...expected].toSorted();
   if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
     fail(`${label} keys differ: expected ${wanted.join(", ")}, got ${actual.join(", ")}`);
   }
@@ -122,7 +122,9 @@ const parseEntry = (value: unknown, index: number): RegistryEntry => {
   );
 
   const id = asString(entry.id, `${label}.id`);
-  if (!ENTRY_ID.test(id)) fail(`${label}.id is not canonical`);
+  if (!ENTRY_ID.test(id)) {
+    fail(`${label}.id is not canonical`);
+  }
 
   const qualification = asString(
     entry.qualification,
@@ -172,7 +174,9 @@ const parseEntry = (value: unknown, index: number): RegistryEntry => {
         fail(`${evidenceLabel}.path escapes the approved evidence roots`);
       }
       const sha256 = asString(record.sha256, `${evidenceLabel}.sha256`);
-      if (!SHA256.test(sha256)) fail(`${evidenceLabel}.sha256 is invalid`);
+      if (!SHA256.test(sha256)) {
+        fail(`${evidenceLabel}.sha256 is invalid`);
+      }
       return { kind, path, sha256 };
     },
   );
@@ -212,7 +216,9 @@ export const validateQualificationRegistryShape = (
   if (registry.$schema !== "./qualification-registry.schema.json") {
     fail("$schema must reference the repository-local schema");
   }
-  if (registry.schemaVersion !== 1) fail("schemaVersion must equal 1");
+  if (registry.schemaVersion !== 1) {
+    fail("schemaVersion must equal 1");
+  }
   if (
     typeof registry.generatedAt !== "string" ||
     !/^\d{4}-\d{2}-\d{2}$/.test(registry.generatedAt)
@@ -255,7 +261,9 @@ export const validateQualificationRegistryShape = (
     (entry: unknown, index: number) => parseEntry(entry, index),
   );
   const ids = entries.map(({ id }) => id);
-  if (new Set(ids).size !== ids.length) fail("entry IDs are not unique");
+  if (new Set(ids).size !== ids.length) {
+    fail("entry IDs are not unique");
+  }
   return entries;
 };
 
@@ -292,7 +300,7 @@ const sha256 = (bytes: Uint8Array): string =>
   createHash("sha256").update(bytes).digest("hex");
 
 const sorted = (values: Iterable<string>): readonly string[] =>
-  [...values].sort((left, right) => left.localeCompare(right));
+  [...values].toSorted((left, right) => left.localeCompare(right));
 
 export const validateQualificationRegistry = async (
   repositoryRoot: string,
@@ -312,7 +320,9 @@ export const validateQualificationRegistry = async (
         fail(`evidence path is registered more than once: ${evidence.path}`);
       }
       evidencePaths.add(evidence.path);
-      if (evidence.kind === "human-report") reportPaths.add(evidence.path);
+      if (evidence.kind === "human-report") {
+        reportPaths.add(evidence.path);
+      }
 
       const absolutePath = resolve(repositoryRoot, evidence.path);
       const relativePath = relative(repositoryRoot, absolutePath);
@@ -425,6 +435,7 @@ if (process.argv[1] && resolve(process.argv[1]) === sourcePath) {
           })}\n`,
         );
       }
+      return;
     })
     .catch((error: unknown) => {
       process.stderr.write(

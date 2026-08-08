@@ -9,8 +9,16 @@ scripts:
   fast: check:fast
   full: check
 changedChecks:
+  - id: lint
+    script: lint:changed
+    extensions: [.ts, .tsx, .mts, .cts]
+    passPaths: true
   - id: typecheck
     script: typecheck
+    extensions: [.ts, .tsx, .mts, .cts]
+    passPaths: false
+  - id: test
+    script: test
     extensions: [.ts, .tsx, .mts, .cts]
     passPaths: false
   - id: rust-boundaries
@@ -18,8 +26,15 @@ changedChecks:
     extensions: [.rs, .toml, .lock]
     passPaths: false
 fullScanPaths:
+  - .oxlintrc.json
   - .github/workflows
+  - architecture/foundation
+  - architecture/decisions
+  - docs
   - docs/architecture/qualification-registry.json
+  - foundation.config.yaml
+  - package.json
   - pnpm-lock.yaml
   - pnpm-workspace.yaml
+  - scripts/foundation
   - tsconfig.json

@@ -4,14 +4,14 @@ import {
   spawn,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFile = promisify(execFileCallback);
 const clientDirectory = dirname(fileURLToPath(import.meta.url));
-const experimentDirectory = resolve(clientDirectory, "..", "..");
+const experimentDirectory = resolvePath(clientDirectory, "..", "..");
 const executableExtension = process.platform === "win32" ? ".exe" : "";
 const protocolServer =
   process.env.BOUNDARY_PROTOCOL_COMPAT_SERVER ??
@@ -89,7 +89,7 @@ const assertExactKeys = (
   expected: readonly string[],
   context: string,
 ): void => {
-  assert.deepEqual(Object.keys(value).sort(), [...expected].sort(), `${context} schema drift`);
+  assert.deepEqual(Object.keys(value).toSorted(), [...expected].toSorted(), `${context} schema drift`);
 };
 
 const asStringOrNull = (value: unknown, context: string): string | null => {
@@ -218,20 +218,22 @@ const buildServer = async (): Promise<void> => {
   if (process.env.BOUNDARY_PROTOCOL_COMPAT_SERVER !== undefined) {
     return;
   }
-  buildPromise ??= execFile(
-    "cargo",
-    [
-      "build",
-      "--locked",
-      "--manifest-path",
-      "Cargo.toml",
-      "-p",
-      "boundary-protocol",
-      "--bin",
-      "protocol-compat-server",
-    ],
-    { cwd: experimentDirectory, maxBuffer: 4 * 1024 * 1024 },
-  ).then(() => undefined);
+  buildPromise ??= (async () => {
+    await execFile(
+      "cargo",
+      [
+        "build",
+        "--locked",
+        "--manifest-path",
+        "Cargo.toml",
+        "-p",
+        "boundary-protocol",
+        "--bin",
+        "protocol-compat-server",
+      ],
+      { cwd: experimentDirectory, maxBuffer: 4 * 1024 * 1024 },
+    );
+  })();
   await buildPromise;
 };
 
@@ -244,7 +246,7 @@ const withTimeout = async <T>(
   try {
     return await Promise.race([
       operation,
-      new Promise<never>((_, reject) => {
+      new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => reject(new Error(`${description} timed out`)), timeoutMs);
       }),
     ]);
@@ -270,9 +272,9 @@ const runExchange = async (
   child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
   child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
   const completion = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-    (resolveCompletion, rejectCompletion) => {
-      child.once("error", rejectCompletion);
-      child.once("close", (code, signal) => resolveCompletion({ code, signal }));
+    (resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => resolve({ code, signal }));
     },
   );
   try {
@@ -291,10 +293,10 @@ const runExchange = async (
     if (child.exitCode === null && child.signalCode === null) {
       child.kill("SIGKILL");
       await withTimeout(
-        completion.catch(() => undefined),
+        completion.catch(() => {}),
         PROCESS_CLEANUP_TIMEOUT_MS,
         "protocol compatibility child cleanup",
-      ).catch(() => undefined);
+      ).catch(() => {});
     }
   }
 };

@@ -122,6 +122,9 @@ Read documents in this order:
    historical hypotheses. It is not an implementation specification.
 37. `../experiments/runtime-profile-behavior/README.md` - experiment status and
    the candidate behaviors known to be superseded or falsified.
+38. `architecture/foundation-adoption.md` - executable Engineering Foundation
+   capabilities, deferred applicability gates, maintainability budgets, and the
+   reviewed bounded-context scaffolding workflow.
 
 Document status vocabulary:
 

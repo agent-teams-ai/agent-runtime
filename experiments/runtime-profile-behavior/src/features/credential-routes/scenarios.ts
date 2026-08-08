@@ -53,8 +53,10 @@ export const copiedCredentialScenario = (input: {
       );
     },
     invocation: input.invocation,
-    normalizeResult: input.normalizeResult,
-    assertions: input.assertions,
+    ...(input.normalizeResult === undefined
+      ? {}
+      : { normalizeResult: input.normalizeResult }),
+    ...(input.assertions === undefined ? {} : { assertions: input.assertions }),
     async verify() {
       if (guard === undefined) {
         throw new Error("Credential fixture guard was not initialized");
@@ -80,7 +82,9 @@ const corruptCredentialScenario = (input: {
   prepare: (sandbox) =>
     writeCorruptCredentialFixture(input.destination(sandbox)),
   invocation: input.invocation,
-  normalizeResult: input.normalizeResult,
+  ...(input.normalizeResult === undefined
+    ? {}
+    : { normalizeResult: input.normalizeResult }),
 });
 
 const claudeRouteScenario = (

@@ -1,0 +1,26 @@
+schemaVersion: 1
+projectId: agent-runtime
+targetCatalogPath: architecture/foundation/scaffold-targets.yaml
+compositions:
+  - id: bounded-context-package
+    scaffoldProfile:
+      ref:
+        id: foundation.node-typescript-pnpm-esm
+        contractVersion: 1
+      parameters:
+        tsconfigBase: architecture/foundation/scaffold-tsconfig.json
+    recipe:
+      ref:
+        id: foundation.node-typescript-library-boundary
+        contractVersion: 1
+    targetRoles:
+      - bounded-context
+    authorityVerifiers:
+      - id: foundation.markdown-yaml-owner
+        contractVersion: 1
+        parameters:
+          allowedStatuses:
+            - accepted
+          documentRoots:
+            - docs/decisions
+    policies: []
