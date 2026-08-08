@@ -212,9 +212,12 @@ const requestGuardianTermination = async (
         );
       }
     } catch (recoveryError) {
-      throw new Error("Guardian cleanup did not produce a terminal response", {
-        cause: recoveryError,
-      });
+      throw Object.assign(
+        new Error("Guardian cleanup did not produce a terminal response", {
+          cause: recoveryError,
+        }),
+        { errors: Object.freeze([firstError, recoveryError]) },
+      );
     } finally {
       await recovery.close().catch(() => {});
     }
