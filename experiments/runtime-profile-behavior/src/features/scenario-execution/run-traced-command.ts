@@ -23,7 +23,7 @@ export const runTracedCommand = async (
       invocation.executable,
       ...invocation.args,
     ],
-    cwd: invocation.cwd,
+    ...(invocation.cwd === undefined ? {} : { cwd: invocation.cwd }),
     env: environment,
     timeoutMs: invocation.timeoutMs ?? 30_000,
   }).then((result) => ({

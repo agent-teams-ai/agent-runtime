@@ -30,6 +30,86 @@ const record = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
+const summarizeHandshake = (input: {
+  requestedProtocolVersion: 1 | 2;
+  initialize: JsonRpcMessage | undefined;
+  sessionNew: JsonRpcMessage | undefined;
+  sessionList: JsonRpcMessage | undefined;
+  sessionClose: JsonRpcMessage | undefined;
+  sessionResume: JsonRpcMessage | undefined;
+  resumedSessionClose: JsonRpcMessage | undefined;
+  promptResponse: JsonRpcMessage | undefined;
+  sessionNewAfterDrift: JsonRpcMessage | undefined;
+  sessionCloseAfterDrift: JsonRpcMessage | undefined;
+  messages: readonly JsonRpcMessage[];
+  workflowError: string | undefined;
+  processResult: {
+    readonly exitCode: number | null;
+    readonly signal: NodeJS.Signals | null;
+  };
+  stderr: string;
+}) => ({
+  requestedProtocolVersion: input.requestedProtocolVersion,
+  initialize: input.initialize,
+  negotiatedProtocolVersion: record(input.initialize?.result).protocolVersion,
+  sessionNew: input.sessionNew,
+  sessionList: input.sessionList,
+  sessionClose: input.sessionClose,
+  sessionResume: input.sessionResume,
+  resumedSessionClose: input.resumedSessionClose,
+  promptResponse: input.promptResponse,
+  sessionNewAfterDrift: input.sessionNewAfterDrift,
+  sessionCloseAfterDrift: input.sessionCloseAfterDrift,
+  promptText: input.messages
+    .map((message) => record(record(message.params).update))
+    .filter(
+      (update) =>
+        update.sessionUpdate === "agent_message_chunk" &&
+        record(update.content).type === "text",
+    )
+    .map((update) => record(update.content).text)
+    .filter((text): text is string => typeof text === "string")
+    .join(""),
+  workflowError: input.workflowError,
+  process: {
+    ...input.processResult,
+    stderr: input.stderr,
+  },
+  unsolicitedMethods: input.messages
+    .filter(
+      (message) => message.method !== undefined && message.id === undefined,
+    )
+    .map((message) => message.method),
+  unsolicitedNotifications: input.messages
+    .filter(
+      (message) => message.method !== undefined && message.id === undefined,
+    )
+    .map(({ method, params }) => ({ method, params })),
+  clientRequests: input.messages
+    .filter(
+      (message) => message.method !== undefined && message.id !== undefined,
+    )
+    .map(({ method, params }) => ({ method, params })),
+  availableCommandsBySession: Object.fromEntries(
+    input.messages
+      .map((message) => record(message.params))
+      .filter(
+        (params) =>
+          record(params.update).sessionUpdate === "available_commands_update",
+      )
+      .map((params) => [
+        params.sessionId,
+        Array.isArray(record(params.update).availableCommands)
+          ? (
+              record(params.update).availableCommands as Array<
+                Record<string, unknown>
+              >
+            ).map((command) => command.name)
+          : [],
+      ]),
+  ),
+});
+
 const runHandshake = async (
   requestedProtocolVersion: 1 | 2,
   resumeSessionId?: string,
@@ -199,7 +279,9 @@ const runHandshake = async (
         );
       }
       if (configPathToMutate !== undefined) {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 150);
+        });
         if (configDriftAction === "delete") {
           await unlink(configPathToMutate);
         } else {
@@ -225,7 +307,9 @@ const runHandshake = async (
           cwd: workspace,
           mcpServers: [],
         });
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 150);
+        });
         const driftSessionId = record(
           sessionNewAfterDrift.result,
         ).sessionId;
@@ -243,9 +327,9 @@ const runHandshake = async (
   } catch (error) {
     workflowError = error instanceof Error ? error.message : "Unknown ACP error";
   } finally {
-    for (const request of pending.values()) {
-      clearTimeout(request.timeout);
-      request.reject(new Error("ACP connection closed"));
+    for (const pendingRequest of pending.values()) {
+      clearTimeout(pendingRequest.timeout);
+      pendingRequest.reject(new Error("ACP connection closed"));
     }
     pending.clear();
     child.stdin.end();
@@ -253,7 +337,9 @@ const runHandshake = async (
 
   await Promise.race([
     exitPromise,
-    new Promise((resolve) => setTimeout(resolve, 2_000)),
+    new Promise((resolve) => {
+      setTimeout(resolve, 2_000);
+    }),
   ]);
   if (!exited) {
     child.kill("SIGTERM");
@@ -261,10 +347,9 @@ const runHandshake = async (
   const processResult = await exitPromise;
   lines.close();
 
-  return {
+  return summarizeHandshake({
     requestedProtocolVersion,
     initialize,
-    negotiatedProtocolVersion: record(initialize?.result).protocolVersion,
     sessionNew,
     sessionList,
     sessionClose,
@@ -273,62 +358,11 @@ const runHandshake = async (
     promptResponse,
     sessionNewAfterDrift,
     sessionCloseAfterDrift,
-    promptText: messages
-      .map((message) => record(record(message.params).update))
-      .filter(
-        (update) =>
-          update.sessionUpdate === "agent_message_chunk" &&
-          record(update.content).type === "text",
-      )
-      .map((update) => record(update.content).text)
-      .filter((text): text is string => typeof text === "string")
-      .join(""),
+    messages,
     workflowError,
-    process: {
-      ...processResult,
-      stderr,
-    },
-    unsolicitedMethods: messages
-      .filter(
-        (message) =>
-          message.method !== undefined &&
-          message.id === undefined,
-      )
-      .map((message) => message.method),
-    unsolicitedNotifications: messages
-      .filter(
-        (message) =>
-          message.method !== undefined &&
-          message.id === undefined,
-      )
-      .map(({ method, params }) => ({ method, params })),
-    clientRequests: messages
-      .filter(
-        (message) =>
-          message.method !== undefined &&
-          message.id !== undefined,
-      )
-      .map(({ method, params }) => ({ method, params })),
-    availableCommandsBySession: Object.fromEntries(
-      messages
-        .map((message) => record(message.params))
-        .filter(
-          (params) =>
-            record(params.update).sessionUpdate ===
-            "available_commands_update",
-        )
-        .map((params) => [
-          params.sessionId,
-          Array.isArray(record(params.update).availableCommands)
-            ? (
-                record(params.update).availableCommands as Array<
-                  Record<string, unknown>
-                >
-              ).map((command) => command.name)
-            : [],
-        ]),
-    ),
-  };
+    processResult,
+    stderr,
+  });
 };
 
 if (driftConfigPath !== undefined) {

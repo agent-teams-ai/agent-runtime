@@ -49,7 +49,7 @@ export const normalizeOpenCodeConfigUsername = (
       pluginCount: Array.isArray(parsed.plugin) ? parsed.plugin.length : 0,
       mcpNames:
         typeof parsed.mcp === "object" && parsed.mcp !== null
-          ? Object.keys(parsed.mcp as Record<string, unknown>).sort()
+          ? Object.keys(parsed.mcp as Record<string, unknown>).toSorted()
           : [],
     });
   } catch {

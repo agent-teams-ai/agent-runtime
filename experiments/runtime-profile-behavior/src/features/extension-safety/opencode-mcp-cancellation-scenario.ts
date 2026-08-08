@@ -31,7 +31,9 @@ const waitForProcessExit = async (pid: number): Promise<boolean> => {
     if (!processExists(pid)) {
       return true;
     }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
   }
   return false;
 };

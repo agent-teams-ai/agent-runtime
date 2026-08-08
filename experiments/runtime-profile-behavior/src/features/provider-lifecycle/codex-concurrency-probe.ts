@@ -42,8 +42,10 @@ const summarize = (
       event.item?.type === "agent_message",
   );
   return {
-    threadId: thread?.thread_id,
-    finalText: message?.item?.text,
+    ...(thread?.thread_id === undefined ? {} : { threadId: thread.thread_id }),
+    ...(message?.item?.text === undefined
+      ? {}
+      : { finalText: message.item.text }),
     eventTypes: [...new Set(events.map((event) => event.type))].filter(
       (type) => type !== undefined,
     ),

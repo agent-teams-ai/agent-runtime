@@ -120,7 +120,7 @@ process.stdout.write(
       username: newProcessConfig.username,
       commands: Object.keys(
         (newProcessConfig.command as Record<string, unknown> | undefined) ?? {},
-      ).sort(),
+      ).toSorted(),
     },
     corruptManagedConfigRejected: corruptResult.exitCode !== 0,
   })}\n`,

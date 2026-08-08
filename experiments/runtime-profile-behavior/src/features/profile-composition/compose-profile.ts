@@ -60,7 +60,7 @@ const validateLayer = (layer: ProfileLayer): void => {
 };
 
 const sortedUnique = <T extends string>(values: readonly T[]): readonly T[] =>
-  [...new Set(values)].sort();
+  [...new Set(values)].toSorted();
 
 const activationFor = (
   entry: ResourceEntry,
@@ -101,7 +101,7 @@ const stableValue = (value: JsonValue): JsonValue => {
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .toSorted(([left], [right]) => left.localeCompare(right))
         .map(([key, item]) => [key, stableValue(item)]),
     );
   }
@@ -113,7 +113,7 @@ const canonicalLayer = (layer: ProfileLayer): JsonValue => ({
   sourceIdentity: layer.sourceIdentity,
   revisionRef: layer.revisionRef,
   entries: [...layer.entries]
-    .sort((left, right) => entryKey(left).localeCompare(entryKey(right)))
+    .toSorted((left, right) => entryKey(left).localeCompare(entryKey(right)))
     .map((entry) =>
       stableValue(
         (entry.target === "resource" && entry.operation === "upsert"
@@ -167,7 +167,7 @@ export const composeProfile = (
   const trustedKinds = new Set(input.security.trustedExecutableKinds);
 
   const resolvedSettings = [...settings.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
+    .toSorted(([left], [right]) => left.localeCompare(right))
     .map(([key, entry]) =>
       entry.operation === "set"
         ? {
@@ -184,7 +184,7 @@ export const composeProfile = (
     );
 
   const resolvedResources = [...resources.values()]
-    .sort((left, right) =>
+    .toSorted((left, right) =>
       `${left.kind}:${left.id}`.localeCompare(`${right.kind}:${right.id}`),
     )
     .map((entry): ResolvedResource => {

@@ -112,7 +112,7 @@ export const splitProviderConfig = (
 
   return {
     profileConfig: visit(input, []) as Readonly<Record<string, unknown>>,
-    credentialRequirements: requirements.sort((left, right) =>
+    credentialRequirements: requirements.toSorted((left, right) =>
       left.path.localeCompare(right.path),
     ),
   };

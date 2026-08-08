@@ -244,7 +244,7 @@ export const runLegacyComparison = async (): Promise<void> => {
       ),
       projectBehaviorFingerprint: legacyBefore.projectBehaviorFingerprint,
       managedConfigFingerprint: legacyBefore.managedConfigFingerprint,
-      managedConfigKeys: Object.keys(legacyBefore.managedConfig).sort(),
+      managedConfigKeys: Object.keys(legacyBefore.managedConfig).toSorted(),
       behaviorSources: legacyBefore.behaviorSources,
       inspection: legacyInspection,
       afterContentChange: {
