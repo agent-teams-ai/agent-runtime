@@ -1,3 +1,10 @@
+---
+id: ADR-0003
+status: accepted
+supersedes: []
+superseded_by: []
+---
+
 # ADR-0003: Runtime cutoff barriers and scope disposition
 
 Status: accepted for the architecture foundation

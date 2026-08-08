@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "sha256",
+  "decisions": [
+    {
+      "id": "ADR-0001",
+      "path": "docs/decisions/0001-runtime-profile-and-activation-boundaries.md",
+      "immutableDigest": "sha256:a43a1b6339d09544689176388f56272bf03658f82490caa8faf26be19c5a4da4"
+    },
+    {
+      "id": "ADR-0002",
+      "path": "docs/decisions/0002-architecture-reconciliation-tenancy-and-operator-recovery.md",
+      "immutableDigest": "sha256:0733d07765cd43ee80ce5347e8098655065b01a683d00974dafde9763e864e94"
+    },
+    {
+      "id": "ADR-0003",
+      "path": "docs/decisions/0003-runtime-cutoff-barriers-and-scope-disposition.md",
+      "immutableDigest": "sha256:2b67c84978f85aceac9b5767badf8aa9f490907c4249e62873feef9545bde89d"
+    },
+    {
+      "id": "ADR-0004",
+      "path": "docs/decisions/0004-pre-materialization-dispatch-prevention.md",
+      "immutableDigest": "sha256:ebe1510cba80693c5b6ec6215bde2ff827578b1428e0fafc8a7e8d40531f06da"
+    }
+  ]
+}

@@ -9,6 +9,10 @@ scripts:
   fast: check:fast
   full: check
 changedChecks:
+  - id: lint
+    script: lint:changed
+    extensions: [.ts, .tsx, .mts, .cts]
+    passPaths: true
   - id: typecheck
     script: typecheck
     extensions: [.ts, .tsx, .mts, .cts]
@@ -18,8 +22,12 @@ changedChecks:
     extensions: [.rs, .toml, .lock]
     passPaths: false
 fullScanPaths:
+  - .oxlintrc.json
   - .github/workflows
+  - architecture/foundation
   - docs/architecture/qualification-registry.json
+  - foundation.config.yaml
+  - package.json
   - pnpm-lock.yaml
   - pnpm-workspace.yaml
   - tsconfig.json

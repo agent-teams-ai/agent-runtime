@@ -1,0 +1,7 @@
+schemaVersion: 1
+governedRoots:
+  - experiments
+nonWaivableRulePrefixes:
+  - access-control.
+  - security.
+waivers: []

@@ -1,0 +1,32 @@
+schemaVersion: 1
+workspace:
+  kind: pnpm
+  manifest: pnpm-workspace.yaml
+governedRoots:
+  - experiments
+boundaries:
+  - id: experiments.typescript-evidence
+    roots:
+      - experiments/runtime-profile-behavior
+      - experiments/rust-system-boundaries/client
+      - experiments/rust-system-boundaries/evidence
+    entrypoints: []
+    allow:
+      boundaries: []
+      packages:
+        - zod
+      builtins:
+        - node:assert/strict
+        - node:child_process
+        - node:crypto
+        - node:fs
+        - node:fs/promises
+        - node:os
+        - node:path
+        - node:perf_hooks
+        - node:readline
+        - node:test
+        - node:timers/promises
+        - node:url
+        - node:util
+      runtimeReferences: []

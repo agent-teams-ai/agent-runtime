@@ -1,4 +1,5 @@
 {
+  "extends": "@agent-teams/engineering-foundation/presets/typescript/node.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
