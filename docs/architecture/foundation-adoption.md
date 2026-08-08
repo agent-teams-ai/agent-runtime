@@ -1,7 +1,6 @@
 # Engineering Foundation adoption
 
-Status: active consumer policy; registry upgrade is coordinated with the next
-Foundation release.
+Status: active consumer policy backed by the current exact registry dependency.
 
 Agent Runtime uses Engineering Foundation only as development tooling. Runtime
 code must not import it. Installation alone never enables policy: every active
