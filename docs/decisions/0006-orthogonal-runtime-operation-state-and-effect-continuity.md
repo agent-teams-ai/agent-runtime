@@ -401,13 +401,21 @@ collection. Its transaction creates the unique root, command journal, typed
 receipt, audit entry, and outbox record. Exact replay or receipt query recovers
 a lost acknowledgement.
 
-The operation-acceptance transaction consumes only a current retention receipt
-bound to the exact tenant, runtime scope, operation, binary revision, request
-digest, and root generation. Only then does it durably create the accepted
-operation. No provider or effect work is permitted before that commit, and
-normal execution authority is still required afterward. This is an explicit
-process-manager seam between Agent Execution modules, not a cross-module
-transaction, foreign key, SQL join, or domain import.
+The `OperationAcceptanceProcess` owns one revisioned state machine,
+`PENDING -> ACCEPTED | ABORTED`. Its accept CAS atomically writes `ACCEPTED`,
+the `RuntimeOperation`, acceptance receipt, audit, and outbox in the Operation
+Lifecycle transaction. Its abort CAS atomically writes `ABORTED`, the typed
+abort receipt, audit, and outbox in that same owner transaction. The losing
+command is stale and returns the current durable receipt; exact replay is
+idempotent. Host Custody cannot consume an abort receipt when accept won.
+
+The accept transaction consumes only a current retention receipt bound to the
+exact tenant, runtime scope, operation, binary revision, request digest, and
+root generation. Only then does it durably create the accepted operation. No
+provider or effect work is permitted before that commit, and normal execution
+authority is still required afterward. This is an explicit process-manager
+seam between Agent Execution modules, not a cross-module transaction, foreign
+key, SQL join, or domain import.
 
 If root creation wins the lifecycle CAS, collection is blocked. If collection
 or tombstoning wins, root establishment and acceptance are stale and reject
@@ -418,9 +426,17 @@ exact intent as `ABORTED`, bound to command ID, request digest, operation ID,
 and root identity, then publishes a typed `OperationAcceptanceAbortedReceipt`.
 Host Custody consumes only that exact receipt and releases the root in its own
 transaction. Missing, stale, wrong-scope, unknown, or TTL-only evidence retains
-the root. Exact abandon replay returns the durable Host Custody release receipt.
+the root. A later exact abort receipt remains authoritative after TTL elapsed.
+Exact abandon replay returns the durable Host Custody release receipt.
 Session-assignment release is fenced by the Host Custody lifecycle revision and
 never erases a semantic root.
+
+Root creation and its establishment receipt pin a closed Host Custody-owned
+`RetentionObligationSet`: schema, policy, and capability revisions plus its
+canonical digest. Release must match that exact set and cannot substitute a
+weaker or differently digested set. An obligation discovered dynamically must
+be reserved before the first revision-specific use and the set must be sealed
+before terminal closure; otherwise work or release fails closed.
 
 The root remains while any nonterminal operation, effect reconciliation,
 terminal projection, transcript projection, or other closure step still needs
@@ -439,11 +455,13 @@ the semantic root retained until exact replay or reconciliation proves
 completion. After release, binary revision collection requires zero semantic
 roots, all ADR-0001 collection blockers clear, and a winning Host Custody
 collection CAS. That transaction persists the scoped deletion intent, claim,
-and tombstone before physical deletion. A deletion crash preserves those
-records and requires reconciliation; it does not recreate a semantic root.
-Exact replay or query with the same claim returns the original deletion result.
-Missing, stale, wrong-scope, or unknown claim evidence denies deletion, as does
-contradictory zero-root and retained-root evidence.
+immutable deletion-set digest, store-level reference and fence evidence, and
+tombstone before physical deletion. Only a durable `DeletionCompletedReceipt`
+completes deletion. A partial or unknown deletion preserves those records and
+requires reconciliation; it does not recreate a semantic root. Exact replay or
+query with the same claim returns the durable completion result. Missing,
+stale, wrong-scope, or unknown claim evidence denies deletion, as does any
+`root_cas_won` or contradictory zero-root and retained-root evidence.
 
 The retention root grants no dispatch, process, provider, output, effect, or
 other execution authority. A shared `EffectId` is covered by the independently
@@ -529,10 +547,11 @@ Acceptance of this ADR requires machine-readable fixtures for at least:
 27. every allowed and forbidden cross-axis transition among dispatch,
     provider execution, containment, cutoff, and terminal state.
 28. binary-revision root/collection CAS races, receipt loss, orphan and
-    abandonment recovery, session-release fencing, nonterminal and
-    reconciliation retention, closed release-manifest validation, physical
-    deletion replay, zero-root garbage collection, separate execution
-    authority, and shared-effect participation.
+    abandonment recovery, accept/abort revision races, session-release fencing,
+    pinned and dynamically arising retention obligations, nonterminal and
+    reconciliation retention, closed release-manifest validation, durable
+    physical-deletion completion and replay, zero-root garbage collection,
+    separate execution authority, and shared-effect participation.
 
 The oracle validates these closed semantic evidence categories and transitions,
 not a final wire-schema field layout. It uses deterministic synthetic models

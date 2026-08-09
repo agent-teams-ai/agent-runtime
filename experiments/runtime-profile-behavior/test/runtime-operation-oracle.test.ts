@@ -37,9 +37,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 151,
-    acceptedCount: 86,
-    rejectedCount: 65,
+    exampleCount: 177,
+    acceptedCount: 97,
+    rejectedCount: 80,
   });
 });
 
@@ -402,6 +402,27 @@ test("binary revision semantic retention fails closed before work and GC", async
     decision: "reject",
     code: "binary_revision_gc_blocked",
   });
+  for (const contradictoryFact of [
+    "root_cas_won",
+    "contradictory_zero_and_retained_roots",
+  ] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...deletionReplay,
+      facts: [...deletionReplay.facts, contradictoryFact],
+    }), {
+      decision: "reject",
+      code: "binary_revision_gc_blocked",
+    });
+  }
+  assert.deepEqual(evaluateOracleExample({
+    ...deletionReplay,
+    facts: deletionReplay.facts.filter(
+      (fact) => fact !== "deletion_completed_receipt_durable",
+    ),
+  }), {
+    decision: "reject",
+    code: "deletion_reconciliation_required",
+  });
 
   const sharedEffectWork = retentionCase.examples.find(
     ({ id }) => id === "shared-effect-work-complete-roots",
@@ -414,6 +435,24 @@ test("binary revision semantic retention fails closed before work and GC", async
     decision: "reject",
     code: "root_not_execution_authority",
   });
+
+  const sharedEffectConflict = retentionCase.examples.find(
+    ({ id }) => id === "shared-effect-conflicting-root-facts-reject",
+  );
+  assert.ok(sharedEffectConflict);
+  assert.deepEqual(evaluateOracleExample(sharedEffectConflict), sharedEffectConflict.expected);
+
+  const acceptedAbort = retentionCase.examples.find(
+    ({ id }) => id === "accepted-operation-rejects-abort-release",
+  );
+  assert.ok(acceptedAbort);
+  assert.deepEqual(evaluateOracleExample(acceptedAbort), acceptedAbort.expected);
+
+  const abortAfterTtl = retentionCase.examples.find(
+    ({ id }) => id === "valid-abort-proof-after-ttl-releases-root",
+  );
+  assert.ok(abortAfterTtl);
+  assert.deepEqual(evaluateOracleExample(abortAfterTtl), abortAfterTtl.expected);
 });
 
 test("exact inventory rejects weakened binary revision retention evidence", async () => {

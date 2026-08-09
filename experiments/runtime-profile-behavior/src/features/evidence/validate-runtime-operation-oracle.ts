@@ -397,6 +397,10 @@ const result = (code: ResultCode): OracleExample["expected"] => ({
     "retention_receipt_replayed",
     "physical_deletion_replayed",
     "abandon_release_replayed",
+    "operation_acceptance_aborted",
+    "operation_acceptance_replayed",
+    "operation_abort_replayed",
+    "physical_deletion_completed",
   ].includes(code) ? "accept" : "reject",
   code,
 });
