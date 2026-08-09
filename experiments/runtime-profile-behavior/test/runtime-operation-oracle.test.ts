@@ -4,6 +4,12 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
+  BINARY_RETENTION_ALLOWED_FACTS,
+  BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
+  binaryRetentionFactIsLifecycleCommand,
+  binaryRetentionHasMixedCommandIntent,
+} from "../src/features/evidence/runtime-operation-binary-retention-oracle.ts";
+import {
   evaluateOracleExample,
   evaluateGeneratedAxisProducts,
   generatedStateIsValid,
@@ -38,9 +44,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 223,
+    exampleCount: 226,
     acceptedCount: 104,
-    rejectedCount: 119,
+    rejectedCount: 122,
   });
 });
 
@@ -553,6 +559,9 @@ test("binary revision semantic retention fails closed before work and GC", async
     "deletion-command-cannot-bypass-work-authorization",
     "deletion-command-cannot-bypass-dispatch-authorization",
     "authorized-work-with-acceptance-command-intent-rejects",
+    "authorized-work-with-release-replay-intent-rejects",
+    "authorized-work-with-abandon-replay-intent-rejects",
+    "authorized-work-with-session-release-intent-rejects",
   ] as const) {
     const example: OracleExample | undefined = retentionCase.examples.find(
       (candidate: OracleExample) => candidate.id === id,
@@ -623,6 +632,46 @@ test("work authorization dominates accepted non-work branch outcomes", async () 
         facts: [...seed.facts, trigger],
       });
       assert.equal(outcome.decision, "reject", `${id} + ${trigger}`);
+    }
+  }
+});
+
+test("closed mixed-command vocabulary cannot drift around work authorization", async () => {
+  const classifiedCommands = BINARY_RETENTION_ALLOWED_FACTS.filter(
+    binaryRetentionFactIsLifecycleCommand,
+  );
+  assert.deepEqual(classifiedCommands, BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS);
+
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  const authorizedWork = retentionCase?.examples.find(
+    ({ id }) => id === "root-before-provider-or-effect-work",
+  );
+  assert.ok(authorizedWork);
+  const authorizedFacts = authorizedWork.facts.filter(
+    (fact) => fact !== "provider_or_effect_work_requested",
+  );
+  const integrityDominating = new Set([
+    "operation_acceptance_abort_cas_won",
+    "root_abort_release_requested",
+    "root_request_exact_replay",
+    "physical_deletion_started",
+    "physical_deletion_crash",
+    "physical_deletion_partial",
+    "physical_deletion_unknown",
+    "physical_deletion_completed",
+    "physical_deletion_exact_replay",
+  ]);
+  for (const commandFact of BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS) {
+    for (const trigger of ["provider_or_effect_work_requested", "dispatch_requested"] as const) {
+      const facts = [...authorizedFacts, commandFact, trigger];
+      assert.equal(binaryRetentionHasMixedCommandIntent(new Set(facts)), true, commandFact);
+      const outcome = evaluateOracleExample({ ...authorizedWork, facts });
+      assert.equal(outcome.decision, "reject", `${commandFact} + ${trigger}`);
+      if (!integrityDominating.has(commandFact)) {
+        assert.equal(outcome.code, "mixed_command_intent_forbidden", `${commandFact} + ${trigger}`);
+      }
     }
   }
 });

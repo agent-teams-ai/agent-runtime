@@ -167,7 +167,10 @@ const has = (facts: ReadonlySet<string>, fact: string): boolean => facts.has(fac
 const workRequested = (facts: ReadonlySet<string>): boolean =>
   has(facts, "provider_or_effect_work_requested") || has(facts, "dispatch_requested");
 
-const mixedCommandIntent = (facts: ReadonlySet<string>): boolean => [
+export const BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS = [
+  "session_assignment_release_requested",
+  "release_exact_replay",
+  "gc_requested",
   "operation_acceptance_accept_requested",
   "operation_acceptance_abort_requested",
   "operation_acceptance_accept_cas_won",
@@ -176,20 +179,37 @@ const mixedCommandIntent = (facts: ReadonlySet<string>): boolean => [
   "operation_abort_exact_replay",
   "ensure_semantic_retention_requested",
   "root_abort_release_requested",
+  "root_abort_release_cas_won",
   "root_request_exact_replay",
   "root_cas_won",
-  "root_abort_release_cas_won",
-  "gc_requested",
   "collection_or_tombstone_cas_won",
   "host_custody_collection_cas_won",
   "physical_deletion_preclaim_requested",
+  "abandon_release_exact_replay",
   "physical_deletion_started",
   "physical_deletion_crash",
   "physical_deletion_partial",
   "physical_deletion_unknown",
   "physical_deletion_completed",
   "physical_deletion_exact_replay",
-].some((fact) => has(facts, fact));
+] as const;
+
+export const binaryRetentionFactIsLifecycleCommand = (fact: string): boolean =>
+  fact !== "provider_or_effect_work_requested" && fact !== "dispatch_requested" &&
+  (fact === "session_assignment_release_requested" ||
+    fact === "release_exact_replay" ||
+    fact === "abandon_release_exact_replay" ||
+    fact === "gc_requested" ||
+    fact === "collection_or_tombstone_cas_won" ||
+    fact === "host_custody_collection_cas_won" ||
+    fact.endsWith("_requested") ||
+    ((fact.startsWith("operation_acceptance_") || fact.startsWith("root_")) &&
+      fact.endsWith("_cas_won")) ||
+    fact.endsWith("_exact_replay") ||
+    fact.startsWith("physical_deletion_"));
+
+export const binaryRetentionHasMixedCommandIntent = (facts: ReadonlySet<string>): boolean =>
+  BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS.some((fact) => has(facts, fact));
 
 
 const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
@@ -210,14 +230,12 @@ const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
 const evaluateAuthorizedWork = (
   facts: ReadonlySet<string>,
 ): BinaryRetentionResult => {
-  if (has(facts, "collection_or_tombstone_cas_won")) {
-    return "semantic_root_establishment_race";
-  }
   const exactRoot = has(facts, "operation_acceptance_intent_persisted") &&
     has(facts, "binary_revision_root_established") &&
     has(facts, "retention_receipt_exact_current");
   if (!exactRoot) {
-    return has(facts, "session_assignment_release_requested")
+    return has(facts, "session_assignment_release_requested") ||
+      has(facts, "collection_or_tombstone_cas_won")
       ? "semantic_root_establishment_race"
       : "semantic_root_required";
   }
@@ -422,7 +440,7 @@ export const evaluateBinaryRevisionRetention = (
     if (authorization !== "accepted") {
       return authorization;
     }
-    if (mixedCommandIntent(facts)) {
+    if (binaryRetentionHasMixedCommandIntent(facts)) {
       return "mixed_command_intent_forbidden";
     }
     if (has(facts, "shared_effect") &&
