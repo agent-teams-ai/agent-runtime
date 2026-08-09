@@ -393,26 +393,54 @@ Rules for successor participation are:
 ### Binary revision semantics remain retained through operation closure
 
 Host Custody owns a non-authorizing `BinaryRevisionSemanticRetentionRoot`.
-Durable operation acceptance binds each `RuntimeOperation` to the exact
-`BinaryRevision` whose capability/compiler revision, operation/effect and
-terminal projectors, and transcript/session codec define its semantics. The
-root is established in the acceptance transaction before any provider or
-effect work. Releasing a session assignment cannot race or erase that
-establishment.
+`OperationAcceptanceProcess` first persists immutable intent with allocated
+`OperationId`, `CommandId`, canonical request digest, and exact
+`BinaryRevision`. Host Custody `EnsureSemanticRetention` then uses the same
+owner-local `BinaryRevision` lifecycle revision, lock, and affected-row CAS as
+collection. Its transaction creates the unique root, command journal, typed
+receipt, audit entry, and outbox record. Exact replay or receipt query recovers
+a lost acknowledgement.
+
+The operation-acceptance transaction consumes only a current retention receipt
+bound to the exact tenant, runtime scope, operation, binary revision, request
+digest, and root generation. Only then does it durably create the accepted
+operation. No provider or effect work is permitted before that commit, and
+normal execution authority is still required afterward. This is an explicit
+process-manager seam between Agent Execution modules, not a cross-module
+transaction, foreign key, SQL join, or domain import.
+
+If root creation wins the lifecycle CAS, collection is blocked. If collection
+or tombstoning wins, root establishment and acceptance are stale and reject
+without work. A crash after root creation but before acceptance leaves a safe
+retained orphan, never a TTL-expiring root. Only an owner-local, durable
+`AbandonUnacceptedRootReceipt` may release it; missing, stale, wrong-scope, or
+unknown abandonment remains retained. Session-assignment release is fenced by
+the Host Custody lifecycle revision and never erases a semantic root.
 
 The root remains while any nonterminal operation, effect reconciliation,
 terminal projection, transcript projection, or other closure step still needs
-components from that revision. Release is idempotent and permitted only after
-write-once terminal and effect closure plus durable receipts and projections
-that no longer require the revision's executable semantic components. An
-unknown release outcome remains retained until exact replay or reconciliation
-proves release. Binary revision garbage collection requires zero semantic
-retention roots in addition to the blockers already defined by ADR-0001.
+components from that revision. Release consumes a Host Custody-owned closed,
+immutable `BinaryRevisionReleaseEvidenceManifest`. It binds manifest ID and
+canonical digest, root generation, tenant/scope/operation/root/binary
+identities, retention-obligation digest, terminal and satisfaction digests,
+effect-closure receipts, terminal/output/transcript independence receipts, and
+typed non-applicability proofs. Exact duplicate replay is idempotent; the same
+manifest ID with another digest is a hard conflict. Missing, duplicate, stale,
+wrong-scope, or unknown evidence retains the root.
+
+Release is permitted only after write-once terminal and effect closure plus
+durable revision-independent receipts and projections. An unknown release or
+physical-deletion outcome remains retained until exact replay or reconciliation
+proves completion. Binary revision collection requires zero semantic roots,
+all ADR-0001 collection blockers clear, and a winning Host Custody collection
+CAS. Contradictory zero-root and retained-root evidence denies collection.
 
 The retention root grants no dispatch, process, provider, output, effect, or
 other execution authority. A shared `EffectId` is covered by the independently
 established root of every attempting `RuntimeOperation`; the originating
 operation's root cannot substitute for a successor participant's root.
+Future extraction into separately deployed services requires a new
+reservation/finalize protocol ADR; this decision does not pre-authorize it.
 
 ### Invariants and forbidden transitions
 
@@ -490,10 +518,11 @@ Acceptance of this ADR requires machine-readable fixtures for at least:
     mapping, which must reject terminal commit;
 27. every allowed and forbidden cross-axis transition among dispatch,
     provider execution, containment, cutoff, and terminal state.
-28. binary-revision semantic-root establishment, session-release races,
-    nonterminal and reconciliation retention, revision-independent release,
-    unknown release, zero-root garbage collection, non-authority, and shared
-    effect participation.
+28. binary-revision root/collection CAS races, receipt loss, orphan and
+    abandonment recovery, session-release fencing, nonterminal and
+    reconciliation retention, closed release-manifest validation, physical
+    deletion replay, zero-root garbage collection, separate execution
+    authority, and shared-effect participation.
 
 The oracle uses deterministic synthetic models only. It does not run an agent,
 provider, terminal runtime, MCP, or user project.

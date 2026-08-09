@@ -37,9 +37,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 114,
-    acceptedCount: 64,
-    rejectedCount: 50,
+    exampleCount: 134,
+    acceptedCount: 77,
+    rejectedCount: 57,
   });
 });
 
@@ -318,12 +318,43 @@ test("binary revision semantic retention fails closed before work and GC", async
     decision: "reject",
     code: "semantic_root_required",
   });
+  assert.deepEqual(evaluateOracleExample({
+    ...rootedWork,
+    facts: rootedWork.facts.filter((fact) => fact !== "execution_authority_present"),
+  }), {
+    decision: "reject",
+    code: "root_not_execution_authority",
+  });
 
   const gcWithRoot = retentionCase.examples.find(
     ({ id }) => id === "gc-with-retained-semantic-root",
   );
   assert.ok(gcWithRoot);
   assert.deepEqual(evaluateOracleExample(gcWithRoot), gcWithRoot.expected);
+
+  const gcAllowed = retentionCase.examples.find(
+    ({ id }) => id === "gc-with-zero-semantic-roots",
+  );
+  assert.ok(gcAllowed);
+  assert.deepEqual(evaluateOracleExample({
+    ...gcAllowed,
+    facts: ["gc_requested", "zero_semantic_roots"],
+  }), {
+    decision: "reject",
+    code: "binary_revision_gc_blocked",
+  });
+
+  const safeRelease = retentionCase.examples.find(
+    ({ id }) => id === "closed-operation-releases-root",
+  );
+  assert.ok(safeRelease);
+  assert.deepEqual(evaluateOracleExample({
+    ...safeRelease,
+    facts: safeRelease.facts.filter((fact) => fact !== "binary_revision_root_established"),
+  }), {
+    decision: "reject",
+    code: "semantic_root_required",
+  });
 });
 
 test("exact inventory rejects weakened binary revision retention evidence", async () => {

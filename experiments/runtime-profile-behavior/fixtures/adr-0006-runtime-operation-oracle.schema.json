@@ -133,7 +133,18 @@
         "durable_revision_independent_projection", "release_outcome_unknown",
         "release_exact_replay",
         "semantic_root_retained", "gc_requested", "zero_semantic_roots", "shared_effect",
-        "attempting_operation_roots_complete", "attempting_operation_root_missing"
+        "attempting_operation_roots_complete", "attempting_operation_root_missing",
+        "operation_acceptance_intent_persisted", "retention_receipt_exact_current",
+        "execution_authority_present", "root_cas_won",
+        "collection_or_tombstone_cas_won", "existing_gc_blockers_clear",
+        "host_custody_collection_cas_won", "contradictory_zero_and_retained_roots",
+        "orphan_root_after_crash", "root_receipt_ack_lost", "acceptance_outcome_unknown",
+        "abandon_unaccepted_receipt_durable", "abandon_receipt_stale", "ttl_elapsed",
+        "release_manifest_exact_bound", "release_manifest_incomplete",
+        "release_manifest_stale", "release_manifest_wrong_scope", "release_manifest_unknown",
+        "release_manifest_duplicate_evidence", "release_manifest_digest_conflict",
+        "physical_deletion_started", "physical_deletion_crash",
+        "physical_deletion_exact_replay"
       ]
     },
     "resultCode": {
@@ -152,7 +163,9 @@
         "manifest_incomplete", "transition_forbidden", "semantic_root_required",
         "semantic_root_establishment_race", "semantic_root_retained",
         "semantic_root_released", "binary_revision_gc_allowed",
-        "binary_revision_gc_blocked", "root_not_execution_authority"
+        "binary_revision_gc_blocked", "root_not_execution_authority",
+        "retention_receipt_replayed", "release_manifest_conflict",
+        "physical_deletion_replayed"
       ]
     }
   }
