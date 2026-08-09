@@ -144,6 +144,23 @@ qualified_not_required(capabilityRef, receiptRef)
 a receipt. Product policy cannot declare technically required containment
 unnecessary.
 
+Containment transitions are closed:
+
+```text
+not_requested -> pending
+pending -> contained
+pending -> uncertain
+uncertain -> pending
+uncertain -> contained
+not_requested -> qualified_not_required
+```
+
+`uncertain -> pending` is an evidence-preserving retry. `uncertain -> contained`
+requires late exact proof. `qualified_not_required` may be established only
+with the qualified proof above, fenced operation admission and output, and no
+active provider execution. `contained` and `qualified_not_required` are
+terminal containment states and never reopen.
+
 Effect resolution stores exact sets rather than a lossy status:
 
 ```text

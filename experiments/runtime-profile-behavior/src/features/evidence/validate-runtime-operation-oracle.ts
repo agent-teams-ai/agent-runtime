@@ -350,7 +350,7 @@ export const parseRuntimeOperationOracle = (value: unknown): RuntimeOperationOra
   for (const oracleCase of cases) {
     const inventory = RUNTIME_OPERATION_ORACLE_INVENTORY[oracleCase.requirement - 1];
     if (inventory === undefined || oracleCase.id !== inventory.caseId ||
-        JSON.stringify(oracleCase.examples.map(({ id }) => id)) !== JSON.stringify(inventory.exampleIds)) {
+        JSON.stringify(oracleCase.examples) !== JSON.stringify(inventory.examples)) {
       fail(`requirement ${oracleCase.requirement} does not match the exact scenario/example inventory`);
     }
   }
@@ -540,6 +540,13 @@ export const generatedStateIsValid = (state: GeneratedState): boolean => {
     return false;
   }
   if (state.satisfaction === "complete" && state.manifest !== "sealed") {
+    return false;
+  }
+  if (state.satisfaction === "complete" && state.effectResolution === "unresolved") {
+    return false;
+  }
+  if (state.containment === "qualified_not_required" &&
+      (state.admission !== "fenced" || state.output !== "fenced" || state.execution === "active")) {
     return false;
   }
   if (state.terminal === "open") {

@@ -53,8 +53,8 @@ test("JSON schema closed enums stay aligned with the executable validator", asyn
 test("model oracle exhausts the deterministic ten-axis state product", () => {
   assert.deepEqual(evaluateGeneratedAxisProducts(), {
     total: 48000,
-    valid: 1512,
-    invalid: 46488,
+    valid: 1242,
+    invalid: 46758,
   });
 });
 
@@ -80,6 +80,32 @@ test("generated model enforces coupled and terminal invariants", () => {
     manifest: "sealed",
   }), false);
   assert.equal(generatedStateIsValid({ ...openState, satisfaction: "complete" }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    admission: "fenced",
+    output: "fenced",
+    manifest: "sealed",
+    satisfaction: "complete",
+    effectResolution: "unresolved",
+  }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    containment: "qualified_not_required",
+  }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    dispatch: "provider_accepted",
+    admission: "fenced",
+    output: "fenced",
+    execution: "active",
+    containment: "qualified_not_required",
+  }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    admission: "fenced",
+    output: "fenced",
+    containment: "qualified_not_required",
+  }), true);
 
   const finalState = {
     ...openState,
@@ -178,6 +204,37 @@ test("exact inventory rejects a truncated cross-axis matrix", async () => {
   );
 });
 
+test("exact inventory distinguishes operation, session, and scope cutoff races", async () => {
+  const fixture = await readFixture();
+  const cutoffCase = casesOf(fixture).find(({ requirement }) => requirement === 2);
+  assert.ok(cutoffCase);
+  for (const example of examplesOf(cutoffCase)) {
+    if (["session-cutoff-wins-dispatch", "scope-cutoff-wins-dispatch"].includes(String(example.id))) {
+      example.facts = ["operation_cutoff_committed_first"];
+    }
+  }
+  assert.throws(
+    () => parseRuntimeOperationOracle(fixture),
+    /does not match the exact scenario\/example inventory/,
+  );
+});
+
+test("exact inventory prevents transition-matrix collapse", async () => {
+  const fixture = await readFixture();
+  const transitionCase = casesOf(fixture).find(({ requirement }) => requirement === 27);
+  assert.ok(transitionCase);
+  for (const example of examplesOf(transitionCase)) {
+    const expected = example.expected as Record<string, unknown>;
+    example.facts = expected.decision === "accept"
+      ? ["transition_dispatch_unclaimed_claimed"]
+      : ["transition_dispatch_accepted_claimed"];
+  }
+  assert.throws(
+    () => parseRuntimeOperationOracle(fixture),
+    /does not match the exact scenario\/example inventory/,
+  );
+});
+
 test("every case carries both accepted and rejected evidence", async () => {
   const fixture = await readFixture();
   const firstCase = casesOf(fixture)[0];
@@ -191,7 +248,7 @@ test("every case carries both accepted and rejected evidence", async () => {
   );
 });
 
-test("oracle detects an expectation that contradicts the model", async () => {
+test("exact inventory detects a rewritten expected outcome", async () => {
   const fixture = await readFixture();
   const cases = casesOf(fixture);
   const manifestCase = cases.find(({ requirement }) => requirement === 26);
@@ -203,7 +260,7 @@ test("oracle detects an expectation that contradicts the model", async () => {
   missingChild.expected = { decision: "accept", code: "accepted" };
   assert.throws(
     () => validateRuntimeOperationOracleValue(fixture),
-    /missing-child-satisfaction expected.*got/,
+    /does not match the exact scenario\/example inventory/,
   );
 });
 
