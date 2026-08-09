@@ -31,6 +31,7 @@ export const ORACLE_CHECKS = [
   "deployment_continuity",
   "manifest_coverage",
   "cross_axis_transition",
+  "binary_revision_retention",
 ] as const;
 
 export const ORACLE_FACTS = [
@@ -145,6 +146,24 @@ export const ORACLE_FACTS = [
   "transition_terminal_open_final_active_execution",
   "transition_terminal_final_open",
   "transition_claim_without_execution_activation",
+  "binary_revision_root_established",
+  "provider_or_effect_work_requested",
+  "session_assignment_release_requested",
+  "operation_nonterminal",
+  "effect_reconciliation_required",
+  "terminal_projection_requires_revision",
+  "transcript_projection_requires_revision",
+  "terminal_write_once",
+  "effect_closure_write_once",
+  "durable_revision_independent_projection",
+  "release_outcome_unknown",
+  "release_exact_replay",
+  "semantic_root_retained",
+  "gc_requested",
+  "zero_semantic_roots",
+  "shared_effect",
+  "attempting_operation_roots_complete",
+  "attempting_operation_root_missing",
 ] as const;
 
 export const ORACLE_RESULT_CODES = [
@@ -178,6 +197,13 @@ export const ORACLE_RESULT_CODES = [
   "continuity_unproven",
   "manifest_incomplete",
   "transition_forbidden",
+  "semantic_root_required",
+  "semantic_root_establishment_race",
+  "semantic_root_retained",
+  "semantic_root_released",
+  "binary_revision_gc_allowed",
+  "binary_revision_gc_blocked",
+  "root_not_execution_authority",
 ] as const;
 
 type Check = (typeof ORACLE_CHECKS)[number];
@@ -213,6 +239,7 @@ const ALLOWED_FACTS_BY_CHECK: Record<Check, ReadonlySet<Fact>> = {
   deployment_continuity: new Set(["continuity_receipt_verified", "continuity_receipt_missing", "dispatch_requested"]),
   manifest_coverage: new Set(["all_manifest_entries_satisfied", "child_requirement_missing", "transcript_requirement_missing"]),
   cross_axis_transition: new Set(ORACLE_FACTS.filter((fact) => fact.startsWith("transition_") || ["admission_fenced", "output_fenced", "reconciliation_clear", "execution_not_started", "execution_active", "execution_terminated", "containment_satisfied", "manifest_sealed", "all_manifest_entries_satisfied"].includes(fact))),
+  binary_revision_retention: new Set(["binary_revision_root_established", "provider_or_effect_work_requested", "session_assignment_release_requested", "operation_nonterminal", "effect_reconciliation_required", "terminal_projection_requires_revision", "transcript_projection_requires_revision", "terminal_write_once", "effect_closure_write_once", "durable_revision_independent_projection", "release_outcome_unknown", "release_exact_replay", "semantic_root_retained", "gc_requested", "zero_semantic_roots", "shared_effect", "attempting_operation_roots_complete", "attempting_operation_root_missing", "dispatch_requested"]),
 };
 
 export type OracleExample = {
@@ -339,9 +366,9 @@ export const parseRuntimeOperationOracle = (value: unknown): RuntimeOperationOra
     };
   });
   const requirements = cases.map(({ requirement }) => requirement);
-  const expectedRequirements = Array.from({ length: 27 }, (_, index) => index + 1);
+  const expectedRequirements = Array.from({ length: ORACLE_CHECKS.length }, (_, index) => index + 1);
   if (JSON.stringify(requirements.toSorted((a, b) => a - b)) !== JSON.stringify(expectedRequirements)) {
-    fail("cases must cover requirements 1 through 27 exactly once");
+    fail(`cases must cover requirements 1 through ${ORACLE_CHECKS.length} exactly once`);
   }
   const ids = [...cases.map(({ id }) => id), ...cases.flatMap(({ examples }) => examples.map(({ id }) => id))];
   if (new Set(ids).size !== ids.length) {
@@ -381,6 +408,9 @@ const result = (code: ResultCode): OracleExample["expected"] => ({
     "completed_result_replayed",
     "containment_not_required",
     "zero_attempt_effect_closed",
+    "semantic_root_retained",
+    "semantic_root_released",
+    "binary_revision_gc_allowed",
   ].includes(code) ? "accept" : "reject",
   code,
 });
@@ -471,6 +501,40 @@ const evaluateCrossAxisTransition: Evaluator = (facts) => {
     : "transition_forbidden";
 };
 
+const evaluateBinaryRevisionRetention: Evaluator = (facts) => {
+  if (has(facts, "gc_requested")) {
+    return has(facts, "zero_semantic_roots")
+      ? "binary_revision_gc_allowed"
+      : "binary_revision_gc_blocked";
+  }
+  if (has(facts, "dispatch_requested") && has(facts, "binary_revision_root_established") &&
+      !has(facts, "provider_or_effect_work_requested")) {
+    return "root_not_execution_authority";
+  }
+  if (has(facts, "shared_effect")) {
+    return has(facts, "attempting_operation_roots_complete")
+      ? "accepted"
+      : "semantic_root_required";
+  }
+  if (has(facts, "provider_or_effect_work_requested") && !has(facts, "binary_revision_root_established")) {
+    return has(facts, "session_assignment_release_requested")
+      ? "semantic_root_establishment_race"
+      : "semantic_root_required";
+  }
+  if (has(facts, "provider_or_effect_work_requested")) {
+    return "accepted";
+  }
+  if (has(facts, "release_outcome_unknown") || has(facts, "operation_nonterminal") ||
+      has(facts, "effect_reconciliation_required") || has(facts, "terminal_projection_requires_revision") ||
+      has(facts, "transcript_projection_requires_revision")) {
+    return "semantic_root_retained";
+  }
+  const safelyClosed = has(facts, "terminal_write_once") &&
+    has(facts, "effect_closure_write_once") &&
+    has(facts, "durable_revision_independent_projection");
+  return safelyClosed ? "semantic_root_released" : "semantic_root_retained";
+};
+
 const EVALUATORS: Record<Check, Evaluator> = {
   output_terminal_order: (facts) => has(facts, "seal_committed_first") ? "append_rejected_after_seal" : "accepted",
   dispatch_cutoff_race: (facts) => has(facts, "dispatch_claim_committed_first") ? "accepted" : "dispatch_rejected_after_cutoff",
@@ -499,6 +563,7 @@ const EVALUATORS: Record<Check, Evaluator> = {
   deployment_continuity: (facts) => has(facts, "continuity_receipt_verified") ? "accepted" : "continuity_unproven",
   manifest_coverage: (facts) => has(facts, "all_manifest_entries_satisfied") && !has(facts, "child_requirement_missing") && !has(facts, "transcript_requirement_missing") ? "accepted" : "manifest_incomplete",
   cross_axis_transition: evaluateCrossAxisTransition,
+  binary_revision_retention: evaluateBinaryRevisionRetention,
 };
 
 export const evaluateOracleExample = (example: OracleExample): OracleExample["expected"] =>

@@ -390,6 +390,30 @@ Rules for successor participation are:
   is forbidden;
 - a successor link does not itself grant execution authority.
 
+### Binary revision semantics remain retained through operation closure
+
+Host Custody owns a non-authorizing `BinaryRevisionSemanticRetentionRoot`.
+Durable operation acceptance binds each `RuntimeOperation` to the exact
+`BinaryRevision` whose capability/compiler revision, operation/effect and
+terminal projectors, and transcript/session codec define its semantics. The
+root is established in the acceptance transaction before any provider or
+effect work. Releasing a session assignment cannot race or erase that
+establishment.
+
+The root remains while any nonterminal operation, effect reconciliation,
+terminal projection, transcript projection, or other closure step still needs
+components from that revision. Release is idempotent and permitted only after
+write-once terminal and effect closure plus durable receipts and projections
+that no longer require the revision's executable semantic components. An
+unknown release outcome remains retained until exact replay or reconciliation
+proves release. Binary revision garbage collection requires zero semantic
+retention roots in addition to the blockers already defined by ADR-0001.
+
+The retention root grants no dispatch, process, provider, output, effect, or
+other execution authority. A shared `EffectId` is covered by the independently
+established root of every attempting `RuntimeOperation`; the originating
+operation's root cannot substitute for a successor participant's root.
+
 ### Invariants and forbidden transitions
 
 Every final terminal result implies fenced admission and output, a sealed
@@ -466,6 +490,10 @@ Acceptance of this ADR requires machine-readable fixtures for at least:
     mapping, which must reject terminal commit;
 27. every allowed and forbidden cross-axis transition among dispatch,
     provider execution, containment, cutoff, and terminal state.
+28. binary-revision semantic-root establishment, session-release races,
+    nonterminal and reconciliation retention, revision-independent release,
+    unknown release, zero-root garbage collection, non-authority, and shared
+    effect participation.
 
 The oracle uses deterministic synthetic models only. It does not run an agent,
 provider, terminal runtime, MCP, or user project.

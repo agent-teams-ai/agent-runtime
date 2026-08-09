@@ -36,10 +36,10 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
-    caseCount: 27,
-    exampleCount: 98,
-    acceptedCount: 53,
-    rejectedCount: 45,
+    caseCount: 28,
+    exampleCount: 114,
+    acceptedCount: 64,
+    rejectedCount: 50,
   });
 });
 
@@ -131,7 +131,7 @@ test("oracle fails closed when a required case is missing", async () => {
   fixture.cases = casesOf(fixture).slice(0, -1);
   assert.throws(
     () => parseRuntimeOperationOracle(fixture),
-    /cover requirements 1 through 27 exactly once/,
+    /cover requirements 1 through 28 exactly once/,
   );
 });
 
@@ -300,4 +300,43 @@ test("terminal transition rejects otherwise complete closure without sealed mani
     decision: "reject",
     code: "transition_forbidden",
   });
+});
+
+test("binary revision semantic retention fails closed before work and GC", async () => {
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  assert.ok(retentionCase);
+  const rootedWork = retentionCase.examples.find(
+    ({ id }) => id === "root-before-provider-or-effect-work",
+  );
+  assert.ok(rootedWork);
+  assert.deepEqual(evaluateOracleExample({
+    ...rootedWork,
+    facts: ["provider_or_effect_work_requested"],
+  }), {
+    decision: "reject",
+    code: "semantic_root_required",
+  });
+
+  const gcWithRoot = retentionCase.examples.find(
+    ({ id }) => id === "gc-with-retained-semantic-root",
+  );
+  assert.ok(gcWithRoot);
+  assert.deepEqual(evaluateOracleExample(gcWithRoot), gcWithRoot.expected);
+});
+
+test("exact inventory rejects weakened binary revision retention evidence", async () => {
+  const fixture = await readFixture();
+  const retentionCase = casesOf(fixture).find(({ requirement }) => requirement === 28);
+  assert.ok(retentionCase);
+  const rootedWork = examplesOf(retentionCase).find(
+    ({ id }) => id === "root-before-provider-or-effect-work",
+  );
+  assert.ok(rootedWork);
+  rootedWork.facts = ["provider_or_effect_work_requested"];
+  assert.throws(
+    () => parseRuntimeOperationOracle(fixture),
+    /does not match the exact scenario\/example inventory/,
+  );
 });

@@ -10,8 +10,8 @@
     "adr": { "const": "ADR-0006" },
     "cases": {
       "type": "array",
-      "minItems": 27,
-      "maxItems": 27,
+      "minItems": 28,
+      "maxItems": 28,
       "items": { "$ref": "#/$defs/case" }
     }
   },
@@ -23,7 +23,7 @@
       "required": ["id", "requirement", "examples"],
       "properties": {
         "id": { "$ref": "#/$defs/canonicalId" },
-        "requirement": { "type": "integer", "minimum": 1, "maximum": 27 },
+        "requirement": { "type": "integer", "minimum": 1, "maximum": 28 },
         "examples": {
           "type": "array",
           "minItems": 2,
@@ -65,7 +65,7 @@
         "effect_cardinality", "receipt_handling", "stale_restore", "model_invariants",
         "cutoff_boundary_reuse", "normal_provider_termination", "zero_attempt_cutoff",
         "post_seal_receipt", "atomic_indeterminate_clear", "deployment_continuity",
-        "manifest_coverage", "cross_axis_transition"
+        "manifest_coverage", "cross_axis_transition", "binary_revision_retention"
       ]
     },
     "fact": {
@@ -125,7 +125,15 @@
         "transition_terminal_open_final_with_closure",
         "transition_terminal_open_final_not_started_with_closure",
         "transition_terminal_open_final_active_execution", "transition_terminal_final_open",
-        "transition_claim_without_execution_activation"
+        "transition_claim_without_execution_activation", "binary_revision_root_established",
+        "provider_or_effect_work_requested", "session_assignment_release_requested",
+        "operation_nonterminal", "effect_reconciliation_required",
+        "terminal_projection_requires_revision", "transcript_projection_requires_revision",
+        "terminal_write_once", "effect_closure_write_once",
+        "durable_revision_independent_projection", "release_outcome_unknown",
+        "release_exact_replay",
+        "semantic_root_retained", "gc_requested", "zero_semantic_roots", "shared_effect",
+        "attempting_operation_roots_complete", "attempting_operation_root_missing"
       ]
     },
     "resultCode": {
@@ -141,7 +149,10 @@
         "conflicting_receipt", "stale_authority", "axis_invariant_violation",
         "cutoff_boundary_conflict", "containment_not_required", "zero_attempt_effect_closed",
         "receipt_not_bound", "indeterminate_clear_not_atomic", "continuity_unproven",
-        "manifest_incomplete", "transition_forbidden"
+        "manifest_incomplete", "transition_forbidden", "semantic_root_required",
+        "semantic_root_establishment_race", "semantic_root_retained",
+        "semantic_root_released", "binary_revision_gc_allowed",
+        "binary_revision_gc_blocked", "root_not_execution_authority"
       ]
     }
   }
