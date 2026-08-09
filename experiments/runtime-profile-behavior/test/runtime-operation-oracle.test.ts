@@ -5,8 +5,8 @@ import test from "node:test";
 
 import {
   BINARY_RETENTION_ALLOWED_FACTS,
+  BINARY_RETENTION_FACT_ROLE_CATALOG,
   BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-  binaryRetentionFactIsLifecycleCommand,
   binaryRetentionHasMixedCommandIntent,
 } from "../src/features/evidence/runtime-operation-binary-retention-oracle.ts";
 import {
@@ -44,9 +44,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 226,
-    acceptedCount: 104,
-    rejectedCount: 122,
+    exampleCount: 234,
+    acceptedCount: 106,
+    rejectedCount: 128,
   });
 });
 
@@ -637,10 +637,25 @@ test("work authorization dominates accepted non-work branch outcomes", async () 
 });
 
 test("closed mixed-command vocabulary cannot drift around work authorization", async () => {
-  const classifiedCommands = BINARY_RETENTION_ALLOWED_FACTS.filter(
-    binaryRetentionFactIsLifecycleCommand,
+  assert.deepEqual(Object.keys(BINARY_RETENTION_FACT_ROLE_CATALOG), BINARY_RETENTION_ALLOWED_FACTS);
+  const classifiedCommands = BINARY_RETENTION_ALLOWED_FACTS.filter((fact) =>
+    BINARY_RETENTION_FACT_ROLE_CATALOG[fact] === "command_intent"
   );
   assert.deepEqual(classifiedCommands, BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS);
+  assert.equal(BINARY_RETENTION_FACT_ROLE_CATALOG.provider_or_effect_work_requested, "work_intent");
+  assert.equal(BINARY_RETENTION_FACT_ROLE_CATALOG.dispatch_requested, "work_intent");
+  for (const historicalEvidence of [
+    "root_cas_won",
+    "operation_acceptance_accept_cas_won",
+    "operation_acceptance_abort_cas_won",
+    "root_abort_release_cas_won",
+    "collection_or_tombstone_cas_won",
+    "host_custody_collection_cas_won",
+    "physical_deletion_started",
+    "physical_deletion_completed",
+  ] as const) {
+    assert.equal(BINARY_RETENTION_FACT_ROLE_CATALOG[historicalEvidence], "evidence");
+  }
 
   const fixture = await readFixture();
   const oracle = parseRuntimeOperationOracle(fixture);
@@ -652,26 +667,23 @@ test("closed mixed-command vocabulary cannot drift around work authorization", a
   const authorizedFacts = authorizedWork.facts.filter(
     (fact) => fact !== "provider_or_effect_work_requested",
   );
-  const integrityDominating = new Set([
-    "operation_acceptance_abort_cas_won",
-    "root_abort_release_requested",
-    "root_request_exact_replay",
-    "physical_deletion_started",
-    "physical_deletion_crash",
-    "physical_deletion_partial",
-    "physical_deletion_unknown",
-    "physical_deletion_completed",
-    "physical_deletion_exact_replay",
-  ]);
   for (const commandFact of BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS) {
     for (const trigger of ["provider_or_effect_work_requested", "dispatch_requested"] as const) {
       const facts = [...authorizedFacts, commandFact, trigger];
       assert.equal(binaryRetentionHasMixedCommandIntent(new Set(facts)), true, commandFact);
       const outcome = evaluateOracleExample({ ...authorizedWork, facts });
       assert.equal(outcome.decision, "reject", `${commandFact} + ${trigger}`);
-      if (!integrityDominating.has(commandFact)) {
-        assert.equal(outcome.code, "mixed_command_intent_forbidden", `${commandFact} + ${trigger}`);
-      }
+      assert.equal(outcome.code, "mixed_command_intent_forbidden", `${commandFact} + ${trigger}`);
+    }
+  }
+
+  for (const historicalEvidence of ["root_cas_won", "operation_acceptance_accept_cas_won"] as const) {
+    for (const trigger of ["provider_or_effect_work_requested", "dispatch_requested"] as const) {
+      const outcome = evaluateOracleExample({
+        ...authorizedWork,
+        facts: [...authorizedFacts, historicalEvidence, trigger],
+      });
+      assert.deepEqual(outcome, { decision: "accept", code: "accepted" });
     }
   }
 });

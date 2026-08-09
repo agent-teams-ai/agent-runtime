@@ -471,6 +471,11 @@ before the first revision-specific use. A competing reserve and seal cannot
 both win the same expected revision. Before terminal closure, Host Custody
 commits `SEALED(finalDigest)` and a durable seal receipt. Release must match that
 final sealed digest and cannot substitute a weaker or differently digested set.
+Provider work and dispatch require the exact pinned set to remain `OPEN`.
+`SEALED` is terminal-closure evidence, never execution authority. The oracle's
+closed fact-role catalog distinguishes command intent from historical CAS,
+receipt, outcome, and observation evidence; only explicit command intents are
+forbidden in the same evaluation as provider work or dispatch.
 
 The root remains while any nonterminal operation, effect reconciliation,
 terminal projection, transcript projection, or other closure step still needs

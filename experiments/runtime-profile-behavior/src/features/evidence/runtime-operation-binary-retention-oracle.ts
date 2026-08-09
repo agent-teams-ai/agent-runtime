@@ -1,7 +1,7 @@
 import {
   evaluateAcceptanceTransition,
   evaluateRootRequestLifecycle,
-  retentionObligationSetIsExact,
+  retentionObligationSetIsOpenAndExact,
 } from "./runtime-operation-root-lifecycle-oracle.ts";
 
 export const BINARY_RETENTION_FACTS = [
@@ -167,46 +167,44 @@ const has = (facts: ReadonlySet<string>, fact: string): boolean => facts.has(fac
 const workRequested = (facts: ReadonlySet<string>): boolean =>
   has(facts, "provider_or_effect_work_requested") || has(facts, "dispatch_requested");
 
-export const BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS = [
+type BinaryRetentionAllowedFact = (typeof BINARY_RETENTION_ALLOWED_FACTS)[number];
+type BinaryRetentionFactRole = "command_intent" | "work_intent" | "evidence";
+
+const BINARY_RETENTION_COMMAND_INTENT_FACTS = [
   "session_assignment_release_requested",
   "release_exact_replay",
   "gc_requested",
   "operation_acceptance_accept_requested",
   "operation_acceptance_abort_requested",
-  "operation_acceptance_accept_cas_won",
-  "operation_acceptance_abort_cas_won",
   "operation_acceptance_exact_replay",
   "operation_abort_exact_replay",
   "ensure_semantic_retention_requested",
   "root_abort_release_requested",
-  "root_abort_release_cas_won",
   "root_request_exact_replay",
-  "root_cas_won",
-  "collection_or_tombstone_cas_won",
-  "host_custody_collection_cas_won",
   "physical_deletion_preclaim_requested",
   "abandon_release_exact_replay",
-  "physical_deletion_started",
-  "physical_deletion_crash",
-  "physical_deletion_partial",
-  "physical_deletion_unknown",
-  "physical_deletion_completed",
   "physical_deletion_exact_replay",
-] as const;
+] as const satisfies readonly BinaryRetentionAllowedFact[];
 
-export const binaryRetentionFactIsLifecycleCommand = (fact: string): boolean =>
-  fact !== "provider_or_effect_work_requested" && fact !== "dispatch_requested" &&
-  (fact === "session_assignment_release_requested" ||
-    fact === "release_exact_replay" ||
-    fact === "abandon_release_exact_replay" ||
-    fact === "gc_requested" ||
-    fact === "collection_or_tombstone_cas_won" ||
-    fact === "host_custody_collection_cas_won" ||
-    fact.endsWith("_requested") ||
-    ((fact.startsWith("operation_acceptance_") || fact.startsWith("root_")) &&
-      fact.endsWith("_cas_won")) ||
-    fact.endsWith("_exact_replay") ||
-    fact.startsWith("physical_deletion_"));
+const commandIntentFacts = new Set<BinaryRetentionAllowedFact>(
+  BINARY_RETENTION_COMMAND_INTENT_FACTS,
+);
+
+export const BINARY_RETENTION_FACT_ROLE_CATALOG = Object.freeze(
+  Object.fromEntries(BINARY_RETENTION_ALLOWED_FACTS.map((fact) => [
+    fact,
+    commandIntentFacts.has(fact)
+      ? "command_intent"
+      : fact === "provider_or_effect_work_requested" || fact === "dispatch_requested"
+      ? "work_intent"
+      : "evidence",
+  ])) as Record<BinaryRetentionAllowedFact, BinaryRetentionFactRole>,
+);
+
+export const BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS =
+  BINARY_RETENTION_ALLOWED_FACTS.filter(
+    (fact) => BINARY_RETENTION_FACT_ROLE_CATALOG[fact] === "command_intent",
+  );
 
 export const binaryRetentionHasMixedCommandIntent = (facts: ReadonlySet<string>): boolean =>
   BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS.some((fact) => has(facts, fact));
@@ -230,6 +228,11 @@ const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
 const evaluateAuthorizedWork = (
   facts: ReadonlySet<string>,
 ): BinaryRetentionResult => {
+  if (has(facts, "shared_effect") &&
+      (has(facts, "attempting_operation_root_missing") ||
+        !has(facts, "attempting_operation_roots_complete"))) {
+    return "semantic_root_required";
+  }
   const exactRoot = has(facts, "operation_acceptance_intent_persisted") &&
     has(facts, "binary_revision_root_established") &&
     has(facts, "retention_receipt_exact_current");
@@ -248,7 +251,7 @@ const evaluateAuthorizedWork = (
       has(facts, "retention_obligation_set_weaker")) {
     return "retention_obligation_mismatch";
   }
-  if (!retentionObligationSetIsExact(facts)) {
+  if (!retentionObligationSetIsOpenAndExact(facts)) {
     return "retention_obligation_set_required";
   }
   if (has(facts, "dynamic_obligation_arose") &&
@@ -409,6 +412,15 @@ export const evaluateBinaryRevisionRetention = (
         has(facts, "retention_obligation_set_sealed"))) {
     return "retention_obligation_integrity_contradiction";
   }
+  if (workRequested(facts)) {
+    const authorization = evaluateAuthorizedWork(facts);
+    if (authorization !== "accepted") {
+      return authorization;
+    }
+    if (binaryRetentionHasMixedCommandIntent(facts)) {
+      return "mixed_command_intent_forbidden";
+    }
+  }
   const acceptanceTransition = evaluateAcceptanceTransition(facts);
   if (acceptanceTransition === "operation_acceptance_integrity_contradiction") {
     return acceptanceTransition;
@@ -436,18 +448,6 @@ export const evaluateBinaryRevisionRetention = (
     return physicalDeletion;
   }
   if (workRequested(facts)) {
-    const authorization = evaluateAuthorizedWork(facts);
-    if (authorization !== "accepted") {
-      return authorization;
-    }
-    if (binaryRetentionHasMixedCommandIntent(facts)) {
-      return "mixed_command_intent_forbidden";
-    }
-    if (has(facts, "shared_effect") &&
-        (has(facts, "attempting_operation_root_missing") ||
-          !has(facts, "attempting_operation_roots_complete"))) {
-      return "semantic_root_required";
-    }
     return "accepted";
   }
   if (acceptanceTransition !== undefined) {

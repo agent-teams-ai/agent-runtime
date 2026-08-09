@@ -26,6 +26,12 @@ export const retentionObligationSetIsExact = (
   (has(facts, "retention_obligation_set_open") ||
     has(facts, "retention_obligation_set_sealed"));
 
+export const retentionObligationSetIsOpenAndExact = (
+  facts: ReadonlySet<string>,
+): boolean => retentionObligationSetIsExact(facts) &&
+  has(facts, "retention_obligation_set_open") &&
+  !has(facts, "retention_obligation_set_sealed");
+
 const acceptancePathRequested = (facts: ReadonlySet<string>): boolean => [
   "operation_acceptance_accept_requested",
   "operation_acceptance_accept_cas_won",
@@ -203,6 +209,6 @@ export const evaluateRootRequestLifecycle = (
   }
   const established = stable && has(facts, "root_cas_won") &&
     has(facts, "root_request_state_established") &&
-    retentionObligationSetIsExact(facts);
+    retentionObligationSetIsOpenAndExact(facts);
   return established ? "accepted" : "retention_obligation_set_required";
 };
