@@ -401,6 +401,7 @@ const result = (code: ResultCode): OracleExample["expected"] => ({
     "operation_acceptance_replayed",
     "operation_abort_replayed",
     "operation_acceptance_winner_committed_current_receipt",
+    "root_establishment_receipt_replayed",
     "physical_deletion_completed",
   ].includes(code) ? "accept" : "reject",
   code,
@@ -550,13 +551,15 @@ export type GeneratedState = {
   [Axis in keyof typeof GENERATED_AXES]: (typeof GENERATED_AXES)[Axis][number];
 };
 
+const executionMatchesDispatch = (state: GeneratedState): boolean =>
+  (state.dispatch === "unclaimed" && state.execution === "not_started") ||
+  (state.dispatch === "claimed" && state.execution === "active") ||
+  (state.dispatch === "acceptance_unknown" && ["active", "terminated"].includes(state.execution)) ||
+  (state.dispatch === "known_not_accepted" && state.execution === "not_started") ||
+  (state.dispatch === "provider_accepted" && ["active", "terminated"].includes(state.execution));
+
 export const generatedStateIsValid = (state: GeneratedState): boolean => {
-  const executionMatchesClaim =
-    (state.dispatch === "unclaimed" && state.execution === "not_started") ||
-    (["claimed", "acceptance_unknown"].includes(state.dispatch) && state.execution === "active") ||
-    (state.dispatch === "known_not_accepted" && state.execution === "not_started") ||
-    (state.dispatch === "provider_accepted" && ["active", "terminated"].includes(state.execution));
-  if (!executionMatchesClaim) {
+  if (!executionMatchesDispatch(state)) {
     return false;
   }
   if (state.manifest === "sealed" && (state.admission !== "fenced" || state.output !== "fenced")) {

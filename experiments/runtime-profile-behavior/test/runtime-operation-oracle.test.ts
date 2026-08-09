@@ -38,9 +38,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 195,
-    acceptedCount: 103,
-    rejectedCount: 92,
+    exampleCount: 202,
+    acceptedCount: 104,
+    rejectedCount: 98,
   });
 });
 
@@ -55,8 +55,8 @@ test("JSON schema closed enums stay aligned with the executable validator", asyn
 test("model oracle exhausts the deterministic ten-axis state product", () => {
   assert.deepEqual(evaluateGeneratedAxisProducts(), {
     total: 48000,
-    valid: 1242,
-    invalid: 46758,
+    valid: 1472,
+    invalid: 46528,
   });
 });
 
@@ -108,6 +108,15 @@ test("generated model enforces coupled and terminal invariants", () => {
     output: "fenced",
     containment: "qualified_not_required",
   }), true);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    dispatch: "acceptance_unknown",
+    admission: "fenced",
+    output: "fenced",
+    execution: "terminated",
+    containment: "contained",
+    reconciliation: "required",
+  }), true);
 
   const finalState = {
     ...openState,
@@ -122,6 +131,14 @@ test("generated model enforces coupled and terminal invariants", () => {
   assert.equal(generatedStateIsValid({ ...finalState, execution: "active" }), false);
   assert.equal(generatedStateIsValid({
     ...finalState,
+    effectResolution: "indeterminate",
+    terminal: "outcome_indeterminate",
+  }), true);
+  assert.equal(generatedStateIsValid({
+    ...finalState,
+    dispatch: "acceptance_unknown",
+    execution: "terminated",
+    containment: "contained",
     effectResolution: "indeterminate",
     terminal: "outcome_indeterminate",
   }), true);
@@ -422,7 +439,7 @@ test("binary revision semantic retention fails closed before work and GC", async
     ),
   }), {
     decision: "reject",
-    code: "deletion_reconciliation_required",
+    code: "deletion_integrity_contradiction",
   });
 
   const sharedEffectWork = retentionCase.examples.find(
@@ -468,6 +485,13 @@ test("binary revision semantic retention fails closed before work and GC", async
     "reserve-and-seal-same-revision-both-win-forbidden",
     "physical-deletion-completed-receipt-lost-reconciles",
     "predelete-tombstone-is-not-final-deleted",
+    "established-root-lost-ack-replays-original-receipt",
+    "established-root-stale-generation-replay-rejects",
+    "concurrent-accept-winner-with-both-terminal-states-rejects",
+    "concurrent-accept-winner-with-abort-receipt-rejects",
+    "concurrent-accept-winner-without-pending-rejects",
+    "final-deleted-state-without-completion-receipt-quarantines",
+    "completion-receipt-without-final-deleted-state-quarantines",
   ] as const) {
     const example: OracleExample | undefined = retentionCase.examples.find(
       (candidate: OracleExample) => candidate.id === id,

@@ -45,6 +45,9 @@ export const BINARY_RETENTION_FACTS = [
   "root_abort_release_cas_won",
   "establishment_forbidden_tombstone_durable",
   "root_request_exact_replay",
+  "root_request_generation_current",
+  "root_request_generation_stale",
+  "root_establishment_receipt_durable",
   "same_revision_root_and_abort_cas_both_won",
   "root_establishment_rejected_receipt_durable",
   "retention_receipt_exact_current",
@@ -85,7 +88,6 @@ export const BINARY_RETENTION_FACTS = [
   "physical_deletion_preclaim_requested",
   "deletion_claim_wrong_scope",
   "owner_release_receipt_durable",
-  "orphan_root_after_crash",
   "root_receipt_ack_lost",
   "acceptance_outcome_unknown",
   "operation_acceptance_aborted_receipt_exact",
@@ -145,6 +147,7 @@ export const BINARY_RETENTION_RESULT_CODES = [
   "physical_deletion_completed",
   "deletion_integrity_contradiction",
   "root_establishment_forbidden_current_receipt",
+  "root_establishment_receipt_replayed",
   "root_lifecycle_integrity_contradiction",
   "retention_obligation_integrity_contradiction",
 ] as const;
@@ -298,6 +301,11 @@ const evaluatePhysicalDeletion = (
     "deletion_completed_receipt_durable",
     "final_deleted_state_durable",
   ].some((fact) => has(facts, fact));
+  const completionReceipt = has(facts, "deletion_completed_receipt_durable");
+  const finalDeletedState = has(facts, "final_deleted_state_durable");
+  if (completionReceipt !== finalDeletedState) {
+    return "deletion_integrity_contradiction";
+  }
   if (contradictoryRoot || invalidClaim || !claimed) {
     return sideEffectObserved
       ? "deletion_integrity_contradiction"
@@ -352,6 +360,7 @@ export const evaluateBinaryRevisionRetention = (
     "physical_absence_observed",
     "physical_deletion_preclaim_requested",
     "final_deleted_state_durable",
+    "deletion_completed_receipt_durable",
   ].some((fact) => has(facts, fact))) {
     return evaluatePhysicalDeletion(facts);
   }

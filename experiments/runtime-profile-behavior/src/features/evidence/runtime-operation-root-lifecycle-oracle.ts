@@ -8,6 +8,7 @@ export type RootLifecycleResult =
   | "operation_abort_replayed"
   | "retention_obligation_set_required"
   | "root_establishment_forbidden_current_receipt"
+  | "root_establishment_receipt_replayed"
   | "root_lifecycle_integrity_contradiction"
   | "semantic_root_released";
 
@@ -59,19 +60,25 @@ const evaluateConcurrentAcceptance = (
   }
   const acceptWon = has(facts, "operation_acceptance_accept_cas_won");
   const abortWon = has(facts, "operation_acceptance_abort_cas_won");
-  if (acceptWon === abortWon) {
-    return acceptWon
-      ? "operation_acceptance_integrity_contradiction"
-      : "operation_acceptance_stale_current_receipt";
+  const pending = has(facts, "operation_acceptance_revision_pending");
+  const accepted = has(facts, "operation_acceptance_state_accepted");
+  const aborted = has(facts, "operation_acceptance_state_aborted");
+  const contradictoryEvidence = (accepted && aborted) ||
+    (accepted && has(facts, "operation_acceptance_aborted_receipt_exact")) ||
+    (aborted && has(facts, "operation_acceptance_committed"));
+  if (!pending || acceptWon === abortWon || contradictoryEvidence) {
+    return "operation_acceptance_integrity_contradiction";
   }
   const acceptComplete = acceptWon &&
-    has(facts, "operation_acceptance_state_accepted") &&
+    accepted && !aborted &&
     has(facts, "operation_acceptance_committed") &&
-    has(facts, "operation_acceptance_transaction_complete");
+    has(facts, "operation_acceptance_transaction_complete") &&
+    !has(facts, "operation_abort_transaction_complete");
   const abortComplete = abortWon &&
-    has(facts, "operation_acceptance_state_aborted") &&
+    aborted && !accepted &&
     has(facts, "operation_abort_transaction_complete") &&
-    has(facts, "operation_acceptance_aborted_receipt_exact");
+    has(facts, "operation_acceptance_aborted_receipt_exact") &&
+    !has(facts, "operation_acceptance_transaction_complete");
   return acceptComplete || abortComplete
     ? "operation_acceptance_winner_committed_current_receipt"
     : "operation_acceptance_integrity_contradiction";
@@ -168,6 +175,17 @@ export const evaluateRootRequestLifecycle = (
       has(facts, "root_request_exact_replay")) && forbidden) {
     return stable
       ? "root_establishment_forbidden_current_receipt"
+      : "root_lifecycle_integrity_contradiction";
+  }
+  if (has(facts, "root_request_exact_replay")) {
+    const establishedReplay = stable &&
+      has(facts, "root_request_state_established") &&
+      has(facts, "root_request_generation_current") &&
+      !has(facts, "root_request_generation_stale") &&
+      has(facts, "retention_obligation_set_digest_exact") &&
+      has(facts, "root_establishment_receipt_durable");
+    return establishedReplay
+      ? "root_establishment_receipt_replayed"
       : "root_lifecycle_integrity_contradiction";
   }
   if (has(facts, "root_abort_release_requested")) {

@@ -86,6 +86,11 @@ of every registered `EffectId` mapping, and a current command receipt.
 `not_found`, or absence from provider history cannot produce
 `known_not_accepted`.
 
+`acceptance_unknown` records dispatch evidence, not a requirement that local
+execution remain active. Cutoff or containment may durably terminate execution
+while dispatch acceptance stays unknown and reconciliation remains required;
+later permanent effect closure may support `outcome_indeterminate`.
+
 The two monotonic operation fences are:
 
 ```text
@@ -410,6 +415,11 @@ later exact abort receipt releases the established root and writes the same
 terminal tombstone at the next revision. Two winners for one expected revision
 are an integrity contradiction.
 
+For an established root, lost acknowledgement recovery with the stable request
+ID, current root generation, and exact obligation digest returns the original
+immutable establishment receipt without another lifecycle CAS. A stale
+generation or mismatched digest fails closed.
+
 The `OperationAcceptanceProcess` owns one revisioned state machine,
 `PENDING -> ACCEPTED | ABORTED`. Its accept CAS atomically writes `ACCEPTED`,
 the `RuntimeOperation`, acceptance receipt, audit, and outbox in the Operation
@@ -472,6 +482,9 @@ immutable deletion-set digest, store-level reference and fence evidence, and
 pre-delete tombstone before physical deletion. That tombstone is not the final
 `DELETED` state. Only a durable `DeletionCompletedReceipt` plus the final state
 completes deletion; a lost completion acknowledgement is queried or replayed.
+A final `DELETED` state without its completion receipt, or a completion receipt
+without the final state, is an integrity contradiction that quarantines the
+revision and requires reconciliation.
 A partial or unknown deletion preserves the pre-delete records and requires
 reconciliation; it does not recreate a semantic root. Missing, stale,
 wrong-scope, active shared-reference, or contradictory root evidence blocks
