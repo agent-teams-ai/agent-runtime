@@ -10,9 +10,9 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm architecture:registry && pnpm typecheck && pnpm lint && pnpm test",
+    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm typecheck && pnpm lint && pnpm test",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm architecture:registry && pnpm typecheck && pnpm lint",
+    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm typecheck && pnpm lint",
     "foundation:assert-dev-only": "agent-teams-foundation assert-dev-only",
     "foundation:assert-registry": "agent-teams-foundation assert-registry",
     "foundation:attach": "agent-teams-foundation attach",
@@ -25,6 +25,7 @@
     "lint": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config .",
     "lint:changed": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config --format agent --no-error-on-unmatched-pattern",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
+    "architecture:operation-oracle": "node experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts",
     "spike:inventory": "node experiments/runtime-profile-behavior/src/cli.ts inventory",
     "spike:baseline": "node experiments/runtime-profile-behavior/src/cli.ts baseline",
     "spike:precedence": "node experiments/runtime-profile-behavior/src/cli.ts precedence",

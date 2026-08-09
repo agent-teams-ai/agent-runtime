@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "adr-0006-runtime-operation-oracle.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "adr", "cases"],
+  "properties": {
+    "$schema": { "const": "./adr-0006-runtime-operation-oracle.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "adr": { "const": "ADR-0006" },
+    "cases": {
+      "type": "array",
+      "minItems": 27,
+      "maxItems": 27,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "canonicalId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "requirement", "examples"],
+      "properties": {
+        "id": { "$ref": "#/$defs/canonicalId" },
+        "requirement": { "type": "integer", "minimum": 1, "maximum": 27 },
+        "examples": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/example" }
+        }
+      }
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "check", "facts", "expected"],
+      "properties": {
+        "id": { "$ref": "#/$defs/canonicalId" },
+        "check": { "$ref": "#/$defs/check" },
+        "facts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fact" }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["decision", "code"],
+          "properties": {
+            "decision": { "enum": ["accept", "reject"] },
+            "code": { "$ref": "#/$defs/resultCode" }
+          }
+        }
+      }
+    },
+    "check": {
+      "enum": [
+        "output_terminal_order", "dispatch_cutoff_race", "requirement_closure_race",
+        "terminal_replay", "indeterminate_evidence_race", "outbox_recovery",
+        "dispatch_crash", "provider_observation", "lost_acknowledgement",
+        "effect_identity_claim", "effect_fingerprint_conflict", "distinct_external_identity",
+        "completed_effect_replay", "retry_after_known_not_accepted", "tombstone_restore",
+        "effect_cardinality", "receipt_handling", "stale_restore", "model_invariants",
+        "cutoff_boundary_reuse", "normal_provider_termination", "zero_attempt_cutoff",
+        "post_seal_receipt", "atomic_indeterminate_clear", "deployment_continuity",
+        "manifest_coverage", "cross_axis_transition"
+      ]
+    },
+    "fact": {
+      "enum": [
+        "append_committed_first", "seal_committed_first", "dispatch_claim_committed_first",
+        "operation_cutoff_committed_first", "session_cutoff_committed_first",
+        "scope_cutoff_committed_first", "reservation_committed_first",
+        "manifest_seal_committed_first", "final_receipt_committed_first",
+        "terminal_command_committed_first", "late_positive_committed_first",
+        "indeterminate_terminal_committed_first", "seal_durable", "outbox_unpublished",
+        "claim_durable", "provider_bytes_absent", "provider_accepted",
+        "observation_not_durable", "terminal_durable", "acknowledgement_lost",
+        "exact_replay", "conflicting_replay", "same_external_identity",
+        "different_external_identity", "same_fingerprint", "different_fingerprint",
+        "same_payload", "effect_completed", "provider_call_requested",
+        "known_not_accepted_receipt", "fresh_attempt_identity", "stale_attempt_identity",
+        "permanent_tombstone", "restore_or_compaction", "zero_effects",
+        "one_coarse_effect", "multiple_mediated_effects", "invalid_effect_cardinality",
+        "receipt_delayed", "receipt_reordered", "receipt_duplicate_exact",
+        "receipt_conflicting", "authority_reopen_requested", "authority_monotonic",
+        "all_axis_invariants_hold", "axis_invariant_violated", "prior_cutoff_fences_exact",
+        "cursor_and_receipt_reused", "cursor_or_receipt_advanced",
+        "provider_execution_terminated", "containment_not_requested", "containment_uncertain",
+        "effect_registered", "zero_attempts", "cutoff_fenced", "manifest_sealed",
+        "receipt_bound_to_manifest_entry", "receipt_unbound",
+        "all_tombstone_receipts_present", "tombstone_receipt_missing",
+        "debt_clear_terminal_atomic", "debt_cleared_separately",
+        "continuity_receipt_verified", "continuity_receipt_missing", "dispatch_requested",
+        "all_manifest_entries_satisfied", "child_requirement_missing",
+        "transcript_requirement_missing", "admission_fenced", "output_fenced",
+        "reconciliation_clear", "execution_not_started", "execution_active",
+        "execution_terminated", "containment_satisfied",
+        "transition_dispatch_unclaimed_claimed", "transition_dispatch_claimed_unknown",
+        "transition_dispatch_claimed_not_accepted", "transition_dispatch_claimed_accepted",
+        "transition_dispatch_unknown_not_accepted", "transition_dispatch_unknown_accepted",
+        "transition_dispatch_not_accepted_claimed_fresh",
+        "transition_dispatch_accepted_claimed",
+        "transition_execution_not_started_active_with_claim",
+        "transition_execution_active_not_started_with_proof",
+        "transition_execution_active_terminated_with_receipt",
+        "transition_execution_terminated_active",
+        "transition_containment_not_requested_pending",
+        "transition_containment_pending_contained",
+        "transition_containment_pending_uncertain",
+        "transition_containment_contained_pending", "transition_cutoff_open_fenced",
+        "transition_cutoff_fenced_open", "transition_terminal_open_final_with_closure",
+        "transition_terminal_open_final_active_execution", "transition_terminal_final_open",
+        "transition_claim_without_execution_activation"
+      ]
+    },
+    "resultCode": {
+      "enum": [
+        "accepted", "append_rejected_after_seal", "dispatch_rejected_after_cutoff",
+        "reservation_rejected_after_seal", "terminal_already_final",
+        "late_evidence_is_noncanonical", "durable_recovery_required",
+        "provider_dispatch_not_authorized", "reconciliation_required",
+        "replay_returns_original_receipt", "idempotent_existing_effect",
+        "external_identity_conflict", "distinct_effect_required", "completed_result_replayed",
+        "fresh_attempt_required", "retry_permanently_forbidden", "invalid_effect_cardinality",
+        "conflicting_receipt", "stale_authority", "axis_invariant_violation",
+        "cutoff_boundary_conflict", "containment_not_required", "zero_attempt_effect_closed",
+        "receipt_not_bound", "indeterminate_clear_not_atomic", "continuity_unproven",
+        "manifest_incomplete", "transition_forbidden"
+      ]
+    }
+  }
+}

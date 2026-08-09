@@ -1,0 +1,146 @@
+{
+  "$schema": "./adr-0006-runtime-operation-oracle.schema.json",
+  "schemaVersion": 1,
+  "adr": "ADR-0006",
+  "cases": [
+    { "id": "output-terminal-order", "requirement": 1, "examples": [
+      { "id": "output-before-seal", "check": "output_terminal_order", "facts": ["append_committed_first"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "seal-before-output", "check": "output_terminal_order", "facts": ["seal_committed_first"], "expected": { "decision": "reject", "code": "append_rejected_after_seal" } }
+    ] },
+    { "id": "dispatch-cutoff-race", "requirement": 2, "examples": [
+      { "id": "claim-wins-cutoff-race", "check": "dispatch_cutoff_race", "facts": ["dispatch_claim_committed_first"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "operation-cutoff-wins-dispatch", "check": "dispatch_cutoff_race", "facts": ["operation_cutoff_committed_first"], "expected": { "decision": "reject", "code": "dispatch_rejected_after_cutoff" } },
+      { "id": "session-cutoff-wins-dispatch", "check": "dispatch_cutoff_race", "facts": ["session_cutoff_committed_first"], "expected": { "decision": "reject", "code": "dispatch_rejected_after_cutoff" } },
+      { "id": "scope-cutoff-wins-dispatch", "check": "dispatch_cutoff_race", "facts": ["scope_cutoff_committed_first"], "expected": { "decision": "reject", "code": "dispatch_rejected_after_cutoff" } }
+    ] },
+    { "id": "requirement-closure-race", "requirement": 3, "examples": [
+      { "id": "reservation-before-seal", "check": "requirement_closure_race", "facts": ["reservation_committed_first"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "seal-before-reservation", "check": "requirement_closure_race", "facts": ["manifest_seal_committed_first"], "expected": { "decision": "reject", "code": "reservation_rejected_after_seal" } }
+    ] },
+    { "id": "terminal-command-race", "requirement": 4, "examples": [
+      { "id": "terminal-command-before-final-receipt", "check": "terminal_replay", "facts": ["terminal_command_committed_first"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "final-receipt-before-duplicate-terminal", "check": "terminal_replay", "facts": ["final_receipt_committed_first"], "expected": { "decision": "accept", "code": "terminal_already_final" } },
+      { "id": "conflicting-terminal-replay", "check": "terminal_replay", "facts": ["conflicting_replay"], "expected": { "decision": "reject", "code": "stale_authority" } }
+    ] },
+    { "id": "indeterminate-evidence-race", "requirement": 5, "examples": [
+      { "id": "positive-evidence-before-indeterminate", "check": "indeterminate_evidence_race", "facts": ["late_positive_committed_first"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "positive-evidence-after-indeterminate", "check": "indeterminate_evidence_race", "facts": ["indeterminate_terminal_committed_first"], "expected": { "decision": "accept", "code": "late_evidence_is_noncanonical" } },
+      { "id": "invalid-indeterminate-race-shape", "check": "indeterminate_evidence_race", "facts": ["conflicting_replay"], "expected": { "decision": "reject", "code": "axis_invariant_violation" } }
+    ] },
+    { "id": "seal-outbox-recovery", "requirement": 6, "examples": [
+      { "id": "recover-sealed-unpublished-outbox", "check": "outbox_recovery", "facts": ["seal_durable", "outbox_unpublished"], "expected": { "decision": "accept", "code": "durable_recovery_required" } },
+      { "id": "uncommitted-seal-cannot-publish", "check": "outbox_recovery", "facts": ["outbox_unpublished"], "expected": { "decision": "reject", "code": "axis_invariant_violation" } }
+    ] },
+    { "id": "dispatch-claim-crash", "requirement": 7, "examples": [
+      { "id": "claimed-without-provider-bytes", "check": "dispatch_crash", "facts": ["claim_durable", "provider_bytes_absent"], "expected": { "decision": "reject", "code": "provider_dispatch_not_authorized" } },
+      { "id": "normal-dispatch-after-claim", "check": "dispatch_crash", "facts": ["claim_durable", "provider_accepted"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "unclaimed-provider-dispatch", "check": "dispatch_crash", "facts": ["provider_bytes_absent"], "expected": { "decision": "reject", "code": "axis_invariant_violation" } }
+    ] },
+    { "id": "provider-acceptance-observation", "requirement": 8, "examples": [
+      { "id": "accepted-and-observed", "check": "provider_observation", "facts": ["provider_accepted"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "accepted-before-durable-observation", "check": "provider_observation", "facts": ["provider_accepted", "observation_not_durable"], "expected": { "decision": "reject", "code": "reconciliation_required" } }
+    ] },
+    { "id": "terminal-lost-ack", "requirement": 9, "examples": [
+      { "id": "exact-terminal-replay-after-lost-ack", "check": "lost_acknowledgement", "facts": ["terminal_durable", "acknowledgement_lost", "exact_replay"], "expected": { "decision": "accept", "code": "replay_returns_original_receipt" } },
+      { "id": "conflicting-terminal-replay-after-lost-ack", "check": "lost_acknowledgement", "facts": ["terminal_durable", "acknowledgement_lost", "conflicting_replay"], "expected": { "decision": "reject", "code": "stale_authority" } }
+    ] },
+    { "id": "successor-effect-identity", "requirement": 10, "examples": [
+      { "id": "successors-share-qualified-effect", "check": "effect_identity_claim", "facts": ["same_external_identity", "same_fingerprint"], "expected": { "decision": "accept", "code": "idempotent_existing_effect" } },
+      { "id": "successors-conflict-on-fingerprint", "check": "effect_identity_claim", "facts": ["same_external_identity", "different_fingerprint"], "expected": { "decision": "reject", "code": "external_identity_conflict" } }
+    ] },
+    { "id": "effect-fingerprint-conflict", "requirement": 11, "examples": [
+      { "id": "new-external-identity-new-fingerprint", "check": "effect_fingerprint_conflict", "facts": ["different_external_identity", "different_fingerprint"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "same-external-identity-conflicting-fingerprint", "check": "effect_fingerprint_conflict", "facts": ["same_external_identity", "different_fingerprint"], "expected": { "decision": "reject", "code": "external_identity_conflict" } }
+    ] },
+    { "id": "distinct-identity-equal-payload", "requirement": 12, "examples": [
+      { "id": "equal-payload-distinct-effects", "check": "distinct_external_identity", "facts": ["different_external_identity", "same_payload"], "expected": { "decision": "accept", "code": "distinct_effect_required" } },
+      { "id": "same-identity-cannot-create-distinct-effect", "check": "distinct_external_identity", "facts": ["same_external_identity", "same_payload"], "expected": { "decision": "reject", "code": "external_identity_conflict" } }
+    ] },
+    { "id": "completed-effect-replay", "requirement": 13, "examples": [
+      { "id": "completed-effect-zero-provider-calls", "check": "completed_effect_replay", "facts": ["effect_completed"], "expected": { "decision": "accept", "code": "completed_result_replayed" } },
+      { "id": "completed-effect-provider-call-forbidden", "check": "completed_effect_replay", "facts": ["effect_completed", "provider_call_requested"], "expected": { "decision": "reject", "code": "retry_permanently_forbidden" } }
+    ] },
+    { "id": "known-not-accepted-retry", "requirement": 14, "examples": [
+      { "id": "one-fresh-attempt-after-proof", "check": "retry_after_known_not_accepted", "facts": ["known_not_accepted_receipt", "fresh_attempt_identity"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "stale-attempt-after-proof", "check": "retry_after_known_not_accepted", "facts": ["known_not_accepted_receipt", "stale_attempt_identity"], "expected": { "decision": "reject", "code": "fresh_attempt_required" } }
+    ] },
+    { "id": "tombstone-restore", "requirement": 15, "examples": [
+      { "id": "ordinary-restored-effect", "check": "tombstone_restore", "facts": ["restore_or_compaction"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "restored-tombstone-still-blocks-retry", "check": "tombstone_restore", "facts": ["permanent_tombstone", "restore_or_compaction"], "expected": { "decision": "reject", "code": "retry_permanently_forbidden" } }
+    ] },
+    { "id": "effect-cardinality", "requirement": 16, "examples": [
+      { "id": "operation-with-zero-effects", "check": "effect_cardinality", "facts": ["zero_effects"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "operation-with-one-coarse-effect", "check": "effect_cardinality", "facts": ["one_coarse_effect"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "operation-with-multiple-mediated-effects", "check": "effect_cardinality", "facts": ["multiple_mediated_effects"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "operation-with-invalid-effect-cardinality", "check": "effect_cardinality", "facts": ["invalid_effect_cardinality"], "expected": { "decision": "reject", "code": "invalid_effect_cardinality" } }
+    ] },
+    { "id": "receipt-ordering", "requirement": 17, "examples": [
+      { "id": "delayed-receipt", "check": "receipt_handling", "facts": ["receipt_delayed"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "reordered-receipt", "check": "receipt_handling", "facts": ["receipt_reordered"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "exact-duplicate-receipt", "check": "receipt_handling", "facts": ["receipt_duplicate_exact"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "conflicting-receipt-rejected", "check": "receipt_handling", "facts": ["receipt_conflicting"], "expected": { "decision": "reject", "code": "conflicting_receipt" } }
+    ] },
+    { "id": "stale-authority-restore", "requirement": 18, "examples": [
+      { "id": "monotonic-authority-restore", "check": "stale_restore", "facts": ["authority_monotonic"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "restore-reopens-authority", "check": "stale_restore", "facts": ["authority_reopen_requested"], "expected": { "decision": "reject", "code": "stale_authority" } }
+    ] },
+    { "id": "model-generation", "requirement": 19, "examples": [
+      { "id": "generated-valid-axis-product", "check": "model_invariants", "facts": ["all_axis_invariants_hold"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "generated-invalid-axis-product", "check": "model_invariants", "facts": ["axis_invariant_violated"], "expected": { "decision": "reject", "code": "axis_invariant_violation" } }
+    ] },
+    { "id": "cutoff-before-boundary", "requirement": 20, "examples": [
+      { "id": "boundary-reuses-cutoff-fences", "check": "cutoff_boundary_reuse", "facts": ["prior_cutoff_fences_exact", "cursor_and_receipt_reused"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "boundary-advances-cutoff-cursor", "check": "cutoff_boundary_reuse", "facts": ["prior_cutoff_fences_exact", "cursor_or_receipt_advanced"], "expected": { "decision": "reject", "code": "cutoff_boundary_conflict" } }
+    ] },
+    { "id": "normal-provider-termination", "requirement": 21, "examples": [
+      { "id": "normal-termination-needs-no-containment", "check": "normal_provider_termination", "facts": ["provider_execution_terminated", "containment_not_requested"], "expected": { "decision": "accept", "code": "containment_not_required" } },
+      { "id": "uncertain-containment-blocks-terminal", "check": "normal_provider_termination", "facts": ["provider_execution_terminated", "containment_uncertain"], "expected": { "decision": "reject", "code": "reconciliation_required" } }
+    ] },
+    { "id": "zero-attempt-effect-cutoff", "requirement": 22, "examples": [
+      { "id": "registered-effect-cutoff-before-attempt", "check": "zero_attempt_cutoff", "facts": ["effect_registered", "zero_attempts", "cutoff_fenced"], "expected": { "decision": "accept", "code": "zero_attempt_effect_closed" } },
+      { "id": "zero-attempt-effect-without-cutoff", "check": "zero_attempt_cutoff", "facts": ["effect_registered", "zero_attempts"], "expected": { "decision": "reject", "code": "axis_invariant_violation" } }
+    ] },
+    { "id": "post-seal-receipt", "requirement": 23, "examples": [
+      { "id": "bound-receipt-after-seal", "check": "post_seal_receipt", "facts": ["manifest_sealed", "receipt_bound_to_manifest_entry"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "unbound-receipt-after-seal", "check": "post_seal_receipt", "facts": ["manifest_sealed", "receipt_unbound"], "expected": { "decision": "reject", "code": "receipt_not_bound" } }
+    ] },
+    { "id": "atomic-indeterminate-clear", "requirement": 24, "examples": [
+      { "id": "all-tombstones-clear-and-terminal-atomically", "check": "atomic_indeterminate_clear", "facts": ["all_tombstone_receipts_present", "debt_clear_terminal_atomic"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "indeterminate-debt-cleared-separately", "check": "atomic_indeterminate_clear", "facts": ["all_tombstone_receipts_present", "debt_cleared_separately"], "expected": { "decision": "reject", "code": "indeterminate_clear_not_atomic" } },
+      { "id": "missing-tombstone-blocks-clear", "check": "atomic_indeterminate_clear", "facts": ["tombstone_receipt_missing", "debt_clear_terminal_atomic"], "expected": { "decision": "reject", "code": "indeterminate_clear_not_atomic" } }
+    ] },
+    { "id": "deployment-continuity", "requirement": 25, "examples": [
+      { "id": "verified-continuity-allows-dispatch", "check": "deployment_continuity", "facts": ["continuity_receipt_verified", "dispatch_requested"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "missing-continuity-fails-closed", "check": "deployment_continuity", "facts": ["continuity_receipt_missing", "dispatch_requested"], "expected": { "decision": "reject", "code": "continuity_unproven" } }
+    ] },
+    { "id": "manifest-coverage", "requirement": 26, "examples": [
+      { "id": "complete-manifest-satisfaction", "check": "manifest_coverage", "facts": ["all_manifest_entries_satisfied"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "missing-child-satisfaction", "check": "manifest_coverage", "facts": ["child_requirement_missing"], "expected": { "decision": "reject", "code": "manifest_incomplete" } },
+      { "id": "missing-transcript-satisfaction", "check": "manifest_coverage", "facts": ["transcript_requirement_missing"], "expected": { "decision": "reject", "code": "manifest_incomplete" } }
+    ] },
+    { "id": "cross-axis-transitions", "requirement": 27, "examples": [
+      { "id": "allow-dispatch-unclaimed-to-claimed", "check": "cross_axis_transition", "facts": ["transition_dispatch_unclaimed_claimed"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-dispatch-claimed-to-unknown", "check": "cross_axis_transition", "facts": ["transition_dispatch_claimed_unknown"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-dispatch-claimed-to-not-accepted", "check": "cross_axis_transition", "facts": ["transition_dispatch_claimed_not_accepted"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-dispatch-claimed-to-accepted", "check": "cross_axis_transition", "facts": ["transition_dispatch_claimed_accepted"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-dispatch-unknown-to-not-accepted", "check": "cross_axis_transition", "facts": ["transition_dispatch_unknown_not_accepted"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-dispatch-unknown-to-accepted", "check": "cross_axis_transition", "facts": ["transition_dispatch_unknown_accepted"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-dispatch-not-accepted-to-fresh-claim", "check": "cross_axis_transition", "facts": ["transition_dispatch_not_accepted_claimed_fresh"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "forbid-dispatch-accepted-to-claimed", "check": "cross_axis_transition", "facts": ["transition_dispatch_accepted_claimed"], "expected": { "decision": "reject", "code": "transition_forbidden" } },
+      { "id": "allow-execution-start-with-claim", "check": "cross_axis_transition", "facts": ["transition_execution_not_started_active_with_claim"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-execution-reset-with-proof", "check": "cross_axis_transition", "facts": ["transition_execution_active_not_started_with_proof"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-execution-termination-with-receipt", "check": "cross_axis_transition", "facts": ["transition_execution_active_terminated_with_receipt"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "forbid-execution-reopen", "check": "cross_axis_transition", "facts": ["transition_execution_terminated_active"], "expected": { "decision": "reject", "code": "transition_forbidden" } },
+      { "id": "allow-containment-request", "check": "cross_axis_transition", "facts": ["transition_containment_not_requested_pending"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-containment-completion", "check": "cross_axis_transition", "facts": ["transition_containment_pending_contained"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "allow-containment-uncertainty", "check": "cross_axis_transition", "facts": ["transition_containment_pending_uncertain"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "forbid-containment-reopen", "check": "cross_axis_transition", "facts": ["transition_containment_contained_pending"], "expected": { "decision": "reject", "code": "transition_forbidden" } },
+      { "id": "allow-cutoff-open-to-fenced", "check": "cross_axis_transition", "facts": ["transition_cutoff_open_fenced"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "forbid-cutoff-reopen", "check": "cross_axis_transition", "facts": ["transition_cutoff_fenced_open"], "expected": { "decision": "reject", "code": "transition_forbidden" } },
+      { "id": "allow-terminal-with-complete-closure", "check": "cross_axis_transition", "facts": ["transition_terminal_open_final_with_closure", "admission_fenced", "output_fenced", "reconciliation_clear", "execution_terminated", "containment_satisfied", "all_manifest_entries_satisfied"], "expected": { "decision": "accept", "code": "accepted" } },
+      { "id": "forbid-terminal-with-active-execution", "check": "cross_axis_transition", "facts": ["transition_terminal_open_final_active_execution", "execution_active"], "expected": { "decision": "reject", "code": "transition_forbidden" } },
+      { "id": "forbid-terminal-reopen", "check": "cross_axis_transition", "facts": ["transition_terminal_final_open"], "expected": { "decision": "reject", "code": "transition_forbidden" } },
+      { "id": "forbid-claim-without-execution-activation", "check": "cross_axis_transition", "facts": ["transition_claim_without_execution_activation"], "expected": { "decision": "reject", "code": "transition_forbidden" } }
+    ] }
+  ]
+}
