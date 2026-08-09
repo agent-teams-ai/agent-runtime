@@ -38,9 +38,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 214,
+    exampleCount: 223,
     acceptedCount: 104,
-    rejectedCount: 110,
+    rejectedCount: 119,
   });
 });
 
@@ -544,6 +544,15 @@ test("binary revision semantic retention fails closed before work and GC", async
     "concurrent-accept-winner-without-pending-rejects",
     "final-deleted-state-without-completion-receipt-quarantines",
     "completion-receipt-without-final-deleted-state-quarantines",
+    "acceptance-command-cannot-bypass-work-authorization",
+    "acceptance-command-cannot-bypass-dispatch-authorization",
+    "root-request-cannot-bypass-work-authorization",
+    "root-request-cannot-bypass-dispatch-authorization",
+    "gc-command-cannot-bypass-work-authorization",
+    "gc-command-cannot-bypass-dispatch-authorization",
+    "deletion-command-cannot-bypass-work-authorization",
+    "deletion-command-cannot-bypass-dispatch-authorization",
+    "authorized-work-with-acceptance-command-intent-rejects",
   ] as const) {
     const example: OracleExample | undefined = retentionCase.examples.find(
       (candidate: OracleExample) => candidate.id === id,
@@ -578,6 +587,44 @@ test("binary revision semantic retention fails closed before work and GC", async
     decision: "reject",
     code: "operation_acceptance_integrity_contradiction",
   });
+
+});
+
+test("work authorization dominates accepted non-work branch outcomes", async () => {
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  assert.ok(retentionCase);
+  const branchBypassSeeds = [
+    "gc-with-zero-semantic-roots",
+    "physical-deletion-completes-with-durable-receipt",
+    "physical-deletion-exact-replay",
+    "accept-cas-wins-pending-revision",
+    "abort-cas-wins-pending-revision",
+    "accept-exact-replay-returns-current-receipt",
+    "abort-exact-replay-returns-current-receipt",
+    "concurrent-accept-abort-accept-wins",
+    "concurrent-accept-abort-abort-wins",
+    "abort-first-persists-forbidden-tombstone",
+    "ensure-first-abort-releases-and-forbids",
+    "ensure-establishes-open-obligation-set",
+    "established-root-lost-ack-replays-original-receipt",
+  ] as const;
+  assert.equal(branchBypassSeeds.length, 13);
+  for (const id of branchBypassSeeds) {
+    const seed: OracleExample | undefined = retentionCase.examples.find(
+      (example: OracleExample) => example.id === id,
+    );
+    assert.ok(seed, id);
+    assert.equal(seed.expected.decision, "accept", id);
+    for (const trigger of ["provider_or_effect_work_requested", "dispatch_requested"] as const) {
+      const outcome = evaluateOracleExample({
+        ...seed,
+        facts: [...seed.facts, trigger],
+      });
+      assert.equal(outcome.decision, "reject", `${id} + ${trigger}`);
+    }
+  }
 });
 
 test("exact inventory rejects weakened binary revision retention evidence", async () => {

@@ -150,6 +150,7 @@ export const BINARY_RETENTION_RESULT_CODES = [
   "root_establishment_receipt_replayed",
   "root_lifecycle_integrity_contradiction",
   "retention_obligation_integrity_contradiction",
+  "mixed_command_intent_forbidden",
 ] as const;
 
 export const BINARY_RETENTION_ALLOWED_FACTS = [
@@ -162,6 +163,33 @@ type BinaryRetentionResult =
   | "accepted";
 
 const has = (facts: ReadonlySet<string>, fact: string): boolean => facts.has(fact);
+
+const workRequested = (facts: ReadonlySet<string>): boolean =>
+  has(facts, "provider_or_effect_work_requested") || has(facts, "dispatch_requested");
+
+const mixedCommandIntent = (facts: ReadonlySet<string>): boolean => [
+  "operation_acceptance_accept_requested",
+  "operation_acceptance_abort_requested",
+  "operation_acceptance_accept_cas_won",
+  "operation_acceptance_abort_cas_won",
+  "operation_acceptance_exact_replay",
+  "operation_abort_exact_replay",
+  "ensure_semantic_retention_requested",
+  "root_abort_release_requested",
+  "root_request_exact_replay",
+  "root_cas_won",
+  "root_abort_release_cas_won",
+  "gc_requested",
+  "collection_or_tombstone_cas_won",
+  "host_custody_collection_cas_won",
+  "physical_deletion_preclaim_requested",
+  "physical_deletion_started",
+  "physical_deletion_crash",
+  "physical_deletion_partial",
+  "physical_deletion_unknown",
+  "physical_deletion_completed",
+  "physical_deletion_exact_replay",
+].some((fact) => has(facts, fact));
 
 
 const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
@@ -182,6 +210,9 @@ const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
 const evaluateAuthorizedWork = (
   facts: ReadonlySet<string>,
 ): BinaryRetentionResult => {
+  if (has(facts, "collection_or_tombstone_cas_won")) {
+    return "semantic_root_establishment_race";
+  }
   const exactRoot = has(facts, "operation_acceptance_intent_persisted") &&
     has(facts, "binary_revision_root_established") &&
     has(facts, "retention_receipt_exact_current");
@@ -361,14 +392,14 @@ export const evaluateBinaryRevisionRetention = (
     return "retention_obligation_integrity_contradiction";
   }
   const acceptanceTransition = evaluateAcceptanceTransition(facts);
-  if (acceptanceTransition !== undefined) {
+  if (acceptanceTransition === "operation_acceptance_integrity_contradiction") {
     return acceptanceTransition;
   }
   const rootRequestLifecycle = evaluateRootRequestLifecycle(facts);
-  if (rootRequestLifecycle !== undefined) {
+  if (rootRequestLifecycle === "root_lifecycle_integrity_contradiction") {
     return rootRequestLifecycle;
   }
-  if ([
+  const physicalDeletionRequested = [
     "physical_deletion_started",
     "physical_deletion_crash",
     "physical_deletion_partial",
@@ -379,19 +410,20 @@ export const evaluateBinaryRevisionRetention = (
     "physical_deletion_preclaim_requested",
     "final_deleted_state_durable",
     "deletion_completed_receipt_durable",
-  ].some((fact) => has(facts, fact))) {
-    return evaluatePhysicalDeletion(facts);
+  ].some((fact) => has(facts, fact));
+  const physicalDeletion = physicalDeletionRequested
+    ? evaluatePhysicalDeletion(facts)
+    : undefined;
+  if (physicalDeletion === "deletion_integrity_contradiction") {
+    return physicalDeletion;
   }
-  if (has(facts, "gc_requested")) {
-    return evaluateGc(facts);
-  }
-  if (has(facts, "collection_or_tombstone_cas_won")) {
-    return "semantic_root_establishment_race";
-  }
-  if (has(facts, "provider_or_effect_work_requested") || has(facts, "dispatch_requested")) {
+  if (workRequested(facts)) {
     const authorization = evaluateAuthorizedWork(facts);
     if (authorization !== "accepted") {
       return authorization;
+    }
+    if (mixedCommandIntent(facts)) {
+      return "mixed_command_intent_forbidden";
     }
     if (has(facts, "shared_effect") &&
         (has(facts, "attempting_operation_root_missing") ||
@@ -399,6 +431,21 @@ export const evaluateBinaryRevisionRetention = (
       return "semantic_root_required";
     }
     return "accepted";
+  }
+  if (acceptanceTransition !== undefined) {
+    return acceptanceTransition;
+  }
+  if (rootRequestLifecycle !== undefined) {
+    return rootRequestLifecycle;
+  }
+  if (physicalDeletion !== undefined) {
+    return physicalDeletion;
+  }
+  if (has(facts, "gc_requested")) {
+    return evaluateGc(facts);
+  }
+  if (has(facts, "collection_or_tombstone_cas_won")) {
+    return "semantic_root_establishment_race";
   }
   if (has(facts, "shared_effect")) {
     return has(facts, "attempting_operation_roots_complete") &&

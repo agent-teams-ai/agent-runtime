@@ -443,6 +443,12 @@ authority is still required afterward. This is an explicit process-manager
 seam between Agent Execution modules, not a cross-module transaction, foreign
 key, SQL join, or domain import.
 
+Any request containing provider work or dispatch intent validates the complete
+accepted-operation, retention, and execution-authority preconditions before a
+lifecycle, root, collection, or deletion outcome can be returned. A request
+that combines otherwise authorized work with a lifecycle/GC/deletion command
+intent is rejected as a mixed command rather than silently ignoring one side.
+
 If root creation wins the lifecycle CAS, collection is blocked. If collection
 or tombstoning wins, root establishment and acceptance are stale and reject
 without work. A crash after root creation but before acceptance leaves a safe

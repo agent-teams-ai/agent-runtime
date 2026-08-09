@@ -227,7 +227,7 @@
         "root_establishment_forbidden_current_receipt",
         "root_establishment_receipt_replayed",
         "root_lifecycle_integrity_contradiction",
-        "retention_obligation_integrity_contradiction"
+        "retention_obligation_integrity_contradiction", "mixed_command_intent_forbidden"
       ]
     }
   }
