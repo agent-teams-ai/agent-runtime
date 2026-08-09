@@ -575,6 +575,10 @@ export const generatedStateIsValid = (state: GeneratedState): boolean => {
       (state.admission !== "fenced" || state.output !== "fenced" || state.execution === "active")) {
     return false;
   }
+  if (state.dispatch === "acceptance_unknown" && state.terminal === "open" &&
+      state.reconciliation !== "required") {
+    return false;
+  }
   if (state.terminal === "open") {
     return true;
   }

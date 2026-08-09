@@ -38,9 +38,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 202,
+    exampleCount: 212,
     acceptedCount: 104,
-    rejectedCount: 98,
+    rejectedCount: 108,
   });
 });
 
@@ -55,8 +55,8 @@ test("JSON schema closed enums stay aligned with the executable validator", asyn
 test("model oracle exhausts the deterministic ten-axis state product", () => {
   assert.deepEqual(evaluateGeneratedAxisProducts(), {
     total: 48000,
-    valid: 1472,
-    invalid: 46528,
+    valid: 1277,
+    invalid: 46723,
   });
 });
 
@@ -117,6 +117,15 @@ test("generated model enforces coupled and terminal invariants", () => {
     containment: "contained",
     reconciliation: "required",
   }), true);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    dispatch: "acceptance_unknown",
+    admission: "fenced",
+    output: "fenced",
+    execution: "terminated",
+    containment: "contained",
+    reconciliation: "clear",
+  }), false);
 
   const finalState = {
     ...openState,
@@ -387,6 +396,32 @@ test("binary revision semantic retention fails closed before work and GC", async
   assert.ok(releaseReplay);
   assert.equal(releaseReplay.facts.includes("binary_revision_root_established"), false);
   assert.deepEqual(evaluateOracleExample(releaseReplay), releaseReplay.expected);
+  for (const invalidReleaseEvidence of ["release_manifest_stale", "release_manifest_wrong_scope"] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...releaseReplay,
+      facts: [...releaseReplay.facts, invalidReleaseEvidence],
+    }), {
+      decision: "reject",
+      code: "release_manifest_conflict",
+    });
+  }
+
+  const abandonReplay = retentionCase.examples.find(
+    ({ id }) => id === "exact-abandon-release-replay",
+  );
+  assert.ok(abandonReplay);
+  for (const invalidAbortEvidence of [
+    "operation_acceptance_aborted_receipt_stale",
+    "operation_acceptance_aborted_receipt_wrong_scope",
+  ] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...abandonReplay,
+      facts: [...abandonReplay.facts, invalidAbortEvidence],
+    }), {
+      decision: "reject",
+      code: "operation_acceptance_stale_current_receipt",
+    });
+  }
 
   const lostReceipt = retentionCase.examples.find(
     ({ id }) => id === "lost-root-receipt-ack-replays",
@@ -461,7 +496,7 @@ test("binary revision semantic retention fails closed before work and GC", async
   assert.deepEqual(evaluateOracleExample(sharedEffectConflict), sharedEffectConflict.expected);
 
   const acceptedAbort = retentionCase.examples.find(
-    ({ id }) => id === "accepted-operation-rejects-abort-release",
+    ({ id }) => id === "accepted-operation-with-abort-receipt-quarantines",
   );
   assert.ok(acceptedAbort);
   assert.deepEqual(evaluateOracleExample(acceptedAbort), acceptedAbort.expected);
@@ -487,6 +522,16 @@ test("binary revision semantic retention fails closed before work and GC", async
     "predelete-tombstone-is-not-final-deleted",
     "established-root-lost-ack-replays-original-receipt",
     "established-root-stale-generation-replay-rejects",
+    "established-root-replay-with-conflicting-digest-rejects",
+    "established-root-replay-with-weaker-set-rejects",
+    "release-replay-with-stale-manifest-rejects",
+    "release-replay-with-wrong-scope-manifest-rejects",
+    "abandon-replay-with-stale-abort-receipt-rejects",
+    "abandon-replay-with-wrong-scope-abort-receipt-rejects",
+    "accepted-state-with-abort-cas-quarantines",
+    "aborted-state-with-accept-cas-quarantines",
+    "nonconcurrent-both-terminal-states-quarantine",
+    "nonconcurrent-both-cas-winners-quarantine",
     "concurrent-accept-winner-with-both-terminal-states-rejects",
     "concurrent-accept-winner-with-abort-receipt-rejects",
     "concurrent-accept-winner-without-pending-rejects",
@@ -499,6 +544,33 @@ test("binary revision semantic retention fails closed before work and GC", async
     assert.ok(example, id);
     assert.deepEqual(evaluateOracleExample(example), example.expected, id);
   }
+
+  const establishedReplay = retentionCase.examples.find(
+    ({ id }) => id === "established-root-lost-ack-replays-original-receipt",
+  );
+  assert.ok(establishedReplay);
+  for (const invalidDigest of [
+    "retention_obligation_set_digest_wrong",
+    "retention_obligation_set_weaker",
+  ] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...establishedReplay,
+      facts: [...establishedReplay.facts, invalidDigest],
+    }), {
+      decision: "reject",
+      code: "root_lifecycle_integrity_contradiction",
+    });
+  }
+
+  const abortLoses = retentionCase.examples.find(({ id }) => id === "abort-loses-after-accept");
+  assert.ok(abortLoses);
+  assert.deepEqual(evaluateOracleExample({
+    ...abortLoses,
+    facts: [...abortLoses.facts, "operation_acceptance_abort_cas_won"],
+  }), {
+    decision: "reject",
+    code: "operation_acceptance_integrity_contradiction",
+  });
 });
 
 test("exact inventory rejects weakened binary revision retention evidence", async () => {

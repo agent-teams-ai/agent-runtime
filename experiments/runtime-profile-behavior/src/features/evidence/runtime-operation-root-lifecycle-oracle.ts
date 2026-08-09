@@ -142,7 +142,7 @@ export const evaluateAcceptanceTransition = (
     return concurrent;
   }
   if (acceptanceStateIsContradictory(facts)) {
-    return "operation_acceptance_stale_current_receipt";
+    return "operation_acceptance_integrity_contradiction";
   }
   const replay = evaluateAcceptanceReplay(facts);
   return replay ?? evaluatePendingAcceptance(facts, acceptPath);
@@ -178,10 +178,13 @@ export const evaluateRootRequestLifecycle = (
       : "root_lifecycle_integrity_contradiction";
   }
   if (has(facts, "root_request_exact_replay")) {
+    const invalidDigest = has(facts, "retention_obligation_set_digest_wrong") ||
+      has(facts, "retention_obligation_set_weaker");
     const establishedReplay = stable &&
       has(facts, "root_request_state_established") &&
       has(facts, "root_request_generation_current") &&
       !has(facts, "root_request_generation_stale") &&
+      !invalidDigest &&
       has(facts, "retention_obligation_set_digest_exact") &&
       has(facts, "root_establishment_receipt_durable");
     return establishedReplay

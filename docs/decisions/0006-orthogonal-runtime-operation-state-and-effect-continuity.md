@@ -430,6 +430,11 @@ idempotent. Concurrent accept and abort must have exactly one CAS winner; both
 winners are an integrity contradiction. Host Custody cannot consume an abort
 receipt when accept won.
 
+Impossible durable local combinations, including both terminal states, a CAS
+winner for the opposite terminal state, both CAS winners, or a contradictory
+terminal receipt, are integrity contradictions and require quarantine. They are
+not classified as a normal stale losing command.
+
 The accept transaction consumes only a current retention receipt bound to the
 exact tenant, runtime scope, operation, binary revision, request digest, and
 root generation. Only then does it durably create the accepted operation. No
@@ -470,7 +475,10 @@ identities, retention-obligation digest, terminal and satisfaction digests,
 effect-closure receipts, terminal/output/transcript independence receipts, and
 typed non-applicability proofs. Exact duplicate replay is idempotent; the same
 manifest ID with another digest is a hard conflict. Missing, duplicate, stale,
-wrong-scope, or unknown evidence retains the root.
+wrong-scope, or unknown evidence retains the root. Historical release and
+abandon receipts are replayed only when incoming evidence is exact;
+contradictory digest, scope, manifest, or abort evidence dominates replay and
+fails closed.
 
 Release is permitted only after write-once terminal and effect closure plus
 durable revision-independent receipts and projections. An unknown release keeps

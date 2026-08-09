@@ -234,9 +234,27 @@ const mustRemain = (facts: ReadonlySet<string>): boolean => [
   "release_obligation_set_weaker",
 ].some((fact) => has(facts, fact));
 
+const releaseReplayEvidenceIsInvalid = (facts: ReadonlySet<string>): boolean => [
+  "release_manifest_stale",
+  "release_manifest_wrong_scope",
+  "release_manifest_duplicate_evidence",
+  "release_obligation_set_digest_wrong",
+  "release_obligation_set_weaker",
+].some((fact) => has(facts, fact));
+
+const abortReceiptIsInvalid = (facts: ReadonlySet<string>): boolean => [
+  "operation_acceptance_aborted_receipt_stale",
+  "operation_acceptance_aborted_receipt_wrong_scope",
+  "operation_acceptance_aborted_receipt_unknown",
+].some((fact) => has(facts, fact));
+
 const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
-  if (has(facts, "release_manifest_digest_conflict")) {
+  if (has(facts, "release_manifest_digest_conflict") ||
+      (has(facts, "release_exact_replay") && releaseReplayEvidenceIsInvalid(facts))) {
     return "release_manifest_conflict";
+  }
+  if (has(facts, "abandon_release_exact_replay") && abortReceiptIsInvalid(facts)) {
+    return "operation_acceptance_stale_current_receipt";
   }
   if (has(facts, "release_exact_replay") && has(facts, "owner_release_receipt_durable")) {
     return "semantic_root_released";
@@ -248,10 +266,8 @@ const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
   if (!has(facts, "binary_revision_root_established")) {
     return "semantic_root_required";
   }
-  const invalidAbort = has(facts, "operation_acceptance_aborted_receipt_stale") ||
-    has(facts, "operation_acceptance_aborted_receipt_wrong_scope") ||
-    has(facts, "operation_acceptance_aborted_receipt_unknown");
-  if (has(facts, "operation_acceptance_aborted_receipt_exact") && !invalidAbort) {
+  if (has(facts, "operation_acceptance_aborted_receipt_exact") &&
+      !abortReceiptIsInvalid(facts)) {
     return "semantic_root_released";
   }
   if (mustRemain(facts)) {
