@@ -235,8 +235,10 @@ const mustRemain = (facts: ReadonlySet<string>): boolean => [
 ].some((fact) => has(facts, fact));
 
 const releaseReplayEvidenceIsInvalid = (facts: ReadonlySet<string>): boolean => [
+  "release_manifest_incomplete",
   "release_manifest_stale",
   "release_manifest_wrong_scope",
+  "release_manifest_unknown",
   "release_manifest_duplicate_evidence",
   "release_obligation_set_digest_wrong",
   "release_obligation_set_weaker",

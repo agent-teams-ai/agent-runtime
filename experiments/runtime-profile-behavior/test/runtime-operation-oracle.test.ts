@@ -38,9 +38,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 212,
+    exampleCount: 214,
     acceptedCount: 104,
-    rejectedCount: 108,
+    rejectedCount: 110,
   });
 });
 
@@ -396,7 +396,12 @@ test("binary revision semantic retention fails closed before work and GC", async
   assert.ok(releaseReplay);
   assert.equal(releaseReplay.facts.includes("binary_revision_root_established"), false);
   assert.deepEqual(evaluateOracleExample(releaseReplay), releaseReplay.expected);
-  for (const invalidReleaseEvidence of ["release_manifest_stale", "release_manifest_wrong_scope"] as const) {
+  for (const invalidReleaseEvidence of [
+    "release_manifest_stale",
+    "release_manifest_wrong_scope",
+    "release_manifest_unknown",
+    "release_manifest_incomplete",
+  ] as const) {
     assert.deepEqual(evaluateOracleExample({
       ...releaseReplay,
       facts: [...releaseReplay.facts, invalidReleaseEvidence],
@@ -526,6 +531,8 @@ test("binary revision semantic retention fails closed before work and GC", async
     "established-root-replay-with-weaker-set-rejects",
     "release-replay-with-stale-manifest-rejects",
     "release-replay-with-wrong-scope-manifest-rejects",
+    "release-replay-with-unknown-manifest-rejects",
+    "release-replay-with-incomplete-manifest-rejects",
     "abandon-replay-with-stale-abort-receipt-rejects",
     "abandon-replay-with-wrong-scope-abort-receipt-rejects",
     "accepted-state-with-abort-cas-quarantines",
