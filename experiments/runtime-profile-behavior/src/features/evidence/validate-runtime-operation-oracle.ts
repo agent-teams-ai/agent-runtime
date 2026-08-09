@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { RUNTIME_OPERATION_ORACLE_INVENTORY } from "./runtime-operation-oracle-inventory.ts";
+
 export const ORACLE_CHECKS = [
   "output_terminal_order",
   "dispatch_cutoff_race",
@@ -48,6 +50,9 @@ export const ORACLE_FACTS = [
   "outbox_unpublished",
   "claim_durable",
   "provider_bytes_absent",
+  "provider_bytes_or_action",
+  "provider_acceptance_unproven",
+  "new_claim_requested",
   "provider_accepted",
   "observation_not_durable",
   "terminal_durable",
@@ -119,13 +124,24 @@ export const ORACLE_FACTS = [
   "transition_execution_active_not_started_with_proof",
   "transition_execution_active_terminated_with_receipt",
   "transition_execution_terminated_active",
+  "transition_execution_start_without_claim",
+  "transition_execution_reset_without_not_accepted_proof",
+  "transition_execution_terminate_without_receipt",
   "transition_containment_not_requested_pending",
   "transition_containment_pending_contained",
   "transition_containment_pending_uncertain",
+  "transition_containment_uncertain_pending_retry",
+  "transition_containment_uncertain_contained_late_proof",
+  "transition_containment_not_requested_qualified_not_required",
   "transition_containment_contained_pending",
+  "transition_containment_qualified_not_required_pending",
   "transition_cutoff_open_fenced",
   "transition_cutoff_fenced_open",
+  "transition_manifest_open_sealed_with_fences",
+  "transition_manifest_open_sealed_open_admission",
+  "transition_manifest_open_sealed_open_output",
   "transition_terminal_open_final_with_closure",
+  "transition_terminal_open_final_not_started_with_closure",
   "transition_terminal_open_final_active_execution",
   "transition_terminal_final_open",
   "transition_claim_without_execution_activation",
@@ -140,7 +156,9 @@ export const ORACLE_RESULT_CODES = [
   "late_evidence_is_noncanonical",
   "durable_recovery_required",
   "provider_dispatch_not_authorized",
+  "new_claim_forbidden",
   "reconciliation_required",
+  "acceptance_unknown_reconcile_required",
   "replay_returns_original_receipt",
   "idempotent_existing_effect",
   "external_identity_conflict",
@@ -166,6 +184,36 @@ type Check = (typeof ORACLE_CHECKS)[number];
 type Fact = (typeof ORACLE_FACTS)[number];
 type ResultCode = (typeof ORACLE_RESULT_CODES)[number];
 type JsonRecord = Record<string, unknown>;
+
+const ALLOWED_FACTS_BY_CHECK: Record<Check, ReadonlySet<Fact>> = {
+  output_terminal_order: new Set(["append_committed_first", "seal_committed_first"]),
+  dispatch_cutoff_race: new Set(["dispatch_claim_committed_first", "operation_cutoff_committed_first", "session_cutoff_committed_first", "scope_cutoff_committed_first"]),
+  requirement_closure_race: new Set(["reservation_committed_first", "manifest_seal_committed_first"]),
+  terminal_replay: new Set(["final_receipt_committed_first", "terminal_command_committed_first", "conflicting_replay"]),
+  indeterminate_evidence_race: new Set(["late_positive_committed_first", "indeterminate_terminal_committed_first", "conflicting_replay"]),
+  outbox_recovery: new Set(["seal_durable", "outbox_unpublished"]),
+  dispatch_crash: new Set(["claim_durable", "provider_bytes_absent", "provider_bytes_or_action", "provider_acceptance_unproven", "new_claim_requested", "provider_accepted"]),
+  provider_observation: new Set(["provider_accepted", "observation_not_durable"]),
+  lost_acknowledgement: new Set(["terminal_durable", "acknowledgement_lost", "exact_replay", "conflicting_replay"]),
+  effect_identity_claim: new Set(["same_external_identity", "same_fingerprint", "different_fingerprint"]),
+  effect_fingerprint_conflict: new Set(["same_external_identity", "different_external_identity", "different_fingerprint"]),
+  distinct_external_identity: new Set(["same_external_identity", "different_external_identity", "same_payload"]),
+  completed_effect_replay: new Set(["effect_completed", "provider_call_requested"]),
+  retry_after_known_not_accepted: new Set(["known_not_accepted_receipt", "fresh_attempt_identity", "stale_attempt_identity"]),
+  tombstone_restore: new Set(["permanent_tombstone", "restore_or_compaction"]),
+  effect_cardinality: new Set(["zero_effects", "one_coarse_effect", "multiple_mediated_effects", "invalid_effect_cardinality"]),
+  receipt_handling: new Set(["receipt_delayed", "receipt_reordered", "receipt_duplicate_exact", "receipt_conflicting"]),
+  stale_restore: new Set(["authority_reopen_requested", "authority_monotonic"]),
+  model_invariants: new Set(["all_axis_invariants_hold", "axis_invariant_violated"]),
+  cutoff_boundary_reuse: new Set(["prior_cutoff_fences_exact", "cursor_and_receipt_reused", "cursor_or_receipt_advanced"]),
+  normal_provider_termination: new Set(["provider_execution_terminated", "containment_not_requested", "containment_uncertain"]),
+  zero_attempt_cutoff: new Set(["effect_registered", "zero_attempts", "cutoff_fenced"]),
+  post_seal_receipt: new Set(["manifest_sealed", "receipt_bound_to_manifest_entry", "receipt_unbound"]),
+  atomic_indeterminate_clear: new Set(["all_tombstone_receipts_present", "tombstone_receipt_missing", "debt_clear_terminal_atomic", "debt_cleared_separately"]),
+  deployment_continuity: new Set(["continuity_receipt_verified", "continuity_receipt_missing", "dispatch_requested"]),
+  manifest_coverage: new Set(["all_manifest_entries_satisfied", "child_requirement_missing", "transcript_requirement_missing"]),
+  cross_axis_transition: new Set(ORACLE_FACTS.filter((fact) => fact.startsWith("transition_") || ["admission_fenced", "output_fenced", "reconciliation_clear", "execution_not_started", "execution_active", "execution_terminated", "containment_satisfied", "all_manifest_entries_satisfied"].includes(fact))),
+};
 
 export type OracleExample = {
   id: string;
@@ -237,11 +285,16 @@ const parseExample = (value: unknown, label: string): OracleExample => {
   if (new Set(facts).size !== facts.length) {
     fail(`${label}.facts contains duplicates`);
   }
+  const check = enumValue(record.check, ORACLE_CHECKS, `${label}.check`);
+  const disallowedFact = facts.find((fact) => !ALLOWED_FACTS_BY_CHECK[check].has(fact));
+  if (disallowedFact !== undefined) {
+    fail(`${label}.facts contains ${disallowedFact}, which is not allowed for ${check}`);
+  }
   const expected = asRecord(record.expected, `${label}.expected`);
   exactKeys(expected, ["decision", "code"], `${label}.expected`);
   return {
     id: canonicalId(record.id, `${label}.id`),
-    check: enumValue(record.check, ORACLE_CHECKS, `${label}.check`),
+    check,
     facts,
     expected: {
       decision: enumValue(expected.decision, ["accept", "reject"], `${label}.expected.decision`),
@@ -295,6 +348,13 @@ export const parseRuntimeOperationOracle = (value: unknown): RuntimeOperationOra
     fail("case and example IDs must be globally unique");
   }
   for (const oracleCase of cases) {
+    const inventory = RUNTIME_OPERATION_ORACLE_INVENTORY[oracleCase.requirement - 1];
+    if (inventory === undefined || oracleCase.id !== inventory.caseId ||
+        JSON.stringify(oracleCase.examples.map(({ id }) => id)) !== JSON.stringify(inventory.exampleIds)) {
+      fail(`requirement ${oracleCase.requirement} does not match the exact scenario/example inventory`);
+    }
+  }
+  for (const oracleCase of cases) {
     for (const example of oracleCase.examples) {
       if (example.check !== ORACLE_CHECKS[oracleCase.requirement - 1]) {
         fail(`${example.id} uses the wrong check for requirement ${oracleCase.requirement}`);
@@ -341,8 +401,13 @@ const ALLOWED_TRANSITIONS = new Set<Fact>([
   "transition_containment_not_requested_pending",
   "transition_containment_pending_contained",
   "transition_containment_pending_uncertain",
+  "transition_containment_uncertain_pending_retry",
+  "transition_containment_uncertain_contained_late_proof",
+  "transition_containment_not_requested_qualified_not_required",
   "transition_cutoff_open_fenced",
+  "transition_manifest_open_sealed_with_fences",
   "transition_terminal_open_final_with_closure",
+  "transition_terminal_open_final_not_started_with_closure",
 ]);
 const TRANSITION_FACTS = new Set<Fact>(
   ORACLE_FACTS.filter((fact) => fact.startsWith("transition_")),
@@ -364,10 +429,16 @@ const evaluateIndeterminateRace: Evaluator = (facts) => {
 
 const evaluateDispatchCrash: Evaluator = (facts) => {
   if (!has(facts, "claim_durable")) {
-    return "axis_invariant_violation";
+    return "provider_dispatch_not_authorized";
+  }
+  if (has(facts, "new_claim_requested")) {
+    return "new_claim_forbidden";
   }
   if (has(facts, "provider_bytes_absent")) {
-    return "provider_dispatch_not_authorized";
+    return "durable_recovery_required";
+  }
+  if (has(facts, "provider_acceptance_unproven")) {
+    return "acceptance_unknown_reconcile_required";
   }
   return has(facts, "provider_accepted") ? "accepted" : "axis_invariant_violation";
 };
@@ -377,7 +448,13 @@ const evaluateCrossAxisTransition: Evaluator = (facts) => {
   if (transitions.length !== 1 || !ALLOWED_TRANSITIONS.has(transitions[0] as Fact)) {
     return "transition_forbidden";
   }
-  if (transitions[0] !== "transition_terminal_open_final_with_closure") {
+  const transition = transitions[0]!;
+  if (transition === "transition_manifest_open_sealed_with_fences") {
+    return has(facts, "admission_fenced") && has(facts, "output_fenced")
+      ? "accepted"
+      : "transition_forbidden";
+  }
+  if (!["transition_terminal_open_final_with_closure", "transition_terminal_open_final_not_started_with_closure"].includes(transition)) {
     return "accepted";
   }
   const closureFacts: readonly Fact[] = [
@@ -441,29 +518,71 @@ const GENERATED_AXES = {
   containment: ["not_requested", "pending", "contained", "uncertain", "qualified_not_required"],
   reconciliation: ["clear", "required"],
   manifest: ["open", "sealed"],
-  terminal: ["open", "final"],
+  satisfaction: ["incomplete", "complete"],
+  effectResolution: ["none", "unresolved", "resolved", "indeterminate"],
+  terminal: ["open", "succeeded", "failed", "cancelled", "outcome_indeterminate"],
 } as const;
 
-type GeneratedState = {
+export type GeneratedState = {
   [Axis in keyof typeof GENERATED_AXES]: (typeof GENERATED_AXES)[Axis][number];
 };
 
-const generatedStateIsValid = (state: GeneratedState): boolean => {
-  if (state.execution === "active" && ["unclaimed", "known_not_accepted"].includes(state.dispatch)) {
+export const generatedStateIsValid = (state: GeneratedState): boolean => {
+  const executionMatchesClaim =
+    (state.dispatch === "unclaimed" && state.execution === "not_started") ||
+    (["claimed", "acceptance_unknown"].includes(state.dispatch) && state.execution === "active") ||
+    (state.dispatch === "known_not_accepted" && state.execution === "not_started") ||
+    (state.dispatch === "provider_accepted" && ["active", "terminated"].includes(state.execution));
+  if (!executionMatchesClaim) {
     return false;
   }
-  if (state.dispatch === "known_not_accepted" && state.execution !== "not_started") {
+  if (state.manifest === "sealed" && (state.admission !== "fenced" || state.output !== "fenced")) {
+    return false;
+  }
+  if (state.satisfaction === "complete" && state.manifest !== "sealed") {
     return false;
   }
   if (state.terminal === "open") {
     return true;
   }
-  return state.admission === "fenced" &&
+  const effectClosed = state.terminal === "outcome_indeterminate"
+    ? ["none", "indeterminate"].includes(state.effectResolution)
+    : ["none", "resolved"].includes(state.effectResolution);
+  return effectClosed &&
+    state.admission === "fenced" &&
     state.output === "fenced" &&
     state.execution !== "active" &&
     !["pending", "uncertain"].includes(state.containment) &&
     state.reconciliation === "clear" &&
-    state.manifest === "sealed";
+    state.manifest === "sealed" &&
+    state.satisfaction === "complete";
+};
+
+const generatedAxisProductSize = (): number =>
+  Object.values(GENERATED_AXES).reduce((product, values) => product * values.length, 1);
+
+const generatedStateAt = (index: number): GeneratedState => {
+  let quotient = index;
+  const take = <Axis extends keyof typeof GENERATED_AXES>(
+    axis: Axis,
+  ): (typeof GENERATED_AXES)[Axis][number] => {
+    const values = GENERATED_AXES[axis];
+    const value = values[quotient % values.length];
+    quotient = Math.floor(quotient / values.length);
+    return value as (typeof GENERATED_AXES)[Axis][number];
+  };
+  return {
+    dispatch: take("dispatch"),
+    admission: take("admission"),
+    output: take("output"),
+    execution: take("execution"),
+    containment: take("containment"),
+    reconciliation: take("reconciliation"),
+    manifest: take("manifest"),
+    satisfaction: take("satisfaction"),
+    effectResolution: take("effectResolution"),
+    terminal: take("terminal"),
+  };
 };
 
 export const evaluateGeneratedAxisProducts = (): {
@@ -473,18 +592,9 @@ export const evaluateGeneratedAxisProducts = (): {
 } => {
   let valid = 0;
   let invalid = 0;
-  const total = 2400;
+  const total = generatedAxisProductSize();
   for (let index = 0; index < total; index += 1) {
-    const state: GeneratedState = {
-      dispatch: GENERATED_AXES.dispatch[index % 5]!,
-      admission: GENERATED_AXES.admission[Math.floor(index / 5) % 2]!,
-      output: GENERATED_AXES.output[Math.floor(index / 10) % 2]!,
-      execution: GENERATED_AXES.execution[Math.floor(index / 20) % 3]!,
-      containment: GENERATED_AXES.containment[Math.floor(index / 60) % 5]!,
-      reconciliation: GENERATED_AXES.reconciliation[Math.floor(index / 300) % 2]!,
-      manifest: GENERATED_AXES.manifest[Math.floor(index / 600) % 2]!,
-      terminal: GENERATED_AXES.terminal[Math.floor(index / 1200) % 2]!,
-    };
+    const state = generatedStateAt(index);
     if (generatedStateIsValid(state)) {
       valid += 1;
     } else {
@@ -497,8 +607,8 @@ export const evaluateGeneratedAxisProducts = (): {
 export const validateRuntimeOperationOracleValue = (value: unknown): RuntimeOperationOracleValidation => {
   const oracle = parseRuntimeOperationOracle(value);
   const generated = evaluateGeneratedAxisProducts();
-  if (generated.total !== 2400 || generated.valid === 0 || generated.invalid === 0) {
-    fail("model generation must exhaust the complete eight-axis product");
+  if (generated.total !== generatedAxisProductSize() || generated.valid === 0 || generated.invalid === 0) {
+    fail("model generation must exhaust the complete axis product");
   }
   const examples = oracle.cases.flatMap(({ examples: items }) => items);
   for (const example of examples) {

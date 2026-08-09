@@ -5,6 +5,7 @@ import test from "node:test";
 
 import {
   evaluateGeneratedAxisProducts,
+  generatedStateIsValid,
   ORACLE_CHECKS,
   ORACLE_FACTS,
   ORACLE_RESULT_CODES,
@@ -35,9 +36,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 27,
-    exampleCount: 85,
-    acceptedCount: 47,
-    rejectedCount: 38,
+    exampleCount: 98,
+    acceptedCount: 53,
+    rejectedCount: 45,
   });
 });
 
@@ -49,12 +50,53 @@ test("JSON schema closed enums stay aligned with the executable validator", asyn
   assert.deepEqual(definitions.resultCode?.enum, ORACLE_RESULT_CODES);
 });
 
-test("model oracle exhausts the deterministic eight-axis state product", () => {
+test("model oracle exhausts the deterministic ten-axis state product", () => {
   assert.deepEqual(evaluateGeneratedAxisProducts(), {
-    total: 2400,
-    valid: 987,
-    invalid: 1413,
+    total: 48000,
+    valid: 1512,
+    invalid: 46488,
   });
+});
+
+test("generated model enforces coupled and terminal invariants", () => {
+  const openState = {
+    dispatch: "unclaimed",
+    admission: "open",
+    output: "open",
+    execution: "not_started",
+    containment: "not_requested",
+    reconciliation: "clear",
+    manifest: "open",
+    satisfaction: "incomplete",
+    effectResolution: "none",
+    terminal: "open",
+  } as const;
+  assert.equal(generatedStateIsValid(openState), true);
+  assert.equal(generatedStateIsValid({ ...openState, dispatch: "claimed" }), false);
+  assert.equal(generatedStateIsValid({ ...openState, manifest: "sealed" }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    admission: "fenced",
+    manifest: "sealed",
+  }), false);
+  assert.equal(generatedStateIsValid({ ...openState, satisfaction: "complete" }), false);
+
+  const finalState = {
+    ...openState,
+    admission: "fenced",
+    output: "fenced",
+    manifest: "sealed",
+    satisfaction: "complete",
+    terminal: "succeeded",
+  } as const;
+  assert.equal(generatedStateIsValid(finalState), true);
+  assert.equal(generatedStateIsValid({ ...finalState, effectResolution: "unresolved" }), false);
+  assert.equal(generatedStateIsValid({ ...finalState, execution: "active" }), false);
+  assert.equal(generatedStateIsValid({
+    ...finalState,
+    effectResolution: "indeterminate",
+    terminal: "outcome_indeterminate",
+  }), true);
 });
 
 test("oracle fails closed when a required case is missing", async () => {
@@ -109,6 +151,31 @@ test("oracle rejects open fields and duplicate facts", async () => {
   delete firstExample.policyBag;
   firstExample.facts = ["append_committed_first", "append_committed_first"];
   assert.throws(() => parseRuntimeOperationOracle(fixture), /contains duplicates/);
+});
+
+test("oracle rejects facts outside the closed semantics of a check", async () => {
+  const fixture = await readFixture();
+  const firstCase = casesOf(fixture)[0];
+  assert.ok(firstCase);
+  const firstExample = examplesOf(firstCase)[0];
+  assert.ok(firstExample);
+  firstExample.facts = ["append_committed_first", "same_payload"];
+  assert.throws(
+    () => parseRuntimeOperationOracle(fixture),
+    /not allowed for output_terminal_order/,
+  );
+});
+
+test("exact inventory rejects a truncated cross-axis matrix", async () => {
+  const fixture = await readFixture();
+  const transitionCase = casesOf(fixture).find(({ requirement }) => requirement === 27);
+  assert.ok(transitionCase);
+  const transitionExamples = examplesOf(transitionCase);
+  transitionCase.examples = [transitionExamples[0], transitionExamples[7]];
+  assert.throws(
+    () => parseRuntimeOperationOracle(fixture),
+    /does not match the exact scenario\/example inventory/,
+  );
 });
 
 test("every case carries both accepted and rejected evidence", async () => {
