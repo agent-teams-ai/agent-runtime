@@ -18,9 +18,9 @@ Read documents in this order:
    observations to the smallest promoted architecture rules.
    Immediately after it, read
    `architecture/qualification-registry.json` - the fail-closed exact target
-   registry for provider, binary closure, platform, credential route,
-   transport, failure domain, evidence hashes, limitations, and readiness
-   links. Its schema is
+   registry for complete provider, provider-adapter, binary-closure, platform,
+   credential-route, storage-topology, transport-topology, and failure-domain
+   tuples, plus evidence hashes, limitations, and readiness links. Its schema is
    `architecture/qualification-registry.schema.json`.
 3. `architecture/readiness.md` - current qualification register and the single
    owner of open implementation, production, and deployment gates.
@@ -143,9 +143,13 @@ section is historical as of that campaign; `architecture/readiness.md` is the
 current gate register.
 
 Qualification lookup is fail closed. A target must match every dimension in
-`architecture/qualification-registry.json` exactly. An omitted combination is
-`unqualified`; `provider-neutral` and `not-applicable` are explicit values, not
-wildcards. `pnpm architecture:registry` verifies all traceability rows, target
-shapes, readiness links, evidence files, and pinned SHA-256 identities. The
-same command accepts `--target-json '<six-dimension JSON object>'` for an exact
-lookup; an unmatched target returns `unqualified`.
+`architecture/qualification-registry.json` as one complete scalar tuple:
+provider, provider adapter, binary closure, platform, credential route, storage
+topology, transport topology, and failure domain. Arrays of independent values
+are forbidden because their Cartesian product would invent unobserved targets.
+An omitted tuple is `unqualified`; `provider-neutral` is an explicit value, not
+a wildcard. `pnpm architecture:registry` verifies all traceability rows, target
+shapes, duplicate/conflicting tuples, readiness links, evidence files, and
+pinned SHA-256 identities. The same command accepts `--target-json
+'<eight-dimension JSON object>'` for an exact whole-tuple lookup; an unmatched
+target returns `unqualified`.

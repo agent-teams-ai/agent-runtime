@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "$schema",
     "schemaVersion",
     "generatedAt",
     "matchingPolicy",
@@ -12,6 +13,9 @@
     "entries"
   ],
   "properties": {
+    "$schema": {
+      "const": "./qualification-registry.schema.json"
+    },
     "schemaVersion": {
       "const": 1
     },
@@ -34,10 +38,10 @@
           "const": "unqualified"
         },
         "dimensionRule": {
-          "const": "exact-match-all-dimensions"
+          "const": "exact-match-whole-target-tuple"
         },
         "entryValueRule": {
-          "const": "target-token-equals-one-observed-token-per-dimension"
+          "const": "each-target-is-one-complete-observed-scalar-tuple"
         },
         "wildcardsAllowed": {
           "const": false
@@ -65,14 +69,49 @@
     }
   },
   "$defs": {
-    "exactTokens": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "pattern": "^(?!\\*$|any$|all$).+"
+    "exactToken": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!(?:\\*|[Aa][Nn][Yy]|[Aa][Ll][Ll])$).+"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "providerAdapter",
+        "binaryClosure",
+        "platform",
+        "credentialRoute",
+        "storageTopology",
+        "transportTopology",
+        "failureDomain"
+      ],
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/exactToken"
+        },
+        "providerAdapter": {
+          "$ref": "#/$defs/exactToken"
+        },
+        "binaryClosure": {
+          "$ref": "#/$defs/exactToken"
+        },
+        "platform": {
+          "$ref": "#/$defs/exactToken"
+        },
+        "credentialRoute": {
+          "$ref": "#/$defs/exactToken"
+        },
+        "storageTopology": {
+          "$ref": "#/$defs/exactToken"
+        },
+        "transportTopology": {
+          "$ref": "#/$defs/exactToken"
+        },
+        "failureDomain": {
+          "$ref": "#/$defs/exactToken"
+        }
       }
     },
     "evidence": {
@@ -106,7 +145,7 @@
       "required": [
         "id",
         "qualification",
-        "dimensions",
+        "targets",
         "evidence",
         "readinessSections",
         "limitations"
@@ -124,36 +163,12 @@
             "deployment"
           ]
         },
-        "dimensions": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "provider",
-            "binaryClosure",
-            "platform",
-            "credentialRoute",
-            "transport",
-            "failureDomain"
-          ],
-          "properties": {
-            "provider": {
-              "$ref": "#/$defs/exactTokens"
-            },
-            "binaryClosure": {
-              "$ref": "#/$defs/exactTokens"
-            },
-            "platform": {
-              "$ref": "#/$defs/exactTokens"
-            },
-            "credentialRoute": {
-              "$ref": "#/$defs/exactTokens"
-            },
-            "transport": {
-              "$ref": "#/$defs/exactTokens"
-            },
-            "failureDomain": {
-              "$ref": "#/$defs/exactTokens"
-            }
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/target"
           }
         },
         "evidence": {
