@@ -9,6 +9,7 @@ import {
   BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
   binaryRetentionHasMixedCommandIntent,
 } from "../src/features/evidence/runtime-operation-binary-retention-oracle.ts";
+import { ENSURE_ROOT_ESTABLISHMENT_WINNER_FENCES } from "../src/features/evidence/runtime-operation-root-lifecycle-oracle.ts";
 import {
   evaluateOracleExample,
   evaluateGeneratedAxisProducts,
@@ -746,41 +747,39 @@ test("root establishment rejects competing collection and seal winners", async (
     ({ id }) => id === "ensure-establishes-open-obligation-set",
   );
   assert.ok(ensure);
-  for (const collectionWinner of [
+  assert.deepEqual(ENSURE_ROOT_ESTABLISHMENT_WINNER_FENCES.map(({ fact }) => fact), [
     "collection_or_tombstone_cas_won",
     "host_custody_collection_cas_won",
-  ] as const) {
+    "retention_obligation_seal_cas_won",
+    "root_abort_release_cas_won",
+  ]);
+  for (const winner of ENSURE_ROOT_ESTABLISHMENT_WINNER_FENCES) {
     for (const facts of [
-      [collectionWinner, ...ensure.facts],
-      [...ensure.facts, collectionWinner],
+      [winner.fact, ...ensure.facts],
+      [...ensure.facts, winner.fact],
     ]) {
       assert.deepEqual(evaluateOracleExample({ ...ensure, facts }), {
         decision: "reject",
-        code: "semantic_root_establishment_race",
+        code: winner.currentOutcome,
       });
     }
-  }
-  const sealRequests: readonly (readonly OracleExample["facts"][number][])[] =
-    [[], ["retention_obligation_seal_requested"]];
-  for (const sealRequest of sealRequests) {
-    const sealFacts: OracleExample["facts"][] = [
-      ["retention_obligation_seal_cas_won", ...sealRequest, ...ensure.facts],
-      [...ensure.facts, ...sealRequest, "retention_obligation_seal_cas_won"],
-    ];
-    for (const facts of sealFacts) {
-      assert.deepEqual(evaluateOracleExample({ ...ensure, facts }), {
+    assert.deepEqual(evaluateOracleExample({
+      ...ensure,
+      facts: [
+        ...ensure.facts.filter((fact) => fact !== "retention_obligation_set_open"),
+        winner.fact,
+      ],
+    }), {
         decision: "reject",
-        code: "retention_obligation_integrity_contradiction",
+        code: winner.staleOutcome,
       });
-    }
   }
-  assert.deepEqual(evaluateOracleExample({
-    ...ensure,
-    facts: [
-      ...ensure.facts.filter((fact) => fact !== "retention_obligation_set_open"),
-      "retention_obligation_seal_cas_won",
-    ],
-  }), { decision: "reject", code: "retention_obligation_set_required" });
+  for (const sealRequest of [[], ["retention_obligation_seal_requested"]] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...ensure,
+      facts: [...ensure.facts, ...sealRequest, "retention_obligation_seal_cas_won"],
+    }), { decision: "reject", code: "retention_obligation_integrity_contradiction" });
+  }
 });
 test("completed release and seal history rejects work without false quarantine", async () => {
   const fixture = await readFixture();

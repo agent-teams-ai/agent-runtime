@@ -166,19 +166,45 @@ const rootRequestLifecycleIsPresent = (facts: ReadonlySet<string>): boolean => [
   "same_revision_root_and_abort_cas_both_won",
 ].some((fact) => has(facts, fact));
 
+export const ENSURE_ROOT_ESTABLISHMENT_WINNER_FENCES = [
+  {
+    fact: "collection_or_tombstone_cas_won",
+    currentOutcome: "semantic_root_establishment_race",
+    staleOutcome: "semantic_root_establishment_race",
+  },
+  {
+    fact: "host_custody_collection_cas_won",
+    currentOutcome: "semantic_root_establishment_race",
+    staleOutcome: "semantic_root_establishment_race",
+  },
+  {
+    fact: "retention_obligation_seal_cas_won",
+    currentOutcome: "retention_obligation_integrity_contradiction",
+    staleOutcome: "retention_obligation_set_required",
+  },
+  {
+    fact: "root_abort_release_cas_won",
+    currentOutcome: "root_lifecycle_integrity_contradiction",
+    staleOutcome: "root_lifecycle_integrity_contradiction",
+  },
+] as const satisfies readonly {
+  fact: string;
+  currentOutcome: RootLifecycleResult;
+  staleOutcome: RootLifecycleResult;
+}[];
+
 const evaluateEnsureWinnerFence = (
   facts: ReadonlySet<string>,
 ): RootLifecycleResult | undefined => {
-  if (has(facts, "collection_or_tombstone_cas_won") ||
-      has(facts, "host_custody_collection_cas_won")) {
-    return "semantic_root_establishment_race";
-  }
-  if (!has(facts, "retention_obligation_seal_cas_won")) {
+  const winner = ENSURE_ROOT_ESTABLISHMENT_WINNER_FENCES.find(
+    ({ fact }) => has(facts, fact),
+  );
+  if (winner === undefined) {
     return undefined;
   }
   return has(facts, "retention_obligation_set_open")
-    ? "retention_obligation_integrity_contradiction"
-    : "retention_obligation_set_required";
+    ? winner.currentOutcome
+    : winner.staleOutcome;
 };
 
 export const evaluateRootRequestLifecycle = (
