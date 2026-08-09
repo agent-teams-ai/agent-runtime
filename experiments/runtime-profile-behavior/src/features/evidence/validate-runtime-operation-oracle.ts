@@ -396,6 +396,7 @@ const result = (code: ResultCode): OracleExample["expected"] => ({
     "binary_revision_gc_allowed",
     "retention_receipt_replayed",
     "physical_deletion_replayed",
+    "abandon_release_replayed",
   ].includes(code) ? "accept" : "reject",
   code,
 });

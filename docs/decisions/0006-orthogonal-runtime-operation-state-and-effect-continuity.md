@@ -412,10 +412,15 @@ transaction, foreign key, SQL join, or domain import.
 If root creation wins the lifecycle CAS, collection is blocked. If collection
 or tombstoning wins, root establishment and acceptance are stale and reject
 without work. A crash after root creation but before acceptance leaves a safe
-retained orphan, never a TTL-expiring root. Only an owner-local, durable
-`AbandonUnacceptedRootReceipt` may release it; missing, stale, wrong-scope, or
-unknown abandonment remains retained. Session-assignment release is fenced by
-the Host Custody lifecycle revision and never erases a semantic root.
+retained orphan, never a TTL-expiring root. Operation Lifecycle, not Host
+Custody, owns whether acceptance remained uncommitted. It terminalizes the
+exact intent as `ABORTED`, bound to command ID, request digest, operation ID,
+and root identity, then publishes a typed `OperationAcceptanceAbortedReceipt`.
+Host Custody consumes only that exact receipt and releases the root in its own
+transaction. Missing, stale, wrong-scope, unknown, or TTL-only evidence retains
+the root. Exact abandon replay returns the durable Host Custody release receipt.
+Session-assignment release is fenced by the Host Custody lifecycle revision and
+never erases a semantic root.
 
 The root remains while any nonterminal operation, effect reconciliation,
 terminal projection, transcript projection, or other closure step still needs
@@ -429,11 +434,16 @@ manifest ID with another digest is a hard conflict. Missing, duplicate, stale,
 wrong-scope, or unknown evidence retains the root.
 
 Release is permitted only after write-once terminal and effect closure plus
-durable revision-independent receipts and projections. An unknown release or
-physical-deletion outcome remains retained until exact replay or reconciliation
-proves completion. Binary revision collection requires zero semantic roots,
-all ADR-0001 collection blockers clear, and a winning Host Custody collection
-CAS. Contradictory zero-root and retained-root evidence denies collection.
+durable revision-independent receipts and projections. An unknown release keeps
+the semantic root retained until exact replay or reconciliation proves
+completion. After release, binary revision collection requires zero semantic
+roots, all ADR-0001 collection blockers clear, and a winning Host Custody
+collection CAS. That transaction persists the scoped deletion intent, claim,
+and tombstone before physical deletion. A deletion crash preserves those
+records and requires reconciliation; it does not recreate a semantic root.
+Exact replay or query with the same claim returns the original deletion result.
+Missing, stale, wrong-scope, or unknown claim evidence denies deletion, as does
+contradictory zero-root and retained-root evidence.
 
 The retention root grants no dispatch, process, provider, output, effect, or
 other execution authority. A shared `EffectId` is covered by the independently
@@ -524,8 +534,9 @@ Acceptance of this ADR requires machine-readable fixtures for at least:
     deletion replay, zero-root garbage collection, separate execution
     authority, and shared-effect participation.
 
-The oracle uses deterministic synthetic models only. It does not run an agent,
-provider, terminal runtime, MCP, or user project.
+The oracle validates these closed semantic evidence categories and transitions,
+not a final wire-schema field layout. It uses deterministic synthetic models
+only. It does not run an agent, provider, terminal runtime, MCP, or user project.
 
 ## Consequences
 

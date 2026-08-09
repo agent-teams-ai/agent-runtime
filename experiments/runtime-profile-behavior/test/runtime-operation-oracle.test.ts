@@ -37,9 +37,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 134,
-    acceptedCount: 77,
-    rejectedCount: 57,
+    exampleCount: 151,
+    acceptedCount: 86,
+    rejectedCount: 65,
   });
 });
 
@@ -325,6 +325,13 @@ test("binary revision semantic retention fails closed before work and GC", async
     decision: "reject",
     code: "root_not_execution_authority",
   });
+  assert.deepEqual(evaluateOracleExample({
+    ...rootedWork,
+    facts: rootedWork.facts.filter((fact) => fact !== "operation_acceptance_committed"),
+  }), {
+    decision: "reject",
+    code: "operation_acceptance_required",
+  });
 
   const gcWithRoot = retentionCase.examples.find(
     ({ id }) => id === "gc-with-retained-semantic-root",
@@ -354,6 +361,58 @@ test("binary revision semantic retention fails closed before work and GC", async
   }), {
     decision: "reject",
     code: "semantic_root_required",
+  });
+
+  const releaseReplay = retentionCase.examples.find(
+    ({ id }) => id === "exact-release-replay-is-idempotent",
+  );
+  assert.ok(releaseReplay);
+  assert.equal(releaseReplay.facts.includes("binary_revision_root_established"), false);
+  assert.deepEqual(evaluateOracleExample(releaseReplay), releaseReplay.expected);
+
+  const lostReceipt = retentionCase.examples.find(
+    ({ id }) => id === "lost-root-receipt-ack-replays",
+  );
+  assert.ok(lostReceipt);
+  assert.deepEqual(evaluateOracleExample({
+    ...lostReceipt,
+    facts: lostReceipt.facts.filter((fact) => fact !== "root_receipt_exact_replay_or_query"),
+  }), {
+    decision: "reject",
+    code: "retention_receipt_reconciliation_required",
+  });
+
+  const deletionReplay = retentionCase.examples.find(
+    ({ id }) => id === "physical-deletion-exact-replay",
+  );
+  assert.ok(deletionReplay);
+  for (const fact of ["durable_gc_deletion_intent_claim", "zero_semantic_roots"] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...deletionReplay,
+      facts: deletionReplay.facts.filter((candidate) => candidate !== fact),
+    }), {
+      decision: "reject",
+      code: "binary_revision_gc_blocked",
+    });
+  }
+  assert.deepEqual(evaluateOracleExample({
+    ...deletionReplay,
+    facts: [...deletionReplay.facts, "binary_revision_root_established"],
+  }), {
+    decision: "reject",
+    code: "binary_revision_gc_blocked",
+  });
+
+  const sharedEffectWork = retentionCase.examples.find(
+    ({ id }) => id === "shared-effect-work-complete-roots",
+  );
+  assert.ok(sharedEffectWork);
+  assert.deepEqual(evaluateOracleExample({
+    ...sharedEffectWork,
+    facts: sharedEffectWork.facts.filter((fact) => fact !== "execution_authority_present"),
+  }), {
+    decision: "reject",
+    code: "root_not_execution_authority",
   });
 });
 

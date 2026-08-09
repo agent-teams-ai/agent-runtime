@@ -18,20 +18,34 @@ export const BINARY_RETENTION_FACTS = [
   "attempting_operation_roots_complete",
   "attempting_operation_root_missing",
   "operation_acceptance_intent_persisted",
+  "operation_acceptance_committed",
   "retention_receipt_exact_current",
+  "root_receipt_exact_replay_or_query",
   "execution_authority_present",
   "root_cas_won",
   "collection_or_tombstone_cas_won",
   "existing_gc_blockers_clear",
   "host_custody_collection_cas_won",
   "contradictory_zero_and_retained_roots",
+  "durable_gc_deletion_intent_claim",
+  "deletion_claim_wrong_scope",
+  "owner_release_receipt_durable",
   "orphan_root_after_crash",
   "root_receipt_ack_lost",
   "acceptance_outcome_unknown",
-  "abandon_unaccepted_receipt_durable",
-  "abandon_receipt_stale",
+  "operation_acceptance_aborted_receipt_exact",
+  "operation_acceptance_aborted_receipt_stale",
+  "operation_acceptance_aborted_receipt_wrong_scope",
+  "operation_acceptance_aborted_receipt_unknown",
+  "abandon_release_exact_replay",
+  "owner_abandon_release_receipt_durable",
   "ttl_elapsed",
-  "release_manifest_exact_bound",
+  "release_manifest_identity_binding_complete",
+  "release_manifest_retention_obligation_digest",
+  "release_manifest_terminal_satisfaction_digests",
+  "release_manifest_effect_closure_receipts",
+  "release_manifest_projection_independence_receipts",
+  "release_manifest_typed_non_applicability_complete",
   "release_manifest_incomplete",
   "release_manifest_stale",
   "release_manifest_wrong_scope",
@@ -54,6 +68,10 @@ export const BINARY_RETENTION_RESULT_CODES = [
   "retention_receipt_replayed",
   "release_manifest_conflict",
   "physical_deletion_replayed",
+  "deletion_reconciliation_required",
+  "operation_acceptance_required",
+  "retention_receipt_reconciliation_required",
+  "abandon_release_replayed",
 ] as const;
 
 export const BINARY_RETENTION_ALLOWED_FACTS = [
@@ -93,6 +111,9 @@ const evaluateAuthorizedWork = (
       ? "semantic_root_establishment_race"
       : "semantic_root_required";
   }
+  if (!has(facts, "operation_acceptance_committed")) {
+    return "operation_acceptance_required";
+  }
   return has(facts, "execution_authority_present")
     ? "accepted"
     : "root_not_execution_authority";
@@ -105,7 +126,9 @@ const mustRemain = (facts: ReadonlySet<string>): boolean => [
   "terminal_projection_requires_revision",
   "transcript_projection_requires_revision",
   "acceptance_outcome_unknown",
-  "abandon_receipt_stale",
+  "operation_acceptance_aborted_receipt_stale",
+  "operation_acceptance_aborted_receipt_wrong_scope",
+  "operation_acceptance_aborted_receipt_unknown",
   "ttl_elapsed",
   "release_manifest_incomplete",
   "release_manifest_stale",
@@ -115,21 +138,23 @@ const mustRemain = (facts: ReadonlySet<string>): boolean => [
 ].some((fact) => has(facts, fact));
 
 const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
-  if (!has(facts, "binary_revision_root_established")) {
-    return "semantic_root_required";
-  }
   if (has(facts, "release_manifest_digest_conflict")) {
     return "release_manifest_conflict";
   }
-  if (has(facts, "physical_deletion_exact_replay")) {
-    return has(facts, "release_manifest_exact_bound")
-      ? "physical_deletion_replayed"
-      : "semantic_root_retained";
+  if (has(facts, "release_exact_replay") && has(facts, "owner_release_receipt_durable")) {
+    return "semantic_root_released";
   }
-  if (has(facts, "physical_deletion_crash") || mustRemain(facts)) {
+  if (has(facts, "abandon_release_exact_replay") &&
+      has(facts, "owner_abandon_release_receipt_durable")) {
+    return "abandon_release_replayed";
+  }
+  if (!has(facts, "binary_revision_root_established")) {
+    return "semantic_root_required";
+  }
+  if (mustRemain(facts)) {
     return "semantic_root_retained";
   }
-  if (has(facts, "abandon_unaccepted_receipt_durable")) {
+  if (has(facts, "operation_acceptance_aborted_receipt_exact")) {
     return has(facts, "orphan_root_after_crash")
       ? "semantic_root_released"
       : "semantic_root_retained";
@@ -137,31 +162,69 @@ const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
   const safelyClosed = has(facts, "terminal_write_once") &&
     has(facts, "effect_closure_write_once") &&
     has(facts, "durable_revision_independent_projection") &&
-    has(facts, "release_manifest_exact_bound");
+    has(facts, "release_manifest_identity_binding_complete") &&
+    has(facts, "release_manifest_retention_obligation_digest") &&
+    has(facts, "release_manifest_terminal_satisfaction_digests") &&
+    has(facts, "release_manifest_effect_closure_receipts") &&
+    has(facts, "release_manifest_projection_independence_receipts") &&
+    has(facts, "release_manifest_typed_non_applicability_complete");
   return safelyClosed ? "semantic_root_released" : "semantic_root_retained";
+};
+
+const evaluatePhysicalDeletion = (
+  facts: ReadonlySet<string>,
+): BinaryRetentionResult => {
+  const contradictoryRoot = has(facts, "binary_revision_root_established") ||
+    has(facts, "semantic_root_retained");
+  const claimed = has(facts, "zero_semantic_roots") &&
+    has(facts, "existing_gc_blockers_clear") &&
+    has(facts, "host_custody_collection_cas_won") &&
+    has(facts, "durable_gc_deletion_intent_claim");
+  if (contradictoryRoot || has(facts, "deletion_claim_wrong_scope") || !claimed) {
+    return "binary_revision_gc_blocked";
+  }
+  if (has(facts, "physical_deletion_exact_replay")) {
+    return "physical_deletion_replayed";
+  }
+  return has(facts, "physical_deletion_started") && has(facts, "physical_deletion_crash")
+    ? "deletion_reconciliation_required"
+    : "binary_revision_gc_blocked";
 };
 
 export const evaluateBinaryRevisionRetention = (
   facts: ReadonlySet<string>,
 ): BinaryRetentionResult => {
+  if (has(facts, "physical_deletion_crash") || has(facts, "physical_deletion_exact_replay")) {
+    return evaluatePhysicalDeletion(facts);
+  }
   if (has(facts, "gc_requested")) {
     return evaluateGc(facts);
   }
   if (has(facts, "collection_or_tombstone_cas_won")) {
     return "semantic_root_establishment_race";
   }
+  if (has(facts, "provider_or_effect_work_requested") || has(facts, "dispatch_requested")) {
+    const authorization = evaluateAuthorizedWork(facts);
+    if (authorization !== "accepted") {
+      return authorization;
+    }
+    if (has(facts, "shared_effect") &&
+        (has(facts, "attempting_operation_root_missing") ||
+          !has(facts, "attempting_operation_roots_complete"))) {
+      return "semantic_root_required";
+    }
+    return "accepted";
+  }
   if (has(facts, "shared_effect")) {
     return has(facts, "attempting_operation_roots_complete")
       ? "accepted"
       : "semantic_root_required";
   }
-  if (has(facts, "provider_or_effect_work_requested") || has(facts, "dispatch_requested")) {
-    return evaluateAuthorizedWork(facts);
-  }
   if (has(facts, "root_receipt_ack_lost")) {
-    return has(facts, "binary_revision_root_established")
+    return has(facts, "binary_revision_root_established") &&
+      has(facts, "root_receipt_exact_replay_or_query")
       ? "retention_receipt_replayed"
-      : "semantic_root_required";
+      : "retention_receipt_reconciliation_required";
   }
   return evaluateRelease(facts);
 };
