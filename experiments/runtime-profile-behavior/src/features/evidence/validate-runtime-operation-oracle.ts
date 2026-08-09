@@ -467,6 +467,17 @@ const evaluateDispatchCrash: Evaluator = (facts) => {
   return has(facts, "provider_accepted") ? "accepted" : "axis_invariant_violation";
 };
 
+const EXECUTION_STATE_FACTS: readonly Fact[] = [
+  "execution_not_started",
+  "execution_active",
+  "execution_terminated",
+];
+
+const hasExactExecutionState = (facts: ReadonlySet<Fact>, expected: Fact): boolean => {
+  const observed = EXECUTION_STATE_FACTS.filter((fact) => has(facts, fact));
+  return observed.length === 1 && observed[0] === expected;
+};
+
 const evaluateCrossAxisTransition: Evaluator = (facts) => {
   const transitions = [...facts].filter((fact) => TRANSITION_FACTS.has(fact));
   if (transitions.length !== 1 || !ALLOWED_TRANSITIONS.has(transitions[0] as Fact)) {
@@ -479,14 +490,8 @@ const evaluateCrossAxisTransition: Evaluator = (facts) => {
       : "transition_forbidden";
   }
   if (transition === "transition_containment_not_requested_qualified_not_required") {
-    const executionStates: readonly Fact[] = [
-      "execution_not_started",
-      "execution_terminated",
-      "execution_active",
-    ];
-    const observedExecution = executionStates.filter((fact) => has(facts, fact));
-    const executionNotActive = observedExecution.length === 1 &&
-      observedExecution[0] !== "execution_active";
+    const executionNotActive = hasExactExecutionState(facts, "execution_not_started") ||
+      hasExactExecutionState(facts, "execution_terminated");
     return has(facts, "admission_fenced") && has(facts, "output_fenced") &&
         executionNotActive && has(facts, "containment_capability_evidence_immutable") &&
         has(facts, "containment_qualification_receipt_exact")
@@ -504,8 +509,11 @@ const evaluateCrossAxisTransition: Evaluator = (facts) => {
     "manifest_sealed",
     "all_manifest_entries_satisfied",
   ];
-  const executionClosed = has(facts, "execution_not_started") || has(facts, "execution_terminated");
-  return closureFacts.every((fact) => has(facts, fact)) && executionClosed
+  const expectedExecutionState = transition === "transition_terminal_open_final_with_closure"
+    ? "execution_terminated"
+    : "execution_not_started";
+  return closureFacts.every((fact) => has(facts, fact)) &&
+      hasExactExecutionState(facts, expectedExecutionState)
     ? "accepted"
     : "transition_forbidden";
 };

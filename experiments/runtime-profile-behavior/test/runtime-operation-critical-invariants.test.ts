@@ -77,3 +77,30 @@ test("qualified-not-required requires proof, both fences, and inactive execution
     code: "accepted",
   });
 });
+
+test("terminal transitions require their exact single execution state", async () => {
+  const examples = await readExamples();
+  const executions = ["execution_not_started", "execution_active", "execution_terminated"] as const;
+  const terminalTransitions = [
+    ["allow-terminal-with-complete-closure", "execution_terminated"],
+    ["allow-terminal-not-started-with-complete-closure", "execution_not_started"],
+  ] as const;
+  for (const [id, expectedExecution] of terminalTransitions) {
+    const seed = examples.find((example) => example.id === id);
+    assert.ok(seed, id);
+    const closureFacts: OracleExample["facts"] = seed.facts.filter((fact) => !executions.includes(
+      fact as typeof executions[number],
+    ));
+    for (let mask = 0; mask < 2 ** executions.length; mask += 1) {
+      const observed = executions.filter((_, index) => (mask & (1 << index)) !== 0);
+      const shouldAccept = observed.length === 1 && observed[0] === expectedExecution;
+      assert.deepEqual(evaluateOracleExample({
+        ...seed,
+        facts: [...closureFacts, ...observed],
+      }), {
+        decision: shouldAccept ? "accept" : "reject",
+        code: shouldAccept ? "accepted" : "transition_forbidden",
+      }, `${id}: ${observed.join("+") || "missing"}`);
+    }
+  }
+});
