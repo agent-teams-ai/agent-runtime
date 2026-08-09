@@ -9,6 +9,12 @@ target matches and evidence hashes are in
 `architecture/qualification-registry.json`. This document owns the mutable list
 of qualified scope and remaining gates.
 
+Registry matching is over an indivisible observed eight-field tuple. In
+particular, storage and transport topology tokens name the complete observed
+topology rather than reusable hops. Evidence for two binaries, protocols, or
+adapters creates explicit tuples only; it never authorizes their Cartesian
+product.
+
 ## Status vocabulary
 
 - `foundation accepted`: ownership and contracts may be implemented.

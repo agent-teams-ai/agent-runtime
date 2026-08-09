@@ -9,9 +9,9 @@ core. The canonical decision is:
 
 The cross-campaign exact target index is
 `docs/architecture/qualification-registry.json`. It defaults every omitted
-provider/binary/platform/credential/transport/failure-domain combination to
-`unqualified`; `pnpm architecture:registry` verifies its coverage and evidence
-hashes.
+provider/provider-adapter/binary-closure/platform/credential-route/storage-
+topology/transport-topology/failure-domain whole tuple to `unqualified`;
+`pnpm architecture:registry` verifies its coverage and evidence hashes.
 
 Current runtime-profile and execution evidence:
 
