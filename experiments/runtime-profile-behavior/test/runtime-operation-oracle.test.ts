@@ -11,6 +11,7 @@ import {
   ORACLE_FACTS,
   ORACLE_RESULT_CODES,
   parseRuntimeOperationOracle,
+  type OracleExample,
   validateRuntimeOperationOracle,
   validateRuntimeOperationOracleValue,
 } from "../src/features/evidence/validate-runtime-operation-oracle.ts";
@@ -37,9 +38,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 177,
-    acceptedCount: 97,
-    rejectedCount: 80,
+    exampleCount: 195,
+    acceptedCount: 103,
+    rejectedCount: 92,
   });
 });
 
@@ -392,7 +393,7 @@ test("binary revision semantic retention fails closed before work and GC", async
       facts: deletionReplay.facts.filter((candidate) => candidate !== fact),
     }), {
       decision: "reject",
-      code: "binary_revision_gc_blocked",
+      code: "deletion_integrity_contradiction",
     });
   }
   assert.deepEqual(evaluateOracleExample({
@@ -400,7 +401,7 @@ test("binary revision semantic retention fails closed before work and GC", async
     facts: [...deletionReplay.facts, "binary_revision_root_established"],
   }), {
     decision: "reject",
-    code: "binary_revision_gc_blocked",
+    code: "deletion_integrity_contradiction",
   });
   for (const contradictoryFact of [
     "root_cas_won",
@@ -411,7 +412,7 @@ test("binary revision semantic retention fails closed before work and GC", async
       facts: [...deletionReplay.facts, contradictoryFact],
     }), {
       decision: "reject",
-      code: "binary_revision_gc_blocked",
+      code: "deletion_integrity_contradiction",
     });
   }
   assert.deepEqual(evaluateOracleExample({
@@ -453,6 +454,27 @@ test("binary revision semantic retention fails closed before work and GC", async
   );
   assert.ok(abortAfterTtl);
   assert.deepEqual(evaluateOracleExample(abortAfterTtl), abortAfterTtl.expected);
+
+  for (const id of [
+    "normal-abort-releases-established-root",
+    "abort-first-persists-forbidden-tombstone",
+    "abort-first-forbids-delayed-ensure",
+    "abort-first-crash-replay-stays-forbidden",
+    "ensure-first-abort-releases-and-forbids",
+    "root-establish-and-abort-same-revision-both-win-forbidden",
+    "concurrent-accept-abort-accept-wins",
+    "concurrent-accept-abort-abort-wins",
+    "concurrent-accept-abort-both-cas-win-forbidden",
+    "reserve-and-seal-same-revision-both-win-forbidden",
+    "physical-deletion-completed-receipt-lost-reconciles",
+    "predelete-tombstone-is-not-final-deleted",
+  ] as const) {
+    const example: OracleExample | undefined = retentionCase.examples.find(
+      (candidate: OracleExample) => candidate.id === id,
+    );
+    assert.ok(example, id);
+    assert.deepEqual(evaluateOracleExample(example), example.expected, id);
+  }
 });
 
 test("exact inventory rejects weakened binary revision retention evidence", async () => {

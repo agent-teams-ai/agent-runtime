@@ -400,6 +400,7 @@ const result = (code: ResultCode): OracleExample["expected"] => ({
     "operation_acceptance_aborted",
     "operation_acceptance_replayed",
     "operation_abort_replayed",
+    "operation_acceptance_winner_committed_current_receipt",
     "physical_deletion_completed",
   ].includes(code) ? "accept" : "reject",
   code,

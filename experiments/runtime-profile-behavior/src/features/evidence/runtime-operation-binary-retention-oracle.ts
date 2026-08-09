@@ -1,3 +1,9 @@
+import {
+  evaluateAcceptanceTransition,
+  evaluateRootRequestLifecycle,
+  retentionObligationSetIsExact,
+} from "./runtime-operation-root-lifecycle-oracle.ts";
+
 export const BINARY_RETENTION_FACTS = [
   "binary_revision_root_established",
   "provider_or_effect_work_requested",
@@ -30,6 +36,17 @@ export const BINARY_RETENTION_FACTS = [
   "operation_abort_transaction_complete",
   "operation_acceptance_exact_replay",
   "operation_abort_exact_replay",
+  "root_request_id_stable",
+  "root_request_state_pending",
+  "root_request_state_established",
+  "root_request_state_establishment_forbidden",
+  "ensure_semantic_retention_requested",
+  "root_abort_release_requested",
+  "root_abort_release_cas_won",
+  "establishment_forbidden_tombstone_durable",
+  "root_request_exact_replay",
+  "same_revision_root_and_abort_cas_both_won",
+  "root_establishment_rejected_receipt_durable",
   "retention_receipt_exact_current",
   "root_receipt_exact_replay_or_query",
   "retention_obligation_set_pinned",
@@ -41,6 +58,13 @@ export const BINARY_RETENTION_FACTS = [
   "retention_obligation_set_weaker",
   "dynamic_obligation_arose",
   "dynamic_obligation_reserved_before_use",
+  "dynamic_obligation_revision_digest_advanced",
+  "retention_obligation_reserve_cas_won",
+  "retention_obligation_seal_cas_won",
+  "retention_obligation_final_digest_durable",
+  "retention_obligation_seal_receipt_durable",
+  "same_revision_reserve_and_seal_cas_both_won",
+  "retention_obligation_set_open",
   "retention_obligation_set_sealed",
   "execution_authority_present",
   "root_cas_won",
@@ -54,6 +78,11 @@ export const BINARY_RETENTION_FACTS = [
   "store_level_deletion_reference_fence_exact",
   "store_level_deletion_reference_fence_stale",
   "deletion_completed_receipt_durable",
+  "predelete_tombstone_durable",
+  "final_deleted_state_durable",
+  "shared_store_reference_active",
+  "physical_absence_observed",
+  "physical_deletion_preclaim_requested",
   "deletion_claim_wrong_scope",
   "owner_release_receipt_durable",
   "orphan_root_after_crash",
@@ -72,7 +101,7 @@ export const BINARY_RETENTION_FACTS = [
   "release_manifest_effect_closure_receipts",
   "release_manifest_projection_independence_receipts",
   "release_manifest_typed_non_applicability_complete",
-  "release_obligation_set_digest_exact",
+  "release_obligation_final_digest_exact",
   "release_obligation_set_digest_wrong",
   "release_obligation_set_weaker",
   "release_manifest_incomplete",
@@ -108,10 +137,16 @@ export const BINARY_RETENTION_RESULT_CODES = [
   "operation_acceptance_replayed",
   "operation_abort_replayed",
   "operation_acceptance_stale_current_receipt",
+  "operation_acceptance_winner_committed_current_receipt",
+  "operation_acceptance_integrity_contradiction",
   "retention_obligation_set_required",
   "retention_obligation_mismatch",
   "retention_obligation_reservation_required",
   "physical_deletion_completed",
+  "deletion_integrity_contradiction",
+  "root_establishment_forbidden_current_receipt",
+  "root_lifecycle_integrity_contradiction",
+  "retention_obligation_integrity_contradiction",
 ] as const;
 
 export const BINARY_RETENTION_ALLOWED_FACTS = [
@@ -125,103 +160,6 @@ type BinaryRetentionResult =
 
 const has = (facts: ReadonlySet<string>, fact: string): boolean => facts.has(fact);
 
-const retentionObligationSetIsExact = (facts: ReadonlySet<string>): boolean => [
-  "retention_obligation_set_pinned",
-  "retention_obligation_schema_revision_pinned",
-  "retention_obligation_policy_revision_pinned",
-  "retention_obligation_capability_revision_pinned",
-  "retention_obligation_set_digest_exact",
-].every((fact) => has(facts, fact));
-
-const acceptancePathRequested = (facts: ReadonlySet<string>): boolean => [
-  "operation_acceptance_accept_requested",
-  "operation_acceptance_accept_cas_won",
-  "operation_acceptance_exact_replay",
-].some((fact) => has(facts, fact));
-
-const abortPathRequested = (facts: ReadonlySet<string>): boolean => [
-  "operation_acceptance_abort_requested",
-  "operation_acceptance_abort_cas_won",
-  "operation_abort_exact_replay",
-].some((fact) => has(facts, fact));
-
-const acceptanceStateIsContradictory = (
-  facts: ReadonlySet<string>,
-  acceptPath: boolean,
-  abortPath: boolean,
-): boolean => {
-  const accepted = has(facts, "operation_acceptance_state_accepted");
-  const aborted = has(facts, "operation_acceptance_state_aborted");
-  return (accepted && abortPath) || (aborted && acceptPath) ||
-    (accepted && aborted) ||
-    (accepted && has(facts, "operation_acceptance_aborted_receipt_exact")) ||
-    (aborted && has(facts, "operation_acceptance_committed")) ||
-    (has(facts, "operation_acceptance_accept_cas_won") &&
-      has(facts, "operation_acceptance_abort_cas_won"));
-};
-
-const evaluateAcceptanceReplay = (
-  facts: ReadonlySet<string>,
-): BinaryRetentionResult | undefined => {
-  if (has(facts, "operation_acceptance_exact_replay")) {
-    return has(facts, "operation_acceptance_state_accepted") &&
-      has(facts, "operation_acceptance_transaction_complete")
-      ? "operation_acceptance_replayed"
-      : "operation_acceptance_stale_current_receipt";
-  }
-  if (!has(facts, "operation_abort_exact_replay")) {
-    return undefined;
-  }
-  return has(facts, "operation_acceptance_state_aborted") &&
-    has(facts, "operation_abort_transaction_complete") &&
-    has(facts, "operation_acceptance_aborted_receipt_exact")
-    ? "operation_abort_replayed"
-    : "operation_acceptance_stale_current_receipt";
-};
-
-const evaluatePendingAcceptance = (
-  facts: ReadonlySet<string>,
-  acceptPath: boolean,
-): BinaryRetentionResult => {
-  const pending = has(facts, "operation_acceptance_revision_pending");
-  if (acceptPath) {
-    return pending && has(facts, "operation_acceptance_accept_cas_won") &&
-      has(facts, "operation_acceptance_state_accepted") &&
-      has(facts, "operation_acceptance_committed") &&
-      has(facts, "operation_acceptance_transaction_complete")
-      ? "accepted"
-      : "operation_acceptance_stale_current_receipt";
-  }
-  return pending && has(facts, "operation_acceptance_abort_cas_won") &&
-    has(facts, "operation_acceptance_state_aborted") &&
-    has(facts, "operation_abort_transaction_complete") &&
-    has(facts, "operation_acceptance_aborted_receipt_exact")
-    ? "operation_acceptance_aborted"
-    : "operation_acceptance_stale_current_receipt";
-};
-
-const evaluateAcceptanceTransition = (
-  facts: ReadonlySet<string>,
-): BinaryRetentionResult | undefined => {
-  const acceptPath = acceptancePathRequested(facts);
-  const abortPath = abortPathRequested(facts);
-  const accepted = has(facts, "operation_acceptance_state_accepted");
-  const aborted = has(facts, "operation_acceptance_state_aborted");
-  const contradictoryEvidence =
-    (accepted && has(facts, "operation_acceptance_aborted_receipt_exact")) ||
-    (aborted && has(facts, "operation_acceptance_committed"));
-  if (!acceptPath && !abortPath && !contradictoryEvidence && !(accepted && aborted)) {
-    return undefined;
-  }
-  if (acceptanceStateIsContradictory(facts, acceptPath, abortPath)) {
-    return "operation_acceptance_stale_current_receipt";
-  }
-  const replay = evaluateAcceptanceReplay(facts);
-  if (replay !== undefined) {
-    return replay;
-  }
-  return evaluatePendingAcceptance(facts, acceptPath);
-};
 
 const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
   const contradictory = has(facts, "contradictory_zero_and_retained_roots") ||
@@ -262,7 +200,10 @@ const evaluateAuthorizedWork = (
     return "retention_obligation_set_required";
   }
   if (has(facts, "dynamic_obligation_arose") &&
-      !has(facts, "dynamic_obligation_reserved_before_use")) {
+      (!has(facts, "dynamic_obligation_reserved_before_use") ||
+        !has(facts, "dynamic_obligation_revision_digest_advanced") ||
+        !has(facts, "retention_obligation_reserve_cas_won") ||
+        !has(facts, "retention_obligation_set_open"))) {
     return "retention_obligation_reservation_required";
   }
   return has(facts, "execution_authority_present")
@@ -308,9 +249,7 @@ const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
     has(facts, "operation_acceptance_aborted_receipt_wrong_scope") ||
     has(facts, "operation_acceptance_aborted_receipt_unknown");
   if (has(facts, "operation_acceptance_aborted_receipt_exact") && !invalidAbort) {
-    return has(facts, "orphan_root_after_crash")
-      ? "semantic_root_released"
-      : "semantic_root_retained";
+    return "semantic_root_released";
   }
   if (mustRemain(facts)) {
     return "semantic_root_retained";
@@ -324,9 +263,11 @@ const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
     has(facts, "release_manifest_effect_closure_receipts") &&
     has(facts, "release_manifest_projection_independence_receipts") &&
     has(facts, "release_manifest_typed_non_applicability_complete") &&
-    has(facts, "release_obligation_set_digest_exact") &&
-    (!has(facts, "dynamic_obligation_arose") ||
-      has(facts, "retention_obligation_set_sealed"));
+    has(facts, "retention_obligation_set_sealed") &&
+    has(facts, "retention_obligation_seal_cas_won") &&
+    has(facts, "retention_obligation_final_digest_durable") &&
+    has(facts, "retention_obligation_seal_receipt_durable") &&
+    has(facts, "release_obligation_final_digest_exact");
   return safelyClosed ? "semantic_root_released" : "semantic_root_retained";
 };
 
@@ -341,19 +282,35 @@ const evaluatePhysicalDeletion = (
     has(facts, "host_custody_collection_cas_won") &&
     has(facts, "durable_gc_deletion_intent_claim") &&
     has(facts, "deletion_set_digest_exact") &&
-    has(facts, "store_level_deletion_reference_fence_exact");
+    has(facts, "store_level_deletion_reference_fence_exact") &&
+    has(facts, "predelete_tombstone_durable");
   const invalidClaim = has(facts, "deletion_claim_wrong_scope") ||
     has(facts, "deletion_set_digest_wrong") ||
-    has(facts, "store_level_deletion_reference_fence_stale");
+    has(facts, "store_level_deletion_reference_fence_stale") ||
+    has(facts, "shared_store_reference_active");
+  const sideEffectObserved = [
+    "physical_deletion_started",
+    "physical_deletion_crash",
+    "physical_deletion_partial",
+    "physical_deletion_unknown",
+    "physical_deletion_completed",
+    "physical_absence_observed",
+    "deletion_completed_receipt_durable",
+    "final_deleted_state_durable",
+  ].some((fact) => has(facts, fact));
   if (contradictoryRoot || invalidClaim || !claimed) {
-    return "binary_revision_gc_blocked";
+    return sideEffectObserved
+      ? "deletion_integrity_contradiction"
+      : "binary_revision_gc_blocked";
   }
   if (has(facts, "physical_deletion_exact_replay") &&
-      has(facts, "deletion_completed_receipt_durable")) {
+      has(facts, "deletion_completed_receipt_durable") &&
+      has(facts, "final_deleted_state_durable")) {
     return "physical_deletion_replayed";
   }
   if (has(facts, "physical_deletion_completed") &&
-      has(facts, "deletion_completed_receipt_durable")) {
+      has(facts, "deletion_completed_receipt_durable") &&
+      has(facts, "final_deleted_state_durable")) {
     return "physical_deletion_completed";
   }
   return [
@@ -361,6 +318,8 @@ const evaluatePhysicalDeletion = (
     "physical_deletion_crash",
     "physical_deletion_partial",
     "physical_deletion_unknown",
+    "physical_deletion_completed",
+    "physical_absence_observed",
     "physical_deletion_exact_replay",
   ].some((fact) => has(facts, fact))
     ? "deletion_reconciliation_required"
@@ -370,9 +329,18 @@ const evaluatePhysicalDeletion = (
 export const evaluateBinaryRevisionRetention = (
   facts: ReadonlySet<string>,
 ): BinaryRetentionResult => {
+  if (has(facts, "same_revision_reserve_and_seal_cas_both_won") ||
+      (has(facts, "retention_obligation_set_open") &&
+        has(facts, "retention_obligation_set_sealed"))) {
+    return "retention_obligation_integrity_contradiction";
+  }
   const acceptanceTransition = evaluateAcceptanceTransition(facts);
   if (acceptanceTransition !== undefined) {
     return acceptanceTransition;
+  }
+  const rootRequestLifecycle = evaluateRootRequestLifecycle(facts);
+  if (rootRequestLifecycle !== undefined) {
+    return rootRequestLifecycle;
   }
   if ([
     "physical_deletion_started",
@@ -381,6 +349,9 @@ export const evaluateBinaryRevisionRetention = (
     "physical_deletion_unknown",
     "physical_deletion_completed",
     "physical_deletion_exact_replay",
+    "physical_absence_observed",
+    "physical_deletion_preclaim_requested",
+    "final_deleted_state_durable",
   ].some((fact) => has(facts, fact))) {
     return evaluatePhysicalDeletion(facts);
   }
