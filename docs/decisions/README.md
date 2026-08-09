@@ -5,7 +5,7 @@ immutable evidence; a later change uses an explicit superseding decision.
 
 ## Proposed
 
-No proposed decisions.
+- [ADR-0006: Orthogonal runtime-operation state and effect continuity](0006-orthogonal-runtime-operation-state-and-effect-continuity.md)
 
 ## Accepted
 

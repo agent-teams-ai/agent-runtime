@@ -5,7 +5,17 @@ ADR-0003, and ADR-0004; detailed protocols remain open ADRs.
 
 ## Purpose
 
-Communication is an independent architectural concern. Agent Runtime must
+Communication is an independent architectural concern. An owner-local Agent
+Runtime slice may proceed without resolving unrelated communication surfaces.
+Before a slice publishes or consumes an external contract, or dispatches
+provider effects, the owning decision must define the applicable schema,
+compatibility, identity, recovery, and conformance behavior. ADR-0001 through
+ADR-0004 already control accepted runtime semantics. Exact Published Language
+representation remains deferred. Orchestrator inboxes and A2A product semantics
+remain consumer-owned and are not prerequisites for an unrelated owner-local
+slice.
+
+Agent Runtime must
 support local and hosted deployments, ACP-compatible and native agents, and
 future consumers without making any transport or external protocol part of its
 domain model.
@@ -110,7 +120,8 @@ orchestration event. An ACP session is not an Agent Runtime session.
 
 ## Communication architecture to design
 
-Before implementation, dedicated ADRs must define:
+Before implementing each corresponding external communication surface,
+dedicated ADRs must define:
 
 1. The provider-neutral input, observation, interaction, configuration, and
    capability contracts.
