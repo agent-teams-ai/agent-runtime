@@ -476,6 +476,10 @@ Provider work and dispatch require the exact pinned set to remain `OPEN`.
 closed fact-role catalog distinguishes command intent from historical CAS,
 receipt, outcome, and observation evidence; only explicit command intents are
 forbidden in the same evaluation as provider work or dispatch.
+Initial sealing and release use distinct `retention_obligation_seal_requested`
+and `semantic_root_release_requested` intents. A dedicated durable-integrity
+preflight quarantines impossible persisted combinations before authorization;
+it does not reinterpret complete historical lifecycle evidence as a command.
 
 The root remains while any nonterminal operation, effect reconciliation,
 terminal projection, transcript projection, or other closure step still needs

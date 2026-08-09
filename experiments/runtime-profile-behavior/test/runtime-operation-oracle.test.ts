@@ -688,6 +688,82 @@ test("closed mixed-command vocabulary cannot drift around work authorization", a
   }
 });
 
+test("durable integrity preflight dominates appended work intents", async () => {
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  assert.ok(retentionCase);
+  const durableIntegrityExamples = retentionCase.examples.filter(({ id, expected }) =>
+    expected.code === "deletion_integrity_contradiction" ||
+    expected.code === "retention_obligation_integrity_contradiction" ||
+    id === "root-establish-and-abort-same-revision-both-win-forbidden" ||
+    (expected.code === "operation_acceptance_integrity_contradiction" &&
+      id !== "concurrent-accept-winner-without-pending-rejects")
+  );
+  assert.equal(durableIntegrityExamples.length, 19);
+  for (const example of durableIntegrityExamples) {
+    for (const trigger of ["provider_or_effect_work_requested", "dispatch_requested"] as const) {
+      assert.deepEqual(evaluateOracleExample({
+        ...example,
+        facts: [...example.facts, trigger],
+      }), example.expected, `${example.id} + ${trigger}`);
+    }
+  }
+});
+
+test("winning lifecycle evidence fences otherwise authorized work", async () => {
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  const authorizedWork = retentionCase?.examples.find(
+    ({ id }) => id === "root-before-provider-or-effect-work",
+  );
+  assert.ok(authorizedWork);
+  const authorizedFacts = authorizedWork.facts.filter(
+    (fact) => fact !== "provider_or_effect_work_requested",
+  );
+  const fences = [
+    ["collection_or_tombstone_cas_won", "semantic_root_establishment_race"],
+    ["host_custody_collection_cas_won", "semantic_root_establishment_race"],
+    ["root_abort_release_cas_won", "root_lifecycle_integrity_contradiction"],
+    ["retention_obligation_seal_cas_won", "retention_obligation_integrity_contradiction"],
+  ] as const;
+  for (const [fence, code] of fences) {
+    for (const trigger of ["provider_or_effect_work_requested", "dispatch_requested"] as const) {
+      assert.deepEqual(evaluateOracleExample({
+        ...authorizedWork,
+        facts: [...authorizedFacts, fence, trigger],
+      }), { decision: "reject", code }, `${fence} + ${trigger}`);
+    }
+  }
+});
+
+test("complete historical root evidence remains non-command work evidence", async () => {
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  const authorizedWork = retentionCase?.examples.find(
+    ({ id }) => id === "root-before-provider-or-effect-work",
+  );
+  assert.ok(authorizedWork);
+  const authorizedFacts = authorizedWork.facts.filter(
+    (fact) => fact !== "provider_or_effect_work_requested",
+  );
+  const historicalRoot = [
+    "root_request_id_stable",
+    "root_request_state_established",
+    "root_cas_won",
+    "root_request_generation_current",
+    "root_establishment_receipt_durable",
+  ] as const;
+  for (const trigger of ["provider_or_effect_work_requested", "dispatch_requested"] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...authorizedWork,
+      facts: [...authorizedFacts, ...historicalRoot, trigger],
+    }), { decision: "accept", code: "accepted" });
+  }
+});
+
 test("exact inventory rejects weakened binary revision retention evidence", async () => {
   const fixture = await readFixture();
   const retentionCase = casesOf(fixture).find(({ requirement }) => requirement === 28);
