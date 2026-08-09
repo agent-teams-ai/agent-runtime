@@ -156,6 +156,27 @@ const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
     : "binary_revision_gc_blocked";
 };
 
+const evaluateAuthorizedWorkWinnerFence = (
+  facts: ReadonlySet<string>,
+  exactRoot: boolean,
+  currentAcceptedRoot: boolean,
+): BinaryRetentionResult | undefined => {
+  if (has(facts, "root_abort_release_cas_won")) {
+    return currentAcceptedRoot
+      ? "root_lifecycle_integrity_contradiction"
+      : "semantic_root_required";
+  }
+  if (has(facts, "retention_obligation_seal_cas_won")) {
+    return exactRoot && has(facts, "retention_obligation_set_open")
+      ? "retention_obligation_integrity_contradiction"
+      : "retention_obligation_set_required";
+  }
+  return has(facts, "collection_or_tombstone_cas_won") ||
+      has(facts, "host_custody_collection_cas_won")
+    ? "semantic_root_establishment_race"
+    : undefined;
+};
+
 const evaluateAuthorizedWork = (
   facts: ReadonlySet<string>,
 ): BinaryRetentionResult => {
@@ -164,19 +185,21 @@ const evaluateAuthorizedWork = (
         !has(facts, "attempting_operation_roots_complete"))) {
     return "semantic_root_required";
   }
-  if (has(facts, "root_abort_release_cas_won")) {
-    return "root_lifecycle_integrity_contradiction";
-  }
-  if (has(facts, "retention_obligation_seal_cas_won")) {
-    return "retention_obligation_integrity_contradiction";
-  }
-  if (has(facts, "collection_or_tombstone_cas_won") ||
-      has(facts, "host_custody_collection_cas_won")) {
-    return "semantic_root_establishment_race";
-  }
   const exactRoot = has(facts, "operation_acceptance_intent_persisted") &&
     has(facts, "binary_revision_root_established") &&
     has(facts, "retention_receipt_exact_current");
+  const currentAcceptedRoot = exactRoot &&
+    has(facts, "operation_acceptance_committed") &&
+    has(facts, "operation_acceptance_state_accepted") &&
+    has(facts, "operation_acceptance_transaction_complete");
+  const winnerFence = evaluateAuthorizedWorkWinnerFence(
+    facts,
+    exactRoot,
+    currentAcceptedRoot,
+  );
+  if (winnerFence !== undefined) {
+    return winnerFence;
+  }
   if (!exactRoot) {
     return has(facts, "session_assignment_release_requested") ||
       has(facts, "collection_or_tombstone_cas_won")

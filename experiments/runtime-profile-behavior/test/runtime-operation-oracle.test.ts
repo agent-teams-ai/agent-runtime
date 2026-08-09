@@ -738,6 +738,74 @@ test("winning lifecycle evidence fences otherwise authorized work", async () => 
   }
 });
 
+test("root establishment rejects competing collection and seal winners", async () => {
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  const ensure = retentionCase?.examples.find(
+    ({ id }) => id === "ensure-establishes-open-obligation-set",
+  );
+  assert.ok(ensure);
+  for (const collectionWinner of [
+    "collection_or_tombstone_cas_won",
+    "host_custody_collection_cas_won",
+  ] as const) {
+    for (const facts of [
+      [collectionWinner, ...ensure.facts],
+      [...ensure.facts, collectionWinner],
+    ]) {
+      assert.deepEqual(evaluateOracleExample({ ...ensure, facts }), {
+        decision: "reject",
+        code: "semantic_root_establishment_race",
+      });
+    }
+  }
+  const sealRequests: readonly (readonly OracleExample["facts"][number][])[] =
+    [[], ["retention_obligation_seal_requested"]];
+  for (const sealRequest of sealRequests) {
+    const sealFacts: OracleExample["facts"][] = [
+      ["retention_obligation_seal_cas_won", ...sealRequest, ...ensure.facts],
+      [...ensure.facts, ...sealRequest, "retention_obligation_seal_cas_won"],
+    ];
+    for (const facts of sealFacts) {
+      assert.deepEqual(evaluateOracleExample({ ...ensure, facts }), {
+        decision: "reject",
+        code: "retention_obligation_integrity_contradiction",
+      });
+    }
+  }
+  assert.deepEqual(evaluateOracleExample({
+    ...ensure,
+    facts: [
+      ...ensure.facts.filter((fact) => fact !== "retention_obligation_set_open"),
+      "retention_obligation_seal_cas_won",
+    ],
+  }), { decision: "reject", code: "retention_obligation_set_required" });
+});
+test("completed release and seal history rejects work without false quarantine", async () => {
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  assert.ok(retentionCase);
+  const histories = [["ensure-first-abort-releases-and-forbids", "semantic_root_required"],
+    ["closed-operation-releases-root", "retention_obligation_set_required"],
+    ["dynamic-obligation-sealed-before-release", "retention_obligation_set_required"],
+  ] as const;
+  for (const [id, code] of histories) {
+    const seed: OracleExample | undefined = retentionCase.examples.find(
+      (example: OracleExample) => example.id === id,
+    );
+    assert.ok(seed, id);
+    assert.equal(seed.expected.decision, "accept", id);
+    for (const trigger of ["provider_or_effect_work_requested", "dispatch_requested"] as const) {
+      assert.deepEqual(evaluateOracleExample({
+        ...seed,
+        facts: [...seed.facts, trigger],
+      }), { decision: "reject", code }, `${id} + ${trigger}`);
+    }
+  }
+});
+
 test("complete historical root evidence remains non-command work evidence", async () => {
   const fixture = await readFixture();
   const oracle = parseRuntimeOperationOracle(fixture);

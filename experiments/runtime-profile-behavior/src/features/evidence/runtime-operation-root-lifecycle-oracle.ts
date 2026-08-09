@@ -7,9 +7,11 @@ export type RootLifecycleResult =
   | "operation_acceptance_winner_committed_current_receipt"
   | "operation_abort_replayed"
   | "retention_obligation_set_required"
+  | "retention_obligation_integrity_contradiction"
   | "root_establishment_forbidden_current_receipt"
   | "root_establishment_receipt_replayed"
   | "root_lifecycle_integrity_contradiction"
+  | "semantic_root_establishment_race"
   | "semantic_root_released";
 
 const has = (facts: ReadonlySet<string>, fact: string): boolean => facts.has(fact);
@@ -164,6 +166,21 @@ const rootRequestLifecycleIsPresent = (facts: ReadonlySet<string>): boolean => [
   "same_revision_root_and_abort_cas_both_won",
 ].some((fact) => has(facts, fact));
 
+const evaluateEnsureWinnerFence = (
+  facts: ReadonlySet<string>,
+): RootLifecycleResult | undefined => {
+  if (has(facts, "collection_or_tombstone_cas_won") ||
+      has(facts, "host_custody_collection_cas_won")) {
+    return "semantic_root_establishment_race";
+  }
+  if (!has(facts, "retention_obligation_seal_cas_won")) {
+    return undefined;
+  }
+  return has(facts, "retention_obligation_set_open")
+    ? "retention_obligation_integrity_contradiction"
+    : "retention_obligation_set_required";
+};
+
 export const evaluateRootRequestLifecycle = (
   facts: ReadonlySet<string>,
 ): RootLifecycleResult | undefined => {
@@ -206,6 +223,10 @@ export const evaluateRootRequestLifecycle = (
   }
   if (!has(facts, "ensure_semantic_retention_requested")) {
     return "root_lifecycle_integrity_contradiction";
+  }
+  const winnerFence = evaluateEnsureWinnerFence(facts);
+  if (winnerFence !== undefined) {
+    return winnerFence;
   }
   const established = stable && has(facts, "root_cas_won") &&
     has(facts, "root_request_state_established") &&

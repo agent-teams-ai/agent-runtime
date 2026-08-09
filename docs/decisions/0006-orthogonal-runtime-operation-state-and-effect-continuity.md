@@ -480,6 +480,10 @@ Initial sealing and release use distinct `retention_obligation_seal_requested`
 and `semantic_root_release_requested` intents. A dedicated durable-integrity
 preflight quarantines impossible persisted combinations before authorization;
 it does not reinterpret complete historical lifecycle evidence as a command.
+CAS winner evidence fences a competing establishment or work attempt, but does
+not by itself prove corruption. Quarantine requires contradictory durable
+current state, such as an accepted retained root after its abort winner or an
+`OPEN` obligation set after its seal winner.
 
 The root remains while any nonterminal operation, effect reconciliation,
 terminal projection, transcript projection, or other closure step still needs
