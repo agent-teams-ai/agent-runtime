@@ -11,6 +11,7 @@ export type RootLifecycleResult =
   | "root_establishment_forbidden_current_receipt"
   | "root_establishment_receipt_replayed"
   | "root_lifecycle_integrity_contradiction"
+  | "retention_receipt_reconciliation_required"
   | "semantic_root_establishment_race"
   | "semantic_root_released";
 
@@ -254,8 +255,13 @@ export const evaluateRootRequestLifecycle = (
   if (winnerFence !== undefined) {
     return winnerFence;
   }
-  const established = stable && has(facts, "root_cas_won") &&
+  const rootAndObligationsEstablished = stable && has(facts, "root_cas_won") &&
     has(facts, "root_request_state_established") &&
     retentionObligationSetIsOpenAndExact(facts);
-  return established ? "accepted" : "retention_obligation_set_required";
+  if (!rootAndObligationsEstablished) {
+    return "retention_obligation_set_required";
+  }
+  return has(facts, "root_establishment_receipt_durable")
+    ? "accepted"
+    : "retention_receipt_reconciliation_required";
 };

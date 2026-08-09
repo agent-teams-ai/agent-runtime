@@ -146,8 +146,9 @@ qualified_not_required(capabilityRef, receiptRef)
 ```
 
 `qualified_not_required` requires immutable technical capability evidence and
-a receipt. Product policy cannot declare technically required containment
-unnecessary.
+an exact qualification receipt. The transition marker does not implicitly
+prove either artifact. Product policy cannot declare technically required
+containment unnecessary.
 
 Containment transitions are closed:
 
@@ -164,7 +165,9 @@ not_requested -> qualified_not_required
 requires late exact proof. `qualified_not_required` may be established only
 with the qualified proof above, fenced operation admission and output, and no
 active provider execution. `contained` and `qualified_not_required` are
-terminal containment states and never reopen.
+terminal containment states and never reopen. The transition observes exactly
+one execution state: `not_started` or `terminated`; missing, active, or
+contradictory execution-state evidence rejects.
 
 Effect resolution stores exact sets rather than a lossy status:
 
@@ -476,6 +479,10 @@ Provider work and dispatch require the exact pinned set to remain `OPEN`.
 closed fact-role catalog distinguishes command intent from historical CAS,
 receipt, outcome, and observation evidence; only explicit command intents are
 forbidden in the same evaluation as provider work or dispatch.
+An establishment transition is accepted only when its typed establishment
+receipt is durable in the same owner-local result. A committed root without
+that receipt remains incomplete and must be reconciled, never inferred as an
+accepted establishment.
 Initial sealing and release use distinct `retention_obligation_seal_requested`
 and `semantic_root_release_requested` intents. A dedicated durable-integrity
 preflight quarantines impossible persisted combinations before authorization;

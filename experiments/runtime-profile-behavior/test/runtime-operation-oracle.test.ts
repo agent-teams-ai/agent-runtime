@@ -45,9 +45,9 @@ const examplesOf = (oracleCase: Record<string, unknown>): Record<string, unknown
 test("ADR-0006 oracle covers every required case and expected outcome", async () => {
   assert.deepEqual(await validateRuntimeOperationOracle(repositoryRoot), {
     caseCount: 28,
-    exampleCount: 234,
-    acceptedCount: 106,
-    rejectedCount: 128,
+    exampleCount: 242,
+    acceptedCount: 107,
+    rejectedCount: 135,
   });
 });
 

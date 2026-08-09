@@ -117,6 +117,8 @@
         "transition_containment_uncertain_pending_retry",
         "transition_containment_uncertain_contained_late_proof",
         "transition_containment_not_requested_qualified_not_required",
+        "containment_capability_evidence_immutable",
+        "containment_qualification_receipt_exact",
         "transition_containment_contained_pending",
         "transition_containment_qualified_not_required_pending", "transition_cutoff_open_fenced",
         "transition_cutoff_fenced_open", "transition_manifest_open_sealed_with_fences",

@@ -140,6 +140,8 @@ export const ORACLE_FACTS = [
   "transition_containment_uncertain_pending_retry",
   "transition_containment_uncertain_contained_late_proof",
   "transition_containment_not_requested_qualified_not_required",
+  "containment_capability_evidence_immutable",
+  "containment_qualification_receipt_exact",
   "transition_containment_contained_pending",
   "transition_containment_qualified_not_required_pending",
   "transition_cutoff_open_fenced",
@@ -221,7 +223,7 @@ const ALLOWED_FACTS_BY_CHECK: Record<Check, ReadonlySet<Fact>> = {
   atomic_indeterminate_clear: new Set(["all_tombstone_receipts_present", "tombstone_receipt_missing", "debt_clear_terminal_atomic", "debt_cleared_separately"]),
   deployment_continuity: new Set(["continuity_receipt_verified", "continuity_receipt_missing", "dispatch_requested"]),
   manifest_coverage: new Set(["all_manifest_entries_satisfied", "child_requirement_missing", "transcript_requirement_missing"]),
-  cross_axis_transition: new Set(ORACLE_FACTS.filter((fact) => fact.startsWith("transition_") || ["admission_fenced", "output_fenced", "reconciliation_clear", "execution_not_started", "execution_active", "execution_terminated", "containment_satisfied", "manifest_sealed", "all_manifest_entries_satisfied"].includes(fact))),
+  cross_axis_transition: new Set(ORACLE_FACTS.filter((fact) => fact.startsWith("transition_") || ["admission_fenced", "output_fenced", "reconciliation_clear", "execution_not_started", "execution_active", "execution_terminated", "containment_satisfied", "containment_capability_evidence_immutable", "containment_qualification_receipt_exact", "manifest_sealed", "all_manifest_entries_satisfied"].includes(fact))),
   binary_revision_retention: new Set(BINARY_RETENTION_ALLOWED_FACTS),
 };
 
@@ -473,6 +475,21 @@ const evaluateCrossAxisTransition: Evaluator = (facts) => {
   const transition = transitions[0]!;
   if (transition === "transition_manifest_open_sealed_with_fences") {
     return has(facts, "admission_fenced") && has(facts, "output_fenced")
+      ? "accepted"
+      : "transition_forbidden";
+  }
+  if (transition === "transition_containment_not_requested_qualified_not_required") {
+    const executionStates: readonly Fact[] = [
+      "execution_not_started",
+      "execution_terminated",
+      "execution_active",
+    ];
+    const observedExecution = executionStates.filter((fact) => has(facts, fact));
+    const executionNotActive = observedExecution.length === 1 &&
+      observedExecution[0] !== "execution_active";
+    return has(facts, "admission_fenced") && has(facts, "output_fenced") &&
+        executionNotActive && has(facts, "containment_capability_evidence_immutable") &&
+        has(facts, "containment_qualification_receipt_exact")
       ? "accepted"
       : "transition_forbidden";
   }
