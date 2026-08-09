@@ -212,7 +212,7 @@ const ALLOWED_FACTS_BY_CHECK: Record<Check, ReadonlySet<Fact>> = {
   atomic_indeterminate_clear: new Set(["all_tombstone_receipts_present", "tombstone_receipt_missing", "debt_clear_terminal_atomic", "debt_cleared_separately"]),
   deployment_continuity: new Set(["continuity_receipt_verified", "continuity_receipt_missing", "dispatch_requested"]),
   manifest_coverage: new Set(["all_manifest_entries_satisfied", "child_requirement_missing", "transcript_requirement_missing"]),
-  cross_axis_transition: new Set(ORACLE_FACTS.filter((fact) => fact.startsWith("transition_") || ["admission_fenced", "output_fenced", "reconciliation_clear", "execution_not_started", "execution_active", "execution_terminated", "containment_satisfied", "all_manifest_entries_satisfied"].includes(fact))),
+  cross_axis_transition: new Set(ORACLE_FACTS.filter((fact) => fact.startsWith("transition_") || ["admission_fenced", "output_fenced", "reconciliation_clear", "execution_not_started", "execution_active", "execution_terminated", "containment_satisfied", "manifest_sealed", "all_manifest_entries_satisfied"].includes(fact))),
 };
 
 export type OracleExample = {
@@ -462,6 +462,7 @@ const evaluateCrossAxisTransition: Evaluator = (facts) => {
     "output_fenced",
     "reconciliation_clear",
     "containment_satisfied",
+    "manifest_sealed",
     "all_manifest_entries_satisfied",
   ];
   const executionClosed = has(facts, "execution_not_started") || has(facts, "execution_terminated");

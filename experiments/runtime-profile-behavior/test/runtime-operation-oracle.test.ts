@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
+  evaluateOracleExample,
   evaluateGeneratedAxisProducts,
   generatedStateIsValid,
   ORACLE_CHECKS,
@@ -281,4 +282,22 @@ test("cross-axis matrix includes all five axes and coupled invalid states", asyn
   }
   assert.ok(facts.has("transition_claim_without_execution_activation"));
   assert.ok(facts.has("transition_terminal_open_final_active_execution"));
+});
+
+test("terminal transition rejects otherwise complete closure without sealed manifest", async () => {
+  const fixture = await readFixture();
+  const oracle = parseRuntimeOperationOracle(fixture);
+  const transitionCase = oracle.cases.find(({ requirement }) => requirement === 27);
+  const terminalExample = transitionCase?.examples.find(
+    ({ id }) => id === "allow-terminal-with-complete-closure",
+  );
+  assert.ok(terminalExample);
+  const missingManifest = {
+    ...terminalExample,
+    facts: terminalExample.facts.filter((fact) => fact !== "manifest_sealed"),
+  };
+  assert.deepEqual(evaluateOracleExample(missingManifest), {
+    decision: "reject",
+    code: "transition_forbidden",
+  });
 });
