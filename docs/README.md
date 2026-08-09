@@ -13,7 +13,11 @@ Read documents in this order:
    effect-identity boundary, and normalized scope-disposition rules. Then read
    `decisions/0004-pre-materialization-dispatch-prevention.md` - the durable
    negative operation-intent guard, dispatch ordering, anti-resurrection, and
-   automated external-effect identity requirements.
+   automated external-effect identity requirements. Then read
+   `decisions/0005-runtime-context-package-identities.md` - the accepted private
+   package identities and the rule that scaffolding accompanies a real vertical
+   slice. Before the first Agent Execution implementation, review proposed
+   `decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md`.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
@@ -135,8 +139,8 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. ADR-0001, ADR-0002, ADR-0003, ADR-0004, and the promoted-rule column
-of the traceability matrix are normative. Supporting architecture documents
+of truth. ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005, and the promoted-rule
+column of the traceability matrix are normative. Supporting architecture documents
 are accepted only as amended by the ADRs. Readiness status is intentionally
 separate and cannot change domain ownership. A spike's `Remaining gates`
 section is historical as of that campaign; `architecture/readiness.md` is the

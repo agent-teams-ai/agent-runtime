@@ -2,8 +2,9 @@
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain and dependency decisions are in ADR-0001, ADR-0002,
-ADR-0003, and ADR-0004.
+The canonical domain, dependency, and package-identity decisions are in
+ADR-0001, ADR-0002, ADR-0003, ADR-0004, and ADR-0005. Proposed ADR-0006 must be
+accepted before the first Agent Execution operation/effect-ledger slice.
 Evidence promotion is in `architecture/evidence-traceability.md`. Exact scoped
 target matches and evidence hashes are in
 `architecture/qualification-registry.json`. This document owns the mutable list
