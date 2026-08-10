@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "specifications": [
+    {
+      "id": "runtime-operation-oracle",
+      "ownerDocs": [
+        "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md",
+        "docs/architecture/readiness.md"
+      ],
+      "adrRefs": [
+        "docs/decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md"
+      ],
+      "schemaPaths": [
+        "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/schema.json",
+        "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/authority.schema.json"
+      ],
+      "documents": [
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/manifest.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/catalog.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cross-axis.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/01-output-terminal-order.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/02-dispatch-cutoff-race.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/03-requirement-closure-race.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/04-terminal-command-race.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/05-indeterminate-evidence-race.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/06-seal-outbox-recovery.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/07-dispatch-claim-crash.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/08-provider-acceptance-observation.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/09-terminal-lost-ack.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/10-successor-effect-identity.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/11-effect-fingerprint-conflict.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/12-distinct-identity-equal-payload.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/13-completed-effect-replay.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/14-known-not-accepted-retry.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/15-tombstone-restore.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/16-effect-cardinality.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/17-receipt-ordering.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/18-stale-authority-restore.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/19-model-generation.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/20-cutoff-before-boundary.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/21-normal-provider-termination.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/22-zero-attempt-effect-cutoff.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/23-post-seal-receipt.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/24-atomic-indeterminate-clear.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/25-deployment-continuity.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/26-manifest-coverage.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/27-cross-axis-transitions.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/28-binary-revision-semantic-retention.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/case-parts/28-01.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/case-parts/28-02.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/case-parts/28-03.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/case-parts/28-04.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" }
+      ],
+      "generatedTypes": [
+        {
+          "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json",
+          "outputPath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts"
+        }
+      ],
+      "gateBindings": {
+        "typeGeneration": { "packageName": "@vioxen/agent-runtime", "script": "architecture:operation-oracle:type-generation" },
+        "property": { "packageName": "@vioxen/agent-runtime", "script": "architecture:operation-oracle:property" },
+        "mutation": { "packageName": "@vioxen/agent-runtime", "script": "architecture:operation-oracle:mutation" }
+      },
+      "stateModel": {
+        "kind": "xstate",
+        "axes": ["dispatch", "execution", "containment", "admission", "output", "manifest", "terminal"],
+        "modelPath": "experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-xstate-builder.ts",
+        "adapterPath": "experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-xstate-adapter.ts",
+        "tracesPath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated/runtime-operation-xstate-paths.generated.json",
+        "diagramPath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated/runtime-operation-xstate.generated.mmd",
+        "gateBinding": { "packageName": "@vioxen/agent-runtime", "script": "architecture:operation-oracle:model" }
+      }
+    }
+  ]
+}

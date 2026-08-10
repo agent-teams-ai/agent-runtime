@@ -14,8 +14,8 @@ import {
   buildSyntheticCrossAxisMachine,
   deriveShortestPathWitnesses,
   syntheticCrossAxisModelFromAuthority,
-  type SyntheticCrossAxisModel,
 } from "./runtime-operation-xstate-builder.ts";
+import type { SyntheticCrossAxisModel } from "./runtime-operation-xstate-adapter.ts";
 
 const GENERATED_DIRECTORY =
   "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated";

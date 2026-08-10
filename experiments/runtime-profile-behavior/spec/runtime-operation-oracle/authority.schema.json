@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json",
+  "title": "ADR-0006 Runtime Operation Oracle Authority Document",
+  "oneOf": [
+    {
+      "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/manifest"
+    },
+    {
+      "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/catalog"
+    },
+    {
+      "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/crossAxis"
+    },
+    {
+      "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/caseFragment"
+    },
+    {
+      "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/exampleFragment"
+    }
+  ]
+}

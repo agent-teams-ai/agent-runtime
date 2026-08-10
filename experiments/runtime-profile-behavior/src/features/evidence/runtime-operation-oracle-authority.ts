@@ -316,7 +316,7 @@ export const loadRuntimeOperationOracleAuthority = async (
     .filter((path) => path.endsWith(".json")).toSorted();
   exactArray(
     actualRootJson,
-    ["schema.json", "manifest.json", manifest.catalog, manifest.crossAxis].toSorted(),
+    ["authority.schema.json", "schema.json", "manifest.json", manifest.catalog, manifest.crossAxis].toSorted(),
     "root authority-file membership",
   );
   const caseValidator = requireValidator(ajv, "caseFragment");

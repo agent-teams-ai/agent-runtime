@@ -9,47 +9,17 @@ import {
   type StateValue,
 } from "xstate";
 
-import type { CrossAxis } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+import {
+  type SyntheticCrossAxisEvent,
+  type SyntheticCrossAxisModel,
+  type SyntheticCrossAxisTransition,
+} from "./runtime-operation-xstate-adapter.ts";
 
-export type SyntheticCrossAxisTransition = {
-  fact: string;
-  targets: readonly {
-    axis: string;
-    from: string;
-    to: string;
-  }[];
-  requiredState?: Readonly<Record<string, readonly string[]>>;
-  requiredFacts?: readonly string[];
-};
-
-export type SyntheticCrossAxisEvent = {
-  type: string;
-  facts: readonly string[];
-};
+export { syntheticCrossAxisModelFromAuthority } from "./runtime-operation-xstate-adapter.ts";
 
 const eventFor = (transition: SyntheticCrossAxisTransition): SyntheticCrossAxisEvent => ({
   type: transition.fact,
   facts: [...(transition.requiredFacts ?? [])],
-});
-
-export type SyntheticCrossAxisModel = {
-  requirement: 27;
-  machineKind: "synthetic-verifier";
-  initial: Readonly<Record<string, string>>;
-  axes: Readonly<Record<string, readonly string[]>>;
-  transitions: readonly SyntheticCrossAxisTransition[];
-  forbiddenTransitionFacts: readonly string[];
-};
-
-export const syntheticCrossAxisModelFromAuthority = (
-  authority: CrossAxis,
-): SyntheticCrossAxisModel => ({
-  requirement: 27,
-  machineKind: "synthetic-verifier",
-  initial: authority.initial as unknown as Readonly<Record<string, string>>,
-  axes: authority.axes as unknown as Readonly<Record<string, readonly string[]>>,
-  transitions: authority.transitions,
-  forbiddenTransitionFacts: authority.forbiddenTransitionFacts,
 });
 
 type StateConfig = {

@@ -70,6 +70,29 @@ test("manifest is the sole ordered case membership authority", async () => {
   );
 });
 
+test("Foundation catalog closes over the manifest and every referenced case part", async () => {
+  const { manifest } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
+  const shardedCase = JSON.parse(await readFile(
+    join(specificationRoot, "cases/28-binary-revision-semantic-retention.json"),
+    "utf8",
+  )) as { exampleFragments: string[] };
+  const foundationCatalog = JSON.parse(await readFile(
+    join(repositoryRoot, "architecture/specifications/catalog.json"),
+    "utf8",
+  )) as { specifications: { documents: { path: string }[] }[] };
+  const declared = foundationCatalog.specifications[0]!.documents
+    .map(({ path }) => path.replace(`${specificationRelative}/`, ""))
+    .toSorted();
+  const expected = [
+    "manifest.json",
+    manifest.catalog,
+    manifest.crossAxis,
+    ...manifest.cases.map(({ path }) => path),
+    ...shardedCase.exampleFragments,
+  ].toSorted();
+  assert.deepEqual(declared, expected);
+});
+
 test("jsonc-parser defense rejects nested duplicate keys before Ajv", () => {
   assert.throws(
     () => parseAuthorityJson('{"outer":{"fact":"first","fact":"second"}}', "duplicate.json"),

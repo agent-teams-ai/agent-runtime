@@ -7,6 +7,7 @@ governedRoots:
   - scripts/foundation
 boundaries:
   - id: experiments.typescript-evidence
+    dependencyMode: development
     roots:
       - experiments/runtime-profile-behavior
       - experiments/rust-system-boundaries/client
@@ -38,6 +39,7 @@ boundaries:
         - node:util
       runtimeReferences: []
   - id: tooling.foundation-scaffolding
+    dependencyMode: development
     roots:
       - scripts/foundation
     entrypoints: []
