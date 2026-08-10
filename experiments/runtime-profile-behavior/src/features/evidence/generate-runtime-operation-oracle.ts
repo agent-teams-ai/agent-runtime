@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 import { compile } from "json-schema-to-typescript";
 
+import type { Catalog } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+
 import { loadRuntimeOperationOracleAuthority } from "./runtime-operation-oracle-authority.ts";
 import {
   createStateProductEvaluator,
@@ -19,13 +21,40 @@ const GENERATED_DIRECTORY =
   "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated";
 const BANNER = "// Generated from ADR-0006 JSON authority. Do not edit.\n\n";
 
-const renderTypes = async (schema: Record<string, unknown>): Promise<string> => {
-  const generated = await compile(schema, "RuntimeOperationOracle", {
+const generatedUnionMembers = (source: string, name: string): string[] => {
+  const body = new RegExp(`export type ${name} =([\\s\\S]*?);`).exec(source)?.[1];
+  if (body === undefined) {
+    throw new Error(`runtime-operation oracle generation: missing ${name} union`);
+  }
+  return [...body.matchAll(/"([^"]+)"/g)].map((match) => match[1]!);
+};
+
+const renderTypes = async (
+  schema: Record<string, unknown>,
+  catalog: Catalog,
+): Promise<string> => {
+  const projectionSchema = structuredClone(schema);
+  const definitions = projectionSchema.$defs as Record<string, Record<string, unknown>>;
+  definitions.check = { ...definitions.check, enum: [...catalog.checks] };
+  definitions.fact = { ...definitions.fact, enum: [...catalog.facts] };
+  definitions.resultCode = { ...definitions.resultCode, enum: [...catalog.resultCodes] };
+  const generated = await compile(projectionSchema, "RuntimeOperationOracle", {
     bannerComment: BANNER.trimEnd(),
     format: true,
     unreachableDefinitions: true,
   });
-  return generated.endsWith("\n") ? generated : `${generated}\n`;
+  const source = generated.endsWith("\n") ? generated : `${generated}\n`;
+  for (const [name, expected] of [
+    ["Check", catalog.checks],
+    ["Fact", catalog.facts],
+    ["ResultCode", catalog.resultCodes],
+  ] as const) {
+    const actual = generatedUnionMembers(source, name);
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new Error(`runtime-operation oracle generation: ${name} differs from catalog order`);
+    }
+  }
+  return source;
 };
 
 const renderMermaid = (model: SyntheticCrossAxisModel): string => {
@@ -51,7 +80,9 @@ const renderMermaid = (model: SyntheticCrossAxisModel): string => {
   return `${lines.join("\n")}\n`;
 };
 
-const renderGeneratedFiles = async (repositoryRoot: string): Promise<Map<string, string>> => {
+export const renderRuntimeOperationOracleGeneratedFiles = async (
+  repositoryRoot: string,
+): Promise<Map<string, string>> => {
   const authority = await loadRuntimeOperationOracleAuthority(repositoryRoot);
   const model = syntheticCrossAxisModelFromAuthority(authority.crossAxis);
   const machine = buildSyntheticCrossAxisMachine(model);
@@ -88,10 +119,17 @@ const renderGeneratedFiles = async (repositoryRoot: string): Promise<Map<string,
     shortestPathWitnesses: topology.witnesses,
   };
   return new Map([
-    ["runtime-operation-oracle-types.generated.ts", await renderTypes(authority.schema)],
+    ["runtime-operation-oracle-types.generated.ts", await renderTypes(authority.schema, authority.catalog)],
     ["runtime-operation-xstate-paths.generated.json", `${JSON.stringify(pathArtifact, null, 2)}\n`],
     ["runtime-operation-xstate.generated.mmd", renderMermaid(model)],
   ]);
+};
+
+export const checkRuntimeOperationOracleGeneratedFiles = async (
+  repositoryRoot: string,
+): Promise<void> => {
+  const files = await renderRuntimeOperationOracleGeneratedFiles(repositoryRoot);
+  await checkGeneratedFiles(repositoryRoot, files);
 };
 
 const writeGeneratedFiles = async (
@@ -132,17 +170,18 @@ const checkGeneratedFiles = async (
   }
 };
 
-const mode = process.argv[2];
-if (mode !== "--write" && mode !== "--check") {
-  throw new Error("usage: generate-runtime-operation-oracle.ts --write|--check");
-}
-
-const repositoryRoot = process.cwd();
-const files = await renderGeneratedFiles(repositoryRoot);
-if (mode === "--write") {
-  await writeGeneratedFiles(join(repositoryRoot, GENERATED_DIRECTORY), files);
-  console.log(JSON.stringify({ mode: "write", generated: files.size }));
-} else {
-  await checkGeneratedFiles(repositoryRoot, files);
-  console.log(JSON.stringify({ mode: "check", generated: files.size, fresh: true }));
+if (process.argv[1]?.endsWith("generate-runtime-operation-oracle.ts")) {
+  const mode = process.argv[2];
+  if (mode !== "--write" && mode !== "--check") {
+    throw new Error("usage: generate-runtime-operation-oracle.ts --write|--check");
+  }
+  const repositoryRoot = process.cwd();
+  const files = await renderRuntimeOperationOracleGeneratedFiles(repositoryRoot);
+  if (mode === "--write") {
+    await writeGeneratedFiles(join(repositoryRoot, GENERATED_DIRECTORY), files);
+    console.log(JSON.stringify({ mode: "write", generated: files.size }));
+  } else {
+    await checkGeneratedFiles(repositoryRoot, files);
+    console.log(JSON.stringify({ mode: "check", generated: files.size, fresh: true }));
+  }
 }

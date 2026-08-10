@@ -7,11 +7,16 @@ import { initialTransition, transition as transitionMachine } from "xstate";
 
 import { loadRuntimeOperationOracleAuthority, parseAuthorityJson } from "../src/features/evidence/runtime-operation-oracle-authority.ts";
 import { createOracleEvaluator } from "../src/features/evidence/runtime-operation-oracle-evaluator.ts";
+import {
+  checkRuntimeOperationOracleGeneratedFiles,
+  renderRuntimeOperationOracleGeneratedFiles,
+} from "../src/features/evidence/generate-runtime-operation-oracle.ts";
 import { validateRuntimeOperationOracle } from "../src/features/evidence/validate-runtime-operation-oracle.ts";
 import {
   buildSyntheticCrossAxisMachine,
   syntheticCrossAxisModelFromAuthority,
 } from "../src/features/evidence/runtime-operation-xstate-builder.ts";
+import type { Fact } from "../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 const specificationRelative = "experiments/runtime-profile-behavior/spec/runtime-operation-oracle";
@@ -111,6 +116,41 @@ test("schema stays structural while catalog owns vocabulary", async () => {
     schema.$defs.crossAxisTransition?.properties?.requiredState?.propertyNames?.enum,
     undefined,
   );
+});
+
+test("generated vocabulary unions exactly project the loaded catalog", async () => {
+  const { catalog } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
+  const source = await readFile(
+    join(specificationRoot, "generated/runtime-operation-oracle-types.generated.ts"),
+    "utf8",
+  );
+  const members = (name: string): string[] => {
+    const body = new RegExp(`export type ${name} =([\\s\\S]*?);`).exec(source)?.[1];
+    assert.ok(body, name);
+    return [...body.matchAll(/"([^"]+)"/g)].map((match) => match[1]!);
+  };
+  assert.deepEqual(members("Check"), catalog.checks);
+  assert.deepEqual(members("Fact"), catalog.facts);
+  assert.deepEqual(members("ResultCode"), catalog.resultCodes);
+});
+
+test("temporary catalog vocabulary changes generated projection and freshness", async () => {
+  const baseline = await renderRuntimeOperationOracleGeneratedFiles(repositoryRoot);
+  await withSpecificationCopy(async (root) => {
+    const path = join(root, "catalog.json");
+    const value = JSON.parse(await readFile(path, "utf8")) as { resultCodes: string[] };
+    value.resultCodes.push("temporary_projection_code");
+    await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+  }, async (temporaryRepositoryRoot) => {
+    const changed = await renderRuntimeOperationOracleGeneratedFiles(temporaryRepositoryRoot);
+    const generatedName = "runtime-operation-oracle-types.generated.ts";
+    assert.notEqual(changed.get(generatedName), baseline.get(generatedName));
+    assert.match(changed.get(generatedName) ?? "", /"temporary_projection_code"/);
+    await assert.rejects(
+      checkRuntimeOperationOracleGeneratedFiles(temporaryRepositoryRoot),
+      /runtime-operation-oracle-types.generated.ts/,
+    );
+  });
 });
 
 test("semantic linker rejects vocabulary drift that structural schema permits", async () => {
@@ -264,7 +304,7 @@ test("terminal XState edges require exact closure evidence payloads", async () =
   const terminalTransitions = crossAxis.transitions.filter(({ fact }) =>
     fact.startsWith("transition_terminal_open_final_"),
   );
-  const criticalEvidence = [
+  const criticalEvidence: readonly Fact[] = [
     "reconciliation_clear",
     "containment_satisfied",
     "all_manifest_entries_satisfied",
