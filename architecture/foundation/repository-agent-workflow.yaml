@@ -29,6 +29,7 @@ fullScanPaths:
   - .oxlintrc.json
   - .github/workflows
   - architecture/foundation
+  - architecture/specifications
   - architecture/decisions
   - docs
   - docs/architecture/qualification-registry.json

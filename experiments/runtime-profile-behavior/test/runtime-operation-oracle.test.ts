@@ -93,6 +93,36 @@ test("Foundation catalog closes over the manifest and every referenced case part
   assert.deepEqual(declared, expected);
 });
 
+test("Foundation XState axes exactly follow JSON authority and generated path evidence", async () => {
+  const { crossAxis } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
+  const authorityAxes = Object.keys(crossAxis.axes);
+  const foundationCatalog = JSON.parse(await readFile(
+    join(repositoryRoot, "architecture/specifications/catalog.json"),
+    "utf8",
+  )) as { specifications: { stateModel: { axes: string[] } }[] };
+  const pathEvidence = JSON.parse(await readFile(
+    join(specificationRoot, "generated/runtime-operation-xstate-paths.generated.json"),
+    "utf8",
+  )) as {
+    topologyReachability: { axes: string[] };
+    shortestPathWitnesses: { source: Record<string, string>; target: Record<string, string> }[];
+  };
+  assert.deepEqual(foundationCatalog.specifications[0]!.stateModel.axes, authorityAxes);
+  assert.deepEqual(pathEvidence.topologyReachability.axes, authorityAxes);
+  for (const witness of pathEvidence.shortestPathWitnesses) {
+    assert.deepEqual(Object.keys(witness.source), authorityAxes);
+    assert.deepEqual(Object.keys(witness.target), authorityAxes);
+  }
+});
+
+test("repository workflow routes Foundation catalog changes through the full scan", async () => {
+  const workflow = await readFile(
+    join(repositoryRoot, "architecture/foundation/repository-agent-workflow.yaml"),
+    "utf8",
+  );
+  assert.match(workflow, /^  - architecture\/specifications$/m);
+});
+
 test("jsonc-parser defense rejects nested duplicate keys before Ajv", () => {
   assert.throws(
     () => parseAuthorityJson('{"outer":{"fact":"first","fact":"second"}}', "duplicate.json"),
