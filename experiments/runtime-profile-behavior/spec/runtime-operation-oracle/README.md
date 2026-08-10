@@ -29,13 +29,15 @@ actors, services, timers, or actions. Its seven-axis
 reachability result is not the independent ten-axis validity result and is not
 a production runtime state machine. Requirement 28 binary-retention semantics
 remain exclusively in the handwritten evaluator and JSON examples.
+Transition guards require `requiredFacts`, reject JSON-declared
+`forbiddenFacts`, and allow other supplemental evidence.
 
 Run `pnpm architecture:operation-oracle:generate` to write generated files.
 Normal gates run `pnpm architecture:operation-oracle`, whose freshness check
 renders to a temporary directory and byte-compares without changing tracked
 files.
 
-Both TypeScript gates keep `skipLibCheck: false`. The three synthetic-toolchain
+Both TypeScript gates keep `skipLibCheck: false`. The four synthetic-toolchain
 entrypoints use the transparent `tsconfig.synthetic-oracle.json` boundary with
 only `exactOptionalPropertyTypes: false`, because XState 5.32.5 and
 json-schema-to-typescript 15.0.4 expose incompatible optional-property

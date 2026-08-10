@@ -9,6 +9,7 @@ export type SyntheticCrossAxisTransition = {
   }[];
   requiredState?: Readonly<Record<string, readonly string[]>>;
   requiredFacts?: readonly string[];
+  forbiddenFacts?: readonly string[];
 };
 
 export type SyntheticCrossAxisEvent = {

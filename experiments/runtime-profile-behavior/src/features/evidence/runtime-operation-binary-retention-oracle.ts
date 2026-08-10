@@ -226,13 +226,31 @@ const abortReceiptIsInvalid = (facts: ReadonlySet<string>): boolean => [
   "operation_acceptance_aborted_receipt_unknown",
 ].some((fact) => has(facts, fact));
 
-const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
+const isHistoricalReplay = (facts: ReadonlySet<string>): boolean =>
+  has(facts, "release_exact_replay") || has(facts, "abandon_release_exact_replay");
+
+const evaluateHistoricalReplayContradiction = (
+  facts: ReadonlySet<string>,
+): BinaryRetentionResult | undefined => {
+  if (!isHistoricalReplay(facts)) {
+    return undefined;
+  }
   if (has(facts, "release_manifest_digest_conflict") ||
-      (has(facts, "release_exact_replay") && releaseReplayEvidenceIsInvalid(facts))) {
+      releaseReplayEvidenceIsInvalid(facts)) {
     return "release_manifest_conflict";
   }
-  if (has(facts, "abandon_release_exact_replay") && abortReceiptIsInvalid(facts)) {
-    return "operation_acceptance_stale_current_receipt";
+  return abortReceiptIsInvalid(facts)
+    ? "operation_acceptance_stale_current_receipt"
+    : undefined;
+};
+
+const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
+  const replayContradiction = evaluateHistoricalReplayContradiction(facts);
+  if (replayContradiction !== undefined) {
+    return replayContradiction;
+  }
+  if (has(facts, "release_manifest_digest_conflict")) {
+    return "release_manifest_conflict";
   }
   if (has(facts, "release_exact_replay") && has(facts, "owner_release_receipt_durable")) {
     return "semantic_root_released";
@@ -328,6 +346,10 @@ export const evaluateBinaryRevisionRetention = (
   const durableIntegrity = evaluateDurableIntegrity(facts);
   if (durableIntegrity !== undefined) {
     return durableIntegrity;
+  }
+  const replayContradiction = evaluateHistoricalReplayContradiction(facts);
+  if (replayContradiction !== undefined) {
+    return replayContradiction;
   }
   if (workRequested(facts)) {
     const authorization = evaluateAuthorizedWork(facts);

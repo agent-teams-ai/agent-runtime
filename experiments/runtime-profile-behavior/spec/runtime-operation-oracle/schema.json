@@ -409,6 +409,14 @@
           "items": {
             "$ref": "#/$defs/fact"
           }
+        },
+        "forbiddenFacts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fact"
+          }
         }
       }
     },

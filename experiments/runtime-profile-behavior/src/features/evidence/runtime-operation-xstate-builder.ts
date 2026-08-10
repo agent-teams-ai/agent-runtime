@@ -44,10 +44,13 @@ const guardFor = (
     return valueGuards.length === 1 ? valueGuards[0]! : or(valueGuards);
   });
   const requiredFacts = declaration.requiredFacts ?? [];
-  if (requiredFacts.length > 0) {
-    guards.push(({ event }: { event: { type: string; facts?: readonly string[] } }) =>
-      requiredFacts.every((fact) => (event.facts ?? []).includes(fact)),
-    );
+  const forbiddenFacts = declaration.forbiddenFacts ?? [];
+  if (requiredFacts.length > 0 || forbiddenFacts.length > 0) {
+    guards.push(({ event }: { event: { type: string; facts?: readonly string[] } }) => {
+      const observedFacts = event.facts ?? [];
+      return requiredFacts.every((fact) => observedFacts.includes(fact)) &&
+        forbiddenFacts.every((fact) => !observedFacts.includes(fact));
+    });
   }
   return guards.length === 1 ? guards[0]! : and(guards as never);
 };

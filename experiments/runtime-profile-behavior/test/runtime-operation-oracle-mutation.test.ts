@@ -112,3 +112,55 @@ test("every authoritative required-fact deletion is killed by the handwritten ev
     }
   }
 });
+
+test("historical release replay rejects contradictions from either evidence family", () => {
+  const retentionCase = authority.oracle.cases.find(({ requirement }) => requirement === 28);
+  assert.ok(retentionCase);
+  const releaseReplay = retentionCase.examples.find(
+    ({ id }) => id === "exact-release-replay-is-idempotent",
+  );
+  const abandonReplay = retentionCase.examples.find(
+    ({ id }) => id === "exact-abandon-release-replay",
+  );
+  assert.ok(releaseReplay);
+  assert.ok(abandonReplay);
+  const earlierAcceptanceReplay = [
+    "operation_acceptance_exact_replay",
+    "operation_acceptance_state_accepted",
+    "operation_acceptance_transaction_complete",
+  ] as const;
+
+  for (const replay of [releaseReplay, abandonReplay]) {
+    for (const invalidAbortEvidence of [
+      "operation_acceptance_aborted_receipt_stale",
+      "operation_acceptance_aborted_receipt_wrong_scope",
+      "operation_acceptance_aborted_receipt_unknown",
+    ] as const) {
+      assert.deepEqual(evaluateOracleExample({
+        ...replay,
+        facts: [...replay.facts, ...earlierAcceptanceReplay, invalidAbortEvidence],
+      }), {
+        decision: "reject",
+        code: "operation_acceptance_stale_current_receipt",
+      });
+    }
+
+    for (const invalidManifestEvidence of [
+      "release_manifest_incomplete",
+      "release_manifest_stale",
+      "release_manifest_wrong_scope",
+      "release_manifest_unknown",
+      "release_manifest_duplicate_evidence",
+      "release_obligation_set_digest_wrong",
+      "release_obligation_set_weaker",
+    ] as const) {
+      assert.deepEqual(evaluateOracleExample({
+        ...replay,
+        facts: [...replay.facts, ...earlierAcceptanceReplay, invalidManifestEvidence],
+      }), {
+        decision: "reject",
+        code: "release_manifest_conflict",
+      });
+    }
+  }
+});

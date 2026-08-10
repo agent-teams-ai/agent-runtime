@@ -16,6 +16,7 @@ import type {
   Catalog,
   CrossAxis,
   ExampleFragment,
+  Fact,
   Manifest,
 } from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
@@ -159,9 +160,14 @@ const validateCrossAxis = (crossAxis: CrossAxis, requirementCase: Case, catalog:
     }
   }
   for (const transition of crossAxis.transitions) {
+    const requiredFacts: readonly Fact[] = transition.requiredFacts ?? [];
+    const forbiddenFacts: readonly Fact[] = transition.forbiddenFacts ?? [];
     if (!declaredFacts.has(transition.fact) ||
-        (transition.requiredFacts ?? []).some((fact) => !declaredFacts.has(fact))) {
+        [...requiredFacts, ...forbiddenFacts].some((fact) => !declaredFacts.has(fact))) {
       fail(`cross-axis transition ${transition.fact} contains a fact outside catalog.facts`);
+    }
+    if (forbiddenFacts.some((fact) => requiredFacts.includes(fact))) {
+      fail(`cross-axis transition ${transition.fact} requires and forbids the same fact`);
     }
     const targetAxes = transition.targets.map(({ axis }) => axis);
     if (new Set(targetAxes).size !== targetAxes.length) {
@@ -183,9 +189,13 @@ const validateCrossAxis = (crossAxis: CrossAxis, requirementCase: Case, catalog:
       example.expected.decision === "accept" && example.facts.includes(transition.fact),
     );
     for (const example of acceptedExamples) {
-      const missing = (transition.requiredFacts ?? []).filter((fact) => !example.facts.includes(fact));
+      const missing = requiredFacts.filter((fact) => !example.facts.includes(fact));
       if (missing.length > 0) {
         fail(`cross-axis example ${example.id} omits required facts for ${transition.fact}: ${missing.join(", ")}`);
+      }
+      const forbidden = forbiddenFacts.filter((fact) => example.facts.includes(fact));
+      if (forbidden.length > 0) {
+        fail(`cross-axis example ${example.id} contains forbidden facts for ${transition.fact}: ${forbidden.join(", ")}`);
       }
     }
     const commonEvidenceFacts = acceptedExamples.length === 0
@@ -194,7 +204,7 @@ const validateCrossAxis = (crossAxis: CrossAxis, requirementCase: Case, catalog:
         fact !== transition.fact && acceptedExamples.every((example) => example.facts.includes(fact)),
       ).toSorted();
     exactArray(
-      [...(transition.requiredFacts ?? [])].toSorted(),
+      [...requiredFacts].toSorted(),
       commonEvidenceFacts,
       `cross-axis required facts for ${transition.fact}`,
     );

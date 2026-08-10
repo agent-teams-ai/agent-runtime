@@ -723,6 +723,10 @@ export interface CrossAxisTransition {
    * @minItems 1
    */
   requiredFacts?: [Fact, ...Fact[]];
+  /**
+   * @minItems 1
+   */
+  forbiddenFacts?: [Fact, ...Fact[]];
 }
 /**
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema

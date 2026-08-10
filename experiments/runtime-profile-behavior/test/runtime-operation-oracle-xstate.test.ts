@@ -124,7 +124,7 @@ test("XState witnesses prove every declared composite target", async () => {
   }
 });
 
-test("terminal XState edges require exact closure evidence payloads", async () => {
+test("terminal XState edges require closure evidence and reject forbidden contradictions", async () => {
   const { crossAxis } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
   const machine = buildSyntheticCrossAxisMachine(syntheticCrossAxisModelFromAuthority(crossAxis));
   const artifact = JSON.parse(await readFile(pathEvidencePath, "utf8")) as {
@@ -150,8 +150,15 @@ test("terminal XState edges require exact closure evidence payloads", async () =
     }
     const exactEvent = witness.events.at(-1)!;
     assert.deepEqual(exactEvent.facts, declaration.requiredFacts);
+    assert.equal(declaration.forbiddenFacts?.includes("execution_active"), true);
     const [accepted] = transitionMachine(machine, source, exactEvent);
     assert.equal((accepted.value as Record<string, string>).terminal, "final");
+    const supplementalEvent: { type: string; facts: string[] } = {
+      ...exactEvent,
+      facts: [...exactEvent.facts, "containment_capability_evidence_immutable"],
+    };
+    const [supplemental] = transitionMachine(machine, source, supplementalEvent);
+    assert.equal((supplemental.value as Record<string, string>).terminal, "final");
     for (const missingFact of criticalEvidence) {
       assert.equal(exactEvent.facts.includes(missingFact), true, declaration.fact);
       const incompleteEvent: { type: string; facts: string[] } = {
@@ -161,5 +168,15 @@ test("terminal XState edges require exact closure evidence payloads", async () =
       const [rejected] = transitionMachine(machine, source, incompleteEvent);
       assert.deepEqual(rejected.value, source.value, `${declaration.fact} without ${missingFact}`);
     }
+    const contradictoryEvent: { type: string; facts: string[] } = {
+      ...exactEvent,
+      facts: [...exactEvent.facts, "execution_active"],
+    };
+    const [contradictory] = transitionMachine(machine, source, contradictoryEvent);
+    assert.deepEqual(
+      contradictory.value,
+      source.value,
+      `${declaration.fact} with contradictory execution_active`,
+    );
   }
 });
