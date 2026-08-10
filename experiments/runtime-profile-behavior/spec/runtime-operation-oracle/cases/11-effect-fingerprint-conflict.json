@@ -1,0 +1,30 @@
+{
+  "id": "effect-fingerprint-conflict",
+  "requirement": 11,
+  "examples": [
+    {
+      "id": "new-external-identity-new-fingerprint",
+      "check": "effect_fingerprint_conflict",
+      "facts": [
+        "different_external_identity",
+        "different_fingerprint"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "same-external-identity-conflicting-fingerprint",
+      "check": "effect_fingerprint_conflict",
+      "facts": [
+        "same_external_identity",
+        "different_fingerprint"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "external_identity_conflict"
+      }
+    }
+  ]
+}

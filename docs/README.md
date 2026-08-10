@@ -13,14 +13,20 @@ Read documents in this order:
    effect-identity boundary, and normalized scope-disposition rules. Then read
    `decisions/0004-pre-materialization-dispatch-prevention.md` - the durable
    negative operation-intent guard, dispatch ordering, anti-resurrection, and
-   automated external-effect identity requirements.
+   automated external-effect identity requirements. Then read
+   `decisions/0005-runtime-context-package-identities.md` - the accepted private
+   package identities and the rule that scaffolding accompanies a real vertical
+   slice. Before the first Agent Execution implementation, review proposed
+   `decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md`
+   and its synthetic executable oracle at
+   `../experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md`.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
    `architecture/qualification-registry.json` - the fail-closed exact target
-   registry for provider, binary closure, platform, credential route,
-   transport, failure domain, evidence hashes, limitations, and readiness
-   links. Its schema is
+   registry for complete provider, provider-adapter, binary-closure, platform,
+   credential-route, storage-topology, transport-topology, and failure-domain
+   tuples, plus evidence hashes, limitations, and readiness links. Its schema is
    `architecture/qualification-registry.schema.json`.
 3. `architecture/readiness.md` - current qualification register and the single
    owner of open implementation, production, and deployment gates.
@@ -122,6 +128,9 @@ Read documents in this order:
    historical hypotheses. It is not an implementation specification.
 37. `../experiments/runtime-profile-behavior/README.md` - experiment status and
    the candidate behaviors known to be superseded or falsified.
+38. `architecture/foundation-adoption.md` - executable Engineering Foundation
+   capabilities, deferred applicability gates, maintainability budgets, and the
+   reviewed bounded-context scaffolding workflow.
 
 Document status vocabulary:
 
@@ -132,17 +141,21 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. ADR-0001, ADR-0002, ADR-0003, ADR-0004, and the promoted-rule column
-of the traceability matrix are normative. Supporting architecture documents
+of truth. ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005, and the promoted-rule
+column of the traceability matrix are normative. Supporting architecture documents
 are accepted only as amended by the ADRs. Readiness status is intentionally
 separate and cannot change domain ownership. A spike's `Remaining gates`
 section is historical as of that campaign; `architecture/readiness.md` is the
 current gate register.
 
 Qualification lookup is fail closed. A target must match every dimension in
-`architecture/qualification-registry.json` exactly. An omitted combination is
-`unqualified`; `provider-neutral` and `not-applicable` are explicit values, not
-wildcards. `pnpm architecture:registry` verifies all traceability rows, target
-shapes, readiness links, evidence files, and pinned SHA-256 identities. The
-same command accepts `--target-json '<six-dimension JSON object>'` for an exact
-lookup; an unmatched target returns `unqualified`.
+`architecture/qualification-registry.json` as one complete scalar tuple:
+provider, provider adapter, binary closure, platform, credential route, storage
+topology, transport topology, and failure domain. Arrays of independent values
+are forbidden because their Cartesian product would invent unobserved targets.
+An omitted tuple is `unqualified`; `provider-neutral` is an explicit value, not
+a wildcard. `pnpm architecture:registry` verifies all traceability rows, target
+shapes, duplicate/conflicting tuples, readiness links, evidence files, and
+pinned SHA-256 identities. The same command accepts `--target-json
+'<eight-dimension JSON object>'` for an exact whole-tuple lookup; an unmatched
+target returns `unqualified`.

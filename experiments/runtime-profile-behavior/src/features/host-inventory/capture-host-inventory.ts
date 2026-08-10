@@ -144,8 +144,12 @@ const stateRootInventory = async (
       path: `$HOME/${relativePath}`,
       exists: true,
       kind,
-      fileCount: counts?.files,
-      directoryCount: counts?.directories,
+      ...(counts === undefined
+        ? {}
+        : {
+            fileCount: counts.files,
+            directoryCount: counts.directories,
+          }),
     };
   } catch (error) {
     if (

@@ -82,12 +82,12 @@ test("entry order is canonical but layer precedence is semantic", async () => {
     ...fixture.input,
     layers: fixture.input.layers.map((layer) => ({
       ...layer,
-      entries: [...layer.entries].reverse(),
+      entries: [...layer.entries].toReversed(),
     })),
   });
   const reversedLayers = composeProfile({
     ...fixture.input,
-    layers: [...fixture.input.layers].reverse(),
+    layers: [...fixture.input.layers].toReversed(),
   });
 
   assert.equal(reorderedEntries.revisionDigest, baseline.revisionDigest);
@@ -109,7 +109,7 @@ test("capability set order is not part of semantic identity", async () => {
         entry.target === "resource" && entry.operation === "upsert"
           ? {
               ...entry,
-              requiredCapabilities: [...entry.requiredCapabilities].reverse(),
+              requiredCapabilities: [...entry.requiredCapabilities].toReversed(),
             }
           : entry,
       ),

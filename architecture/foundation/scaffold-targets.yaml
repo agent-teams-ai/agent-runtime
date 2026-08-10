@@ -1,0 +1,22 @@
+version: 1
+packages:
+  - id: runtime-configuration
+    role: bounded-context
+    path: packages/contexts/runtime-configuration
+    package_name: "@agent-teams/runtime-configuration"
+    owner_document: ADR-0005
+  - id: runtime-security
+    role: bounded-context
+    path: packages/contexts/runtime-security
+    package_name: "@agent-teams/runtime-security"
+    owner_document: ADR-0005
+  - id: provider-access
+    role: bounded-context
+    path: packages/contexts/provider-access
+    package_name: "@agent-teams/provider-access"
+    owner_document: ADR-0005
+  - id: agent-execution
+    role: bounded-context
+    path: packages/contexts/agent-execution
+    package_name: "@agent-teams/agent-execution"
+    owner_document: ADR-0005

@@ -1,0 +1,30 @@
+{
+  "id": "known-not-accepted-retry",
+  "requirement": 14,
+  "examples": [
+    {
+      "id": "one-fresh-attempt-after-proof",
+      "check": "retry_after_known_not_accepted",
+      "facts": [
+        "known_not_accepted_receipt",
+        "fresh_attempt_identity"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "stale-attempt-after-proof",
+      "check": "retry_after_known_not_accepted",
+      "facts": [
+        "known_not_accepted_receipt",
+        "stale_attempt_identity"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "fresh_attempt_required"
+      }
+    }
+  ]
+}

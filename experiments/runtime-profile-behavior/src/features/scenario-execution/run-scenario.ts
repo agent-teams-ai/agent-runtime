@@ -104,7 +104,9 @@ export const runScenario = async (
     args: invocation.args,
     cwd: invocation.cwd ?? sandbox.workspace,
     env: environment,
-    timeoutMs: invocation.timeoutMs,
+    ...(invocation.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: invocation.timeoutMs }),
   };
   const result = syscallTrace
     ? await runTracedCommand(
@@ -141,7 +143,7 @@ export const runScenario = async (
       syscallTrace,
       inheritedSensitiveEnvironmentKeys,
     },
-    verification,
+    ...(verification === undefined ? {} : { verification }),
   };
   const assertions = [
     ...(safetyAssertions(evidence, invocation.expectedTimeout ?? false) ?? []),

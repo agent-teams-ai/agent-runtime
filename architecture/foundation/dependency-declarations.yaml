@@ -1,0 +1,23 @@
+schemaVersion: 1
+packageManager:
+  kind: pnpm
+  workspaceManifest: pnpm-workspace.yaml
+policies:
+  externalDependencies: catalog
+  catalogVersions: exact
+  internalDependencies: workspace-protocol
+  reservedScopes:
+    - "@agent-teams/"
+  developmentOnlyPackages:
+    - "@agent-teams/engineering-foundation"
+    - "@xstate/graph"
+    - "@types/node"
+    - ajv
+    - fast-check
+    - json-schema-to-typescript
+    - jsonc-parser
+    - oxlint
+    - typescript
+    - xstate
+  exactRegistryDevelopmentOnlyPackages:
+    - "@agent-teams/engineering-foundation"

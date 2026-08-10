@@ -1,0 +1,56 @@
+schemaVersion: 1
+workspace:
+  kind: pnpm
+  manifest: pnpm-workspace.yaml
+governedRoots:
+  - experiments
+  - scripts/foundation
+boundaries:
+  - id: experiments.typescript-evidence
+    dependencyMode: development
+    roots:
+      - experiments/runtime-profile-behavior
+      - experiments/rust-system-boundaries/client
+      - experiments/rust-system-boundaries/evidence
+    entrypoints: []
+    allow:
+      boundaries: []
+      packages:
+        - "@xstate/graph"
+        - ajv
+        - fast-check
+        - json-schema-to-typescript
+        - jsonc-parser
+        - xstate
+        - zod
+      builtins:
+        - node:assert/strict
+        - node:child_process
+        - node:crypto
+        - node:fs
+        - node:fs/promises
+        - node:os
+        - node:path
+        - node:perf_hooks
+        - node:readline
+        - node:test
+        - node:timers/promises
+        - node:url
+        - node:util
+      runtimeReferences: []
+  - id: tooling.foundation-scaffolding
+    dependencyMode: development
+    roots:
+      - scripts/foundation
+    entrypoints: []
+    allow:
+      boundaries: []
+      packages: []
+      builtins:
+        - node:child_process
+        - node:fs/promises
+        - node:os
+        - node:path
+        - node:url
+        - node:util
+      runtimeReferences: []

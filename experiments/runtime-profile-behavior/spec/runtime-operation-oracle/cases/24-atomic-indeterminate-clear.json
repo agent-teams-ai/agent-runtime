@@ -1,0 +1,42 @@
+{
+  "id": "atomic-indeterminate-clear",
+  "requirement": 24,
+  "examples": [
+    {
+      "id": "all-tombstones-clear-and-terminal-atomically",
+      "check": "atomic_indeterminate_clear",
+      "facts": [
+        "all_tombstone_receipts_present",
+        "debt_clear_terminal_atomic"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "indeterminate-debt-cleared-separately",
+      "check": "atomic_indeterminate_clear",
+      "facts": [
+        "all_tombstone_receipts_present",
+        "debt_cleared_separately"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "indeterminate_clear_not_atomic"
+      }
+    },
+    {
+      "id": "missing-tombstone-blocks-clear",
+      "check": "atomic_indeterminate_clear",
+      "facts": [
+        "tombstone_receipt_missing",
+        "debt_clear_terminal_atomic"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "indeterminate_clear_not_atomic"
+      }
+    }
+  ]
+}

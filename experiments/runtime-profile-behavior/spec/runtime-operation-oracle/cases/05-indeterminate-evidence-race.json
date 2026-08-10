@@ -1,0 +1,39 @@
+{
+  "id": "indeterminate-evidence-race",
+  "requirement": 5,
+  "examples": [
+    {
+      "id": "positive-evidence-before-indeterminate",
+      "check": "indeterminate_evidence_race",
+      "facts": [
+        "late_positive_committed_first"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "positive-evidence-after-indeterminate",
+      "check": "indeterminate_evidence_race",
+      "facts": [
+        "indeterminate_terminal_committed_first"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "late_evidence_is_noncanonical"
+      }
+    },
+    {
+      "id": "invalid-indeterminate-race-shape",
+      "check": "indeterminate_evidence_race",
+      "facts": [
+        "conflicting_replay"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "axis_invariant_violation"
+      }
+    }
+  ]
+}

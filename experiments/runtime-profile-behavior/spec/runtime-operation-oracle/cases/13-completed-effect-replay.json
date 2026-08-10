@@ -1,0 +1,29 @@
+{
+  "id": "completed-effect-replay",
+  "requirement": 13,
+  "examples": [
+    {
+      "id": "completed-effect-zero-provider-calls",
+      "check": "completed_effect_replay",
+      "facts": [
+        "effect_completed"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "completed_result_replayed"
+      }
+    },
+    {
+      "id": "completed-effect-provider-call-forbidden",
+      "check": "completed_effect_replay",
+      "facts": [
+        "effect_completed",
+        "provider_call_requested"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "retry_permanently_forbidden"
+      }
+    }
+  ]
+}

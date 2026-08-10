@@ -12,7 +12,7 @@ const skillIds = async (root: string): Promise<readonly string[]> => {
     return (await readdir(root, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
-      .sort();
+      .toSorted();
   } catch {
     return [];
   }
@@ -22,7 +22,7 @@ const mcpNames = async (path: string): Promise<readonly string[]> => {
   const value = JSON.parse(await readFile(path, "utf8")) as {
     mcp?: Record<string, unknown>;
   };
-  return Object.keys(value.mcp ?? {}).sort();
+  return Object.keys(value.mcp ?? {}).toSorted();
 };
 
 export const evaluateTargetInvariants = async (
@@ -43,7 +43,7 @@ export const evaluateTargetInvariants = async (
         ),
       )
     )
-      .sort()
+      .toSorted()
       .join("\n"),
   );
   const [globalSkills, projectSkills, globalMcp, projectMcp] =

@@ -1,0 +1,50 @@
+{
+  "id": "dispatch-cutoff-race",
+  "requirement": 2,
+  "examples": [
+    {
+      "id": "claim-wins-cutoff-race",
+      "check": "dispatch_cutoff_race",
+      "facts": [
+        "dispatch_claim_committed_first"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "operation-cutoff-wins-dispatch",
+      "check": "dispatch_cutoff_race",
+      "facts": [
+        "operation_cutoff_committed_first"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "dispatch_rejected_after_cutoff"
+      }
+    },
+    {
+      "id": "session-cutoff-wins-dispatch",
+      "check": "dispatch_cutoff_race",
+      "facts": [
+        "session_cutoff_committed_first"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "dispatch_rejected_after_cutoff"
+      }
+    },
+    {
+      "id": "scope-cutoff-wins-dispatch",
+      "check": "dispatch_cutoff_race",
+      "facts": [
+        "scope_cutoff_committed_first"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "dispatch_rejected_after_cutoff"
+      }
+    }
+  ]
+}

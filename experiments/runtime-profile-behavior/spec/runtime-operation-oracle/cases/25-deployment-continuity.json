@@ -1,0 +1,30 @@
+{
+  "id": "deployment-continuity",
+  "requirement": 25,
+  "examples": [
+    {
+      "id": "verified-continuity-allows-dispatch",
+      "check": "deployment_continuity",
+      "facts": [
+        "continuity_receipt_verified",
+        "dispatch_requested"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "missing-continuity-fails-closed",
+      "check": "deployment_continuity",
+      "facts": [
+        "continuity_receipt_missing",
+        "dispatch_requested"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "continuity_unproven"
+      }
+    }
+  ]
+}

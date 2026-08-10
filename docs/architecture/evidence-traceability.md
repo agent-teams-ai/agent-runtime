@@ -9,9 +9,14 @@ Exact target dimensions and pinned report/summary hashes are enforced by
 `qualification-registry.json`. A target absent from that registry is
 unqualified.
 
+Each registry target is one complete observed tuple. Multi-valued evidence is
+expanded only into tuples the report actually proves; values from separate
+tuples cannot be recombined. Storage and transport fields identify their full
+observed topologies, not independent infrastructure hops.
+
 Only the `Promoted architecture rule` column is normative. An observation does
-not qualify another provider, binary revision, platform, transport, credential
-route, or failure domain.
+not qualify another provider, provider adapter, binary revision, platform,
+credential route, storage topology, transport topology, or failure domain.
 
 | Evidence | Observed scope | Promoted architecture rule |
 | --- | --- | --- |

@@ -51,7 +51,7 @@ export const codexNativeInspectionAssertions = (
     const sharedSkillScopes = skills
       .filter((value) => record(value).name === "shared")
       .map((value) => record(value).scope)
-      .sort();
+      .toSorted();
     const hasProjectLayer = layers.some(
       (value) => record(value).type === "project",
     );

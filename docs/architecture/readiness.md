@@ -2,12 +2,23 @@
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain and dependency decisions are in ADR-0001, ADR-0002,
-ADR-0003, and ADR-0004.
+The canonical domain, dependency, and package-identity decisions are in
+ADR-0001, ADR-0002, ADR-0003, ADR-0004, and ADR-0005. Proposed ADR-0006 must be
+accepted before the first Agent Execution operation/effect-ledger slice.
+The committed ADR-0006 JSON oracle, independent evaluator, property/mutation
+checks, and synthetic XState requirement-27 verifier improve review evidence
+but do not change ADR-0006 from `proposed`, authorize an Agent Execution slice,
+or establish implementation/deployment qualification.
 Evidence promotion is in `architecture/evidence-traceability.md`. Exact scoped
 target matches and evidence hashes are in
 `architecture/qualification-registry.json`. This document owns the mutable list
 of qualified scope and remaining gates.
+
+Registry matching is over an indivisible observed eight-field tuple. In
+particular, storage and transport topology tokens name the complete observed
+topology rather than reusable hops. Evidence for two binaries, protocols, or
+adapters creates explicit tuples only; it never authorizes their Cartesian
+product.
 
 ## Status vocabulary
 

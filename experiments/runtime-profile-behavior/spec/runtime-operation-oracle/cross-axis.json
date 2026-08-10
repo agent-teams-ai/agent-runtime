@@ -1,0 +1,221 @@
+{
+  "$schema": "./schema.json#/$defs/crossAxis",
+  "schemaVersion": 1,
+  "requirement": 27,
+  "machineKind": "synthetic-verifier",
+  "initial": {
+    "dispatch": "unclaimed",
+    "execution": "not_started",
+    "containment": "not_requested",
+    "admission": "open",
+    "output": "open",
+    "manifest": "open",
+    "terminal": "open"
+  },
+  "axes": {
+    "dispatch": ["unclaimed", "claimed", "acceptance_unknown", "known_not_accepted", "provider_accepted"],
+    "execution": ["not_started", "active", "terminated"],
+    "containment": ["not_requested", "pending", "contained", "uncertain", "qualified_not_required"],
+    "admission": ["open", "fenced"],
+    "output": ["open", "fenced"],
+    "manifest": ["open", "sealed"],
+    "terminal": ["open", "final"]
+  },
+  "transitions": [
+    {
+      "fact": "transition_dispatch_unclaimed_claimed",
+      "targets": [
+        { "axis": "dispatch", "from": "unclaimed", "to": "claimed" },
+        { "axis": "execution", "from": "not_started", "to": "active" }
+      ],
+      "requiredState": {
+        "dispatch": ["unclaimed"],
+        "execution": ["not_started"],
+        "containment": ["not_requested", "pending", "contained", "uncertain"],
+        "terminal": ["open"]
+      }
+    },
+    {
+      "fact": "transition_dispatch_claimed_unknown",
+      "targets": [{ "axis": "dispatch", "from": "claimed", "to": "acceptance_unknown" }],
+      "requiredState": { "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_dispatch_claimed_not_accepted",
+      "targets": [
+        { "axis": "dispatch", "from": "claimed", "to": "known_not_accepted" },
+        { "axis": "execution", "from": "active", "to": "not_started" }
+      ],
+      "requiredState": { "dispatch": ["claimed"], "execution": ["active"], "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_dispatch_claimed_accepted",
+      "targets": [{ "axis": "dispatch", "from": "claimed", "to": "provider_accepted" }],
+      "requiredState": { "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_dispatch_unknown_not_accepted",
+      "targets": [
+        { "axis": "dispatch", "from": "acceptance_unknown", "to": "known_not_accepted" },
+        { "axis": "execution", "from": "active", "to": "not_started" }
+      ],
+      "requiredState": { "dispatch": ["acceptance_unknown"], "execution": ["active"], "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_dispatch_unknown_accepted",
+      "targets": [{ "axis": "dispatch", "from": "acceptance_unknown", "to": "provider_accepted" }],
+      "requiredState": { "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_dispatch_not_accepted_claimed_fresh",
+      "targets": [
+        { "axis": "dispatch", "from": "known_not_accepted", "to": "claimed" },
+        { "axis": "execution", "from": "not_started", "to": "active" }
+      ],
+      "requiredState": {
+        "dispatch": ["known_not_accepted"],
+        "execution": ["not_started"],
+        "containment": ["not_requested", "pending", "contained", "uncertain"],
+        "terminal": ["open"]
+      }
+    },
+    {
+      "fact": "transition_execution_not_started_active_with_claim",
+      "targets": [
+        { "axis": "dispatch", "from": "unclaimed", "to": "claimed" },
+        { "axis": "execution", "from": "not_started", "to": "active" }
+      ],
+      "requiredState": {
+        "dispatch": ["unclaimed"],
+        "execution": ["not_started"],
+        "containment": ["not_requested", "pending", "contained", "uncertain"],
+        "terminal": ["open"]
+      }
+    },
+    {
+      "fact": "transition_execution_active_not_started_with_proof",
+      "targets": [
+        { "axis": "dispatch", "from": "claimed", "to": "known_not_accepted" },
+        { "axis": "execution", "from": "active", "to": "not_started" }
+      ],
+      "requiredState": { "dispatch": ["claimed"], "execution": ["active"], "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_execution_active_terminated_with_receipt",
+      "targets": [{ "axis": "execution", "from": "active", "to": "terminated" }],
+      "requiredState": { "dispatch": ["acceptance_unknown", "provider_accepted"], "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_containment_not_requested_pending",
+      "targets": [{ "axis": "containment", "from": "not_requested", "to": "pending" }],
+      "requiredState": { "dispatch": ["claimed", "acceptance_unknown", "provider_accepted"], "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_containment_pending_contained",
+      "targets": [{ "axis": "containment", "from": "pending", "to": "contained" }],
+      "requiredState": { "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_containment_pending_uncertain",
+      "targets": [{ "axis": "containment", "from": "pending", "to": "uncertain" }],
+      "requiredState": { "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_containment_uncertain_pending_retry",
+      "targets": [{ "axis": "containment", "from": "uncertain", "to": "pending" }],
+      "requiredState": { "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_containment_uncertain_contained_late_proof",
+      "targets": [{ "axis": "containment", "from": "uncertain", "to": "contained" }],
+      "requiredState": { "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_containment_not_requested_qualified_not_required",
+      "targets": [{ "axis": "containment", "from": "not_requested", "to": "qualified_not_required" }],
+      "requiredState": {
+        "admission": ["fenced"],
+        "output": ["fenced"],
+        "execution": ["not_started", "terminated"],
+        "terminal": ["open"]
+      },
+      "requiredFacts": [
+        "containment_capability_evidence_immutable",
+        "containment_qualification_receipt_exact",
+        "admission_fenced",
+        "output_fenced"
+      ]
+    },
+    {
+      "fact": "transition_cutoff_open_fenced",
+      "targets": [
+        { "axis": "admission", "from": "open", "to": "fenced" },
+        { "axis": "output", "from": "open", "to": "fenced" }
+      ],
+      "requiredState": { "terminal": ["open"] }
+    },
+    {
+      "fact": "transition_manifest_open_sealed_with_fences",
+      "targets": [{ "axis": "manifest", "from": "open", "to": "sealed" }],
+      "requiredState": { "admission": ["fenced"], "output": ["fenced"], "terminal": ["open"] },
+      "requiredFacts": ["admission_fenced", "output_fenced"]
+    },
+    {
+      "fact": "transition_terminal_open_final_with_closure",
+      "targets": [{ "axis": "terminal", "from": "open", "to": "final" }],
+      "requiredState": {
+        "admission": ["fenced"],
+        "output": ["fenced"],
+        "execution": ["terminated"],
+        "containment": ["not_requested", "contained", "qualified_not_required"],
+        "manifest": ["sealed"]
+      },
+      "requiredFacts": [
+        "admission_fenced",
+        "output_fenced",
+        "reconciliation_clear",
+        "execution_terminated",
+        "containment_satisfied",
+        "manifest_sealed",
+        "all_manifest_entries_satisfied"
+      ],
+      "forbiddenFacts": ["execution_not_started", "execution_active"]
+    },
+    {
+      "fact": "transition_terminal_open_final_not_started_with_closure",
+      "targets": [{ "axis": "terminal", "from": "open", "to": "final" }],
+      "requiredState": {
+        "admission": ["fenced"],
+        "output": ["fenced"],
+        "execution": ["not_started"],
+        "containment": ["not_requested", "contained", "qualified_not_required"],
+        "manifest": ["sealed"]
+      },
+      "requiredFacts": [
+        "admission_fenced",
+        "output_fenced",
+        "reconciliation_clear",
+        "execution_not_started",
+        "containment_satisfied",
+        "manifest_sealed",
+        "all_manifest_entries_satisfied"
+      ],
+      "forbiddenFacts": ["execution_active", "execution_terminated"]
+    }
+  ],
+  "forbiddenTransitionFacts": [
+    "transition_dispatch_accepted_claimed",
+    "transition_execution_terminated_active",
+    "transition_execution_start_without_claim",
+    "transition_execution_reset_without_not_accepted_proof",
+    "transition_execution_terminate_without_receipt",
+    "transition_containment_contained_pending",
+    "transition_containment_qualified_not_required_pending",
+    "transition_cutoff_fenced_open",
+    "transition_manifest_open_sealed_open_admission",
+    "transition_manifest_open_sealed_open_output",
+    "transition_terminal_open_final_active_execution",
+    "transition_terminal_final_open",
+    "transition_claim_without_execution_activation"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "seal-outbox-recovery",
+  "requirement": 6,
+  "examples": [
+    {
+      "id": "recover-sealed-unpublished-outbox",
+      "check": "outbox_recovery",
+      "facts": [
+        "seal_durable",
+        "outbox_unpublished"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "durable_recovery_required"
+      }
+    },
+    {
+      "id": "uncommitted-seal-cannot-publish",
+      "check": "outbox_recovery",
+      "facts": [
+        "outbox_unpublished"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "axis_invariant_violation"
+      }
+    }
+  ]
+}

@@ -19,6 +19,9 @@ the fail-closed machine-readable
 `docs/architecture/qualification-registry.json`; current open gates are in
 `docs/architecture/readiness.md`. Run `pnpm architecture:registry` to verify
 registry coverage and pinned evidence hashes.
+Executable repository governance, maintainability limits, and the approved
+bounded-context scaffolding workflow are recorded in
+[`docs/architecture/foundation-adoption.md`](docs/architecture/foundation-adoption.md).
 Current OpenCode platform evidence is in
 `docs/spikes/opencode-hosting-e2e-results.md` and
 `docs/spikes/opencode-macos-conformance-results.md`.

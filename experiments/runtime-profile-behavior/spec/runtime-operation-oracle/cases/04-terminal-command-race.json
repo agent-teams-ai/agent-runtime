@@ -1,0 +1,39 @@
+{
+  "id": "terminal-command-race",
+  "requirement": 4,
+  "examples": [
+    {
+      "id": "terminal-command-before-final-receipt",
+      "check": "terminal_replay",
+      "facts": [
+        "terminal_command_committed_first"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "final-receipt-before-duplicate-terminal",
+      "check": "terminal_replay",
+      "facts": [
+        "final_receipt_committed_first"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "terminal_already_final"
+      }
+    },
+    {
+      "id": "conflicting-terminal-replay",
+      "check": "terminal_replay",
+      "facts": [
+        "conflicting_replay"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "stale_authority"
+      }
+    }
+  ]
+}

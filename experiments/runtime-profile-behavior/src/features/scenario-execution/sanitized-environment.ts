@@ -57,4 +57,4 @@ export const inheritedSensitiveKeys = (
 ): readonly string[] =>
   Object.keys(environment)
     .filter((key) => SENSITIVE_KEY_PATTERN.test(key))
-    .sort();
+    .toSorted();

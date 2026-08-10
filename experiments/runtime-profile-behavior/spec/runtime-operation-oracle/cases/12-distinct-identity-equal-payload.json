@@ -1,0 +1,30 @@
+{
+  "id": "distinct-identity-equal-payload",
+  "requirement": 12,
+  "examples": [
+    {
+      "id": "equal-payload-distinct-effects",
+      "check": "distinct_external_identity",
+      "facts": [
+        "different_external_identity",
+        "same_payload"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "distinct_effect_required"
+      }
+    },
+    {
+      "id": "same-identity-cannot-create-distinct-effect",
+      "check": "distinct_external_identity",
+      "facts": [
+        "same_external_identity",
+        "same_payload"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "external_identity_conflict"
+      }
+    }
+  ]
+}

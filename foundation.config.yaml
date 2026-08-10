@@ -2,5 +2,17 @@ schemaVersion: 1
 project:
   id: agent-runtime
 capabilities:
+  quality.executable-specifications:
+    configPath: architecture/foundation/executable-specifications.yaml
+  architecture.source-dependencies:
+    configPath: architecture/foundation/source-dependencies.yaml
+  documentation.local-references:
+    configPath: architecture/foundation/documentation-local-references.yaml
+  governance.architecture-decisions:
+    configPath: architecture/foundation/governance-architecture-decisions.yaml
+  quality.suppression-governance:
+    configPath: architecture/foundation/suppression-governance.yaml
   repository.agent-workflow:
     configPath: architecture/foundation/repository-agent-workflow.yaml
+  workspace.dependency-declarations:
+    configPath: architecture/foundation/dependency-declarations.yaml

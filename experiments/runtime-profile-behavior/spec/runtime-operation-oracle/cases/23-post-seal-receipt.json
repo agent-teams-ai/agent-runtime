@@ -1,0 +1,30 @@
+{
+  "id": "post-seal-receipt",
+  "requirement": 23,
+  "examples": [
+    {
+      "id": "bound-receipt-after-seal",
+      "check": "post_seal_receipt",
+      "facts": [
+        "manifest_sealed",
+        "receipt_bound_to_manifest_entry"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "unbound-receipt-after-seal",
+      "check": "post_seal_receipt",
+      "facts": [
+        "manifest_sealed",
+        "receipt_unbound"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "receipt_not_bound"
+      }
+    }
+  ]
+}

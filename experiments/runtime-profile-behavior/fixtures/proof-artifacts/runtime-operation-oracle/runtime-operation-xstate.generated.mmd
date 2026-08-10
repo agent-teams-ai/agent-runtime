@@ -1,0 +1,67 @@
+%% Generated from ADR-0006 JSON authority. Do not edit.
+flowchart LR
+  scope["Synthetic verifier: ADR-0006 requirement 27 only"]
+  warning["Topology reachability is not 10-axis semantic validity or production runtime behavior"]
+  scope -.-> warning
+  subgraph dispatch["dispatch"]
+    dispatch_unclaimed["unclaimed"]
+    dispatch_claimed["claimed"]
+    dispatch_acceptance_unknown["acceptance_unknown"]
+    dispatch_known_not_accepted["known_not_accepted"]
+    dispatch_provider_accepted["provider_accepted"]
+  end
+  subgraph execution["execution"]
+    execution_not_started["not_started"]
+    execution_active["active"]
+    execution_terminated["terminated"]
+  end
+  subgraph containment["containment"]
+    containment_not_requested["not_requested"]
+    containment_pending["pending"]
+    containment_contained["contained"]
+    containment_uncertain["uncertain"]
+    containment_qualified_not_required["qualified_not_required"]
+  end
+  subgraph admission["admission"]
+    admission_open["open"]
+    admission_fenced["fenced"]
+  end
+  subgraph output["output"]
+    output_open["open"]
+    output_fenced["fenced"]
+  end
+  subgraph manifest["manifest"]
+    manifest_open["open"]
+    manifest_sealed["sealed"]
+  end
+  subgraph terminal["terminal"]
+    terminal_open["open"]
+    terminal_final["final"]
+  end
+  dispatch_unclaimed -->|"transition_dispatch_unclaimed_claimed"| dispatch_claimed
+  execution_not_started -->|"transition_dispatch_unclaimed_claimed"| execution_active
+  dispatch_claimed -->|"transition_dispatch_claimed_unknown"| dispatch_acceptance_unknown
+  dispatch_claimed -->|"transition_dispatch_claimed_not_accepted"| dispatch_known_not_accepted
+  execution_active -->|"transition_dispatch_claimed_not_accepted"| execution_not_started
+  dispatch_claimed -->|"transition_dispatch_claimed_accepted"| dispatch_provider_accepted
+  dispatch_acceptance_unknown -->|"transition_dispatch_unknown_not_accepted"| dispatch_known_not_accepted
+  execution_active -->|"transition_dispatch_unknown_not_accepted"| execution_not_started
+  dispatch_acceptance_unknown -->|"transition_dispatch_unknown_accepted"| dispatch_provider_accepted
+  dispatch_known_not_accepted -->|"transition_dispatch_not_accepted_claimed_fresh"| dispatch_claimed
+  execution_not_started -->|"transition_dispatch_not_accepted_claimed_fresh"| execution_active
+  dispatch_unclaimed -->|"transition_execution_not_started_active_with_claim"| dispatch_claimed
+  execution_not_started -->|"transition_execution_not_started_active_with_claim"| execution_active
+  dispatch_claimed -->|"transition_execution_active_not_started_with_proof"| dispatch_known_not_accepted
+  execution_active -->|"transition_execution_active_not_started_with_proof"| execution_not_started
+  execution_active -->|"transition_execution_active_terminated_with_receipt"| execution_terminated
+  containment_not_requested -->|"transition_containment_not_requested_pending"| containment_pending
+  containment_pending -->|"transition_containment_pending_contained"| containment_contained
+  containment_pending -->|"transition_containment_pending_uncertain"| containment_uncertain
+  containment_uncertain -->|"transition_containment_uncertain_pending_retry"| containment_pending
+  containment_uncertain -->|"transition_containment_uncertain_contained_late_proof"| containment_contained
+  containment_not_requested -->|"transition_containment_not_requested_qualified_not_required"| containment_qualified_not_required
+  admission_open -->|"transition_cutoff_open_fenced"| admission_fenced
+  output_open -->|"transition_cutoff_open_fenced"| output_fenced
+  manifest_open -->|"transition_manifest_open_sealed_with_fences"| manifest_sealed
+  terminal_open -->|"transition_terminal_open_final_with_closure"| terminal_final
+  terminal_open -->|"transition_terminal_open_final_not_started_with_closure"| terminal_final

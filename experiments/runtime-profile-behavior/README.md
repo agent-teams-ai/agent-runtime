@@ -9,12 +9,15 @@ core. The canonical decision is:
 
 The cross-campaign exact target index is
 `docs/architecture/qualification-registry.json`. It defaults every omitted
-provider/binary/platform/credential/transport/failure-domain combination to
-`unqualified`; `pnpm architecture:registry` verifies its coverage and evidence
-hashes.
+provider/provider-adapter/binary-closure/platform/credential-route/storage-
+topology/transport-topology/failure-domain whole tuple to `unqualified`;
+`pnpm architecture:registry` verifies its coverage and evidence hashes.
 
 Current runtime-profile and execution evidence:
 
+- `spec/runtime-operation-oracle/README.md` - synthetic executable evidence for
+  proposed ADR-0006, with JSON authority, generated review artifacts, and an
+  explicit validity-versus-reachability boundary;
 - `docs/spikes/opencode-hosting-e2e-results.md` - human-readable accepted
   scoped results and adapter consequences;
 - `fixtures/opencode-hosting-e2e-summary.json` - redacted machine-readable

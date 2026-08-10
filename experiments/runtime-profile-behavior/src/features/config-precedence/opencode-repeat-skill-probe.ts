@@ -52,7 +52,7 @@ process.stdout.write(
           const [observedMarker, location] = key.split("|", 2);
           return { observedMarker, location, count };
         })
-        .sort((left, right) =>
+        .toSorted((left, right) =>
           String(left.observedMarker).localeCompare(String(right.observedMarker)),
         ),
     },

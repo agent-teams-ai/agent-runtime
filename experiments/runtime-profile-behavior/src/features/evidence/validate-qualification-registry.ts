@@ -12,10 +12,12 @@ const LEVELS = [
 
 const DIMENSIONS = [
   "provider",
+  "providerAdapter",
   "binaryClosure",
   "platform",
   "credentialRoute",
-  "transport",
+  "storageTopology",
+  "transportTopology",
   "failureDomain",
 ] as const;
 
@@ -35,7 +37,7 @@ type EvidenceRecord = {
 type RegistryEntry = {
   id: string;
   qualification: (typeof LEVELS)[number];
-  dimensions: Record<(typeof DIMENSIONS)[number], readonly string[]>;
+  targets: readonly QualificationTarget[];
   evidence: readonly EvidenceRecord[];
   readinessSections: readonly string[];
   limitations: readonly string[];
@@ -68,8 +70,8 @@ const exactKeys = (
   expected: readonly string[],
   label: string,
 ): void => {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
+  const actual = Object.keys(value).toSorted();
+  const wanted = [...expected].toSorted();
   if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
     fail(`${label} keys differ: expected ${wanted.join(", ")}, got ${actual.join(", ")}`);
   }
@@ -85,7 +87,6 @@ const asString = (value: unknown, label: string): string => {
 const asStringArray = (
   value: unknown,
   label: string,
-  options: { exactTokens?: boolean } = {},
 ): readonly string[] => {
   if (!Array.isArray(value) || value.length === 0) {
     return fail(`${label} must be a non-empty array`);
@@ -95,12 +96,6 @@ const asStringArray = (
   );
   if (new Set(items).size !== items.length) {
     fail(`${label} contains duplicates`);
-  }
-  if (
-    options.exactTokens &&
-    items.some((item) => FORBIDDEN_TOKENS.has(item.toLowerCase()))
-  ) {
-    fail(`${label} contains a forbidden wildcard token`);
   }
   return items;
 };
@@ -113,7 +108,7 @@ const parseEntry = (value: unknown, index: number): RegistryEntry => {
     [
       "id",
       "qualification",
-      "dimensions",
+      "targets",
       "evidence",
       "readinessSections",
       "limitations",
@@ -122,7 +117,9 @@ const parseEntry = (value: unknown, index: number): RegistryEntry => {
   );
 
   const id = asString(entry.id, `${label}.id`);
-  if (!ENTRY_ID.test(id)) fail(`${label}.id is not canonical`);
+  if (!ENTRY_ID.test(id)) {
+    fail(`${label}.id is not canonical`);
+  }
 
   const qualification = asString(
     entry.qualification,
@@ -132,18 +129,13 @@ const parseEntry = (value: unknown, index: number): RegistryEntry => {
     fail(`${label}.qualification is unknown`);
   }
 
-  const dimensionsValue = asRecord(entry.dimensions, `${label}.dimensions`);
-  exactKeys(dimensionsValue, DIMENSIONS, `${label}.dimensions`);
-  const dimensions = Object.fromEntries(
-    DIMENSIONS.map((dimension) => [
-      dimension,
-      asStringArray(
-        dimensionsValue[dimension],
-        `${label}.dimensions.${dimension}`,
-        { exactTokens: true },
-      ),
-    ]),
-  ) as RegistryEntry["dimensions"];
+  if (!Array.isArray(entry.targets) || entry.targets.length === 0) {
+    fail(`${label}.targets must be a non-empty array`);
+  }
+  const targetValues = entry.targets as unknown[];
+  const targets = targetValues.map((target: unknown, targetIndex: number) =>
+    parseTarget(target, `${label}.targets[${targetIndex}]`),
+  );
 
   const evidenceValue = entry.evidence;
   if (!Array.isArray(evidenceValue) || evidenceValue.length === 0) {
@@ -172,7 +164,9 @@ const parseEntry = (value: unknown, index: number): RegistryEntry => {
         fail(`${evidenceLabel}.path escapes the approved evidence roots`);
       }
       const sha256 = asString(record.sha256, `${evidenceLabel}.sha256`);
-      if (!SHA256.test(sha256)) fail(`${evidenceLabel}.sha256 is invalid`);
+      if (!SHA256.test(sha256)) {
+        fail(`${evidenceLabel}.sha256 is invalid`);
+      }
       return { kind, path, sha256 };
     },
   );
@@ -183,7 +177,7 @@ const parseEntry = (value: unknown, index: number): RegistryEntry => {
   return {
     id,
     qualification: qualification as RegistryEntry["qualification"],
-    dimensions,
+    targets,
     evidence,
     readinessSections: asStringArray(
       entry.readinessSections,
@@ -212,7 +206,9 @@ export const validateQualificationRegistryShape = (
   if (registry.$schema !== "./qualification-registry.schema.json") {
     fail("$schema must reference the repository-local schema");
   }
-  if (registry.schemaVersion !== 1) fail("schemaVersion must equal 1");
+  if (registry.schemaVersion !== 1) {
+    fail("schemaVersion must equal 1");
+  }
   if (
     typeof registry.generatedAt !== "string" ||
     !/^\d{4}-\d{2}-\d{2}$/.test(registry.generatedAt)
@@ -234,9 +230,9 @@ export const validateQualificationRegistryShape = (
   );
   if (
     policy.default !== "unqualified" ||
-    policy.dimensionRule !== "exact-match-all-dimensions" ||
+    policy.dimensionRule !== "exact-match-whole-target-tuple" ||
     policy.entryValueRule !==
-      "target-token-equals-one-observed-token-per-dimension" ||
+      "each-target-is-one-complete-observed-scalar-tuple" ||
     policy.wildcardsAllowed !== false ||
     policy.promotionRule !== "explicit-evidence-and-readiness-update"
   ) {
@@ -255,23 +251,42 @@ export const validateQualificationRegistryShape = (
     (entry: unknown, index: number) => parseEntry(entry, index),
   );
   const ids = entries.map(({ id }) => id);
-  if (new Set(ids).size !== ids.length) fail("entry IDs are not unique");
+  if (new Set(ids).size !== ids.length) {
+    fail("entry IDs are not unique");
+  }
+
+  const qualificationsByTuple = new Map<string, RegistryEntry["qualification"]>();
+  for (const entry of entries) {
+    for (const target of entry.targets) {
+      const canonicalTuple = JSON.stringify(
+        Object.fromEntries(DIMENSIONS.map((dimension) => [dimension, target[dimension]])),
+      );
+      const previous = qualificationsByTuple.get(canonicalTuple);
+      if (previous !== undefined) {
+        if (previous !== entry.qualification) {
+          fail(`canonical target tuple has conflicting qualifications: ${canonicalTuple}`);
+        }
+        fail(`canonical target tuple is registered more than once: ${canonicalTuple}`);
+      }
+      qualificationsByTuple.set(canonicalTuple, entry.qualification);
+    }
+  }
   return entries;
 };
 
-const parseTarget = (value: unknown): QualificationTarget => {
-  const target = asRecord(value, "target");
-  exactKeys(target, DIMENSIONS, "target");
+function parseTarget(value: unknown, label = "target"): QualificationTarget {
+  const target = asRecord(value, label);
+  exactKeys(target, DIMENSIONS, label);
   return Object.fromEntries(
     DIMENSIONS.map((dimension) => {
-      const token = asString(target[dimension], `target.${dimension}`);
+      const token = asString(target[dimension], `${label}.${dimension}`);
       if (FORBIDDEN_TOKENS.has(token.toLowerCase())) {
-        fail(`target.${dimension} contains a forbidden wildcard token`);
+        fail(`${label}.${dimension} contains a forbidden wildcard token`);
       }
       return [dimension, token];
     }),
   ) as QualificationTarget;
-};
+}
 
 export const matchQualificationTarget = (
   value: unknown,
@@ -280,11 +295,9 @@ export const matchQualificationTarget = (
   const entries = validateQualificationRegistryShape(value);
   const target = parseTarget(targetValue);
   return entries
-    .filter((entry) =>
-      DIMENSIONS.every((dimension) =>
-        entry.dimensions[dimension].includes(target[dimension]),
-      ),
-    )
+    .filter((entry) => entry.targets.some((observedTarget) =>
+      DIMENSIONS.every((dimension) => observedTarget[dimension] === target[dimension]),
+    ))
     .map(({ id, qualification }) => ({ id, qualification }));
 };
 
@@ -292,7 +305,7 @@ const sha256 = (bytes: Uint8Array): string =>
   createHash("sha256").update(bytes).digest("hex");
 
 const sorted = (values: Iterable<string>): readonly string[] =>
-  [...values].sort((left, right) => left.localeCompare(right));
+  [...values].toSorted((left, right) => left.localeCompare(right));
 
 export const validateQualificationRegistry = async (
   repositoryRoot: string,
@@ -312,7 +325,9 @@ export const validateQualificationRegistry = async (
         fail(`evidence path is registered more than once: ${evidence.path}`);
       }
       evidencePaths.add(evidence.path);
-      if (evidence.kind === "human-report") reportPaths.add(evidence.path);
+      if (evidence.kind === "human-report") {
+        reportPaths.add(evidence.path);
+      }
 
       const absolutePath = resolve(repositoryRoot, evidence.path);
       const relativePath = relative(repositoryRoot, absolutePath);
@@ -425,6 +440,7 @@ if (process.argv[1] && resolve(process.argv[1]) === sourcePath) {
           })}\n`,
         );
       }
+      return;
     })
     .catch((error: unknown) => {
       process.stderr.write(
