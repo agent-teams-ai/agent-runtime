@@ -25,7 +25,9 @@
     "lint": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config .",
     "lint:changed": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config --format agent --no-error-on-unmatched-pattern",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
-    "architecture:operation-oracle": "node experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts",
+    "architecture:operation-oracle": "pnpm architecture:operation-oracle:generated && node experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts",
+    "architecture:operation-oracle:generate": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --write",
+    "architecture:operation-oracle:generated": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --check",
     "spike:inventory": "node experiments/runtime-profile-behavior/src/cli.ts inventory",
     "spike:baseline": "node experiments/runtime-profile-behavior/src/cli.ts baseline",
     "spike:precedence": "node experiments/runtime-profile-behavior/src/cli.ts precedence",
@@ -56,9 +58,15 @@
     "@agentclientprotocol/sdk": "catalog:",
     "@opencode-ai/plugin": "catalog:",
     "@types/node": "catalog:",
+    "@xstate/graph": "catalog:",
+    "ajv": "catalog:",
+    "fast-check": "catalog:",
+    "json-schema-to-typescript": "catalog:",
+    "jsonc-parser": "catalog:",
     "opencode-ai": "catalog:",
     "opencode-previous": "catalog:",
     "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "xstate": "catalog:"
   }
 }

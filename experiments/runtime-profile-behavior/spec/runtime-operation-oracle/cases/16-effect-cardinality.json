@@ -1,0 +1,50 @@
+{
+  "id": "effect-cardinality",
+  "requirement": 16,
+  "examples": [
+    {
+      "id": "operation-with-zero-effects",
+      "check": "effect_cardinality",
+      "facts": [
+        "zero_effects"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "operation-with-one-coarse-effect",
+      "check": "effect_cardinality",
+      "facts": [
+        "one_coarse_effect"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "operation-with-multiple-mediated-effects",
+      "check": "effect_cardinality",
+      "facts": [
+        "multiple_mediated_effects"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "operation-with-invalid-effect-cardinality",
+      "check": "effect_cardinality",
+      "facts": [
+        "invalid_effect_cardinality"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "invalid_effect_cardinality"
+      }
+    }
+  ]
+}

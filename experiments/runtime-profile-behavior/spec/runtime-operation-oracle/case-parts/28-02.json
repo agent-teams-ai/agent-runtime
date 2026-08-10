@@ -1,0 +1,646 @@
+[
+  {
+    "id": "stale-abandon-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "operation_acceptance_aborted_receipt_stale"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "wrong-scope-abandon-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "operation_acceptance_aborted_receipt_wrong_scope"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "unknown-abandon-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "operation_acceptance_aborted_receipt_unknown"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "release-closure-without-root-rejected",
+    "check": "binary_revision_retention",
+    "facts": [
+      "semantic_root_release_requested",
+      "terminal_write_once",
+      "effect_closure_write_once",
+      "durable_revision_independent_projection",
+      "release_manifest_identity_binding_complete",
+      "release_manifest_retention_obligation_digest",
+      "release_manifest_terminal_satisfaction_digests",
+      "release_manifest_effect_closure_receipts",
+      "release_manifest_projection_independence_receipts",
+      "release_manifest_typed_non_applicability_complete",
+      "retention_obligation_set_sealed",
+      "retention_obligation_seal_requested",
+      "retention_obligation_seal_cas_won",
+      "retention_obligation_final_digest_durable",
+      "retention_obligation_seal_receipt_durable",
+      "release_obligation_final_digest_exact"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "semantic_root_required"
+    }
+  },
+  {
+    "id": "release-without-identity-binding-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "semantic_root_release_requested",
+      "binary_revision_root_established",
+      "terminal_write_once",
+      "effect_closure_write_once",
+      "durable_revision_independent_projection",
+      "release_manifest_retention_obligation_digest",
+      "release_manifest_terminal_satisfaction_digests",
+      "release_manifest_effect_closure_receipts",
+      "release_manifest_projection_independence_receipts",
+      "release_manifest_typed_non_applicability_complete",
+      "retention_obligation_set_sealed",
+      "retention_obligation_seal_requested",
+      "retention_obligation_seal_cas_won",
+      "retention_obligation_final_digest_durable",
+      "retention_obligation_seal_receipt_durable",
+      "release_obligation_final_digest_exact"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "release-without-obligation-digest-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "semantic_root_release_requested",
+      "binary_revision_root_established",
+      "terminal_write_once",
+      "effect_closure_write_once",
+      "durable_revision_independent_projection",
+      "release_manifest_identity_binding_complete",
+      "release_manifest_terminal_satisfaction_digests",
+      "release_manifest_effect_closure_receipts",
+      "release_manifest_projection_independence_receipts",
+      "release_manifest_typed_non_applicability_complete",
+      "retention_obligation_set_sealed",
+      "retention_obligation_seal_requested",
+      "retention_obligation_seal_cas_won",
+      "retention_obligation_final_digest_durable",
+      "retention_obligation_seal_receipt_durable",
+      "release_obligation_final_digest_exact"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "release-without-terminal-satisfaction-digests-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "semantic_root_release_requested",
+      "binary_revision_root_established",
+      "terminal_write_once",
+      "effect_closure_write_once",
+      "durable_revision_independent_projection",
+      "release_manifest_identity_binding_complete",
+      "release_manifest_retention_obligation_digest",
+      "release_manifest_effect_closure_receipts",
+      "release_manifest_projection_independence_receipts",
+      "release_manifest_typed_non_applicability_complete",
+      "retention_obligation_set_sealed",
+      "retention_obligation_seal_requested",
+      "retention_obligation_seal_cas_won",
+      "retention_obligation_final_digest_durable",
+      "retention_obligation_seal_receipt_durable",
+      "release_obligation_final_digest_exact"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "release-without-effect-receipts-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "semantic_root_release_requested",
+      "binary_revision_root_established",
+      "terminal_write_once",
+      "effect_closure_write_once",
+      "durable_revision_independent_projection",
+      "release_manifest_identity_binding_complete",
+      "release_manifest_retention_obligation_digest",
+      "release_manifest_terminal_satisfaction_digests",
+      "release_manifest_projection_independence_receipts",
+      "release_manifest_typed_non_applicability_complete",
+      "retention_obligation_set_sealed",
+      "retention_obligation_seal_requested",
+      "retention_obligation_seal_cas_won",
+      "retention_obligation_final_digest_durable",
+      "retention_obligation_seal_receipt_durable",
+      "release_obligation_final_digest_exact"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "release-without-projection-independence-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "semantic_root_release_requested",
+      "binary_revision_root_established",
+      "terminal_write_once",
+      "effect_closure_write_once",
+      "durable_revision_independent_projection",
+      "release_manifest_identity_binding_complete",
+      "release_manifest_retention_obligation_digest",
+      "release_manifest_terminal_satisfaction_digests",
+      "release_manifest_effect_closure_receipts",
+      "release_manifest_typed_non_applicability_complete",
+      "retention_obligation_set_sealed",
+      "retention_obligation_seal_requested",
+      "retention_obligation_seal_cas_won",
+      "retention_obligation_final_digest_durable",
+      "retention_obligation_seal_receipt_durable",
+      "release_obligation_final_digest_exact"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "release-without-typed-non-applicability-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "semantic_root_release_requested",
+      "binary_revision_root_established",
+      "terminal_write_once",
+      "effect_closure_write_once",
+      "durable_revision_independent_projection",
+      "release_manifest_identity_binding_complete",
+      "release_manifest_retention_obligation_digest",
+      "release_manifest_terminal_satisfaction_digests",
+      "release_manifest_effect_closure_receipts",
+      "release_manifest_projection_independence_receipts",
+      "retention_obligation_set_sealed",
+      "retention_obligation_seal_requested",
+      "retention_obligation_seal_cas_won",
+      "retention_obligation_final_digest_durable",
+      "retention_obligation_seal_receipt_durable",
+      "release_obligation_final_digest_exact"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "incomplete-release-manifest-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "release_manifest_incomplete"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "stale-release-manifest-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "release_manifest_stale"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "wrong-scope-release-manifest-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "release_manifest_wrong_scope"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "unknown-release-manifest-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "release_manifest_unknown"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "duplicate-release-evidence-retains-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "release_manifest_duplicate_evidence"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "semantic_root_retained"
+    }
+  },
+  {
+    "id": "release-manifest-digest-conflict",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "release_manifest_digest_conflict"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "release_manifest_conflict"
+    }
+  },
+  {
+    "id": "post-release-manifest-digest-conflict",
+    "check": "binary_revision_retention",
+    "facts": [
+      "owner_release_receipt_durable",
+      "release_exact_replay",
+      "release_manifest_digest_conflict"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "release_manifest_conflict"
+    }
+  },
+  {
+    "id": "physical-deletion-crash-reconciles-claim",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "physical_deletion_started",
+      "physical_deletion_crash"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "deletion_reconciliation_required"
+    }
+  },
+  {
+    "id": "physical-deletion-completes-with-durable-receipt",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "physical_deletion_completed",
+      "deletion_completed_receipt_durable",
+      "final_deleted_state_durable"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "physical_deletion_completed"
+    }
+  },
+  {
+    "id": "physical-deletion-exact-replay",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "deletion_completed_receipt_durable",
+      "final_deleted_state_durable",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "physical_deletion_replayed"
+    }
+  },
+  {
+    "id": "physical-deletion-replay-without-completion-reconciles",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "deletion_reconciliation_required"
+    }
+  },
+  {
+    "id": "physical-deletion-partial-reconciles",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "physical_deletion_partial"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "deletion_reconciliation_required"
+    }
+  },
+  {
+    "id": "physical-deletion-unknown-reconciles",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "physical_deletion_unknown"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "deletion_reconciliation_required"
+    }
+  },
+  {
+    "id": "physical-deletion-with-active-root-blocked",
+    "check": "binary_revision_retention",
+    "facts": [
+      "binary_revision_root_established",
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "deletion_completed_receipt_durable",
+      "final_deleted_state_durable",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "deletion_integrity_contradiction"
+    }
+  },
+  {
+    "id": "physical-deletion-with-root-cas-winner-blocked",
+    "check": "binary_revision_retention",
+    "facts": [
+      "root_cas_won",
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "deletion_completed_receipt_durable",
+      "final_deleted_state_durable",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "deletion_integrity_contradiction"
+    }
+  },
+  {
+    "id": "physical-deletion-with-contradictory-root-evidence-blocked",
+    "check": "binary_revision_retention",
+    "facts": [
+      "contradictory_zero_and_retained_roots",
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "deletion_completed_receipt_durable",
+      "final_deleted_state_durable",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "deletion_integrity_contradiction"
+    }
+  },
+  {
+    "id": "physical-deletion-without-durable-claim-blocked",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "binary_revision_gc_blocked"
+    }
+  },
+  {
+    "id": "physical-deletion-wrong-scope-claim-blocked",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "deletion_claim_wrong_scope",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "binary_revision_gc_blocked"
+    }
+  },
+  {
+    "id": "physical-deletion-wrong-set-digest-blocked",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_wrong",
+      "store_level_deletion_reference_fence_exact",
+      "predelete_tombstone_durable",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "binary_revision_gc_blocked"
+    }
+  },
+  {
+    "id": "physical-deletion-stale-store-fence-blocked",
+    "check": "binary_revision_retention",
+    "facts": [
+      "zero_semantic_roots",
+      "existing_gc_blockers_clear",
+      "host_custody_collection_cas_won",
+      "durable_gc_deletion_intent_claim",
+      "deletion_set_digest_exact",
+      "store_level_deletion_reference_fence_stale",
+      "physical_deletion_exact_replay"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "binary_revision_gc_blocked"
+    }
+  },
+  {
+    "id": "shared-effect-work-complete-roots",
+    "check": "binary_revision_retention",
+    "facts": [
+      "operation_acceptance_intent_persisted",
+      "operation_acceptance_committed",
+      "operation_acceptance_state_accepted",
+      "operation_acceptance_transaction_complete",
+      "binary_revision_root_established",
+      "retention_receipt_exact_current",
+      "retention_obligation_set_pinned",
+      "retention_obligation_schema_revision_pinned",
+      "retention_obligation_policy_revision_pinned",
+      "retention_obligation_capability_revision_pinned",
+      "retention_obligation_set_digest_exact",
+      "retention_obligation_set_open",
+      "execution_authority_present",
+      "provider_or_effect_work_requested",
+      "shared_effect",
+      "attempting_operation_roots_complete"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "accepted"
+    }
+  },
+  {
+    "id": "shared-effect-work-missing-root",
+    "check": "binary_revision_retention",
+    "facts": [
+      "operation_acceptance_intent_persisted",
+      "operation_acceptance_committed",
+      "operation_acceptance_state_accepted",
+      "operation_acceptance_transaction_complete",
+      "binary_revision_root_established",
+      "retention_receipt_exact_current",
+      "retention_obligation_set_pinned",
+      "retention_obligation_schema_revision_pinned",
+      "retention_obligation_policy_revision_pinned",
+      "retention_obligation_capability_revision_pinned",
+      "retention_obligation_set_digest_exact",
+      "retention_obligation_set_open",
+      "execution_authority_present",
+      "provider_or_effect_work_requested",
+      "shared_effect",
+      "attempting_operation_root_missing"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "semantic_root_required"
+    }
+  },
+  {
+    "id": "shared-effect-conflicting-root-facts-reject",
+    "check": "binary_revision_retention",
+    "facts": [
+      "shared_effect",
+      "attempting_operation_roots_complete",
+      "attempting_operation_root_missing"
+    ],
+    "expected": {
+      "decision": "reject",
+      "code": "semantic_root_required"
+    }
+  },
+  {
+    "id": "accept-cas-wins-pending-revision",
+    "check": "binary_revision_retention",
+    "facts": [
+      "operation_acceptance_revision_pending",
+      "operation_acceptance_accept_requested",
+      "operation_acceptance_accept_cas_won",
+      "operation_acceptance_state_accepted",
+      "operation_acceptance_committed",
+      "operation_acceptance_transaction_complete"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "accepted"
+    }
+  },
+  {
+    "id": "abort-cas-wins-pending-revision",
+    "check": "binary_revision_retention",
+    "facts": [
+      "operation_acceptance_revision_pending",
+      "operation_acceptance_abort_requested",
+      "operation_acceptance_abort_cas_won",
+      "operation_acceptance_state_aborted",
+      "operation_abort_transaction_complete",
+      "operation_acceptance_aborted_receipt_exact"
+    ],
+    "expected": {
+      "decision": "accept",
+      "code": "operation_acceptance_aborted"
+    }
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "id": "requirement-closure-race",
+  "requirement": 3,
+  "examples": [
+    {
+      "id": "reservation-before-seal",
+      "check": "requirement_closure_race",
+      "facts": [
+        "reservation_committed_first"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "seal-before-reservation",
+      "check": "requirement_closure_race",
+      "facts": [
+        "manifest_seal_committed_first"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "reservation_rejected_after_seal"
+      }
+    }
+  ]
+}

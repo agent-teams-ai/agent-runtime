@@ -1,0 +1,30 @@
+{
+  "id": "successor-effect-identity",
+  "requirement": 10,
+  "examples": [
+    {
+      "id": "successors-share-qualified-effect",
+      "check": "effect_identity_claim",
+      "facts": [
+        "same_external_identity",
+        "same_fingerprint"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "idempotent_existing_effect"
+      }
+    },
+    {
+      "id": "successors-conflict-on-fingerprint",
+      "check": "effect_identity_claim",
+      "facts": [
+        "same_external_identity",
+        "different_fingerprint"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "external_identity_conflict"
+      }
+    }
+  ]
+}

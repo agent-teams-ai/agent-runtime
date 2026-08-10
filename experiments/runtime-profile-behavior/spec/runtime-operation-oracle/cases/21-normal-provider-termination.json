@@ -1,0 +1,30 @@
+{
+  "id": "normal-provider-termination",
+  "requirement": 21,
+  "examples": [
+    {
+      "id": "normal-termination-needs-no-containment",
+      "check": "normal_provider_termination",
+      "facts": [
+        "provider_execution_terminated",
+        "containment_not_requested"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "containment_not_required"
+      }
+    },
+    {
+      "id": "uncertain-containment-blocks-terminal",
+      "check": "normal_provider_termination",
+      "facts": [
+        "provider_execution_terminated",
+        "containment_uncertain"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "reconciliation_required"
+      }
+    }
+  ]
+}

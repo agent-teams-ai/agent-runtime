@@ -1,0 +1,541 @@
+{
+  "schemaVersion": 1,
+  "adr": "ADR-0006",
+  "requirement": 27,
+  "machineKind": "synthetic-verifier",
+  "scope": "seven-axis transition topology only; not production runtime behavior",
+  "staticStateProduct": {
+    "total": 48000,
+    "valid": 1277,
+    "invalid": 46723,
+    "meaning": "independent handwritten classification of the complete ten-axis Cartesian product; not XState reachability"
+  },
+  "topologyReachability": {
+    "axes": [
+      "dispatch",
+      "execution",
+      "containment",
+      "admission",
+      "output",
+      "manifest",
+      "terminal"
+    ],
+    "reachableStateCount": 94,
+    "validExtensionCount": 94,
+    "meaning": "reachable snapshots in the requirement-27 synthetic XState topology; each has at least one valid ten-axis extension"
+  },
+  "shortestPathWitnesses": [
+    {
+      "fact": "transition_dispatch_unclaimed_claimed",
+      "events": [
+        "transition_dispatch_unclaimed_claimed"
+      ],
+      "source": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_dispatch_claimed_unknown",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_dispatch_claimed_unknown"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "acceptance_unknown",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_dispatch_claimed_not_accepted",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_dispatch_claimed_not_accepted"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "known_not_accepted",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_dispatch_claimed_accepted",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_dispatch_claimed_accepted"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "provider_accepted",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_dispatch_unknown_not_accepted",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_dispatch_claimed_unknown",
+        "transition_dispatch_unknown_not_accepted"
+      ],
+      "source": {
+        "dispatch": "acceptance_unknown",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "known_not_accepted",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_dispatch_unknown_accepted",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_dispatch_claimed_unknown",
+        "transition_dispatch_unknown_accepted"
+      ],
+      "source": {
+        "dispatch": "acceptance_unknown",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "provider_accepted",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_dispatch_not_accepted_claimed_fresh",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_dispatch_claimed_not_accepted",
+        "transition_dispatch_not_accepted_claimed_fresh"
+      ],
+      "source": {
+        "dispatch": "known_not_accepted",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_execution_not_started_active_with_claim",
+      "events": [
+        "transition_execution_not_started_active_with_claim"
+      ],
+      "source": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_execution_active_not_started_with_proof",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_execution_active_not_started_with_proof"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "known_not_accepted",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_execution_active_terminated_with_receipt",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_dispatch_claimed_unknown",
+        "transition_execution_active_terminated_with_receipt"
+      ],
+      "source": {
+        "dispatch": "acceptance_unknown",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "acceptance_unknown",
+        "execution": "terminated",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_containment_not_requested_pending",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_containment_not_requested_pending"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "pending",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_containment_pending_contained",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_containment_not_requested_pending",
+        "transition_containment_pending_contained"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "pending",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "contained",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_containment_pending_uncertain",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_containment_not_requested_pending",
+        "transition_containment_pending_uncertain"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "pending",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "uncertain",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_containment_uncertain_pending_retry",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_containment_not_requested_pending",
+        "transition_containment_pending_uncertain",
+        "transition_containment_uncertain_pending_retry"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "uncertain",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "pending",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_containment_uncertain_contained_late_proof",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_containment_not_requested_pending",
+        "transition_containment_pending_uncertain",
+        "transition_containment_uncertain_contained_late_proof"
+      ],
+      "source": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "uncertain",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "claimed",
+        "execution": "active",
+        "containment": "contained",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_containment_not_requested_qualified_not_required",
+      "events": [
+        "transition_cutoff_open_fenced",
+        "transition_containment_not_requested_qualified_not_required"
+      ],
+      "source": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "qualified_not_required",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_cutoff_open_fenced",
+      "events": [
+        "transition_cutoff_open_fenced"
+      ],
+      "source": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "open",
+        "output": "open",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "open",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_manifest_open_sealed_with_fences",
+      "events": [
+        "transition_cutoff_open_fenced",
+        "transition_manifest_open_sealed_with_fences"
+      ],
+      "source": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "open",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "sealed",
+        "terminal": "open"
+      }
+    },
+    {
+      "fact": "transition_terminal_open_final_with_closure",
+      "events": [
+        "transition_dispatch_unclaimed_claimed",
+        "transition_dispatch_claimed_unknown",
+        "transition_execution_active_terminated_with_receipt",
+        "transition_cutoff_open_fenced",
+        "transition_manifest_open_sealed_with_fences",
+        "transition_terminal_open_final_with_closure"
+      ],
+      "source": {
+        "dispatch": "acceptance_unknown",
+        "execution": "terminated",
+        "containment": "not_requested",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "sealed",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "acceptance_unknown",
+        "execution": "terminated",
+        "containment": "not_requested",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "sealed",
+        "terminal": "final"
+      }
+    },
+    {
+      "fact": "transition_terminal_open_final_not_started_with_closure",
+      "events": [
+        "transition_cutoff_open_fenced",
+        "transition_manifest_open_sealed_with_fences",
+        "transition_terminal_open_final_not_started_with_closure"
+      ],
+      "source": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "sealed",
+        "terminal": "open"
+      },
+      "target": {
+        "dispatch": "unclaimed",
+        "execution": "not_started",
+        "containment": "not_requested",
+        "admission": "fenced",
+        "output": "fenced",
+        "manifest": "sealed",
+        "terminal": "final"
+      }
+    }
+  ]
+}

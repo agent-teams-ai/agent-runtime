@@ -1,4 +1,4 @@
-type BinaryRetentionFactRole = "command_intent" | "work_intent" | "evidence";
+// Generated from ADR-0006 JSON authority. Do not edit.
 
 export const BINARY_RETENTION_FACT_ROLE_CATALOG = {
   "binary_revision_root_established": "evidence",
@@ -116,10 +116,10 @@ export const BINARY_RETENTION_FACT_ROLE_CATALOG = {
   "physical_deletion_unknown": "evidence",
   "physical_deletion_completed": "evidence",
   "physical_deletion_exact_replay": "command_intent",
-  "dispatch_requested": "work_intent",
-} as const satisfies Record<string, BinaryRetentionFactRole>;
+  "dispatch_requested": "work_intent"
+} as const;
 
-type BinaryRetentionAllowedFact = keyof typeof BINARY_RETENTION_FACT_ROLE_CATALOG;
+export type BinaryRetentionAllowedFact = keyof typeof BINARY_RETENTION_FACT_ROLE_CATALOG;
 
 export const BINARY_RETENTION_ALLOWED_FACTS = Object.keys(
   BINARY_RETENTION_FACT_ROLE_CATALOG,

@@ -6,52 +6,18 @@ import {
 
 import {
   BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-} from "./runtime-operation-binary-retention-vocabulary.ts";
+} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-binary-catalog.generated.ts";
+
+import type { ResultCode } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
 
 export {
   BINARY_RETENTION_ALLOWED_FACTS,
   BINARY_RETENTION_FACTS,
   BINARY_RETENTION_FACT_ROLE_CATALOG,
   BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-} from "./runtime-operation-binary-retention-vocabulary.ts";
+} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-binary-catalog.generated.ts";
 
-
-export const BINARY_RETENTION_RESULT_CODES = [
-  "semantic_root_required",
-  "semantic_root_establishment_race",
-  "semantic_root_retained",
-  "semantic_root_released",
-  "binary_revision_gc_allowed",
-  "binary_revision_gc_blocked",
-  "root_not_execution_authority",
-  "retention_receipt_replayed",
-  "release_manifest_conflict",
-  "physical_deletion_replayed",
-  "deletion_reconciliation_required",
-  "operation_acceptance_required",
-  "retention_receipt_reconciliation_required",
-  "abandon_release_replayed",
-  "operation_acceptance_aborted",
-  "operation_acceptance_replayed",
-  "operation_abort_replayed",
-  "operation_acceptance_stale_current_receipt",
-  "operation_acceptance_winner_committed_current_receipt",
-  "operation_acceptance_integrity_contradiction",
-  "retention_obligation_set_required",
-  "retention_obligation_mismatch",
-  "retention_obligation_reservation_required",
-  "physical_deletion_completed",
-  "deletion_integrity_contradiction",
-  "root_establishment_forbidden_current_receipt",
-  "root_establishment_receipt_replayed",
-  "root_lifecycle_integrity_contradiction",
-  "retention_obligation_integrity_contradiction",
-  "mixed_command_intent_forbidden",
-] as const;
-
-type BinaryRetentionResult =
-  | (typeof BINARY_RETENTION_RESULT_CODES)[number]
-  | "accepted";
+type BinaryRetentionResult = ResultCode;
 
 const has = (facts: ReadonlySet<string>, fact: string): boolean => facts.has(fact);
 

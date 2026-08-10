@@ -10,8 +10,14 @@ policies:
     - "@agent-teams/"
   developmentOnlyPackages:
     - "@agent-teams/engineering-foundation"
+    - "@xstate/graph"
     - "@types/node"
+    - ajv
+    - fast-check
+    - json-schema-to-typescript
+    - jsonc-parser
     - oxlint
     - typescript
+    - xstate
   exactRegistryDevelopmentOnlyPackages:
     - "@agent-teams/engineering-foundation"

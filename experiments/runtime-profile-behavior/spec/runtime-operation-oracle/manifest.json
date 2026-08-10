@@ -1,0 +1,127 @@
+{
+  "$schema": "./schema.json#/$defs/manifest",
+  "schemaVersion": 1,
+  "adr": "ADR-0006",
+  "catalog": "catalog.json",
+  "crossAxis": "cross-axis.json",
+  "cases": [
+    {
+      "requirement": 1,
+      "path": "cases/01-output-terminal-order.json"
+    },
+    {
+      "requirement": 2,
+      "path": "cases/02-dispatch-cutoff-race.json"
+    },
+    {
+      "requirement": 3,
+      "path": "cases/03-requirement-closure-race.json"
+    },
+    {
+      "requirement": 4,
+      "path": "cases/04-terminal-command-race.json"
+    },
+    {
+      "requirement": 5,
+      "path": "cases/05-indeterminate-evidence-race.json"
+    },
+    {
+      "requirement": 6,
+      "path": "cases/06-seal-outbox-recovery.json"
+    },
+    {
+      "requirement": 7,
+      "path": "cases/07-dispatch-claim-crash.json"
+    },
+    {
+      "requirement": 8,
+      "path": "cases/08-provider-acceptance-observation.json"
+    },
+    {
+      "requirement": 9,
+      "path": "cases/09-terminal-lost-ack.json"
+    },
+    {
+      "requirement": 10,
+      "path": "cases/10-successor-effect-identity.json"
+    },
+    {
+      "requirement": 11,
+      "path": "cases/11-effect-fingerprint-conflict.json"
+    },
+    {
+      "requirement": 12,
+      "path": "cases/12-distinct-identity-equal-payload.json"
+    },
+    {
+      "requirement": 13,
+      "path": "cases/13-completed-effect-replay.json"
+    },
+    {
+      "requirement": 14,
+      "path": "cases/14-known-not-accepted-retry.json"
+    },
+    {
+      "requirement": 15,
+      "path": "cases/15-tombstone-restore.json"
+    },
+    {
+      "requirement": 16,
+      "path": "cases/16-effect-cardinality.json"
+    },
+    {
+      "requirement": 17,
+      "path": "cases/17-receipt-ordering.json"
+    },
+    {
+      "requirement": 18,
+      "path": "cases/18-stale-authority-restore.json"
+    },
+    {
+      "requirement": 19,
+      "path": "cases/19-model-generation.json"
+    },
+    {
+      "requirement": 20,
+      "path": "cases/20-cutoff-before-boundary.json"
+    },
+    {
+      "requirement": 21,
+      "path": "cases/21-normal-provider-termination.json"
+    },
+    {
+      "requirement": 22,
+      "path": "cases/22-zero-attempt-effect-cutoff.json"
+    },
+    {
+      "requirement": 23,
+      "path": "cases/23-post-seal-receipt.json"
+    },
+    {
+      "requirement": 24,
+      "path": "cases/24-atomic-indeterminate-clear.json"
+    },
+    {
+      "requirement": 25,
+      "path": "cases/25-deployment-continuity.json"
+    },
+    {
+      "requirement": 26,
+      "path": "cases/26-manifest-coverage.json"
+    },
+    {
+      "requirement": 27,
+      "path": "cases/27-cross-axis-transitions.json"
+    },
+    {
+      "requirement": 28,
+      "path": "cases/28-binary-revision-semantic-retention.json"
+    }
+  ],
+  "expected": {
+    "caseCount": 28,
+    "exampleCount": 242,
+    "acceptedCount": 107,
+    "rejectedCount": 135
+  }
+}

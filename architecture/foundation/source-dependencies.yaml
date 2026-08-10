@@ -15,6 +15,12 @@ boundaries:
     allow:
       boundaries: []
       packages:
+        - "@xstate/graph"
+        - ajv
+        - fast-check
+        - json-schema-to-typescript
+        - jsonc-parser
+        - xstate
         - zod
       builtins:
         - node:assert/strict

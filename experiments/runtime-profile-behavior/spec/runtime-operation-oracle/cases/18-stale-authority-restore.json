@@ -1,0 +1,28 @@
+{
+  "id": "stale-authority-restore",
+  "requirement": 18,
+  "examples": [
+    {
+      "id": "monotonic-authority-restore",
+      "check": "stale_restore",
+      "facts": [
+        "authority_monotonic"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "restore-reopens-authority",
+      "check": "stale_restore",
+      "facts": [
+        "authority_reopen_requested"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "stale_authority"
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "binary-revision-semantic-retention",
+  "requirement": 28,
+  "exampleFragments": [
+    "case-parts/28-01.json",
+    "case-parts/28-02.json",
+    "case-parts/28-03.json",
+    "case-parts/28-04.json"
+  ]
+}
