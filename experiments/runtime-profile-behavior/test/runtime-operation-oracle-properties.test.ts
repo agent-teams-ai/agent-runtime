@@ -29,7 +29,6 @@ const FAST_CHECK_OPTIONS = {
   seed: FAST_CHECK_SEED,
   numRuns: 1_000,
   verbose: 2 as const,
-  endOnFailure: true,
 };
 
 const stateArbitrary = record({

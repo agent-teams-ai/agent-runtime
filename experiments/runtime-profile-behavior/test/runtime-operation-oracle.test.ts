@@ -340,6 +340,25 @@ test("Foundation catalog closes over the manifest and every referenced case part
   assert.deepEqual(declared, expected);
 });
 
+test("Foundation adoption and readiness preserve the executable evidence boundary", async () => {
+  const [foundationConfig, adoption, readiness] = await Promise.all([
+    readFile(join(repositoryRoot, "foundation.config.yaml"), "utf8"),
+    readFile(join(repositoryRoot, "docs/architecture/foundation-adoption.md"), "utf8"),
+    readFile(join(repositoryRoot, "docs/architecture/readiness.md"), "utf8"),
+  ]);
+  const normalizedReadiness = readiness.replaceAll(/\s+/g, " ");
+
+  assert.match(foundationConfig, /^  quality\.executable-specifications:$/m);
+  assert.match(adoption, /\| `quality\.executable-specifications` \| enabled for synthetic architecture evidence \|/);
+  assert.match(adoption, /proposed ADR-0006/);
+  assert.match(adoption, /do not bind or implement a production runtime/);
+  assert.match(adoption, /implementation\/deployment qualification/);
+  assert.match(normalizedReadiness, /Foundation `quality\.executable-specifications`/);
+  assert.match(normalizedReadiness, /do not bind or implement a production runtime/);
+  assert.match(normalizedReadiness, /change ADR-0006 from `proposed`/);
+  assert.match(normalizedReadiness, /implementation\/deployment qualification/);
+});
+
 test("jsonc-parser defense rejects nested duplicate keys before Ajv", () => {
   assert.throws(
     () => parseAuthorityJson('{"outer":{"fact":"first","fact":"second"}}', "duplicate.json"),
