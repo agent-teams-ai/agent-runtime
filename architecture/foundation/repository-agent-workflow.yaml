@@ -40,6 +40,7 @@ fullScanPaths:
   - experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-binary-retention-oracle.ts
   - experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-root-lifecycle-oracle.ts
   - experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-state-product.ts
+  - experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-xstate-adapter.ts
   - experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-xstate-builder.ts
   - experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts
   - experiments/runtime-profile-behavior/test/runtime-operation-oracle-properties.test.ts

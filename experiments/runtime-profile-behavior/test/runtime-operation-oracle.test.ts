@@ -115,12 +115,16 @@ test("Foundation XState axes exactly follow JSON authority and generated path ev
   }
 });
 
-test("repository workflow routes Foundation catalog changes through the full scan", async () => {
+test("repository workflow routes Foundation catalog and XState adapter changes through the full scan", async () => {
   const workflow = await readFile(
     join(repositoryRoot, "architecture/foundation/repository-agent-workflow.yaml"),
     "utf8",
   );
   assert.match(workflow, /^  - architecture\/specifications$/m);
+  assert.match(
+    workflow,
+    /^  - experiments\/runtime-profile-behavior\/src\/features\/evidence\/runtime-operation-xstate-adapter\.ts$/m,
+  );
 });
 
 test("jsonc-parser defense rejects nested duplicate keys before Ajv", () => {
