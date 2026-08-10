@@ -58,8 +58,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@agent-teams/engineering-foundation':
-        specifier: 0.9.0
-        version: 0.9.0(@types/node@24.13.3)(supports-color@8.1.1)
+        specifier: 0.10.0
+        version: 0.10.0(@types/node@24.13.3)(supports-color@8.1.1)
       '@agentclientprotocol/sdk':
         specifier: 'catalog:'
         version: 1.3.0(zod@4.4.3)
@@ -102,8 +102,8 @@ importers:
 
 packages:
 
-  '@agent-teams/engineering-foundation@0.9.0':
-    resolution: {integrity: sha512-IHOHJL7XxB9CbxZy5ls8e1h17+bHIhwO3urhOQbZhD302XCfl/qAlxBTYghYYYr3FT2mQ4JB9j7Qkz7eyl2pZg==}
+  '@agent-teams/engineering-foundation@0.10.0':
+    resolution: {integrity: sha512-e1NKc3mXvuZEgbCvvAGnC1XK3Z7VkZFO7TIaG952hVcvYT2D/5rcFoZU4gsZQAxTLX1FmEkcOzahSOwgpQY1FA==}
     engines: {node: '>=24.18.0 <25', pnpm: '>=11.17.0 <12'}
     hasBin: true
 
@@ -1303,13 +1303,14 @@ packages:
 
 snapshots:
 
-  '@agent-teams/engineering-foundation@0.9.0(@types/node@24.13.3)(supports-color@8.1.1)':
+  '@agent-teams/engineering-foundation@0.10.0(@types/node@24.13.3)(supports-color@8.1.1)':
     dependencies:
       '@microsoft/api-extractor': 7.58.12(@types/node@24.13.3)
       '@microsoft/api-extractor-model': 7.33.10(@types/node@24.13.3)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       github-slugger: 2.0.0
+      jsonc-parser: 3.3.1
       mdast-util-to-string: 4.0.0
       oxc-parser: 0.142.0
       proper-lockfile: 4.1.2
