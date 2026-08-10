@@ -22,6 +22,7 @@ const specificationRelative = "experiments/runtime-profile-behavior/spec/runtime
 const specificationRoot = join(repositoryRoot, specificationRelative);
 const FOUNDATION_ADOPTION_BOUNDARY = "| `quality.executable-specifications` | enabled for synthetic architecture evidence | Cataloged JSON authority, independent evaluator, property/mutation checks, and XState path evidence support review of proposed ADR-0006; they do not bind or implement a production runtime or establish implementation/deployment qualification |";
 const READINESS_BOUNDARY = "They do not bind or implement a production runtime, change ADR-0006 from `proposed`, authorize an Agent Execution slice, or establish implementation/deployment qualification.";
+const FORBIDDEN_POSITIVE_EVIDENCE_CLAIM = /\bthey (?:bind or implement a production runtime|change ADR-0006 from `proposed`|establish implementation\/deployment qualification)(?=[\s.,;]|$)/iu;
 
 const assertExecutableEvidenceBoundary = (adoption: string, readiness: string): void => {
   const normalizedAdoption = adoption.replaceAll(/\s+/g, " ");
@@ -33,6 +34,16 @@ const assertExecutableEvidenceBoundary = (adoption: string, readiness: string): 
   assert.ok(
     normalizedReadiness.includes(READINESS_BOUNDARY),
     "readiness must retain the complete negative production-qualification boundary",
+  );
+  assert.doesNotMatch(
+    normalizedAdoption,
+    FORBIDDEN_POSITIVE_EVIDENCE_CLAIM,
+    "Foundation documentation must not contain a positive production claim",
+  );
+  assert.doesNotMatch(
+    normalizedReadiness,
+    FORBIDDEN_POSITIVE_EVIDENCE_CLAIM,
+    "Foundation documentation must not contain a positive production claim",
   );
 };
 
@@ -355,7 +366,7 @@ test("Foundation catalog closes over the manifest and every referenced case part
   assert.deepEqual(declared, expected);
 });
 
-test("Foundation adoption and readiness preserve the executable evidence boundary", async () => {
+test("Foundation documentation denies production runtime binding and qualification", async () => {
   const [foundationConfig, adoption, readiness] = await Promise.all([
     readFile(join(repositoryRoot, "foundation.config.yaml"), "utf8"),
     readFile(join(repositoryRoot, "docs/architecture/foundation-adoption.md"), "utf8"),
@@ -367,13 +378,13 @@ test("Foundation adoption and readiness preserve the executable evidence boundar
   assertExecutableEvidenceBoundary(adoption, readiness);
 });
 
-test("executable evidence boundary rejects contradictory readiness prose", () => {
+test("production qualification guard rejects a positive claim after the required denial", () => {
   assert.throws(
     () => assertExecutableEvidenceBoundary(
       FOUNDATION_ADOPTION_BOUNDARY,
-      "Foundation `quality.executable-specifications` governs this evidence. They do not bind or implement a production runtime. They change ADR-0006 from `proposed` and establish implementation/deployment qualification.",
+      `${READINESS_BOUNDARY} They change ADR-0006 from \`proposed\` and establish implementation/deployment qualification.`,
     ),
-    /readiness must retain the complete negative production-qualification boundary/,
+    /must not contain a positive production claim/,
   );
 });
 
