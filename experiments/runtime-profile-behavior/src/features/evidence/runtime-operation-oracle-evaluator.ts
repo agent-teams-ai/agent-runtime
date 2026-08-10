@@ -1,6 +1,6 @@
 import { evaluateBinaryRevisionRetention } from "./runtime-operation-binary-retention-oracle.ts";
 
-import { ORACLE_ACCEPTED_RESULT_CODES } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-vocabulary.generated.ts";
+import { ORACLE_ACCEPTED_RESULT_CODES } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
 import type {
   Check,
   Example,

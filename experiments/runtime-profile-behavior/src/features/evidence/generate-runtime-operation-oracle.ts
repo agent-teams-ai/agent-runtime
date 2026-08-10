@@ -13,6 +13,7 @@ import {
 import {
   buildSyntheticCrossAxisMachine,
   deriveShortestPathWitnesses,
+  syntheticCrossAxisModelFromAuthority,
   type SyntheticCrossAxisModel,
 } from "./runtime-operation-xstate-builder.ts";
 
@@ -23,6 +24,13 @@ const BANNER = "// Generated from ADR-0006 JSON authority. Do not edit.\n\n";
 const asTypeScriptConstant = (name: string, value: unknown): string =>
   `export const ${name} = ${JSON.stringify(value, null, 2)} as const;\n`;
 
+const asTypeScriptRecordConstant = (
+  name: string,
+  value: Readonly<Record<string, unknown>>,
+): string => `export const ${name} = {\n${Object.entries(value)
+  .map(([key, entry]) => `  ${JSON.stringify(key)}: ${JSON.stringify(entry)},`)
+  .join("\n")}\n} as const;\n`;
+
 const renderTypes = async (schema: Record<string, unknown>): Promise<string> => {
   const generated = await compile(schema, "RuntimeOperationOracle", {
     bannerComment: BANNER.trimEnd(),
@@ -32,20 +40,16 @@ const renderTypes = async (schema: Record<string, unknown>): Promise<string> => 
   return generated.endsWith("\n") ? generated : `${generated}\n`;
 };
 
-const renderVocabulary = (catalog: Awaited<ReturnType<typeof loadRuntimeOperationOracleAuthority>>["catalog"]): string =>
+const renderCatalog = (catalog: Awaited<ReturnType<typeof loadRuntimeOperationOracleAuthority>>["catalog"]): string =>
   BANNER + [
     asTypeScriptConstant("ORACLE_CHECKS", catalog.checks),
     asTypeScriptConstant("ORACLE_FACTS", catalog.facts),
     asTypeScriptConstant("ORACLE_RESULT_CODES", catalog.resultCodes),
     asTypeScriptConstant("ORACLE_ACCEPTED_RESULT_CODES", catalog.acceptedResultCodes),
     asTypeScriptConstant("GENERATED_AXES", catalog.stateProductAxes),
-  ].join("\n");
-
-const renderAllowedFacts = (catalog: Awaited<ReturnType<typeof loadRuntimeOperationOracleAuthority>>["catalog"]): string =>
-  BANNER + asTypeScriptConstant("ALLOWED_FACTS_BY_CHECK", catalog.allowedFactsByCheck);
-
-const renderBinaryCatalog = (catalog: Awaited<ReturnType<typeof loadRuntimeOperationOracleAuthority>>["catalog"]): string =>
-  BANNER + asTypeScriptConstant("BINARY_RETENTION_FACT_ROLE_CATALOG", catalog.binaryRetentionFactRoles) + `
+    asTypeScriptRecordConstant("ALLOWED_FACTS_BY_CHECK", catalog.allowedFactsByCheck),
+    asTypeScriptRecordConstant("BINARY_RETENTION_FACT_ROLE_CATALOG", catalog.binaryRetentionFactRoles),
+  ].join("\n") + `
 export type BinaryRetentionAllowedFact = keyof typeof BINARY_RETENTION_FACT_ROLE_CATALOG;
 
 export const BINARY_RETENTION_ALLOWED_FACTS = Object.keys(
@@ -61,29 +65,6 @@ export const BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS =
   BINARY_RETENTION_ALLOWED_FACTS.filter(
     (fact) => BINARY_RETENTION_FACT_ROLE_CATALOG[fact] === "command_intent",
   );
-`;
-
-const xstateModel = (
-  crossAxis: Awaited<ReturnType<typeof loadRuntimeOperationOracleAuthority>>["crossAxis"],
-): SyntheticCrossAxisModel => ({
-  requirement: 27,
-  machineKind: "synthetic-verifier",
-  initial: crossAxis.initial as unknown as Readonly<Record<string, string>>,
-  axes: crossAxis.axes as unknown as Readonly<Record<string, readonly string[]>>,
-  transitions: crossAxis.transitions,
-  forbiddenTransitionFacts: crossAxis.forbiddenTransitionFacts,
-});
-
-const renderXStateMachine = (model: SyntheticCrossAxisModel): string => `${BANNER}import {
-  buildSyntheticCrossAxisMachine,
-  type SyntheticCrossAxisModel,
-} from "../../../src/features/evidence/runtime-operation-xstate-builder.ts";
-
-export const RUNTIME_OPERATION_CROSS_AXIS_MODEL = ${JSON.stringify(model, null, 2)} as const satisfies SyntheticCrossAxisModel;
-
-export const runtimeOperationCrossAxisMachine = buildSyntheticCrossAxisMachine(
-  RUNTIME_OPERATION_CROSS_AXIS_MODEL,
-);
 `;
 
 const renderMermaid = (model: SyntheticCrossAxisModel): string => {
@@ -111,7 +92,7 @@ const renderMermaid = (model: SyntheticCrossAxisModel): string => {
 
 const renderGeneratedFiles = async (repositoryRoot: string): Promise<Map<string, string>> => {
   const authority = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const model = xstateModel(authority.crossAxis);
+  const model = syntheticCrossAxisModelFromAuthority(authority.crossAxis);
   const machine = buildSyntheticCrossAxisMachine(model);
   const topology = deriveShortestPathWitnesses(
     machine,
@@ -147,10 +128,7 @@ const renderGeneratedFiles = async (repositoryRoot: string): Promise<Map<string,
   };
   return new Map([
     ["runtime-operation-oracle-types.generated.ts", await renderTypes(authority.schema)],
-    ["runtime-operation-oracle-vocabulary.generated.ts", renderVocabulary(authority.catalog)],
-    ["runtime-operation-oracle-allowed-facts.generated.ts", renderAllowedFacts(authority.catalog)],
-    ["runtime-operation-binary-catalog.generated.ts", renderBinaryCatalog(authority.catalog)],
-    ["runtime-operation-xstate.generated.ts", renderXStateMachine(model)],
+    ["runtime-operation-oracle-catalog.generated.ts", renderCatalog(authority.catalog)],
     ["runtime-operation-xstate-paths.generated.json", `${JSON.stringify(pathArtifact, null, 2)}\n`],
     ["runtime-operation-xstate.generated.mmd", renderMermaid(model)],
   ]);
@@ -161,6 +139,8 @@ const writeGeneratedFiles = async (
   files: ReadonlyMap<string, string>,
 ): Promise<void> => {
   await mkdir(directory, { recursive: true });
+  const obsoleteNames = (await readdir(directory)).filter((name) => !files.has(name));
+  await Promise.all(obsoleteNames.map((name) => rm(join(directory, name))));
   await Promise.all([...files].map(([name, contents]) => writeFile(join(directory, name), contents)));
 };
 

@@ -7,7 +7,10 @@ import test from "node:test";
 import { loadRuntimeOperationOracleAuthority, parseAuthorityJson } from "../src/features/evidence/runtime-operation-oracle-authority.ts";
 import { evaluateOracleExample } from "../src/features/evidence/runtime-operation-oracle-evaluator.ts";
 import { validateRuntimeOperationOracle } from "../src/features/evidence/validate-runtime-operation-oracle.ts";
-import { runtimeOperationCrossAxisMachine } from "../spec/runtime-operation-oracle/generated/runtime-operation-xstate.generated.ts";
+import {
+  buildSyntheticCrossAxisMachine,
+  syntheticCrossAxisModelFromAuthority,
+} from "../src/features/evidence/runtime-operation-xstate-builder.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 const specificationRelative = "experiments/runtime-profile-behavior/spec/runtime-operation-oracle";
@@ -111,6 +114,10 @@ test("authority linker rejects an orphan root JSON file", async () => {
 });
 
 test("XState artifact is a pure parallel synthetic verifier", async () => {
+  const { crossAxis } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
+  const runtimeOperationCrossAxisMachine = buildSyntheticCrossAxisMachine(
+    syntheticCrossAxisModelFromAuthority(crossAxis),
+  );
   assert.equal(runtimeOperationCrossAxisMachine.config.type, "parallel");
   assert.equal(runtimeOperationCrossAxisMachine.id, "adr-0006-requirement-27-synthetic-verifier");
   const forbiddenKeys = new Set(["actions", "actors", "invoke", "after", "delays", "entry", "exit"]);

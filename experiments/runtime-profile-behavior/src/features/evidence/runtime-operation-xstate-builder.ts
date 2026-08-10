@@ -9,6 +9,8 @@ import {
   type StateValue,
 } from "xstate";
 
+import type { CrossAxis } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+
 export type SyntheticCrossAxisTransition = {
   fact: string;
   targets: readonly {
@@ -28,6 +30,17 @@ export type SyntheticCrossAxisModel = {
   transitions: readonly SyntheticCrossAxisTransition[];
   forbiddenTransitionFacts: readonly string[];
 };
+
+export const syntheticCrossAxisModelFromAuthority = (
+  authority: CrossAxis,
+): SyntheticCrossAxisModel => ({
+  requirement: 27,
+  machineKind: "synthetic-verifier",
+  initial: authority.initial as unknown as Readonly<Record<string, string>>,
+  axes: authority.axes as unknown as Readonly<Record<string, readonly string[]>>,
+  transitions: authority.transitions,
+  forbiddenTransitionFacts: authority.forbiddenTransitionFacts,
+});
 
 type StateConfig = {
   on?: Record<string, unknown>;

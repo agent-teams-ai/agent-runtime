@@ -16,11 +16,12 @@ assembles and validates the virtual 28-case oracle in manifest order.
 Generated files are committed under `generated/`:
 
 - schema-derived TypeScript types;
-- catalog-derived constants;
-- the pure parallel XState v5 synthetic verifier for requirement 27;
+- one cohesive catalog-derived TypeScript constants module;
 - shortest-path witnesses and a Mermaid topology artifact.
 
-The XState machine has no actors, services, timers, or actions. Its seven-axis
+The pure parallel XState v5 synthetic verifier is built in memory directly
+from `cross-axis.json`; no generated machine mirror is committed. It has no
+actors, services, timers, or actions. Its seven-axis
 reachability result is not the independent ten-axis validity result and is not
 a production runtime state machine. Requirement 28 binary-retention semantics
 remain exclusively in the handwritten evaluator and JSON examples.

@@ -20,7 +20,7 @@ import {
   generatedStateIsValid,
   type GeneratedState,
 } from "../src/features/evidence/runtime-operation-state-product.ts";
-import { GENERATED_AXES } from "../spec/runtime-operation-oracle/generated/runtime-operation-oracle-vocabulary.generated.ts";
+import { GENERATED_AXES } from "../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
 import type { Example } from "../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");

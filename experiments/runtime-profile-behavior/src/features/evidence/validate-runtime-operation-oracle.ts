@@ -9,14 +9,14 @@ import {
 
 export {
   ALLOWED_FACTS_BY_CHECK,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-allowed-facts.generated.ts";
+} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
 export {
   GENERATED_AXES,
   ORACLE_ACCEPTED_RESULT_CODES,
   ORACLE_CHECKS,
   ORACLE_FACTS,
   ORACLE_RESULT_CODES,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-vocabulary.generated.ts";
+} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
 export type {
   ADR0006RuntimeOperationOracle as RuntimeOperationOracle,
   Case as OracleCase,

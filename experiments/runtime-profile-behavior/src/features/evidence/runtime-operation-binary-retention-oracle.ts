@@ -6,7 +6,7 @@ import {
 
 import {
   BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-binary-catalog.generated.ts";
+} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
 
 import type { ResultCode } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
 
@@ -15,7 +15,7 @@ export {
   BINARY_RETENTION_FACTS,
   BINARY_RETENTION_FACT_ROLE_CATALOG,
   BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-binary-catalog.generated.ts";
+} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
 
 type BinaryRetentionResult = ResultCode;
 
