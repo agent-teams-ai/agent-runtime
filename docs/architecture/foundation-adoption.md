@@ -13,6 +13,7 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 | `repository.agent-workflow` | enabled | Canonical `AGENTS.md`, agent pointers, changed/fast/full checks |
 | `workspace.dependency-declarations` | enabled | Exact pnpm catalog and workspace protocol policy |
 | `architecture.source-dependencies` | enabled for current TypeScript evidence code | All current TypeScript experiment roots form one explicitly non-production boundary; production package boundaries are added when scaffolded |
+| `quality.executable-specifications` | enabled for synthetic architecture evidence | Cataloged JSON authority, independent evaluator, property/mutation checks, and XState path evidence support review of proposed ADR-0006; they do not bind or implement a production runtime or establish implementation/deployment qualification |
 | `documentation.local-references` | enabled | Local links and GitHub anchors under `docs`; the root README only points into that governed tree |
 | `governance.architecture-decisions` | enabled | Stable ADR frontmatter, lifecycle index, and immutable accepted baseline |
 | `quality.suppression-governance` | enabled | Inline suppressions require exact, expiring AR-owned waivers; security and access-control suppressions are non-waivable |
