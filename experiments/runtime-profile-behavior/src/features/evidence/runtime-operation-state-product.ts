@@ -168,4 +168,4 @@ export const createStateProductEvaluator = (
     evaluate: () => evaluateGeneratedAxisProducts(axes),
   };
 };
-import type { Catalog } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+import type { Catalog } from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";

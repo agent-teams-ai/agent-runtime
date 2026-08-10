@@ -6,7 +6,7 @@ import type {
   Example,
   Fact,
   ResultCode,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+} from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
 type Evaluator = (facts: ReadonlySet<Fact>) => ResultCode;
 

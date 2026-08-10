@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { compile } from "json-schema-to-typescript";
 
-import type { Catalog } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+import type { Catalog } from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
 import { loadRuntimeOperationOracleAuthority } from "./runtime-operation-oracle-authority.ts";
 import {
@@ -18,7 +18,7 @@ import {
 import type { SyntheticCrossAxisModel } from "./runtime-operation-xstate-adapter.ts";
 
 const GENERATED_DIRECTORY =
-  "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated";
+  "experiments/runtime-profile-behavior/fixtures/proof-artifacts/runtime-operation-oracle";
 const BANNER = "// Generated from ADR-0006 JSON authority. Do not edit.\n\n";
 
 const generatedUnionMembers = (source: string, name: string): string[] => {

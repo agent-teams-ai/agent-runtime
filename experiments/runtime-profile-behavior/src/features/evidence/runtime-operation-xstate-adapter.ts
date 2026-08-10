@@ -1,4 +1,4 @@
-import type { CrossAxis } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+import type { CrossAxis } from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
 export type SyntheticCrossAxisTransition = {
   fact: string;

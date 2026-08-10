@@ -34,6 +34,7 @@ fullScanPaths:
   - docs
   - docs/architecture/qualification-registry.json
   - experiments/runtime-profile-behavior/spec/runtime-operation-oracle
+  - experiments/runtime-profile-behavior/fixtures/proof-artifacts/runtime-operation-oracle
   - experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts
   - experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-oracle-authority.ts
   - experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-oracle-evaluator.ts
@@ -45,6 +46,7 @@ fullScanPaths:
   - experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts
   - experiments/runtime-profile-behavior/test/runtime-operation-oracle-properties.test.ts
   - experiments/runtime-profile-behavior/test/runtime-operation-oracle.test.ts
+  - experiments/runtime-profile-behavior/test/runtime-operation-oracle-xstate.test.ts
   - foundation.config.yaml
   - package.json
   - pnpm-lock.yaml

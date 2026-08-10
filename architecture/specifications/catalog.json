@@ -54,7 +54,7 @@
       "generatedTypes": [
         {
           "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json",
-          "outputPath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts"
+          "outputPath": "experiments/runtime-profile-behavior/fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts"
         }
       ],
       "gateBindings": {
@@ -67,8 +67,8 @@
         "axes": ["dispatch", "execution", "containment", "admission", "output", "manifest", "terminal"],
         "modelPath": "experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-xstate-builder.ts",
         "adapterPath": "experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-xstate-adapter.ts",
-        "tracesPath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated/runtime-operation-xstate-paths.generated.json",
-        "diagramPath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated/runtime-operation-xstate.generated.mmd",
+        "tracesPath": "experiments/runtime-profile-behavior/fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-xstate-paths.generated.json",
+        "diagramPath": "experiments/runtime-profile-behavior/fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-xstate.generated.mmd",
         "gateBinding": { "packageName": "@vioxen/agent-runtime", "script": "architecture:operation-oracle:model" }
       }
     }

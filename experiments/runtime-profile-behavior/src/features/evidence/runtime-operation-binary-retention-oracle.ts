@@ -4,7 +4,7 @@ import {
   retentionObligationSetIsOpenAndExact,
 } from "./runtime-operation-root-lifecycle-oracle.ts";
 
-import type { ResultCode } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+import type { ResultCode } from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
 type BinaryRetentionResult = ResultCode;
 type BinaryRetentionFactRoles = Readonly<Record<string, "command_intent" | "work_intent" | "evidence">>;

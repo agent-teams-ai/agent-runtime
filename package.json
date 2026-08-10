@@ -31,7 +31,7 @@
     "architecture:operation-oracle:type-generation": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --check",
     "architecture:operation-oracle:property": "node --test experiments/runtime-profile-behavior/test/runtime-operation-oracle-properties.test.ts",
     "architecture:operation-oracle:mutation": "node --test experiments/runtime-profile-behavior/test/runtime-operation-oracle-mutation.test.ts",
-    "architecture:operation-oracle:model": "node --test --test-name-pattern=XState experiments/runtime-profile-behavior/test/runtime-operation-oracle.test.ts",
+    "architecture:operation-oracle:model": "node --test experiments/runtime-profile-behavior/test/runtime-operation-oracle-xstate.test.ts",
     "spike:inventory": "node experiments/runtime-profile-behavior/src/cli.ts inventory",
     "spike:baseline": "node experiments/runtime-profile-behavior/src/cli.ts baseline",
     "spike:precedence": "node experiments/runtime-profile-behavior/src/cli.ts precedence",

@@ -12,7 +12,7 @@ export type {
   Example as OracleExample,
   Fact,
   ResultCode,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+} from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 export type { GeneratedState };
 
 export type RuntimeOperationOracleValidation = {

@@ -13,7 +13,8 @@ The loader rejects comments, trailing commas, nested duplicate keys, schema
 extensions, orphan files, catalog/schema drift, and case-order drift. It then
 assembles and validates the virtual 28-case oracle in manifest order.
 
-Generated files are committed under `generated/`:
+Generated proof artifacts are committed under
+`../../fixtures/proof-artifacts/runtime-operation-oracle/`:
 
 - schema-derived TypeScript types;
 - shortest-path witnesses and a Mermaid topology artifact.

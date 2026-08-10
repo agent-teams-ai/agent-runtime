@@ -3,20 +3,19 @@ import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { initialTransition, transition as transitionMachine } from "xstate";
 
 import { loadRuntimeOperationOracleAuthority, parseAuthorityJson } from "../src/features/evidence/runtime-operation-oracle-authority.ts";
 import { createOracleEvaluator } from "../src/features/evidence/runtime-operation-oracle-evaluator.ts";
+import {
+  createStateProductEvaluator,
+  generatedStateIsValid,
+} from "../src/features/evidence/runtime-operation-state-product.ts";
 import {
   checkRuntimeOperationOracleGeneratedFiles,
   renderRuntimeOperationOracleGeneratedFiles,
 } from "../src/features/evidence/generate-runtime-operation-oracle.ts";
 import { validateRuntimeOperationOracle } from "../src/features/evidence/validate-runtime-operation-oracle.ts";
-import {
-  buildSyntheticCrossAxisMachine,
-  syntheticCrossAxisModelFromAuthority,
-} from "../src/features/evidence/runtime-operation-xstate-builder.ts";
-import type { Fact } from "../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+import type { Example } from "../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 const specificationRelative = "experiments/runtime-profile-behavior/spec/runtime-operation-oracle";
@@ -48,12 +47,260 @@ test("fragment authority preserves cutover parity and ten-axis validity counts",
   });
 });
 
+test("model oracle exhausts the deterministic ten-axis state product", async () => {
+  const authority = await loadRuntimeOperationOracleAuthority(repositoryRoot);
+  assert.deepEqual(createStateProductEvaluator(authority).evaluate(), {
+    total: 48000,
+    valid: 1277,
+    invalid: 46723,
+  });
+});
+
+test("generated model enforces coupled and terminal invariants", () => {
+  const openState = {
+    dispatch: "unclaimed",
+    admission: "open",
+    output: "open",
+    execution: "not_started",
+    containment: "not_requested",
+    reconciliation: "clear",
+    manifest: "open",
+    satisfaction: "incomplete",
+    effectResolution: "none",
+    terminal: "open",
+  } as const;
+  assert.equal(generatedStateIsValid(openState), true);
+  assert.equal(generatedStateIsValid({ ...openState, dispatch: "claimed" }), false);
+  assert.equal(generatedStateIsValid({ ...openState, manifest: "sealed" }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    admission: "fenced",
+    manifest: "sealed",
+  }), false);
+  assert.equal(generatedStateIsValid({ ...openState, satisfaction: "complete" }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    admission: "fenced",
+    output: "fenced",
+    manifest: "sealed",
+    satisfaction: "complete",
+    effectResolution: "unresolved",
+  }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    containment: "qualified_not_required",
+  }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    dispatch: "provider_accepted",
+    admission: "fenced",
+    output: "fenced",
+    execution: "active",
+    containment: "qualified_not_required",
+  }), false);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    admission: "fenced",
+    output: "fenced",
+    containment: "qualified_not_required",
+  }), true);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    dispatch: "acceptance_unknown",
+    admission: "fenced",
+    output: "fenced",
+    execution: "terminated",
+    containment: "contained",
+    reconciliation: "required",
+  }), true);
+  assert.equal(generatedStateIsValid({
+    ...openState,
+    dispatch: "acceptance_unknown",
+    admission: "fenced",
+    output: "fenced",
+    execution: "terminated",
+    containment: "contained",
+    reconciliation: "clear",
+  }), false);
+
+  const finalState = {
+    ...openState,
+    admission: "fenced",
+    output: "fenced",
+    manifest: "sealed",
+    satisfaction: "complete",
+    terminal: "succeeded",
+  } as const;
+  assert.equal(generatedStateIsValid(finalState), true);
+  assert.equal(generatedStateIsValid({ ...finalState, effectResolution: "unresolved" }), false);
+  assert.equal(generatedStateIsValid({ ...finalState, execution: "active" }), false);
+  assert.equal(generatedStateIsValid({
+    ...finalState,
+    effectResolution: "indeterminate",
+    terminal: "outcome_indeterminate",
+  }), true);
+  assert.equal(generatedStateIsValid({
+    ...finalState,
+    dispatch: "acceptance_unknown",
+    execution: "terminated",
+    containment: "contained",
+    effectResolution: "indeterminate",
+    terminal: "outcome_indeterminate",
+  }), true);
+});
+
 test("every authority example agrees with the independent handwritten evaluator", async () => {
   const authority = await loadRuntimeOperationOracleAuthority(repositoryRoot);
   const { oracle } = authority;
   const evaluateOracleExample = createOracleEvaluator(authority);
   for (const example of oracle.cases.flatMap(({ examples }) => examples)) {
     assert.deepEqual(evaluateOracleExample(example), example.expected, example.id);
+  }
+});
+
+test("binary revision semantic retention fails closed before work and GC", async () => {
+  const authority = await loadRuntimeOperationOracleAuthority(repositoryRoot);
+  const oracle = authority.oracle;
+  const evaluateOracleExample = createOracleEvaluator(authority);
+  const retentionCase = oracle.cases.find(({ requirement }) => requirement === 28);
+  assert.ok(retentionCase);
+  const rootedWork = retentionCase.examples.find(
+    ({ id }) => id === "root-before-provider-or-effect-work",
+  );
+  assert.ok(rootedWork);
+  assert.deepEqual(evaluateOracleExample({
+    ...rootedWork,
+    facts: ["provider_or_effect_work_requested"],
+  } as Example), {
+    decision: "reject",
+    code: "semantic_root_required",
+  });
+  assert.deepEqual(evaluateOracleExample({
+    ...rootedWork,
+    facts: rootedWork.facts.filter((fact) => fact !== "execution_authority_present"),
+  } as Example), {
+    decision: "reject",
+    code: "root_not_execution_authority",
+  });
+  assert.deepEqual(evaluateOracleExample({
+    ...rootedWork,
+    facts: rootedWork.facts.filter((fact) => fact !== "operation_acceptance_committed"),
+  } as Example), {
+    decision: "reject",
+    code: "operation_acceptance_required",
+  });
+
+  const gcWithRoot = retentionCase.examples.find(
+    ({ id }) => id === "gc-with-retained-semantic-root",
+  );
+  assert.ok(gcWithRoot);
+  assert.deepEqual(evaluateOracleExample(gcWithRoot), gcWithRoot.expected);
+
+  const gcAllowed = retentionCase.examples.find(
+    ({ id }) => id === "gc-with-zero-semantic-roots",
+  );
+  assert.ok(gcAllowed);
+  assert.deepEqual(evaluateOracleExample({
+    ...gcAllowed,
+    facts: ["gc_requested", "zero_semantic_roots"],
+  } as Example), {
+    decision: "reject",
+    code: "binary_revision_gc_blocked",
+  });
+
+  const safeRelease = retentionCase.examples.find(
+    ({ id }) => id === "closed-operation-releases-root",
+  );
+  assert.ok(safeRelease);
+  assert.deepEqual(evaluateOracleExample({
+    ...safeRelease,
+    facts: safeRelease.facts.filter((fact) => fact !== "binary_revision_root_established"),
+  } as Example), {
+    decision: "reject",
+    code: "semantic_root_required",
+  });
+
+  const releaseReplay = retentionCase.examples.find(
+    ({ id }) => id === "exact-release-replay-is-idempotent",
+  );
+  assert.ok(releaseReplay);
+  assert.equal(releaseReplay.facts.includes("binary_revision_root_established"), false);
+  assert.deepEqual(evaluateOracleExample(releaseReplay), releaseReplay.expected);
+  for (const invalidReleaseEvidence of [
+    "release_manifest_stale",
+    "release_manifest_wrong_scope",
+    "release_manifest_unknown",
+    "release_manifest_incomplete",
+  ] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...releaseReplay,
+      facts: [...releaseReplay.facts, invalidReleaseEvidence],
+    }), {
+      decision: "reject",
+      code: "release_manifest_conflict",
+    });
+  }
+
+  const abandonReplay = retentionCase.examples.find(
+    ({ id }) => id === "exact-abandon-release-replay",
+  );
+  assert.ok(abandonReplay);
+  for (const invalidAbortEvidence of [
+    "operation_acceptance_aborted_receipt_stale",
+    "operation_acceptance_aborted_receipt_wrong_scope",
+  ] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...abandonReplay,
+      facts: [...abandonReplay.facts, invalidAbortEvidence],
+    }), {
+      decision: "reject",
+      code: "operation_acceptance_stale_current_receipt",
+    });
+  }
+
+  const lostReceipt = retentionCase.examples.find(
+    ({ id }) => id === "lost-root-receipt-ack-replays",
+  );
+  assert.ok(lostReceipt);
+  assert.deepEqual(evaluateOracleExample({
+    ...lostReceipt,
+    facts: lostReceipt.facts.filter((fact) => fact !== "root_receipt_exact_replay_or_query"),
+  } as Example), {
+    decision: "reject",
+    code: "retention_receipt_reconciliation_required",
+  });
+
+  const deletionReplay = retentionCase.examples.find(
+    ({ id }) => id === "physical-deletion-exact-replay",
+  );
+  assert.ok(deletionReplay);
+  for (const fact of ["durable_gc_deletion_intent_claim", "zero_semantic_roots"] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...deletionReplay,
+      facts: deletionReplay.facts.filter((candidate) => candidate !== fact),
+    } as Example), {
+      decision: "reject",
+      code: "deletion_integrity_contradiction",
+    });
+  }
+  assert.deepEqual(evaluateOracleExample({
+    ...deletionReplay,
+    facts: [...deletionReplay.facts, "binary_revision_root_established"],
+  }), {
+    decision: "reject",
+    code: "deletion_integrity_contradiction",
+  });
+  for (const contradictoryFact of [
+    "root_cas_won",
+    "contradictory_zero_and_retained_roots",
+  ] as const) {
+    assert.deepEqual(evaluateOracleExample({
+      ...deletionReplay,
+      facts: [...deletionReplay.facts, contradictoryFact],
+    }), {
+      decision: "reject",
+      code: "deletion_integrity_contradiction",
+    });
   }
 });
 
@@ -91,40 +338,6 @@ test("Foundation catalog closes over the manifest and every referenced case part
     ...shardedCase.exampleFragments,
   ].toSorted();
   assert.deepEqual(declared, expected);
-});
-
-test("Foundation XState axes exactly follow JSON authority and generated path evidence", async () => {
-  const { crossAxis } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const authorityAxes = Object.keys(crossAxis.axes);
-  const foundationCatalog = JSON.parse(await readFile(
-    join(repositoryRoot, "architecture/specifications/catalog.json"),
-    "utf8",
-  )) as { specifications: { stateModel: { axes: string[] } }[] };
-  const pathEvidence = JSON.parse(await readFile(
-    join(specificationRoot, "generated/runtime-operation-xstate-paths.generated.json"),
-    "utf8",
-  )) as {
-    topologyReachability: { axes: string[] };
-    shortestPathWitnesses: { source: Record<string, string>; target: Record<string, string> }[];
-  };
-  assert.deepEqual(foundationCatalog.specifications[0]!.stateModel.axes, authorityAxes);
-  assert.deepEqual(pathEvidence.topologyReachability.axes, authorityAxes);
-  for (const witness of pathEvidence.shortestPathWitnesses) {
-    assert.deepEqual(Object.keys(witness.source), authorityAxes);
-    assert.deepEqual(Object.keys(witness.target), authorityAxes);
-  }
-});
-
-test("repository workflow routes Foundation catalog and XState adapter changes through the full scan", async () => {
-  const workflow = await readFile(
-    join(repositoryRoot, "architecture/foundation/repository-agent-workflow.yaml"),
-    "utf8",
-  );
-  assert.match(workflow, /^  - architecture\/specifications$/m);
-  assert.match(
-    workflow,
-    /^  - experiments\/runtime-profile-behavior\/src\/features\/evidence\/runtime-operation-xstate-adapter\.ts$/m,
-  );
 });
 
 test("jsonc-parser defense rejects nested duplicate keys before Ajv", () => {
@@ -178,7 +391,7 @@ test("schema stays structural while catalog owns vocabulary", async () => {
 test("generated vocabulary unions exactly project the loaded catalog", async () => {
   const { catalog } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
   const source = await readFile(
-    join(specificationRoot, "generated/runtime-operation-oracle-types.generated.ts"),
+    join(repositoryRoot, "experiments/runtime-profile-behavior/fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts"),
     "utf8",
   );
   const members = (name: string): string[] => {
@@ -266,125 +479,4 @@ test("authority linker rejects an orphan root JSON file", async () => {
       /root authority-file membership/,
     );
   });
-});
-
-test("XState artifact is a pure parallel synthetic verifier", async () => {
-  const { crossAxis } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const runtimeOperationCrossAxisMachine = buildSyntheticCrossAxisMachine(
-    syntheticCrossAxisModelFromAuthority(crossAxis),
-  );
-  assert.equal(runtimeOperationCrossAxisMachine.config.type, "parallel");
-  assert.equal(runtimeOperationCrossAxisMachine.id, "adr-0006-requirement-27-synthetic-verifier");
-  const forbiddenKeys = new Set(["actions", "actors", "invoke", "after", "delays", "entry", "exit"]);
-  const visit = (value: unknown): void => {
-    if (typeof value !== "object" || value === null) {
-      return;
-    }
-    for (const [key, child] of Object.entries(value)) {
-      assert.equal(forbiddenKeys.has(key), false, `forbidden XState runtime key ${key}`);
-      visit(child);
-    }
-  };
-  visit(runtimeOperationCrossAxisMachine.config);
-
-  const artifact = JSON.parse(await readFile(
-    join(specificationRoot, "generated/runtime-operation-xstate-paths.generated.json"),
-    "utf8",
-  )) as {
-    machineKind: string;
-    scope: string;
-    staticStateProduct: { total: number; valid: number; invalid: number };
-    topologyReachability: {
-      axes: string[];
-      reachableStateCount: number;
-      validExtensionCount: number;
-    };
-    shortestPathWitnesses: unknown[];
-  };
-  assert.equal(artifact.machineKind, "synthetic-verifier");
-  assert.match(artifact.scope, /not production runtime behavior/);
-  assert.deepEqual(artifact.staticStateProduct, {
-    total: 48_000,
-    valid: 1_277,
-    invalid: 46_723,
-    meaning: "independent handwritten classification of the complete ten-axis Cartesian product; not XState reachability",
-  });
-  assert.equal(artifact.topologyReachability.axes.length, 7);
-  assert.ok(artifact.topologyReachability.reachableStateCount > 0);
-  assert.equal(
-    artifact.topologyReachability.validExtensionCount,
-    artifact.topologyReachability.reachableStateCount,
-  );
-  assert.equal(artifact.shortestPathWitnesses.length, 20);
-});
-
-test("XState witnesses prove every declared composite target", async () => {
-  const { crossAxis } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const artifact = JSON.parse(await readFile(
-    join(specificationRoot, "generated/runtime-operation-xstate-paths.generated.json"),
-    "utf8",
-  )) as {
-    shortestPathWitnesses: {
-      fact: string;
-      events: { type: string; facts: string[] }[];
-      source: Record<string, string>;
-      target: Record<string, string>;
-    }[];
-  };
-  for (const transition of crossAxis.transitions) {
-    const witness = artifact.shortestPathWitnesses.find(({ fact }) => fact === transition.fact);
-    assert.ok(witness, transition.fact);
-    assert.deepEqual(witness.events.at(-1), {
-      type: transition.fact,
-      facts: transition.requiredFacts ?? [],
-    });
-    assert.equal(witness.events.some(({ type }) => type === "xstate.init"), false);
-    for (const target of transition.targets) {
-      assert.equal(witness.source[target.axis], target.from, `${transition.fact} source`);
-      assert.equal(witness.target[target.axis], target.to, `${transition.fact} target`);
-    }
-  }
-});
-
-test("terminal XState edges require exact closure evidence payloads", async () => {
-  const { crossAxis } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const machine = buildSyntheticCrossAxisMachine(syntheticCrossAxisModelFromAuthority(crossAxis));
-  const artifact = JSON.parse(await readFile(
-    join(specificationRoot, "generated/runtime-operation-xstate-paths.generated.json"),
-    "utf8",
-  )) as {
-    shortestPathWitnesses: {
-      fact: string;
-      events: { type: string; facts: string[] }[];
-    }[];
-  };
-  const terminalTransitions = crossAxis.transitions.filter(({ fact }) =>
-    fact.startsWith("transition_terminal_open_final_"),
-  );
-  const criticalEvidence: readonly Fact[] = [
-    "reconciliation_clear",
-    "containment_satisfied",
-    "all_manifest_entries_satisfied",
-  ];
-  for (const declaration of terminalTransitions) {
-    const witness = artifact.shortestPathWitnesses.find(({ fact }) => fact === declaration.fact);
-    assert.ok(witness, declaration.fact);
-    let [source] = initialTransition(machine);
-    for (const event of witness.events.slice(0, -1)) {
-      [source] = transitionMachine(machine, source, event);
-    }
-    const exactEvent = witness.events.at(-1)!;
-    assert.deepEqual(exactEvent.facts, declaration.requiredFacts);
-    const [accepted] = transitionMachine(machine, source, exactEvent);
-    assert.equal((accepted.value as Record<string, string>).terminal, "final");
-    for (const missingFact of criticalEvidence) {
-      assert.equal(exactEvent.facts.includes(missingFact), true, declaration.fact);
-      const incompleteEvent: { type: string; facts: string[] } = {
-        ...exactEvent,
-        facts: exactEvent.facts.filter((fact) => fact !== missingFact),
-      };
-      const [rejected] = transitionMachine(machine, source, incompleteEvent);
-      assert.deepEqual(rejected.value, source.value, `${declaration.fact} without ${missingFact}`);
-    }
-  }
 });

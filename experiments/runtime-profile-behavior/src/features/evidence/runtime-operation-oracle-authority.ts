@@ -17,7 +17,7 @@ import type {
   CrossAxis,
   ExampleFragment,
   Manifest,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+} from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
 const SCHEMA_ID = "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json";
 const SPEC_DIRECTORY = "experiments/runtime-profile-behavior/spec/runtime-operation-oracle";

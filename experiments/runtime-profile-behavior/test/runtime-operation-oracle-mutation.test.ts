@@ -7,7 +7,7 @@ import {
   createOracleEvaluator,
   type OracleEvaluator,
 } from "../src/features/evidence/runtime-operation-oracle-evaluator.ts";
-import type { Example } from "../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
+import type { Example } from "../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 const authority = await loadRuntimeOperationOracleAuthority(repositoryRoot);
