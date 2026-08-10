@@ -1,0 +1,30 @@
+{
+  "id": "cutoff-before-boundary",
+  "requirement": 20,
+  "examples": [
+    {
+      "id": "boundary-reuses-cutoff-fences",
+      "check": "cutoff_boundary_reuse",
+      "facts": [
+        "prior_cutoff_fences_exact",
+        "cursor_and_receipt_reused"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "boundary-advances-cutoff-cursor",
+      "check": "cutoff_boundary_reuse",
+      "facts": [
+        "prior_cutoff_fences_exact",
+        "cursor_or_receipt_advanced"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "cutoff_boundary_conflict"
+      }
+    }
+  ]
+}

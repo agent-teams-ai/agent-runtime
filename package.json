@@ -25,7 +25,13 @@
     "lint": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config .",
     "lint:changed": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config --format agent --no-error-on-unmatched-pattern",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
-    "architecture:operation-oracle": "node experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts",
+    "architecture:operation-oracle": "pnpm architecture:operation-oracle:type-generation && pnpm architecture:operation-oracle:property && pnpm architecture:operation-oracle:mutation && pnpm architecture:operation-oracle:model && node experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts",
+    "architecture:operation-oracle:generate": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --write",
+    "architecture:operation-oracle:generated": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --check",
+    "architecture:operation-oracle:type-generation": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --check",
+    "architecture:operation-oracle:property": "node --test experiments/runtime-profile-behavior/test/runtime-operation-oracle-properties.test.ts",
+    "architecture:operation-oracle:mutation": "node --test experiments/runtime-profile-behavior/test/runtime-operation-oracle-mutation.test.ts",
+    "architecture:operation-oracle:model": "node --test experiments/runtime-profile-behavior/test/runtime-operation-oracle-xstate.test.ts",
     "spike:inventory": "node experiments/runtime-profile-behavior/src/cli.ts inventory",
     "spike:baseline": "node experiments/runtime-profile-behavior/src/cli.ts baseline",
     "spike:precedence": "node experiments/runtime-profile-behavior/src/cli.ts precedence",
@@ -46,19 +52,25 @@
     "spike:rust-boundaries:client": "node --test --test-concurrency=1 experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
     "spike:rust-boundaries:evidence": "node --test experiments/runtime-profile-behavior/test/rust-system-boundary-evidence.test.ts",
     "test": "node --test --test-concurrency=1 experiments/runtime-profile-behavior/test/*.test.ts experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
-    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.synthetic-oracle.json --noEmit --pretty false"
   },
   "dependencies": {
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@agent-teams/engineering-foundation": "0.9.0",
+    "@agent-teams/engineering-foundation": "0.10.0",
     "@agentclientprotocol/sdk": "catalog:",
     "@opencode-ai/plugin": "catalog:",
     "@types/node": "catalog:",
+    "@xstate/graph": "catalog:",
+    "ajv": "catalog:",
+    "fast-check": "catalog:",
+    "json-schema-to-typescript": "catalog:",
+    "jsonc-parser": "catalog:",
     "opencode-ai": "catalog:",
     "opencode-previous": "catalog:",
     "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "xstate": "catalog:"
   }
 }

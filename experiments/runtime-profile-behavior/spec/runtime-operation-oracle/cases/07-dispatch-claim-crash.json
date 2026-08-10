@@ -1,0 +1,65 @@
+{
+  "id": "dispatch-claim-crash",
+  "requirement": 7,
+  "examples": [
+    {
+      "id": "claimed-without-provider-bytes",
+      "check": "dispatch_crash",
+      "facts": [
+        "claim_durable",
+        "provider_bytes_absent"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "durable_recovery_required"
+      }
+    },
+    {
+      "id": "normal-dispatch-after-claim",
+      "check": "dispatch_crash",
+      "facts": [
+        "claim_durable",
+        "provider_accepted"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "new-claim-after-durable-claim",
+      "check": "dispatch_crash",
+      "facts": [
+        "claim_durable",
+        "new_claim_requested"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "new_claim_forbidden"
+      }
+    },
+    {
+      "id": "unclaimed-provider-dispatch",
+      "check": "dispatch_crash",
+      "facts": [
+        "provider_bytes_or_action"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "provider_dispatch_not_authorized"
+      }
+    },
+    {
+      "id": "absence-is-not-nonacceptance-proof",
+      "check": "dispatch_crash",
+      "facts": [
+        "claim_durable",
+        "provider_acceptance_unproven"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "acceptance_unknown_reconcile_required"
+      }
+    }
+  ]
+}

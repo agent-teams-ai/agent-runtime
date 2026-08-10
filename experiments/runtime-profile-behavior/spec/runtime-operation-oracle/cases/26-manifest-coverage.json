@@ -1,0 +1,39 @@
+{
+  "id": "manifest-coverage",
+  "requirement": 26,
+  "examples": [
+    {
+      "id": "complete-manifest-satisfaction",
+      "check": "manifest_coverage",
+      "facts": [
+        "all_manifest_entries_satisfied"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "missing-child-satisfaction",
+      "check": "manifest_coverage",
+      "facts": [
+        "child_requirement_missing"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "manifest_incomplete"
+      }
+    },
+    {
+      "id": "missing-transcript-satisfaction",
+      "check": "manifest_coverage",
+      "facts": [
+        "transcript_requirement_missing"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "manifest_incomplete"
+      }
+    }
+  ]
+}

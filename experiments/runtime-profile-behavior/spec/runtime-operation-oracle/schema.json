@@ -1,0 +1,577 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json",
+  "title": "ADR-0006 Runtime Operation Oracle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "adr",
+    "cases"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./schema.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "adr": {
+      "const": "ADR-0006"
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 28,
+      "maxItems": 28,
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    }
+  },
+  "$defs": {
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schemaVersion",
+        "adr",
+        "catalog",
+        "crossAxis",
+        "cases",
+        "expected"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "./schema.json#/$defs/manifest"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "adr": {
+          "const": "ADR-0006"
+        },
+        "catalog": {
+          "const": "catalog.json"
+        },
+        "crossAxis": {
+          "const": "cross-axis.json"
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 28,
+          "maxItems": 28,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "requirement",
+              "path"
+            ],
+            "properties": {
+              "requirement": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 28
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^cases/[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*\\.json$"
+              }
+            }
+          }
+        },
+        "expected": {
+          "$ref": "#/$defs/validationCounts"
+        }
+      }
+    },
+    "validationCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseCount",
+        "exampleCount",
+        "acceptedCount",
+        "rejectedCount"
+      ],
+      "properties": {
+        "caseCount": {
+          "const": 28
+        },
+        "exampleCount": {
+          "const": 242
+        },
+        "acceptedCount": {
+          "const": 107
+        },
+        "rejectedCount": {
+          "const": 135
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schemaVersion",
+        "checks",
+        "facts",
+        "resultCodes",
+        "acceptedResultCodes",
+        "allowedFactsByCheck",
+        "binaryRetentionFactRoles",
+        "stateProductAxes"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "./schema.json#/$defs/catalog"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 28,
+          "maxItems": 28,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/check"
+          }
+        },
+        "facts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fact"
+          }
+        },
+        "resultCodes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/resultCode"
+          }
+        },
+        "acceptedResultCodes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/resultCode"
+          }
+        },
+        "allowedFactsByCheck": {
+          "type": "object",
+          "minProperties": 28,
+          "maxProperties": 28,
+          "propertyNames": {
+            "$ref": "#/$defs/check"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/fact"
+            }
+          }
+        },
+        "binaryRetentionFactRoles": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/fact"
+          },
+          "additionalProperties": {
+            "enum": [
+              "command_intent",
+              "work_intent",
+              "evidence"
+            ]
+          }
+        },
+        "stateProductAxes": {
+          "$ref": "#/$defs/stateProductAxes"
+        }
+      }
+    },
+    "stateProductAxes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dispatch",
+        "admission",
+        "output",
+        "execution",
+        "containment",
+        "reconciliation",
+        "manifest",
+        "satisfaction",
+        "effectResolution",
+        "terminal"
+      ],
+      "properties": {
+        "dispatch": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "admission": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "output": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "execution": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "containment": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "reconciliation": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "manifest": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "satisfaction": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "effectResolution": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "terminal": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "crossAxis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schemaVersion",
+        "requirement",
+        "machineKind",
+        "initial",
+        "axes",
+        "transitions",
+        "forbiddenTransitionFacts"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "./schema.json#/$defs/crossAxis"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "requirement": {
+          "const": 27
+        },
+        "machineKind": {
+          "const": "synthetic-verifier"
+        },
+        "initial": {
+          "$ref": "#/$defs/crossAxisState"
+        },
+        "axes": {
+          "$ref": "#/$defs/crossAxisAxes"
+        },
+        "transitions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/crossAxisTransition"
+          }
+        },
+        "forbiddenTransitionFacts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fact"
+          }
+        }
+      }
+    },
+    "crossAxisAxes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "crossAxisState": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "crossAxisTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fact",
+        "targets"
+      ],
+      "properties": {
+        "fact": {
+          "$ref": "#/$defs/fact"
+        },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/crossAxisTarget"
+          }
+        },
+        "requiredState": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "requiredFacts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fact"
+          }
+        },
+        "forbiddenFacts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fact"
+          }
+        }
+      }
+    },
+    "crossAxisTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "axis",
+        "from",
+        "to"
+      ],
+      "properties": {
+        "axis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      }
+    },
+    "canonicalId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "caseFragment": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/case"
+        },
+        {
+          "$ref": "#/$defs/shardedCase"
+        }
+      ]
+    },
+    "shardedCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "requirement",
+        "exampleFragments"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "requirement": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 28
+        },
+        "exampleFragments": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^case-parts/[0-9]{2}-[0-9]{2}\\.json$"
+          }
+        }
+      }
+    },
+    "exampleFragment": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/example"
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "requirement",
+        "examples"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "requirement": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 28
+        },
+        "examples": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/example"
+          }
+        }
+      }
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "check",
+        "facts",
+        "expected"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "check": {
+          "$ref": "#/$defs/check"
+        },
+        "facts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fact"
+          }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "decision",
+            "code"
+          ],
+          "properties": {
+            "decision": {
+              "enum": [
+                "accept",
+                "reject"
+              ]
+            },
+            "code": {
+              "$ref": "#/$defs/resultCode"
+            }
+          }
+        }
+      }
+    },
+    "check": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+    },
+    "fact": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+    },
+    "resultCode": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+    }
+  }
+}

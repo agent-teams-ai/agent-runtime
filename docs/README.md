@@ -17,7 +17,9 @@ Read documents in this order:
    `decisions/0005-runtime-context-package-identities.md` - the accepted private
    package identities and the rule that scaffolding accompanies a real vertical
    slice. Before the first Agent Execution implementation, review proposed
-   `decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md`.
+   `decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md`
+   and its synthetic executable oracle at
+   `../experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md`.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read

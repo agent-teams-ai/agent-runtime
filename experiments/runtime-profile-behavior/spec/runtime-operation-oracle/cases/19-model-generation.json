@@ -1,0 +1,28 @@
+{
+  "id": "model-generation",
+  "requirement": 19,
+  "examples": [
+    {
+      "id": "generated-valid-axis-product",
+      "check": "model_invariants",
+      "facts": [
+        "all_axis_invariants_hold"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "generated-invalid-axis-product",
+      "check": "model_invariants",
+      "facts": [
+        "axis_invariant_violated"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "axis_invariant_violation"
+      }
+    }
+  ]
+}

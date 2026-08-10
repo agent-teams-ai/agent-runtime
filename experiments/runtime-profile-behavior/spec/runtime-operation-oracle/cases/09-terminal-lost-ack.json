@@ -1,0 +1,32 @@
+{
+  "id": "terminal-lost-ack",
+  "requirement": 9,
+  "examples": [
+    {
+      "id": "exact-terminal-replay-after-lost-ack",
+      "check": "lost_acknowledgement",
+      "facts": [
+        "terminal_durable",
+        "acknowledgement_lost",
+        "exact_replay"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "replay_returns_original_receipt"
+      }
+    },
+    {
+      "id": "conflicting-terminal-replay-after-lost-ack",
+      "check": "lost_acknowledgement",
+      "facts": [
+        "terminal_durable",
+        "acknowledgement_lost",
+        "conflicting_replay"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "stale_authority"
+      }
+    }
+  ]
+}

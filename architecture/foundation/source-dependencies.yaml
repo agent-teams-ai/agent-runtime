@@ -7,6 +7,7 @@ governedRoots:
   - scripts/foundation
 boundaries:
   - id: experiments.typescript-evidence
+    dependencyMode: development
     roots:
       - experiments/runtime-profile-behavior
       - experiments/rust-system-boundaries/client
@@ -15,6 +16,12 @@ boundaries:
     allow:
       boundaries: []
       packages:
+        - "@xstate/graph"
+        - ajv
+        - fast-check
+        - json-schema-to-typescript
+        - jsonc-parser
+        - xstate
         - zod
       builtins:
         - node:assert/strict
@@ -32,6 +39,7 @@ boundaries:
         - node:util
       runtimeReferences: []
   - id: tooling.foundation-scaffolding
+    dependencyMode: development
     roots:
       - scripts/foundation
     entrypoints: []

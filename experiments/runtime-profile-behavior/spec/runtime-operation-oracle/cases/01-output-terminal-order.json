@@ -1,0 +1,28 @@
+{
+  "id": "output-terminal-order",
+  "requirement": 1,
+  "examples": [
+    {
+      "id": "output-before-seal",
+      "check": "output_terminal_order",
+      "facts": [
+        "append_committed_first"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "seal-before-output",
+      "check": "output_terminal_order",
+      "facts": [
+        "seal_committed_first"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "append_rejected_after_seal"
+      }
+    }
+  ]
+}

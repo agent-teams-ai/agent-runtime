@@ -1,0 +1,502 @@
+{
+  "id": "cross-axis-transitions",
+  "requirement": 27,
+  "examples": [
+    {
+      "id": "allow-dispatch-unclaimed-to-claimed",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_dispatch_unclaimed_claimed"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-dispatch-claimed-to-unknown",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_dispatch_claimed_unknown"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-dispatch-claimed-to-not-accepted",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_dispatch_claimed_not_accepted"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-dispatch-claimed-to-accepted",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_dispatch_claimed_accepted"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-dispatch-unknown-to-not-accepted",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_dispatch_unknown_not_accepted"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-dispatch-unknown-to-accepted",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_dispatch_unknown_accepted"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-dispatch-not-accepted-to-fresh-claim",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_dispatch_not_accepted_claimed_fresh"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "forbid-dispatch-accepted-to-claimed",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_dispatch_accepted_claimed"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "allow-execution-start-with-claim",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_execution_not_started_active_with_claim"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-execution-reset-with-proof",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_execution_active_not_started_with_proof"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-execution-termination-with-receipt",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_execution_active_terminated_with_receipt"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "forbid-execution-reopen",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_execution_terminated_active"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-execution-start-without-claim",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_execution_start_without_claim"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-execution-reset-without-proof",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_execution_reset_without_not_accepted_proof"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-execution-termination-without-receipt",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_execution_terminate_without_receipt"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "allow-containment-request",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_pending"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-containment-completion",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_pending_contained"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-containment-uncertainty",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_pending_uncertain"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-containment-retry-from-uncertain",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_uncertain_pending_retry"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-containment-late-exact-proof",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_uncertain_contained_late_proof"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-qualified-containment-not-required",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_qualified_not_required",
+        "containment_capability_evidence_immutable",
+        "containment_qualification_receipt_exact",
+        "admission_fenced",
+        "output_fenced",
+        "execution_not_started"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-qualified-containment-not-required-after-termination",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_qualified_not_required",
+        "containment_capability_evidence_immutable",
+        "containment_qualification_receipt_exact",
+        "admission_fenced",
+        "output_fenced",
+        "execution_terminated"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "forbid-qualified-containment-with-open-admission",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_qualified_not_required",
+        "containment_capability_evidence_immutable",
+        "containment_qualification_receipt_exact",
+        "output_fenced",
+        "execution_not_started"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-qualified-containment-with-open-output",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_qualified_not_required",
+        "containment_capability_evidence_immutable",
+        "containment_qualification_receipt_exact",
+        "admission_fenced",
+        "execution_not_started"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-qualified-containment-with-active-execution",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_qualified_not_required",
+        "containment_capability_evidence_immutable",
+        "containment_qualification_receipt_exact",
+        "admission_fenced",
+        "output_fenced",
+        "execution_active"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-qualified-containment-with-contradictory-execution",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_qualified_not_required",
+        "containment_capability_evidence_immutable",
+        "containment_qualification_receipt_exact",
+        "admission_fenced",
+        "output_fenced",
+        "execution_not_started",
+        "execution_terminated"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-qualified-containment-without-capability-evidence",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_qualified_not_required",
+        "containment_qualification_receipt_exact",
+        "admission_fenced",
+        "output_fenced",
+        "execution_not_started"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-qualified-containment-without-qualification-receipt",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_not_requested_qualified_not_required",
+        "containment_capability_evidence_immutable",
+        "admission_fenced",
+        "output_fenced",
+        "execution_not_started"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-containment-reopen",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_contained_pending"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-qualified-containment-reopen",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_containment_qualified_not_required_pending"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "allow-cutoff-open-to-fenced",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_cutoff_open_fenced"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "forbid-cutoff-reopen",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_cutoff_fenced_open"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "allow-manifest-seal-with-both-fences",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_manifest_open_sealed_with_fences",
+        "admission_fenced",
+        "output_fenced"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "forbid-manifest-seal-with-open-admission",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_manifest_open_sealed_open_admission",
+        "output_fenced"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-manifest-seal-with-open-output",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_manifest_open_sealed_open_output",
+        "admission_fenced"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "allow-terminal-with-complete-closure",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_terminal_open_final_with_closure",
+        "admission_fenced",
+        "output_fenced",
+        "reconciliation_clear",
+        "execution_terminated",
+        "containment_satisfied",
+        "manifest_sealed",
+        "all_manifest_entries_satisfied"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "allow-terminal-not-started-with-complete-closure",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_terminal_open_final_not_started_with_closure",
+        "admission_fenced",
+        "output_fenced",
+        "reconciliation_clear",
+        "execution_not_started",
+        "containment_satisfied",
+        "manifest_sealed",
+        "all_manifest_entries_satisfied"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "forbid-terminal-with-active-execution",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_terminal_open_final_active_execution",
+        "execution_active"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-terminal-reopen",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_terminal_final_open"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    },
+    {
+      "id": "forbid-claim-without-execution-activation",
+      "check": "cross_axis_transition",
+      "facts": [
+        "transition_claim_without_execution_activation"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "transition_forbidden"
+      }
+    }
+  ]
+}

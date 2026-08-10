@@ -1,0 +1,50 @@
+{
+  "id": "receipt-ordering",
+  "requirement": 17,
+  "examples": [
+    {
+      "id": "delayed-receipt",
+      "check": "receipt_handling",
+      "facts": [
+        "receipt_delayed"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "reordered-receipt",
+      "check": "receipt_handling",
+      "facts": [
+        "receipt_reordered"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "exact-duplicate-receipt",
+      "check": "receipt_handling",
+      "facts": [
+        "receipt_duplicate_exact"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "conflicting-receipt-rejected",
+      "check": "receipt_handling",
+      "facts": [
+        "receipt_conflicting"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "conflicting_receipt"
+      }
+    }
+  ]
+}

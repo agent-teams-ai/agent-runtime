@@ -1,0 +1,29 @@
+{
+  "id": "tombstone-restore",
+  "requirement": 15,
+  "examples": [
+    {
+      "id": "ordinary-restored-effect",
+      "check": "tombstone_restore",
+      "facts": [
+        "restore_or_compaction"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "restored-tombstone-still-blocks-retry",
+      "check": "tombstone_restore",
+      "facts": [
+        "permanent_tombstone",
+        "restore_or_compaction"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "retry_permanently_forbidden"
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "exactOptionalPropertyTypes": false,
+    "skipLibCheck": false
+  },
+  "include": [
+    "experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts",
+    "experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-xstate-builder.ts",
+    "experiments/runtime-profile-behavior/test/runtime-operation-oracle.test.ts",
+    "experiments/runtime-profile-behavior/test/runtime-operation-oracle-xstate.test.ts"
+  ],
+  "exclude": []
+}

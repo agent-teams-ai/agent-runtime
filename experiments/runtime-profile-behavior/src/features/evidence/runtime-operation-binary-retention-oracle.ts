@@ -4,54 +4,10 @@ import {
   retentionObligationSetIsOpenAndExact,
 } from "./runtime-operation-root-lifecycle-oracle.ts";
 
-import {
-  BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-} from "./runtime-operation-binary-retention-vocabulary.ts";
+import type { ResultCode } from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
-export {
-  BINARY_RETENTION_ALLOWED_FACTS,
-  BINARY_RETENTION_FACTS,
-  BINARY_RETENTION_FACT_ROLE_CATALOG,
-  BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-} from "./runtime-operation-binary-retention-vocabulary.ts";
-
-
-export const BINARY_RETENTION_RESULT_CODES = [
-  "semantic_root_required",
-  "semantic_root_establishment_race",
-  "semantic_root_retained",
-  "semantic_root_released",
-  "binary_revision_gc_allowed",
-  "binary_revision_gc_blocked",
-  "root_not_execution_authority",
-  "retention_receipt_replayed",
-  "release_manifest_conflict",
-  "physical_deletion_replayed",
-  "deletion_reconciliation_required",
-  "operation_acceptance_required",
-  "retention_receipt_reconciliation_required",
-  "abandon_release_replayed",
-  "operation_acceptance_aborted",
-  "operation_acceptance_replayed",
-  "operation_abort_replayed",
-  "operation_acceptance_stale_current_receipt",
-  "operation_acceptance_winner_committed_current_receipt",
-  "operation_acceptance_integrity_contradiction",
-  "retention_obligation_set_required",
-  "retention_obligation_mismatch",
-  "retention_obligation_reservation_required",
-  "physical_deletion_completed",
-  "deletion_integrity_contradiction",
-  "root_establishment_forbidden_current_receipt",
-  "root_establishment_receipt_replayed",
-  "root_lifecycle_integrity_contradiction",
-  "retention_obligation_integrity_contradiction",
-  "mixed_command_intent_forbidden",
-] as const;
-
-type BinaryRetentionResult =
-  | (typeof BINARY_RETENTION_RESULT_CODES)[number]
-  | "accepted";
+type BinaryRetentionResult = ResultCode;
+type BinaryRetentionFactRoles = Readonly<Record<string, "command_intent" | "work_intent" | "evidence">>;
 
 const has = (facts: ReadonlySet<string>, fact: string): boolean => facts.has(fact);
 
@@ -137,8 +93,12 @@ const evaluateDurableIntegrity = (
   evaluateLifecycleDurableIntegrity(facts) ??
   evaluateDeletionDurableIntegrity(facts);
 
-export const binaryRetentionHasMixedCommandIntent = (facts: ReadonlySet<string>): boolean =>
-  BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS.some((fact) => has(facts, fact));
+export const binaryRetentionHasMixedCommandIntent = (
+  facts: ReadonlySet<string>,
+  factRoles: BinaryRetentionFactRoles,
+): boolean => Object.entries(factRoles).some(([fact, role]) =>
+  role === "command_intent" && has(facts, fact),
+);
 
 
 const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
@@ -266,13 +226,31 @@ const abortReceiptIsInvalid = (facts: ReadonlySet<string>): boolean => [
   "operation_acceptance_aborted_receipt_unknown",
 ].some((fact) => has(facts, fact));
 
-const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
+const isHistoricalReplay = (facts: ReadonlySet<string>): boolean =>
+  has(facts, "release_exact_replay") || has(facts, "abandon_release_exact_replay");
+
+const evaluateHistoricalReplayContradiction = (
+  facts: ReadonlySet<string>,
+): BinaryRetentionResult | undefined => {
+  if (!isHistoricalReplay(facts)) {
+    return undefined;
+  }
   if (has(facts, "release_manifest_digest_conflict") ||
-      (has(facts, "release_exact_replay") && releaseReplayEvidenceIsInvalid(facts))) {
+      releaseReplayEvidenceIsInvalid(facts)) {
     return "release_manifest_conflict";
   }
-  if (has(facts, "abandon_release_exact_replay") && abortReceiptIsInvalid(facts)) {
-    return "operation_acceptance_stale_current_receipt";
+  return abortReceiptIsInvalid(facts)
+    ? "operation_acceptance_stale_current_receipt"
+    : undefined;
+};
+
+const evaluateRelease = (facts: ReadonlySet<string>): BinaryRetentionResult => {
+  const replayContradiction = evaluateHistoricalReplayContradiction(facts);
+  if (replayContradiction !== undefined) {
+    return replayContradiction;
+  }
+  if (has(facts, "release_manifest_digest_conflict")) {
+    return "release_manifest_conflict";
   }
   if (has(facts, "release_exact_replay") && has(facts, "owner_release_receipt_durable")) {
     return "semantic_root_released";
@@ -363,17 +341,22 @@ const evaluatePhysicalDeletion = (
 
 export const evaluateBinaryRevisionRetention = (
   facts: ReadonlySet<string>,
+  factRoles: BinaryRetentionFactRoles,
 ): BinaryRetentionResult => {
   const durableIntegrity = evaluateDurableIntegrity(facts);
   if (durableIntegrity !== undefined) {
     return durableIntegrity;
+  }
+  const replayContradiction = evaluateHistoricalReplayContradiction(facts);
+  if (replayContradiction !== undefined) {
+    return replayContradiction;
   }
   if (workRequested(facts)) {
     const authorization = evaluateAuthorizedWork(facts);
     if (authorization !== "accepted") {
       return authorization;
     }
-    if (binaryRetentionHasMixedCommandIntent(facts)) {
+    if (binaryRetentionHasMixedCommandIntent(facts, factRoles)) {
       return "mixed_command_intent_forbidden";
     }
     return "accepted";

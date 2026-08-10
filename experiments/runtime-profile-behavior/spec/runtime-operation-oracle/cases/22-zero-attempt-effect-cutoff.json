@@ -1,0 +1,31 @@
+{
+  "id": "zero-attempt-effect-cutoff",
+  "requirement": 22,
+  "examples": [
+    {
+      "id": "registered-effect-cutoff-before-attempt",
+      "check": "zero_attempt_cutoff",
+      "facts": [
+        "effect_registered",
+        "zero_attempts",
+        "cutoff_fenced"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "zero_attempt_effect_closed"
+      }
+    },
+    {
+      "id": "zero-attempt-effect-without-cutoff",
+      "check": "zero_attempt_cutoff",
+      "facts": [
+        "effect_registered",
+        "zero_attempts"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "axis_invariant_violation"
+      }
+    }
+  ]
+}

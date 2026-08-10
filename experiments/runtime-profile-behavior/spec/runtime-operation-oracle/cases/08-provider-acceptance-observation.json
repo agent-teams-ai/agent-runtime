@@ -1,0 +1,29 @@
+{
+  "id": "provider-acceptance-observation",
+  "requirement": 8,
+  "examples": [
+    {
+      "id": "accepted-and-observed",
+      "check": "provider_observation",
+      "facts": [
+        "provider_accepted"
+      ],
+      "expected": {
+        "decision": "accept",
+        "code": "accepted"
+      }
+    },
+    {
+      "id": "accepted-before-durable-observation",
+      "check": "provider_observation",
+      "facts": [
+        "provider_accepted",
+        "observation_not_durable"
+      ],
+      "expected": {
+        "decision": "reject",
+        "code": "reconciliation_required"
+      }
+    }
+  ]
+}
