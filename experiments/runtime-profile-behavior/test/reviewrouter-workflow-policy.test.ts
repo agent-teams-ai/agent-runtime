@@ -15,11 +15,14 @@ test("ReviewRouter interaction remains a pinned least-privilege reusable caller"
   assert.match(workflow, /issue_comment:\n    types: \[created, edited\]/);
   assert.match(workflow, /  workflow_dispatch:\n/);
   assert.match(workflow, /^permissions: \{\}$/m);
+  assert.ok(workflow.includes("    if: ${{ github.event_name == 'workflow_dispatch' || ((github.event_name != 'issue_comment' || github.event.issue.pull_request) && github.event.comment.user.type != 'Bot') }}"));
   assert.match(workflow, new RegExp(
     `^    uses: 777genius/review-router/\\.github/workflows/reviewrouter-interaction-reusable\\.yml@${runtimeRef}$`,
     "m",
   ));
   assert.match(workflow, new RegExp(`^      runtime_ref: "${runtimeRef}"$`, "m"));
+  assert.match(workflow, /^      api_url: "https:\/\/api\.reviewrouter\.site"$/m);
+  assert.match(workflow, /^      runtime_config_mode: oidc$/m);
   assert.match(workflow, /      review_workflow_file: reviewrouter-codex\.yml/);
   assert.match(workflow, /      discussion_mode: \$\{\{ vars\.REVIEW_ROUTER_DISCUSSION_MODE \|\| 'off' \}\}/);
   assert.match(workflow, /      discussion_model: \$\{\{ vars\.REVIEW_CODEX_MODEL \|\| 'gpt-5\.5' \}\}/);
