@@ -22,7 +22,15 @@ const specificationRelative = "experiments/runtime-profile-behavior/spec/runtime
 const specificationRoot = join(repositoryRoot, specificationRelative);
 const FOUNDATION_ADOPTION_BOUNDARY = "| `quality.executable-specifications` | enabled for synthetic architecture evidence | Cataloged JSON authority, independent evaluator, property/mutation checks, and XState path evidence support review of proposed ADR-0006; they do not bind or implement a production runtime or establish implementation/deployment qualification |";
 const READINESS_BOUNDARY = "They do not bind or implement a production runtime, change ADR-0006 from `proposed`, authorize an Agent Execution slice, or establish implementation/deployment qualification.";
-const FORBIDDEN_POSITIVE_EVIDENCE_CLAIM = /\bthey (?:bind or implement a production runtime|change ADR-0006 from `proposed`|establish implementation\/deployment qualification)(?=[\s.,;]|$)/iu;
+const FORBIDDEN_POSITIVE_EVIDENCE_CLAIMS = [
+  { statement: "They bind a production runtime.", pattern: /\bthey bind (?:a |the )?production runtime(?=[\s.,;]|$)/iu },
+  { statement: "They implement a production runtime.", pattern: /\bthey implement (?:a |the )?production runtime(?=[\s.,;]|$)/iu },
+  { statement: "They change ADR-0006 from `proposed`.", pattern: /\bthey change ADR-0006 from `proposed`(?=[\s.,;]|$)/iu },
+  { statement: "They authorize an Agent Execution slice.", pattern: /\bthey authorize an Agent Execution slice(?=[\s.,;]|$)/iu },
+  { statement: "They establish implementation qualification.", pattern: /\bthey establish implementation qualification(?=[\s.,;]|$)/iu },
+  { statement: "They establish deployment qualification.", pattern: /\bthey establish deployment qualification(?=[\s.,;]|$)/iu },
+  { statement: "They establish implementation/deployment qualification.", pattern: /\bthey establish implementation\/deployment qualification(?=[\s.,;]|$)/iu },
+] as const;
 
 const assertExecutableEvidenceBoundary = (adoption: string, readiness: string): void => {
   const normalizedAdoption = adoption.replaceAll(/\s+/g, " ");
@@ -35,16 +43,18 @@ const assertExecutableEvidenceBoundary = (adoption: string, readiness: string): 
     normalizedReadiness.includes(READINESS_BOUNDARY),
     "readiness must retain the complete negative production-qualification boundary",
   );
-  assert.doesNotMatch(
-    normalizedAdoption,
-    FORBIDDEN_POSITIVE_EVIDENCE_CLAIM,
-    "Foundation documentation must not contain a positive production claim",
-  );
-  assert.doesNotMatch(
-    normalizedReadiness,
-    FORBIDDEN_POSITIVE_EVIDENCE_CLAIM,
-    "Foundation documentation must not contain a positive production claim",
-  );
+  for (const { pattern } of FORBIDDEN_POSITIVE_EVIDENCE_CLAIMS) {
+    assert.doesNotMatch(
+      normalizedAdoption,
+      pattern,
+      "Foundation documentation must not contain a positive production claim",
+    );
+    assert.doesNotMatch(
+      normalizedReadiness,
+      pattern,
+      "Foundation documentation must not contain a positive production claim",
+    );
+  }
 };
 
 const withSpecificationCopy = async (
@@ -378,14 +388,17 @@ test("Foundation documentation denies production runtime binding and qualificati
   assertExecutableEvidenceBoundary(adoption, readiness);
 });
 
-test("production qualification guard rejects a positive claim after the required denial", () => {
-  assert.throws(
-    () => assertExecutableEvidenceBoundary(
-      FOUNDATION_ADOPTION_BOUNDARY,
-      `${READINESS_BOUNDARY} They change ADR-0006 from \`proposed\` and establish implementation/deployment qualification.`,
-    ),
-    /must not contain a positive production claim/,
-  );
+test("production qualification guard rejects every canonical positive inversion", () => {
+  for (const { statement } of FORBIDDEN_POSITIVE_EVIDENCE_CLAIMS) {
+    assert.throws(
+      () => assertExecutableEvidenceBoundary(
+        FOUNDATION_ADOPTION_BOUNDARY,
+        `${READINESS_BOUNDARY} ${statement}`,
+      ),
+      /must not contain a positive production claim/,
+      statement,
+    );
+  }
 });
 
 test("jsonc-parser defense rejects nested duplicate keys before Ajv", () => {
