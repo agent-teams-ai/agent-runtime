@@ -25,6 +25,7 @@ const READINESS_BOUNDARY = "They do not bind or implement a production runtime, 
 const FORBIDDEN_POSITIVE_EVIDENCE_CLAIMS = [
   { statement: "They bind a production runtime.", pattern: /\bthey bind (?:a |the )?production runtime(?=[\s.,;]|$)/iu },
   { statement: "They implement a production runtime.", pattern: /\bthey implement (?:a |the )?production runtime(?=[\s.,;]|$)/iu },
+  { statement: "They bind or implement a production runtime.", pattern: /\bthey bind or implement (?:a |the )?production runtime(?=[\s.,;]|$)/iu },
   { statement: "They change ADR-0006 from `proposed`.", pattern: /\bthey change ADR-0006 from `proposed`(?=[\s.,;]|$)/iu },
   { statement: "They authorize an Agent Execution slice.", pattern: /\bthey authorize an Agent Execution slice(?=[\s.,;]|$)/iu },
   { statement: "They establish implementation qualification.", pattern: /\bthey establish implementation qualification(?=[\s.,;]|$)/iu },
