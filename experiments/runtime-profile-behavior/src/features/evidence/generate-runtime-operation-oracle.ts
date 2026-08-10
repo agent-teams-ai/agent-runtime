@@ -6,9 +6,7 @@ import { compile } from "json-schema-to-typescript";
 
 import { loadRuntimeOperationOracleAuthority } from "./runtime-operation-oracle-authority.ts";
 import {
-  evaluateGeneratedAxisProducts,
-  projectedStateHasValidExtension,
-  type StateProductAxes,
+  createStateProductEvaluator,
 } from "./runtime-operation-state-product.ts";
 import {
   buildSyntheticCrossAxisMachine,
@@ -21,16 +19,6 @@ const GENERATED_DIRECTORY =
   "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/generated";
 const BANNER = "// Generated from ADR-0006 JSON authority. Do not edit.\n\n";
 
-const asTypeScriptConstant = (name: string, value: unknown): string =>
-  `export const ${name} = ${JSON.stringify(value, null, 2)} as const;\n`;
-
-const asTypeScriptRecordConstant = (
-  name: string,
-  value: Readonly<Record<string, unknown>>,
-): string => `export const ${name} = {\n${Object.entries(value)
-  .map(([key, entry]) => `  ${JSON.stringify(key)}: ${JSON.stringify(entry)},`)
-  .join("\n")}\n} as const;\n`;
-
 const renderTypes = async (schema: Record<string, unknown>): Promise<string> => {
   const generated = await compile(schema, "RuntimeOperationOracle", {
     bannerComment: BANNER.trimEnd(),
@@ -39,33 +27,6 @@ const renderTypes = async (schema: Record<string, unknown>): Promise<string> => 
   });
   return generated.endsWith("\n") ? generated : `${generated}\n`;
 };
-
-const renderCatalog = (catalog: Awaited<ReturnType<typeof loadRuntimeOperationOracleAuthority>>["catalog"]): string =>
-  BANNER + [
-    asTypeScriptConstant("ORACLE_CHECKS", catalog.checks),
-    asTypeScriptConstant("ORACLE_FACTS", catalog.facts),
-    asTypeScriptConstant("ORACLE_RESULT_CODES", catalog.resultCodes),
-    asTypeScriptConstant("ORACLE_ACCEPTED_RESULT_CODES", catalog.acceptedResultCodes),
-    asTypeScriptConstant("GENERATED_AXES", catalog.stateProductAxes),
-    asTypeScriptRecordConstant("ALLOWED_FACTS_BY_CHECK", catalog.allowedFactsByCheck),
-    asTypeScriptRecordConstant("BINARY_RETENTION_FACT_ROLE_CATALOG", catalog.binaryRetentionFactRoles),
-  ].join("\n") + `
-export type BinaryRetentionAllowedFact = keyof typeof BINARY_RETENTION_FACT_ROLE_CATALOG;
-
-export const BINARY_RETENTION_ALLOWED_FACTS = Object.keys(
-  BINARY_RETENTION_FACT_ROLE_CATALOG,
-) as BinaryRetentionAllowedFact[];
-
-export const BINARY_RETENTION_FACTS = BINARY_RETENTION_ALLOWED_FACTS.filter(
-  (fact): fact is Exclude<BinaryRetentionAllowedFact, "dispatch_requested"> =>
-    fact !== "dispatch_requested",
-);
-
-export const BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS =
-  BINARY_RETENTION_ALLOWED_FACTS.filter(
-    (fact) => BINARY_RETENTION_FACT_ROLE_CATALOG[fact] === "command_intent",
-  );
-`;
 
 const renderMermaid = (model: SyntheticCrossAxisModel): string => {
   const lines = [
@@ -98,10 +59,10 @@ const renderGeneratedFiles = async (repositoryRoot: string): Promise<Map<string,
     machine,
     model.transitions,
   );
-  const stateProductAxes = authority.catalog.stateProductAxes as StateProductAxes;
-  const validity = evaluateGeneratedAxisProducts(stateProductAxes);
+  const stateProduct = createStateProductEvaluator(authority);
+  const validity = stateProduct.evaluate();
   const invalidReachableStates = topology.reachableStates.filter(
-    (state) => !projectedStateHasValidExtension(stateProductAxes, state),
+    (state) => !stateProduct.projectedStateHasValidExtension(state),
   );
   if (invalidReachableStates.length > 0) {
     throw new Error(
@@ -128,7 +89,6 @@ const renderGeneratedFiles = async (repositoryRoot: string): Promise<Map<string,
   };
   return new Map([
     ["runtime-operation-oracle-types.generated.ts", await renderTypes(authority.schema)],
-    ["runtime-operation-oracle-catalog.generated.ts", renderCatalog(authority.catalog)],
     ["runtime-operation-xstate-paths.generated.json", `${JSON.stringify(pathArtifact, null, 2)}\n`],
     ["runtime-operation-xstate.generated.mmd", renderMermaid(model)],
   ]);

@@ -22,6 +22,16 @@ export type SyntheticCrossAxisTransition = {
   requiredFacts?: readonly string[];
 };
 
+export type SyntheticCrossAxisEvent = {
+  type: string;
+  facts: readonly string[];
+};
+
+const eventFor = (transition: SyntheticCrossAxisTransition): SyntheticCrossAxisEvent => ({
+  type: transition.fact,
+  facts: [...(transition.requiredFacts ?? [])],
+});
+
 export type SyntheticCrossAxisModel = {
   requirement: 27;
   machineKind: "synthetic-verifier";
@@ -48,7 +58,7 @@ type StateConfig = {
 
 const guardFor = (
   declaration: SyntheticCrossAxisTransition,
-): ReturnType<typeof stateIn> | undefined => {
+): unknown => {
   const requiredState: Record<string, readonly string[]> = {
     ...declaration.requiredState,
   };
@@ -59,11 +69,17 @@ const guardFor = (
     }
     requiredState[axis] = [from];
   }
-  const axisGuards = Object.entries(requiredState).map(([axis, values]) => {
-    const guards = values.map((value) => stateIn({ [axis]: value }));
-    return guards.length === 1 ? guards[0]! : or(guards);
+  const guards: unknown[] = Object.entries(requiredState).map(([axis, values]) => {
+    const valueGuards = values.map((value) => stateIn({ [axis]: value }));
+    return valueGuards.length === 1 ? valueGuards[0]! : or(valueGuards);
   });
-  return axisGuards.length === 1 ? axisGuards[0]! : and(axisGuards);
+  const requiredFacts = declaration.requiredFacts ?? [];
+  if (requiredFacts.length > 0) {
+    guards.push(({ event }: { event: { type: string; facts?: readonly string[] } }) =>
+      requiredFacts.every((fact) => (event.facts ?? []).includes(fact)),
+    );
+  }
+  return guards.length === 1 ? guards[0]! : and(guards as never);
 };
 
 export const buildSyntheticCrossAxisMachine = (
@@ -89,9 +105,7 @@ export const buildSyntheticCrossAxisMachine = (
         throw new Error(`synthetic cross-axis machine: invalid target for ${declaration.fact}`);
       }
       state.on ??= {};
-      state.on[declaration.fact] = guard === undefined
-        ? { target: target.to }
-        : { target: target.to, guard };
+      state.on[declaration.fact] = { target: target.to, guard };
     }
   }
 
@@ -114,7 +128,7 @@ const serializeState = (snapshot: { value: StateValue }): string =>
 
 export type SyntheticPathWitness = {
   fact: string;
-  events: string[];
+  events: SyntheticCrossAxisEvent[];
   source: Record<string, string>;
   target: Record<string, string>;
 };
@@ -128,7 +142,7 @@ export const deriveShortestPathWitnesses = (
   witnesses: SyntheticPathWitness[];
 } => {
   const transitionFacts = transitions.map(({ fact }) => fact);
-  const events = transitionFacts.map((type) => ({ type }));
+  const events = transitions.map(eventFor);
   const traversal = { events, limit: 100_000, serializeState };
   const paths = getShortestPaths(machine, traversal);
   const adjacency = getAdjacencyMap(machine, traversal);
@@ -141,7 +155,7 @@ export const deriveShortestPathWitnesses = (
   }
   const witnesses = transitions.map((declared): SyntheticPathWitness => {
     const fact = declared.fact;
-    const event = { type: fact };
+    const event = eventFor(declared);
     const candidates = paths
       .map((path) => {
         const [next] = transitionMachine(machine, path.state, event);
@@ -168,8 +182,9 @@ export const deriveShortestPathWitnesses = (
       events: [
         ...candidate.path.steps
           .map(({ event: stepEvent }) => stepEvent.type)
-          .filter((type) => type !== "xstate.init"),
-        fact,
+          .filter((type) => type !== "xstate.init")
+          .map((type) => eventFor(transitions.find((transition) => transition.fact === type)!)),
+        event,
       ],
       source: stateValue(candidate.path.state.value),
       target: stateValue(candidate.next.value),

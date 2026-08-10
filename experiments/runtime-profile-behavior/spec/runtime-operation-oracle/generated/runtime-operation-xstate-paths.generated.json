@@ -28,7 +28,10 @@
     {
       "fact": "transition_dispatch_unclaimed_claimed",
       "events": [
-        "transition_dispatch_unclaimed_claimed"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "unclaimed",
@@ -52,8 +55,14 @@
     {
       "fact": "transition_dispatch_claimed_unknown",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_dispatch_claimed_unknown"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_claimed_unknown",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -77,8 +86,14 @@
     {
       "fact": "transition_dispatch_claimed_not_accepted",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_dispatch_claimed_not_accepted"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_claimed_not_accepted",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -102,8 +117,14 @@
     {
       "fact": "transition_dispatch_claimed_accepted",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_dispatch_claimed_accepted"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_claimed_accepted",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -127,9 +148,18 @@
     {
       "fact": "transition_dispatch_unknown_not_accepted",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_dispatch_claimed_unknown",
-        "transition_dispatch_unknown_not_accepted"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_claimed_unknown",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_unknown_not_accepted",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "acceptance_unknown",
@@ -153,9 +183,18 @@
     {
       "fact": "transition_dispatch_unknown_accepted",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_dispatch_claimed_unknown",
-        "transition_dispatch_unknown_accepted"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_claimed_unknown",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_unknown_accepted",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "acceptance_unknown",
@@ -179,9 +218,18 @@
     {
       "fact": "transition_dispatch_not_accepted_claimed_fresh",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_dispatch_claimed_not_accepted",
-        "transition_dispatch_not_accepted_claimed_fresh"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_claimed_not_accepted",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_not_accepted_claimed_fresh",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "known_not_accepted",
@@ -205,7 +253,10 @@
     {
       "fact": "transition_execution_not_started_active_with_claim",
       "events": [
-        "transition_execution_not_started_active_with_claim"
+        {
+          "type": "transition_execution_not_started_active_with_claim",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "unclaimed",
@@ -229,8 +280,14 @@
     {
       "fact": "transition_execution_active_not_started_with_proof",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_execution_active_not_started_with_proof"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_execution_active_not_started_with_proof",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -254,9 +311,18 @@
     {
       "fact": "transition_execution_active_terminated_with_receipt",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_dispatch_claimed_unknown",
-        "transition_execution_active_terminated_with_receipt"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_claimed_unknown",
+          "facts": []
+        },
+        {
+          "type": "transition_execution_active_terminated_with_receipt",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "acceptance_unknown",
@@ -280,8 +346,14 @@
     {
       "fact": "transition_containment_not_requested_pending",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_containment_not_requested_pending"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_not_requested_pending",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -305,9 +377,18 @@
     {
       "fact": "transition_containment_pending_contained",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_containment_not_requested_pending",
-        "transition_containment_pending_contained"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_not_requested_pending",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_pending_contained",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -331,9 +412,18 @@
     {
       "fact": "transition_containment_pending_uncertain",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_containment_not_requested_pending",
-        "transition_containment_pending_uncertain"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_not_requested_pending",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_pending_uncertain",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -357,10 +447,22 @@
     {
       "fact": "transition_containment_uncertain_pending_retry",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_containment_not_requested_pending",
-        "transition_containment_pending_uncertain",
-        "transition_containment_uncertain_pending_retry"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_not_requested_pending",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_pending_uncertain",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_uncertain_pending_retry",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -384,10 +486,22 @@
     {
       "fact": "transition_containment_uncertain_contained_late_proof",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_containment_not_requested_pending",
-        "transition_containment_pending_uncertain",
-        "transition_containment_uncertain_contained_late_proof"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_not_requested_pending",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_pending_uncertain",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_uncertain_contained_late_proof",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "claimed",
@@ -411,8 +525,19 @@
     {
       "fact": "transition_containment_not_requested_qualified_not_required",
       "events": [
-        "transition_cutoff_open_fenced",
-        "transition_containment_not_requested_qualified_not_required"
+        {
+          "type": "transition_cutoff_open_fenced",
+          "facts": []
+        },
+        {
+          "type": "transition_containment_not_requested_qualified_not_required",
+          "facts": [
+            "containment_capability_evidence_immutable",
+            "containment_qualification_receipt_exact",
+            "admission_fenced",
+            "output_fenced"
+          ]
+        }
       ],
       "source": {
         "dispatch": "unclaimed",
@@ -436,7 +561,10 @@
     {
       "fact": "transition_cutoff_open_fenced",
       "events": [
-        "transition_cutoff_open_fenced"
+        {
+          "type": "transition_cutoff_open_fenced",
+          "facts": []
+        }
       ],
       "source": {
         "dispatch": "unclaimed",
@@ -460,8 +588,17 @@
     {
       "fact": "transition_manifest_open_sealed_with_fences",
       "events": [
-        "transition_cutoff_open_fenced",
-        "transition_manifest_open_sealed_with_fences"
+        {
+          "type": "transition_cutoff_open_fenced",
+          "facts": []
+        },
+        {
+          "type": "transition_manifest_open_sealed_with_fences",
+          "facts": [
+            "admission_fenced",
+            "output_fenced"
+          ]
+        }
       ],
       "source": {
         "dispatch": "unclaimed",
@@ -485,12 +622,41 @@
     {
       "fact": "transition_terminal_open_final_with_closure",
       "events": [
-        "transition_dispatch_unclaimed_claimed",
-        "transition_dispatch_claimed_unknown",
-        "transition_execution_active_terminated_with_receipt",
-        "transition_cutoff_open_fenced",
-        "transition_manifest_open_sealed_with_fences",
-        "transition_terminal_open_final_with_closure"
+        {
+          "type": "transition_dispatch_unclaimed_claimed",
+          "facts": []
+        },
+        {
+          "type": "transition_dispatch_claimed_unknown",
+          "facts": []
+        },
+        {
+          "type": "transition_execution_active_terminated_with_receipt",
+          "facts": []
+        },
+        {
+          "type": "transition_cutoff_open_fenced",
+          "facts": []
+        },
+        {
+          "type": "transition_manifest_open_sealed_with_fences",
+          "facts": [
+            "admission_fenced",
+            "output_fenced"
+          ]
+        },
+        {
+          "type": "transition_terminal_open_final_with_closure",
+          "facts": [
+            "admission_fenced",
+            "output_fenced",
+            "reconciliation_clear",
+            "execution_terminated",
+            "containment_satisfied",
+            "manifest_sealed",
+            "all_manifest_entries_satisfied"
+          ]
+        }
       ],
       "source": {
         "dispatch": "acceptance_unknown",
@@ -514,9 +680,29 @@
     {
       "fact": "transition_terminal_open_final_not_started_with_closure",
       "events": [
-        "transition_cutoff_open_fenced",
-        "transition_manifest_open_sealed_with_fences",
-        "transition_terminal_open_final_not_started_with_closure"
+        {
+          "type": "transition_cutoff_open_fenced",
+          "facts": []
+        },
+        {
+          "type": "transition_manifest_open_sealed_with_fences",
+          "facts": [
+            "admission_fenced",
+            "output_fenced"
+          ]
+        },
+        {
+          "type": "transition_terminal_open_final_not_started_with_closure",
+          "facts": [
+            "admission_fenced",
+            "output_fenced",
+            "reconciliation_clear",
+            "execution_not_started",
+            "containment_satisfied",
+            "manifest_sealed",
+            "all_manifest_entries_satisfied"
+          ]
+        }
       ],
       "source": {
         "dispatch": "unclaimed",

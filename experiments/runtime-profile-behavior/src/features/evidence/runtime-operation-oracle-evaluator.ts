@@ -1,8 +1,8 @@
 import { evaluateBinaryRevisionRetention } from "./runtime-operation-binary-retention-oracle.ts";
 
-import { ORACLE_ACCEPTED_RESULT_CODES } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
 import type {
-  Check,
+  Catalog,
+  CrossAxis,
   Example,
   Fact,
   ResultCode,
@@ -12,33 +12,10 @@ type Evaluator = (facts: ReadonlySet<Fact>) => ResultCode;
 
 const has = (facts: ReadonlySet<Fact>, fact: Fact): boolean => facts.has(fact);
 
-const result = (code: ResultCode): Example["expected"] => ({
-  decision: ORACLE_ACCEPTED_RESULT_CODES.includes(code as never) ? "accept" : "reject",
+const result = (acceptedCodes: ReadonlySet<string>, code: ResultCode): Example["expected"] => ({
+  decision: acceptedCodes.has(code) ? "accept" : "reject",
   code,
 });
-
-const ALLOWED_TRANSITIONS = new Set<Fact>([
-  "transition_dispatch_unclaimed_claimed",
-  "transition_dispatch_claimed_unknown",
-  "transition_dispatch_claimed_not_accepted",
-  "transition_dispatch_claimed_accepted",
-  "transition_dispatch_unknown_not_accepted",
-  "transition_dispatch_unknown_accepted",
-  "transition_dispatch_not_accepted_claimed_fresh",
-  "transition_execution_not_started_active_with_claim",
-  "transition_execution_active_not_started_with_proof",
-  "transition_execution_active_terminated_with_receipt",
-  "transition_containment_not_requested_pending",
-  "transition_containment_pending_contained",
-  "transition_containment_pending_uncertain",
-  "transition_containment_uncertain_pending_retry",
-  "transition_containment_uncertain_contained_late_proof",
-  "transition_containment_not_requested_qualified_not_required",
-  "transition_cutoff_open_fenced",
-  "transition_manifest_open_sealed_with_fences",
-  "transition_terminal_open_final_with_closure",
-  "transition_terminal_open_final_not_started_with_closure",
-]);
 
 const evaluateTerminalReplay: Evaluator = (facts) => {
   if (has(facts, "conflicting_replay")) {
@@ -81,9 +58,12 @@ const hasExactExecutionState = (facts: ReadonlySet<Fact>, expected: Fact): boole
   return observed.length === 1 && observed[0] === expected;
 };
 
-const evaluateCrossAxisTransition: Evaluator = (facts) => {
+const evaluateCrossAxisTransition = (
+  facts: ReadonlySet<Fact>,
+  allowedTransitions: ReadonlySet<string>,
+): ResultCode => {
   const transitions = [...facts].filter((fact) => fact.startsWith("transition_"));
-  if (transitions.length !== 1 || !ALLOWED_TRANSITIONS.has(transitions[0]!)) {
+  if (transitions.length !== 1 || !allowedTransitions.has(transitions[0]!)) {
     return "transition_forbidden";
   }
   const transition = transitions[0]!;
@@ -122,7 +102,7 @@ const evaluateCrossAxisTransition: Evaluator = (facts) => {
     : "transition_forbidden";
 };
 
-const EVALUATORS: Record<Check, Evaluator> = {
+const EVALUATORS: Record<string, Evaluator> = {
   output_terminal_order: (facts) => has(facts, "seal_committed_first") ? "append_rejected_after_seal" : "accepted",
   dispatch_cutoff_race: (facts) => has(facts, "dispatch_claim_committed_first") ? "accepted" : "dispatch_rejected_after_cutoff",
   requirement_closure_race: (facts) => has(facts, "reservation_committed_first") ? "accepted" : "reservation_rejected_after_seal",
@@ -149,11 +129,32 @@ const EVALUATORS: Record<Check, Evaluator> = {
   atomic_indeterminate_clear: (facts) => has(facts, "all_tombstone_receipts_present") && has(facts, "debt_clear_terminal_atomic") ? "accepted" : "indeterminate_clear_not_atomic",
   deployment_continuity: (facts) => has(facts, "continuity_receipt_verified") ? "accepted" : "continuity_unproven",
   manifest_coverage: (facts) => has(facts, "all_manifest_entries_satisfied") && !has(facts, "child_requirement_missing") && !has(facts, "transcript_requirement_missing") ? "accepted" : "manifest_incomplete",
-  cross_axis_transition: evaluateCrossAxisTransition,
-  binary_revision_retention: (facts) => evaluateBinaryRevisionRetention(facts),
 };
 
-export const evaluateOracleExample = (example: Example): Example["expected"] =>
-  result(EVALUATORS[example.check](new Set(example.facts)));
-
 export type OracleEvaluator = (example: Example) => Example["expected"];
+
+export const createOracleEvaluator = (
+  authority: { catalog: Catalog; crossAxis: CrossAxis },
+): OracleEvaluator => {
+  const allowedTransitions = new Set(authority.crossAxis.transitions.map(({ fact }) => fact));
+  const evaluators: Record<string, Evaluator> = {
+    ...EVALUATORS,
+    cross_axis_transition: (facts) => evaluateCrossAxisTransition(facts, allowedTransitions),
+    binary_revision_retention: (facts) => evaluateBinaryRevisionRetention(
+      facts,
+      authority.catalog.binaryRetentionFactRoles,
+    ),
+  };
+  const implementedChecks = Object.keys(evaluators).toSorted();
+  if (JSON.stringify(implementedChecks) !== JSON.stringify([...authority.catalog.checks].toSorted())) {
+    throw new Error("runtime-operation evaluator: catalog checks differ from handwritten semantics");
+  }
+  const acceptedCodes = new Set(authority.catalog.acceptedResultCodes);
+  return (example) => {
+    const evaluator = evaluators[example.check];
+    if (evaluator === undefined) {
+      throw new Error(`runtime-operation evaluator: unsupported check ${example.check}`);
+    }
+    return result(acceptedCodes, evaluator(new Set(example.facts)));
+  };
+};

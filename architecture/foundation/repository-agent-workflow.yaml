@@ -49,3 +49,4 @@ fullScanPaths:
   - pnpm-workspace.yaml
   - scripts/foundation
   - tsconfig.json
+  - tsconfig.synthetic-oracle.json

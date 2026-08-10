@@ -628,15 +628,17 @@ The executable form is rooted at
 `experiments/runtime-profile-behavior/spec/runtime-operation-oracle/`.
 Manifest-ordered JSON fragments and their Draft 2020-12 schema are the sole
 scenario and vocabulary authority. The loader rejects duplicate JSON keys
-before strict Ajv validation; generated TypeScript types and catalog constants
-must remain byte-fresh. The fragment cutover preserves exactly 28 cases and
-242 examples: 107 accept and 135 reject.
+before strict Ajv validation. The schema owns structure while the catalog owns
+closed vocabulary, and the generated TypeScript types must remain byte-fresh.
+The fragment cutover preserves exactly 28 cases and 242 examples: 107 accept
+and 135 reject.
 
 The independent handwritten classifier exhausts the complete ten-axis static
 product: 48,000 combinations, of which 1,277 are valid and 46,723 invalid.
-This validity classification is distinct from reachability. The generated
-XState v5 parallel machine and `@xstate/graph` shortest-path witnesses are a
-synthetic verifier for requirement 27 only. They exclude requirement 28 binary
+This validity classification is distinct from reachability. The XState v5
+parallel machine is derived in memory from JSON, while `@xstate/graph`
+shortest-path witnesses and Mermaid remain generated review evidence for the
+requirement 27 synthetic verifier only. They exclude requirement 28 binary
 retention and are not the production runtime state machine, a wire contract,
 or deployment qualification.
 

@@ -4,20 +4,10 @@ import {
   retentionObligationSetIsOpenAndExact,
 } from "./runtime-operation-root-lifecycle-oracle.ts";
 
-import {
-  BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
-
 import type { ResultCode } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
 
-export {
-  BINARY_RETENTION_ALLOWED_FACTS,
-  BINARY_RETENTION_FACTS,
-  BINARY_RETENTION_FACT_ROLE_CATALOG,
-  BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS,
-} from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
-
 type BinaryRetentionResult = ResultCode;
+type BinaryRetentionFactRoles = Readonly<Record<string, "command_intent" | "work_intent" | "evidence">>;
 
 const has = (facts: ReadonlySet<string>, fact: string): boolean => facts.has(fact);
 
@@ -103,8 +93,12 @@ const evaluateDurableIntegrity = (
   evaluateLifecycleDurableIntegrity(facts) ??
   evaluateDeletionDurableIntegrity(facts);
 
-export const binaryRetentionHasMixedCommandIntent = (facts: ReadonlySet<string>): boolean =>
-  BINARY_RETENTION_MIXED_COMMAND_INTENT_FACTS.some((fact) => has(facts, fact));
+export const binaryRetentionHasMixedCommandIntent = (
+  facts: ReadonlySet<string>,
+  factRoles: BinaryRetentionFactRoles,
+): boolean => Object.entries(factRoles).some(([fact, role]) =>
+  role === "command_intent" && has(facts, fact),
+);
 
 
 const evaluateGc = (facts: ReadonlySet<string>): BinaryRetentionResult => {
@@ -329,6 +323,7 @@ const evaluatePhysicalDeletion = (
 
 export const evaluateBinaryRevisionRetention = (
   facts: ReadonlySet<string>,
+  factRoles: BinaryRetentionFactRoles,
 ): BinaryRetentionResult => {
   const durableIntegrity = evaluateDurableIntegrity(facts);
   if (durableIntegrity !== undefined) {
@@ -339,7 +334,7 @@ export const evaluateBinaryRevisionRetention = (
     if (authorization !== "accepted") {
       return authorization;
     }
-    if (binaryRetentionHasMixedCommandIntent(facts)) {
+    if (binaryRetentionHasMixedCommandIntent(facts, factRoles)) {
       return "mixed_command_intent_forbidden";
     }
     return "accepted";

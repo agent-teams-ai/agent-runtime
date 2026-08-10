@@ -16,8 +16,11 @@ assembles and validates the virtual 28-case oracle in manifest order.
 Generated files are committed under `generated/`:
 
 - schema-derived TypeScript types;
-- one cohesive catalog-derived TypeScript constants module;
 - shortest-path witnesses and a Mermaid topology artifact.
+
+No catalog constants mirror is generated. Evaluator and state-product factories
+receive the strictly loaded authority, so temporary-root validation cannot fall
+back to constants from the main checkout.
 
 The pure parallel XState v5 synthetic verifier is built in memory directly
 from `cross-axis.json`; no generated machine mirror is committed. It has no
@@ -31,11 +34,12 @@ Normal gates run `pnpm architecture:operation-oracle`, whose freshness check
 renders to a temporary directory and byte-compares without changing tracked
 files.
 
-The repository keeps own-code strict checking while `skipLibCheck` is enabled
-for this dev-only toolchain: XState 5.32.5 and json-schema-to-typescript 15.0.4
-currently expose declaration incompatibilities under the pinned native
-TypeScript 7 compiler. This is a reviewed compatibility concession, not a
-relaxation of oracle source checks.
+Both TypeScript gates keep `skipLibCheck: false`. The three synthetic-toolchain
+entrypoints use the transparent `tsconfig.synthetic-oracle.json` boundary with
+only `exactOptionalPropertyTypes: false`, because XState 5.32.5 and
+json-schema-to-typescript 15.0.4 expose incompatible optional-property
+declarations under the pinned native TypeScript 7 compiler. Root sources retain
+the stricter default and cannot import through the excluded boundary.
 
 Cutover parity is fixed at 28 cases and 242 examples: 107 accept and 135
 reject. The static product contains 48,000 combinations; the independent

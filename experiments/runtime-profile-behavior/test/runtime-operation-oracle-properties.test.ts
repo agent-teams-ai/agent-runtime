@@ -13,17 +13,20 @@ import {
 
 import { loadRuntimeOperationOracleAuthority } from "../src/features/evidence/runtime-operation-oracle-authority.ts";
 import {
-  evaluateOracleExample,
+  createOracleEvaluator,
   type OracleEvaluator,
 } from "../src/features/evidence/runtime-operation-oracle-evaluator.ts";
 import {
-  generatedStateIsValid,
+  createStateProductEvaluator,
   type GeneratedState,
 } from "../src/features/evidence/runtime-operation-state-product.ts";
-import { GENERATED_AXES } from "../spec/runtime-operation-oracle/generated/runtime-operation-oracle-catalog.generated.ts";
 import type { Example } from "../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
+const authority = await loadRuntimeOperationOracleAuthority(repositoryRoot);
+const evaluateOracleExample = createOracleEvaluator(authority);
+const stateProduct = createStateProductEvaluator(authority);
+const GENERATED_AXES = stateProduct.axes;
 const FAST_CHECK_SEED = 0x0a0d_0006;
 const FAST_CHECK_OPTIONS = {
   seed: FAST_CHECK_SEED,
@@ -47,7 +50,7 @@ const stateArbitrary = record({
 
 test("fast-check terminal-valid states imply every independent closure condition", () => {
   assertProperty(property(stateArbitrary, (state) => {
-    if (!generatedStateIsValid(state) || state.terminal === "open") {
+    if (!stateProduct.stateIsValid(state) || state.terminal === "open") {
       return;
     }
     assert.equal(state.admission, "fenced");
@@ -77,7 +80,7 @@ test("fast-check kills one-field closure weakening of known-valid terminal state
     satisfaction: constant("complete"),
     effectResolution: constantFrom("none", "resolved"),
     terminal: constantFrom("succeeded", "failed", "cancelled"),
-  }).filter((state) => generatedStateIsValid(state));
+  }).filter((state) => stateProduct.stateIsValid(state));
   const mutation = constantFrom<Partial<GeneratedState>>(
     { admission: "open" },
     { output: "open" },
@@ -89,13 +92,12 @@ test("fast-check kills one-field closure weakening of known-valid terminal state
     { effectResolution: "unresolved" },
   );
   assertProperty(property(validTerminalArbitrary, mutation, (state, patch) => {
-    assert.equal(generatedStateIsValid({ ...state, ...patch }), false);
+    assert.equal(stateProduct.stateIsValid({ ...state, ...patch }), false);
   }), FAST_CHECK_OPTIONS);
 });
 
 test("fast-check proves evaluator fact ordering is semantically irrelevant", async () => {
-  const { oracle } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const examples = oracle.cases.flatMap(({ examples: caseExamples }) => caseExamples);
+  const examples = authority.oracle.cases.flatMap(({ examples: caseExamples }) => caseExamples);
   assertProperty(property(
     constantFrom(...examples),
     integer(),
@@ -116,15 +118,21 @@ type SemanticMutant = {
 const acceptWhen = (
   id: string,
   predicate: (example: Example) => boolean,
+  baseline: OracleEvaluator = evaluateOracleExample,
 ): SemanticMutant => ({
   id,
   evaluate: (example) => predicate(example)
     ? { decision: "accept", code: "accepted" }
-    : evaluateOracleExample(example),
+    : baseline(example),
 });
 
 const has = (example: Example, fact: Example["facts"][number]): boolean =>
   example.facts.includes(fact);
+
+const forbiddenTransitionFacts = new Set(authority.crossAxis.forbiddenTransitionFacts);
+const isCanonicalForbiddenCrossAxisEdge = (example: Example): boolean =>
+  example.check === "cross_axis_transition" &&
+  example.facts.some((fact) => forbiddenTransitionFacts.has(fact));
 
 const semanticMutants: SemanticMutant[] = [
   acceptWhen("allow-append-after-seal", (example) => has(example, "seal_committed_first")),
@@ -141,8 +149,7 @@ const semanticMutants: SemanticMutant[] = [
   acceptWhen("reopen-stale-authority", (example) => has(example, "authority_reopen_requested")),
   acceptWhen("terminalize-incomplete-manifest", (example) =>
     has(example, "child_requirement_missing") || has(example, "transcript_requirement_missing")),
-  acceptWhen("allow-forbidden-cross-axis-edge", (example) =>
-    example.check === "cross_axis_transition" && example.expected.decision === "reject"),
+  acceptWhen("allow-forbidden-cross-axis-edge", isCanonicalForbiddenCrossAxisEdge),
   acceptWhen("allow-mixed-binary-command", (example) =>
     example.check === "binary_revision_retention" &&
     has(example, "provider_or_effect_work_requested") &&
@@ -157,8 +164,7 @@ const semanticMutants: SemanticMutant[] = [
 ];
 
 test("all curated semantic mutants are killed by authoritative examples", async () => {
-  const { oracle } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const examples = oracle.cases.flatMap(({ examples: caseExamples }) => caseExamples);
+  const examples = authority.oracle.cases.flatMap(({ examples: caseExamples }) => caseExamples);
   const survivors = semanticMutants.filter((mutant) =>
     !examples.some((example) => {
       const actual = mutant.evaluate(example);
@@ -168,10 +174,23 @@ test("all curated semantic mutants are killed by authoritative examples", async 
   assert.deepEqual(survivors.map(({ id }) => id), []);
 });
 
+test("forbidden-edge mutant is equivalent against an already weakened evaluator", () => {
+  const weakened: OracleEvaluator = (example) => isCanonicalForbiddenCrossAxisEdge(example)
+    ? { decision: "accept", code: "accepted" }
+    : evaluateOracleExample(example);
+  const mutant = acceptWhen(
+    "allow-forbidden-cross-axis-edge",
+    isCanonicalForbiddenCrossAxisEdge,
+    weakened,
+  );
+  for (const example of authority.oracle.cases.flatMap(({ examples }) => examples)) {
+    assert.deepEqual(mutant.evaluate(example), weakened(example), example.id);
+  }
+});
+
 test("every authoritative required-fact deletion is killed by the handwritten evaluator", async () => {
-  const { crossAxis, oracle } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const examples = oracle.cases.flatMap(({ examples: caseExamples }) => caseExamples);
-  for (const transition of crossAxis.transitions) {
+  const examples = authority.oracle.cases.flatMap(({ examples: caseExamples }) => caseExamples);
+  for (const transition of authority.crossAxis.transitions) {
     const acceptedExamples = examples.filter((candidate) =>
       candidate.expected.decision === "accept" && candidate.facts.includes(transition.fact),
     );

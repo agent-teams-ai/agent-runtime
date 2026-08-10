@@ -11,7 +11,7 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "strict": true,
     "target": "ES2024",
     "types": ["node"],
@@ -21,5 +21,10 @@
     "experiments/runtime-profile-behavior/src/**/*.ts",
     "experiments/runtime-profile-behavior/test/**/*.ts",
     "experiments/rust-system-boundaries/client/**/*.ts"
+  ],
+  "exclude": [
+    "experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts",
+    "experiments/runtime-profile-behavior/src/features/evidence/runtime-operation-xstate-builder.ts",
+    "experiments/runtime-profile-behavior/test/runtime-operation-oracle.test.ts"
   ]
 }

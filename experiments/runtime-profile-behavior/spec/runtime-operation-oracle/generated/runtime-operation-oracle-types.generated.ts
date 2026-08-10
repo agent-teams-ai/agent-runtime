@@ -9,333 +9,17 @@ export type CanonicalId = string;
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
  * via the `definition` "check".
  */
-export type Check =
-  | "output_terminal_order"
-  | "dispatch_cutoff_race"
-  | "requirement_closure_race"
-  | "terminal_replay"
-  | "indeterminate_evidence_race"
-  | "outbox_recovery"
-  | "dispatch_crash"
-  | "provider_observation"
-  | "lost_acknowledgement"
-  | "effect_identity_claim"
-  | "effect_fingerprint_conflict"
-  | "distinct_external_identity"
-  | "completed_effect_replay"
-  | "retry_after_known_not_accepted"
-  | "tombstone_restore"
-  | "effect_cardinality"
-  | "receipt_handling"
-  | "stale_restore"
-  | "model_invariants"
-  | "cutoff_boundary_reuse"
-  | "normal_provider_termination"
-  | "zero_attempt_cutoff"
-  | "post_seal_receipt"
-  | "atomic_indeterminate_clear"
-  | "deployment_continuity"
-  | "manifest_coverage"
-  | "cross_axis_transition"
-  | "binary_revision_retention";
+export type Check = string;
 /**
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
  * via the `definition` "fact".
  */
-export type Fact =
-  | "append_committed_first"
-  | "seal_committed_first"
-  | "dispatch_claim_committed_first"
-  | "operation_cutoff_committed_first"
-  | "session_cutoff_committed_first"
-  | "scope_cutoff_committed_first"
-  | "reservation_committed_first"
-  | "manifest_seal_committed_first"
-  | "final_receipt_committed_first"
-  | "terminal_command_committed_first"
-  | "late_positive_committed_first"
-  | "indeterminate_terminal_committed_first"
-  | "seal_durable"
-  | "outbox_unpublished"
-  | "claim_durable"
-  | "provider_bytes_absent"
-  | "provider_bytes_or_action"
-  | "provider_acceptance_unproven"
-  | "new_claim_requested"
-  | "provider_accepted"
-  | "observation_not_durable"
-  | "terminal_durable"
-  | "acknowledgement_lost"
-  | "exact_replay"
-  | "conflicting_replay"
-  | "same_external_identity"
-  | "different_external_identity"
-  | "same_fingerprint"
-  | "different_fingerprint"
-  | "same_payload"
-  | "effect_completed"
-  | "provider_call_requested"
-  | "known_not_accepted_receipt"
-  | "fresh_attempt_identity"
-  | "stale_attempt_identity"
-  | "permanent_tombstone"
-  | "restore_or_compaction"
-  | "zero_effects"
-  | "one_coarse_effect"
-  | "multiple_mediated_effects"
-  | "invalid_effect_cardinality"
-  | "receipt_delayed"
-  | "receipt_reordered"
-  | "receipt_duplicate_exact"
-  | "receipt_conflicting"
-  | "authority_reopen_requested"
-  | "authority_monotonic"
-  | "all_axis_invariants_hold"
-  | "axis_invariant_violated"
-  | "prior_cutoff_fences_exact"
-  | "cursor_and_receipt_reused"
-  | "cursor_or_receipt_advanced"
-  | "provider_execution_terminated"
-  | "containment_not_requested"
-  | "containment_uncertain"
-  | "effect_registered"
-  | "zero_attempts"
-  | "cutoff_fenced"
-  | "manifest_sealed"
-  | "receipt_bound_to_manifest_entry"
-  | "receipt_unbound"
-  | "all_tombstone_receipts_present"
-  | "tombstone_receipt_missing"
-  | "debt_clear_terminal_atomic"
-  | "debt_cleared_separately"
-  | "continuity_receipt_verified"
-  | "continuity_receipt_missing"
-  | "dispatch_requested"
-  | "all_manifest_entries_satisfied"
-  | "child_requirement_missing"
-  | "transcript_requirement_missing"
-  | "admission_fenced"
-  | "output_fenced"
-  | "reconciliation_clear"
-  | "execution_not_started"
-  | "execution_active"
-  | "execution_terminated"
-  | "containment_satisfied"
-  | "transition_dispatch_unclaimed_claimed"
-  | "transition_dispatch_claimed_unknown"
-  | "transition_dispatch_claimed_not_accepted"
-  | "transition_dispatch_claimed_accepted"
-  | "transition_dispatch_unknown_not_accepted"
-  | "transition_dispatch_unknown_accepted"
-  | "transition_dispatch_not_accepted_claimed_fresh"
-  | "transition_dispatch_accepted_claimed"
-  | "transition_execution_not_started_active_with_claim"
-  | "transition_execution_active_not_started_with_proof"
-  | "transition_execution_active_terminated_with_receipt"
-  | "transition_execution_terminated_active"
-  | "transition_execution_start_without_claim"
-  | "transition_execution_reset_without_not_accepted_proof"
-  | "transition_execution_terminate_without_receipt"
-  | "transition_containment_not_requested_pending"
-  | "transition_containment_pending_contained"
-  | "transition_containment_pending_uncertain"
-  | "transition_containment_uncertain_pending_retry"
-  | "transition_containment_uncertain_contained_late_proof"
-  | "transition_containment_not_requested_qualified_not_required"
-  | "containment_capability_evidence_immutable"
-  | "containment_qualification_receipt_exact"
-  | "transition_containment_contained_pending"
-  | "transition_containment_qualified_not_required_pending"
-  | "transition_cutoff_open_fenced"
-  | "transition_cutoff_fenced_open"
-  | "transition_manifest_open_sealed_with_fences"
-  | "transition_manifest_open_sealed_open_admission"
-  | "transition_manifest_open_sealed_open_output"
-  | "transition_terminal_open_final_with_closure"
-  | "transition_terminal_open_final_not_started_with_closure"
-  | "transition_terminal_open_final_active_execution"
-  | "transition_terminal_final_open"
-  | "transition_claim_without_execution_activation"
-  | "binary_revision_root_established"
-  | "provider_or_effect_work_requested"
-  | "session_assignment_release_requested"
-  | "semantic_root_release_requested"
-  | "operation_nonterminal"
-  | "effect_reconciliation_required"
-  | "terminal_projection_requires_revision"
-  | "transcript_projection_requires_revision"
-  | "terminal_write_once"
-  | "effect_closure_write_once"
-  | "durable_revision_independent_projection"
-  | "release_outcome_unknown"
-  | "release_exact_replay"
-  | "semantic_root_retained"
-  | "gc_requested"
-  | "zero_semantic_roots"
-  | "shared_effect"
-  | "attempting_operation_roots_complete"
-  | "attempting_operation_root_missing"
-  | "operation_acceptance_intent_persisted"
-  | "operation_acceptance_committed"
-  | "operation_acceptance_revision_pending"
-  | "operation_acceptance_state_accepted"
-  | "operation_acceptance_state_aborted"
-  | "operation_acceptance_accept_requested"
-  | "operation_acceptance_abort_requested"
-  | "operation_acceptance_accept_cas_won"
-  | "operation_acceptance_abort_cas_won"
-  | "operation_acceptance_transaction_complete"
-  | "operation_abort_transaction_complete"
-  | "operation_acceptance_exact_replay"
-  | "operation_abort_exact_replay"
-  | "root_request_id_stable"
-  | "root_request_state_pending"
-  | "root_request_state_established"
-  | "root_request_state_establishment_forbidden"
-  | "ensure_semantic_retention_requested"
-  | "root_abort_release_requested"
-  | "root_abort_release_cas_won"
-  | "establishment_forbidden_tombstone_durable"
-  | "root_request_exact_replay"
-  | "root_request_generation_current"
-  | "root_request_generation_stale"
-  | "root_establishment_receipt_durable"
-  | "same_revision_root_and_abort_cas_both_won"
-  | "root_establishment_rejected_receipt_durable"
-  | "retention_receipt_exact_current"
-  | "root_receipt_exact_replay_or_query"
-  | "retention_obligation_set_pinned"
-  | "retention_obligation_schema_revision_pinned"
-  | "retention_obligation_policy_revision_pinned"
-  | "retention_obligation_capability_revision_pinned"
-  | "retention_obligation_set_digest_exact"
-  | "retention_obligation_set_digest_wrong"
-  | "retention_obligation_set_weaker"
-  | "dynamic_obligation_arose"
-  | "dynamic_obligation_reserved_before_use"
-  | "dynamic_obligation_revision_digest_advanced"
-  | "retention_obligation_reserve_cas_won"
-  | "retention_obligation_seal_requested"
-  | "retention_obligation_seal_cas_won"
-  | "retention_obligation_final_digest_durable"
-  | "retention_obligation_seal_receipt_durable"
-  | "same_revision_reserve_and_seal_cas_both_won"
-  | "retention_obligation_set_open"
-  | "retention_obligation_set_sealed"
-  | "execution_authority_present"
-  | "root_cas_won"
-  | "collection_or_tombstone_cas_won"
-  | "existing_gc_blockers_clear"
-  | "host_custody_collection_cas_won"
-  | "contradictory_zero_and_retained_roots"
-  | "durable_gc_deletion_intent_claim"
-  | "deletion_set_digest_exact"
-  | "deletion_set_digest_wrong"
-  | "store_level_deletion_reference_fence_exact"
-  | "store_level_deletion_reference_fence_stale"
-  | "deletion_completed_receipt_durable"
-  | "predelete_tombstone_durable"
-  | "final_deleted_state_durable"
-  | "shared_store_reference_active"
-  | "physical_absence_observed"
-  | "physical_deletion_preclaim_requested"
-  | "deletion_claim_wrong_scope"
-  | "owner_release_receipt_durable"
-  | "root_receipt_ack_lost"
-  | "acceptance_outcome_unknown"
-  | "operation_acceptance_aborted_receipt_exact"
-  | "operation_acceptance_aborted_receipt_stale"
-  | "operation_acceptance_aborted_receipt_wrong_scope"
-  | "operation_acceptance_aborted_receipt_unknown"
-  | "abandon_release_exact_replay"
-  | "owner_abandon_release_receipt_durable"
-  | "ttl_elapsed"
-  | "release_manifest_identity_binding_complete"
-  | "release_manifest_retention_obligation_digest"
-  | "release_manifest_terminal_satisfaction_digests"
-  | "release_manifest_effect_closure_receipts"
-  | "release_manifest_projection_independence_receipts"
-  | "release_manifest_typed_non_applicability_complete"
-  | "release_obligation_final_digest_exact"
-  | "release_obligation_set_digest_wrong"
-  | "release_obligation_set_weaker"
-  | "release_manifest_incomplete"
-  | "release_manifest_stale"
-  | "release_manifest_wrong_scope"
-  | "release_manifest_unknown"
-  | "release_manifest_duplicate_evidence"
-  | "release_manifest_digest_conflict"
-  | "physical_deletion_started"
-  | "physical_deletion_crash"
-  | "physical_deletion_partial"
-  | "physical_deletion_unknown"
-  | "physical_deletion_completed"
-  | "physical_deletion_exact_replay";
+export type Fact = string;
 /**
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
  * via the `definition` "resultCode".
  */
-export type ResultCode =
-  | "accepted"
-  | "append_rejected_after_seal"
-  | "dispatch_rejected_after_cutoff"
-  | "reservation_rejected_after_seal"
-  | "terminal_already_final"
-  | "late_evidence_is_noncanonical"
-  | "durable_recovery_required"
-  | "provider_dispatch_not_authorized"
-  | "new_claim_forbidden"
-  | "reconciliation_required"
-  | "acceptance_unknown_reconcile_required"
-  | "replay_returns_original_receipt"
-  | "idempotent_existing_effect"
-  | "external_identity_conflict"
-  | "distinct_effect_required"
-  | "completed_result_replayed"
-  | "fresh_attempt_required"
-  | "retry_permanently_forbidden"
-  | "invalid_effect_cardinality"
-  | "conflicting_receipt"
-  | "stale_authority"
-  | "axis_invariant_violation"
-  | "cutoff_boundary_conflict"
-  | "containment_not_required"
-  | "zero_attempt_effect_closed"
-  | "receipt_not_bound"
-  | "indeterminate_clear_not_atomic"
-  | "continuity_unproven"
-  | "manifest_incomplete"
-  | "transition_forbidden"
-  | "semantic_root_required"
-  | "semantic_root_establishment_race"
-  | "semantic_root_retained"
-  | "semantic_root_released"
-  | "binary_revision_gc_allowed"
-  | "binary_revision_gc_blocked"
-  | "root_not_execution_authority"
-  | "retention_receipt_replayed"
-  | "release_manifest_conflict"
-  | "physical_deletion_replayed"
-  | "deletion_reconciliation_required"
-  | "operation_acceptance_required"
-  | "retention_receipt_reconciliation_required"
-  | "abandon_release_replayed"
-  | "operation_acceptance_aborted"
-  | "operation_acceptance_replayed"
-  | "operation_abort_replayed"
-  | "operation_acceptance_stale_current_receipt"
-  | "operation_acceptance_winner_committed_current_receipt"
-  | "operation_acceptance_integrity_contradiction"
-  | "retention_obligation_set_required"
-  | "retention_obligation_mismatch"
-  | "retention_obligation_reservation_required"
-  | "physical_deletion_completed"
-  | "deletion_integrity_contradiction"
-  | "root_establishment_forbidden_current_receipt"
-  | "root_establishment_receipt_replayed"
-  | "root_lifecycle_integrity_contradiction"
-  | "retention_obligation_integrity_contradiction"
-  | "mixed_command_intent_forbidden";
+export type ResultCode = string;
 /**
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
  * via the `definition` "caseFragment".
@@ -691,13 +375,7 @@ export interface CrossAxis {
  * via the `definition` "crossAxisState".
  */
 export interface CrossAxisState {
-  dispatch: string;
-  execution: string;
-  containment: string;
-  admission: string;
-  output: string;
-  manifest: string;
-  terminal: string;
+  [k: string]: string;
 }
 /**
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
@@ -707,31 +385,7 @@ export interface CrossAxisAxes {
   /**
    * @minItems 1
    */
-  dispatch: [string, ...string[]];
-  /**
-   * @minItems 1
-   */
-  execution: [string, ...string[]];
-  /**
-   * @minItems 1
-   */
-  containment: [string, ...string[]];
-  /**
-   * @minItems 1
-   */
-  admission: [string, ...string[]];
-  /**
-   * @minItems 1
-   */
-  output: [string, ...string[]];
-  /**
-   * @minItems 1
-   */
-  manifest: [string, ...string[]];
-  /**
-   * @minItems 1
-   */
-  terminal: [string, ...string[]];
+  [k: string]: [string, ...string[]];
 }
 /**
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
@@ -759,7 +413,7 @@ export interface CrossAxisTransition {
  * via the `definition` "crossAxisTarget".
  */
 export interface CrossAxisTarget {
-  axis: "dispatch" | "execution" | "containment" | "admission" | "output" | "manifest" | "terminal";
+  axis: string;
   from: string;
   to: string;
 }

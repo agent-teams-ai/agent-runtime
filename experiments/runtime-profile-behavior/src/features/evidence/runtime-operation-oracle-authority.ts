@@ -73,15 +73,6 @@ const exactArray = (actual: readonly unknown[], expected: readonly unknown[], la
   }
 };
 
-const enumFromSchema = (schema: Record<string, unknown>, definition: string): string[] => {
-  const definitions = schema.$defs as Record<string, { enum?: string[] }>;
-  const values = definitions[definition]?.enum;
-  if (values === undefined) {
-    return fail(`schema definition ${definition} must expose an enum`);
-  }
-  return values;
-};
-
 const readJson = async (path: string, label: string): Promise<unknown> =>
   parseAuthorityJson(await readFile(path, "utf8"), label);
 
@@ -110,11 +101,18 @@ const expandCase = async (
   return { id: fragment.id, requirement: fragment.requirement, examples } as Case;
 };
 
-const validateCatalog = (catalog: Catalog, schema: Record<string, unknown>): void => {
-  exactArray(catalog.checks, enumFromSchema(schema, "check"), "catalog.checks");
-  exactArray(catalog.facts, enumFromSchema(schema, "fact"), "catalog.facts");
-  exactArray(catalog.resultCodes, enumFromSchema(schema, "resultCode"), "catalog.resultCodes");
+const validateCatalog = (catalog: Catalog): void => {
   exactArray(Object.keys(catalog.allowedFactsByCheck), catalog.checks, "catalog.allowedFactsByCheck keys");
+  const declaredFacts = new Set(catalog.facts);
+  const allowedFacts = Object.values(catalog.allowedFactsByCheck).flat();
+  if (allowedFacts.some((fact) => !declaredFacts.has(fact))) {
+    fail("catalog.allowedFactsByCheck contains an undeclared fact");
+  }
+  exactArray(
+    [...new Set(allowedFacts)].toSorted(),
+    [...catalog.facts].toSorted(),
+    "catalog fact membership",
+  );
   exactArray(
     Object.keys(catalog.binaryRetentionFactRoles).toSorted(),
     [...(catalog.allowedFactsByCheck.binary_revision_retention ?? [])].toSorted(),
@@ -132,14 +130,39 @@ const validateCatalog = (catalog: Catalog, schema: Record<string, unknown>): voi
   }
 };
 
-const validateCrossAxis = (crossAxis: CrossAxis, requirementCase: Case): void => {
+const validateCrossAxis = (crossAxis: CrossAxis, requirementCase: Case, catalog: Catalog): void => {
   const axes = crossAxis.axes as unknown as Record<string, string[]>;
+  const declaredFacts = new Set(catalog.facts);
+  const declaredStateAxes = new Set(Object.keys(catalog.stateProductAxes));
+  exactArray(
+    Object.keys(crossAxis.initial).toSorted(),
+    Object.keys(axes).toSorted(),
+    "cross-axis initial-axis membership",
+  );
+  for (const [axis, values] of Object.entries(axes)) {
+    if (!declaredStateAxes.has(axis)) {
+      fail(`cross-axis topology contains unknown catalog axis ${axis}`);
+    }
+    if (axis === "terminal") {
+      exactArray(values, ["open", "final"], "cross-axis terminal topology");
+    } else {
+      exactArray(
+        values,
+        catalog.stateProductAxes[axis as keyof typeof catalog.stateProductAxes],
+        `cross-axis ${axis} values`,
+      );
+    }
+  }
   for (const [axis, initial] of Object.entries(crossAxis.initial)) {
     if (!(axes[axis] ?? []).includes(initial)) {
       fail(`cross-axis initial ${axis}.${initial} is not declared`);
     }
   }
   for (const transition of crossAxis.transitions) {
+    if (!declaredFacts.has(transition.fact) ||
+        (transition.requiredFacts ?? []).some((fact) => !declaredFacts.has(fact))) {
+      fail(`cross-axis transition ${transition.fact} contains a fact outside catalog.facts`);
+    }
     const targetAxes = transition.targets.map(({ axis }) => axis);
     if (new Set(targetAxes).size !== targetAxes.length) {
       fail(`cross-axis transition ${transition.fact} targets one axis more than once`);
@@ -151,7 +174,7 @@ const validateCrossAxis = (crossAxis: CrossAxis, requirementCase: Case): void =>
       }
     }
     for (const [axis, values] of Object.entries(transition.requiredState ?? {})) {
-      const declared = axes[axis];
+      const declared = declaredStateAxes.has(axis) ? axes[axis] : undefined;
       if (declared === undefined || values.some((value) => !declared.includes(value))) {
         fail(`cross-axis transition ${transition.fact} has invalid required state on ${axis}`);
       }
@@ -175,6 +198,9 @@ const validateCrossAxis = (crossAxis: CrossAxis, requirementCase: Case): void =>
       commonEvidenceFacts,
       `cross-axis required facts for ${transition.fact}`,
     );
+  }
+  if (crossAxis.forbiddenTransitionFacts.some((fact) => !declaredFacts.has(fact))) {
+    fail("cross-axis forbidden transitions contain a fact outside catalog.facts");
   }
   const primaryTransitionFacts = (decision: "accept" | "reject"): string[] =>
     requirementCase.examples
@@ -226,6 +252,9 @@ const validateOracleSemantics = (
       if (example.facts.some((fact) => !allowedFacts.includes(fact))) {
         fail(`${example.id} contains a fact outside ${example.check}`);
       }
+      if (!catalog.resultCodes.includes(example.expected.code)) {
+        fail(`${example.id} contains a result code outside catalog.resultCodes`);
+      }
       const acceptedCode = catalog.acceptedResultCodes.includes(example.expected.code);
       if (acceptedCode !== (example.expected.decision === "accept")) {
         fail(`${example.id} decision disagrees with the catalog result-code class`);
@@ -249,7 +278,7 @@ const validateOracleSemantics = (
     fail(`fragment parity differs from the manifest: ${JSON.stringify(actualCounts)}`);
   }
   const transitionCase = cases[26] ?? fail("requirement 27 case is missing");
-  validateCrossAxis(crossAxis, transitionCase);
+  validateCrossAxis(crossAxis, transitionCase, catalog);
   return oracle;
 };
 
@@ -319,7 +348,7 @@ export const loadRuntimeOperationOracleAuthority = async (
   const actualCaseParts = (await readdir(join(specificationRoot, "case-parts")))
     .filter((path) => path.endsWith(".json")).toSorted();
   exactArray(actualCaseParts, [...referencedParts].toSorted(), "case-part membership");
-  validateCatalog(catalog, schema);
+  validateCatalog(catalog);
   const oracle = validateOracleSemantics(manifest, catalog, crossAxis, cases);
   validate<ADR0006RuntimeOperationOracle>(
     ajv.getSchema(SCHEMA_ID) ?? fail("root schema validator is unavailable"),

@@ -150,3 +150,22 @@ export const evaluateGeneratedAxisProducts = (
   }
   return { total, valid, invalid: total - valid };
 };
+
+export const createStateProductEvaluator = (
+  authority: { catalog: Catalog },
+): {
+  axes: StateProductAxes;
+  stateIsValid: typeof generatedStateIsValid;
+  projectedStateHasValidExtension: (projection: Readonly<Record<string, string>>) => boolean;
+  evaluate: () => { total: number; valid: number; invalid: number };
+} => {
+  const axes = authority.catalog.stateProductAxes as StateProductAxes;
+  assertSupportedAxes(axes);
+  return {
+    axes,
+    stateIsValid: generatedStateIsValid,
+    projectedStateHasValidExtension: (projection) => projectedStateHasValidExtension(axes, projection),
+    evaluate: () => evaluateGeneratedAxisProducts(axes),
+  };
+};
+import type { Catalog } from "../../../spec/runtime-operation-oracle/generated/runtime-operation-oracle-types.generated.ts";
