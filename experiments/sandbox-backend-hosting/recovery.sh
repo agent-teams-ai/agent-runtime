@@ -6,7 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 IMAGE=${IMAGE:-alpine:3.22.1}
 RESULTS="$EVIDENCE_DIR/recovery.jsonl"
-RESOURCE_NAME=ats-spike-recovery-target
+RESOURCE_NAME="ats-$SPIKE_RUN_ID-recovery-target"
 GENERATION_LABEL=agent_teams_generation
 
 trap_cleanup

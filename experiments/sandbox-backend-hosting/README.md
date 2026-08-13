@@ -18,9 +18,10 @@ The harness probes disposable resources only:
 
 Run only on a dedicated test host after reviewing the scripts and environment
 guards. The default evidence directory is local to the current checkout. Every
-created resource is labeled or namespaced for narrow cleanup. The harness must
-not run against user projects, shared namespaces, ambient credentials, or
-production clusters.
+created resource is labeled or namespaced by a caller-supplied unique
+`SPIKE_RUN_ID` for narrow cleanup. The harness refuses to run without that ID.
+It must not run against user projects, shared namespaces, ambient credentials,
+or production clusters.
 
 No result authorizes a backend. Exact production targets require retained
 evidence and a matching Agent Runtime qualification-registry entry.

@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SPIKE_RUN_ID=${SPIKE_RUN_ID:-sandbox-hosting-v1}
+SPIKE_RUN_ID=${SPIKE_RUN_ID:?set a unique SPIKE_RUN_ID for this disposable run}
+if [[ ! "$SPIKE_RUN_ID" =~ ^[a-z0-9][a-z0-9-]{2,39}$ ]]; then
+  printf 'SPIKE_RUN_ID must match ^[a-z0-9][a-z0-9-]{2,39}$\n' >&2
+  exit 1
+fi
 SPIKE_LABEL_KEY=agent_teams_spike
 SPIKE_LABEL_VALUE=$SPIKE_RUN_ID
-export SPIKE_NETWORK_PREFIX=ats-spike-
-export SPIKE_VOLUME_PREFIX=ats-spike-
+export SPIKE_NETWORK_PREFIX="ats-$SPIKE_RUN_ID-"
+export SPIKE_VOLUME_PREFIX="ats-$SPIKE_RUN_ID-"
 EVIDENCE_DIR=${EVIDENCE_DIR:-$(pwd)/artifacts/sandbox-hosting-spike}
 MIN_AVAILABLE_MEMORY_MB=${MIN_AVAILABLE_MEMORY_MB:-3072}
 MIN_FREE_DISK_GB=${MIN_FREE_DISK_GB:-20}

@@ -24,7 +24,7 @@ for (( target = STEP; target <= MAX_SANDBOXES; target += STEP )); do
   started=$(date +%s%N)
   for (( index = current + 1; index <= target; index++ )); do
     docker run -d \
-      --name "ats-spike-density-$index" \
+      --name "ats-$SPIKE_RUN_ID-density-$index" \
       --label "$SPIKE_LABEL_KEY=$SPIKE_LABEL_VALUE" \
       --memory "$MEMORY_LIMIT" \
       --cpus "$CPU_LIMIT" \

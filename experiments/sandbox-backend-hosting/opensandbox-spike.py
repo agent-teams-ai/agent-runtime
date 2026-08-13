@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import resource
 import shutil
 import time
@@ -16,7 +17,9 @@ from opensandbox.exceptions import SandboxException
 from opensandbox.manager import SandboxManager
 from opensandbox.models.sandboxes import Host, NetworkPolicy, SandboxFilter, Volume
 
-SPIKE_RUN_ID = os.environ.get("SPIKE_RUN_ID", "sandbox-hosting-v1")
+SPIKE_RUN_ID = os.environ["SPIKE_RUN_ID"]
+if re.fullmatch(r"[a-z0-9][a-z0-9-]{2,39}", SPIKE_RUN_ID) is None:
+    raise RuntimeError("SPIKE_RUN_ID has an unsafe or unsupported format")
 MIN_AVAILABLE_MEMORY_MB = int(os.environ.get("MIN_AVAILABLE_MEMORY_MB", "3072"))
 MIN_FREE_DISK_GB = int(os.environ.get("MIN_FREE_DISK_GB", "20"))
 MAX_CPU_PSI_AVG10 = float(os.environ.get("MAX_CPU_PSI_AVG10", "80"))
@@ -347,22 +350,28 @@ async def run_isolation(_: argparse.Namespace) -> None:
     (tenant_a_path / "owner").write_text("tenant-a-secret", encoding="utf-8")
     (tenant_b_path / "owner").write_text("tenant-b-secret", encoding="utf-8")
 
-    sandboxes = await asyncio.gather(
-        create_sandbox(
-            1,
-            scenario="isolation-a",
-            deny_egress=True,
-            volumes=[tenant_a_volume],
-        ),
-        create_sandbox(
-            2,
-            scenario="isolation-b",
-            deny_egress=True,
-            volumes=[tenant_b_volume],
-        ),
-    )
-    tenant_a, tenant_b = sandboxes
+    sandboxes: list[Sandbox] = []
     try:
+        results = await asyncio.gather(
+            create_sandbox(
+                1,
+                scenario="isolation-a",
+                deny_egress=True,
+                volumes=[tenant_a_volume],
+            ),
+            create_sandbox(
+                2,
+                scenario="isolation-b",
+                deny_egress=True,
+                volumes=[tenant_b_volume],
+            ),
+            return_exceptions=True,
+        )
+        sandboxes.extend(result for result in results if isinstance(result, Sandbox))
+        if len(sandboxes) != 2:
+            raise RuntimeError("one or more isolation sandboxes failed to create")
+
+        tenant_a, tenant_b = sandboxes
         await tenant_a.commands.run(
             "mkdir -p /tmp/www; printf tenant-a-network-secret > /tmp/www/value; "
             "busybox httpd -p 8080 -h /tmp/www"
@@ -416,7 +425,7 @@ async def run_isolation(_: argparse.Namespace) -> None:
             },
         )
     finally:
-        await destroy_all([tenant_a, tenant_b])
+        await destroy_all(sandboxes)
 
     residue = await list_spike_sandboxes()
     append_jsonl(
