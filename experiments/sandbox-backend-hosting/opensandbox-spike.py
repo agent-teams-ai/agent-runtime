@@ -351,6 +351,7 @@ async def run_isolation(_: argparse.Namespace) -> None:
     (tenant_b_path / "owner").write_text("tenant-b-secret", encoding="utf-8")
 
     sandboxes: list[Sandbox] = []
+    failures: list[str] = []
     try:
         results = await asyncio.gather(
             create_sandbox(
@@ -394,12 +395,16 @@ async def run_isolation(_: argparse.Namespace) -> None:
                 "commandExitText": network_exit,
             },
         )
+        if network_exit == "0":
+            failures.append("cross-tenant network was reachable")
 
         execution = await tenant_b.commands.run(
             "env | grep -E 'AWS_|GITHUB_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY' || true"
         )
         exposed = any(item.text.strip() for item in execution.logs.stdout)
         append_jsonl(path, {"scenario": "credential-inheritance", "exposed": exposed})
+        if exposed:
+            failures.append("ambient credential-shaped variables were inherited")
 
         execution = await tenant_b.commands.run(
             'test "$(cat /workspace/owner)" = tenant-b-secret'
@@ -411,6 +416,8 @@ async def run_isolation(_: argparse.Namespace) -> None:
                 "outcome": "isolated" if execution.exit_code == 0 else "failed",
             },
         )
+        if execution.exit_code != 0:
+            failures.append("tenant workspace assignment was incorrect")
 
         execution = await tenant_b.commands.run(
             "wget -T 2 -q -O- http://169.254.169.254/latest/meta-data/ >/dev/null 2>&1; printf $?"
@@ -424,29 +431,33 @@ async def run_isolation(_: argparse.Namespace) -> None:
                 "commandExitText": exit_text,
             },
         )
+        if exit_text == "0":
+            failures.append("metadata endpoint was reachable")
     finally:
         await destroy_all(sandboxes)
+        residue = await list_spike_sandboxes()
+        append_jsonl(
+            path,
+            {
+                "scenario": "destroyed-runtime-residue",
+                "outcome": "no_runtime_resource" if not residue else "resource_remains",
+                "externalWorkspaceStillExists": tenant_a_path.exists(),
+                "note": "workspace disposal is a separate owner obligation",
+            },
+        )
+        shutil.rmtree(tenant_a_path.parent)
+        append_jsonl(
+            path,
+            {
+                "scenario": "workspace-disposition",
+                "outcome": "removed_by_explicit_owner",
+            },
+        )
+        await cleanup_spike_sandboxes()
+        await assert_no_spike_sandboxes()
 
-    residue = await list_spike_sandboxes()
-    append_jsonl(
-        path,
-        {
-            "scenario": "destroyed-runtime-residue",
-            "outcome": "no_runtime_resource" if not residue else "resource_remains",
-            "externalWorkspaceStillExists": tenant_a_path.exists(),
-            "note": "workspace disposal is a separate owner obligation",
-        },
-    )
-    shutil.rmtree(tenant_a_path.parent)
-    append_jsonl(
-        path,
-        {
-            "scenario": "workspace-disposition",
-            "outcome": "removed_by_explicit_owner",
-        },
-    )
-    await cleanup_spike_sandboxes()
-    await assert_no_spike_sandboxes()
+    if failures:
+        raise RuntimeError("; ".join(failures))
 
 
 async def prepare_server_restart(_: argparse.Namespace) -> None:

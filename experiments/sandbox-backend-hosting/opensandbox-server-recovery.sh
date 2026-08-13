@@ -37,7 +37,7 @@ stop_server() {
 
 start_server() {
   nohup env OPENSANDBOX_INSECURE_SERVER=YES \
-    uvx --from opensandbox-server opensandbox-server --config "$SERVER_CONFIG" \
+    uvx --from "$OPEN_SANDBOX_SERVER_SPEC" opensandbox-server --config "$SERVER_CONFIG" \
     >> "$SERVER_LOG" 2>&1 &
   printf '%s\n' "$!" > "$SERVER_PID_FILE"
   for _ in $(seq 1 60); do
@@ -59,7 +59,7 @@ ensure_server() {
 
 trap ensure_server EXIT INT TERM
 guard_host
-uv run --with opensandbox "$SCRIPT_DIR/opensandbox-spike.py" prepare-server-restart
+uv run --with "$OPEN_SANDBOX_SDK_SPEC" "$SCRIPT_DIR/opensandbox-spike.py" prepare-server-restart
 
 stop_server
 for _ in $(seq 1 30); do
@@ -69,5 +69,5 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 start_server
-uv run --with opensandbox "$SCRIPT_DIR/opensandbox-spike.py" verify-server-restart
+uv run --with "$OPEN_SANDBOX_SDK_SPEC" "$SCRIPT_DIR/opensandbox-spike.py" verify-server-restart
 trap - EXIT INT TERM

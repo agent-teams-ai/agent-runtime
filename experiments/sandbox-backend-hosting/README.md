@@ -25,3 +25,7 @@ or production clusters.
 
 No result authorizes a backend. Exact production targets require retained
 evidence and a matching Agent Runtime qualification-registry entry.
+
+The retained OpenSandbox campaign versions are pinned by default to SDK
+`0.1.15` and Server `0.2.2`. Overrides are explicit environment inputs and
+produce a different evidence target.

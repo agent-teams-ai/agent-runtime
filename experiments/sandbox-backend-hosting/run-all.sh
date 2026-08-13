@@ -9,7 +9,7 @@ export OPEN_SANDBOX_VOLUME_ROOT=${OPEN_SANDBOX_VOLUME_ROOT:?set OPEN_SANDBOX_VOL
 
 cleanup_all() {
   cleanup_spike_resources
-  uv run --with opensandbox "$SCRIPT_DIR/opensandbox-spike.py" cleanup >/dev/null 2>&1 || true
+  uv run --with "$OPEN_SANDBOX_SDK_SPEC" "$SCRIPT_DIR/opensandbox-spike.py" cleanup >/dev/null 2>&1 || true
 }
 
 trap cleanup_all EXIT INT TERM
@@ -22,13 +22,13 @@ done
 for scenario in density recovery isolation; do
   guard_host
   if [[ "$scenario" == density ]]; then
-    uv run --with opensandbox "$SCRIPT_DIR/opensandbox-spike.py" density \
+    uv run --with "$OPEN_SANDBOX_SDK_SPEC" "$SCRIPT_DIR/opensandbox-spike.py" density \
       --max-sandboxes "${OPEN_SANDBOX_MAX_SANDBOXES:-100}" \
       --step "${OPEN_SANDBOX_STEP:-10}" \
       --create-concurrency "${OPEN_SANDBOX_CREATE_CONCURRENCY:-1}" \
       --evidence-label "${OPEN_SANDBOX_EVIDENCE_LABEL:-sequential}"
   else
-    uv run --with opensandbox "$SCRIPT_DIR/opensandbox-spike.py" "$scenario"
+    uv run --with "$OPEN_SANDBOX_SDK_SPEC" "$SCRIPT_DIR/opensandbox-spike.py" "$scenario"
   fi
 done
 
