@@ -118,17 +118,22 @@ Read documents in this order:
 33. `spikes/stage-n-binary-revision-results.md` - complete binary closure,
    compatibility, activation, assignment, rollback, retention, GC, replay,
    clock, and private-state evidence.
-34. `../experiments/rust-system-boundaries/README.md` - synthetic Rust Local
+34. `spikes/sandbox-backend-hosting-qualification-results.md` - scoped hosted
+   Docker, OpenSandbox, and Kubernetes Agent Sandbox density, lifecycle,
+   recovery, isolation, and adapter-gap feasibility evidence.
+35. `../experiments/sandbox-backend-hosting/README.md` - the retained disposable
+   hosted harness; it is not production code or a backend selection.
+36. `../experiments/rust-system-boundaries/README.md` - synthetic Rust Local
    Supervisor and Execution Guardian feasibility evidence, exact fail-closed
    scope, and platform limitations. This is not production qualification.
-35. `spikes/rust-system-boundaries-production-gates.md` - proposed closed-world
+37. `spikes/rust-system-boundaries-production-gates.md` - proposed closed-world
    production qualification gates for platform custody, generation health,
    protocol compatibility, signing, provenance, and rollback.
-36. `spikes/runtime-profile-behavior.md` - provider behavior evidence and
+38. `spikes/runtime-profile-behavior.md` - provider behavior evidence and
    historical hypotheses. It is not an implementation specification.
-37. `../experiments/runtime-profile-behavior/README.md` - experiment status and
+39. `../experiments/runtime-profile-behavior/README.md` - experiment status and
    the candidate behaviors known to be superseded or falsified.
-38. `architecture/foundation-adoption.md` - executable Engineering Foundation
+40. `architecture/foundation-adoption.md` - executable Engineering Foundation
    capabilities, deferred applicability gates, maintainability budgets, and the
    reviewed bounded-context scaffolding workflow.
 
