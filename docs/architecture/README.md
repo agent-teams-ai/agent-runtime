@@ -1,3 +1,16 @@
+---
+id: runtime.architecture.index
+type: index
+status: active
+owner: architecture
+summary: Index of supporting Agent Runtime architecture documents.
+related:
+  - ADR-0001
+  - ADR-0002
+blocked_by: []
+code_anchors: []
+---
+
 # Architecture
 
 This directory records supporting architecture for Agent Runtime. Normative

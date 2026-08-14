@@ -1,3 +1,18 @@
+---
+id: runtime.architecture.communication-boundaries
+type: architecture
+status: accepted
+owner: architecture
+summary: Separates runtime communication semantics from transports and orchestration policy.
+related:
+  - ADR-0001
+  - ADR-0002
+  - ADR-0003
+  - ADR-0004
+blocked_by: []
+code_anchors: []
+---
+
 # Communication Boundaries
 
 Status: accepted architectural direction as amended by ADR-0001, ADR-0002,

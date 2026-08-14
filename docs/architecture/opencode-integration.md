@@ -1,3 +1,18 @@
+---
+id: runtime.architecture.opencode-integration
+type: architecture
+status: accepted
+owner: architecture
+summary: Defines provider-neutral boundaries for the OpenCode runtime integration.
+related:
+  - ADR-0001
+  - ADR-0002
+  - ADR-0003
+  - ADR-0004
+blocked_by: []
+code_anchors: []
+---
+
 # OpenCode Integration
 
 Status: accepted architectural direction as amended by ADR-0001, ADR-0002,

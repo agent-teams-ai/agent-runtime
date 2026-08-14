@@ -1,3 +1,19 @@
+---
+id: runtime.architecture.foundation-adoption
+type: architecture
+status: active
+owner: architecture/tooling
+summary: Records the exact Engineering Foundation capabilities adopted by Agent Runtime.
+related:
+  - ADR-0005
+blocked_by: []
+code_anchors:
+  - enforcement: required
+    pattern: architecture/foundation/**
+  - enforcement: required
+    pattern: package.json
+---
+
 # Engineering Foundation adoption
 
 Status: active consumer policy backed by the current exact registry dependency.
@@ -16,6 +32,7 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 | `quality.executable-specifications` | enabled for synthetic architecture evidence | Cataloged JSON authority, independent evaluator, property/mutation checks, and XState path evidence support review of proposed ADR-0006; they do not bind or implement a production runtime or establish implementation/deployment qualification |
 | `documentation.local-references` | enabled | Local links and GitHub anchors under `docs`; the root README only points into that governed tree |
 | `governance.architecture-decisions` | enabled | Stable ADR frontmatter, lifecycle index, and immutable accepted baseline |
+| unified documentation protocol | adoption prepared | Foundation profile v2, strict frozen-document sidecar, shared agent route, and static byte-preservation gate; exact package versions and CLI qualification are completed in the coordinated release wave |
 | `quality.suppression-governance` | enabled | Inline suppressions require exact, expiring AR-owned waivers; security and access-control suppressions are non-waivable |
 | TypeScript and Oxlint presets | enabled | Node correctness plus the agreed production and test maintainability budgets |
 | deterministic scaffolding | configured and consumer-qualified | Four exact bounded-context package identities are owned by immutable ADR-0005; synthetic Plan, Apply, and generated-package checks are blocking |
@@ -65,3 +82,16 @@ correction updates that sole `v1` plus every known consumer in one coordinated
 release and adoption wave. External tool versions, product protocol versions,
 and package SemVer are separate namespaces and do not create a parallel
 Foundation contract.
+
+## Documentation protocol boundary
+
+The shared Docs Protocol is the only documentation command UX. Engineering
+Foundation owns catalog parsing and every mutation or recovery action. Agent
+Runtime owns only the declarative profile, metadata schema, owner catalog,
+sidecar, templates, indexes, and semantic validation IDs.
+
+Accepted ADRs and registered evidence are never rewritten to adopt catalog
+metadata. Their metadata is merged from the strict path sidecar and
+`pnpm docs:governance` independently verifies all 36 retained byte digests.
+Package scripts remain pinned to exact reviewed registry releases; local links
+and unpublished packages are not qualification evidence.

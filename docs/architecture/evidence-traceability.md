@@ -1,3 +1,15 @@
+---
+id: runtime.architecture.evidence-traceability
+type: architecture
+status: accepted
+owner: architecture/qualification
+summary: Maps scoped runtime evidence to the smallest promoted architecture rules.
+related:
+  - ADR-0001
+blocked_by: []
+code_anchors: []
+---
+
 # Architecture evidence traceability
 
 Status: canonical companion to ADR-0001
