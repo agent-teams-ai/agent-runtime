@@ -53,6 +53,14 @@ credential route, storage topology, transport topology, or failure domain.
 
 ## Non-promoted feasibility evidence
 
+The hosted sandbox-backend campaign is intentionally outside the promoted-rule
+table and qualification registry. Its
+[`experiment harness`](../../experiments/sandbox-backend-hosting/README.md) and
+[`result report`](../spikes/sandbox-backend-hosting-qualification-results.md)
+retain bounded Docker, OpenSandbox, and Kubernetes Agent Sandbox observations.
+They expose backend gaps and inform readiness, but qualify no exact production
+target and promote no new domain owner.
+
 The Rust system-boundary campaign is intentionally outside the promoted-rule
 table and qualification registry. Its
 [`main@aa76858` evidence record](../../experiments/rust-system-boundaries/evidence/main-aa76858-evidence.json)

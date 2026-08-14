@@ -287,6 +287,12 @@ proof of effortless extraction.
 
 Scoped feasibility evidence, not production qualification:
 
+- the hosted sandbox-backend campaign exercised 100 disposable Docker and
+  OpenSandbox resources plus direct and warm-pool Kubernetes Agent Sandbox
+  lifecycle; it exposed an OpenSandbox concurrent port-allocation race,
+  missing backend idempotency and generation fencing, and host-scoped metrics;
+- that campaign qualifies no production backend and does not make
+  OpenSandbox, Kubernetes Agent Sandbox, Docker, or Kind normative;
 - Rust Local Supervisor and Execution Guardian passed the synthetic
   Linux/macOS/Windows boundary matrix on `main@aa76858`; the immutable source
   and run references are recorded in
@@ -319,6 +325,12 @@ Scoped qualified:
 
 Remaining:
 
+- representative coding-agent density, concurrent admission, per-resource
+  accounting, node loss, residue scans, destructive cleanup, and long-running
+  noisy-neighbor tests for every supported sandbox backend and assurance
+  profile;
+- strong hosted isolation qualification for the selected kernel or VM
+  boundary and separate Desktop packaging/containment qualification;
 - Linux production signed-gateway loading, public-PKI DNS/rebinding, kernel and
   container/VM egress bypass resistance, external proxy/load-balancer,
   HTTP/2/HTTP/3 as enabled, real provider/SDK streaming, daemon custody,
