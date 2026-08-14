@@ -400,9 +400,11 @@ async def run_isolation(_: argparse.Namespace) -> None:
         ip_execution = await tenant_a.commands.run("hostname -i | awk '{print $1}'")
         tenant_a_ip = "".join(item.text for item in ip_execution.logs.stdout).strip()
         try:
-            ipaddress.ip_address(tenant_a_ip)
+            tenant_a_address = ipaddress.ip_address(tenant_a_ip)
         except ValueError as error:
             raise RuntimeError("tenant A returned an invalid network address") from error
+        if tenant_a_address.version != 4:
+            raise RuntimeError("tenant A returned an unsupported non-IPv4 address")
 
         network_execution = await tenant_b.commands.run(
             f"wget -T 2 -q -O- http://{tenant_a_ip}:8080/value >/dev/null 2>&1; printf $?"
@@ -461,6 +463,8 @@ async def run_isolation(_: argparse.Namespace) -> None:
     finally:
         await destroy_all(sandboxes)
         residue = await list_spike_sandboxes()
+        if residue:
+            failures.append("destroyed runtime resources remained before cleanup")
         append_jsonl(
             path,
             {

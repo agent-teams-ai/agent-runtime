@@ -33,7 +33,15 @@ stop_server() {
   while read -r child; do
     [[ -n "$child" ]] && kill -KILL "$child" 2>/dev/null || true
   done < <(ps --ppid "$pid" -o pid=)
-  kill -KILL "$pid" 2>/dev/null || true
+  kill -KILL "$pid"
+  for _ in $(seq 1 30); do
+    if ! curl -fsS "$SERVER_HEALTH_URL" >/dev/null 2>&1; then
+      return
+    fi
+    sleep 1
+  done
+  printf 'OpenSandbox server remained healthy after forced stop\n' >&2
+  return 1
 }
 
 start_server() {
@@ -42,7 +50,7 @@ start_server() {
     >> "$SERVER_LOG" 2>&1 &
   printf '%s\n' "$!" > "$SERVER_PID_FILE"
   for _ in $(seq 1 60); do
-    if curl -fsS "$SERVER_HEALTH_URL" >/dev/null 2>&1; then
+    if server_is_expected && curl -fsS "$SERVER_HEALTH_URL" >/dev/null 2>&1; then
       return
     fi
     sleep 1
@@ -52,7 +60,7 @@ start_server() {
 }
 
 ensure_server() {
-  if curl -fsS "$SERVER_HEALTH_URL" >/dev/null 2>&1; then
+  if server_is_expected && curl -fsS "$SERVER_HEALTH_URL" >/dev/null 2>&1; then
     return
   fi
   start_server
@@ -67,12 +75,6 @@ trap ensure_server EXIT INT TERM
 uv run --with "$OPEN_SANDBOX_SDK_SPEC" "$SCRIPT_DIR/opensandbox-spike.py" prepare-server-restart
 
 stop_server
-for _ in $(seq 1 30); do
-  if ! curl -fsS "$SERVER_HEALTH_URL" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
 start_server
 uv run --with "$OPEN_SANDBOX_SDK_SPEC" "$SCRIPT_DIR/opensandbox-spike.py" verify-server-restart
 trap - EXIT INT TERM

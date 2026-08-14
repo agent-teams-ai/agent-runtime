@@ -60,8 +60,17 @@ download_tools() {
 }
 
 cleanup_cluster() {
+  local clusters
   if [[ "$cluster_created" == 1 && -x "$KIND" ]]; then
     "$KIND" delete cluster --name "$CLUSTER_NAME" >/dev/null 2>&1 || true
+    if ! clusters=$("$KIND" get clusters); then
+      printf 'failed to verify kind cluster cleanup\n' >&2
+      return 1
+    fi
+    if grep -Fxq -- "$CLUSTER_NAME" <<< "$clusters"; then
+      printf 'spike-owned kind cluster %s remains after cleanup\n' "$CLUSTER_NAME" >&2
+      return 1
+    fi
     cluster_created=0
   fi
 }
