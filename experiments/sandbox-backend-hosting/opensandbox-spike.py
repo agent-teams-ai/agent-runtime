@@ -510,15 +510,16 @@ async def verify_server_restart(_: argparse.Namespace) -> None:
         sandbox = await Sandbox.connect(sandbox_id, connection_config=connection())
         execution = await sandbox.commands.run("printf recovered-after-server-restart")
         output = "".join(item.text for item in execution.logs.stdout)
+        recovered = output == "recovered-after-server-restart"
         append_jsonl(
             path,
             {
                 "scenario": "server-crash-recovery",
-                "outcome": "reconciled"
-                if output == "recovered-after-server-restart"
-                else "failed",
+                "outcome": "reconciled" if recovered else "failed",
             },
         )
+        if not recovered:
+            raise RuntimeError("server restart verification returned unexpected output")
         await sandbox.destroy()
     finally:
         await cleanup_spike_sandboxes()
