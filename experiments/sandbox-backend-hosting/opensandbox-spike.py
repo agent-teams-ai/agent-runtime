@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+import ipaddress
 import json
 import os
 import re
@@ -168,7 +169,10 @@ async def create_sandbox(
 ) -> Sandbox:
     policy = NetworkPolicy(defaultAction="deny", egress=[]) if deny_egress else None
     return await Sandbox.create(
-        os.environ.get("OPEN_SANDBOX_IMAGE", "alpine:3.22.1"),
+        os.environ.get(
+            "OPEN_SANDBOX_IMAGE",
+            "alpine:3.22.1@sha256:eafc1edb577d2e9b458664a15f23ea1c370214193226069eb22921169fc7e43f",
+        ),
         connection_config=connection(),
         timeout=timedelta(minutes=10),
         ready_timeout=timedelta(seconds=45),
@@ -250,6 +254,7 @@ async def run_density(args: argparse.Namespace) -> None:
                     "hostAfter": host_snapshot(),
                 },
             )
+            guard_host()
     finally:
         await destroy_all(sandboxes)
         await cleanup_spike_sandboxes()
@@ -281,6 +286,8 @@ async def run_recovery(_: argparse.Namespace) -> None:
                 "matches": len(matches),
             },
         )
+        if len(matches) != 1 or matches[0].id != created_id:
+            raise RuntimeError("lost create acknowledgement could not be reconciled")
 
         duplicate = await create_sandbox(
             2, scenario="recovery", operation_id=operation_id, generation=2
@@ -316,6 +323,8 @@ async def run_recovery(_: argparse.Namespace) -> None:
         except SandboxException as error:
             outcome = type(error).__name__
         append_jsonl(path, {"scenario": "lost-kill-ack", "outcome": outcome})
+        if outcome == "unexpectedly_connected":
+            raise RuntimeError("destroyed sandbox remained connectable")
         append_jsonl(
             path,
             {
@@ -377,8 +386,24 @@ async def run_isolation(_: argparse.Namespace) -> None:
             "mkdir -p /tmp/www; printf tenant-a-network-secret > /tmp/www/value; "
             "busybox httpd -p 8080 -h /tmp/www"
         )
+        control_execution = await tenant_a.commands.run(
+            "wget -T 2 -q -O- http://127.0.0.1:8080/value"
+        )
+        control_output = "".join(
+            item.text for item in control_execution.logs.stdout
+        ).strip()
+        if (
+            control_execution.exit_code != 0
+            or control_output != "tenant-a-network-secret"
+        ):
+            raise RuntimeError("network isolation control server is not reachable")
         ip_execution = await tenant_a.commands.run("hostname -i | awk '{print $1}'")
         tenant_a_ip = "".join(item.text for item in ip_execution.logs.stdout).strip()
+        try:
+            ipaddress.ip_address(tenant_a_ip)
+        except ValueError as error:
+            raise RuntimeError("tenant A returned an invalid network address") from error
+
         network_execution = await tenant_b.commands.run(
             f"wget -T 2 -q -O- http://{tenant_a_ip}:8080/value >/dev/null 2>&1; printf $?"
         )

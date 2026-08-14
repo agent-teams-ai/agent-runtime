@@ -7,6 +7,8 @@ source "$SCRIPT_DIR/common.sh"
 KIND_VERSION=${KIND_VERSION:-v0.32.0}
 KUBECTL_VERSION=${KUBECTL_VERSION:-v1.36.1}
 AGENT_SANDBOX_VERSION=${AGENT_SANDBOX_VERSION:-v0.5.4}
+AGENT_SANDBOX_SANDBOX_YAML_SHA256=${AGENT_SANDBOX_SANDBOX_YAML_SHA256:-51e3610f235b58abd465280682d366d3d0fed8972489bf6a800d707988d24c3e}
+AGENT_SANDBOX_EXTENSIONS_YAML_SHA256=${AGENT_SANDBOX_EXTENSIONS_YAML_SHA256:-f337bef3922196dbe75628418c565ccd3d14bbe622107e517542f975b487beba}
 TOOLS_DIR=${TOOLS_DIR:?set TOOLS_DIR}
 KUBECONFIG=${KUBECONFIG:?set KUBECONFIG}
 CLUSTER_NAME=${CLUSTER_NAME:-ats-$SPIKE_RUN_ID}
@@ -14,6 +16,10 @@ NAMESPACE=${NAMESPACE:-ats-$SPIKE_RUN_ID}
 RESULTS="$EVIDENCE_DIR/kubernetes-agent-sandbox.jsonl"
 KIND="$TOOLS_DIR/kind"
 KUBECTL="$TOOLS_DIR/kubectl"
+AGENT_SANDBOX_MANIFEST_DIR="$TOOLS_DIR/agent-sandbox-$AGENT_SANDBOX_VERSION"
+cluster_created=0
+
+export KUBECONFIG
 
 mkdir -p "$TOOLS_DIR" "$(dirname "$KUBECONFIG")"
 : > "$RESULTS"
@@ -39,26 +45,43 @@ download_tools() {
     printf '%s  %s\n' "$(cat "$KUBECTL.sha256")" "$KUBECTL" | sha256sum --check
     chmod 0755 "$KUBECTL"
   fi
+
+  mkdir -p "$AGENT_SANDBOX_MANIFEST_DIR"
+  gh release download "$AGENT_SANDBOX_VERSION" \
+    --repo kubernetes-sigs/agent-sandbox \
+    --pattern sandbox.yaml --pattern extensions.yaml \
+    --dir "$AGENT_SANDBOX_MANIFEST_DIR" --clobber
+  printf '%s  %s\n' \
+    "$AGENT_SANDBOX_SANDBOX_YAML_SHA256" "$AGENT_SANDBOX_MANIFEST_DIR/sandbox.yaml" \
+    | sha256sum --check
+  printf '%s  %s\n' \
+    "$AGENT_SANDBOX_EXTENSIONS_YAML_SHA256" "$AGENT_SANDBOX_MANIFEST_DIR/extensions.yaml" \
+    | sha256sum --check
 }
 
 cleanup_cluster() {
-  if [[ -x "$KIND" ]]; then
+  if [[ "$cluster_created" == 1 && -x "$KIND" ]]; then
     "$KIND" delete cluster --name "$CLUSTER_NAME" >/dev/null 2>&1 || true
+    cluster_created=0
   fi
 }
 
 trap cleanup_cluster EXIT INT TERM
 guard_host
 download_tools
-cleanup_cluster
+if "$KIND" get clusters | grep -Fxq -- "$CLUSTER_NAME"; then
+  printf 'refusing to delete or reuse existing kind cluster %s\n' "$CLUSTER_NAME" >&2
+  exit 1
+fi
 
 started=$(date +%s%N)
+cluster_created=1
 "$KIND" create cluster --name "$CLUSTER_NAME" --kubeconfig "$KUBECONFIG" --wait 120s
 ended=$(date +%s%N)
 record cluster-create ready "$(( (ended - started) / 1000000 ))"
 
-"$KUBECTL" apply -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/$AGENT_SANDBOX_VERSION/sandbox.yaml"
-"$KUBECTL" apply -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/$AGENT_SANDBOX_VERSION/extensions.yaml"
+"$KUBECTL" apply -f "$AGENT_SANDBOX_MANIFEST_DIR/sandbox.yaml"
+"$KUBECTL" apply -f "$AGENT_SANDBOX_MANIFEST_DIR/extensions.yaml"
 "$KUBECTL" wait --for=condition=Ready pod \
   -l app=agent-sandbox-controller -n agent-sandbox-system --timeout=180s
 "$KUBECTL" create namespace "$NAMESPACE"
@@ -74,7 +97,7 @@ spec:
     spec:
       containers:
         - name: runtime
-          image: alpine:3.22.1
+          image: alpine:3.22.1@sha256:eafc1edb577d2e9b458664a15f23ea1c370214193226069eb22921169fc7e43f
           command: ["sh", "-c", "while :; do sleep 60; done"]
           resources:
             requests:
@@ -106,7 +129,7 @@ spec:
     spec:
       containers:
         - name: runtime
-          image: alpine:3.22.1
+          image: alpine:3.22.1@sha256:eafc1edb577d2e9b458664a15f23ea1c370214193226069eb22921169fc7e43f
           command: ["sh", "-c", "while :; do sleep 60; done"]
           resources:
             requests:

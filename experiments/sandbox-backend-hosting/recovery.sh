@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIR/common.sh"
 
-IMAGE=${IMAGE:-alpine:3.22.1}
+IMAGE=${IMAGE:-alpine:3.22.1@sha256:eafc1edb577d2e9b458664a15f23ea1c370214193226069eb22921169fc7e43f}
 RESULTS="$EVIDENCE_DIR/recovery.jsonl"
 RESOURCE_NAME="ats-$SPIKE_RUN_ID-recovery-target"
 GENERATION_LABEL=agent_teams_generation

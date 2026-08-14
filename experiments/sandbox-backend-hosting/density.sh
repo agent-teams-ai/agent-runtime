@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIR/common.sh"
 
-IMAGE=${IMAGE:-alpine:3.22.1}
+IMAGE=${IMAGE:-alpine:3.22.1@sha256:eafc1edb577d2e9b458664a15f23ea1c370214193226069eb22921169fc7e43f}
 MAX_SANDBOXES=${MAX_SANDBOXES:-100}
 STEP=${STEP:-10}
 MEMORY_LIMIT=${MEMORY_LIMIT:-32m}
@@ -19,7 +19,7 @@ capture_host_snapshot density-before
 printf 'count,create_seconds,total_mem_bytes,total_cpu_percent,available_memory_mb,cpu_psi_avg10,memory_psi_avg10,io_psi_avg10\n' > "$RESULTS"
 
 for (( target = STEP; target <= MAX_SANDBOXES; target += STEP )); do
-  guard_host || break
+  guard_host
   current=$(docker ps -q --filter "label=$SPIKE_LABEL_KEY=$SPIKE_LABEL_VALUE" | wc -l)
   started=$(date +%s%N)
   for (( index = current + 1; index <= target; index++ )); do
@@ -60,6 +60,7 @@ for (( target = STEP; target <= MAX_SANDBOXES; target += STEP )); do
   printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
     "$target" "$elapsed" "$total_mem" "$total_cpu" \
     "$(available_memory_mb)" "$(psi_avg10 cpu)" "$(psi_avg10 memory)" "$(psi_avg10 io)" >> "$RESULTS"
+  guard_host
 done
 
 capture_host_snapshot density-after

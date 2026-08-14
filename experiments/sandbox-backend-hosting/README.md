@@ -28,4 +28,8 @@ evidence and a matching Agent Runtime qualification-registry entry.
 
 The retained OpenSandbox campaign versions are pinned by default to SDK
 `0.1.15` and Server `0.2.2`. Overrides are explicit environment inputs and
-produce a different evidence target.
+produce a different evidence target. The disposable Alpine workload image is
+pinned to its Linux AMD64 manifest digest. Kubernetes Agent Sandbox release
+manifests are downloaded at the pinned release and verified against retained
+SHA-256 digests before use. The Kind scenario refuses to reuse or delete a
+cluster it did not create during the current run.

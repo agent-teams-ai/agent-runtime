@@ -13,12 +13,13 @@ SERVER_DOMAIN=${OPEN_SANDBOX_DOMAIN:-127.0.0.1:18080}
 export EVIDENCE_DIR SPIKE_RUN_ID OPEN_SANDBOX_DOMAIN=$SERVER_DOMAIN
 
 server_pid() {
+  [[ -r "$SERVER_PID_FILE" ]] || return 1
   cat "$SERVER_PID_FILE"
 }
 
 server_is_expected() {
   local pid
-  pid=$(server_pid)
+  pid=$(server_pid) || return 1
   [[ -r "/proc/$pid/cmdline" ]] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq -- "$SERVER_CONFIG"
 }
 
@@ -57,8 +58,12 @@ ensure_server() {
   start_server
 }
 
-trap ensure_server EXIT INT TERM
 guard_host
+if ! curl -fsS "$SERVER_HEALTH_URL" >/dev/null 2>&1 || ! server_is_expected; then
+  printf 'OpenSandbox server is not running as the spike-owned process\n' >&2
+  exit 1
+fi
+trap ensure_server EXIT INT TERM
 uv run --with "$OPEN_SANDBOX_SDK_SPEC" "$SCRIPT_DIR/opensandbox-spike.py" prepare-server-restart
 
 stop_server
