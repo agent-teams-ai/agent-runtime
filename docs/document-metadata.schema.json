@@ -9,8 +9,7 @@
     "type",
     "status",
     "owner",
-    "summary",
-    "related"
+    "summary"
   ],
   "properties": {
     "id": {

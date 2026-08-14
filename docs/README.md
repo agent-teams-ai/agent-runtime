@@ -31,9 +31,9 @@ Read documents in this order:
    `decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md`
    and its synthetic executable oracle at
    `../experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md`.
-   Documentation changes also follow proposed
-   `decisions/0007-deterministic-documentation-governance.md`; proposal status
-   does not add it to the immutable accepted-decision registry.
+   Documentation changes follow accepted
+   `decisions/0007-deterministic-documentation-governance.md`, which is pinned
+   in the immutable accepted-decision registry.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read

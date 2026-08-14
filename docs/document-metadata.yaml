@@ -370,3 +370,16 @@ documents:
     blocked_by: []
     code_anchors: []
     content_sha256: e787c96ab814c997b0fdde6352ba6ba2512f129a6d8d00802515a3d0ce379997
+  docs/spikes/sandbox-backend-hosting-qualification-results.md:
+    id: evidence.sandbox-backend-hosting-qualification
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from disposable sandbox backend hosting qualification.
+    related:
+      - ADR-0001
+    blocked_by: []
+    code_anchors:
+      - enforcement: required
+        pattern: experiments/sandbox-backend-hosting/**
+    content_sha256: 6b775fc7b9c988b329bf3abeeef2bc5c2d65ced9252695af6a0fa0cd2c9ccf8a

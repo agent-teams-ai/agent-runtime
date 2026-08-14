@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SIDECAR_PATH = "docs/document-metadata.yaml";
-const EXPECTED_FROZEN_COUNT = 36;
+const EXPECTED_FROZEN_COUNT = 37;
 const ENTRY = /^  (docs\/[A-Za-z0-9._/-]+\.md):$/u;
 const DIGEST = /^    content_sha256: ([a-f0-9]{64})$/u;
 

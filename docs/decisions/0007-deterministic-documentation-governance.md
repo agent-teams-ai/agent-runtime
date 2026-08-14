@@ -1,7 +1,7 @@
 ---
 id: ADR-0007
 type: adr
-status: proposed
+status: accepted
 owner: architecture/tooling
 summary: Defines deterministic documentation authority and immutable evidence adoption.
 related:
@@ -19,7 +19,7 @@ superseded_by: []
 
 # ADR-0007: Deterministic documentation governance
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-14
 
@@ -30,11 +30,11 @@ qualification evidence, and a fail-closed qualification plan. These documents
 must be discoverable through the organization-wide documentation protocol
 without weakening the repository's immutable evidence rules.
 
-Thirty-six existing files cannot receive inline metadata safely: accepted
-ADR-0001 through ADR-0005 are immutable decisions, thirty retained spike reports
-are bound by SHA-256 in the qualification registry, and the superseded runtime
-profile report remains frozen historical evidence. Editing those files only to
-add frontmatter would invalidate the evidence they preserve.
+Thirty-seven existing files cannot receive inline metadata safely: accepted
+ADR-0001 through ADR-0005 are immutable decisions, thirty-one retained spike
+reports are bound by SHA-256 in the qualification registry, and the superseded
+runtime profile report remains frozen historical evidence. Editing those files
+only to add frontmatter would invalidate the evidence they preserve.
 
 ## Decision
 
@@ -54,7 +54,7 @@ The repository owns only declarative authority:
   authoring types, placement, templates, and reachability;
 - `docs/document-metadata.schema.json` defines the closed metadata vocabulary;
 - `docs/owners.yaml` defines stable maintenance owners;
-- `docs/document-metadata.json` supplies complete metadata for frozen files;
+- `docs/document-metadata.yaml` supplies complete metadata for frozen files;
 - `docs/templates/` supplies inert Markdown body templates.
 
 These files contain no commands, callbacks, imports, remote schemas,
@@ -95,10 +95,10 @@ The supported types are `index`, `architecture`, `adr`, `evidence`, and
 `qualification-plan`. Their maintenance owners are `architecture`,
 `architecture/tooling`, and `architecture/qualification`.
 
-Every type has an explicit manual index route. Publication reports the exact
-index path and Markdown link, but never edits an index automatically. A new
-document is incomplete until its author updates that reported index in the same
-change.
+Every non-index type has an explicit manual index route. Index documents are
+explicit roots for their governed subtree. Publication reports the exact index
+path and Markdown link, but never edits an index automatically. A new document
+is incomplete until its author updates that reported index in the same change.
 
 Templates establish the required initial structure but do not duplicate
 repository-specific policy. `docs:info` is the authoritative way for an agent
@@ -123,8 +123,8 @@ flows against a real project.
   Runtime-specific policy from data rather than copied instructions.
 - Sidecar entries create an explicit maintenance obligation. Moving a frozen
   file requires an intentional sidecar and evidence-registry update.
-- Accepting this ADR requires adding it to the immutable accepted-decision
-  registry in the acceptance change; proposal alone must not register it.
+- This accepted ADR is pinned in the immutable accepted-decision registry; any
+  later change requires an explicit superseding decision.
 - Removing the shared protocol or changing its major contract requires a new
   ADR and a coordinated migration.
 

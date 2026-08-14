@@ -43,20 +43,20 @@ function increment(counter, value) {
 }
 
 test("committed frozen authority preserves all evidence bytes", async () => {
-  assert.equal(await verifyFrozenDocumentBytes(repositoryRoot), 36);
+  assert.equal(await verifyFrozenDocumentBytes(repositoryRoot), 37);
 });
 
 test("catalog authority has the reviewed type and lifecycle census", async () => {
   const sidecar = await readFile(join(repositoryRoot, "docs/document-metadata.yaml"), "utf8");
   const sidecarBlocks = sidecar.split(/^  (?=docs\/)/mu).slice(1);
-  assert.equal(sidecarBlocks.length, 36);
+  assert.equal(sidecarBlocks.length, 37);
   const metadata = sidecarBlocks.map((block) => scalarMetadata(block, 4));
   for (const path of inlineMetadataPaths) {
     metadata.push(scalarMetadata(await readFile(join(repositoryRoot, path), "utf8"), 0));
   }
 
-  assert.equal(metadata.length, 49);
-  assert.equal(new Set(metadata.map((entry) => entry.id)).size, 49);
+  assert.equal(metadata.length, 50);
+  assert.equal(new Set(metadata.map((entry) => entry.id)).size, 50);
   const types = new Map();
   const statuses = new Map();
   for (const entry of metadata) {
@@ -65,24 +65,24 @@ test("catalog authority has the reviewed type and lifecycle census", async () =>
   }
   assert.deepEqual(Object.fromEntries(types), {
     adr: 7,
-    evidence: 31,
+    evidence: 32,
     index: 3,
     architecture: 7,
     "qualification-plan": 1
   });
   assert.deepEqual(Object.fromEntries(statuses), {
-    accepted: 10,
-    "evidence-reference": 30,
+    accepted: 11,
+    "evidence-reference": 31,
     superseded: 1,
     active: 5,
-    proposed: 3
+    proposed: 2
   });
 });
 
 test("frozen authority rejects an incomplete path set", async () => {
   assert.throws(
     () => readFrozenDigestAuthority("contract: foundation.document-metadata-sidecar/v1\ndocuments: {}\n"),
-    (error) => error instanceof FrozenDocumentError && /must contain 36 paths/u.test(error.message)
+    (error) => error instanceof FrozenDocumentError && /must contain 37 paths/u.test(error.message)
   );
 });
 
