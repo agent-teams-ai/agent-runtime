@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SPIKE_RUN_ID=${SPIKE_RUN_ID:?set a unique SPIKE_RUN_ID for this disposable run}
-if [[ ! "$SPIKE_RUN_ID" =~ ^[a-z0-9][a-z0-9-]{2,39}$ ]]; then
-  printf 'SPIKE_RUN_ID must match ^[a-z0-9][a-z0-9-]{2,39}$\n' >&2
+if [[ ! "$SPIKE_RUN_ID" =~ ^[a-z0-9]([a-z0-9-]{1,38}[a-z0-9])$ ]]; then
+  printf 'SPIKE_RUN_ID must be 3-40 lowercase alphanumeric/hyphen characters and end alphanumeric\n' >&2
   exit 1
 fi
 SPIKE_LABEL_KEY=agent_teams_spike

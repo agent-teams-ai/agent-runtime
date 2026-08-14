@@ -19,7 +19,7 @@ from opensandbox.manager import SandboxManager
 from opensandbox.models.sandboxes import Host, NetworkPolicy, SandboxFilter, Volume
 
 SPIKE_RUN_ID = os.environ["SPIKE_RUN_ID"]
-if re.fullmatch(r"[a-z0-9][a-z0-9-]{2,39}", SPIKE_RUN_ID) is None:
+if re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])", SPIKE_RUN_ID) is None:
     raise RuntimeError("SPIKE_RUN_ID has an unsafe or unsupported format")
 MIN_AVAILABLE_MEMORY_MB = int(os.environ.get("MIN_AVAILABLE_MEMORY_MB", "3072"))
 MIN_FREE_DISK_GB = int(os.environ.get("MIN_FREE_DISK_GB", "20"))
