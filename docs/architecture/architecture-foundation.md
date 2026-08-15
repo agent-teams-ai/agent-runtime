@@ -1,3 +1,18 @@
+---
+id: runtime.architecture.foundation
+type: architecture
+status: accepted
+owner: architecture
+summary: Defines Agent Runtime boundaries, dependencies, packages, and quality rules.
+related:
+  - ADR-0001
+  - ADR-0002
+  - ADR-0003
+  - ADR-0004
+blocked_by: []
+code_anchors: []
+---
+
 # Accepted Architecture Foundation
 
 Status: accepted as amended by ADR-0001, ADR-0002, ADR-0003, and ADR-0004

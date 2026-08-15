@@ -10,6 +10,7 @@ Start here:
 - Current readiness gates: [docs/architecture/readiness.md](docs/architecture/readiness.md)
 - Exact qualified runtime targets:
   [docs/architecture/qualification-registry.json](docs/architecture/qualification-registry.json)
+Use [.agents/skills/docs-authoring/SKILL.md](.agents/skills/docs-authoring/SKILL.md) for documentation.
 
 Guardrails:
 

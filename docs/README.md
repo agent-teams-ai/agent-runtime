@@ -1,3 +1,14 @@
+---
+id: runtime.docs.index
+type: index
+status: active
+owner: architecture
+summary: Canonical reading order for Agent Runtime architecture and evidence.
+related: []
+blocked_by: []
+code_anchors: []
+---
+
 # Agent Runtime architecture
 
 Read documents in this order:
@@ -20,6 +31,9 @@ Read documents in this order:
    `decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md`
    and its synthetic executable oracle at
    `../experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md`.
+   Documentation changes follow accepted
+   `decisions/0007-deterministic-documentation-governance.md`, which is pinned
+   in the immutable accepted-decision registry.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read

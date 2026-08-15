@@ -1,0 +1,8 @@
+version: 1
+owners:
+  architecture:
+    kind: architecture
+  architecture/tooling:
+    kind: architecture
+  architecture/qualification:
+    kind: architecture

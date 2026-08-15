@@ -1,0 +1,385 @@
+contract: foundation.document-metadata-sidecar/v1
+documents:
+  docs/decisions/0001-runtime-profile-and-activation-boundaries.md:
+    id: ADR-0001
+    type: adr
+    status: accepted
+    owner: architecture
+    summary: "Defines the accepted adr-0001: runtime profile and activation boundaries decision."
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: b970edbad86eed9384a7154a94153a5ee558ab85ea1d2cc2ff3341d048ef7fd3
+    supersedes: []
+    superseded_by: []
+  docs/decisions/0002-architecture-reconciliation-tenancy-and-operator-recovery.md:
+    id: ADR-0002
+    type: adr
+    status: accepted
+    owner: architecture
+    summary: "Defines the accepted adr-0002: architecture reconciliation, tenancy, and operator recovery decision."
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 3198c3f58efbe27684cd70e14d6c75e8ec6eaa0d131ce35f984a84dc3fff3956
+    supersedes: []
+    superseded_by: []
+  docs/decisions/0003-runtime-cutoff-barriers-and-scope-disposition.md:
+    id: ADR-0003
+    type: adr
+    status: accepted
+    owner: architecture
+    summary: "Defines the accepted adr-0003: runtime cutoff barriers and scope disposition decision."
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 6d0f5fdbe7a201ab1feb95b4484866251615bb8470e4bc874bad00af55faf806
+    supersedes: []
+    superseded_by: []
+  docs/decisions/0004-pre-materialization-dispatch-prevention.md:
+    id: ADR-0004
+    type: adr
+    status: accepted
+    owner: architecture
+    summary: "Defines the accepted adr-0004: pre-materialization dispatch prevention decision."
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 430d717c5c5c4c1023a35b22d95a433e7c563a76fc3fe4dda03b1be49390d7e3
+    supersedes: []
+    superseded_by: []
+  docs/decisions/0005-runtime-context-package-identities.md:
+    id: ADR-0005
+    type: adr
+    status: accepted
+    owner: architecture
+    summary: "Defines the accepted adr-0005: runtime context package identities decision."
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 11dc2c557d389893c6944ee3900e366681b552d9eb79c79c9eaf84c9fd1a9acf
+    supersedes: []
+    superseded_by: []
+  docs/spikes/connect-replay-results.md:
+    id: evidence.connect-replay
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from connect replay and timeout results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: b14d5eacf2b97f049033d432d6b23e884e9530351b8dbd31d179f028c852c149
+  docs/spikes/linux-nonroot-containment-egress-results.md:
+    id: evidence.linux-nonroot-containment-egress
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from linux non-root containment and egress results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 83e408cc68b24a375b33e8fe2c03c257af5ca96adf268c3be923afa06a8dfae6
+  docs/spikes/macos-claude-agent-sdk-conformance-results.md:
+    id: evidence.macos-claude-agent-sdk-conformance
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos claude agent sdk conformance results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 09017fbf382d73f448478267b65ccb51aa1f1bd055751ada1cddca72e6ef7ba6
+  docs/spikes/macos-claude-mcp-failure-conformance-results.md:
+    id: evidence.macos-claude-mcp-failure-conformance
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos claude mcp failure conformance results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 7d4c5ad7f35a4d3a1c4796fe73cf57855dfb4f95b380e2f05e38049f7f93de6e
+  docs/spikes/macos-claude-session-store-conformance-results.md:
+    id: evidence.macos-claude-session-store-conformance
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos claude sessionstore conformance results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 86b4f1a5de018e5d82ed4b988325607b0bf26aeafa33415de93d18f81e3724cb
+  docs/spikes/macos-claude-subagent-parallel-results.md:
+    id: evidence.macos-claude-subagent-parallel
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos claude subagent and parallel-call results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 5d1bb59726c15c1d6f7fbe43369572d2b74234a63166bf703354e52a61527b6d
+  docs/spikes/macos-claude-subagent-stdio-results.md:
+    id: evidence.macos-claude-subagent-stdio
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos claude subagent stdio and roster results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: a2a501d9c851c49654c9f28d00db1d46926c42fd9375ff6ec0eb5727ddc502ed
+  docs/spikes/macos-claude-tools-hooks-conformance-results.md:
+    id: evidence.macos-claude-tools-hooks-conformance
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos claude mcp, tool, and hook conformance results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 9503155abaf6e272a533094738282aca7c591e72d10a034e883e2683156ba2cc
+  docs/spikes/macos-codex-app-server-conformance-results.md:
+    id: evidence.macos-codex-app-server-conformance
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos codex app server conformance results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 05c65131185a47b51dbf45e716422361b2a8dfc4d87176ad25733690fc618f8b
+  docs/spikes/macos-codex-app-server-effects-results.md:
+    id: evidence.macos-codex-app-server-effects
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos codex app server effect-lifecycle results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 970093771868511a9f8d45f629aa19b5d8ec86880432fb76bd5958b444725779
+  docs/spikes/macos-codex-claude-cli-conformance-results.md:
+    id: evidence.macos-codex-claude-cli-conformance
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos codex and claude cli conformance results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 4458c3a87c9d9f728f2fb6bde1c89855d55b2afa74d1802ae1d6011eee81c9dc
+  docs/spikes/macos-keychain-custody-results.md:
+    id: evidence.macos-keychain-custody
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from macos keychain custody results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 85fff3703771f934df91ce9243c4b86a5108971ad202bb01de2291309c376978
+  docs/spikes/opencode-container-tls-gateway-results.md:
+    id: evidence.opencode-container-tls-gateway
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from opencode container and tls egress gateway results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 8d8c48bc25a14c15d7b03f47bff68775976de0b4bac68e738ed78bb8bfca2d5d
+  docs/spikes/opencode-hosting-e2e-results.md:
+    id: evidence.opencode-hosting-e2e
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from opencode hosting e2e conformance results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 78f0ed621647dc8935f2d801cddc66f5b8ecc0276f5aec211f0a0be92a059815
+  docs/spikes/opencode-macos-conformance-results.md:
+    id: evidence.opencode-macos-conformance
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from opencode macos conformance results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: d41e97f688323e6f3ac4506fd8c5eb0a344aaa066fa1d1c7b992964b61edb9be
+  docs/spikes/postgresql-concurrency-results.md:
+    id: evidence.postgresql-concurrency
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from postgresql concurrency and recovery results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 2e5bd87852c35b6713573dd2701023ee21874fecda10393738f0c1297c5e1604
+  docs/spikes/stage-a-profile-foundation-results.md:
+    id: evidence.stage-a-profile-foundation
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage a profile foundation results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 6a90188c51756265e371dfbf5263d09cdf47ef659c2aa3a2bbe3380cedbe5b64
+  docs/spikes/stage-b-runtime-execution-results.md:
+    id: evidence.stage-b-runtime-execution
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage b runtime execution results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 605d7dfb0cb987782048957dad436084affd6673ea861e021f37dad5dde30cd8
+  docs/spikes/stage-c-provider-profile-and-opencode-operation-results.md:
+    id: evidence.stage-c-provider-profile-and-opencode-operation
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage c provider profile and opencode operation results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: da3ff7959d0678db64c54555f4ffc6fcd260dac2ec089fb1d71372c3743e0eb4
+  docs/spikes/stage-d-cross-context-reconciliation-results.md:
+    id: evidence.stage-d-cross-context-reconciliation
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage d cross-context reconciliation results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: d95a69d049201a383ddea69a74a183e7627ae513a308f04b9a57d1b6658e89f0
+  docs/spikes/stage-e-security-time-and-idempotency-results.md:
+    id: evidence.stage-e-security-time-and-idempotency
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage e security, time, and idempotency results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: ff749b019b9f05abc3758fc891b3f599e15de8efe07898b529131a84e60b9b70
+  docs/spikes/stage-f-authority-lease-custody-results.md:
+    id: evidence.stage-f-authority-lease-custody
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage f authority, lease, effect, and custody results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 26fe667c1496783df6c8dc0110b384d60b5aa0e120cefef38a62560502110c72
+  docs/spikes/stage-g-profile-environment-contracts-results.md:
+    id: evidence.stage-g-profile-environment-contracts
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage g profile and environment contract results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 9cc6e763c34c00bc52d335321352de7bf60c426e16f1235cd162acf8462a8fc4
+  docs/spikes/stage-h-version-skew-migration-results.md:
+    id: evidence.stage-h-version-skew-migration
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage h version-skew and migration contract results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 9fe29a34be2760b9b388306b552f640d35237b972191297ec0a1a1ec60a75322
+  docs/spikes/stage-i-streaming-egress-results.md:
+    id: evidence.stage-i-streaming-egress
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage i streaming egress and backpressure results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: d7a13a6999ababdf69d1686a70bfd6a7e7f9853d72acd6060942e5fe5a5bb1b6
+  docs/spikes/stage-j-storage-failure-recovery-results.md:
+    id: evidence.stage-j-storage-failure-recovery
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage j storage failure and recovery results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 6f5d00ada4a1698932f35e02da26f01c3db3ddd714ed1209290130c214fe3499
+  docs/spikes/stage-k-capacity-fairness-results.md:
+    id: evidence.stage-k-capacity-fairness
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage k capacity and fairness results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: a5219a0bedac1946b488ded1265cfcf6fcc37703cf0745182d1fc452526037ea
+  docs/spikes/stage-l-postgres-failover-results.md:
+    id: evidence.stage-l-postgres-failover
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage l postgresql failover results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: f1bdce8d77474314373c969923857c228327491c7ec6ef62cc200d587fe177ff
+  docs/spikes/stage-m-egress-policy-results.md:
+    id: evidence.stage-m-egress-policy
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage m egress policy and gateway results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: 07c64ea9f9577249e762fa00c84561b94dba3381f1d818f80350b96d18465887
+  docs/spikes/stage-n-binary-revision-results.md:
+    id: evidence.stage-n-binary-revision
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from stage n binary revision lifecycle results.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: e08a3e55d0882c5545e0f8d60c348948f48b5db7f4bdd1d4a2ec41bf8963a499
+  docs/spikes/runtime-profile-behavior.md:
+    id: evidence.runtime-profile-behavior
+    type: evidence
+    status: superseded
+    owner: architecture/qualification
+    summary: Retains superseded runtime profile behavior evidence for historical traceability.
+    related: []
+    blocked_by: []
+    code_anchors: []
+    content_sha256: e787c96ab814c997b0fdde6352ba6ba2512f129a6d8d00802515a3d0ce379997
+  docs/spikes/sandbox-backend-hosting-qualification-results.md:
+    id: evidence.sandbox-backend-hosting-qualification
+    type: evidence
+    status: evidence-reference
+    owner: architecture/qualification
+    summary: Retains scoped evidence from disposable sandbox backend hosting qualification.
+    related:
+      - ADR-0001
+    blocked_by: []
+    code_anchors:
+      - enforcement: required
+        pattern: experiments/sandbox-backend-hosting/**
+    content_sha256: 6b775fc7b9c988b329bf3abeeef2bc5c2d65ced9252695af6a0fa0cd2c9ccf8a

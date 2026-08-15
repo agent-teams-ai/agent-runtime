@@ -10,9 +10,18 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm typecheck && pnpm lint && pnpm test",
+    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm typecheck && pnpm lint && pnpm test",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm typecheck && pnpm lint",
+    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm typecheck && pnpm lint",
+    "docs:check": "agent-teams-docs check --consumer . --profile architecture/foundation/docs-protocol.yaml",
+    "docs:doctor": "agent-teams-docs doctor --consumer . --profile architecture/foundation/docs-protocol.yaml",
+    "docs:find": "agent-teams-docs find --consumer . --profile architecture/foundation/docs-protocol.yaml",
+    "docs:governance": "node --test scripts/docs/verify-frozen-document-bytes.test.mjs",
+    "docs:info": "agent-teams-docs info --consumer . --profile architecture/foundation/docs-protocol.yaml",
+    "docs:new": "agent-teams-docs new --consumer . --profile architecture/foundation/docs-protocol.yaml",
+    "docs:protocol:check": "pnpm docs:check && pnpm docs:governance && pnpm docs:qualification",
+    "docs:qualification": "node --test scripts/docs/docs-protocol-adoption.test.mjs",
+    "docs:recover": "agent-teams-docs recover --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "foundation:assert-dev-only": "agent-teams-foundation assert-dev-only",
     "foundation:assert-registry": "agent-teams-foundation assert-registry",
     "foundation:attach": "agent-teams-foundation attach",
@@ -58,7 +67,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@agent-teams/engineering-foundation": "0.16.1",
+    "@agent-teams/docs-protocol": "0.1.0-rc.1",
+    "@agent-teams/engineering-foundation": "0.17.0-rc.0",
     "@agentclientprotocol/sdk": "catalog:",
     "@opencode-ai/plugin": "catalog:",
     "@types/node": "catalog:",

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-teams.ai/schemas/agent-runtime/document-metadata/v1",
+  "title": "Agent Runtime document metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "status",
+    "owner",
+    "summary"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^(ADR-[0-9]{4}|[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+)$"
+    },
+    "type": {
+      "enum": ["index", "architecture", "adr", "evidence", "qualification-plan"]
+    },
+    "status": {
+      "enum": ["active", "accepted", "proposed", "evidence-reference", "superseded"]
+    },
+    "owner": {
+      "enum": ["architecture", "architecture/tooling", "architecture/qualification"]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 180,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "related": { "$ref": "#/$defs/idList" },
+    "blocked_by": { "$ref": "#/$defs/idList" },
+    "code_anchors": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["enforcement", "pattern"],
+        "properties": {
+          "enforcement": { "enum": ["advisory", "required"] },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^(?!/)(?!(?:docs|\\.agents)(?:/|$))(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9._@*?/\\[\\]-]+$"
+          }
+        }
+      }
+    },
+    "supersedes": { "$ref": "#/$defs/idList" },
+    "superseded_by": { "$ref": "#/$defs/idList" },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "adr" } }, "required": ["type"] },
+      "then": {
+        "properties": { "status": { "enum": ["proposed", "accepted", "superseded"] } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "evidence" } }, "required": ["type"] },
+      "then": {
+        "properties": { "status": { "enum": ["evidence-reference", "superseded"] } }
+      }
+    }
+  ],
+  "$defs": {
+    "idList": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 160,
+        "pattern": "^(ADR-[0-9]{4}|[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+)$"
+      }
+    }
+  }
+}

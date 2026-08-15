@@ -1,3 +1,18 @@
+---
+id: qualification.rust-system-boundaries
+type: qualification-plan
+status: proposed
+owner: architecture/qualification
+summary: Defines fail-closed production qualification gates for Rust system boundaries.
+related:
+  - ADR-0001
+  - ADR-0002
+blocked_by: []
+code_anchors:
+  - enforcement: required
+    pattern: experiments/rust-system-boundaries/**
+---
+
 # Rust system-boundary production qualification gates
 
 Status: proposed fail-closed qualification plan

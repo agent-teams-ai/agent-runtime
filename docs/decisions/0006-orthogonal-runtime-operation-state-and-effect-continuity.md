@@ -1,6 +1,18 @@
 ---
 id: ADR-0006
+type: adr
 status: proposed
+owner: architecture
+summary: Defines orthogonal operation state and stable effect continuity semantics.
+related:
+  - ADR-0001
+  - ADR-0002
+  - ADR-0003
+  - ADR-0004
+blocked_by: []
+code_anchors:
+  - enforcement: required
+    pattern: experiments/runtime-profile-behavior/spec/runtime-operation-oracle/**
 supersedes: []
 superseded_by: []
 ---

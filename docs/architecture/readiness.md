@@ -1,3 +1,20 @@
+---
+id: runtime.architecture.readiness
+type: architecture
+status: active
+owner: architecture/qualification
+summary: Owns current Agent Runtime qualification state and remaining readiness gates.
+related:
+  - ADR-0001
+  - ADR-0002
+  - ADR-0003
+  - ADR-0004
+  - ADR-0005
+  - ADR-0006
+blocked_by: []
+code_anchors: []
+---
+
 # Architecture qualification and readiness
 
 Status: current qualification register, not a production-readiness claim

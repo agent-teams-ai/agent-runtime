@@ -26,6 +26,11 @@
       "id": "ADR-0005",
       "path": "docs/decisions/0005-runtime-context-package-identities.md",
       "immutableDigest": "sha256:42a7daa1702053ec2cc4190dd73dfb4afae7fade77a2b8ab1992c947a57253d9"
+    },
+    {
+      "id": "ADR-0007",
+      "path": "docs/decisions/0007-deterministic-documentation-governance.md",
+      "immutableDigest": "sha256:d01e3d25fcc094645087e33656590543c3fe7bd741c24d2adedd66691afeb3fb"
     }
   ]
 }

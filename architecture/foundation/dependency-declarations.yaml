@@ -20,4 +20,5 @@ policies:
     - typescript
     - xstate
   exactRegistryDevelopmentOnlyPackages:
+    - "@agent-teams/docs-protocol"
     - "@agent-teams/engineering-foundation"
