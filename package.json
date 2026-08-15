@@ -58,7 +58,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@agent-teams/engineering-foundation": "0.16.0-rc.0",
+    "@agent-teams/engineering-foundation": "0.16.1",
     "@agentclientprotocol/sdk": "catalog:",
     "@opencode-ai/plugin": "catalog:",
     "@types/node": "catalog:",
