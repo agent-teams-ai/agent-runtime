@@ -153,9 +153,10 @@ test("keeps protocol and frozen-document governance in every repository gate", a
     manifest.scripts["docs:governance"],
     "node --test scripts/docs/verify-frozen-document-bytes.test.mjs"
   );
-  for (const gate of ["check", "check:fast", "check:changed"]) {
+  for (const gate of ["check", "check:fast"]) {
     assert.match(manifest.scripts[gate], /pnpm docs:protocol:check/u);
   }
+  assert.equal(manifest.scripts["check:changed"], "agent-teams-foundation agent-workflow changed --consumer .");
 });
 
 test("qualifies Runtime authoring through the shared disposable runner", async () => {
