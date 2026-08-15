@@ -4,7 +4,7 @@
   "protocolVersion": 1,
   "consumer": "agent-teams-ai/agent-runtime",
   "packages": {
-    "@agent-teams/docs-protocol": "0.1.0-rc.0",
+    "@agent-teams/docs-protocol": "0.1.0-rc.1",
     "@agent-teams/engineering-foundation": "0.17.0-rc.0"
   },
   "profilePath": "architecture/foundation/docs-protocol.yaml",

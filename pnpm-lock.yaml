@@ -58,8 +58,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@agent-teams/docs-protocol':
-        specifier: 0.1.0-rc.0
-        version: 0.1.0-rc.0(@types/node@24.13.3)(supports-color@8.1.1)
+        specifier: 0.1.0-rc.1
+        version: 0.1.0-rc.1(@types/node@24.13.3)(supports-color@8.1.1)
       '@agent-teams/engineering-foundation':
         specifier: 0.17.0-rc.0
         version: 0.17.0-rc.0(@types/node@24.13.3)(supports-color@8.1.1)
@@ -105,8 +105,8 @@ importers:
 
 packages:
 
-  '@agent-teams/docs-protocol@0.1.0-rc.0':
-    resolution: {integrity: sha512-QeaMsi5BWXg4nCqmf708OS1082fWTUbCuQumJdZQowaYWtXT4pVTt88IWxiUkM6EH4EmUFFbkQxU8VhvX0nDdw==}
+  '@agent-teams/docs-protocol@0.1.0-rc.1':
+    resolution: {integrity: sha512-Ug3Hx+eUDjpaqpFKskq8ycWUZEOEc6OoyV/147OHhXcXWHBjzUPhtSXd1uo1Kem0ouFJN2N8bHTPJVbMMTY1yg==}
     engines: {node: '>=24.18.0 <25', pnpm: '>=11.17.0 <12'}
     hasBin: true
 
@@ -1311,7 +1311,7 @@ packages:
 
 snapshots:
 
-  '@agent-teams/docs-protocol@0.1.0-rc.0(@types/node@24.13.3)(supports-color@8.1.1)':
+  '@agent-teams/docs-protocol@0.1.0-rc.1(@types/node@24.13.3)(supports-color@8.1.1)':
     dependencies:
       '@agent-teams/engineering-foundation': 0.17.0-rc.0(@types/node@24.13.3)(supports-color@8.1.1)
       ajv: 8.20.0
