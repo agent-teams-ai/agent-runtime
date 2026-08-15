@@ -26,6 +26,22 @@ const foundationManifest = fileURLToPath(
 const protocolCli = join(dirname(protocolManifest), "dist/cli.js");
 const protocolProfile = "architecture/foundation/docs-protocol.yaml";
 
+test("qualification manifest binds the exact protocol gate and registry packages", async () => {
+  const [qualification, manifest] = await Promise.all([
+    readFile(join(repositoryRoot, "architecture/foundation/docs-protocol-qualification.json"), "utf8").then(JSON.parse),
+    readFile(join(repositoryRoot, "package.json"), "utf8").then(JSON.parse),
+  ]);
+  assert.equal(qualification.gateCommand, "pnpm docs:protocol:check");
+  assert.deepEqual(qualification.packages, {
+    "@agent-teams/docs-protocol": manifest.devDependencies["@agent-teams/docs-protocol"],
+    "@agent-teams/engineering-foundation": manifest.devDependencies["@agent-teams/engineering-foundation"],
+  });
+  assert.deepEqual(qualification.qualificationTests, [
+    "scripts/docs/docs-protocol-adoption.test.mjs",
+    "scripts/docs/verify-frozen-document-bytes.test.mjs"
+  ]);
+});
+
 async function copyFile(source, destination) {
   await mkdir(dirname(destination), { recursive: true });
   await cp(source, destination);
