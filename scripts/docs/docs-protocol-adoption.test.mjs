@@ -90,7 +90,7 @@ async function attachPublishedTooling(root) {
 }
 
 async function disposableRepository(run, { attachTooling = false } = {}) {
-  const root = await mkdtemp(join(tmpdir(), "runtime-docs-protocol-"));
+  const root = await mkdtemp(join(tmpdir(), "atd-r-"));
   try {
     await cp(join(repositoryRoot, "docs"), join(root, "docs"), { recursive: true });
     await mkdir(join(root, "architecture", "foundation"), { recursive: true });
