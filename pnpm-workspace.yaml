@@ -21,5 +21,5 @@ allowBuilds:
   msgpackr-extract: false
   opencode-ai: true
 minimumReleaseAgeExclude:
-  - "@agent-teams/engineering-foundation"
-  - "@agent-teams/docs-protocol@0.1.0-rc.1"
+  - "@agent-teams/docs-protocol@0.1.0-rc.10"
+  - "@agent-teams/engineering-foundation@0.17.0-rc.7"

@@ -1,4 +1,6 @@
 node_modules/
+.agent-teams-local/
+**/.foundation-retired-evidence-/
 .spike/
 coverage/
 *.log
