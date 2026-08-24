@@ -16,36 +16,37 @@
   ],
   "cohort": {
     "schemaVersion": 1,
-    "cohortId": "docs-2026-08-23-stable1",
+    "cohortId": "docs-2026-08-24-stable2",
     "channel": "stable",
-    "recordDigest": "sha256:a35177e6ff340a475440b7f38bf099962ad3b39f2c50af56d43ba3cd08e0905f",
-    "qualificationEventDigest": "sha256:1e3a7faaf9fcbed32534536914d67fecafe35e3fb5d109c531c24d935320e55c",
-    "eligibleAfter": "2026-08-24T14:10:53Z",
+    "recordDigest": "sha256:b37736f98967b8727d9f1466f165bb8a6345ec8f4677462cd19a2247372ae003",
+    "qualificationEventDigest": "sha256:be018ba57362a06d796386707ab75da7d670c2107c0dc1e582ffe75914cff6bf",
+    "eligibleAfter": "2026-08-25T15:43:15Z",
     "upgradeFrom": [
-      "docs-2026-08-18-rc3"
+      "docs-2026-08-18-rc2",
+      "docs-2026-08-23-stable1"
     ],
     "rollbackTo": [],
     "packages": {
       "docsProtocol": {
-        "version": "0.1.1",
-        "integrity": "sha512-Ci+UhsSUg+9K27zTbWBFUOO+DgWW80ZS4sCKK+K20W7hMDrG6ZXvDa1N/idmnbStytvWMa3baX0ppC1HwaN9FA=="
+        "version": "0.1.2",
+        "integrity": "sha512-gSC7j0AsSwriQRQ0sVKNZjrjU7qQArAsWfDwWUw9GoSsswEJlyjpuKbe6D7+ockc/m8esLWDz/G4B4qCASgFTg=="
       },
       "engineeringFoundation": {
-        "version": "0.17.0",
-        "integrity": "sha512-ISF8bDrXN9ZQPtlDSGD+fE8zFaCAv1sLVddGUCJ5ysI0hnGuqrc8kNW442ly0Dxn34qvIjJ7TANZDAaNggpa9w=="
+        "version": "0.18.0",
+        "integrity": "sha512-n6coMdQHgTTzuUWNDqYO9S4jd4oYTu11lxKbG188Pdd4dFAYrDUtjPtL/ZtAkTgFb2jbDLvjqQkeKU70MTGoCg=="
       }
     },
     "workflow": {
       "repository": "agent-teams-ai/.github",
       "path": ".github/workflows/docs-protocol-check.yml",
-      "revision": "94190f4df44b536804fdef8341eab226d2b94f9c",
+      "revision": "fdfedb5f76bc74a5bec37bf3afca2290658311ae",
       "blobSha": "d452902e36bb144f9cb2816ced77cdd8ae629cd9"
     },
     "assets": {
       "skillDigest": "sha256:7b31cd257532247f64c55a014dc926c601e4d742176cfb8513b6b0d8ab48213e",
-      "callerWorkflowDigest": "sha256:f21dc19277a4ba24bcef90a7071c9cf50adf144769f42d6f74ff4eac9ef117cf",
+      "callerWorkflowDigest": "sha256:d697c5c7c9bcfccfc006fcf7e4d4cc8e7c629f9689781b9b0b50f30d82bc019e",
       "assetCatalogDigest": "sha256:b156dba1b2b88aa53bd9196dd49e93c0a153f6fb155ed2ce89c5dc1a0bf8eeb6",
-      "transitionCatalogDigest": "sha256:3672621f9d68e7bcef74b6560e2b8f54cfa08b475b22bb82a56b9b34d96a803d"
+      "transitionCatalogDigest": "sha256:dd76dbd4c196bff1440f3ce105ebb65656d1c59c04c7a983a6831d100e6e8bcc"
     },
     "schemas": {
       "consumerIntegration": 1,
@@ -55,7 +56,7 @@
     "runtime": {
       "node": ">=24.18.0 <25",
       "pnpm": ">=11.17.0 <12",
-      "runtimeClosureDigest": "sha256:6b1a419fc7437d5d4d0744f4013d6d9349a3220d268d4c20fc788439ec5bb902"
+      "runtimeClosureDigest": "sha256:91df738a5e8b5910833b20fa8937b9b15c8c9fdb30df2ba14e4b643db2976f92"
     }
   }
 }
