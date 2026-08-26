@@ -39,6 +39,9 @@ catalogs:
     oxlint:
       specifier: 1.77.0
       version: 1.77.0
+    smol-toml:
+      specifier: 1.8.0
+      version: 1.8.0
     typescript:
       specifier: 7.0.2
       version: 7.0.2
@@ -102,6 +105,28 @@ importers:
       xstate:
         specifier: 'catalog:'
         version: 5.32.5
+
+  packages/apps/embedded-runtime:
+    dependencies:
+      '@agent-teams/agent-execution':
+        specifier: workspace:*
+        version: link:../../contexts/agent-execution
+      '@agent-teams/runtime-configuration':
+        specifier: workspace:*
+        version: link:../../contexts/runtime-configuration
+      '@agent-teams/runtime-security':
+        specifier: workspace:*
+        version: link:../../contexts/runtime-security
+
+  packages/contexts/agent-execution: {}
+
+  packages/contexts/runtime-configuration:
+    dependencies:
+      smol-toml:
+        specifier: 'catalog:'
+        version: 1.8.0
+
+  packages/contexts/runtime-security: {}
 
 packages:
 
@@ -1211,6 +1236,10 @@ packages:
 
   signal-exit@3.0.7:
     resolution: {integrity: sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==}
+
+  smol-toml@1.8.0:
+    resolution: {integrity: sha512-kCZr2V3ch9i00x8zXRhjUNVcjG9ijES5dDudkXvUVCT5QlJNQWElSJdZqyPemffHoLNUYwOcou0Fy+ojN0uHSQ==}
+    engines: {node: '>= 18'}
 
   source-map@0.6.1:
     resolution: {integrity: sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==}
@@ -2443,6 +2472,8 @@ snapshots:
   shebang-regex@3.0.0: {}
 
   signal-exit@3.0.7: {}
+
+  smol-toml@1.8.0: {}
 
   source-map@0.6.1: {}
 

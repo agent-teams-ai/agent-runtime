@@ -4,8 +4,74 @@ workspace:
   manifest: pnpm-workspace.yaml
 governedRoots:
   - experiments
+  - packages/apps/embedded-runtime/src
+  - packages/contexts/agent-execution/src
+  - packages/contexts/runtime-configuration/src
+  - packages/contexts/runtime-security/src
   - scripts/foundation
 boundaries:
+  - id: production.agent-execution
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src
+    entrypoints:
+      - packages/contexts/agent-execution/src/index.ts
+      - packages/contexts/agent-execution/src/composition.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins:
+        - node:crypto
+        - node:fs
+        - node:fs/promises
+      runtimeReferences: []
+  - id: production.runtime-configuration
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/runtime-configuration/src
+    entrypoints:
+      - packages/contexts/runtime-configuration/src/index.ts
+      - packages/contexts/runtime-configuration/src/composition.ts
+    allow:
+      boundaries: []
+      packages:
+        - smol-toml
+      builtins:
+        - node:crypto
+        - node:fs
+        - node:fs/promises
+      runtimeReferences: []
+  - id: production.runtime-security
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/runtime-security/src
+    entrypoints:
+      - packages/contexts/runtime-security/src/index.ts
+      - packages/contexts/runtime-security/src/composition.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins:
+        - node:crypto
+        - node:fs/promises
+        - node:path
+      runtimeReferences: []
+  - id: production.embedded-runtime
+    dependencyMode: runtime
+    roots:
+      - packages/apps/embedded-runtime/src
+    entrypoints:
+      - packages/apps/embedded-runtime/src/index.ts
+      - packages/apps/embedded-runtime/src/composition.ts
+    allow:
+      boundaries: []
+      packages:
+        - "@agent-teams/agent-execution"
+        - "@agent-teams/runtime-configuration"
+        - "@agent-teams/runtime-security"
+      builtins:
+        - node:crypto
+      runtimeReferences: []
   - id: experiments.typescript-evidence
     dependencyMode: development
     roots:
