@@ -139,7 +139,7 @@ export const createBuildCodexSetupView = (
         subject: diagnostic.setting ?? diagnostic.sourceRef,
       })),
     );
-    diagnostics.toSorted((left, right) =>
+    const sortedDiagnostics = diagnostics.toSorted((left, right) =>
       compareText(
         `${left.code}:${left.subject ?? ""}`,
         `${right.code}:${right.subject ?? ""}`,
@@ -152,7 +152,10 @@ export const createBuildCodexSetupView = (
     if (installations.installations.length === 0) {
       nextActions.add("install_codex");
     }
-    if (configuration.diagnostics.length > 0) {
+    if (
+      configuration.diagnostics.length > 0 ||
+      diagnostics.some(item => item.code === "native_profile_invalid")
+    ) {
       nextActions.add("review_configuration");
     }
     if (authorization.diagnostics.some(item => item.code === "source_untrusted")) {
@@ -160,7 +163,7 @@ export const createBuildCodexSetupView = (
     }
 
     return deepFreeze({
-      diagnostics,
+      diagnostics: sortedDiagnostics,
       installations: installations.installations.map(installation => ({
         aliases: installation.aliases.map(alias => ({ ...alias })),
         installationRef: installation.installationRef,
@@ -171,7 +174,7 @@ export const createBuildCodexSetupView = (
       settings: configuration.settings.map(setting => ({ ...setting })),
       sources: configuration.sources.map(source => ({ ...source })),
       status:
-        installations.installations.length > 0 && diagnostics.length === 0
+        installations.installations.length > 0 && sortedDiagnostics.length === 0
           ? "complete"
           : "partial",
     });

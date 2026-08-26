@@ -132,6 +132,44 @@ test("scope binding is copied, cancellation is local, and disposal invalidates h
   );
 });
 
+test("canonicalizes diagnostics and recommends reviewing an invalid native profile", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-codex-diagnostics-e2e-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const config = join(root, "config.toml");
+  await writeFile(config, "model = [\n");
+
+  const host = createDefaultAgentRuntimeHost();
+  t.after(() => host.dispose());
+  const access = host.bindAccess({
+    configurationSources: [
+      {
+        absolutePath: config,
+        kind: "user",
+        precedence: 10,
+        workspaceTrusted: true,
+      },
+    ],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-diagnostics",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [{ absolutePath: root, displayName: "$HOME", kind: "home" }],
+    scopeId: "scope-diagnostics",
+  });
+
+  const result = await access.codexSetup.inspect({ nativeProfile: "invalid profile" });
+  assert.equal(result.status, "partial");
+  if (result.status === "denied" || result.status === "unsupported") {
+    return;
+  }
+  assert.deepEqual(
+    result.diagnostics.map(item => item.code),
+    ["config_parse_failed", "native_profile_invalid"],
+  );
+  assert.deepEqual(result.nextActions, ["install_codex", "review_configuration"]);
+});
+
 test("unsupported and denied scopes fail closed", async t => {
   const host = createDefaultAgentRuntimeHost();
   t.after(() => host.dispose());
