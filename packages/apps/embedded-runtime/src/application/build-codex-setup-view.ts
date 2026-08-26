@@ -136,7 +136,9 @@ export const createBuildCodexSetupView = (
       })),
       ...configuration.diagnostics.map(diagnostic => ({
         code: diagnostic.code,
-        subject: diagnostic.setting ?? diagnostic.sourceRef,
+        ...(diagnostic.setting === undefined && diagnostic.sourceRef === undefined
+          ? {}
+          : { subject: diagnostic.setting ?? diagnostic.sourceRef }),
       })),
     );
     const sortedDiagnostics = diagnostics.toSorted((left, right) =>

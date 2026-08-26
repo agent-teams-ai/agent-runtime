@@ -70,7 +70,6 @@ test("applies deterministic precedence and selected native profile", async t => 
     first.diagnostics.map(item => item.code).toSorted(),
     [
       "executable_setting_deferred",
-      "profile_missing",
       "provider_access_setting_deferred",
       "secret_setting_ignored",
       "security_setting_deferred",
@@ -78,6 +77,60 @@ test("applies deterministic precedence and selected native profile", async t => 
     ],
   );
   assert.doesNotMatch(JSON.stringify(first), /must-not-leak/u);
+});
+
+test("reports a selected native profile missing only from the merged configuration", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-codex-profile-missing-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const user = join(root, "user.toml");
+  const workspace = join(root, "workspace.toml");
+  await writeFile(user, "model = 'base'\n");
+  await writeFile(workspace, "personality = 'concise'\n");
+  const [userCanonical, workspaceCanonical] = await Promise.all([
+    realpath(user),
+    realpath(workspace),
+  ]);
+
+  const result = await createFeature().inspectCodexConfiguration.execute({
+    nativeProfile: "missing",
+    observationEpoch: "epoch-1",
+    sources: [
+      { absolutePath: user, canonicalPath: userCanonical, displayPath: "$HOME/config.toml", kind: "user", observationEpoch: "epoch-1", precedence: 10, sourceRef: "source:user" },
+      { absolutePath: workspace, canonicalPath: workspaceCanonical, displayPath: "$WORKSPACE/config.toml", kind: "workspace", observationEpoch: "epoch-1", precedence: 20, sourceRef: "source:workspace" },
+    ],
+  });
+
+  assert.deepEqual(result.diagnostics, [{ code: "profile_missing" }]);
+});
+
+test("rejects credential-shaped values even under portable setting keys", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-codex-secret-value-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const config = join(root, "config.toml");
+  const secret = "sk-synthetic-credential-value";
+  await writeFile(config, `model = '${secret}'\npersonality = 'concise'\n`);
+  const canonicalPath = await realpath(config);
+
+  const result = await createFeature().inspectCodexConfiguration.execute({
+    observationEpoch: "epoch-1",
+    sources: [{
+      absolutePath: config,
+      canonicalPath,
+      displayPath: "$HOME/config.toml",
+      kind: "user",
+      observationEpoch: "epoch-1",
+      precedence: 10,
+      sourceRef: "source:user",
+    }],
+  });
+
+  assert.deepEqual(result.settings, [
+    { key: "personality", sourceRef: "source:user", value: "concise" },
+  ]);
+  assert.deepEqual(result.diagnostics, [
+    { code: "secret_setting_ignored", sourceRef: "source:user" },
+  ]);
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(secret, "u"));
 });
 
 test("rejects duplicate keys, BOM, invalid UTF-8, oversized and stale sources", async t => {

@@ -49,7 +49,7 @@ export interface CodexConfigurationDiagnostic {
     | "source_epoch_stale"
     | "unknown_setting_ignored";
   readonly setting?: string;
-  readonly sourceRef: string;
+  readonly sourceRef?: string;
 }
 
 export interface InspectCodexConfigurationResult {

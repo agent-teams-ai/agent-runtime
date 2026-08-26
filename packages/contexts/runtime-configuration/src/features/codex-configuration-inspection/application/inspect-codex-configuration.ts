@@ -41,6 +41,8 @@ const executableResources = new Set([
   "skills",
 ]);
 const secretShape = /(api[_-]?key|credential|oauth|password|secret|token)/i;
+const secretValueShape =
+  /(?:\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\b(?:github_pat_|gh[pousr]_|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -74,6 +76,7 @@ export const createInspectCodexConfiguration = (dependencies: {
     const diagnostics: CodexConfigurationDiagnostic[] = [];
     const sourceObservations: CodexConfigurationSourceObservation[] = [];
     const effective = new Map<PortableCodexSettingKey, PortableCodexSettingObservation>();
+    let selectedProfileFound = false;
     const sources = [...input.sources].toSorted(
       (left, right) =>
         left.precedence - right.precedence ||
@@ -91,6 +94,10 @@ export const createInspectCodexConfiguration = (dependencies: {
         const value = document[key];
         if (portableKeys.has(key as PortableCodexSettingKey)) {
           if (typeof value === "string" && value.length > 0) {
+            if (secretValueShape.test(value)) {
+              diagnostics.push({ code: "secret_setting_ignored", sourceRef });
+              continue;
+            }
             const portableKey = key as PortableCodexSettingKey;
             effective.set(portableKey, { key: portableKey, sourceRef, value });
           } else {
@@ -171,9 +178,8 @@ export const createInspectCodexConfiguration = (dependencies: {
         const profiles = parsed.document.profiles;
         const selected = isRecord(profiles) ? profiles[input.nativeProfile] : undefined;
         if (isRecord(selected)) {
+          selectedProfileFound = true;
           applySettings(selected, source.sourceRef);
-        } else {
-          diagnostics.push({ code: "profile_missing", sourceRef: source.sourceRef });
         }
       }
       sourceObservations.push({
@@ -185,11 +191,15 @@ export const createInspectCodexConfiguration = (dependencies: {
       });
     }
 
+    if (input.nativeProfile !== undefined && !selectedProfileFound) {
+      diagnostics.push({ code: "profile_missing" });
+    }
+
     return {
       diagnostics: diagnostics.toSorted((left, right) =>
         compareText(
-          `${left.code}:${left.sourceRef}:${left.setting ?? ""}`,
-          `${right.code}:${right.sourceRef}:${right.setting ?? ""}`,
+          `${left.code}:${left.sourceRef ?? ""}:${left.setting ?? ""}`,
+          `${right.code}:${right.sourceRef ?? ""}:${right.setting ?? ""}`,
         ),
       ),
       settings: [...effective.values()].toSorted((left, right) =>
