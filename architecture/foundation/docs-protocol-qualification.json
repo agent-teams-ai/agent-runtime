@@ -1,18 +1,118 @@
 {
-  "schemaVersion": 1,
-  "protocolId": "agent-teams.docs-protocol",
-  "protocolVersion": 1,
-  "consumer": "agent-teams-ai/agent-runtime",
-  "packages": {
-    "@agent-teams/docs-protocol": "0.1.4",
-    "@agent-teams/engineering-foundation": "0.19.0"
-  },
-  "profilePath": "architecture/foundation/docs-protocol.yaml",
-  "callerWorkflowPath": ".github/workflows/docs-protocol.yml",
-  "skillPath": ".agents/skills/docs-authoring/SKILL.md",
-  "gateCommand": "pnpm docs:protocol:check",
-  "qualificationTests": [
-    "scripts/docs/docs-protocol-adoption.test.mjs",
-    "scripts/docs/verify-frozen-document-bytes.test.mjs"
+  "schemaVersion": 2,
+  "scenarios": [
+    {
+      "id": "runtime-index",
+      "type": "index",
+      "intent": {
+        "id": "runtime.index.disposable-protocol-qualification",
+        "title": "Disposable Protocol Qualification",
+        "owner": "architecture",
+        "summary": "Qualifies Runtime index authoring without touching the real repository.",
+        "related": [
+          "ADR-0001"
+        ]
+      },
+      "expected": {
+        "documentPath": "docs/disposable-protocol-qualification/README.md",
+        "metadataStorage": "frontmatter",
+        "reachability": {
+          "state": "not-required",
+          "reason": "Index documents are explicit reachability roots for their governed subtree."
+        }
+      }
+    },
+    {
+      "id": "runtime-architecture",
+      "type": "architecture",
+      "intent": {
+        "id": "runtime.architecture.disposable-protocol-qualification",
+        "title": "Disposable Protocol Qualification",
+        "owner": "architecture/tooling",
+        "summary": "Qualifies Runtime architecture authoring without touching the real repository.",
+        "slug": "disposable-protocol-qualification",
+        "related": [
+          "ADR-0001"
+        ]
+      },
+      "expected": {
+        "documentPath": "docs/architecture/disposable-protocol-qualification.md",
+        "metadataStorage": "frontmatter",
+        "reachability": {
+          "state": "manual-required",
+          "indexPath": "docs/architecture/README.md",
+          "markdownLink": "[Disposable Protocol Qualification](disposable-protocol-qualification.md)"
+        }
+      }
+    },
+    {
+      "id": "runtime-adr",
+      "type": "adr",
+      "intent": {
+        "id": "ADR-9999",
+        "title": "Disposable Protocol Qualification",
+        "owner": "architecture/tooling",
+        "summary": "Qualifies Runtime ADR authoring without touching the real repository.",
+        "slug": "disposable-protocol-qualification",
+        "related": [
+          "ADR-0001"
+        ]
+      },
+      "expected": {
+        "documentPath": "docs/decisions/9999-disposable-protocol-qualification.md",
+        "metadataStorage": "frontmatter",
+        "reachability": {
+          "state": "manual-required",
+          "indexPath": "docs/decisions/README.md",
+          "markdownLink": "[ADR-9999: Disposable Protocol Qualification](9999-disposable-protocol-qualification.md)"
+        }
+      }
+    },
+    {
+      "id": "runtime-evidence",
+      "type": "evidence",
+      "intent": {
+        "id": "evidence.disposable-protocol-qualification",
+        "title": "Disposable Evidence Protocol Qualification",
+        "owner": "architecture/qualification",
+        "summary": "Qualifies Runtime evidence authoring without touching the real repository.",
+        "slug": "disposable-evidence-protocol-qualification",
+        "related": [
+          "ADR-0001"
+        ]
+      },
+      "expected": {
+        "documentPath": "docs/spikes/disposable-evidence-protocol-qualification.md",
+        "metadataStorage": "frontmatter",
+        "reachability": {
+          "state": "manual-required",
+          "indexPath": "docs/README.md",
+          "markdownLink": "[Disposable Evidence Protocol Qualification](spikes/disposable-evidence-protocol-qualification.md)"
+        }
+      }
+    },
+    {
+      "id": "runtime-qualification-plan",
+      "type": "qualification-plan",
+      "intent": {
+        "id": "qualification.disposable-protocol-qualification",
+        "title": "Disposable Qualification Plan Protocol",
+        "owner": "architecture/qualification",
+        "summary": "Qualifies Runtime qualification-plan authoring without touching the real repository.",
+        "slug": "disposable-qualification-plan-protocol",
+        "related": [
+          "ADR-0001"
+        ]
+      },
+      "expected": {
+        "documentPath": "docs/spikes/disposable-qualification-plan-protocol.md",
+        "metadataStorage": "frontmatter",
+        "reachability": {
+          "state": "manual-required",
+          "indexPath": "docs/README.md",
+          "markdownLink": "[Disposable Qualification Plan Protocol](spikes/disposable-qualification-plan-protocol.md)"
+        }
+      }
+    }
   ]
 }
