@@ -10,7 +10,8 @@ const maximumArrayItems = 1_024;
 const maximumObjectKeys = 1_024;
 const maximumKeyLength = 256;
 const maximumStringLength = 16_384;
-const maximumClassifierItems = 256;
+const maximumClassifierSettings = 256;
+const maximumClassifierDiagnostics = maximumObjectKeys;
 const maximumClassifierStringLength = 256;
 
 const portableSettingKeys = new Set<PortableCodexSettingKey>([
@@ -31,7 +32,7 @@ const dangerousObjectKeys = new Set(["__proto__", "constructor", "prototype"]);
 const safeSettingName = /^[A-Za-z0-9_.-]{1,128}$/u;
 const secretNameShape = /(api[_-]?key|credential|oauth|password|secret|token)/iu;
 const secretValueShape =
-  /(?:api[_-]?key|credential|oauth|password|secret|token|\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
+  /(?:api[_-]?key|credential|oauth|password|secret|token|\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|glpat-|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
 
 interface NormalizationState {
   readonly ancestors: Set<object>;
@@ -40,7 +41,14 @@ interface NormalizationState {
 
 type NormalizedScalar =
   | { readonly accepted: false }
-  | { readonly accepted: true; readonly value: boolean | number | string };
+  | { readonly accepted: true; readonly value: unknown };
+
+const opaqueScalar = (kind: "non-finite-number" | "toml-bigint" | "toml-date"): object =>
+  Object.freeze(Object.assign(Object.create(null) as object, { kind }));
+
+const nonFiniteNumber = opaqueScalar("non-finite-number");
+const tomlBigint = opaqueScalar("toml-bigint");
+const tomlDate = opaqueScalar("toml-date");
 
 export const isSecretShapedValue = (value: string): boolean =>
   secretValueShape.test(value);
@@ -105,13 +113,25 @@ const normalizeScalar = (input: unknown): NormalizedScalar => {
   if (typeof input === "boolean") {
     return { accepted: true, value: input };
   }
-  if (typeof input === "number" && Number.isFinite(input)) {
-    return { accepted: true, value: input };
+  if (typeof input === "number") {
+    return { accepted: true, value: Number.isFinite(input) ? input : nonFiniteNumber };
+  }
+  if (typeof input === "bigint") {
+    return { accepted: true, value: tomlBigint };
   }
   if (typeof input === "string" && input.length <= maximumStringLength) {
     return { accepted: true, value: input };
   }
   return { accepted: false };
+};
+
+const isDateScalar = (input: object): boolean => {
+  try {
+    Date.prototype.getTime.call(input);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const normalizeDocumentArray = (
@@ -172,6 +192,9 @@ const normalizeDocumentValue = (
   if (typeof input !== "object" || input === null) {
     throw new TypeError("unsupported document value");
   }
+  if (isDateScalar(input)) {
+    return tomlDate;
+  }
   if (state.ancestors.has(input)) {
     throw new TypeError("cyclic document");
   }
@@ -189,6 +212,9 @@ export const normalizeParsedCodexDocument = (
   value: unknown,
 ): Readonly<Record<string, unknown>> | undefined => {
   try {
+    if (!isPlainRecord(value)) {
+      return undefined;
+    }
     const normalized = normalizeDocumentValue(value, 0, {
       ancestors: new Set(),
       nodes: 0,
@@ -221,8 +247,11 @@ const exactDataRecord = (
   return record;
 };
 
-const classificationArray = (value: unknown): readonly unknown[] | undefined => {
-  if (!Array.isArray(value) || value.length > maximumClassifierItems) {
+const classificationArray = (
+  value: unknown,
+  maximumItems: number,
+): readonly unknown[] | undefined => {
+  if (!Array.isArray(value) || value.length > maximumItems) {
     return undefined;
   }
   return denseArrayValues(value);
@@ -299,14 +328,8 @@ const validateDiagnostics = (
   rawDiagnostics: readonly unknown[],
 ): CodexConfigurationSemanticClassification["diagnostics"] => {
   const diagnostics: CodexConfigurationSemanticClassification["diagnostics"][number][] = [];
-  const identities = new Set<string>();
   for (const raw of rawDiagnostics) {
     const diagnostic = validateDiagnostic(raw);
-    const identity = `${diagnostic.code}:${diagnostic.setting ?? ""}`;
-    if (identities.has(identity)) {
-      return invalidClassification();
-    }
-    identities.add(identity);
     diagnostics.push(Object.freeze(diagnostic));
   }
   return Object.freeze(diagnostics);
@@ -336,8 +359,11 @@ export const validateSemanticClassification = (
     if (root === undefined || !("diagnostics" in root) || !("settings" in root)) {
       return invalidClassification();
     }
-    const rawDiagnostics = classificationArray(root.diagnostics);
-    const rawSettings = classificationArray(root.settings);
+    const rawDiagnostics = classificationArray(
+      root.diagnostics,
+      maximumClassifierDiagnostics,
+    );
+    const rawSettings = classificationArray(root.settings, maximumClassifierSettings);
     if (rawDiagnostics === undefined || rawSettings === undefined) {
       return invalidClassification();
     }

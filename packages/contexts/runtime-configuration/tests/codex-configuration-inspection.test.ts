@@ -583,6 +583,7 @@ test("fails closed for encoded and unprefixed credential-like portable values", 
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZWNyZXQifQ.signature",
     "abcdefghijklmnopqrstuvwxyzABCDEF1234567890",
     "custom-provider-secret-value",
+    "glpat-1234567890abcdefghij",
   ];
 
   for (const [index, value] of values.entries()) {

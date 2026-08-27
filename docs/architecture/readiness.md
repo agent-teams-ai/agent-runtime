@@ -169,10 +169,10 @@ Remaining before implementation qualification:
 
 - for AR-1, real version-bound Codex semantic-classifier fixtures tying every
   supported binary and configuration dialect to observed user,
-  selected-profile, and project-layer semantics; the fixture set must cover
-  every accepted model, reasoning, personality, and profile form and prove that
-  changed or unknown forms fail closed rather than being inferred from current
-  synthetic allowlists;
+  selected-profile, and project-layer semantics. `model` remains an open,
+  bounded string domain; fixtures must instead exhaust structural forms and the
+  closed reasoning/personality enums, proving that changed or unknown closed
+  forms fail closed rather than being inferred from synthetic allowlists;
 - for AR-1, secure platform-native collectors that derive the trusted roots,
   source inventory and ordering, observation epoch, known installation
   locations, and executable-search candidates for each supported Desktop

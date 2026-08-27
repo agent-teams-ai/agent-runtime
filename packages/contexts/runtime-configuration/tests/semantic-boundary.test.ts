@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
   codexConfigurationSemanticClassifierContract,
   createCodexConfigurationInspectionFeature,
+  createCodexConfigurationSemanticClassifierV1,
+  createSmolTomlParser,
 } from "../dist/composition.js";
 
 const syntheticSource = {
@@ -22,7 +25,10 @@ const syntheticReader = {
   },
 };
 
-const inspectWithRevision = async (revision: string) => {
+const inspectWithRevision = async (
+  revision: string,
+  dialect = "codex-0.134",
+) => {
   const feature = createCodexConfigurationInspectionFeature({
     parser: {
       parse() {
@@ -41,7 +47,7 @@ const inspectWithRevision = async (revision: string) => {
     sourceReader: syntheticReader,
   });
   const result = await feature.inspectCodexConfiguration.execute({
-    dialect: "codex-0.134",
+    dialect,
     identityScope: "scope-semantic-digest",
     observationEpoch: "epoch-1",
     sources: [syntheticSource],
@@ -89,7 +95,7 @@ test("rejects parser accessors without invoking them", async () => {
   assert.equal(result.sources[0]?.status, "malformed");
 });
 
-test("rejects unsafe classifier output without exposing it", async () => {
+test("rejects secret-shaped classifier output without exposing it", async () => {
   const secret = "sk-synthetic-classifier-secret-value";
   const feature = createCodexConfigurationInspectionFeature({
     parser: { parse: () => ({ document: { model: "safe" }, kind: "parsed" as const }) },
@@ -99,8 +105,8 @@ test("rejects unsafe classifier output without exposing it", async () => {
       classify() {
         return {
           diagnostics: [],
-          settings: [{ key: "model", unexpected: true, value: secret }],
-        } as never;
+          settings: [{ key: "model", value: secret }],
+        };
       },
       supportsDialect: () => true,
     },
@@ -124,11 +130,145 @@ test("rejects unsafe classifier output without exposing it", async () => {
   );
 });
 
-test("binds semantic digests to classifier revision and schema", async () => {
+test("rejects non-record parser roots while keeping nested opaque scalars inert", async () => {
+  const throwingProxy = new Proxy(Object.create(null) as object, {
+    getPrototypeOf() {
+      throw new Error("synthetic parser trap must stay contained");
+    },
+  });
+  for (const rootDocument of [
+    new Date("1979-05-27T07:32:00Z"),
+    Number.POSITIVE_INFINITY,
+    throwingProxy,
+  ]) {
+    let classifierCalls = 0;
+    const feature = createCodexConfigurationInspectionFeature({
+      parser: { parse: () => ({ document: rootDocument, kind: "parsed" as const }) },
+      semanticClassifier: {
+        contract: codexConfigurationSemanticClassifierContract,
+        revision: "synthetic-classifier/1",
+        classify() {
+          classifierCalls += 1;
+          return { diagnostics: [], settings: [] };
+        },
+        supportsDialect: () => true,
+      },
+      sourceIdentityKey: Buffer.alloc(32, 7),
+      sourceReader: syntheticReader,
+    });
+
+    const result = await feature.inspectCodexConfiguration.execute({
+      dialect: "codex-0.134",
+      identityScope: "scope-invalid-parser-root",
+      observationEpoch: "epoch-1",
+      sources: [syntheticSource],
+    });
+
+    assert.equal(classifierCalls, 0);
+    assert.equal(result.sources[0]?.status, "malformed");
+  }
+
+  const feature = createCodexConfigurationInspectionFeature({
+    parser: {
+      parse: () => ({
+        document: { model: "safe-model", opaqueInteger: 9_223_372_036_854_775_807n },
+        kind: "parsed" as const,
+      }),
+    },
+    semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
+    sourceIdentityKey: Buffer.alloc(32, 7),
+    sourceReader: syntheticReader,
+  });
+  const result = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-nested-bigint",
+    observationEpoch: "epoch-1",
+    sources: [syntheticSource],
+  });
+  assert.equal(result.sources[0]?.status, "applied");
+  assert.equal(result.settings[0]?.value, "safe-model");
+  assert.equal(result.diagnostics[0]?.code, "unknown_setting_ignored");
+});
+
+test("keeps valid TOML opaque scalars and repeated diagnostics observable", async () => {
+  const feature = createCodexConfigurationInspectionFeature({
+    parser: createSmolTomlParser(),
+    semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
+    sourceIdentityKey: Buffer.alloc(32, 7),
+    sourceReader: {
+      async read() {
+        return {
+          bytes: Buffer.from([
+            "model = 'safe-model'",
+            "updated = 1979-05-27T07:32:00Z",
+            "limit = inf",
+          ].join("\n")),
+          kind: "read" as const,
+        };
+      },
+    },
+  });
+
+  const result = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-valid-toml-scalars",
+    observationEpoch: "epoch-1",
+    sources: [syntheticSource],
+  });
+
+  assert.deepEqual(result.settings, [{
+    key: "model",
+    sourceRef: result.sources[0]?.sourceRef,
+    value: "safe-model",
+  }]);
+  assert.deepEqual(
+    result.diagnostics.map(diagnostic => diagnostic.code),
+    ["unknown_setting_ignored", "unknown_setting_ignored"],
+  );
+  assert.equal(result.sources[0]?.status, "applied");
+});
+
+test("keeps the parser and classifier diagnostic budgets aligned", async () => {
+  const document = Object.fromEntries(
+    Array.from({ length: 257 }, (_, index) => [`unknown_${index}`, index]),
+  );
+  const feature = createCodexConfigurationInspectionFeature({
+    parser: { parse: () => ({ document, kind: "parsed" as const }) },
+    semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
+    sourceIdentityKey: Buffer.alloc(32, 7),
+    sourceReader: syntheticReader,
+  });
+  const result = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-diagnostic-budget",
+    observationEpoch: "epoch-1",
+    sources: [syntheticSource],
+  });
+
+  assert.equal(result.sources[0]?.status, "applied");
+  assert.equal(result.diagnostics.length, 257);
+  assert.ok(result.diagnostics.every(item => item.code === "unknown_setting_ignored"));
+});
+
+test("binds semantic digests to schema, contract, revision, dialect, and settings", async () => {
   const first = await inspectWithRevision("synthetic-classifier/1");
   const second = await inspectWithRevision("synthetic-classifier/2");
+  const otherDialect = await inspectWithRevision("synthetic-classifier/1", "codex-next");
   const digestShape = /^codex-configuration-semantic-digest\/v1:sha256:[a-f0-9]{64}$/u;
   assert.match(first ?? "", digestShape);
   assert.match(second ?? "", digestShape);
   assert.notEqual(first, second);
+  assert.notEqual(first, otherDialect);
+
+  const expectedPreimage = {
+    classifierContract: codexConfigurationSemanticClassifierContract,
+    classifierRevision: "synthetic-classifier/1",
+    dialect: "codex-0.134",
+    digestSchema: "codex-configuration-semantic-digest/v1",
+    settings: [["model", "safe"]],
+  };
+  const expected = `codex-configuration-semantic-digest/v1:sha256:${
+    createHash("sha256").update(JSON.stringify(expectedPreimage)).digest("hex")
+  }`;
+  assert.equal(first, expected);
 });
