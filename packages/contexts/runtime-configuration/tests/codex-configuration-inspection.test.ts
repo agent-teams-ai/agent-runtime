@@ -7,7 +7,9 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import {
+  codexConfigurationSemanticClassifierContract,
   createCodexConfigurationInspectionFeature,
+  createCodexConfigurationSemanticClassifierV1,
   createNodeConfigurationSourceReader,
   createSmolTomlParser,
 } from "../dist/composition.js";
@@ -17,6 +19,7 @@ const execFile = promisify(execFileCallback);
 const createFeature = (maximumBytes = 128 * 1024) =>
   createCodexConfigurationInspectionFeature({
     parser: createSmolTomlParser(),
+    semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: createNodeConfigurationSourceReader(maximumBytes),
   });
@@ -25,6 +28,85 @@ const fileIdentity = async (path: string): Promise<string> => {
   const observation = await stat(path, { bigint: true });
   return `${observation.dev}:${observation.ino}:${observation.ctimeNs}:${observation.size}`;
 };
+
+test("uses the injected versioned semantic-classifier capability", async () => {
+  const classifiedDocuments: Readonly<Record<string, unknown>>[] = [];
+  const feature = createCodexConfigurationInspectionFeature({
+    parser: {
+      parse() {
+        return {
+          document: { provider_native_setting: "opaque-to-application" },
+          kind: "parsed" as const,
+        };
+      },
+    },
+    semanticClassifier: {
+      contract: codexConfigurationSemanticClassifierContract,
+      revision: "synthetic-classifier/1",
+      classify(dialect, document) {
+        assert.equal(dialect, "codex-0.134");
+        classifiedDocuments.push(document);
+        return {
+          diagnostics: [],
+          settings: [{ key: "model", value: "adapter-owned-model-policy" }],
+        };
+      },
+      supportsDialect: selectedDialect => selectedDialect === "codex-0.134",
+    },
+    sourceIdentityKey: Buffer.alloc(32, 7),
+    sourceReader: {
+      async read() {
+        return { bytes: Buffer.from("synthetic"), kind: "read" as const };
+      },
+    },
+  });
+
+  const result = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-classifier-port",
+    observationEpoch: "epoch-1",
+    sources: [{
+      absolutePath: "/synthetic/config.toml",
+      authorizedFileIdentity: "synthetic-file",
+      canonicalPath: "/synthetic/config.toml",
+      custodyRoot: {
+        absolutePath: "/synthetic",
+        canonicalPath: "/synthetic",
+      },
+      displayPath: "$HOME/.codex/config.toml",
+      kind: "user",
+      observationEpoch: "epoch-1",
+    }],
+  });
+
+  assert.equal(classifiedDocuments.length, 1);
+  assert.deepEqual(result.settings, [{
+    key: "model",
+    sourceRef: result.sources[0]?.sourceRef,
+    value: "adapter-owned-model-policy",
+  }]);
+});
+
+test("Codex semantic classifier v1 owns dialect and portable-value policy", () => {
+  const classifier = createCodexConfigurationSemanticClassifierV1();
+
+  assert.equal(classifier.contract, codexConfigurationSemanticClassifierContract);
+  assert.equal(classifier.revision, "codex-0.134-semantic-classifier/1");
+  assert.equal(classifier.supportsDialect("codex-0.134"), true);
+  assert.equal(classifier.supportsDialect("future-codex-dialect"), false);
+  assert.deepEqual(classifier.classify("codex-0.134", {
+    model: "gpt-5.6-codex",
+    model_reasoning_effort: "ultra",
+    personality: "pragmatic",
+  }), {
+    diagnostics: [],
+    settings: [
+      { key: "model", value: "gpt-5.6-codex" },
+      { key: "model_reasoning_effort", value: "ultra" },
+      { key: "personality", value: "pragmatic" },
+    ],
+  });
+});
 
 test("applies user, selected external profile, and project precedence deterministically", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-config-"));
@@ -325,7 +407,7 @@ test("rejects concise personality and fails closed for an unsupported dialect", 
     identityScope: "scope-dialect",
     observationEpoch: "epoch-1",
     sources: [source],
-  } as never);
+  });
   assert.deepEqual(unsupported.settings, []);
   assert.deepEqual(unsupported.diagnostics, [
     { code: "configuration_dialect_unsupported" },
@@ -379,6 +461,7 @@ test("does not resolve inherited object properties as native profiles", async ()
         return { document: inheritedDocument, kind: "parsed" as const };
       },
     },
+    semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: {
       async read() {

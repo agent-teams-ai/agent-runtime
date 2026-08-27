@@ -7,6 +7,7 @@ import {
 } from "@agent-teams/agent-execution/composition";
 import {
   createCodexConfigurationInspectionFeature,
+  createCodexConfigurationSemanticClassifierV1,
   createNodeConfigurationSourceReader,
   createSmolTomlParser,
 } from "@agent-teams/runtime-configuration/composition";
@@ -135,6 +136,7 @@ export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
   });
   const configuration = createCodexConfigurationInspectionFeature({
     parser: createSmolTomlParser(),
+    semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
     sourceIdentityKey: randomBytes(32),
     sourceReader: createNodeConfigurationSourceReader(),
   });

@@ -3,7 +3,7 @@ export type PortableCodexSettingKey =
   | "model_reasoning_effort"
   | "personality";
 
-export type CodexConfigurationDialect = "codex-0.134";
+export type CodexConfigurationDialect = string;
 export type CodexConfigurationSourceKind =
   | "external-profile"
   | "user"

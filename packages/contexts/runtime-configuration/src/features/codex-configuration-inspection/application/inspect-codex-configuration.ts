@@ -12,6 +12,10 @@ import type {
   PortableCodexSettingObservation,
 } from "../contracts/codex-configuration-inspection.js";
 import type { CodexTomlParser } from "./ports/outbound/codex-toml-parser.js";
+import {
+  codexConfigurationSemanticClassifierContract,
+  type CodexConfigurationSemanticClassifier,
+} from "./ports/outbound/codex-configuration-semantic-classifier.js";
 import type { ConfigurationSourceReader } from "./ports/outbound/configuration-source-reader.js";
 
 interface BoundSource extends CodexConfigurationSource {
@@ -36,72 +40,16 @@ interface InspectionCollections {
 
 interface InspectionDependencies {
   readonly parser: CodexTomlParser;
+  readonly semanticClassifier: CodexConfigurationSemanticClassifier;
   readonly sourceIdentityKey: Uint8Array;
   readonly sourceReader: ConfigurationSourceReader;
 }
 
-const portableKeys = new Set<PortableCodexSettingKey>([
-  "model",
-  "model_reasoning_effort",
-  "personality",
-]);
-const securityOwned = new Set([
-  "approval_policy",
-  "managed_requirements",
-  "network_access",
-  "permissions",
-  "sandbox_mode",
-  "web_search",
-]);
-const providerAccessOwned = new Set([
-  "model_provider",
-  "model_providers",
-  "provider",
-  "providers",
-  "service_tier",
-]);
-const executableResources = new Set([
-  "commands",
-  "hooks",
-  "instructions",
-  "mcp_servers",
-  "plugins",
-  "shell_environment_policy",
-  "skills",
-]);
 const sourceRanks: Readonly<Record<CodexConfigurationSourceKind, number>> = {
   user: 10,
   "external-profile": 20,
   workspace: 30,
 };
-const supportedReasoningEfforts = new Set([
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-]);
-const supportedPersonalities = new Set(["none", "friendly", "pragmatic"]);
-const supportedModelIdentifiers = new Set([
-  "gpt-5.3-codex-spark",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-  "gpt-5.5",
-  "gpt-5.6",
-  "gpt-5.6-codex",
-  "gpt-5.6-luna",
-  "gpt-5.6-sol",
-  "gpt-5.6-terra",
-  "o1",
-  "o3",
-  "o3-mini",
-  "o4-mini",
-]);
-const secretShape = /(api[_-]?key|credential|oauth|password|secret|token)/i;
-const secretValueShape =
-  /(?:\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
 
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
@@ -123,37 +71,6 @@ const semanticDigest = (
     compareText(left, right),
   );
   return `sha256:${createHash("sha256").update(JSON.stringify(projection)).digest("hex")}`;
-};
-
-const diagnosticForSetting = (
-  key: string,
-): CodexConfigurationDiagnostic["code"] => {
-  if (secretShape.test(key)) {
-    return "secret_setting_ignored";
-  }
-  if (securityOwned.has(key)) {
-    return "security_setting_deferred";
-  }
-  if (providerAccessOwned.has(key)) {
-    return "provider_access_setting_deferred";
-  }
-  if (executableResources.has(key)) {
-    return "executable_setting_deferred";
-  }
-  return "unknown_setting_ignored";
-};
-
-const isSupportedPortableValue = (
-  key: PortableCodexSettingKey,
-  value: string,
-): boolean => {
-  if (key === "model") {
-    return supportedModelIdentifiers.has(value);
-  }
-  if (key === "model_reasoning_effort") {
-    return supportedReasoningEfforts.has(value);
-  }
-  return supportedPersonalities.has(value);
 };
 
 const rejectSources = (
@@ -296,54 +213,29 @@ const bindSources = (
   return { rejectedSourceRefs, sources };
 };
 
-const createApplySettings = (collections: InspectionCollections) =>
+const createApplySettings = (
+  classifier: CodexConfigurationSemanticClassifier,
+  dialect: string,
+  collections: InspectionCollections,
+) =>
   (document: Readonly<Record<string, unknown>>, source: PreparedSource): void => {
     const safeProjection =
       collections.safeProjectionBySource.get(source.sourceRef) ?? new Map();
     collections.safeProjectionBySource.set(source.sourceRef, safeProjection);
-    for (const key of Object.keys(document).toSorted()) {
-      const value = document[key];
-      if (!portableKeys.has(key as PortableCodexSettingKey)) {
-        const code = diagnosticForSetting(key);
-        collections.diagnostics.push({
-          code,
-          sourceRef: source.sourceRef,
-          ...(code === "unknown_setting_ignored" || code === "secret_setting_ignored"
-            ? {}
-            : { setting: key }),
-        });
-        continue;
-      }
-      if (typeof value !== "string" || value.length === 0) {
-        collections.diagnostics.push({
-          code: "setting_type_unsupported",
-          setting: key,
-          sourceRef: source.sourceRef,
-        });
-        continue;
-      }
-      if (secretValueShape.test(value)) {
-        collections.diagnostics.push({
-          code: "secret_setting_ignored",
-          sourceRef: source.sourceRef,
-        });
-        continue;
-      }
-      const portableKey = key as PortableCodexSettingKey;
-      if (!isSupportedPortableValue(portableKey, value)) {
-        collections.diagnostics.push({
-          code: "setting_value_unsupported",
-          setting: key,
-          sourceRef: source.sourceRef,
-        });
-        continue;
-      }
-      collections.effective.set(portableKey, {
-        key: portableKey,
+    const classification = classifier.classify(dialect, document);
+    for (const diagnostic of classification.diagnostics) {
+      collections.diagnostics.push({
+        ...diagnostic,
         sourceRef: source.sourceRef,
-        value,
       });
-      safeProjection.set(portableKey, value);
+    }
+    for (const setting of classification.settings) {
+      collections.effective.set(setting.key, {
+        key: setting.key,
+        sourceRef: source.sourceRef,
+        value: setting.value,
+      });
+      safeProjection.set(setting.key, setting.value);
     }
   };
 
@@ -440,9 +332,11 @@ const prepareSources = async (
 
 const applyPreparedSources = (
   preparedSources: readonly PreparedSource[],
+  classifier: CodexConfigurationSemanticClassifier,
+  dialect: string,
   collections: InspectionCollections,
 ): void => {
-  const applySettings = createApplySettings(collections);
+  const applySettings = createApplySettings(classifier, dialect, collections);
   for (const source of preparedSources) {
     applySettings(source.document, source);
   }
@@ -491,7 +385,7 @@ const executeInspection = async (
   };
   const bindingDiagnostics: CodexConfigurationDiagnostic[] = [];
   const bound = bindSources(input, identityKey, bindingDiagnostics);
-  if (input.dialect !== "codex-0.134") {
+  if (!dependencies.semanticClassifier.supportsDialect(input.dialect)) {
     collections.diagnostics.push({ code: "configuration_dialect_unsupported" });
     for (const source of bound.sources) {
       collections.sourceObservations.push({
@@ -511,13 +405,25 @@ const executeInspection = async (
     collections,
     signal,
   );
-  applyPreparedSources(preparedSources, collections);
+  applyPreparedSources(
+    preparedSources,
+    dependencies.semanticClassifier,
+    input.dialect,
+    collections,
+  );
   return buildResult(collections);
 };
 
 export const createInspectCodexConfiguration = (
   dependencies: InspectionDependencies,
 ): InspectCodexConfiguration => {
+  if (
+    dependencies.semanticClassifier.contract !==
+      codexConfigurationSemanticClassifierContract ||
+    dependencies.semanticClassifier.revision.length === 0
+  ) {
+    throw new TypeError("semanticClassifier must implement the versioned contract");
+  }
   if (dependencies.sourceIdentityKey.byteLength < 32) {
     throw new TypeError("sourceIdentityKey must contain at least 32 bytes");
   }
