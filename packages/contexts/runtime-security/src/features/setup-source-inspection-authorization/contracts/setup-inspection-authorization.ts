@@ -2,13 +2,14 @@ export type SetupPathRootKind = "home" | "system" | "workspace";
 
 export interface TrustedSetupPathRoot {
   readonly absolutePath: string;
-  readonly displayName: string;
   readonly kind: SetupPathRootKind;
 }
 
 export interface TrustedConfigurationSource {
   readonly absolutePath: string;
-  readonly kind: "user" | "workspace";
+  readonly kind: "external-profile" | "user" | "workspace";
+  readonly profileName?: string;
+  readonly workspaceLayer?: number;
   readonly workspaceTrusted: boolean;
 }
 
@@ -43,8 +44,10 @@ export interface AuthorizedConfigurationSource {
   readonly canonicalPath: string;
   readonly custodyRoot: AuthorizedPathCustodyRoot;
   readonly displayPath: string;
-  readonly kind: "user" | "workspace";
+  readonly kind: "external-profile" | "user" | "workspace";
   readonly observationEpoch: string;
+  readonly profileName?: string;
+  readonly workspaceLayer?: number;
 }
 
 export interface SetupAuthorizationDiagnostic {

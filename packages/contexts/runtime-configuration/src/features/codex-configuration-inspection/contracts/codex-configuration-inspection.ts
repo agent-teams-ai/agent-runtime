@@ -3,6 +3,12 @@ export type PortableCodexSettingKey =
   | "model_reasoning_effort"
   | "personality";
 
+export type CodexConfigurationDialect = "codex-0.134";
+export type CodexConfigurationSourceKind =
+  | "external-profile"
+  | "user"
+  | "workspace";
+
 export interface CodexConfigurationSource {
   readonly absolutePath: string;
   readonly authorizedFileIdentity?: string;
@@ -12,11 +18,15 @@ export interface CodexConfigurationSource {
     readonly canonicalPath: string;
   };
   readonly displayPath: string;
-  readonly kind: "user" | "workspace";
+  readonly kind: CodexConfigurationSourceKind;
   readonly observationEpoch: string;
+  readonly profileName?: string;
+  /** Zero-based, closest-to-outermost project configuration order from Codex. */
+  readonly workspaceLayer?: number;
 }
 
 export interface InspectCodexConfigurationInput {
+  readonly dialect: CodexConfigurationDialect;
   readonly identityScope: string;
   readonly nativeProfile?: string;
   readonly observationEpoch: string;
@@ -31,7 +41,7 @@ export interface PortableCodexSettingObservation {
 
 export interface CodexConfigurationSourceObservation {
   readonly displayPath: string;
-  readonly kind: "user" | "workspace";
+  readonly kind: CodexConfigurationSourceKind;
   readonly semanticDigest?: string;
   readonly sourceRef: string;
   readonly status:
@@ -50,6 +60,7 @@ export interface CodexConfigurationDiagnostic {
     | "config_parse_failed"
     | "config_too_large"
     | "config_unreadable"
+    | "configuration_dialect_unsupported"
     | "executable_setting_deferred"
     | "profile_missing"
     | "provider_access_setting_deferred"

@@ -23,6 +23,21 @@ interface AuthorizationCollections {
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
+const rootLabels: Readonly<Record<TrustedSetupPathRoot["kind"], string>> = {
+  home: "$HOME",
+  system: "$SYSTEM",
+  workspace: "$WORKSPACE",
+};
+
+const safePathSegment = (value: string): string =>
+  [...value]
+    .map(character =>
+      /^[A-Za-z0-9._-]$/u.test(character)
+        ? character
+        : `%${character.codePointAt(0)?.toString(16).toUpperCase() ?? "0"}`,
+    )
+    .join("");
+
 const contains = (root: string, candidate: string): boolean => {
   const remainder = relative(root, candidate);
   return remainder === "" || (!remainder.startsWith("..") && !isAbsolute(remainder));
@@ -38,7 +53,7 @@ const selectContainingRoot = (
       (left, right) =>
         right.canonicalPath.length - left.canonicalPath.length ||
         right.absolutePath.length - left.absolutePath.length ||
-        compareText(left.displayName, right.displayName),
+        compareText(rootLabels[left.kind], rootLabels[right.kind]),
     )[0];
 
 const selectRoot = (
@@ -64,7 +79,12 @@ const displayPath = (
   const suffix = contains(lexicalRoot, lexicalPath)
     ? relative(lexicalRoot, lexicalPath)
     : relative(root.canonicalPath, canonicalPath);
-  return suffix === "" ? root.displayName : `${root.displayName}/${suffix}`;
+  const label = rootLabels[root.kind];
+  const safeSuffix = suffix
+    .split(/[\\/]/u)
+    .map(safePathSegment)
+    .join("/");
+  return safeSuffix === "" ? label : `${label}/${safeSuffix}`;
 };
 
 const rethrowCancellation = (error: unknown, signal?: AbortSignal): void => {
@@ -318,7 +338,7 @@ const collectConfigurationSources = async (
       continue;
     }
     const lexicalPath = resolve(source.absolutePath);
-    const expectedRootKind = source.kind === "user" ? "home" : "workspace";
+    const expectedRootKind = source.kind === "workspace" ? "workspace" : "home";
     let canonicalPath: string;
     let authorizedFileIdentity: string | undefined;
     let hardLinked = false;
@@ -368,6 +388,10 @@ const collectConfigurationSources = async (
       displayPath: displayPath(lexicalPath, canonicalPath, root),
       kind: source.kind,
       observationEpoch: input.observationEpoch,
+      ...(source.profileName === undefined ? {} : { profileName: source.profileName }),
+      ...(source.workspaceLayer === undefined
+        ? {}
+        : { workspaceLayer: source.workspaceLayer }),
     });
   }
   return { configurationSources, diagnostics };

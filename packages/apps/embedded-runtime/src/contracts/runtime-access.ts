@@ -13,7 +13,7 @@ export interface CodexSetupInstallationView {
 
 export interface CodexSetupSourceView {
   readonly displayPath: string;
-  readonly kind: "user" | "workspace";
+  readonly kind: "external-profile" | "user" | "workspace";
   readonly semanticDigest?: string;
   readonly sourceRef: string;
   readonly status:
@@ -41,6 +41,7 @@ export type CodexSetupDiagnosticCode =
   | "config_parse_failed"
   | "config_too_large"
   | "config_unreadable"
+  | "configuration_dialect_unsupported"
   | "empty_path_entry"
   | "executable_setting_deferred"
   | "native_profile_invalid"

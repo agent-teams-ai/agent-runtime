@@ -97,6 +97,10 @@ const mapConfigurationSource = (
   displayPath: source.displayPath,
   kind: source.kind,
   observationEpoch: source.observationEpoch,
+  ...(source.profileName === undefined ? {} : { profileName: source.profileName }),
+  ...(source.workspaceLayer === undefined
+    ? {}
+    : { workspaceLayer: source.workspaceLayer }),
 });
 
 export const createBuildCodexSetupView = (
@@ -174,6 +178,7 @@ export const createBuildCodexSetupView = (
       )),
       invokeAsPromise(() => dependencies.inspectCodexConfiguration.execute(
         {
+          dialect: scope.configurationDialect,
           identityScope: scope.scopeId,
           observationEpoch: authorization.observationEpoch,
           sources: configurationSources,

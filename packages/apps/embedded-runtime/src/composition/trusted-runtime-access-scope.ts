@@ -6,6 +6,7 @@ export const copyTrustedRuntimeAccessScope = (
   scope: TrustedRuntimeAccessScope,
 ): TrustedRuntimeAccessScope =>
   Object.freeze({
+    configurationDialect: scope.configurationDialect,
     configurationSources: Object.freeze(
       scope.configurationSources.map(source => Object.freeze({ ...source })),
     ),

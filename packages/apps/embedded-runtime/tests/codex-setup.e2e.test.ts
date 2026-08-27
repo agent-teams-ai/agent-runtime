@@ -41,11 +41,13 @@ test(
     join(home, ".codex", "config.toml"),
     [
       "model = 'gpt-5.6-codex'",
-      "personality = 'concise'",
-      "api_key = 'synthetic-secret-must-not-leak'",
-      "[profiles.research]",
-      "model_reasoning_effort = 'xhigh'",
+      "personality = 'friendly'",
+      "api_key = 'public-placeholder-value'",
     ].join("\n"),
+  );
+  await writeFile(
+    join(home, ".codex", "research.config.toml"),
+    "model_reasoning_effort = 'max'\n",
   );
   await writeFile(
     join(workspace, ".codex", "config.toml"),
@@ -55,8 +57,10 @@ test(
   const host = createDefaultAgentRuntimeHost();
   t.after(() => host.dispose());
   const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [
       { absolutePath: join(home, ".codex", "config.toml"), kind: "user", workspaceTrusted: true },
+      { absolutePath: join(home, ".codex", "research.config.toml"), kind: "external-profile", profileName: "research", workspaceTrusted: true },
       { absolutePath: join(workspace, ".codex", "config.toml"), kind: "workspace", workspaceTrusted: true },
     ],
     explicitCodexExecutablePaths: [],
@@ -65,8 +69,8 @@ test(
     pathEntries: [bin],
     platform: process.platform,
     roots: [
-      { absolutePath: home, displayName: "$HOME", kind: "home" },
-      { absolutePath: workspace, displayName: "$WORKSPACE", kind: "workspace" },
+      { absolutePath: home, kind: "home" },
+      { absolutePath: workspace, kind: "workspace" },
     ],
     scopeId: "synthetic-scope",
   });
@@ -83,12 +87,12 @@ test(
   assert.equal(first.installations[0]?.aliases.length, 2);
   assert.deepEqual(first.settings, [
     { key: "model", sourceRef: first.sources.find(source => source.kind === "user")?.sourceRef, value: "gpt-5.6-codex" },
-    { key: "model_reasoning_effort", sourceRef: first.sources.find(source => source.kind === "user")?.sourceRef, value: "xhigh" },
+    { key: "model_reasoning_effort", sourceRef: first.sources.find(source => source.kind === "external-profile")?.sourceRef, value: "max" },
     { key: "personality", sourceRef: first.sources.find(source => source.kind === "workspace")?.sourceRef, value: "pragmatic" },
   ]);
   const serialized = JSON.stringify(first);
   assert.doesNotMatch(serialized, new RegExp(root, "u"));
-  assert.doesNotMatch(serialized, /synthetic-secret-must-not-leak/u);
+  assert.doesNotMatch(serialized, /public-placeholder-value/u);
   assert.match(serialized, /\$HOME/u);
   assert.match(serialized, /secret_setting_ignored/u);
   },
@@ -101,13 +105,14 @@ test("scope binding is copied, cancellation is local, and disposal invalidates h
   await mkdir(mutableEntries[0]!, { recursive: true });
   const host = createDefaultAgentRuntimeHost();
   const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: mutableEntries,
     platform: "darwin",
-    roots: [{ absolutePath: root, displayName: "$HOME", kind: "home" }],
+    roots: [{ absolutePath: root, kind: "home" }],
     scopeId: "scope-1",
   });
   mutableEntries.push("relative-path-that-must-not-enter-bound-scope");
@@ -127,6 +132,7 @@ test("scope binding is copied, cancellation is local, and disposal invalidates h
   await assert.rejects(access.codexSetup.inspect({}), /Host is disposed/u);
   assert.throws(
     () => host.bindAccess({
+      configurationDialect: "codex-0.134",
       configurationSources: [],
       explicitCodexExecutablePaths: [],
       knownExecutableDirectories: [],
@@ -149,6 +155,7 @@ test("canonicalizes diagnostics and recommends reviewing an invalid native profi
   const host = createDefaultAgentRuntimeHost();
   t.after(() => host.dispose());
   const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [
       {
         absolutePath: config,
@@ -161,7 +168,7 @@ test("canonicalizes diagnostics and recommends reviewing an invalid native profi
     observationEpoch: "epoch-diagnostics",
     pathEntries: [],
     platform: "darwin",
-    roots: [{ absolutePath: root, displayName: "$HOME", kind: "home" }],
+    roots: [{ absolutePath: root, kind: "home" }],
     scopeId: "scope-diagnostics",
   });
 
@@ -181,6 +188,7 @@ test("unsupported and denied scopes fail closed", async t => {
   const host = createDefaultAgentRuntimeHost();
   t.after(() => host.dispose());
   const unsupported = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
@@ -196,6 +204,7 @@ test("unsupported and denied scopes fail closed", async t => {
   });
 
   const denied = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
@@ -218,6 +227,7 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
       async execute() {
         await authorizationGate;
         return {
+          configurationDialect: "codex-0.134",
           configurationSources: [],
           diagnostics: [],
           installationCandidates: [],
@@ -242,6 +252,7 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
     },
   });
   const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
@@ -282,6 +293,7 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
       async execute() {
         await authorizationGate;
         return {
+          configurationDialect: "codex-0.134",
           configurationSources: [],
           diagnostics: [],
           installationCandidates: [],
@@ -305,6 +317,7 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
   });
   t.after(() => host.dispose());
   const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
@@ -349,6 +362,7 @@ test("disposal tracks every parallel branch after a sibling rejects", async () =
     authorizeSetupInspection: {
       async execute() {
         return {
+          configurationDialect: "codex-0.134",
           configurationSources: [],
           diagnostics: [],
           installationCandidates: [],
@@ -380,6 +394,7 @@ test("disposal tracks every parallel branch after a sibling rejects", async () =
     },
   });
   const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
@@ -416,6 +431,7 @@ test("disposal remains bounded when a dependency never settles", async () => {
     authorizeSetupInspection: {
       async execute() {
         return {
+          configurationDialect: "codex-0.134",
           configurationSources: [],
           diagnostics: [],
           installationCandidates: [],
@@ -439,6 +455,7 @@ test("disposal remains bounded when a dependency never settles", async () => {
     },
   });
   const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
@@ -471,6 +488,7 @@ test("a synchronous branch throw cannot escape parallel drain custody", async ()
     authorizeSetupInspection: {
       async execute() {
         return {
+          configurationDialect: "codex-0.134",
           configurationSources: [],
           diagnostics: [],
           installationCandidates: [],
@@ -494,6 +512,7 @@ test("a synchronous branch throw cannot escape parallel drain custody", async ()
     },
   });
   const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
@@ -526,6 +545,7 @@ test("product installation references are stable within and isolated across trus
     authorizeSetupInspection: {
       async execute(input) {
         return {
+          configurationDialect: "codex-0.134",
           configurationSources: [],
           diagnostics: [],
           installationCandidates: [],
@@ -555,13 +575,14 @@ test("product installation references are stable within and isolated across trus
   });
   t.after(() => host.dispose());
   const bind = (scopeId: string) => host.bindAccess({
+    configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: [],
     platform: "darwin",
-    roots: [{ absolutePath: "/synthetic-home", displayName: "$HOME", kind: "home" }],
+    roots: [{ absolutePath: "/synthetic-home", kind: "home" }],
     scopeId,
   });
 

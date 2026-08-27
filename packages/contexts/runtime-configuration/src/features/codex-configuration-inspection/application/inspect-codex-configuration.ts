@@ -3,6 +3,7 @@ import { createHash, createHmac } from "node:crypto";
 import type {
   CodexConfigurationDiagnostic,
   CodexConfigurationSource,
+  CodexConfigurationSourceKind,
   CodexConfigurationSourceObservation,
   InspectCodexConfiguration,
   InspectCodexConfigurationInput,
@@ -22,7 +23,7 @@ interface PreparedSource extends BoundSource {
 }
 
 interface SourceBindingPlan {
-  readonly duplicateKinds: ReadonlySet<"user" | "workspace">;
+  readonly rejectedSourceRefs: ReadonlySet<string>;
   readonly sources: readonly BoundSource[];
 }
 
@@ -68,9 +69,21 @@ const executableResources = new Set([
   "shell_environment_policy",
   "skills",
 ]);
-const sourceRanks = { user: 10, workspace: 20 } as const;
-const supportedReasoningEfforts = new Set(["minimal", "low", "medium", "high", "xhigh"]);
-const supportedPersonalities = new Set(["none", "friendly", "pragmatic", "concise"]);
+const sourceRanks: Readonly<Record<CodexConfigurationSourceKind, number>> = {
+  user: 10,
+  "external-profile": 20,
+  workspace: 30,
+};
+const supportedReasoningEfforts = new Set([
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+]);
+const supportedPersonalities = new Set(["none", "friendly", "pragmatic"]);
 const supportedModelIdentifiers = new Set([
   "gpt-5.3-codex-spark",
   "gpt-5.4",
@@ -89,9 +102,6 @@ const supportedModelIdentifiers = new Set([
 const secretShape = /(api[_-]?key|credential|oauth|password|secret|token)/i;
 const secretValueShape =
   /(?:\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
@@ -151,13 +161,6 @@ const bindSources = (
   identityKey: Uint8Array,
   diagnostics: CodexConfigurationDiagnostic[],
 ): SourceBindingPlan => {
-  const duplicateKinds = new Set<"user" | "workspace">();
-  for (const kind of ["user", "workspace"] as const) {
-    if (input.sources.filter(source => source.kind === kind).length > 1) {
-      duplicateKinds.add(kind);
-      diagnostics.push({ code: "source_precedence_conflict", setting: kind });
-    }
-  }
   const sources = input.sources
     .map(source => ({
       ...source,
@@ -171,9 +174,59 @@ const bindSources = (
     .toSorted(
       (left, right) =>
         sourceRanks[left.kind] - sourceRanks[right.kind] ||
+        (right.kind === "workspace" ? (right.workspaceLayer ?? 0) : 0) -
+          (left.kind === "workspace" ? (left.workspaceLayer ?? 0) : 0) ||
         compareText(left.sourceRef, right.sourceRef),
     );
-  return { duplicateKinds, sources };
+  const rejectedSourceRefs = new Set<string>();
+  const reject = (conflicting: readonly BoundSource[], setting: string): void => {
+    for (const source of conflicting) {
+      rejectedSourceRefs.add(source.sourceRef);
+    }
+    diagnostics.push({ code: "source_precedence_conflict", setting });
+  };
+
+  const userSources = sources.filter(source => source.kind === "user");
+  if (userSources.length > 1) {
+    reject(userSources, "user");
+  }
+
+  const workspaceSources = sources.filter(source => source.kind === "workspace");
+  const validWorkspaceOrder = workspaceSources.every(source =>
+    Number.isSafeInteger(source.workspaceLayer) && (source.workspaceLayer ?? -1) >= 0,
+  );
+  const workspaceLayers = new Set(workspaceSources.map(source => source.workspaceLayer));
+  if (
+    workspaceSources.length > 1 &&
+    (!validWorkspaceOrder || workspaceLayers.size !== workspaceSources.length)
+  ) {
+    reject(workspaceSources, "workspace");
+  }
+
+  const selectedProfiles = sources.filter(source =>
+    source.kind === "external-profile" &&
+    source.profileName === input.nativeProfile,
+  );
+  if (selectedProfiles.length > 1) {
+    reject(selectedProfiles, "external-profile");
+  }
+  for (const source of sources) {
+    const metadataValid =
+      (source.kind === "user" &&
+        source.profileName === undefined && source.workspaceLayer === undefined) ||
+      (source.kind === "external-profile" &&
+        source.workspaceLayer === undefined &&
+        typeof source.profileName === "string" && source.profileName.length > 0) ||
+      (source.kind === "workspace" && source.profileName === undefined);
+    if (!metadataValid ||
+      (source.kind === "external-profile" && source.profileName !== input.nativeProfile)) {
+      rejectedSourceRefs.add(source.sourceRef);
+    }
+  }
+  if (input.nativeProfile !== undefined && selectedProfiles.length === 0) {
+    diagnostics.push({ code: "profile_missing" });
+  }
+  return { rejectedSourceRefs, sources };
 };
 
 const createApplySettings = (collections: InspectionCollections) =>
@@ -182,9 +235,6 @@ const createApplySettings = (collections: InspectionCollections) =>
       collections.safeProjectionBySource.get(source.sourceRef) ?? new Map();
     collections.safeProjectionBySource.set(source.sourceRef, safeProjection);
     for (const key of Object.keys(document).toSorted()) {
-      if (key === "profiles") {
-        continue;
-      }
       const value = document[key];
       if (!portableKeys.has(key as PortableCodexSettingKey)) {
         const code = diagnosticForSetting(key);
@@ -252,7 +302,7 @@ const prepareSources = async (
   const preparedSources: PreparedSource[] = [];
   for (const source of binding.sources) {
     signal?.throwIfAborted();
-    if (binding.duplicateKinds.has(source.kind)) {
+    if (binding.rejectedSourceRefs.has(source.sourceRef)) {
       collections.sourceObservations.push({
         displayPath: source.displayPath,
         kind: source.kind,
@@ -317,31 +367,11 @@ const prepareSources = async (
 
 const applyPreparedSources = (
   preparedSources: readonly PreparedSource[],
-  nativeProfile: string | undefined,
   collections: InspectionCollections,
 ): void => {
   const applySettings = createApplySettings(collections);
   for (const source of preparedSources) {
     applySettings(source.document, source);
-  }
-  let selectedProfileFound = false;
-  if (nativeProfile !== undefined) {
-    for (const source of preparedSources) {
-      const profiles = Object.hasOwn(source.document, "profiles")
-        ? source.document.profiles
-        : undefined;
-      const selected =
-        isRecord(profiles) && Object.hasOwn(profiles, nativeProfile)
-          ? profiles[nativeProfile]
-          : undefined;
-      if (isRecord(selected)) {
-        selectedProfileFound = true;
-        applySettings(selected, source);
-      }
-    }
-    if (!selectedProfileFound) {
-      collections.diagnostics.push({ code: "profile_missing" });
-    }
   }
   for (const source of preparedSources) {
     collections.sourceObservations.push({
@@ -386,7 +416,21 @@ const executeInspection = async (
     safeProjectionBySource: new Map(),
     sourceObservations: [],
   };
-  const bound = bindSources(input, identityKey, collections.diagnostics);
+  const bindingDiagnostics: CodexConfigurationDiagnostic[] = [];
+  const bound = bindSources(input, identityKey, bindingDiagnostics);
+  if (input.dialect !== "codex-0.134") {
+    collections.diagnostics.push({ code: "configuration_dialect_unsupported" });
+    for (const source of bound.sources) {
+      collections.sourceObservations.push({
+        displayPath: source.displayPath,
+        kind: source.kind,
+        sourceRef: source.sourceRef,
+        status: "rejected",
+      });
+    }
+    return buildResult(collections);
+  }
+  collections.diagnostics.push(...bindingDiagnostics);
   const preparedSources = await prepareSources(
     dependencies,
     input,
@@ -394,7 +438,7 @@ const executeInspection = async (
     collections,
     signal,
   );
-  applyPreparedSources(preparedSources, input.nativeProfile, collections);
+  applyPreparedSources(preparedSources, collections);
   return buildResult(collections);
 };
 

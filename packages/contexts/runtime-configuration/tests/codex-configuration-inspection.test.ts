@@ -26,11 +26,12 @@ const fileIdentity = async (path: string): Promise<string> => {
   return `${observation.dev}:${observation.ino}:${observation.ctimeNs}:${observation.size}`;
 };
 
-test("applies deterministic precedence and selected native profile", async t => {
+test("applies user, selected external profile, and project precedence deterministically", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-config-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const user = join(root, "user.toml");
   const workspace = join(root, "workspace.toml");
+  const profile = join(root, "work.config.toml");
   await writeFile(
     user,
     [
@@ -40,33 +41,38 @@ test("applies deterministic precedence and selected native profile", async t => 
       "api_key = 'must-not-leak'",
       "approval_policy = 'never'",
       "unknown_future_key = 'future'",
-      "[profiles.work]",
-      "model = 'gpt-5.6-codex'",
-      "model_reasoning_effort = 'high'",
     ].join("\n"),
+  );
+  await writeFile(
+    profile,
+    "model = 'gpt-5.6-codex'\nmodel_reasoning_effort = 'high'\npersonality = 'friendly'\n",
   );
   await writeFile(
     workspace,
     [
-      "personality = 'concise'",
+      "personality = 'pragmatic'",
       "model_reasoning_effort = 'medium'",
       "[mcp_servers.synthetic]",
       "command = 'ignored'",
     ].join("\n"),
   );
-  const [userCanonical, workspaceCanonical, userIdentity, workspaceIdentity] = await Promise.all([
+  const [userCanonical, profileCanonical, workspaceCanonical, userIdentity, profileIdentity, workspaceIdentity] = await Promise.all([
     realpath(user),
+    realpath(profile),
     realpath(workspace),
     fileIdentity(user),
+    fileIdentity(profile),
     fileIdentity(workspace),
   ]);
 
   const input = {
+    dialect: "codex-0.134",
     identityScope: "scope-1",
     nativeProfile: "work",
     observationEpoch: "epoch-1",
     sources: [
       { absolutePath: workspace, authorizedFileIdentity: workspaceIdentity, canonicalPath: workspaceCanonical, displayPath: "$WORKSPACE/.codex/config.toml", kind: "workspace" as const, observationEpoch: "epoch-1" },
+      { absolutePath: profile, authorizedFileIdentity: profileIdentity, canonicalPath: profileCanonical, displayPath: "$HOME/.codex/work.config.toml", kind: "external-profile" as const, observationEpoch: "epoch-1", profileName: "work" },
       { absolutePath: user, authorizedFileIdentity: userIdentity, canonicalPath: userCanonical, displayPath: "$HOME/.codex/config.toml", kind: "user" as const, observationEpoch: "epoch-1" },
     ],
   };
@@ -79,9 +85,9 @@ test("applies deterministic precedence and selected native profile", async t => 
   assert.ok(userSourceRef !== undefined);
   assert.ok(workspaceSourceRef !== undefined);
   assert.deepEqual(first.settings, [
-    { key: "model", sourceRef: userSourceRef, value: "gpt-5.6-codex" },
-    { key: "model_reasoning_effort", sourceRef: userSourceRef, value: "high" },
-    { key: "personality", sourceRef: workspaceSourceRef, value: "concise" },
+    { key: "model", sourceRef: first.sources.find(source => source.kind === "external-profile")?.sourceRef, value: "gpt-5.6-codex" },
+    { key: "model_reasoning_effort", sourceRef: workspaceSourceRef, value: "medium" },
+    { key: "personality", sourceRef: workspaceSourceRef, value: "pragmatic" },
   ]);
   assert.deepEqual(
     first.diagnostics.map(item => item.code).toSorted(),
@@ -96,13 +102,46 @@ test("applies deterministic precedence and selected native profile", async t => 
   assert.doesNotMatch(JSON.stringify(first), /must-not-leak/u);
 });
 
+test("does not apply obsolete nested profile tables as current Codex profiles", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-codex-legacy-profile-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const user = join(root, "config.toml");
+  await writeFile(
+    user,
+    "[profiles.research]\nmodel = 'gpt-5.6-sol'\nmodel_reasoning_effort = 'max'\n",
+  );
+  const canonicalPath = await realpath(user);
+  const authorizedFileIdentity = await fileIdentity(user);
+
+  const result = await createFeature().inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-legacy-profile",
+    nativeProfile: "research",
+    observationEpoch: "epoch-1",
+    sources: [{
+      absolutePath: user,
+      authorizedFileIdentity,
+      canonicalPath,
+      displayPath: "$HOME/.codex/config.toml",
+      kind: "user",
+      observationEpoch: "epoch-1",
+    }],
+  });
+
+  assert.deepEqual(result.settings, []);
+  assert.deepEqual(result.diagnostics.map(item => item.code), [
+    "profile_missing",
+    "unknown_setting_ignored",
+  ]);
+});
+
 test("reports a selected native profile missing only from the merged configuration", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-profile-missing-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const user = join(root, "user.toml");
   const workspace = join(root, "workspace.toml");
   await writeFile(user, "model = 'gpt-5.5'\n");
-  await writeFile(workspace, "personality = 'concise'\n");
+  await writeFile(workspace, "personality = 'pragmatic'\n");
   const [userCanonical, workspaceCanonical, userIdentity, workspaceIdentity] = await Promise.all([
     realpath(user),
     realpath(workspace),
@@ -111,6 +150,7 @@ test("reports a selected native profile missing only from the merged configurati
   ]);
 
   const result = await createFeature().inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
     identityScope: "scope-1",
     nativeProfile: "missing",
     observationEpoch: "epoch-1",
@@ -121,6 +161,124 @@ test("reports a selected native profile missing only from the merged configurati
   });
 
   assert.deepEqual(result.diagnostics, [{ code: "profile_missing" }]);
+});
+
+test("applies Codex workspace layers returned closest-first and rejects ambiguous order", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-codex-workspace-layers-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const outer = join(root, "outer.toml");
+  const closest = join(root, "closest.toml");
+  await Promise.all([
+    writeFile(outer, "personality = 'friendly'\n"),
+    writeFile(closest, "personality = 'pragmatic'\n"),
+  ]);
+  const [outerCanonical, closestCanonical, outerIdentity, closestIdentity] =
+    await Promise.all([
+      realpath(outer),
+      realpath(closest),
+      fileIdentity(outer),
+      fileIdentity(closest),
+    ]);
+  const sources = [
+    { absolutePath: closest, authorizedFileIdentity: closestIdentity, canonicalPath: closestCanonical, displayPath: "$WORKSPACE/closest/.codex/config.toml", kind: "workspace" as const, observationEpoch: "epoch-1", workspaceLayer: 0 },
+    { absolutePath: outer, authorizedFileIdentity: outerIdentity, canonicalPath: outerCanonical, displayPath: "$WORKSPACE/.codex/config.toml", kind: "workspace" as const, observationEpoch: "epoch-1", workspaceLayer: 1 },
+  ];
+
+  const feature = createFeature();
+  const ordered = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-layers",
+    observationEpoch: "epoch-1",
+    sources,
+  });
+  assert.deepEqual(ordered.settings, [{
+    key: "personality",
+    sourceRef: ordered.sources.find(source => source.displayPath.includes("closest"))?.sourceRef,
+    value: "pragmatic",
+  }]);
+
+  const ambiguous = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-layers",
+    observationEpoch: "epoch-1",
+    sources: sources.map(source => ({ ...source, workspaceLayer: 0 })),
+  });
+  assert.deepEqual(ambiguous.settings, []);
+  assert.deepEqual(ambiguous.diagnostics, [
+    { code: "source_precedence_conflict", setting: "workspace" },
+  ]);
+  assert.ok(ambiguous.sources.every(source => source.status === "rejected"));
+});
+
+test("rejects concise personality and fails closed for an unsupported dialect", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-codex-dialect-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const config = join(root, "config.toml");
+  await writeFile(config, "personality = 'concise'\n");
+  const canonicalPath = await realpath(config);
+  const authorizedFileIdentity = await fileIdentity(config);
+  const source = {
+    absolutePath: config,
+    authorizedFileIdentity,
+    canonicalPath,
+    displayPath: "$HOME/.codex/config.toml",
+    kind: "user" as const,
+    observationEpoch: "epoch-1",
+  };
+  const feature = createFeature();
+
+  const invalidPersonality = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-personality",
+    observationEpoch: "epoch-1",
+    sources: [source],
+  });
+  assert.deepEqual(invalidPersonality.settings, []);
+  assert.equal(invalidPersonality.diagnostics[0]?.code, "setting_value_unsupported");
+
+  const unsupported = await feature.inspectCodexConfiguration.execute({
+    dialect: "future-codex-dialect",
+    identityScope: "scope-dialect",
+    observationEpoch: "epoch-1",
+    sources: [source],
+  } as never);
+  assert.deepEqual(unsupported.settings, []);
+  assert.deepEqual(unsupported.diagnostics, [
+    { code: "configuration_dialect_unsupported" },
+  ]);
+  assert.equal(unsupported.sources[0]?.status, "rejected");
+});
+
+test("accepts current Codex max and ultra reasoning efforts", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-codex-reasoning-effort-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+
+  for (const effort of ["max", "ultra"] as const) {
+    const config = join(root, `${effort}.toml`);
+    await writeFile(config, `model_reasoning_effort = '${effort}'\n`);
+    const canonicalPath = await realpath(config);
+    const authorizedFileIdentity = await fileIdentity(config);
+    const result = await createFeature().inspectCodexConfiguration.execute({
+      dialect: "codex-0.134",
+      identityScope: `scope-${effort}`,
+      observationEpoch: "epoch-1",
+      sources: [{
+        absolutePath: config,
+        authorizedFileIdentity,
+        canonicalPath,
+        displayPath: `$HOME/.codex/${effort}.toml`,
+        kind: "user",
+        observationEpoch: "epoch-1",
+      }],
+    });
+
+    assert.deepEqual(result.diagnostics, []);
+    assert.deepEqual(result.settings, [{
+      key: "model_reasoning_effort",
+      sourceRef: result.sources[0]?.sourceRef,
+      value: effort,
+    }]);
+  }
 });
 
 test("does not resolve inherited object properties as native profiles", async () => {
@@ -145,6 +303,7 @@ test("does not resolve inherited object properties as native profiles", async ()
     },
   });
   const result = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
     identityScope: "scope-prototype",
     nativeProfile: "__proto__",
     observationEpoch: "epoch-1",
@@ -158,10 +317,14 @@ test("does not resolve inherited object properties as native profiles", async ()
     }],
   });
 
-  assert.deepEqual(result.diagnostics, [{ code: "profile_missing" }]);
+  assert.deepEqual(result.diagnostics.map(item => item.code), [
+    "profile_missing",
+    "unknown_setting_ignored",
+  ]);
 
   delete inheritedDocument.profiles;
   const inheritedTopLevel = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
     identityScope: "scope-prototype",
     nativeProfile: "inherited",
     observationEpoch: "epoch-1",
@@ -191,6 +354,7 @@ test(
     ]);
 
     const result = await createFeature().inspectCodexConfiguration.execute({
+      dialect: "codex-0.134",
       identityScope: "scope-fifo",
       observationEpoch: "epoch-1",
       sources: [{
@@ -213,11 +377,12 @@ test("rejects credential-shaped values even under portable setting keys", async 
   t.after(() => rm(root, { force: true, recursive: true }));
   const config = join(root, "config.toml");
   const secret = "sk-synthetic-credential-value";
-  await writeFile(config, `model = '${secret}'\npersonality = 'concise'\n`);
+  await writeFile(config, `model = '${secret}'\npersonality = 'friendly'\n`);
   const canonicalPath = await realpath(config);
   const authorizedFileIdentity = await fileIdentity(config);
 
   const result = await createFeature().inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
     identityScope: "scope-1",
     observationEpoch: "epoch-1",
     sources: [{
@@ -233,7 +398,7 @@ test("rejects credential-shaped values even under portable setting keys", async 
   const observedSourceRef = result.sources[0]?.sourceRef;
   assert.ok(observedSourceRef !== undefined);
   assert.deepEqual(result.settings, [
-    { key: "personality", sourceRef: observedSourceRef, value: "concise" },
+    { key: "personality", sourceRef: observedSourceRef, value: "friendly" },
   ]);
   assert.deepEqual(result.diagnostics, [
     { code: "secret_setting_ignored", sourceRef: observedSourceRef },
@@ -257,6 +422,7 @@ test("fails closed for encoded and unprefixed credential-like portable values", 
     const canonicalPath = await realpath(config);
     const authorizedFileIdentity = await fileIdentity(config);
     const result = await createFeature().inspectCodexConfiguration.execute({
+      dialect: "codex-0.134",
       identityScope: `scope-${index}`,
       observationEpoch: "epoch-1",
       sources: [{
@@ -297,6 +463,7 @@ test("rejects duplicate sources instead of accepting caller-defined precedence",
   ]);
 
   const result = await createFeature().inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
     identityScope: "scope-1",
     observationEpoch: "epoch-1",
     sources: [
@@ -349,6 +516,7 @@ test("rejects duplicate keys, BOM, invalid UTF-8, oversized and stale sources", 
   ] as const;
   const results = await Promise.all(fixtures.map((source, index) =>
     createFeature(32).inspectCodexConfiguration.execute({
+      dialect: "codex-0.134",
       identityScope: `scope-${index}`,
       observationEpoch: "epoch-current",
       sources: [{ ...source, kind: "user" }],
@@ -384,6 +552,7 @@ test("does not read a configuration alias retargeted after authorization", async
   await symlink(second, alias);
 
   const result = await createFeature().inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
     identityScope: "scope-1",
     observationEpoch: "epoch-1",
     sources: [{
@@ -411,6 +580,7 @@ test("does not read a different file installed at the authorized canonical path"
   await writeFile(config, "model = 'replacement-must-not-be-read'\n");
 
   const result = await createFeature().inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
     identityScope: "scope-1",
     observationEpoch: "epoch-1",
     sources: [{

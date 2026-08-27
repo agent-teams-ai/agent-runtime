@@ -1,6 +1,8 @@
 export type {
   CodexConfigurationDiagnostic,
+  CodexConfigurationDialect,
   CodexConfigurationSource,
+  CodexConfigurationSourceKind,
   CodexConfigurationSourceObservation,
   InspectCodexConfiguration,
   InspectCodexConfigurationInput,

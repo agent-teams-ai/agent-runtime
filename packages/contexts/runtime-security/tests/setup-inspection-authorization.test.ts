@@ -44,8 +44,8 @@ test("authorizes exact synthetic paths and rejects ambient expansion", async t =
     pathEntries: ["", "relative-bin", join(home, "bin")],
     platform: "darwin",
     roots: [
-      { absolutePath: home, displayName: "$HOME", kind: "home" },
-      { absolutePath: workspace, displayName: "$WORKSPACE", kind: "workspace" },
+      { absolutePath: home, kind: "home" },
+      { absolutePath: workspace, kind: "workspace" },
     ],
   });
 
@@ -83,7 +83,7 @@ test("rejects a symlink that resolves outside authorized roots", async t => {
     observationEpoch: "epoch-1",
     pathEntries: [],
     platform: "darwin",
-    roots: [{ absolutePath: allowed, displayName: "$HOME/bin", kind: "home" }],
+    roots: [{ absolutePath: allowed, kind: "home" }],
   });
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") {
@@ -122,8 +122,8 @@ test("binds configuration sources to their matching root kind", async t => {
     pathEntries: [],
     platform: "darwin",
     roots: [
-      { absolutePath: home, displayName: "$HOME", kind: "home" },
-      { absolutePath: workspace, displayName: "$WORKSPACE", kind: "workspace" },
+      { absolutePath: home, kind: "home" },
+      { absolutePath: workspace, kind: "workspace" },
     ],
   });
 
@@ -164,8 +164,8 @@ test("does not treat a workspace target as trusted user configuration", async t 
     pathEntries: [],
     platform: "darwin",
     roots: [
-      { absolutePath: home, displayName: "$HOME", kind: "home" },
-      { absolutePath: workspace, displayName: "$WORKSPACE", kind: "workspace" },
+      { absolutePath: home, kind: "home" },
+      { absolutePath: workspace, kind: "workspace" },
     ],
   });
 
@@ -198,8 +198,8 @@ test("uses the most-specific root for deterministic display paths", async t => {
     pathEntries: [],
     platform: "darwin",
     roots: [
-      { absolutePath: home, displayName: "$HOME", kind: "home" },
-      { absolutePath: workspace, displayName: "$WORKSPACE", kind: "workspace" },
+      { absolutePath: home, kind: "home" },
+      { absolutePath: workspace, kind: "workspace" },
     ],
   });
 
@@ -208,6 +208,52 @@ test("uses the most-specific root for deterministic display paths", async t => {
     return;
   }
   assert.equal(result.installationCandidates[0]?.displayPath, "$WORKSPACE/bin/codex");
+});
+
+test("derives deterministic display labels without leaking caller labels or host paths", async t => {
+  const outer = await mkdtemp(join(tmpdir(), "ar-setup-display-label-"));
+  t.after(() => rm(outer, { force: true, recursive: true }));
+  const home = join(outer, "private-home");
+  const executable = join(home, "bin", "co\ndex");
+  await mkdir(join(home, "bin"), { recursive: true });
+  await writeFile(executable, "synthetic");
+
+  const feature = createSetupInspectionAuthorizationFeature({
+    pathCanonicalizer: createNodePathCanonicalizer(),
+  });
+  const maliciousLabel = `${outer}\n$WORKSPACE`;
+  const roots = [
+    { absolutePath: outer, displayName: maliciousLabel, kind: "system" as const },
+    { absolutePath: home, displayName: maliciousLabel, kind: "home" as const },
+  ];
+  const inspect = (orderedRoots: readonly {
+    readonly absolutePath: string;
+    readonly kind: "home" | "system" | "workspace";
+  }[]) =>
+    feature.authorizeSetupInspection.execute({
+      configurationSources: [],
+      explicitExecutablePaths: [executable],
+      knownExecutableDirectories: [],
+      observationEpoch: "epoch-display",
+      pathEntries: [],
+      platform: "darwin",
+      roots: orderedRoots,
+    });
+
+  const [first, second] = await Promise.all([
+    inspect(roots),
+    inspect(roots.toReversed()),
+  ]);
+  assert.deepEqual(first, second);
+  assert.equal(first.status, "authorized");
+  if (first.status !== "authorized") {
+    return;
+  }
+  assert.equal(first.installationCandidates[0]?.displayPath, "$HOME/bin/co%Adex");
+  const renderedLabels = first.installationCandidates.map(candidate => candidate.displayPath);
+  assert.equal(renderedLabels.some(label => label.includes(outer)), false);
+  assert.equal(renderedLabels.some(label => label.includes(maliciousLabel)), false);
+  assert.equal(renderedLabels.some(label => label.includes("\n")), false);
 });
 
 test("fails closed on unsupported platform", async () => {
@@ -252,7 +298,7 @@ test("rejects hard-linked executable and configuration sources", async t => {
     observationEpoch: "epoch-hardlink",
     pathEntries: [],
     platform: "darwin",
-    roots: [{ absolutePath: root, displayName: "$HOME", kind: "home" }],
+    roots: [{ absolutePath: root, kind: "home" }],
   });
 
   assert.equal(result.status, "authorized");
@@ -290,7 +336,7 @@ test(
       observationEpoch: "epoch-fifo",
       pathEntries: [],
       platform: "darwin",
-      roots: [{ absolutePath: root, displayName: "$HOME", kind: "home" }],
+      roots: [{ absolutePath: root, kind: "home" }],
     });
 
     assert.equal(result.status, "authorized");
@@ -343,7 +389,7 @@ test(
     observationEpoch: "epoch-case",
     pathEntries: [],
     platform: "darwin",
-    roots: [{ absolutePath: lexicalRoot, displayName: "$HOME", kind: "home" }],
+    roots: [{ absolutePath: lexicalRoot, kind: "home" }],
   });
 
   assert.equal(result.status, "authorized");
@@ -392,7 +438,7 @@ test(
       observationEpoch: "epoch-case-sensitive",
       pathEntries: [],
       platform: "darwin",
-      roots: [{ absolutePath: lexicalRoot, displayName: "$HOME", kind: "home" }],
+      roots: [{ absolutePath: lexicalRoot, kind: "home" }],
     });
 
     assert.equal(result.status, "authorized");
