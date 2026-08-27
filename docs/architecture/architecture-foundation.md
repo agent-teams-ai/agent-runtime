@@ -39,6 +39,8 @@ Agent Runtime owns:
 
 Agent Runtime never owns:
 
+- the Desktop product, application shell, UI workflows, navigation,
+  presentation state, renderer code, or user-facing interaction design;
 - teams, teammates, tasks, boards, inboxes, handoffs, or workflow routing;
 - team prompts, role briefings, task retry policy, or visible-reply policy;
 - product approvals, task attribution, review policy, or merge policy;
@@ -47,6 +49,13 @@ Agent Runtime never owns:
 
 Consumers integrate through typed, consumer-owned ports and anti-corruption
 layers. Agent Runtime publishes its own versioned runtime language and SDK.
+
+Desktop is a separate product, repository, and delivery ownership boundary.
+It consumes Agent Runtime as a headless capability provider and owns its app
+shell, presentation, interaction flow, and product composition. References to
+Desktop deployment or collectors in Agent Runtime describe compatibility of
+headless runtime adapters on desktop operating systems; they do not assign the
+Desktop product or UI implementation to Agent Runtime.
 
 ## Architectural style
 
