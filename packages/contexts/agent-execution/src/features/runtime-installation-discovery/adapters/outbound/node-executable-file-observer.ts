@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { lstat, open, realpath, stat } from "node:fs/promises";
+import { lstat, open, realpath } from "node:fs/promises";
 
 import type {
   ExecutableFileObservation,
@@ -35,25 +35,21 @@ const observeAuthorizedExecutable = async (
   authorizedFileIdentity: string,
   signal?: AbortSignal,
 ): Promise<ExecutableFileObservation> => {
-  const beforeOpen = await stat(canonicalPath, { bigint: true });
-  if (!beforeOpen.isFile() || (beforeOpen.mode & 0o111n) === 0n) {
-    return { kind: "invalid" };
-  }
   signal?.throwIfAborted();
   const handle = await open(
     canonicalPath,
-    constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+    constants.O_RDONLY |
+      constants.O_NONBLOCK |
+      (constants.O_NOFOLLOW ?? 0),
   );
   try {
     const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || (opened.mode & 0o111n) === 0n) {
+      return { kind: "invalid" };
+    }
     if (
       opened.nlink > 1n ||
-      authorizationFileIdentity(opened) !== authorizedFileIdentity ||
-      opened.dev !== beforeOpen.dev ||
-      opened.ino !== beforeOpen.ino ||
-      opened.size !== beforeOpen.size ||
-      opened.mtimeNs !== beforeOpen.mtimeNs ||
-      opened.ctimeNs !== beforeOpen.ctimeNs
+      authorizationFileIdentity(opened) !== authorizedFileIdentity
     ) {
       return { kind: "unstable" };
     }

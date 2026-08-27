@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
 import { chmod, mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   createNodeExecutableFileObserver,
   createRuntimeInstallationDiscoveryFeature,
 } from "../dist/composition.js";
+
+const execFile = promisify(execFileCallback);
 
 const fileIdentity = async (path: string): Promise<string> => {
   const observation = await stat(path, { bigint: true });
@@ -175,6 +179,24 @@ test("rejects a different executable installed at the authorized canonical path"
 
   assert.equal(result.installations.length, 0);
   assert.equal(result.diagnostics[0]?.code, "candidate_unstable");
+});
+
+test("rejects a symbolic alias to a FIFO without blocking", { timeout: 2_000 }, async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-installation-fifo-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const fifo = join(root, "codex-fifo");
+  const alias = join(root, "codex");
+  await execFile("mkfifo", [fifo]);
+  await symlink(fifo, alias);
+
+  const observer = createNodeExecutableFileObserver();
+  const result = await observer.observe(
+    alias,
+    await realpath(fifo),
+    "synthetic-authorized-identity",
+  );
+
+  assert.deepEqual(result, { kind: "invalid" });
 });
 
 test("propagates local AbortSignal cancellation", async () => {
