@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import {
   createAgentRuntimeHost,
@@ -313,9 +314,20 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
   const inspection = access.codexSetup.inspect({}, { signal: controller.signal });
   await Promise.resolve();
   controller.abort(new DOMException("caller cancelled", "AbortError"));
-  releaseAuthorization?.();
-
-  await assert.rejects(inspection, { name: "AbortError" });
+  try {
+    await assert.rejects(
+      Promise.race([
+        inspection,
+        delay(100, null, { ref: false }).then(() => {
+          throw new Error("cancelled inspection remained pending");
+        }),
+      ]),
+      { name: "AbortError" },
+    );
+  } finally {
+    releaseAuthorization?.();
+  }
+  await host.dispose();
 });
 
 test("product installation references are stable within and isolated across trusted scopes", async t => {

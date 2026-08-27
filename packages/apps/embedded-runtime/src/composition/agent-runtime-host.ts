@@ -41,6 +41,34 @@ const waitForDisposalDeadline = async (): Promise<void> => {
   await delay(1_000, null, { ref: false });
 };
 
+const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const settle = (callback: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      callback();
+    };
+    const abort = (): void => {
+      settle(() => reject(
+        signal.reason ?? new DOMException("Agent Runtime inspection was cancelled", "AbortError"),
+      ));
+    };
+
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+    operation.then(
+      value => settle(() => resolve(value)),
+      error => settle(() => reject(error)),
+    );
+  });
+
 export const createAgentRuntimeHost = (
   dependencies: BuildCodexSetupViewDependencies,
 ): AgentRuntimeHost => {
@@ -81,15 +109,14 @@ export const createAgentRuntimeHost = (
               options?.signal === undefined
                 ? hostAbort.signal
                 : AbortSignal.any([hostAbort.signal, options.signal]);
-            let call: Promise<unknown>;
-            call = buildCodexSetupView(boundScope, input, { signal })
-              .then(result => {
-                signal.throwIfAborted();
-                return result;
-              })
-              .finally(() => activeCalls.delete(call));
-            activeCalls.add(call);
-            return call as ReturnType<RuntimeAccessHandle["codexSetup"]["inspect"]>;
+            signal.throwIfAborted();
+            const operation = buildCodexSetupView(boundScope, input, { signal });
+            activeCalls.add(operation);
+            operation.then(
+              () => activeCalls.delete(operation),
+              () => activeCalls.delete(operation),
+            );
+            return raceWithAbort(operation, signal);
           },
         }),
       });

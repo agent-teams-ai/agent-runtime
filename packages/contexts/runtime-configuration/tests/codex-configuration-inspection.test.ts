@@ -34,14 +34,14 @@ test("applies deterministic precedence and selected native profile", async t => 
   await writeFile(
     user,
     [
-      "model = 'gpt-base'",
+      "model = 'gpt-5.5'",
       "personality = 'friendly'",
       "model_provider = 'openai'",
       "api_key = 'must-not-leak'",
       "approval_policy = 'never'",
       "unknown_future_key = 'future'",
       "[profiles.work]",
-      "model = 'gpt-work'",
+      "model = 'gpt-5.6-codex'",
       "model_reasoning_effort = 'high'",
     ].join("\n"),
   );
@@ -79,7 +79,7 @@ test("applies deterministic precedence and selected native profile", async t => 
   assert.ok(userSourceRef !== undefined);
   assert.ok(workspaceSourceRef !== undefined);
   assert.deepEqual(first.settings, [
-    { key: "model", sourceRef: userSourceRef, value: "gpt-work" },
+    { key: "model", sourceRef: userSourceRef, value: "gpt-5.6-codex" },
     { key: "model_reasoning_effort", sourceRef: userSourceRef, value: "high" },
     { key: "personality", sourceRef: workspaceSourceRef, value: "concise" },
   ]);
@@ -101,7 +101,7 @@ test("reports a selected native profile missing only from the merged configurati
   t.after(() => rm(root, { force: true, recursive: true }));
   const user = join(root, "user.toml");
   const workspace = join(root, "workspace.toml");
-  await writeFile(user, "model = 'gpt-base'\n");
+  await writeFile(user, "model = 'gpt-5.5'\n");
   await writeFile(workspace, "personality = 'concise'\n");
   const [userCanonical, workspaceCanonical, userIdentity, workspaceIdentity] = await Promise.all([
     realpath(user),
@@ -248,6 +248,7 @@ test("fails closed for encoded and unprefixed credential-like portable values", 
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZWNyZXQifQ.signature",
     "abcdefghijklmnopqrstuvwxyzABCDEF1234567890",
     "custom-provider-secret-value",
+    "gpt-AbCdEfGhIjKlMnOpQrStUv",
   ];
 
   for (const [index, value] of values.entries()) {

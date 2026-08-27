@@ -71,8 +71,21 @@ const executableResources = new Set([
 const sourceRanks = { user: 10, workspace: 20 } as const;
 const supportedReasoningEfforts = new Set(["minimal", "low", "medium", "high", "xhigh"]);
 const supportedPersonalities = new Set(["none", "friendly", "pragmatic", "concise"]);
-const supportedModelIdentifier =
-  /^(?:gpt-[A-Za-z0-9][A-Za-z0-9._-]{0,63}|o[1-9][A-Za-z0-9._-]{0,63})$/u;
+const supportedModelIdentifiers = new Set([
+  "gpt-5.3-codex-spark",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.5",
+  "gpt-5.6",
+  "gpt-5.6-codex",
+  "gpt-5.6-luna",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "o1",
+  "o3",
+  "o3-mini",
+  "o4-mini",
+]);
 const secretShape = /(api[_-]?key|credential|oauth|password|secret|token)/i;
 const secretValueShape =
   /(?:\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
@@ -125,7 +138,7 @@ const isSupportedPortableValue = (
   value: string,
 ): boolean => {
   if (key === "model") {
-    return supportedModelIdentifier.test(value);
+    return supportedModelIdentifiers.has(value);
   }
   if (key === "model_reasoning_effort") {
     return supportedReasoningEfforts.has(value);
