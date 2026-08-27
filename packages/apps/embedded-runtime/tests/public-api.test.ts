@@ -34,6 +34,7 @@ test("production slice has no process, network, ambient env or write adapter", a
     join(repositoryRoot, "packages", "contexts", "agent-execution", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-configuration", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-security", "src"),
+    join(repositoryRoot, "packages", "platform", "filesystem-custody", "src"),
   ];
   const files: string[] = [];
   const walk = async (directory: string): Promise<void> => {
@@ -63,6 +64,7 @@ test("application and contracts stay independent from adapters and runtime frame
     join(repositoryRoot, "packages", "contexts", "agent-execution", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-configuration", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-security", "src"),
+    join(repositoryRoot, "packages", "platform", "filesystem-custody", "src"),
   ];
   const files: string[] = [];
   const walk = async (directory: string): Promise<void> => {

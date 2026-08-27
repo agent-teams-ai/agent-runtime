@@ -11,6 +11,7 @@ related:
   - ADR-0004
   - ADR-0005
   - ADR-0006
+  - ADR-0008
 blocked_by: []
 code_anchors: []
 ---
@@ -19,9 +20,10 @@ code_anchors: []
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain, dependency, and package-identity decisions are in
-ADR-0001, ADR-0002, ADR-0003, ADR-0004, and ADR-0005. Proposed ADR-0006 must be
-accepted before the first Agent Execution operation/effect-ledger slice.
+The canonical domain, dependency, package-identity, and private application
+entrypoint decisions are in ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005,
+and ADR-0008. Proposed ADR-0006 must be accepted before the first Agent
+Execution operation/effect-ledger slice.
 The committed ADR-0006 JSON oracle, independent evaluator, property/mutation
 checks, and synthetic XState requirement-27 verifier are executable architecture
 evidence governed through Foundation `quality.executable-specifications`. They do
