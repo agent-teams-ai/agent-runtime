@@ -163,6 +163,56 @@ test("reports a selected native profile missing only from the merged configurati
   assert.deepEqual(result.diagnostics, [{ code: "profile_missing" }]);
 });
 
+test("reports a selected external profile that is missing or metadata-invalid", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-codex-external-profile-missing-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const existing = join(root, "work.config.toml");
+  const missing = join(root, "missing.config.toml");
+  await writeFile(existing, "model = 'gpt-5.6-sol'\n");
+  const existingCanonical = await realpath(existing);
+  const existingIdentity = await fileIdentity(existing);
+  const feature = createFeature();
+
+  const missingResult = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-missing-external-profile",
+    nativeProfile: "missing",
+    observationEpoch: "epoch-1",
+    sources: [{
+      absolutePath: missing,
+      canonicalPath: missing,
+      displayPath: "$HOME/.codex/missing.config.toml",
+      kind: "external-profile",
+      observationEpoch: "epoch-1",
+      profileName: "missing",
+    }],
+  });
+  assert.deepEqual(missingResult.diagnostics, [{ code: "profile_missing" }]);
+  assert.equal(missingResult.sources[0]?.status, "missing");
+
+  const invalidMetadata = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-invalid-external-profile",
+    nativeProfile: "work",
+    observationEpoch: "epoch-1",
+    sources: [{
+      absolutePath: existing,
+      authorizedFileIdentity: existingIdentity,
+      canonicalPath: existingCanonical,
+      displayPath: "$HOME/.codex/work.config.toml",
+      kind: "external-profile",
+      observationEpoch: "epoch-1",
+      profileName: "work",
+      workspaceLayer: 0,
+    }],
+  });
+  assert.deepEqual(invalidMetadata.diagnostics, [
+    { code: "profile_missing" },
+    { code: "source_precedence_conflict", setting: "external-profile" },
+  ]);
+  assert.equal(invalidMetadata.sources[0]?.status, "rejected");
+});
+
 test("applies Codex workspace layers returned closest-first and rejects ambiguous order", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-workspace-layers-"));
   t.after(() => rm(root, { force: true, recursive: true }));
@@ -208,6 +258,18 @@ test("applies Codex workspace layers returned closest-first and rejects ambiguou
     { code: "source_precedence_conflict", setting: "workspace" },
   ]);
   assert.ok(ambiguous.sources.every(source => source.status === "rejected"));
+
+  const duplicateIdentity = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-layers",
+    observationEpoch: "epoch-1",
+    sources: [sources[0]!, { ...sources[0]!, workspaceLayer: 1 }],
+  });
+  assert.deepEqual(duplicateIdentity.settings, []);
+  assert.deepEqual(duplicateIdentity.diagnostics, [
+    { code: "source_precedence_conflict", setting: "workspace" },
+  ]);
+  assert.ok(duplicateIdentity.sources.every(source => source.status === "rejected"));
 });
 
 test("rejects concise personality and fails closed for an unsupported dialect", async t => {

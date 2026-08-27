@@ -156,6 +156,47 @@ const isSupportedPortableValue = (
   return supportedPersonalities.has(value);
 };
 
+const rejectSources = (
+  conflicting: readonly BoundSource[],
+  setting: string,
+  rejectedSourceRefs: Set<string>,
+  reportedConflicts: Set<string>,
+  diagnostics: CodexConfigurationDiagnostic[],
+): void => {
+  for (const source of conflicting) {
+    rejectedSourceRefs.add(source.sourceRef);
+  }
+  if (!reportedConflicts.has(setting)) {
+    reportedConflicts.add(setting);
+    diagnostics.push({ code: "source_precedence_conflict", setting });
+  }
+};
+
+const duplicateSourceGroups = (
+  sources: readonly BoundSource[],
+): readonly (readonly BoundSource[])[] => {
+  const sourcesByRef = new Map<string, BoundSource[]>();
+  for (const source of sources) {
+    const matching = sourcesByRef.get(source.sourceRef) ?? [];
+    matching.push(source);
+    sourcesByRef.set(source.sourceRef, matching);
+  }
+  return [...sourcesByRef.values()].filter(matching => matching.length > 1);
+};
+
+const hasValidSourceMetadata = (source: BoundSource): boolean =>
+  (source.kind === "user" &&
+    source.profileName === undefined && source.workspaceLayer === undefined) ||
+  (source.kind === "external-profile" &&
+    source.workspaceLayer === undefined &&
+    typeof source.profileName === "string" && source.profileName.length > 0) ||
+  (source.kind === "workspace" && source.profileName === undefined);
+
+const hasValidWorkspaceOrder = (sources: readonly BoundSource[]): boolean =>
+  sources.every(source =>
+    Number.isSafeInteger(source.workspaceLayer) && (source.workspaceLayer ?? -1) >= 0,
+  ) && new Set(sources.map(source => source.workspaceLayer)).size === sources.length;
+
 const bindSources = (
   input: InspectCodexConfigurationInput,
   identityKey: Uint8Array,
@@ -179,51 +220,73 @@ const bindSources = (
         compareText(left.sourceRef, right.sourceRef),
     );
   const rejectedSourceRefs = new Set<string>();
-  const reject = (conflicting: readonly BoundSource[], setting: string): void => {
-    for (const source of conflicting) {
-      rejectedSourceRefs.add(source.sourceRef);
-    }
-    diagnostics.push({ code: "source_precedence_conflict", setting });
-  };
+  const reportedConflicts = new Set<string>();
+  for (const matching of duplicateSourceGroups(sources)) {
+    rejectSources(
+      matching,
+      matching[0]?.kind ?? "source",
+      rejectedSourceRefs,
+      reportedConflicts,
+      diagnostics,
+    );
+  }
 
   const userSources = sources.filter(source => source.kind === "user");
   if (userSources.length > 1) {
-    reject(userSources, "user");
+    rejectSources(
+      userSources,
+      "user",
+      rejectedSourceRefs,
+      reportedConflicts,
+      diagnostics,
+    );
   }
 
   const workspaceSources = sources.filter(source => source.kind === "workspace");
-  const validWorkspaceOrder = workspaceSources.every(source =>
-    Number.isSafeInteger(source.workspaceLayer) && (source.workspaceLayer ?? -1) >= 0,
-  );
-  const workspaceLayers = new Set(workspaceSources.map(source => source.workspaceLayer));
-  if (
-    workspaceSources.length > 1 &&
-    (!validWorkspaceOrder || workspaceLayers.size !== workspaceSources.length)
-  ) {
-    reject(workspaceSources, "workspace");
+  if (workspaceSources.length > 1 && !hasValidWorkspaceOrder(workspaceSources)) {
+    rejectSources(
+      workspaceSources,
+      "workspace",
+      rejectedSourceRefs,
+      reportedConflicts,
+      diagnostics,
+    );
+  }
+
+  for (const source of sources) {
+    if (!hasValidSourceMetadata(source)) {
+      rejectSources(
+        [source],
+        source.kind,
+        rejectedSourceRefs,
+        reportedConflicts,
+        diagnostics,
+      );
+    } else if (
+      source.kind === "external-profile" && source.profileName !== input.nativeProfile
+    ) {
+      rejectedSourceRefs.add(source.sourceRef);
+    }
   }
 
   const selectedProfiles = sources.filter(source =>
     source.kind === "external-profile" &&
-    source.profileName === input.nativeProfile,
+    source.profileName === input.nativeProfile &&
+    !rejectedSourceRefs.has(source.sourceRef),
   );
   if (selectedProfiles.length > 1) {
-    reject(selectedProfiles, "external-profile");
+    rejectSources(
+      selectedProfiles,
+      "external-profile",
+      rejectedSourceRefs,
+      reportedConflicts,
+      diagnostics,
+    );
   }
-  for (const source of sources) {
-    const metadataValid =
-      (source.kind === "user" &&
-        source.profileName === undefined && source.workspaceLayer === undefined) ||
-      (source.kind === "external-profile" &&
-        source.workspaceLayer === undefined &&
-        typeof source.profileName === "string" && source.profileName.length > 0) ||
-      (source.kind === "workspace" && source.profileName === undefined);
-    if (!metadataValid ||
-      (source.kind === "external-profile" && source.profileName !== input.nativeProfile)) {
-      rejectedSourceRefs.add(source.sourceRef);
-    }
-  }
-  if (input.nativeProfile !== undefined && selectedProfiles.length === 0) {
+  if (
+    input.nativeProfile !== undefined &&
+    selectedProfiles.every(source => rejectedSourceRefs.has(source.sourceRef))
+  ) {
     diagnostics.push({ code: "profile_missing" });
   }
   return { rejectedSourceRefs, sources };
@@ -332,7 +395,13 @@ const prepareSources = async (
       signal === undefined ? undefined : { signal },
     );
     if (read.kind !== "read") {
-      if (read.kind !== "missing") {
+      if (
+        read.kind === "missing" &&
+        source.kind === "external-profile" &&
+        source.profileName === input.nativeProfile
+      ) {
+        collections.diagnostics.push({ code: "profile_missing" });
+      } else if (read.kind !== "missing") {
         collections.diagnostics.push({
           code: read.kind === "too-large" ? "config_too_large" : "config_unreadable",
           sourceRef: source.sourceRef,

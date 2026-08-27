@@ -34,7 +34,7 @@ const safePathSegment = (value: string): string =>
     .map(character =>
       /^[A-Za-z0-9._-]$/u.test(character)
         ? character
-        : `%${character.codePointAt(0)?.toString(16).toUpperCase() ?? "0"}`,
+        : `%{${character.codePointAt(0)?.toString(16).toUpperCase() ?? "0"}}`,
     )
     .join("");
 

@@ -215,8 +215,14 @@ test("derives deterministic display labels without leaking caller labels or host
   t.after(() => rm(outer, { force: true, recursive: true }));
   const home = join(outer, "private-home");
   const executable = join(home, "bin", "co\ndex");
+  const newlineThenA = join(home, "bin", "\nA");
+  const feminineOrdinal = join(home, "bin", "\u{00AA}");
   await mkdir(join(home, "bin"), { recursive: true });
-  await writeFile(executable, "synthetic");
+  await Promise.all([
+    writeFile(executable, "synthetic"),
+    writeFile(newlineThenA, "synthetic"),
+    writeFile(feminineOrdinal, "synthetic"),
+  ]);
 
   const feature = createSetupInspectionAuthorizationFeature({
     pathCanonicalizer: createNodePathCanonicalizer(),
@@ -232,7 +238,7 @@ test("derives deterministic display labels without leaking caller labels or host
   }[]) =>
     feature.authorizeSetupInspection.execute({
       configurationSources: [],
-      explicitExecutablePaths: [executable],
+      explicitExecutablePaths: [executable, newlineThenA, feminineOrdinal],
       knownExecutableDirectories: [],
       observationEpoch: "epoch-display",
       pathEntries: [],
@@ -249,8 +255,11 @@ test("derives deterministic display labels without leaking caller labels or host
   if (first.status !== "authorized") {
     return;
   }
-  assert.equal(first.installationCandidates[0]?.displayPath, "$HOME/bin/co%Adex");
   const renderedLabels = first.installationCandidates.map(candidate => candidate.displayPath);
+  assert.ok(renderedLabels.includes("$HOME/bin/co%{A}dex"));
+  assert.ok(renderedLabels.includes("$HOME/bin/%{A}A"));
+  assert.ok(renderedLabels.includes("$HOME/bin/%{AA}"));
+  assert.equal(new Set(renderedLabels).size, renderedLabels.length);
   assert.equal(renderedLabels.some(label => label.includes(outer)), false);
   assert.equal(renderedLabels.some(label => label.includes(maliciousLabel)), false);
   assert.equal(renderedLabels.some(label => label.includes("\n")), false);
