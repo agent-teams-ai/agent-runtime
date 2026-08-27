@@ -330,6 +330,130 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
   await host.dispose();
 });
 
+test("disposal tracks every parallel branch after a sibling rejects", async () => {
+  let configurationStarted: (() => void) | undefined;
+  const started = new Promise<void>(resolve => {
+    configurationStarted = resolve;
+  });
+  let releaseConfiguration: (() => void) | undefined;
+  const configurationGate = new Promise<void>(resolve => {
+    releaseConfiguration = resolve;
+  });
+  const host = createAgentRuntimeHost({
+    authorizeSetupInspection: {
+      async execute() {
+        return {
+          configurationSources: [],
+          diagnostics: [],
+          installationCandidates: [],
+          observationEpoch: "epoch-1",
+          status: "authorized" as const,
+        };
+      },
+    },
+    discoverCodexInstallations: {
+      async execute(_input, options) {
+        return new Promise<never>((_resolve, reject) => {
+          const abort = (): void => reject(
+            options?.signal?.reason ?? new DOMException("cancelled", "AbortError"),
+          );
+          if (options?.signal?.aborted === true) {
+            abort();
+            return;
+          }
+          options?.signal?.addEventListener("abort", abort, { once: true });
+        });
+      },
+    },
+    inspectCodexConfiguration: {
+      async execute() {
+        configurationStarted?.();
+        await configurationGate;
+        return { diagnostics: [], settings: [], sources: [] };
+      },
+    },
+  });
+  const access = host.bindAccess({
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-1",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [],
+    scopeId: "scope-parallel-drain",
+  });
+  const controller = new AbortController();
+  const inspection = access.codexSetup.inspect({}, { signal: controller.signal });
+  await started;
+  controller.abort(new DOMException("caller cancelled", "AbortError"));
+  await assert.rejects(inspection, { name: "AbortError" });
+
+  let disposalSettled = false;
+  const disposal = host.dispose().then(() => {
+    disposalSettled = true;
+    return null;
+  });
+  await delay(25);
+  assert.equal(disposalSettled, false);
+  releaseConfiguration?.();
+  await disposal;
+  assert.equal(disposalSettled, true);
+});
+
+test("disposal remains bounded when a dependency never settles", async () => {
+  let configurationStarted: (() => void) | undefined;
+  const started = new Promise<void>(resolve => {
+    configurationStarted = resolve;
+  });
+  const host = createAgentRuntimeHost({
+    authorizeSetupInspection: {
+      async execute() {
+        return {
+          configurationSources: [],
+          diagnostics: [],
+          installationCandidates: [],
+          observationEpoch: "epoch-1",
+          status: "authorized" as const,
+        };
+      },
+    },
+    discoverCodexInstallations: {
+      async execute() {
+        return { diagnostics: [], installations: [], observationEpoch: "epoch-1" };
+      },
+    },
+    inspectCodexConfiguration: {
+      async execute() {
+        configurationStarted?.();
+        return new Promise<never>(() => {
+          // Synthetic non-cooperative dependency used to prove the disposal deadline.
+        });
+      },
+    },
+  });
+  const access = host.bindAccess({
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-1",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [],
+    scopeId: "scope-bounded-disposal",
+  });
+  const inspection = access.codexSetup.inspect({});
+  await started;
+  const disposal = host.dispose();
+  await assert.rejects(inspection, { name: "AbortError" });
+  await Promise.race([
+    disposal,
+    delay(1_500, null, { ref: false }).then(() => {
+      throw new Error("Host disposal exceeded its deadline");
+    }),
+  ]);
+});
+
 test("product installation references are stable within and isolated across trusted scopes", async t => {
   const host = createAgentRuntimeHost({
     authorizeSetupInspection: {

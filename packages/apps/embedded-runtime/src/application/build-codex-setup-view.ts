@@ -160,7 +160,7 @@ export const createBuildCodexSetupView = (
       diagnostics.push({ code: "native_profile_invalid" });
     }
 
-    const [installations, configuration] = await Promise.all([
+    const [installationSettlement, configurationSettlement] = await Promise.allSettled([
       dependencies.discoverCodexInstallations.execute(
         {
           candidates: installationCandidates,
@@ -178,6 +178,14 @@ export const createBuildCodexSetupView = (
         options,
       ),
     ]);
+    if (installationSettlement.status === "rejected") {
+      throw installationSettlement.reason;
+    }
+    if (configurationSettlement.status === "rejected") {
+      throw configurationSettlement.reason;
+    }
+    const installations = installationSettlement.value;
+    const configuration = configurationSettlement.value;
 
     diagnostics.push(
       ...installations.diagnostics.map(diagnostic => ({
