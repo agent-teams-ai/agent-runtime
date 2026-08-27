@@ -90,7 +90,7 @@ test("application and contracts stay independent from adapters and runtime frame
       imports.some(specifier =>
         specifier !== undefined &&
         (/node:(?:child_process|dgram|dns|fs|http|https|module|net|tls)/u.test(specifier) ||
-          /(?:^|\/)adapters(?:\/|$)|container|module-graph|registry|transport/u.test(specifier)),
+          /(?:^|\/)(?:adapters|composition)(?:\/|$)|container|module-graph|registry|transport/u.test(specifier)),
       ),
       false,
       `forbidden inward dependency in ${file}`,

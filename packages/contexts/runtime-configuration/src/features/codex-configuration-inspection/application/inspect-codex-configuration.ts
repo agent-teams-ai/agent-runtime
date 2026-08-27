@@ -314,7 +314,10 @@ const applyPreparedSources = (
   if (nativeProfile !== undefined) {
     for (const source of preparedSources) {
       const profiles = source.document.profiles;
-      const selected = isRecord(profiles) ? profiles[nativeProfile] : undefined;
+      const selected =
+        isRecord(profiles) && Object.hasOwn(profiles, nativeProfile)
+          ? profiles[nativeProfile]
+          : undefined;
       if (isRecord(selected)) {
         selectedProfileFound = true;
         applySettings(selected, source);

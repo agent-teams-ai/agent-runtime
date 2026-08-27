@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   createCodexConfigurationInspectionFeature,
   createNodeConfigurationSourceReader,
   createSmolTomlParser,
 } from "../dist/composition.js";
+
+const execFile = promisify(execFileCallback);
 
 const createFeature = (maximumBytes = 128 * 1024) =>
   createCodexConfigurationInspectionFeature({
@@ -118,6 +122,68 @@ test("reports a selected native profile missing only from the merged configurati
 
   assert.deepEqual(result.diagnostics, [{ code: "profile_missing" }]);
 });
+
+test("does not resolve inherited object properties as native profiles", async () => {
+  const feature = createCodexConfigurationInspectionFeature({
+    parser: {
+      parse() {
+        return { document: { profiles: {} }, kind: "parsed" as const };
+      },
+    },
+    sourceIdentityKey: Buffer.alloc(32, 7),
+    sourceReader: {
+      async read() {
+        return { bytes: Buffer.from("synthetic"), kind: "read" as const };
+      },
+    },
+  });
+  const result = await feature.inspectCodexConfiguration.execute({
+    identityScope: "scope-prototype",
+    nativeProfile: "__proto__",
+    observationEpoch: "epoch-1",
+    sources: [{
+      absolutePath: "/synthetic/config.toml",
+      authorizedFileIdentity: "synthetic-file",
+      canonicalPath: "/synthetic/config.toml",
+      displayPath: "$HOME/config.toml",
+      kind: "user",
+      observationEpoch: "epoch-1",
+    }],
+  });
+
+  assert.deepEqual(result.diagnostics, [{ code: "profile_missing" }]);
+});
+
+test(
+  "rejects a FIFO configuration source without blocking",
+  { skip: process.platform === "win32" },
+  async t => {
+    const root = await mkdtemp(join(tmpdir(), "ar-codex-config-fifo-"));
+    t.after(() => rm(root, { force: true, recursive: true }));
+    const fifo = join(root, "config.toml");
+    await execFile("mkfifo", [fifo]);
+    const [canonicalPath, authorizedFileIdentity] = await Promise.all([
+      realpath(fifo),
+      fileIdentity(fifo),
+    ]);
+
+    const result = await createFeature().inspectCodexConfiguration.execute({
+      identityScope: "scope-fifo",
+      observationEpoch: "epoch-1",
+      sources: [{
+        absolutePath: fifo,
+        authorizedFileIdentity,
+        canonicalPath,
+        displayPath: "$HOME/config.toml",
+        kind: "user",
+        observationEpoch: "epoch-1",
+      }],
+    });
+
+    assert.deepEqual(result.settings, []);
+    assert.equal(result.diagnostics[0]?.code, "config_unreadable");
+  },
+);
 
 test("rejects credential-shaped values even under portable setting keys", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-secret-value-"));

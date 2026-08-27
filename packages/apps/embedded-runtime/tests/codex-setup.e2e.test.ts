@@ -269,6 +269,55 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
   assert.equal(getterReads, 1);
 });
 
+test("caller cancellation revokes an in-flight inspection even when a dependency ignores it", async t => {
+  let releaseAuthorization: (() => void) | undefined;
+  const authorizationGate = new Promise<void>(resolve => {
+    releaseAuthorization = resolve;
+  });
+  const host = createAgentRuntimeHost({
+    authorizeSetupInspection: {
+      async execute() {
+        await authorizationGate;
+        return {
+          configurationSources: [],
+          diagnostics: [],
+          installationCandidates: [],
+          observationEpoch: "epoch-1",
+          status: "authorized" as const,
+        };
+      },
+    },
+    discoverCodexInstallations: {
+      async execute() {
+        return { diagnostics: [], installations: [], observationEpoch: "epoch-1" };
+      },
+    },
+    inspectCodexConfiguration: {
+      async execute() {
+        return { diagnostics: [], settings: [], sources: [] };
+      },
+    },
+  });
+  t.after(() => host.dispose());
+  const access = host.bindAccess({
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-1",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [],
+    scopeId: "scope-caller-abort",
+  });
+  const controller = new AbortController();
+  const inspection = access.codexSetup.inspect({}, { signal: controller.signal });
+  await Promise.resolve();
+  controller.abort(new DOMException("caller cancelled", "AbortError"));
+  releaseAuthorization?.();
+
+  await assert.rejects(inspection, { name: "AbortError" });
+});
+
 test("product installation references are stable within and isolated across trusted scopes", async t => {
   const host = createAgentRuntimeHost({
     authorizeSetupInspection: {

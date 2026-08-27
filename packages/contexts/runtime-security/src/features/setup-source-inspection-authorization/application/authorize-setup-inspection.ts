@@ -28,6 +28,9 @@ const contains = (root: string, candidate: string): boolean => {
   return remainder === "" || (!remainder.startsWith("..") && !isAbsolute(remainder));
 };
 
+const containsWithDarwinCaseFolding = (root: string, candidate: string): boolean =>
+  contains(root.toLocaleLowerCase("en-US"), candidate.toLocaleLowerCase("en-US"));
+
 const selectRoot = (
   lexicalPath: string,
   canonicalPath: string,
@@ -38,7 +41,7 @@ const selectRoot = (
     .filter(
       root =>
         (expectedKind === undefined || root.kind === expectedKind) &&
-        contains(resolve(root.absolutePath), lexicalPath) &&
+        containsWithDarwinCaseFolding(resolve(root.absolutePath), lexicalPath) &&
         contains(root.canonicalPath, canonicalPath),
     )
     .toSorted(
@@ -48,8 +51,15 @@ const selectRoot = (
         compareText(left.displayName, right.displayName),
     )[0];
 
-const displayPath = (candidate: string, root: CanonicalRoot): string => {
-  const suffix = relative(resolve(root.absolutePath), candidate);
+const displayPath = (
+  lexicalPath: string,
+  canonicalPath: string,
+  root: CanonicalRoot,
+): string => {
+  const lexicalRoot = resolve(root.absolutePath);
+  const suffix = contains(lexicalRoot, lexicalPath)
+    ? relative(lexicalRoot, lexicalPath)
+    : relative(root.canonicalPath, canonicalPath);
   return suffix === "" ? root.displayName : `${root.displayName}/${suffix}`;
 };
 
@@ -120,6 +130,7 @@ const authorizeExecutable = async (
   let canonicalPath: string;
   let authorizedFileIdentity: string | undefined;
   let hardLinked = false;
+  let nonRegular = false;
   try {
     const canonical = await dependencies.canonicalizer.canonicalize(
       lexicalPath,
@@ -128,22 +139,26 @@ const authorizeExecutable = async (
     canonicalPath = canonical.absolutePath;
     authorizedFileIdentity = canonical.fileIdentity;
     hardLinked = canonical.isFile === true && (canonical.linkCount ?? 0) > 1;
+    nonRegular = canonical.exists && canonical.isFile !== true;
   } catch (error) {
     rethrowCancellation(error, signal);
     return { code: "path_outside_scope", subject: "unreadable-path" };
   }
   const root = selectRoot(lexicalPath, canonicalPath, dependencies.roots);
-  if (root === undefined || hardLinked) {
+  if (root === undefined || hardLinked || nonRegular) {
     return {
       code: "path_outside_scope",
-      subject: root === undefined ? "unscoped-path" : displayPath(lexicalPath, root),
+      subject:
+        root === undefined
+          ? "unscoped-path"
+          : displayPath(lexicalPath, canonicalPath, root),
     };
   }
   return {
     absolutePath: lexicalPath,
     ...(authorizedFileIdentity === undefined ? {} : { authorizedFileIdentity }),
     canonicalPath,
-    displayPath: displayPath(lexicalPath, root),
+    displayPath: displayPath(lexicalPath, canonicalPath, root),
     required: request.required,
     source: request.source,
   };
@@ -232,6 +247,7 @@ const collectConfigurationSources = async (
     let canonicalPath: string;
     let authorizedFileIdentity: string | undefined;
     let hardLinked = false;
+    let nonRegular = false;
     try {
       const canonical = await canonicalizer.canonicalize(
         lexicalPath,
@@ -240,6 +256,7 @@ const collectConfigurationSources = async (
       canonicalPath = canonical.absolutePath;
       authorizedFileIdentity = canonical.fileIdentity;
       hardLinked = canonical.isFile === true && (canonical.linkCount ?? 0) > 1;
+      nonRegular = canonical.exists && canonical.isFile !== true;
     } catch (error) {
       rethrowCancellation(error, signal);
       diagnostics.push({ code: "path_outside_scope", subject: `${source.kind}-config` });
@@ -247,13 +264,13 @@ const collectConfigurationSources = async (
     }
     const expectedRootKind = source.kind === "user" ? "home" : "workspace";
     const root = selectRoot(lexicalPath, canonicalPath, roots, expectedRootKind);
-    if (root === undefined || hardLinked) {
+    if (root === undefined || hardLinked || nonRegular) {
       diagnostics.push({
         code: "path_outside_scope",
         subject:
           root === undefined
             ? `${source.kind}-config`
-            : displayPath(lexicalPath, root),
+            : displayPath(lexicalPath, canonicalPath, root),
       });
       continue;
     }
@@ -261,7 +278,7 @@ const collectConfigurationSources = async (
       absolutePath: lexicalPath,
       ...(authorizedFileIdentity === undefined ? {} : { authorizedFileIdentity }),
       canonicalPath,
-      displayPath: displayPath(lexicalPath, root),
+      displayPath: displayPath(lexicalPath, canonicalPath, root),
       kind: source.kind,
       observationEpoch: input.observationEpoch,
     });

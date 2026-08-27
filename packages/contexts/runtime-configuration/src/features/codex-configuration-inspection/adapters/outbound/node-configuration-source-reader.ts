@@ -99,7 +99,9 @@ export const createNodeConfigurationSourceReader = (
       }
       const handle = await open(
         canonicalPath,
-        constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+        constants.O_RDONLY |
+          constants.O_NONBLOCK |
+          (constants.O_NOFOLLOW ?? 0),
       );
       try {
         return await readStableAuthorizedFile(

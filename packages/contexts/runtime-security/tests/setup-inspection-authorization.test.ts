@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
 import { link, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   createNodePathCanonicalizer,
   createSetupInspectionAuthorizationFeature,
 } from "../dist/composition.js";
+
+const execFile = promisify(execFileCallback);
 
 test("authorizes exact synthetic paths and rejects ambient expansion", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-setup-authorization-"));
@@ -218,3 +222,84 @@ test("rejects hard-linked executable and configuration sources", async t => {
     { code: "path_outside_scope", subject: "$HOME/config.toml" },
   ]);
 });
+
+test(
+  "rejects a FIFO without blocking path authorization",
+  { skip: process.platform === "win32" },
+  async t => {
+    const root = await mkdtemp(join(tmpdir(), "ar-setup-fifo-"));
+    t.after(() => rm(root, { force: true, recursive: true }));
+    const fifo = join(root, "codex");
+    await execFile("mkfifo", [fifo]);
+
+    const feature = createSetupInspectionAuthorizationFeature({
+      pathCanonicalizer: createNodePathCanonicalizer(),
+    });
+    const result = await feature.authorizeSetupInspection.execute({
+      configurationSources: [{
+        absolutePath: fifo,
+        kind: "user",
+        workspaceTrusted: true,
+      }],
+      explicitExecutablePaths: [fifo],
+      knownExecutableDirectories: [],
+      observationEpoch: "epoch-fifo",
+      pathEntries: [],
+      platform: "darwin",
+      roots: [{ absolutePath: root, displayName: "$HOME", kind: "home" }],
+    });
+
+    assert.equal(result.status, "authorized");
+    if (result.status !== "authorized") {
+      return;
+    }
+    assert.deepEqual(result.configurationSources, []);
+    assert.deepEqual(result.installationCandidates, []);
+    assert.equal(result.diagnostics.length, 2);
+    assert.ok(result.diagnostics.every(item => item.code === "path_outside_scope"));
+  },
+);
+
+test(
+  "uses canonical containment when a trusted filesystem changes path casing",
+  { skip: process.platform === "win32" },
+  async () => {
+  const lexicalRoot = "/Synthetic/Home";
+  const lexicalCandidate = "/synthetic/home/bin/codex";
+  const canonicalRoot = "/Synthetic/Home";
+  const canonicalCandidate = "/Synthetic/Home/bin/codex";
+  const feature = createSetupInspectionAuthorizationFeature({
+    pathCanonicalizer: {
+      async canonicalize(path) {
+        if (path === lexicalRoot) {
+          return { absolutePath: canonicalRoot, exists: true, isFile: false };
+        }
+        assert.equal(path, lexicalCandidate);
+        return {
+          absolutePath: canonicalCandidate,
+          exists: true,
+          fileIdentity: "synthetic-file",
+          isFile: true,
+          linkCount: 1,
+        };
+      },
+    },
+  });
+
+  const result = await feature.authorizeSetupInspection.execute({
+    configurationSources: [],
+    explicitExecutablePaths: [lexicalCandidate],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-case",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [{ absolutePath: lexicalRoot, displayName: "$HOME", kind: "home" }],
+  });
+
+  assert.equal(result.status, "authorized");
+  if (result.status !== "authorized") {
+    return;
+  }
+  assert.equal(result.installationCandidates[0]?.displayPath, "$HOME/bin/codex");
+  },
+);

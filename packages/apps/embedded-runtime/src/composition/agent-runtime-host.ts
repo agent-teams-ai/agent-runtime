@@ -84,7 +84,7 @@ export const createAgentRuntimeHost = (
             let call: Promise<unknown>;
             call = buildCodexSetupView(boundScope, input, { signal })
               .then(result => {
-                hostAbort.signal.throwIfAborted();
+                signal.throwIfAborted();
                 return result;
               })
               .finally(() => activeCalls.delete(call));

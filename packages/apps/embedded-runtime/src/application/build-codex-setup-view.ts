@@ -15,7 +15,7 @@ import type {
   InspectCodexRuntimeSetup,
   InspectCodexRuntimeSetupOutcome,
 } from "../contracts/runtime-access.js";
-import type { TrustedRuntimeAccessScope } from "../composition/trusted-runtime-access-scope.js";
+import type { TrustedRuntimeAccessScope } from "./trusted-runtime-access-scope.js";
 
 export interface BuildCodexSetupViewDependencies {
   readonly authorizeSetupInspection: AuthorizeSetupInspection;
