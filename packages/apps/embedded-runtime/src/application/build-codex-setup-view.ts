@@ -132,6 +132,7 @@ export const createBuildCodexSetupView = (
       },
       options,
     );
+    options?.signal?.throwIfAborted();
     if (authorization.status !== "authorized") {
       return deepFreeze({
         diagnostics: authorization.diagnostics.map(diagnostic => ({

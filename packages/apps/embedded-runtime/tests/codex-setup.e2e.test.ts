@@ -271,6 +271,8 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
 });
 
 test("caller cancellation revokes an in-flight inspection even when a dependency ignores it", async t => {
+  let discoveryCalls = 0;
+  let configurationCalls = 0;
   let releaseAuthorization: (() => void) | undefined;
   const authorizationGate = new Promise<void>(resolve => {
     releaseAuthorization = resolve;
@@ -290,11 +292,13 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
     },
     discoverCodexInstallations: {
       async execute() {
+        discoveryCalls += 1;
         return { diagnostics: [], installations: [], observationEpoch: "epoch-1" };
       },
     },
     inspectCodexConfiguration: {
       async execute() {
+        configurationCalls += 1;
         return { diagnostics: [], settings: [], sources: [] };
       },
     },
@@ -328,6 +332,8 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
     releaseAuthorization?.();
   }
   await host.dispose();
+  assert.equal(discoveryCalls, 0);
+  assert.equal(configurationCalls, 0);
 });
 
 test("disposal tracks every parallel branch after a sibling rejects", async () => {
