@@ -270,6 +270,28 @@ test("applies Codex workspace layers returned closest-first and rejects ambiguou
     { code: "source_precedence_conflict", setting: "workspace" },
   ]);
   assert.ok(duplicateIdentity.sources.every(source => source.status === "rejected"));
+
+  const duplicateAcrossKinds = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-cross-kind-duplicate",
+    nativeProfile: "work",
+    observationEpoch: "epoch-1",
+    sources: [
+      { ...sources[0]!, kind: "user", workspaceLayer: undefined },
+      {
+        ...sources[0]!,
+        kind: "external-profile",
+        profileName: "work",
+        workspaceLayer: undefined,
+      },
+    ],
+  });
+  assert.deepEqual(duplicateAcrossKinds.settings, []);
+  assert.deepEqual(duplicateAcrossKinds.diagnostics, [
+    { code: "profile_missing" },
+    { code: "source_precedence_conflict", setting: "source" },
+  ]);
+  assert.ok(duplicateAcrossKinds.sources.every(source => source.status === "rejected"));
 });
 
 test("rejects concise personality and fails closed for an unsupported dialect", async t => {

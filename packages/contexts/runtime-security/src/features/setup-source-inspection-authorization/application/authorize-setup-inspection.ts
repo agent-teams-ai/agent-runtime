@@ -81,7 +81,7 @@ const displayPath = (
     : relative(root.canonicalPath, canonicalPath);
   const label = rootLabels[root.kind];
   const safeSuffix = suffix
-    .split(/[\\/]/u)
+    .split("/")
     .map(safePathSegment)
     .join("/");
   return safeSuffix === "" ? label : `${label}/${safeSuffix}`;

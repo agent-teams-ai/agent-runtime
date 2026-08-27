@@ -175,14 +175,18 @@ const rejectSources = (
 const duplicateSourceGroups = (
   sources: readonly BoundSource[],
 ): readonly (readonly BoundSource[])[] => {
-  const sourcesByRef = new Map<string, BoundSource[]>();
+  const sourcesByCanonicalPath = new Map<string, BoundSource[]>();
   for (const source of sources) {
-    const matching = sourcesByRef.get(source.sourceRef) ?? [];
+    const matching = sourcesByCanonicalPath.get(source.canonicalPath) ?? [];
     matching.push(source);
-    sourcesByRef.set(source.sourceRef, matching);
+    sourcesByCanonicalPath.set(source.canonicalPath, matching);
   }
-  return [...sourcesByRef.values()].filter(matching => matching.length > 1);
+  return [...sourcesByCanonicalPath.values()].filter(matching => matching.length > 1);
 };
+
+const duplicateSourceSetting = (sources: readonly BoundSource[]): string =>
+  new Set(sources.map(source => source.kind)).size === 1
+    ? (sources[0]?.kind ?? "source") : "source";
 
 const hasValidSourceMetadata = (source: BoundSource): boolean =>
   (source.kind === "user" &&
@@ -224,7 +228,7 @@ const bindSources = (
   for (const matching of duplicateSourceGroups(sources)) {
     rejectSources(
       matching,
-      matching[0]?.kind ?? "source",
+      duplicateSourceSetting(matching),
       rejectedSourceRefs,
       reportedConflicts,
       diagnostics,
