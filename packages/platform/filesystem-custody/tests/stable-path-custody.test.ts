@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
@@ -48,4 +48,46 @@ test("detects an ancestor that was renamed and restored", async t => {
   const after = await capturePathLineage(path, root);
 
   assert.equal(pathLineagesEqual(before, after), false);
+});
+
+test("accepts a legitimate path component beginning with two dots", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-path-dot-prefix-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const path = join(root, "..config");
+  await writeFile(path, "synthetic");
+
+  const lineage = await capturePathLineage(path, root);
+
+  assert.equal(lineage.components.length, 2);
+});
+
+test(
+  "treats a backslash as a filename character on POSIX",
+  { skip: process.platform === "win32" },
+  async t => {
+    const root = await mkdtemp(join(tmpdir(), "ar-path-backslash-"));
+    t.after(() => rm(root, { force: true, recursive: true }));
+    const path = join(root, "directory\\name");
+    await writeFile(path, "synthetic");
+
+    const lineage = await capturePathLineage(path, root);
+
+    assert.equal(lineage.components.length, 2);
+  },
+);
+
+test("rejects a path under an unrelated sibling boundary", async t => {
+  const parent = await mkdtemp(join(tmpdir(), "ar-path-twin-root-"));
+  t.after(() => rm(parent, { force: true, recursive: true }));
+  const boundary = join(parent, "root");
+  const twin = join(parent, "root-twin");
+  const path = join(twin, "config.toml");
+  await Promise.all([mkdir(boundary), mkdir(twin)]);
+  await writeFile(path, "synthetic");
+
+  await assert.rejects(
+    capturePathLineage(path, boundary),
+    /outside its custody boundary/u,
+  );
+  assert.equal(dirname(path), twin);
 });

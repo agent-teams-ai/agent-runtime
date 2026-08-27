@@ -28,18 +28,32 @@ import {
   copyTrustedRuntimeAccessScope,
   type TrustedRuntimeAccessScope,
 } from "./trusted-runtime-access-scope.js";
+import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
 
 export interface AgentRuntimeHost extends AsyncDisposable {
   bindAccess(scope: TrustedRuntimeAccessScope): RuntimeAccessHandle;
   dispose(): Promise<void>;
 }
 
+export class AgentRuntimeHostDisposalIncompleteError extends Error {
+  public readonly activeCallCount: number;
+
+  public constructor(activeCallCount: number) {
+    super("Agent Runtime Host disposal deadline elapsed with active calls");
+    this.name = "AgentRuntimeHostDisposalIncompleteError";
+    this.activeCallCount = activeCallCount;
+  }
+}
+
 const settleActiveCalls = async (activeCalls: ReadonlySet<Promise<unknown>>): Promise<void> => {
   await Promise.allSettled(activeCalls);
 };
 
-const waitForDisposalDeadline = async (): Promise<void> => {
+const rejectAtDisposalDeadline = async (
+  activeCalls: ReadonlySet<Promise<unknown>>,
+): Promise<never> => {
   await delay(1_000, null, { ref: false });
+  throw new AgentRuntimeHostDisposalIncompleteError(activeCalls.size);
 };
 
 const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T> =>
@@ -91,7 +105,10 @@ export const createAgentRuntimeHost = (
     }
     disposed = true;
     hostAbort.abort(new DOMException("Agent Runtime Host is disposed", "AbortError"));
-    disposal = Promise.race([settleActiveCalls(activeCalls), waitForDisposalDeadline()]);
+    disposal = Promise.race([
+      settleActiveCalls(activeCalls),
+      rejectAtDisposalDeadline(activeCalls),
+    ]);
     return disposal;
   };
 
@@ -145,5 +162,6 @@ export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
     authorizeSetupInspection: security.authorizeSetupInspection,
     discoverCodexInstallations: execution.discoverCodexInstallations,
     inspectCodexConfiguration: configuration.inspectCodexConfiguration,
+    planCodexSetupInspection: createCodexSetupInspectionPlanner(process.platform),
   });
 };

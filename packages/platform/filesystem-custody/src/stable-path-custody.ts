@@ -7,6 +7,7 @@ import {
   join,
   relative,
   resolve,
+  sep,
 } from "node:path";
 
 interface PathComponentIdentity {
@@ -50,12 +51,16 @@ const componentPaths = (
   const target = resolve(absolutePath);
   const boundary = resolve(boundaryPath);
   const suffix = relative(boundary, target);
-  if (suffix.startsWith("..") || isAbsolute(suffix)) {
+  if (
+    suffix === ".." ||
+    suffix.startsWith(`..${sep}`) ||
+    isAbsolute(suffix)
+  ) {
     throw new PathCustodyError("Path is outside its custody boundary");
   }
   const paths = [boundary];
   let cursor = boundary;
-  for (const component of suffix.split(/[/\\]+/u).filter(Boolean)) {
+  for (const component of suffix.split(sep).filter(Boolean)) {
     cursor = join(cursor, component);
     paths.push(cursor);
   }

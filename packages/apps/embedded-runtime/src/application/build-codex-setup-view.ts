@@ -12,6 +12,7 @@ import type {
   AuthorizeSetupInspection,
   AuthorizedConfigurationSource,
   AuthorizedInstallationCandidate,
+  SetupAuthorizationDiagnostic,
 } from "@agent-teams/runtime-security";
 
 import type {
@@ -19,12 +20,14 @@ import type {
   InspectCodexRuntimeSetup,
   InspectCodexRuntimeSetupOutcome,
 } from "../contracts/runtime-access.js";
+import type { CodexSetupInspectionPlanner } from "./ports/outbound/codex-setup-inspection-planner.js";
 import type { TrustedRuntimeAccessScope } from "./trusted-runtime-access-scope.js";
 
 export interface BuildCodexSetupViewDependencies {
   readonly authorizeSetupInspection: AuthorizeSetupInspection;
   readonly discoverCodexInstallations: DiscoverCodexInstallations;
   readonly inspectCodexConfiguration: InspectCodexConfiguration;
+  readonly planCodexSetupInspection: CodexSetupInspectionPlanner;
 }
 
 const nativeProfilePattern = /^[A-Za-z0-9_-]{1,64}$/u;
@@ -103,6 +106,13 @@ const mapConfigurationSource = (
     : { workspaceLayer: source.workspaceLayer }),
 });
 
+const mapAuthorizationDiagnostics = (
+  diagnostics: readonly SetupAuthorizationDiagnostic[],
+): readonly CodexSetupDiagnostic[] => diagnostics.map(diagnostic => ({
+  code: diagnostic.code,
+  ...(diagnostic.subject === undefined ? {} : { subject: diagnostic.subject }),
+}));
+
 export const createBuildCodexSetupView = (
   dependencies: BuildCodexSetupViewDependencies,
   opaqueReferenceKey: Uint8Array,
@@ -124,14 +134,18 @@ export const createBuildCodexSetupView = (
         ? requestedNativeProfile
         : undefined;
     options?.signal?.throwIfAborted();
+    const plan = dependencies.planCodexSetupInspection.plan(scope);
+    if (plan.status === "unsupported") {
+      return deepFreeze({
+        diagnostics: [],
+        status: "unsupported",
+      });
+    }
     const authorization = await dependencies.authorizeSetupInspection.execute(
       {
         configurationSources: scope.configurationSources,
-        explicitExecutablePaths: scope.explicitCodexExecutablePaths,
-        knownExecutableDirectories: scope.knownExecutableDirectories,
+        installationCandidates: plan.installationCandidates,
         observationEpoch: scope.observationEpoch,
-        pathEntries: scope.pathEntries,
-        platform: scope.platform,
         roots: scope.roots,
       },
       options,
@@ -139,12 +153,10 @@ export const createBuildCodexSetupView = (
     options?.signal?.throwIfAborted();
     if (authorization.status !== "authorized") {
       return deepFreeze({
-        diagnostics: authorization.diagnostics.map(diagnostic => ({
-          code: diagnostic.code,
-          ...(diagnostic.subject === undefined
-            ? {}
-            : { subject: diagnostic.subject }),
-        })),
+        diagnostics: mapAuthorizationDiagnostics([
+          ...plan.diagnostics,
+          ...authorization.diagnostics,
+        ]),
         status: authorization.status,
       });
     }
@@ -156,14 +168,10 @@ export const createBuildCodexSetupView = (
       mapConfigurationSource,
     );
 
-    const diagnostics: CodexSetupDiagnostic[] = authorization.diagnostics.map(
-      diagnostic => ({
-        code: diagnostic.code,
-        ...(diagnostic.subject === undefined
-          ? {}
-          : { subject: diagnostic.subject }),
-      }),
-    );
+    const diagnostics: CodexSetupDiagnostic[] = [
+      ...mapAuthorizationDiagnostics(plan.diagnostics),
+      ...mapAuthorizationDiagnostics(authorization.diagnostics),
+    ];
     if (requestedNativeProfile !== undefined && nativeProfile === undefined) {
       diagnostics.push({ code: "native_profile_invalid" });
     }
@@ -248,7 +256,7 @@ export const createBuildCodexSetupView = (
       sources: configuration.sources.map(source => ({ ...source })),
       status:
         installations.installations.length > 0 && sortedDiagnostics.length === 0
-          ? "complete"
+          ? "observed"
           : "partial",
     });
   };

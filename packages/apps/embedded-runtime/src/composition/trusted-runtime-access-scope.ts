@@ -18,7 +18,6 @@ export const copyTrustedRuntimeAccessScope = (
     ]),
     observationEpoch: scope.observationEpoch,
     pathEntries: Object.freeze([...scope.pathEntries]),
-    platform: scope.platform,
     roots: Object.freeze(scope.roots.map(root => Object.freeze({ ...root }))),
     scopeId: scope.scopeId,
   });

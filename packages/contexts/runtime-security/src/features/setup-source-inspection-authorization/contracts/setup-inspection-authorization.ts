@@ -13,6 +13,12 @@ export interface TrustedConfigurationSource {
   readonly workspaceTrusted: boolean;
 }
 
+export interface TrustedInstallationCandidate {
+  readonly absolutePath: string;
+  readonly required: boolean;
+  readonly source: "explicit" | "known-location" | "path-entry";
+}
+
 export interface AuthorizedPathCustodyRoot {
   readonly absolutePath: string;
   readonly canonicalPath: string;
@@ -20,11 +26,8 @@ export interface AuthorizedPathCustodyRoot {
 
 export interface AuthorizeSetupInspectionInput {
   readonly configurationSources: readonly TrustedConfigurationSource[];
-  readonly explicitExecutablePaths: readonly string[];
-  readonly knownExecutableDirectories: readonly string[];
+  readonly installationCandidates: readonly TrustedInstallationCandidate[];
   readonly observationEpoch: string;
-  readonly pathEntries: readonly string[];
-  readonly platform: string;
   readonly roots: readonly TrustedSetupPathRoot[];
 }
 
@@ -62,7 +65,7 @@ export interface SetupAuthorizationDiagnostic {
 export type AuthorizeSetupInspectionResult =
   | {
       readonly diagnostics: readonly SetupAuthorizationDiagnostic[];
-      readonly status: "denied" | "unsupported";
+      readonly status: "denied";
     }
   | {
       readonly configurationSources: readonly AuthorizedConfigurationSource[];

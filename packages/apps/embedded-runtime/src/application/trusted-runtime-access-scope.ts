@@ -11,7 +11,6 @@ export interface TrustedRuntimeAccessScope {
   readonly knownExecutableDirectories: readonly string[];
   readonly observationEpoch: string;
   readonly pathEntries: readonly string[];
-  readonly platform: string;
   readonly roots: readonly {
     readonly absolutePath: string;
     readonly kind: "home" | "system" | "workspace";

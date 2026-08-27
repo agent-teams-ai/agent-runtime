@@ -12,6 +12,14 @@ import {
 } from "../dist/composition.js";
 
 const execFile = promisify(execFileCallback);
+const installationCandidate = (
+  absolutePath: string,
+  source: "explicit" | "known-location" | "path-entry" = "explicit",
+) => ({
+  absolutePath,
+  required: source === "explicit",
+  source,
+});
 
 test("authorizes exact synthetic paths and rejects ambient expansion", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-setup-authorization-"));
@@ -38,11 +46,14 @@ test("authorizes exact synthetic paths and rejects ambient expansion", async t =
       { absolutePath: join(home, ".codex", "config.toml"), kind: "user", workspaceTrusted: true },
       { absolutePath: join(workspace, ".codex", "config.toml"), kind: "workspace", workspaceTrusted: false },
     ],
-    explicitExecutablePaths: [join(outside, "codex")],
-    knownExecutableDirectories: [join(home, "bin")],
+    installationCandidates: [
+      installationCandidate(join(outside, "codex")),
+      installationCandidate(join(home, "bin", "codex"), "known-location"),
+      installationCandidate("", "path-entry"),
+      installationCandidate("relative-bin", "path-entry"),
+      installationCandidate(join(home, "bin", "codex"), "path-entry"),
+    ],
     observationEpoch: "epoch-1",
-    pathEntries: ["", "relative-bin", join(home, "bin")],
-    platform: "darwin",
     roots: [
       { absolutePath: home, kind: "home" },
       { absolutePath: workspace, kind: "workspace" },
@@ -78,11 +89,8 @@ test("rejects a symlink that resolves outside authorized roots", async t => {
   });
   const result = await feature.authorizeSetupInspection.execute({
     configurationSources: [],
-    explicitExecutablePaths: [alias],
-    knownExecutableDirectories: [],
+    installationCandidates: [installationCandidate(alias)],
     observationEpoch: "epoch-1",
-    pathEntries: [],
-    platform: "darwin",
     roots: [{ absolutePath: allowed, kind: "home" }],
   });
   assert.equal(result.status, "authorized");
@@ -116,11 +124,8 @@ test("binds configuration sources to their matching root kind", async t => {
       kind: "workspace",
       workspaceTrusted: true,
     }],
-    explicitExecutablePaths: [],
-    knownExecutableDirectories: [],
+    installationCandidates: [],
     observationEpoch: "epoch-1",
-    pathEntries: [],
-    platform: "darwin",
     roots: [
       { absolutePath: home, kind: "home" },
       { absolutePath: workspace, kind: "workspace" },
@@ -158,11 +163,8 @@ test("does not treat a workspace target as trusted user configuration", async t 
       kind: "user",
       workspaceTrusted: true,
     }],
-    explicitExecutablePaths: [],
-    knownExecutableDirectories: [],
+    installationCandidates: [],
     observationEpoch: "epoch-user-workspace-alias",
-    pathEntries: [],
-    platform: "darwin",
     roots: [
       { absolutePath: home, kind: "home" },
       { absolutePath: workspace, kind: "workspace" },
@@ -192,11 +194,8 @@ test("uses the most-specific root for deterministic display paths", async t => {
   });
   const result = await feature.authorizeSetupInspection.execute({
     configurationSources: [],
-    explicitExecutablePaths: [executable],
-    knownExecutableDirectories: [],
+    installationCandidates: [installationCandidate(executable)],
     observationEpoch: "epoch-1",
-    pathEntries: [],
-    platform: "darwin",
     roots: [
       { absolutePath: home, kind: "home" },
       { absolutePath: workspace, kind: "workspace" },
@@ -245,17 +244,14 @@ test("derives deterministic display labels without leaking caller labels or host
   }[]) =>
     feature.authorizeSetupInspection.execute({
       configurationSources: [],
-      explicitExecutablePaths: [
+      installationCandidates: [
         executable,
         newlineThenA,
         feminineOrdinal,
         backslashName,
         nestedPath,
-      ],
-      knownExecutableDirectories: [],
+      ].map(path => installationCandidate(path)),
       observationEpoch: "epoch-display",
-      pathEntries: [],
-      platform: "darwin",
       roots: orderedRoots,
     });
 
@@ -280,20 +276,20 @@ test("derives deterministic display labels without leaking caller labels or host
   assert.equal(renderedLabels.some(label => label.includes("\n")), false);
 });
 
-test("fails closed on unsupported platform", async () => {
+test("fails closed when no custody root is authorized", async () => {
   const feature = createSetupInspectionAuthorizationFeature({
     pathCanonicalizer: createNodePathCanonicalizer(),
   });
   const result = await feature.authorizeSetupInspection.execute({
     configurationSources: [],
-    explicitExecutablePaths: [],
-    knownExecutableDirectories: [],
+    installationCandidates: [],
     observationEpoch: "epoch-1",
-    pathEntries: [],
-    platform: "linux",
     roots: [],
   });
-  assert.deepEqual(result, { diagnostics: [], status: "unsupported" });
+  assert.deepEqual(result, {
+    diagnostics: [{ code: "path_outside_scope", subject: "scope" }],
+    status: "denied",
+  });
 });
 
 test("rejects hard-linked executable and configuration sources", async t => {
@@ -317,11 +313,8 @@ test("rejects hard-linked executable and configuration sources", async t => {
       kind: "user",
       workspaceTrusted: true,
     }],
-    explicitExecutablePaths: [executable],
-    knownExecutableDirectories: [],
+    installationCandidates: [installationCandidate(executable)],
     observationEpoch: "epoch-hardlink",
-    pathEntries: [],
-    platform: "darwin",
     roots: [{ absolutePath: root, kind: "home" }],
   });
 
@@ -355,11 +348,8 @@ test(
         kind: "user",
         workspaceTrusted: true,
       }],
-      explicitExecutablePaths: [fifo],
-      knownExecutableDirectories: [],
+      installationCandidates: [installationCandidate(fifo)],
       observationEpoch: "epoch-fifo",
-      pathEntries: [],
-      platform: "darwin",
       roots: [{ absolutePath: root, kind: "home" }],
     });
 
@@ -408,11 +398,8 @@ test(
 
   const result = await feature.authorizeSetupInspection.execute({
     configurationSources: [],
-    explicitExecutablePaths: [lexicalCandidate],
-    knownExecutableDirectories: [],
+    installationCandidates: [installationCandidate(lexicalCandidate)],
     observationEpoch: "epoch-case",
-    pathEntries: [],
-    platform: "darwin",
     roots: [{ absolutePath: lexicalRoot, kind: "home" }],
   });
 
@@ -457,11 +444,8 @@ test(
 
     const result = await feature.authorizeSetupInspection.execute({
       configurationSources: [],
-      explicitExecutablePaths: [outsideAlias],
-      knownExecutableDirectories: [],
+      installationCandidates: [installationCandidate(outsideAlias)],
       observationEpoch: "epoch-case-sensitive",
-      pathEntries: [],
-      platform: "darwin",
       roots: [{ absolutePath: lexicalRoot, kind: "home" }],
     });
 

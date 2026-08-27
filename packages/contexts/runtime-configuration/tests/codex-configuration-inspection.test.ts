@@ -91,18 +91,18 @@ test("Codex semantic classifier v1 owns dialect and portable-value policy", () =
   const classifier = createCodexConfigurationSemanticClassifierV1();
 
   assert.equal(classifier.contract, codexConfigurationSemanticClassifierContract);
-  assert.equal(classifier.revision, "codex-0.134-semantic-classifier/1");
+  assert.equal(classifier.revision, "codex-0.134-semantic-classifier/2");
   assert.equal(classifier.supportsDialect("codex-0.134"), true);
   assert.equal(classifier.supportsDialect("future-codex-dialect"), false);
   assert.deepEqual(classifier.classify("codex-0.134", {
-    model: "gpt-5.6-codex",
-    model_reasoning_effort: "ultra",
+    model: "future-provider/model-v2",
+    model_reasoning_effort: "xhigh",
     personality: "pragmatic",
   }), {
     diagnostics: [],
     settings: [
-      { key: "model", value: "gpt-5.6-codex" },
-      { key: "model_reasoning_effort", value: "ultra" },
+      { key: "model", value: "future-provider/model-v2" },
+      { key: "model_reasoning_effort", value: "xhigh" },
       { key: "personality", value: "pragmatic" },
     ],
   });
@@ -415,7 +415,7 @@ test("rejects concise personality and fails closed for an unsupported dialect", 
   assert.equal(unsupported.sources[0]?.status, "rejected");
 });
 
-test("accepts current Codex max and ultra reasoning efforts", async t => {
+test("rejects reasoning efforts outside the versioned Codex dialect", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-reasoning-effort-"));
   t.after(() => rm(root, { force: true, recursive: true }));
 
@@ -438,16 +438,16 @@ test("accepts current Codex max and ultra reasoning efforts", async t => {
       }],
     });
 
-    assert.deepEqual(result.diagnostics, []);
-    assert.deepEqual(result.settings, [{
-      key: "model_reasoning_effort",
+    assert.deepEqual(result.settings, []);
+    assert.deepEqual(result.diagnostics, [{
+      code: "setting_value_unsupported",
+      setting: "model_reasoning_effort",
       sourceRef: result.sources[0]?.sourceRef,
-      value: effort,
     }]);
   }
 });
 
-test("does not resolve inherited object properties as native profiles", async () => {
+test("rejects parser documents with inherited object properties", async () => {
   const inheritedDocument = Object.assign(
     Object.create({ profiles: { inherited: { model: "gpt-inherited" } } }) as Record<
       string,
@@ -485,8 +485,8 @@ test("does not resolve inherited object properties as native profiles", async ()
   });
 
   assert.deepEqual(result.diagnostics.map(item => item.code), [
+    "config_parse_failed",
     "profile_missing",
-    "unknown_setting_ignored",
   ]);
 
   delete inheritedDocument.profiles;
@@ -504,7 +504,10 @@ test("does not resolve inherited object properties as native profiles", async ()
       observationEpoch: "epoch-1",
     }],
   });
-  assert.deepEqual(inheritedTopLevel.diagnostics, [{ code: "profile_missing" }]);
+  assert.deepEqual(inheritedTopLevel.diagnostics.map(item => item.code), [
+    "config_parse_failed",
+    "profile_missing",
+  ]);
 });
 
 test(
@@ -580,7 +583,7 @@ test("fails closed for encoded and unprefixed credential-like portable values", 
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZWNyZXQifQ.signature",
     "abcdefghijklmnopqrstuvwxyzABCDEF1234567890",
     "custom-provider-secret-value",
-    "gpt-AbCdEfGhIjKlMnOpQrStUv",
+    "glpat-1234567890abcdefghij",
   ];
 
   for (const [index, value] of values.entries()) {

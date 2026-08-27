@@ -17,6 +17,10 @@ import {
   type CodexConfigurationSemanticClassifier,
 } from "./ports/outbound/codex-configuration-semantic-classifier.js";
 import type { ConfigurationSourceReader } from "./ports/outbound/configuration-source-reader.js";
+import {
+  normalizeParsedCodexDocument,
+  validateSemanticClassification,
+} from "./safe-semantic-boundary.js";
 
 interface BoundSource extends CodexConfigurationSource {
   readonly sourceRef: string;
@@ -66,11 +70,22 @@ const createSourceRef = (
 
 const semanticDigest = (
   settings: ReadonlyMap<PortableCodexSettingKey, string> | undefined,
+  dialect: string,
+  classifier: CodexConfigurationSemanticClassifier,
 ): string => {
   const projection = [...(settings?.entries() ?? [])].toSorted(([left], [right]) =>
     compareText(left, right),
   );
-  return `sha256:${createHash("sha256").update(JSON.stringify(projection)).digest("hex")}`;
+  const preimage = {
+    classifierContract: classifier.contract,
+    classifierRevision: classifier.revision,
+    dialect,
+    digestSchema: "codex-configuration-semantic-digest/v1",
+    settings: projection,
+  };
+  return `codex-configuration-semantic-digest/v1:sha256:${
+    createHash("sha256").update(JSON.stringify(preimage)).digest("hex")
+  }`;
 };
 
 const rejectSources = (
@@ -222,7 +237,9 @@ const createApplySettings = (
     const safeProjection =
       collections.safeProjectionBySource.get(source.sourceRef) ?? new Map();
     collections.safeProjectionBySource.set(source.sourceRef, safeProjection);
-    const classification = classifier.classify(dialect, document);
+    const classification = validateSemanticClassification(
+      classifier.classify(dialect, document),
+    );
     for (const diagnostic of classification.diagnostics) {
       collections.diagnostics.push({
         ...diagnostic,
@@ -325,7 +342,21 @@ const prepareSources = async (
       });
       continue;
     }
-    preparedSources.push({ ...source, document: parsed.document });
+    const document = normalizeParsedCodexDocument(parsed.document);
+    if (document === undefined) {
+      collections.diagnostics.push({
+        code: "config_parse_failed",
+        sourceRef: source.sourceRef,
+      });
+      collections.sourceObservations.push({
+        displayPath: source.displayPath,
+        kind: source.kind,
+        sourceRef: source.sourceRef,
+        status: "malformed",
+      });
+      continue;
+    }
+    preparedSources.push({ ...source, document });
   }
   return preparedSources;
 };
@@ -346,6 +377,8 @@ const applyPreparedSources = (
       kind: source.kind,
       semanticDigest: semanticDigest(
         collections.safeProjectionBySource.get(source.sourceRef),
+        dialect,
+        classifier,
       ),
       sourceRef: source.sourceRef,
       status: "applied",
@@ -420,7 +453,9 @@ export const createInspectCodexConfiguration = (
   if (
     dependencies.semanticClassifier.contract !==
       codexConfigurationSemanticClassifierContract ||
-    dependencies.semanticClassifier.revision.length === 0
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/u.test(
+      dependencies.semanticClassifier.revision,
+    )
   ) {
     throw new TypeError("semanticClassifier must implement the versioned contract");
   }

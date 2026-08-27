@@ -1,4 +1,4 @@
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import type {
   AuthorizeSetupInspection,
@@ -40,7 +40,12 @@ const safePathSegment = (value: string): string =>
 
 const contains = (root: string, candidate: string): boolean => {
   const remainder = relative(root, candidate);
-  return remainder === "" || (!remainder.startsWith("..") && !isAbsolute(remainder));
+  return remainder === "" ||
+    (
+      remainder !== ".." &&
+      !remainder.startsWith(`..${sep}`) &&
+      !isAbsolute(remainder)
+    );
 };
 
 const selectContainingRoot = (
@@ -271,35 +276,16 @@ const collectInstallationCandidates = async (
     readonly source: AuthorizedInstallationCandidate["source"];
   }> = [];
 
-  for (const entry of input.pathEntries) {
-    if (entry.length === 0) {
-      diagnostics.push({ code: "empty_path_entry", subject: "PATH" });
-    } else if (!isAbsolute(entry)) {
-      diagnostics.push({ code: "relative_path_entry", subject: "PATH" });
-    } else {
-      requests.push({
-        absolutePath: join(entry, "codex"),
-        required: false,
-        source: "path-entry",
+  for (const candidate of input.installationCandidates) {
+    if (!isAbsolute(candidate.absolutePath)) {
+      diagnostics.push({
+        code: candidate.absolutePath.length === 0
+          ? "empty_path_entry"
+          : "relative_path_entry",
+        subject: candidate.source,
       });
-    }
-  }
-  for (const directory of input.knownExecutableDirectories) {
-    if (!isAbsolute(directory)) {
-      diagnostics.push({ code: "relative_path_entry", subject: "known-location" });
     } else {
-      requests.push({
-        absolutePath: join(directory, "codex"),
-        required: false,
-        source: "known-location",
-      });
-    }
-  }
-  for (const absolutePath of input.explicitExecutablePaths) {
-    if (!isAbsolute(absolutePath)) {
-      diagnostics.push({ code: "relative_path_entry", subject: "explicit" });
-    } else {
-      requests.push({ absolutePath, required: true, source: "explicit" });
+      requests.push(candidate);
     }
   }
 
@@ -401,9 +387,6 @@ export const createAuthorizeSetupInspection = (
   canonicalizer: PathCanonicalizer,
 ): AuthorizeSetupInspection => ({
   async execute(input, options) {
-    if (input.platform !== "darwin") {
-      return { diagnostics: [], status: "unsupported" };
-    }
     if (input.observationEpoch.length === 0 || input.roots.length === 0) {
       return {
         diagnostics: [{ code: "path_outside_scope", subject: "scope" }],
