@@ -30,6 +30,9 @@ Documents:
   runtime commands, provider protocols, observations, and consumer transports.
 - [OpenCode integration](opencode-integration.md): ACP-first execution plus
   isolated native OpenCode management and reconciliation.
+- [Provider setup delivery roadmap](provider-setup-delivery-roadmap.md): legacy
+  capability disposition and delivery order for Codex, Claude Code, and
+  OpenCode setup.
 
 Decision status:
 
