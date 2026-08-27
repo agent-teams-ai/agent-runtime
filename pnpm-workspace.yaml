@@ -1,6 +1,8 @@
 packages:
   - "experiments/*"
+  - "packages/apps/*"
   - "packages/contexts/*"
+  - "packages/platform/*"
 catalogMode: strict
 catalog:
   "@xstate/graph": "3.0.4"
@@ -14,6 +16,7 @@ catalog:
   opencode-ai: "1.18.5"
   opencode-previous: "npm:opencode-ai@1.17.20"
   oxlint: "1.77.0"
+  smol-toml: "1.8.0"
   typescript: "7.0.2"
   xstate: "5.32.5"
   zod: "4.4.3"

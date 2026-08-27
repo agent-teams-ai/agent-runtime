@@ -1,0 +1,31 @@
+{
+  "name": "@agent-teams/runtime-security",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.json --pretty false",
+    "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
+    "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
+    "test": "node --test --test-concurrency=1 tests/setup-inspection-authorization.test.ts",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  },
+  "agentTeamsArchitecture": {
+    "role": "bounded-context",
+    "ownerDocument": "ADR-0005"
+  },
+  "dependencies": {
+    "@agent-teams/filesystem-custody": "workspace:*"
+  },
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./composition": {
+      "types": "./dist/composition.d.ts",
+      "import": "./dist/composition.js"
+    }
+  }
+}

@@ -30,7 +30,11 @@ Read documents in this order:
    `../experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md`.
    Documentation changes follow accepted
    `decisions/0007-deterministic-documentation-governance.md`, which is pinned
-   in the immutable accepted-decision registry.
+   in the immutable accepted-decision registry. Production application
+   composition follows accepted
+   `decisions/0008-private-embedded-runtime-access-entrypoint.md`, which owns
+   the private scope-bound Runtime access entrypoint and its direct Pure DI
+   boundary.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
@@ -157,12 +161,13 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005, and the promoted-rule
-column of the traceability matrix are normative. Supporting architecture documents
-are accepted only as amended by the ADRs. Readiness status is intentionally
-separate and cannot change domain ownership. A spike's `Remaining gates`
-section is historical as of that campaign; `architecture/readiness.md` is the
-current gate register.
+of truth. ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005, ADR-0008, and the
+promoted-rule column of the traceability matrix are normative for production
+architecture. ADR-0007 governs deterministic documentation changes. Supporting
+architecture documents are accepted only as amended by the ADRs. Readiness
+status is intentionally separate and cannot change domain ownership. A spike's
+`Remaining gates` section is historical as of that campaign;
+`architecture/readiness.md` is the current gate register.
 
 Qualification lookup is fail closed. A target must match every dimension in
 `architecture/qualification-registry.json` as one complete scalar tuple:

@@ -64,7 +64,8 @@ async function addRequiredAnchorFixtures(root) {
   for (const path of [
     "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md",
     "experiments/rust-system-boundaries/README.md",
-    "experiments/sandbox-backend-hosting/README.md"
+    "experiments/sandbox-backend-hosting/README.md",
+    "packages/apps/embedded-runtime/src/index.ts"
   ]) {
     const destination = join(root, path);
     await mkdir(dirname(destination), { recursive: true });

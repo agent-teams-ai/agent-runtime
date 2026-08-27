@@ -31,6 +31,11 @@
       "id": "ADR-0007",
       "path": "docs/decisions/0007-deterministic-documentation-governance.md",
       "immutableDigest": "sha256:d01e3d25fcc094645087e33656590543c3fe7bd741c24d2adedd66691afeb3fb"
+    },
+    {
+      "id": "ADR-0008",
+      "path": "docs/decisions/0008-private-embedded-runtime-access-entrypoint.md",
+      "immutableDigest": "sha256:cc01253865e4292e1160363f211b0ccb675fb50860fab7c23c3925fa6bb033c7"
     }
   ]
 }
