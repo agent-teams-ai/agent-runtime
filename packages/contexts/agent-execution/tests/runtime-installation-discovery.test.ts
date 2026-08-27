@@ -10,8 +10,8 @@ import {
 } from "../dist/composition.js";
 
 const fileIdentity = async (path: string): Promise<string> => {
-  const observation = await stat(path);
-  return `${observation.dev}:${observation.ino}`;
+  const observation = await stat(path, { bigint: true });
+  return `${observation.dev}:${observation.ino}:${observation.ctimeNs}:${observation.size}`;
 };
 
 test("discovers distinct binaries and groups symlink and hardlink aliases", async t => {

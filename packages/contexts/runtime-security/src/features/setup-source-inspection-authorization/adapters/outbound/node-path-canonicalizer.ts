@@ -9,6 +9,13 @@ const errorCode = (error: unknown): string =>
     ? String(error.code)
     : "";
 
+const authorizationFileIdentity = (stats: {
+  readonly ctimeNs: bigint;
+  readonly dev: bigint;
+  readonly ino: bigint;
+  readonly size: bigint;
+}): string => `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.size}`;
+
 export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
   async canonicalize(absolutePath, options) {
     if (!isAbsolute(absolutePath)) {
@@ -22,7 +29,7 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
         constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
       );
       try {
-        const opened = await handle.stat();
+        const opened = await handle.stat({ bigint: true });
         options?.signal?.throwIfAborted();
         if ((await realpath(absolutePath)) !== canonicalPath) {
           throw new Error("Path changed while it was being authorized");
@@ -30,9 +37,9 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
         return {
           absolutePath: canonicalPath,
           exists: true,
-          fileIdentity: `${opened.dev}:${opened.ino}`,
+          fileIdentity: authorizationFileIdentity(opened),
           isFile: opened.isFile(),
-          linkCount: opened.nlink,
+          linkCount: Number(opened.nlink),
         };
       } finally {
         await handle.close();

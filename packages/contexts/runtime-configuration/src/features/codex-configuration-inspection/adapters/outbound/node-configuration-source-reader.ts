@@ -17,6 +17,13 @@ const classifyError = (error: unknown): ConfigurationSourceRead => {
   return { kind: "unreadable" };
 };
 
+const authorizationFileIdentity = (stats: {
+  readonly ctimeNs: bigint;
+  readonly dev: bigint;
+  readonly ino: bigint;
+  readonly size: bigint;
+}): string => `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.size}`;
+
 const readBounded = async (
   handle: Awaited<ReturnType<typeof open>>,
   maximumBytes: number,
@@ -49,14 +56,14 @@ const readStableAuthorizedFile = async (
   maximumBytes: number,
   signal?: AbortSignal,
 ): Promise<ConfigurationSourceRead> => {
-  const beforeRead = await handle.stat();
+  const beforeRead = await handle.stat({ bigint: true });
   if (!beforeRead.isFile()) {
     return { kind: "unreadable" };
   }
-  if (`${beforeRead.dev}:${beforeRead.ino}` !== authorizedFileIdentity) {
+  if (authorizationFileIdentity(beforeRead) !== authorizedFileIdentity) {
     return { kind: "unreadable" };
   }
-  if (beforeRead.size > maximumBytes) {
+  if (beforeRead.size > BigInt(maximumBytes)) {
     return { kind: "too-large" };
   }
   const read = await readBounded(handle, maximumBytes, signal);
@@ -64,13 +71,13 @@ const readStableAuthorizedFile = async (
     return read;
   }
   signal?.throwIfAborted();
-  const afterRead = await handle.stat();
+  const afterRead = await handle.stat({ bigint: true });
   if (
     beforeRead.dev !== afterRead.dev ||
     beforeRead.ino !== afterRead.ino ||
     beforeRead.size !== afterRead.size ||
-    beforeRead.mtimeMs !== afterRead.mtimeMs ||
-    beforeRead.ctimeMs !== afterRead.ctimeMs
+    beforeRead.mtimeNs !== afterRead.mtimeNs ||
+    beforeRead.ctimeNs !== afterRead.ctimeNs
   ) {
     return { kind: "unreadable" };
   }

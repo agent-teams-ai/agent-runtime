@@ -23,13 +23,20 @@ const classifyError = (error: unknown): ExecutableFileObservation => {
   return { kind: "unreadable" };
 };
 
+const authorizationFileIdentity = (stats: {
+  readonly ctimeNs: bigint;
+  readonly dev: bigint;
+  readonly ino: bigint;
+  readonly size: bigint;
+}): string => `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.size}`;
+
 const observeAuthorizedExecutable = async (
   canonicalPath: string,
   authorizedFileIdentity: string,
   signal?: AbortSignal,
 ): Promise<ExecutableFileObservation> => {
-  const beforeOpen = await stat(canonicalPath);
-  if (!beforeOpen.isFile() || (beforeOpen.mode & 0o111) === 0) {
+  const beforeOpen = await stat(canonicalPath, { bigint: true });
+  if (!beforeOpen.isFile() || (beforeOpen.mode & 0o111n) === 0n) {
     return { kind: "invalid" };
   }
   signal?.throwIfAborted();
@@ -38,14 +45,15 @@ const observeAuthorizedExecutable = async (
     constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
   );
   try {
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     if (
-      opened.nlink > 1 ||
-      `${opened.dev}:${opened.ino}` !== authorizedFileIdentity ||
+      opened.nlink > 1n ||
+      authorizationFileIdentity(opened) !== authorizedFileIdentity ||
       opened.dev !== beforeOpen.dev ||
       opened.ino !== beforeOpen.ino ||
       opened.size !== beforeOpen.size ||
-      opened.mtimeMs !== beforeOpen.mtimeMs
+      opened.mtimeNs !== beforeOpen.mtimeNs ||
+      opened.ctimeNs !== beforeOpen.ctimeNs
     ) {
       return { kind: "unstable" };
     }

@@ -18,8 +18,8 @@ const createFeature = (maximumBytes = 128 * 1024) =>
   });
 
 const fileIdentity = async (path: string): Promise<string> => {
-  const observation = await stat(path);
-  return `${observation.dev}:${observation.ino}`;
+  const observation = await stat(path, { bigint: true });
+  return `${observation.dev}:${observation.ino}:${observation.ctimeNs}:${observation.size}`;
 };
 
 test("applies deterministic precedence and selected native profile", async t => {
