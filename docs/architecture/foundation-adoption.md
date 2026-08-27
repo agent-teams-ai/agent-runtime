@@ -6,7 +6,6 @@ owner: architecture/tooling
 summary: Records the exact Engineering Foundation capabilities adopted by Agent Runtime.
 related:
   - ADR-0005
-blocked_by: []
 code_anchors:
   - enforcement: required
     pattern: architecture/foundation/**

@@ -9,8 +9,6 @@ related:
   - ADR-0002
   - ADR-0003
   - ADR-0004
-blocked_by: []
-code_anchors: []
 ---
 
 # OpenCode Integration

@@ -9,12 +9,9 @@ related:
   - ADR-0002
   - ADR-0003
   - ADR-0004
-blocked_by: []
 code_anchors:
   - enforcement: required
     pattern: experiments/runtime-profile-behavior/spec/runtime-operation-oracle/**
-supersedes: []
-superseded_by: []
 ---
 
 # ADR-0006: Orthogonal runtime-operation state and effect continuity

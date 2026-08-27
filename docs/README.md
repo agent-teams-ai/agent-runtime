@@ -4,9 +4,6 @@ type: index
 status: active
 owner: architecture
 summary: Canonical reading order for Agent Runtime architecture and evidence.
-related: []
-blocked_by: []
-code_anchors: []
 ---
 
 # Agent Runtime architecture

@@ -11,8 +11,6 @@ related:
   - ADR-0004
   - ADR-0005
   - ADR-0006
-blocked_by: []
-code_anchors: []
 ---
 
 # Architecture qualification and readiness

@@ -2,14 +2,7 @@
 
 ```markdown
 ---
-id: runtime.architecture.topic
-type: architecture
-status: active
-owner: architecture
-summary: Describe the architecture boundary owned by this document.
-related: []
-blocked_by: []
-code_anchors: []
+{}
 ---
 
 # Architecture title
