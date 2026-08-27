@@ -124,10 +124,17 @@ test("reports a selected native profile missing only from the merged configurati
 });
 
 test("does not resolve inherited object properties as native profiles", async () => {
+  const inheritedDocument = Object.assign(
+    Object.create({ profiles: { inherited: { model: "gpt-inherited" } } }) as Record<
+      string,
+      unknown
+    >,
+    { profiles: {} },
+  );
   const feature = createCodexConfigurationInspectionFeature({
     parser: {
       parse() {
-        return { document: { profiles: {} }, kind: "parsed" as const };
+        return { document: inheritedDocument, kind: "parsed" as const };
       },
     },
     sourceIdentityKey: Buffer.alloc(32, 7),
@@ -152,6 +159,22 @@ test("does not resolve inherited object properties as native profiles", async ()
   });
 
   assert.deepEqual(result.diagnostics, [{ code: "profile_missing" }]);
+
+  delete inheritedDocument.profiles;
+  const inheritedTopLevel = await feature.inspectCodexConfiguration.execute({
+    identityScope: "scope-prototype",
+    nativeProfile: "inherited",
+    observationEpoch: "epoch-1",
+    sources: [{
+      absolutePath: "/synthetic/config.toml",
+      authorizedFileIdentity: "synthetic-file",
+      canonicalPath: "/synthetic/config.toml",
+      displayPath: "$HOME/config.toml",
+      kind: "user",
+      observationEpoch: "epoch-1",
+    }],
+  });
+  assert.deepEqual(inheritedTopLevel.diagnostics, [{ code: "profile_missing" }]);
 });
 
 test(

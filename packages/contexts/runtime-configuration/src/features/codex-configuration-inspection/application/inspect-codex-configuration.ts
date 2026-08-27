@@ -265,6 +265,7 @@ const prepareSources = async (
       source.absolutePath,
       source.canonicalPath,
       source.authorizedFileIdentity,
+      source.custodyRoot,
       signal === undefined ? undefined : { signal },
     );
     if (read.kind !== "read") {
@@ -313,7 +314,9 @@ const applyPreparedSources = (
   let selectedProfileFound = false;
   if (nativeProfile !== undefined) {
     for (const source of preparedSources) {
-      const profiles = source.document.profiles;
+      const profiles = Object.hasOwn(source.document, "profiles")
+        ? source.document.profiles
+        : undefined;
       const selected =
         isRecord(profiles) && Object.hasOwn(profiles, nativeProfile)
           ? profiles[nativeProfile]
