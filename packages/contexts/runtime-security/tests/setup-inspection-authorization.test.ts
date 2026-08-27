@@ -135,6 +135,50 @@ test("binds configuration sources to their matching root kind", async t => {
   assert.equal(result.diagnostics[0]?.code, "path_outside_scope");
 });
 
+test("does not treat a workspace target as trusted user configuration", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-setup-user-workspace-alias-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const home = join(root, "home");
+  const workspace = join(home, "workspace");
+  await Promise.all([
+    mkdir(join(home, ".codex"), { recursive: true }),
+    mkdir(join(workspace, ".codex"), { recursive: true }),
+  ]);
+  const workspaceConfig = join(workspace, ".codex", "untrusted.toml");
+  const userAlias = join(home, ".codex", "config.toml");
+  await writeFile(workspaceConfig, "model = 'workspace-controlled'\n");
+  await symlink(workspaceConfig, userAlias);
+
+  const feature = createSetupInspectionAuthorizationFeature({
+    pathCanonicalizer: createNodePathCanonicalizer(),
+  });
+  const result = await feature.authorizeSetupInspection.execute({
+    configurationSources: [{
+      absolutePath: userAlias,
+      kind: "user",
+      workspaceTrusted: true,
+    }],
+    explicitExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-user-workspace-alias",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [
+      { absolutePath: home, displayName: "$HOME", kind: "home" },
+      { absolutePath: workspace, displayName: "$WORKSPACE", kind: "workspace" },
+    ],
+  });
+
+  assert.equal(result.status, "authorized");
+  if (result.status !== "authorized") {
+    return;
+  }
+  assert.deepEqual(result.configurationSources, []);
+  assert.deepEqual(result.diagnostics, [
+    { code: "path_outside_scope", subject: "user-config" },
+  ]);
+});
+
 test("uses the most-specific root for deterministic display paths", async t => {
   const home = await mkdtemp(join(tmpdir(), "ar-setup-specific-root-"));
   t.after(() => rm(home, { force: true, recursive: true }));

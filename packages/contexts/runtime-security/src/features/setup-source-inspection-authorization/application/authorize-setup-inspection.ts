@@ -28,25 +28,32 @@ const contains = (root: string, candidate: string): boolean => {
   return remainder === "" || (!remainder.startsWith("..") && !isAbsolute(remainder));
 };
 
-const selectRoot = (
-  canonicalLocationPath: string,
+const selectContainingRoot = (
   canonicalPath: string,
   roots: readonly CanonicalRoot[],
-  expectedKind?: CanonicalRoot["kind"],
 ): CanonicalRoot | undefined =>
   roots
-    .filter(
-      root =>
-        (expectedKind === undefined || root.kind === expectedKind) &&
-        contains(root.canonicalPath, canonicalLocationPath) &&
-        contains(root.canonicalPath, canonicalPath),
-    )
+    .filter(root => contains(root.canonicalPath, canonicalPath))
     .toSorted(
       (left, right) =>
         right.canonicalPath.length - left.canonicalPath.length ||
         right.absolutePath.length - left.absolutePath.length ||
         compareText(left.displayName, right.displayName),
     )[0];
+
+const selectRoot = (
+  canonicalLocationPath: string,
+  canonicalPath: string,
+  roots: readonly CanonicalRoot[],
+  expectedKind?: CanonicalRoot["kind"],
+): CanonicalRoot | undefined => {
+  const locationRoot = selectContainingRoot(canonicalLocationPath, roots);
+  const targetRoot = selectContainingRoot(canonicalPath, roots);
+  return locationRoot === targetRoot &&
+    (expectedKind === undefined || locationRoot?.kind === expectedKind)
+    ? locationRoot
+    : undefined;
+};
 
 const displayPath = (
   lexicalPath: string,
