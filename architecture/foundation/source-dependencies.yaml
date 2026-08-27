@@ -8,6 +8,7 @@ governedRoots:
   - packages/contexts/agent-execution/src
   - packages/contexts/runtime-configuration/src
   - packages/contexts/runtime-security/src
+  - packages/platform/filesystem-custody/src
   - scripts/foundation
 boundaries:
   - id: production.agent-execution
@@ -19,7 +20,8 @@ boundaries:
       - packages/contexts/agent-execution/src/composition.ts
     allow:
       boundaries: []
-      packages: []
+      packages:
+        - "@agent-teams/filesystem-custody"
       builtins:
         - node:crypto
         - node:fs
@@ -35,6 +37,7 @@ boundaries:
     allow:
       boundaries: []
       packages:
+        - "@agent-teams/filesystem-custody"
         - smol-toml
       builtins:
         - node:crypto
@@ -50,9 +53,24 @@ boundaries:
       - packages/contexts/runtime-security/src/composition.ts
     allow:
       boundaries: []
-      packages: []
+      packages:
+        - "@agent-teams/filesystem-custody"
       builtins:
         - node:crypto
+        - node:fs
+        - node:fs/promises
+        - node:path
+      runtimeReferences: []
+  - id: production.filesystem-custody
+    dependencyMode: runtime
+    roots:
+      - packages/platform/filesystem-custody/src
+    entrypoints:
+      - packages/platform/filesystem-custody/src/index.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins:
         - node:fs
         - node:fs/promises
         - node:path

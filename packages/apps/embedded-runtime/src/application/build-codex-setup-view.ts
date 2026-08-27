@@ -8,7 +8,11 @@ import type {
   CodexConfigurationSource,
   InspectCodexConfiguration,
 } from "@agent-teams/runtime-configuration";
-import type { AuthorizeSetupInspection } from "@agent-teams/runtime-security";
+import type {
+  AuthorizeSetupInspection,
+  AuthorizedConfigurationSource,
+  AuthorizedInstallationCandidate,
+} from "@agent-teams/runtime-security";
 
 import type {
   CodexSetupDiagnostic,
@@ -64,6 +68,34 @@ const installationObservationRef = (
     ]))
     .digest("hex")}`;
 
+const mapInstallationCandidate = (
+  candidate: AuthorizedInstallationCandidate,
+): InstallationCandidate => ({
+  absolutePath: candidate.absolutePath,
+  ...(candidate.authorizedFileIdentity === undefined
+    ? {}
+    : { authorizedFileIdentity: candidate.authorizedFileIdentity }),
+  canonicalPath: candidate.canonicalPath,
+  custodyRoot: candidate.custodyRoot,
+  displayPath: candidate.displayPath,
+  required: candidate.required,
+  source: candidate.source,
+});
+
+const mapConfigurationSource = (
+  source: AuthorizedConfigurationSource,
+): CodexConfigurationSource => ({
+  absolutePath: source.absolutePath,
+  ...(source.authorizedFileIdentity === undefined
+    ? {}
+    : { authorizedFileIdentity: source.authorizedFileIdentity }),
+  canonicalPath: source.canonicalPath,
+  custodyRoot: source.custodyRoot,
+  displayPath: source.displayPath,
+  kind: source.kind,
+  observationEpoch: source.observationEpoch,
+});
+
 export const createBuildCodexSetupView = (
   dependencies: BuildCodexSetupViewDependencies,
   opaqueReferenceKey: Uint8Array,
@@ -109,28 +141,12 @@ export const createBuildCodexSetupView = (
       });
     }
 
-    const installationCandidates: InstallationCandidate[] =
-      authorization.installationCandidates.map(candidate => ({
-        absolutePath: candidate.absolutePath,
-        ...(candidate.authorizedFileIdentity === undefined
-          ? {}
-          : { authorizedFileIdentity: candidate.authorizedFileIdentity }),
-        canonicalPath: candidate.canonicalPath,
-        displayPath: candidate.displayPath,
-        required: candidate.required,
-        source: candidate.source,
-      }));
-    const configurationSources: CodexConfigurationSource[] =
-      authorization.configurationSources.map(source => ({
-        absolutePath: source.absolutePath,
-        ...(source.authorizedFileIdentity === undefined
-          ? {}
-          : { authorizedFileIdentity: source.authorizedFileIdentity }),
-        canonicalPath: source.canonicalPath,
-        displayPath: source.displayPath,
-        kind: source.kind,
-        observationEpoch: source.observationEpoch,
-      }));
+    const installationCandidates = authorization.installationCandidates.map(
+      mapInstallationCandidate,
+    );
+    const configurationSources = authorization.configurationSources.map(
+      mapConfigurationSource,
+    );
 
     const diagnostics: CodexSetupDiagnostic[] = authorization.diagnostics.map(
       diagnostic => ({

@@ -8,6 +8,10 @@ export interface ExecutableFileObserver {
     absolutePath: string,
     expectedCanonicalPath: string,
     authorizedFileIdentity: string | undefined,
+    custodyRoot: {
+      readonly absolutePath: string;
+      readonly canonicalPath: string;
+    },
     options?: { readonly signal?: AbortSignal },
   ): Promise<ExecutableFileObservation>;
 }

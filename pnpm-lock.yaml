@@ -118,15 +118,28 @@ importers:
         specifier: workspace:*
         version: link:../../contexts/runtime-security
 
-  packages/contexts/agent-execution: {}
+  packages/contexts/agent-execution:
+    dependencies:
+      '@agent-teams/filesystem-custody':
+        specifier: workspace:*
+        version: link:../../platform/filesystem-custody
 
   packages/contexts/runtime-configuration:
     dependencies:
+      '@agent-teams/filesystem-custody':
+        specifier: workspace:*
+        version: link:../../platform/filesystem-custody
       smol-toml:
         specifier: 'catalog:'
         version: 1.8.0
 
-  packages/contexts/runtime-security: {}
+  packages/contexts/runtime-security:
+    dependencies:
+      '@agent-teams/filesystem-custody':
+        specifier: workspace:*
+        version: link:../../platform/filesystem-custody
+
+  packages/platform/filesystem-custody: {}
 
 packages:
 

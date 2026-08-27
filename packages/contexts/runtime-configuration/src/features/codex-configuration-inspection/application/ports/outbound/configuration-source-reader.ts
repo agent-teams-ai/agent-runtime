@@ -7,6 +7,10 @@ export interface ConfigurationSourceReader {
     absolutePath: string,
     expectedCanonicalPath: string,
     authorizedFileIdentity: string | undefined,
+    custodyRoot: {
+      readonly absolutePath: string;
+      readonly canonicalPath: string;
+    },
     options?: { readonly signal?: AbortSignal },
   ): Promise<ConfigurationSourceRead>;
 }

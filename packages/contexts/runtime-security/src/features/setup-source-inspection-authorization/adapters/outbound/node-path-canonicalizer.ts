@@ -1,6 +1,6 @@
-import { constants } from "node:fs";
-import { basename, dirname, isAbsolute, join, parse } from "node:path";
-import { open, realpath } from "node:fs/promises";
+import { openStablePath } from "@agent-teams/filesystem-custody";
+import { dirname, isAbsolute, join, parse } from "node:path";
+import { realpath } from "node:fs/promises";
 
 import type { PathCanonicalizer } from "../../application/ports/outbound/path-canonicalizer.js";
 
@@ -24,33 +24,25 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
     options?.signal?.throwIfAborted();
     try {
       const canonicalPath = await realpath(absolutePath);
-      const canonicalLocationPath = join(
-        await realpath(dirname(absolutePath)),
-        basename(absolutePath),
-      );
-      const handle = await open(
+      return await openStablePath(
+        absolutePath,
         canonicalPath,
-        constants.O_RDONLY |
-          constants.O_NONBLOCK |
-          (constants.O_NOFOLLOW ?? 0),
-      );
-      try {
-        const opened = await handle.stat({ bigint: true });
-        options?.signal?.throwIfAborted();
-        if ((await realpath(absolutePath)) !== canonicalPath) {
-          throw new Error("Path changed while it was being authorized");
-        }
-        return {
-          absolutePath: canonicalPath,
-          canonicalLocationPath,
+        async opened => ({
+          absolutePath: opened.canonicalPath,
+          canonicalLocationPath: opened.canonicalLocationPath,
           exists: true,
-          fileIdentity: authorizationFileIdentity(opened),
-          isFile: opened.isFile(),
-          linkCount: Number(opened.nlink),
-        };
-      } finally {
-        await handle.close();
-      }
+          fileIdentity: authorizationFileIdentity(opened.stats),
+          isFile: opened.stats.isFile(),
+          linkCount: Number(opened.stats.nlink),
+        }),
+        {
+          custodyBoundary: options?.custodyBoundary ?? {
+            absolutePath,
+            canonicalPath,
+          },
+          ...(options?.signal === undefined ? {} : { signal: options.signal }),
+        },
+      );
     } catch (error) {
       if (errorCode(error) !== "ENOENT" && errorCode(error) !== "ENOTDIR") {
         throw error;

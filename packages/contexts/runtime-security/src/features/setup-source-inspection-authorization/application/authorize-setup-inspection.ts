@@ -77,6 +77,23 @@ const cancellationOptions = (
 ): { readonly signal: AbortSignal } | undefined =>
   signal === undefined ? undefined : { signal };
 
+const custodyOptions = (
+  root: CanonicalRoot,
+  signal?: AbortSignal,
+): {
+  readonly custodyBoundary: {
+    readonly absolutePath: string;
+    readonly canonicalPath: string;
+  };
+  readonly signal?: AbortSignal;
+} => ({
+  custodyBoundary: {
+    absolutePath: resolve(root.absolutePath),
+    canonicalPath: root.canonicalPath,
+  },
+  ...(signal === undefined ? {} : { signal }),
+});
+
 const canonicalizeRoots = async (
   input: AuthorizeSetupInspectionInput,
   canonicalizer: PathCanonicalizer,
@@ -110,6 +127,47 @@ const canonicalizeRoots = async (
   return duplicateCanonicalRoot ? undefined : roots;
 };
 
+const canonicalizeWithinRoot = async (
+  lexicalPath: string,
+  roots: readonly CanonicalRoot[],
+  canonicalizer: PathCanonicalizer,
+  expectedKind?: CanonicalRoot["kind"],
+  signal?: AbortSignal,
+): Promise<
+  | {
+      readonly canonical: Awaited<ReturnType<PathCanonicalizer["canonicalize"]>>;
+      readonly root: CanonicalRoot;
+    }
+  | undefined
+> => {
+  const observed = await canonicalizer.canonicalize(
+    lexicalPath,
+    cancellationOptions(signal),
+  );
+  const observedRoot = selectRoot(
+    observed.canonicalLocationPath,
+    observed.absolutePath,
+    roots,
+    expectedKind,
+  );
+  if (observedRoot === undefined) {
+    return undefined;
+  }
+  const canonical = await canonicalizer.canonicalize(
+    lexicalPath,
+    custodyOptions(observedRoot, signal),
+  );
+  const verifiedRoot = selectRoot(
+    canonical.canonicalLocationPath,
+    canonical.absolutePath,
+    roots,
+    expectedKind,
+  );
+  return verifiedRoot === observedRoot
+    ? { canonical, root: observedRoot }
+    : undefined;
+};
+
 const authorizeExecutable = async (
   request: Readonly<{
     absolutePath: string;
@@ -125,17 +183,24 @@ const authorizeExecutable = async (
   signal?.throwIfAborted();
   const lexicalPath = resolve(request.absolutePath);
   let canonicalPath: string;
-  let canonicalLocationPath: string;
   let authorizedFileIdentity: string | undefined;
   let hardLinked = false;
   let nonRegular = false;
+  let root: CanonicalRoot | undefined;
   try {
-    const canonical = await dependencies.canonicalizer.canonicalize(
+    const verified = await canonicalizeWithinRoot(
       lexicalPath,
-      cancellationOptions(signal),
+      dependencies.roots,
+      dependencies.canonicalizer,
+      undefined,
+      signal,
     );
+    if (verified === undefined) {
+      return { code: "path_outside_scope", subject: "unscoped-path" };
+    }
+    const canonical = verified.canonical;
+    root = verified.root;
     canonicalPath = canonical.absolutePath;
-    canonicalLocationPath = canonical.canonicalLocationPath;
     authorizedFileIdentity = canonical.fileIdentity;
     hardLinked = canonical.isFile === true && (canonical.linkCount ?? 0) > 1;
     nonRegular = canonical.exists && canonical.isFile !== true;
@@ -143,11 +208,6 @@ const authorizeExecutable = async (
     rethrowCancellation(error, signal);
     return { code: "path_outside_scope", subject: "unreadable-path" };
   }
-  const root = selectRoot(
-    canonicalLocationPath,
-    canonicalPath,
-    dependencies.roots,
-  );
   if (root === undefined || hardLinked || nonRegular) {
     return {
       code: "path_outside_scope",
@@ -161,6 +221,10 @@ const authorizeExecutable = async (
     absolutePath: lexicalPath,
     ...(authorizedFileIdentity === undefined ? {} : { authorizedFileIdentity }),
     canonicalPath,
+    custodyRoot: {
+      absolutePath: resolve(root.absolutePath),
+      canonicalPath: root.canonicalPath,
+    },
     displayPath: displayPath(lexicalPath, canonicalPath, root),
     required: request.required,
     source: request.source,
@@ -247,18 +311,27 @@ const collectConfigurationSources = async (
       continue;
     }
     const lexicalPath = resolve(source.absolutePath);
+    const expectedRootKind = source.kind === "user" ? "home" : "workspace";
     let canonicalPath: string;
-    let canonicalLocationPath: string;
     let authorizedFileIdentity: string | undefined;
     let hardLinked = false;
     let nonRegular = false;
+    let root: CanonicalRoot | undefined;
     try {
-      const canonical = await canonicalizer.canonicalize(
+      const verified = await canonicalizeWithinRoot(
         lexicalPath,
-        cancellationOptions(signal),
+        roots,
+        canonicalizer,
+        expectedRootKind,
+        signal,
       );
+      if (verified === undefined) {
+        diagnostics.push({ code: "path_outside_scope", subject: `${source.kind}-config` });
+        continue;
+      }
+      const canonical = verified.canonical;
+      root = verified.root;
       canonicalPath = canonical.absolutePath;
-      canonicalLocationPath = canonical.canonicalLocationPath;
       authorizedFileIdentity = canonical.fileIdentity;
       hardLinked = canonical.isFile === true && (canonical.linkCount ?? 0) > 1;
       nonRegular = canonical.exists && canonical.isFile !== true;
@@ -267,13 +340,6 @@ const collectConfigurationSources = async (
       diagnostics.push({ code: "path_outside_scope", subject: `${source.kind}-config` });
       continue;
     }
-    const expectedRootKind = source.kind === "user" ? "home" : "workspace";
-    const root = selectRoot(
-      canonicalLocationPath,
-      canonicalPath,
-      roots,
-      expectedRootKind,
-    );
     if (root === undefined || hardLinked || nonRegular) {
       diagnostics.push({
         code: "path_outside_scope",
@@ -288,6 +354,10 @@ const collectConfigurationSources = async (
       absolutePath: lexicalPath,
       ...(authorizedFileIdentity === undefined ? {} : { authorizedFileIdentity }),
       canonicalPath,
+      custodyRoot: {
+        absolutePath: resolve(root.absolutePath),
+        canonicalPath: root.canonicalPath,
+      },
       displayPath: displayPath(lexicalPath, canonicalPath, root),
       kind: source.kind,
       observationEpoch: input.observationEpoch,

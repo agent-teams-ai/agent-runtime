@@ -10,6 +10,12 @@ export interface CanonicalPathObservation {
 export interface PathCanonicalizer {
   canonicalize(
     absolutePath: string,
-    options?: { readonly signal?: AbortSignal },
+    options?: {
+      readonly custodyBoundary?: {
+        readonly absolutePath: string;
+        readonly canonicalPath: string;
+      };
+      readonly signal?: AbortSignal;
+    },
   ): Promise<CanonicalPathObservation>;
 }

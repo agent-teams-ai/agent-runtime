@@ -1,5 +1,9 @@
-import { constants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
+import {
+  PathCustodyError,
+  openStablePath,
+  type OpenedStablePath,
+} from "@agent-teams/filesystem-custody";
+import { lstat, realpath } from "node:fs/promises";
 
 import type {
   ExecutableFileObservation,
@@ -7,6 +11,9 @@ import type {
 } from "../../application/ports/outbound/executable-file-observation.js";
 
 const classifyError = (error: unknown): ExecutableFileObservation => {
+  if (error instanceof PathCustodyError) {
+    return { kind: "unstable" };
+  }
   const code =
     typeof error === "object" && error !== null && "code" in error
       ? String(error.code)
@@ -31,54 +38,51 @@ const authorizationFileIdentity = (stats: {
 }): string => `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.size}`;
 
 const observeAuthorizedExecutable = async (
-  canonicalPath: string,
+  openedPath: OpenedStablePath,
   authorizedFileIdentity: string,
-  signal?: AbortSignal,
 ): Promise<ExecutableFileObservation> => {
-  signal?.throwIfAborted();
-  const handle = await open(
-    canonicalPath,
-    constants.O_RDONLY |
-      constants.O_NONBLOCK |
-      (constants.O_NOFOLLOW ?? 0),
-  );
-  try {
-    const opened = await handle.stat({ bigint: true });
-    if (!opened.isFile() || (opened.mode & 0o111n) === 0n) {
-      return { kind: "invalid" };
-    }
-    if (
-      opened.nlink > 1n ||
-      authorizationFileIdentity(opened) !== authorizedFileIdentity
-    ) {
-      return { kind: "unstable" };
-    }
-    return { identity: `${opened.dev}:${opened.ino}`, kind: "found" };
-  } finally {
-    await handle.close();
+  const opened = openedPath.stats;
+  if (!opened.isFile() || (opened.mode & 0o111n) === 0n) {
+    return { kind: "invalid" };
   }
+  if (
+    opened.nlink > 1n ||
+    authorizationFileIdentity(opened) !== authorizedFileIdentity
+  ) {
+    return { kind: "unstable" };
+  }
+  return { identity: `${opened.dev}:${opened.ino}`, kind: "found" };
 };
 
 export const createNodeExecutableFileObserver = (): ExecutableFileObserver => ({
-  async observe(absolutePath, expectedCanonicalPath, authorizedFileIdentity, options) {
+  async observe(
+    absolutePath,
+    expectedCanonicalPath,
+    authorizedFileIdentity,
+    custodyRoot,
+    options,
+  ) {
     options?.signal?.throwIfAborted();
     try {
       const alias = await lstat(absolutePath);
       if (!alias.isFile() && !alias.isSymbolicLink()) {
         return { kind: "invalid" };
       }
-
-      const canonicalPath = await realpath(absolutePath);
-      if (canonicalPath !== expectedCanonicalPath) {
+      if ((await realpath(absolutePath)) !== expectedCanonicalPath) {
         return { kind: "unstable" };
       }
       if (authorizedFileIdentity === undefined) {
         return { kind: "unstable" };
       }
-      return await observeAuthorizedExecutable(
-        canonicalPath,
-        authorizedFileIdentity,
-        options?.signal,
+      return await openStablePath(
+        absolutePath,
+        expectedCanonicalPath,
+        async opened =>
+          observeAuthorizedExecutable(opened, authorizedFileIdentity),
+        {
+          custodyBoundary: custodyRoot,
+          ...(options?.signal === undefined ? {} : { signal: options.signal }),
+        },
       );
     } catch (error) {
       options?.signal?.throwIfAborted();

@@ -1,5 +1,5 @@
-import { constants } from "node:fs";
-import { open, realpath } from "node:fs/promises";
+import { openStablePath } from "@agent-teams/filesystem-custody";
+import { realpath, type FileHandle } from "node:fs/promises";
 
 import type {
   ConfigurationSourceRead,
@@ -25,7 +25,7 @@ const authorizationFileIdentity = (stats: {
 }): string => `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.size}`;
 
 const readBounded = async (
-  handle: Awaited<ReturnType<typeof open>>,
+  handle: FileHandle,
   maximumBytes: number,
   signal?: AbortSignal,
 ): Promise<ConfigurationSourceRead> => {
@@ -51,7 +51,7 @@ const readBounded = async (
 };
 
 const readStableAuthorizedFile = async (
-  handle: Awaited<ReturnType<typeof open>>,
+  handle: FileHandle,
   authorizedFileIdentity: string,
   maximumBytes: number,
   signal?: AbortSignal,
@@ -87,32 +87,36 @@ const readStableAuthorizedFile = async (
 export const createNodeConfigurationSourceReader = (
   maximumBytes = 128 * 1024,
 ): ConfigurationSourceReader => ({
-  async read(absolutePath, expectedCanonicalPath, authorizedFileIdentity, options) {
+  async read(
+    absolutePath,
+    expectedCanonicalPath,
+    authorizedFileIdentity,
+    custodyRoot,
+    options,
+  ) {
     options?.signal?.throwIfAborted();
     try {
-      const canonicalPath = await realpath(absolutePath);
-      if (canonicalPath !== expectedCanonicalPath) {
+      if ((await realpath(absolutePath)) !== expectedCanonicalPath) {
         return { kind: "unreadable" };
       }
       if (authorizedFileIdentity === undefined) {
         return { kind: "unreadable" };
       }
-      const handle = await open(
-        canonicalPath,
-        constants.O_RDONLY |
-          constants.O_NONBLOCK |
-          (constants.O_NOFOLLOW ?? 0),
+      return await openStablePath(
+        absolutePath,
+        expectedCanonicalPath,
+        async opened =>
+          readStableAuthorizedFile(
+            opened.handle,
+            authorizedFileIdentity,
+            maximumBytes,
+            options?.signal,
+          ),
+        {
+          custodyBoundary: custodyRoot,
+          ...(options?.signal === undefined ? {} : { signal: options.signal }),
+        },
       );
-      try {
-        return await readStableAuthorizedFile(
-          handle,
-          authorizedFileIdentity,
-          maximumBytes,
-          options?.signal,
-        );
-      } finally {
-        await handle.close();
-      }
     } catch (error) {
       options?.signal?.throwIfAborted();
       return classifyError(error);

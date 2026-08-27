@@ -2,6 +2,7 @@ packages:
   - "experiments/*"
   - "packages/apps/*"
   - "packages/contexts/*"
+  - "packages/platform/*"
 catalogMode: strict
 catalog:
   "@xstate/graph": "3.0.4"

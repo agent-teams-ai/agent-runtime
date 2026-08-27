@@ -7,6 +7,10 @@ export interface CodexConfigurationSource {
   readonly absolutePath: string;
   readonly authorizedFileIdentity?: string;
   readonly canonicalPath: string;
+  readonly custodyRoot: {
+    readonly absolutePath: string;
+    readonly canonicalPath: string;
+  };
   readonly displayPath: string;
   readonly kind: "user" | "workspace";
   readonly observationEpoch: string;
