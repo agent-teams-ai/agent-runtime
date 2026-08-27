@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -176,4 +176,45 @@ test("fails closed on unsupported platform", async () => {
     roots: [],
   });
   assert.deepEqual(result, { diagnostics: [], status: "unsupported" });
+});
+
+test("rejects hard-linked executable and configuration sources", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-setup-hardlink-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const executable = join(root, "codex");
+  const executablePeer = join(root, "codex-peer");
+  const configuration = join(root, "config.toml");
+  const configurationPeer = join(root, "config-peer.toml");
+  await writeFile(executable, "synthetic executable");
+  await writeFile(configuration, "model = 'gpt-5.6-codex'\n");
+  await link(executable, executablePeer);
+  await link(configuration, configurationPeer);
+
+  const feature = createSetupInspectionAuthorizationFeature({
+    pathCanonicalizer: createNodePathCanonicalizer(),
+  });
+  const result = await feature.authorizeSetupInspection.execute({
+    configurationSources: [{
+      absolutePath: configuration,
+      kind: "user",
+      workspaceTrusted: true,
+    }],
+    explicitExecutablePaths: [executable],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-hardlink",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [{ absolutePath: root, displayName: "$HOME", kind: "home" }],
+  });
+
+  assert.equal(result.status, "authorized");
+  if (result.status !== "authorized") {
+    return;
+  }
+  assert.deepEqual(result.installationCandidates, []);
+  assert.deepEqual(result.configurationSources, []);
+  assert.deepEqual(result.diagnostics, [
+    { code: "path_outside_scope", subject: "$HOME/codex" },
+    { code: "path_outside_scope", subject: "$HOME/config.toml" },
+  ]);
 });

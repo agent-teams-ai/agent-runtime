@@ -268,3 +268,61 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
   await disposal;
   assert.equal(getterReads, 1);
 });
+
+test("product installation references are stable within and isolated across trusted scopes", async t => {
+  const host = createAgentRuntimeHost({
+    authorizeSetupInspection: {
+      async execute(input) {
+        return {
+          configurationSources: [],
+          diagnostics: [],
+          installationCandidates: [],
+          observationEpoch: input.observationEpoch,
+          status: "authorized" as const,
+        };
+      },
+    },
+    discoverCodexInstallations: {
+      async execute(input) {
+        return {
+          diagnostics: [],
+          installations: [{
+            aliases: [{ displayPath: "$HOME/bin/codex", source: "path-entry" as const }],
+            installationRef: "context-internal-file-identity",
+            status: "found_unverified" as const,
+          }],
+          observationEpoch: input.observationEpoch,
+        };
+      },
+    },
+    inspectCodexConfiguration: {
+      async execute() {
+        return { diagnostics: [], settings: [], sources: [] };
+      },
+    },
+  });
+  t.after(() => host.dispose());
+  const bind = (scopeId: string) => host.bindAccess({
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-1",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [{ absolutePath: "/synthetic-home", displayName: "$HOME", kind: "home" }],
+    scopeId,
+  });
+
+  const first = await bind("scope-a").codexSetup.inspect({});
+  const replay = await bind("scope-a").codexSetup.inspect({});
+  const otherScope = await bind("scope-b").codexSetup.inspect({});
+  assert.equal(first.status, "complete");
+  assert.equal(replay.status, "complete");
+  assert.equal(otherScope.status, "complete");
+  if (first.status !== "complete" || replay.status !== "complete" || otherScope.status !== "complete") {
+    return;
+  }
+  assert.equal(first.installations[0]?.installationRef, replay.installations[0]?.installationRef);
+  assert.notEqual(first.installations[0]?.installationRef, otherScope.installations[0]?.installationRef);
+  assert.doesNotMatch(JSON.stringify(first), /context-internal-file-identity/u);
+});

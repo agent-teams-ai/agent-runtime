@@ -14,7 +14,7 @@ const fileIdentity = async (path: string): Promise<string> => {
   return `${observation.dev}:${observation.ino}:${observation.ctimeNs}:${observation.size}`;
 };
 
-test("discovers distinct binaries and groups symlink and hardlink aliases", async t => {
+test("discovers distinct binaries and groups symbolic aliases", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-installation-discovery-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const first = join(root, "bin-a", "codex");

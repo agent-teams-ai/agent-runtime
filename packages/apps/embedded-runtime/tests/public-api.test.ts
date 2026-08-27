@@ -52,6 +52,48 @@ test("production slice has no process, network, ambient env or write adapter", a
   const source = (await Promise.all(files.map(file => readFile(file, "utf8")))).join("\n");
   assert.doesNotMatch(
     source,
-    /node:(?:child_process|http|https|net|tls)|process\.env|spawn\(|execFile\(|writeFile\(|appendFile\(/u,
+    /node:(?:child_process|dgram|dns|http|https|net|tls)|process\.(?:cwd|env)|\b(?:fetch|spawn|exec|execFile|fork)\s*\(|\b(?:appendFile|chmod|chown|copyFile|cp|link|lchmod|lchown|lutimes|mkdir|mkdtemp|rename|rm|rmdir|symlink|truncate|unlink|utimes|write|writeFile)\s*\(|\bO_(?:APPEND|CREAT|RDWR|TRUNC|WRONLY)\b/u,
   );
+});
+
+test("application and contracts stay independent from adapters and runtime frameworks", async () => {
+  const repositoryRoot = resolve(packageRoot, "../../..");
+  const roots = [
+    join(repositoryRoot, "packages", "apps", "embedded-runtime", "src"),
+    join(repositoryRoot, "packages", "contexts", "agent-execution", "src"),
+    join(repositoryRoot, "packages", "contexts", "runtime-configuration", "src"),
+    join(repositoryRoot, "packages", "contexts", "runtime-security", "src"),
+  ];
+  const files: string[] = [];
+  const walk = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await walk(path);
+      } else if (
+        entry.name.endsWith(".ts") &&
+        (path.includes("/application/") || path.includes("/contracts/"))
+      ) {
+        files.push(path);
+      }
+    }
+  };
+  for (const root of roots) {
+    await walk(root);
+  }
+
+  for (const file of files) {
+    const source = await readFile(file, "utf8");
+    const imports = [...source.matchAll(/(?:from\s+|import\s*)["']([^"']+)["']/gu)]
+      .map(match => match[1]);
+    assert.equal(
+      imports.some(specifier =>
+        specifier !== undefined &&
+        (/node:(?:child_process|dgram|dns|fs|http|https|module|net|tls)/u.test(specifier) ||
+          /(?:^|\/)adapters(?:\/|$)|container|module-graph|registry|transport/u.test(specifier)),
+      ),
+      false,
+      `forbidden inward dependency in ${file}`,
+    );
+  }
 });

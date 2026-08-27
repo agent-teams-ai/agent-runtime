@@ -43,7 +43,25 @@ const observationRef = (
   scope: TrustedRuntimeAccessScope,
 ): string =>
   `codex-setup-observation:${createHmac("sha256", opaqueReferenceKey)
-    .update(`${scope.scopeId}\0${scope.observationEpoch}`)
+    .update(JSON.stringify([
+      "codex-setup-observation",
+      scope.scopeId,
+      scope.observationEpoch,
+    ]))
+    .digest("hex")}`;
+
+const installationObservationRef = (
+  opaqueReferenceKey: Uint8Array,
+  scope: TrustedRuntimeAccessScope,
+  internalInstallationRef: string,
+): string =>
+  `codex-installation:${createHmac("sha256", opaqueReferenceKey)
+    .update(JSON.stringify([
+      "codex-installation-observation",
+      scope.scopeId,
+      scope.observationEpoch,
+      internalInstallationRef,
+    ]))
     .digest("hex")}`;
 
 export const createBuildCodexSetupView = (
@@ -184,7 +202,11 @@ export const createBuildCodexSetupView = (
       diagnostics: sortedDiagnostics,
       installations: installations.installations.map(installation => ({
         aliases: installation.aliases.map(alias => ({ ...alias })),
-        installationRef: installation.installationRef,
+        installationRef: installationObservationRef(
+          referenceKey,
+          scope,
+          installation.installationRef,
+        ),
         status: installation.status,
       })),
       nextActions: [...nextActions].toSorted(),
