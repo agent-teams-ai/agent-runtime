@@ -53,6 +53,7 @@ boundaries:
       packages: []
       builtins:
         - node:crypto
+        - node:fs
         - node:fs/promises
         - node:path
       runtimeReferences: []
@@ -71,6 +72,7 @@ boundaries:
         - "@agent-teams/runtime-security"
       builtins:
         - node:crypto
+        - node:timers/promises
       runtimeReferences: []
   - id: experiments.typescript-evidence
     dependencyMode: development

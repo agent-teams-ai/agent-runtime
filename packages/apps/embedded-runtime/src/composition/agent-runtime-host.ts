@@ -1,3 +1,6 @@
+import { randomBytes } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
+
 import {
   createNodeExecutableFileObserver,
   createRuntimeInstallationDiscoveryFeature,
@@ -30,11 +33,22 @@ export interface AgentRuntimeHost extends AsyncDisposable {
   dispose(): Promise<void>;
 }
 
+const settleActiveCalls = async (activeCalls: ReadonlySet<Promise<unknown>>): Promise<void> => {
+  await Promise.allSettled(activeCalls);
+};
+
+const waitForDisposalDeadline = async (): Promise<void> => {
+  await delay(1_000, null, { ref: false });
+};
+
 export const createAgentRuntimeHost = (
   dependencies: BuildCodexSetupViewDependencies,
 ): AgentRuntimeHost => {
-  const buildCodexSetupView = createBuildCodexSetupView(dependencies);
+  const buildCodexSetupView = createBuildCodexSetupView(dependencies, randomBytes(32));
+  const hostAbort = new AbortController();
+  const activeCalls = new Set<Promise<unknown>>();
   let disposed = false;
+  let disposal: Promise<void> | undefined;
 
   const assertActive = (): void => {
     if (disposed) {
@@ -42,8 +56,14 @@ export const createAgentRuntimeHost = (
     }
   };
 
-  const dispose = async (): Promise<void> => {
+  const dispose = (): Promise<void> => {
+    if (disposal !== undefined) {
+      return disposal;
+    }
     disposed = true;
+    hostAbort.abort(new DOMException("Agent Runtime Host is disposed", "AbortError"));
+    disposal = Promise.race([settleActiveCalls(activeCalls), waitForDisposalDeadline()]);
+    return disposal;
   };
 
   return Object.freeze({
@@ -57,7 +77,19 @@ export const createAgentRuntimeHost = (
             options?: { readonly signal?: AbortSignal },
           ) => {
             assertActive();
-            return buildCodexSetupView(boundScope, input, options);
+            const signal =
+              options?.signal === undefined
+                ? hostAbort.signal
+                : AbortSignal.any([hostAbort.signal, options.signal]);
+            let call: Promise<unknown>;
+            call = buildCodexSetupView(boundScope, input, { signal })
+              .then(result => {
+                hostAbort.signal.throwIfAborted();
+                return result;
+              })
+              .finally(() => activeCalls.delete(call));
+            activeCalls.add(call);
+            return call as ReturnType<RuntimeAccessHandle["codexSetup"]["inspect"]>;
           },
         }),
       });
@@ -76,6 +108,7 @@ export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
   });
   const configuration = createCodexConfigurationInspectionFeature({
     parser: createSmolTomlParser(),
+    sourceIdentityKey: randomBytes(32),
     sourceReader: createNodeConfigurationSourceReader(),
   });
 

@@ -7,6 +7,7 @@ export interface ExecutableFileObserver {
   observe(
     absolutePath: string,
     expectedCanonicalPath: string,
+    authorizedFileIdentity: string | undefined,
     options?: { readonly signal?: AbortSignal },
   ): Promise<ExecutableFileObservation>;
 }

@@ -4,6 +4,7 @@ import type { ConfigurationSourceReader } from "../application/ports/outbound/co
 
 export interface CodexConfigurationInspectionDependencies {
   readonly parser: CodexTomlParser;
+  readonly sourceIdentityKey: Uint8Array;
   readonly sourceReader: ConfigurationSourceReader;
 }
 

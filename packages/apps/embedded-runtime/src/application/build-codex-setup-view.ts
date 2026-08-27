@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 import type {
   DiscoverCodexInstallations,
@@ -38,19 +38,34 @@ const deepFreeze = <T>(value: T): T => {
   return Object.freeze(value);
 };
 
-const observationRef = (scope: TrustedRuntimeAccessScope): string =>
-  `codex-setup-observation:${createHash("sha256")
+const observationRef = (
+  opaqueReferenceKey: Uint8Array,
+  scope: TrustedRuntimeAccessScope,
+): string =>
+  `codex-setup-observation:${createHmac("sha256", opaqueReferenceKey)
     .update(`${scope.scopeId}\0${scope.observationEpoch}`)
     .digest("hex")}`;
 
 export const createBuildCodexSetupView = (
   dependencies: BuildCodexSetupViewDependencies,
-) =>
-  async (
+  opaqueReferenceKey: Uint8Array,
+) => {
+  if (opaqueReferenceKey.byteLength < 32) {
+    throw new TypeError("opaqueReferenceKey must contain at least 32 bytes");
+  }
+  const referenceKey = Uint8Array.from(opaqueReferenceKey);
+  return async (
     scope: TrustedRuntimeAccessScope,
     input: InspectCodexRuntimeSetup,
     options?: { readonly signal?: AbortSignal },
   ): Promise<InspectCodexRuntimeSetupOutcome> => {
+    const requestedNativeProfile = input.nativeProfile;
+    const nativeProfile =
+      requestedNativeProfile === undefined ||
+      (typeof requestedNativeProfile === "string" &&
+        nativeProfilePattern.test(requestedNativeProfile))
+        ? requestedNativeProfile
+        : undefined;
     options?.signal?.throwIfAborted();
     const authorization = await dependencies.authorizeSetupInspection.execute(
       {
@@ -79,6 +94,9 @@ export const createBuildCodexSetupView = (
     const installationCandidates: InstallationCandidate[] =
       authorization.installationCandidates.map(candidate => ({
         absolutePath: candidate.absolutePath,
+        ...(candidate.authorizedFileIdentity === undefined
+          ? {}
+          : { authorizedFileIdentity: candidate.authorizedFileIdentity }),
         canonicalPath: candidate.canonicalPath,
         displayPath: candidate.displayPath,
         required: candidate.required,
@@ -87,12 +105,13 @@ export const createBuildCodexSetupView = (
     const configurationSources: CodexConfigurationSource[] =
       authorization.configurationSources.map(source => ({
         absolutePath: source.absolutePath,
+        ...(source.authorizedFileIdentity === undefined
+          ? {}
+          : { authorizedFileIdentity: source.authorizedFileIdentity }),
         canonicalPath: source.canonicalPath,
         displayPath: source.displayPath,
         kind: source.kind,
         observationEpoch: source.observationEpoch,
-        precedence: source.precedence,
-        sourceRef: source.sourceRef,
       }));
 
     const diagnostics: CodexSetupDiagnostic[] = authorization.diagnostics.map(
@@ -103,11 +122,7 @@ export const createBuildCodexSetupView = (
           : { subject: diagnostic.subject }),
       }),
     );
-    const nativeProfile =
-      input.nativeProfile === undefined || nativeProfilePattern.test(input.nativeProfile)
-        ? input.nativeProfile
-        : undefined;
-    if (input.nativeProfile !== undefined && nativeProfile === undefined) {
+    if (requestedNativeProfile !== undefined && nativeProfile === undefined) {
       diagnostics.push({ code: "native_profile_invalid" });
     }
 
@@ -121,6 +136,7 @@ export const createBuildCodexSetupView = (
       ),
       dependencies.inspectCodexConfiguration.execute(
         {
+          identityScope: scope.scopeId,
           observationEpoch: authorization.observationEpoch,
           sources: configurationSources,
           ...(nativeProfile === undefined ? {} : { nativeProfile }),
@@ -172,7 +188,7 @@ export const createBuildCodexSetupView = (
         status: installation.status,
       })),
       nextActions: [...nextActions].toSorted(),
-      observationRef: observationRef(scope),
+      observationRef: observationRef(referenceKey, scope),
       settings: configuration.settings.map(setting => ({ ...setting })),
       sources: configuration.sources.map(source => ({ ...source })),
       status:
@@ -181,3 +197,4 @@ export const createBuildCodexSetupView = (
           : "partial",
     });
   };
+};

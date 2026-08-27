@@ -5,6 +5,7 @@ export type InstallationCandidateSource =
 
 export interface InstallationCandidate {
   readonly absolutePath: string;
+  readonly authorizedFileIdentity?: string;
   readonly canonicalPath: string;
   readonly displayPath: string;
   readonly required: boolean;

@@ -12,11 +12,17 @@ export interface CodexSetupInstallationView {
 }
 
 export interface CodexSetupSourceView {
-  readonly contentDigest?: string;
   readonly displayPath: string;
   readonly kind: "user" | "workspace";
+  readonly semanticDigest?: string;
   readonly sourceRef: string;
-  readonly status: "applied" | "malformed" | "missing" | "stale" | "unreadable";
+  readonly status:
+    | "applied"
+    | "malformed"
+    | "missing"
+    | "rejected"
+    | "stale"
+    | "unreadable";
 }
 
 export interface CodexSetupSettingView {
@@ -45,7 +51,9 @@ export type CodexSetupDiagnosticCode =
   | "secret_setting_ignored"
   | "security_setting_deferred"
   | "setting_type_unsupported"
+  | "setting_value_unsupported"
   | "source_epoch_stale"
+  | "source_precedence_conflict"
   | "source_untrusted"
   | "unknown_setting_ignored";
 

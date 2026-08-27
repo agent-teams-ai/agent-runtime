@@ -43,14 +43,51 @@ const readBounded = async (
   return { bytes: buffer.subarray(0, offset), kind: "read" };
 };
 
+const readStableAuthorizedFile = async (
+  handle: Awaited<ReturnType<typeof open>>,
+  authorizedFileIdentity: string,
+  maximumBytes: number,
+  signal?: AbortSignal,
+): Promise<ConfigurationSourceRead> => {
+  const beforeRead = await handle.stat();
+  if (!beforeRead.isFile()) {
+    return { kind: "unreadable" };
+  }
+  if (`${beforeRead.dev}:${beforeRead.ino}` !== authorizedFileIdentity) {
+    return { kind: "unreadable" };
+  }
+  if (beforeRead.size > maximumBytes) {
+    return { kind: "too-large" };
+  }
+  const read = await readBounded(handle, maximumBytes, signal);
+  if (read.kind !== "read") {
+    return read;
+  }
+  signal?.throwIfAborted();
+  const afterRead = await handle.stat();
+  if (
+    beforeRead.dev !== afterRead.dev ||
+    beforeRead.ino !== afterRead.ino ||
+    beforeRead.size !== afterRead.size ||
+    beforeRead.mtimeMs !== afterRead.mtimeMs ||
+    beforeRead.ctimeMs !== afterRead.ctimeMs
+  ) {
+    return { kind: "unreadable" };
+  }
+  return read;
+};
+
 export const createNodeConfigurationSourceReader = (
   maximumBytes = 128 * 1024,
 ): ConfigurationSourceReader => ({
-  async read(absolutePath, expectedCanonicalPath, options) {
+  async read(absolutePath, expectedCanonicalPath, authorizedFileIdentity, options) {
     options?.signal?.throwIfAborted();
     try {
       const canonicalPath = await realpath(absolutePath);
       if (canonicalPath !== expectedCanonicalPath) {
+        return { kind: "unreadable" };
+      }
+      if (authorizedFileIdentity === undefined) {
         return { kind: "unreadable" };
       }
       const handle = await open(
@@ -58,28 +95,12 @@ export const createNodeConfigurationSourceReader = (
         constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
       );
       try {
-        const beforeRead = await handle.stat();
-        if (!beforeRead.isFile()) {
-          return { kind: "unreadable" };
-        }
-        if (beforeRead.size > maximumBytes) {
-          return { kind: "too-large" };
-        }
-        const read = await readBounded(handle, maximumBytes, options?.signal);
-        if (read.kind !== "read") {
-          return read;
-        }
-        options?.signal?.throwIfAborted();
-        const afterRead = await handle.stat();
-        if (
-          beforeRead.dev !== afterRead.dev ||
-          beforeRead.ino !== afterRead.ino ||
-          beforeRead.size !== afterRead.size ||
-          beforeRead.mtimeMs !== afterRead.mtimeMs
-        ) {
-          return { kind: "unreadable" };
-        }
-        return read;
+        return await readStableAuthorizedFile(
+          handle,
+          authorizedFileIdentity,
+          maximumBytes,
+          options?.signal,
+        );
       } finally {
         await handle.close();
       }

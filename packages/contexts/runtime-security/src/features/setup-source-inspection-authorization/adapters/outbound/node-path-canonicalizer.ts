@@ -1,5 +1,6 @@
+import { constants } from "node:fs";
 import { dirname, isAbsolute, join, parse } from "node:path";
-import { realpath } from "node:fs/promises";
+import { open, realpath } from "node:fs/promises";
 
 import type { PathCanonicalizer } from "../../application/ports/outbound/path-canonicalizer.js";
 
@@ -15,7 +16,27 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
     }
     options?.signal?.throwIfAborted();
     try {
-      return { absolutePath: await realpath(absolutePath), exists: true };
+      const canonicalPath = await realpath(absolutePath);
+      const handle = await open(
+        canonicalPath,
+        constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+      );
+      try {
+        const opened = await handle.stat();
+        options?.signal?.throwIfAborted();
+        if ((await realpath(absolutePath)) !== canonicalPath) {
+          throw new Error("Path changed while it was being authorized");
+        }
+        return {
+          absolutePath: canonicalPath,
+          exists: true,
+          fileIdentity: `${opened.dev}:${opened.ino}`,
+          isFile: opened.isFile(),
+          linkCount: opened.nlink,
+        };
+      } finally {
+        await handle.close();
+      }
     } catch (error) {
       if (errorCode(error) !== "ENOENT" && errorCode(error) !== "ENOTDIR") {
         throw error;

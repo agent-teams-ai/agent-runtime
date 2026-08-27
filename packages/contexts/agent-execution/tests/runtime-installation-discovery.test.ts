@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, link, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,6 +9,11 @@ import {
   createRuntimeInstallationDiscoveryFeature,
 } from "../dist/composition.js";
 
+const fileIdentity = async (path: string): Promise<string> => {
+  const observation = await stat(path);
+  return `${observation.dev}:${observation.ino}`;
+};
+
 test("discovers distinct binaries and groups symlink and hardlink aliases", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-installation-discovery-"));
   t.after(() => rm(root, { force: true, recursive: true }));
@@ -16,7 +21,7 @@ test("discovers distinct binaries and groups symlink and hardlink aliases", asyn
   const second = join(root, "bin-b", "codex");
   const unicodeAliasDirectory = "bin space-e\u0301";
   const symbolicAlias = join(root, unicodeAliasDirectory, "codex");
-  const hardAlias = join(root, "bin-d", "codex");
+  const secondSymbolicAlias = join(root, "bin-d", "codex");
   await Promise.all([
     mkdir(join(root, "bin-a"), { recursive: true }),
     mkdir(join(root, "bin-b"), { recursive: true }),
@@ -26,12 +31,16 @@ test("discovers distinct binaries and groups symlink and hardlink aliases", asyn
   await writeFile(first, "synthetic-a");
   await writeFile(second, "synthetic-b");
   await Promise.all([chmod(first, 0o755), chmod(second, 0o755)]);
-  await symlink(first, symbolicAlias);
-  await link(first, hardAlias);
-  const [firstCanonical, secondCanonical, hardAliasCanonical] = await Promise.all([
+  await Promise.all([
+    symlink(first, symbolicAlias),
+    symlink(first, secondSymbolicAlias),
+  ]);
+  const [firstCanonical, secondCanonical, secondAliasCanonical, firstIdentity, secondIdentity] = await Promise.all([
     realpath(first),
     realpath(second),
-    realpath(hardAlias),
+    realpath(secondSymbolicAlias),
+    fileIdentity(first),
+    fileIdentity(second),
   ]);
 
   const feature = createRuntimeInstallationDiscoveryFeature({
@@ -39,10 +48,10 @@ test("discovers distinct binaries and groups symlink and hardlink aliases", asyn
   });
   const result = await feature.discoverCodexInstallations.execute({
     candidates: [
-      { absolutePath: second, canonicalPath: secondCanonical, displayPath: "$HOME/bin-b/codex", required: false, source: "path-entry" },
-      { absolutePath: hardAlias, canonicalPath: hardAliasCanonical, displayPath: "$HOME/bin-d/codex", required: false, source: "known-location" },
-      { absolutePath: first, canonicalPath: firstCanonical, displayPath: "$HOME/bin-a/codex", required: true, source: "explicit" },
-      { absolutePath: symbolicAlias, canonicalPath: firstCanonical, displayPath: `$HOME/${unicodeAliasDirectory}/codex`, required: false, source: "path-entry" },
+      { absolutePath: second, authorizedFileIdentity: secondIdentity, canonicalPath: secondCanonical, displayPath: "$HOME/bin-b/codex", required: false, source: "path-entry" },
+      { absolutePath: secondSymbolicAlias, authorizedFileIdentity: firstIdentity, canonicalPath: secondAliasCanonical, displayPath: "$HOME/bin-d/codex", required: false, source: "known-location" },
+      { absolutePath: first, authorizedFileIdentity: firstIdentity, canonicalPath: firstCanonical, displayPath: "$HOME/bin-a/codex", required: true, source: "explicit" },
+      { absolutePath: symbolicAlias, authorizedFileIdentity: firstIdentity, canonicalPath: firstCanonical, displayPath: `$HOME/${unicodeAliasDirectory}/codex`, required: false, source: "path-entry" },
     ],
     observationEpoch: "epoch-1",
   });
@@ -74,9 +83,11 @@ test("reports invalid required candidates without executing them", async t => {
   await symlink(join(root, "missing-target"), broken);
   await symlink(cyclicPeer, cyclic);
   await symlink(cyclic, cyclicPeer);
-  const [directoryCanonical, nonExecutableCanonical] = await Promise.all([
+  const [directoryCanonical, nonExecutableCanonical, directoryIdentity, nonExecutableIdentity] = await Promise.all([
     realpath(directory),
     realpath(nonExecutable),
+    fileIdentity(directory),
+    fileIdentity(nonExecutable),
   ]);
 
   const feature = createRuntimeInstallationDiscoveryFeature({
@@ -84,8 +95,8 @@ test("reports invalid required candidates without executing them", async t => {
   });
   const result = await feature.discoverCodexInstallations.execute({
     candidates: [
-      { absolutePath: directory, canonicalPath: directoryCanonical, displayPath: "$HOME/directory", required: true, source: "explicit" },
-      { absolutePath: nonExecutable, canonicalPath: nonExecutableCanonical, displayPath: "$HOME/not-executable", required: true, source: "explicit" },
+      { absolutePath: directory, authorizedFileIdentity: directoryIdentity, canonicalPath: directoryCanonical, displayPath: "$HOME/directory", required: true, source: "explicit" },
+      { absolutePath: nonExecutable, authorizedFileIdentity: nonExecutableIdentity, canonicalPath: nonExecutableCanonical, displayPath: "$HOME/not-executable", required: true, source: "explicit" },
       { absolutePath: broken, canonicalPath: broken, displayPath: "$HOME/broken", required: true, source: "explicit" },
       { absolutePath: cyclic, canonicalPath: cyclic, displayPath: "$HOME/cyclic", required: true, source: "explicit" },
     ],
@@ -112,6 +123,7 @@ test("rejects a candidate whose alias changed after authorization", async t => {
   await Promise.all([chmod(first, 0o755), chmod(second, 0o755)]);
   await symlink(first, alias);
   const firstCanonical = await realpath(first);
+  const authorizedFileIdentity = await fileIdentity(first);
   await rm(alias);
   await symlink(second, alias);
 
@@ -121,7 +133,39 @@ test("rejects a candidate whose alias changed after authorization", async t => {
   const result = await feature.discoverCodexInstallations.execute({
     candidates: [{
       absolutePath: alias,
+      authorizedFileIdentity,
       canonicalPath: firstCanonical,
+      displayPath: "$HOME/codex",
+      required: true,
+      source: "explicit",
+    }],
+    observationEpoch: "epoch-1",
+  });
+
+  assert.equal(result.installations.length, 0);
+  assert.equal(result.diagnostics[0]?.code, "candidate_unstable");
+});
+
+test("rejects a different executable installed at the authorized canonical path", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-installation-identity-race-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const executable = join(root, "codex");
+  await writeFile(executable, "authorized");
+  await chmod(executable, 0o755);
+  const canonicalPath = await realpath(executable);
+  const authorizedFileIdentity = await fileIdentity(executable);
+  await rm(executable);
+  await writeFile(executable, "replacement");
+  await chmod(executable, 0o755);
+
+  const feature = createRuntimeInstallationDiscoveryFeature({
+    executableFileObserver: createNodeExecutableFileObserver(),
+  });
+  const result = await feature.discoverCodexInstallations.execute({
+    candidates: [{
+      absolutePath: executable,
+      authorizedFileIdentity,
+      canonicalPath,
       displayPath: "$HOME/codex",
       required: true,
       source: "explicit",

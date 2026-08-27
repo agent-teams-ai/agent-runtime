@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createDefaultAgentRuntimeHost } from "../dist/composition.js";
+import {
+  createAgentRuntimeHost,
+  createDefaultAgentRuntimeHost,
+} from "../dist/composition.js";
 
 const isDeeplyFrozen = (value: unknown): boolean => {
   if (typeof value !== "object" || value === null) {
@@ -13,7 +16,10 @@ const isDeeplyFrozen = (value: unknown): boolean => {
   return Object.isFrozen(value) && Object.values(value).every(isDeeplyFrozen);
 };
 
-test("inspects a synthetic Codex setup deterministically without leaking paths or secrets", async t => {
+test(
+  "inspects a synthetic Codex setup deterministically without leaking paths or secrets",
+  { skip: process.platform !== "darwin" },
+  async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-setup-e2e-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const home = join(root, "synthetic-home");
@@ -49,14 +55,14 @@ test("inspects a synthetic Codex setup deterministically without leaking paths o
   t.after(() => host.dispose());
   const access = host.bindAccess({
     configurationSources: [
-      { absolutePath: join(home, ".codex", "config.toml"), kind: "user", precedence: 10, workspaceTrusted: true },
-      { absolutePath: join(workspace, ".codex", "config.toml"), kind: "workspace", precedence: 20, workspaceTrusted: true },
+      { absolutePath: join(home, ".codex", "config.toml"), kind: "user", workspaceTrusted: true },
+      { absolutePath: join(workspace, ".codex", "config.toml"), kind: "workspace", workspaceTrusted: true },
     ],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [aliasBin],
     observationEpoch: "synthetic-epoch-1",
     pathEntries: [bin],
-    platform: "darwin",
+    platform: process.platform,
     roots: [
       { absolutePath: home, displayName: "$HOME", kind: "home" },
       { absolutePath: workspace, displayName: "$WORKSPACE", kind: "workspace" },
@@ -84,7 +90,8 @@ test("inspects a synthetic Codex setup deterministically without leaking paths o
   assert.doesNotMatch(serialized, /synthetic-secret-must-not-leak/u);
   assert.match(serialized, /\$HOME/u);
   assert.match(serialized, /secret_setting_ignored/u);
-});
+  },
+);
 
 test("scope binding is copied, cancellation is local, and disposal invalidates handles", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-scope-e2e-"));
@@ -145,7 +152,6 @@ test("canonicalizes diagnostics and recommends reviewing an invalid native profi
       {
         absolutePath: config,
         kind: "user",
-        precedence: 10,
         workspaceTrusted: true,
       },
     ],
@@ -199,4 +205,66 @@ test("unsupported and denied scopes fail closed", async t => {
     scopeId: "scope-denied",
   });
   assert.equal((await denied.codexSetup.inspect({})).status, "denied");
+});
+
+test("snapshots getter-backed input and revokes an in-flight inspection on disposal", async () => {
+  let releaseAuthorization: (() => void) | undefined;
+  const authorizationGate = new Promise<void>(resolve => {
+    releaseAuthorization = resolve;
+  });
+  const host = createAgentRuntimeHost({
+    authorizeSetupInspection: {
+      async execute() {
+        await authorizationGate;
+        return {
+          configurationSources: [],
+          diagnostics: [],
+          installationCandidates: [],
+          observationEpoch: "epoch-1",
+          status: "authorized" as const,
+        };
+      },
+    },
+    discoverCodexInstallations: {
+      async execute() {
+        return {
+          diagnostics: [],
+          installations: [],
+          observationEpoch: "epoch-1",
+        };
+      },
+    },
+    inspectCodexConfiguration: {
+      async execute() {
+        return { diagnostics: [], settings: [], sources: [] };
+      },
+    },
+  });
+  const access = host.bindAccess({
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-1",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [],
+    scopeId: "scope-1",
+  });
+  let getterReads = 0;
+  const input = Object.defineProperty({}, "nativeProfile", {
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return getterReads === 1 ? "invalid profile" : undefined;
+    },
+  });
+
+  const inspection = access.codexSetup.inspect(input);
+  await Promise.resolve();
+  const disposal = host.dispose();
+  releaseAuthorization?.();
+
+  await assert.rejects(inspection, { name: "AbortError" });
+  await disposal;
+  assert.equal(getterReads, 1);
 });

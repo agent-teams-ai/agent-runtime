@@ -9,7 +9,6 @@ export interface TrustedSetupPathRoot {
 export interface TrustedConfigurationSource {
   readonly absolutePath: string;
   readonly kind: "user" | "workspace";
-  readonly precedence: number;
   readonly workspaceTrusted: boolean;
 }
 
@@ -25,6 +24,7 @@ export interface AuthorizeSetupInspectionInput {
 
 export interface AuthorizedInstallationCandidate {
   readonly absolutePath: string;
+  readonly authorizedFileIdentity?: string;
   readonly canonicalPath: string;
   readonly displayPath: string;
   readonly required: boolean;
@@ -33,12 +33,11 @@ export interface AuthorizedInstallationCandidate {
 
 export interface AuthorizedConfigurationSource {
   readonly absolutePath: string;
+  readonly authorizedFileIdentity?: string;
   readonly canonicalPath: string;
   readonly displayPath: string;
   readonly kind: "user" | "workspace";
   readonly observationEpoch: string;
-  readonly precedence: number;
-  readonly sourceRef: string;
 }
 
 export interface SetupAuthorizationDiagnostic {

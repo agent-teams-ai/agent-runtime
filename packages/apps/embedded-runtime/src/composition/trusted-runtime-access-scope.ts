@@ -2,7 +2,6 @@ export interface TrustedRuntimeAccessScope {
   readonly configurationSources: readonly {
     readonly absolutePath: string;
     readonly kind: "user" | "workspace";
-    readonly precedence: number;
     readonly workspaceTrusted: boolean;
   }[];
   readonly explicitCodexExecutablePaths: readonly string[];

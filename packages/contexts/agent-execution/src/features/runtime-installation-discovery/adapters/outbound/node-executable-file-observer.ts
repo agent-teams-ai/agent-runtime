@@ -23,8 +23,40 @@ const classifyError = (error: unknown): ExecutableFileObservation => {
   return { kind: "unreadable" };
 };
 
+const observeAuthorizedExecutable = async (
+  canonicalPath: string,
+  authorizedFileIdentity: string,
+  signal?: AbortSignal,
+): Promise<ExecutableFileObservation> => {
+  const beforeOpen = await stat(canonicalPath);
+  if (!beforeOpen.isFile() || (beforeOpen.mode & 0o111) === 0) {
+    return { kind: "invalid" };
+  }
+  signal?.throwIfAborted();
+  const handle = await open(
+    canonicalPath,
+    constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+  );
+  try {
+    const opened = await handle.stat();
+    if (
+      opened.nlink > 1 ||
+      `${opened.dev}:${opened.ino}` !== authorizedFileIdentity ||
+      opened.dev !== beforeOpen.dev ||
+      opened.ino !== beforeOpen.ino ||
+      opened.size !== beforeOpen.size ||
+      opened.mtimeMs !== beforeOpen.mtimeMs
+    ) {
+      return { kind: "unstable" };
+    }
+    return { identity: `${opened.dev}:${opened.ino}`, kind: "found" };
+  } finally {
+    await handle.close();
+  }
+};
+
 export const createNodeExecutableFileObserver = (): ExecutableFileObserver => ({
-  async observe(absolutePath, expectedCanonicalPath, options) {
+  async observe(absolutePath, expectedCanonicalPath, authorizedFileIdentity, options) {
     options?.signal?.throwIfAborted();
     try {
       const alias = await lstat(absolutePath);
@@ -36,33 +68,14 @@ export const createNodeExecutableFileObserver = (): ExecutableFileObserver => ({
       if (canonicalPath !== expectedCanonicalPath) {
         return { kind: "unstable" };
       }
-      const beforeOpen = await stat(canonicalPath);
-      if (!beforeOpen.isFile() || (beforeOpen.mode & 0o111) === 0) {
-        return { kind: "invalid" };
+      if (authorizedFileIdentity === undefined) {
+        return { kind: "unstable" };
       }
-
-      options?.signal?.throwIfAborted();
-      const handle = await open(
+      return await observeAuthorizedExecutable(
         canonicalPath,
-        constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+        authorizedFileIdentity,
+        options?.signal,
       );
-      try {
-        const opened = await handle.stat();
-        if (
-          opened.dev !== beforeOpen.dev ||
-          opened.ino !== beforeOpen.ino ||
-          opened.size !== beforeOpen.size ||
-          opened.mtimeMs !== beforeOpen.mtimeMs
-        ) {
-          return { kind: "unstable" };
-        }
-        return {
-          identity: `${opened.dev}:${opened.ino}`,
-          kind: "found",
-        };
-      } finally {
-        await handle.close();
-      }
     } catch (error) {
       options?.signal?.throwIfAborted();
       return classifyError(error);

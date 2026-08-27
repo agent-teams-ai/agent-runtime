@@ -5,15 +5,15 @@ export type PortableCodexSettingKey =
 
 export interface CodexConfigurationSource {
   readonly absolutePath: string;
+  readonly authorizedFileIdentity?: string;
   readonly canonicalPath: string;
   readonly displayPath: string;
   readonly kind: "user" | "workspace";
   readonly observationEpoch: string;
-  readonly precedence: number;
-  readonly sourceRef: string;
 }
 
 export interface InspectCodexConfigurationInput {
+  readonly identityScope: string;
   readonly nativeProfile?: string;
   readonly observationEpoch: string;
   readonly sources: readonly CodexConfigurationSource[];
@@ -26,11 +26,17 @@ export interface PortableCodexSettingObservation {
 }
 
 export interface CodexConfigurationSourceObservation {
-  readonly contentDigest?: string;
   readonly displayPath: string;
   readonly kind: "user" | "workspace";
+  readonly semanticDigest?: string;
   readonly sourceRef: string;
-  readonly status: "applied" | "malformed" | "missing" | "stale" | "unreadable";
+  readonly status:
+    | "applied"
+    | "malformed"
+    | "missing"
+    | "rejected"
+    | "stale"
+    | "unreadable";
 }
 
 export interface CodexConfigurationDiagnostic {
@@ -46,7 +52,9 @@ export interface CodexConfigurationDiagnostic {
     | "secret_setting_ignored"
     | "security_setting_deferred"
     | "setting_type_unsupported"
+    | "setting_value_unsupported"
     | "source_epoch_stale"
+    | "source_precedence_conflict"
     | "unknown_setting_ignored";
   readonly setting?: string;
   readonly sourceRef?: string;

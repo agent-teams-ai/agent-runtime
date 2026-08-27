@@ -41,6 +41,7 @@ export const createDiscoverCodexInstallations = (
       const observation = await fileObserver.observe(
         candidate.absolutePath,
         candidate.canonicalPath,
+        candidate.authorizedFileIdentity,
         options,
       );
       if (observation.kind === "missing") {
