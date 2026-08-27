@@ -32,6 +32,9 @@ const nativeProfilePattern = /^[A-Za-z0-9_-]{1,64}$/u;
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
+const invokeAsPromise = <T>(operation: () => Promise<T>): Promise<T> =>
+  Promise.resolve().then(operation);
+
 const deepFreeze = <T>(value: T): T => {
   if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
     return value;
@@ -161,14 +164,14 @@ export const createBuildCodexSetupView = (
     }
 
     const [installationSettlement, configurationSettlement] = await Promise.allSettled([
-      dependencies.discoverCodexInstallations.execute(
+      invokeAsPromise(() => dependencies.discoverCodexInstallations.execute(
         {
           candidates: installationCandidates,
           observationEpoch: authorization.observationEpoch,
         },
         options,
-      ),
-      dependencies.inspectCodexConfiguration.execute(
+      )),
+      invokeAsPromise(() => dependencies.inspectCodexConfiguration.execute(
         {
           identityScope: scope.scopeId,
           observationEpoch: authorization.observationEpoch,
@@ -176,7 +179,7 @@ export const createBuildCodexSetupView = (
           ...(nativeProfile === undefined ? {} : { nativeProfile }),
         },
         options,
-      ),
+      )),
     ]);
     if (installationSettlement.status === "rejected") {
       throw installationSettlement.reason;

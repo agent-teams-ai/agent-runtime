@@ -454,6 +454,67 @@ test("disposal remains bounded when a dependency never settles", async () => {
   ]);
 });
 
+test("a synchronous branch throw cannot escape parallel drain custody", async () => {
+  let installationStarted: (() => void) | undefined;
+  const started = new Promise<void>(resolve => {
+    installationStarted = resolve;
+  });
+  let rejectInstallation: (() => void) | undefined;
+  const synchronousFailure = new Error("synthetic synchronous validation failure");
+  const host = createAgentRuntimeHost({
+    authorizeSetupInspection: {
+      async execute() {
+        return {
+          configurationSources: [],
+          diagnostics: [],
+          installationCandidates: [],
+          observationEpoch: "epoch-1",
+          status: "authorized" as const,
+        };
+      },
+    },
+    discoverCodexInstallations: {
+      execute() {
+        installationStarted?.();
+        return new Promise<never>((_resolve, reject) => {
+          rejectInstallation = () => reject(new Error("synthetic late sibling failure"));
+        });
+      },
+    },
+    inspectCodexConfiguration: {
+      execute() {
+        throw synchronousFailure;
+      },
+    },
+  });
+  const access = host.bindAccess({
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "epoch-1",
+    pathEntries: [],
+    platform: "darwin",
+    roots: [],
+    scopeId: "scope-synchronous-throw",
+  });
+  const controller = new AbortController();
+  const inspection = access.codexSetup.inspect({}, { signal: controller.signal });
+  await started;
+  controller.abort(new DOMException("caller cancelled", "AbortError"));
+  await assert.rejects(inspection, { name: "AbortError" });
+
+  let disposalSettled = false;
+  const disposal = host.dispose().then(() => {
+    disposalSettled = true;
+    return null;
+  });
+  await delay(25);
+  assert.equal(disposalSettled, false);
+  rejectInstallation?.();
+  await disposal;
+  assert.equal(disposalSettled, true);
+});
+
 test("product installation references are stable within and isolated across trusted scopes", async t => {
   const host = createAgentRuntimeHost({
     authorizeSetupInspection: {
