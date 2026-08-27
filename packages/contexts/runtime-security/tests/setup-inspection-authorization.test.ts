@@ -272,11 +272,17 @@ test(
     pathCanonicalizer: {
       async canonicalize(path) {
         if (path === lexicalRoot) {
-          return { absolutePath: canonicalRoot, exists: true, isFile: false };
+          return {
+            absolutePath: canonicalRoot,
+            canonicalLocationPath: canonicalRoot,
+            exists: true,
+            isFile: false,
+          };
         }
         assert.equal(path, lexicalCandidate);
         return {
           absolutePath: canonicalCandidate,
+          canonicalLocationPath: canonicalCandidate,
           exists: true,
           fileIdentity: "synthetic-file",
           isFile: true,
@@ -301,5 +307,55 @@ test(
     return;
   }
   assert.equal(result.installationCandidates[0]?.displayPath, "$HOME/bin/codex");
+  },
+);
+
+test(
+  "does not confuse case-distinct sibling locations on a case-sensitive volume",
+  { skip: process.platform === "win32" },
+  async () => {
+    const lexicalRoot = "/Synthetic/Home";
+    const outsideAlias = "/Synthetic/home/codex";
+    const canonicalTarget = "/Synthetic/Home/bin/codex";
+    const feature = createSetupInspectionAuthorizationFeature({
+      pathCanonicalizer: {
+        async canonicalize(path) {
+          if (path === lexicalRoot) {
+            return {
+              absolutePath: lexicalRoot,
+              canonicalLocationPath: lexicalRoot,
+              exists: true,
+              isFile: false,
+            };
+          }
+          assert.equal(path, outsideAlias);
+          return {
+            absolutePath: canonicalTarget,
+            canonicalLocationPath: outsideAlias,
+            exists: true,
+            fileIdentity: "synthetic-file",
+            isFile: true,
+            linkCount: 1,
+          };
+        },
+      },
+    });
+
+    const result = await feature.authorizeSetupInspection.execute({
+      configurationSources: [],
+      explicitExecutablePaths: [outsideAlias],
+      knownExecutableDirectories: [],
+      observationEpoch: "epoch-case-sensitive",
+      pathEntries: [],
+      platform: "darwin",
+      roots: [{ absolutePath: lexicalRoot, displayName: "$HOME", kind: "home" }],
+    });
+
+    assert.equal(result.status, "authorized");
+    if (result.status !== "authorized") {
+      return;
+    }
+    assert.deepEqual(result.installationCandidates, []);
+    assert.equal(result.diagnostics[0]?.code, "path_outside_scope");
   },
 );

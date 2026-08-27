@@ -28,11 +28,8 @@ const contains = (root: string, candidate: string): boolean => {
   return remainder === "" || (!remainder.startsWith("..") && !isAbsolute(remainder));
 };
 
-const containsWithDarwinCaseFolding = (root: string, candidate: string): boolean =>
-  contains(root.toLocaleLowerCase("en-US"), candidate.toLocaleLowerCase("en-US"));
-
 const selectRoot = (
-  lexicalPath: string,
+  canonicalLocationPath: string,
   canonicalPath: string,
   roots: readonly CanonicalRoot[],
   expectedKind?: CanonicalRoot["kind"],
@@ -41,7 +38,7 @@ const selectRoot = (
     .filter(
       root =>
         (expectedKind === undefined || root.kind === expectedKind) &&
-        containsWithDarwinCaseFolding(resolve(root.absolutePath), lexicalPath) &&
+        contains(root.canonicalPath, canonicalLocationPath) &&
         contains(root.canonicalPath, canonicalPath),
     )
     .toSorted(
@@ -128,6 +125,7 @@ const authorizeExecutable = async (
   signal?.throwIfAborted();
   const lexicalPath = resolve(request.absolutePath);
   let canonicalPath: string;
+  let canonicalLocationPath: string;
   let authorizedFileIdentity: string | undefined;
   let hardLinked = false;
   let nonRegular = false;
@@ -137,6 +135,7 @@ const authorizeExecutable = async (
       cancellationOptions(signal),
     );
     canonicalPath = canonical.absolutePath;
+    canonicalLocationPath = canonical.canonicalLocationPath;
     authorizedFileIdentity = canonical.fileIdentity;
     hardLinked = canonical.isFile === true && (canonical.linkCount ?? 0) > 1;
     nonRegular = canonical.exists && canonical.isFile !== true;
@@ -144,7 +143,11 @@ const authorizeExecutable = async (
     rethrowCancellation(error, signal);
     return { code: "path_outside_scope", subject: "unreadable-path" };
   }
-  const root = selectRoot(lexicalPath, canonicalPath, dependencies.roots);
+  const root = selectRoot(
+    canonicalLocationPath,
+    canonicalPath,
+    dependencies.roots,
+  );
   if (root === undefined || hardLinked || nonRegular) {
     return {
       code: "path_outside_scope",
@@ -245,6 +248,7 @@ const collectConfigurationSources = async (
     }
     const lexicalPath = resolve(source.absolutePath);
     let canonicalPath: string;
+    let canonicalLocationPath: string;
     let authorizedFileIdentity: string | undefined;
     let hardLinked = false;
     let nonRegular = false;
@@ -254,6 +258,7 @@ const collectConfigurationSources = async (
         cancellationOptions(signal),
       );
       canonicalPath = canonical.absolutePath;
+      canonicalLocationPath = canonical.canonicalLocationPath;
       authorizedFileIdentity = canonical.fileIdentity;
       hardLinked = canonical.isFile === true && (canonical.linkCount ?? 0) > 1;
       nonRegular = canonical.exists && canonical.isFile !== true;
@@ -263,7 +268,12 @@ const collectConfigurationSources = async (
       continue;
     }
     const expectedRootKind = source.kind === "user" ? "home" : "workspace";
-    const root = selectRoot(lexicalPath, canonicalPath, roots, expectedRootKind);
+    const root = selectRoot(
+      canonicalLocationPath,
+      canonicalPath,
+      roots,
+      expectedRootKind,
+    );
     if (root === undefined || hardLinked || nonRegular) {
       diagnostics.push({
         code: "path_outside_scope",

@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { dirname, isAbsolute, join, parse } from "node:path";
+import { basename, dirname, isAbsolute, join, parse } from "node:path";
 import { open, realpath } from "node:fs/promises";
 
 import type { PathCanonicalizer } from "../../application/ports/outbound/path-canonicalizer.js";
@@ -24,6 +24,10 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
     options?.signal?.throwIfAborted();
     try {
       const canonicalPath = await realpath(absolutePath);
+      const canonicalLocationPath = join(
+        await realpath(dirname(absolutePath)),
+        basename(absolutePath),
+      );
       const handle = await open(
         canonicalPath,
         constants.O_RDONLY |
@@ -38,6 +42,7 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
         }
         return {
           absolutePath: canonicalPath,
+          canonicalLocationPath,
           exists: true,
           fileIdentity: authorizationFileIdentity(opened),
           isFile: opened.isFile(),
@@ -63,6 +68,7 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
         const ancestor = await realpath(cursor);
         return {
           absolutePath: join(ancestor, ...missingSegments),
+          canonicalLocationPath: join(ancestor, ...missingSegments),
           exists: false,
         };
       } catch (error) {

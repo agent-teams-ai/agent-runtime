@@ -1,5 +1,6 @@
 export interface CanonicalPathObservation {
   readonly absolutePath: string;
+  readonly canonicalLocationPath: string;
   readonly exists: boolean;
   readonly fileIdentity?: string;
   readonly isFile?: boolean;
