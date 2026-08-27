@@ -1,0 +1,13 @@
+{
+  "extends": "../../../architecture/foundation/scaffold-tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

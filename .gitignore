@@ -1,4 +1,5 @@
 node_modules/
+**/dist/
 .agent-teams-local/
 **/.foundation-retired-evidence-/
 .spike/

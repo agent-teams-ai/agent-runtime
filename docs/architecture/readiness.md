@@ -11,6 +11,7 @@ related:
   - ADR-0004
   - ADR-0005
   - ADR-0006
+  - ADR-0008
 blocked_by: []
 code_anchors: []
 ---
@@ -19,9 +20,10 @@ code_anchors: []
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain, dependency, and package-identity decisions are in
-ADR-0001, ADR-0002, ADR-0003, ADR-0004, and ADR-0005. Proposed ADR-0006 must be
-accepted before the first Agent Execution operation/effect-ledger slice.
+The canonical domain, dependency, package-identity, and private application
+entrypoint decisions are in ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005,
+and ADR-0008. Proposed ADR-0006 must be accepted before the first Agent
+Execution operation/effect-ledger slice.
 The committed ADR-0006 JSON oracle, independent evaluator, property/mutation
 checks, and synthetic XState requirement-27 verifier are executable architecture
 evidence governed through Foundation `quality.executable-specifications`. They do
@@ -105,6 +107,50 @@ Foundation accepted:
 - target-platform canonicalization before collision detection;
 - no ambient reread by a pinned session.
 
+AR-1 implementation present; implementation and deployment qualification open:
+
+- the private `@agent-teams/embedded-runtime` capability implements only
+  `RuntimeAccessHandle.codexSetup.inspect`. A trusted composition root supplies
+  and binds an immutable inspection scope; the application query composes
+  owner-local Runtime Security path authorization, Agent Execution installation
+  observation, and Runtime Configuration configuration inspection. Cancellation
+  is local to the observation, and Host disposal invalidates its bound handles;
+- the Node adapters passively canonicalize predeclared roots, configuration
+  sources, explicit executable candidates, known-location candidates, and
+  `PATH` candidates. Reads are bounded and tied to the authorized canonical
+  path and file identity. Installation results are alias-grouped observations
+  with status `found_unverified`; no Codex binary or provider-controlled code is
+  executed;
+- configuration inspection is limited to the declared `codex-0.134` dialect,
+  user configuration, one selected external profile, and explicitly ordered
+  workspace layers. Its versioned adapter-owned semantic classifier projects
+  only `model`, `model_reasoning_effort`, and `personality`; executable,
+  security, Provider Access, secret-shaped, unsupported, and unknown settings
+  are deferred, ignored, or rejected with typed diagnostics rather than treated
+  as portable setup;
+- the detached result contains opaque scope-bound observation, source, and
+  installation references; redacted display paths; allowlisted settings;
+  diagnostics; and review/install/trust next actions. It does not create or
+  select a saved profile, persist a `ProfileRevision`, compile or review a
+  `ReviewedRuntimeSetup`, authorize resources, prepare or activate a runtime,
+  execute a provider operation, or implement a dynamic module or provider-host
+  lifecycle.
+
+Synthetic implementation evidence present; it does not establish
+implementation or deployment qualification:
+
+- package and embedded end-to-end tests cover deterministic source precedence,
+  selected-profile and workspace-layer behavior, allowlisted projection,
+  secret-shaped-value rejection, unsupported dialect/platform failure,
+  malformed/duplicate/oversized/stale input, and stable scope-isolated opaque
+  references;
+- disposable filesystem tests cover symlink, hard-link, alias-retargeting,
+  file-generation replacement, FIFO, custody-root, path-boundary, and
+  cancellation/disposal cases. The tests use synthetic scopes, files, dialect
+  declarations, and dependency doubles; they do not establish the semantics
+  of a released Codex binary or qualify a Desktop collector or target
+  filesystem.
+
 Scoped qualified:
 
 - synthetic deterministic source precedence over 5,000 randomized input
@@ -118,6 +164,22 @@ Scoped qualified:
 
 Remaining before implementation qualification:
 
+- for AR-1, real version-bound Codex semantic-classifier fixtures tying every
+  supported binary and configuration dialect to observed user,
+  selected-profile, and project-layer semantics; the fixture set must cover
+  every accepted model, reasoning, personality, and profile form and prove that
+  changed or unknown forms fail closed rather than being inferred from current
+  synthetic allowlists;
+- for AR-1, secure platform-native collectors that derive the trusted roots,
+  source inventory and ordering, observation epoch, known installation
+  locations, and executable-search candidates for each supported Desktop
+  platform. Collector authorization, immutable bundle attestation, packaging,
+  update, and compromise boundaries remain unimplemented;
+- for AR-1, collector and filesystem-custody conformance on every supported
+  OS/filesystem, including platform installation aliases and case, Unicode,
+  Windows environment-key aliases, ADS, device-name, trailing-dot, link, mount,
+  and replacement races. The current Node tests do not qualify those target
+  tuples;
 - real Claude, Codex, and OpenCode semantic classifiers for every supported
   profile resource and binary revision;
 - provider-by-provider mapping tests for global, workspace, explicit, and

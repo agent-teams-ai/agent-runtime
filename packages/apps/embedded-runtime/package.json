@@ -1,0 +1,33 @@
+{
+  "name": "@agent-teams/embedded-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.json --pretty false",
+    "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
+    "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
+    "test": "node --test --test-concurrency=1 tests/codex-setup.e2e.test.ts tests/public-api.test.ts",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  },
+  "agentTeamsArchitecture": {
+    "role": "host-app",
+    "ownerDocument": "ADR-0008"
+  },
+  "dependencies": {
+    "@agent-teams/agent-execution": "workspace:*",
+    "@agent-teams/runtime-configuration": "workspace:*",
+    "@agent-teams/runtime-security": "workspace:*"
+  },
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./composition": {
+      "types": "./dist/composition.d.ts",
+      "import": "./dist/composition.js"
+    }
+  }
+}

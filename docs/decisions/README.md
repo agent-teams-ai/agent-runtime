@@ -11,6 +11,7 @@ related:
   - ADR-0004
   - ADR-0005
   - ADR-0006
+  - ADR-0008
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -34,6 +35,7 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0004: Pre-materialization dispatch prevention](0004-pre-materialization-dispatch-prevention.md)
 - [ADR-0005: Runtime context package identities](0005-runtime-context-package-identities.md)
 - [ADR-0007: Deterministic documentation governance](0007-deterministic-documentation-governance.md)
+- [ADR-0008: Private embedded Runtime access entrypoint](0008-private-embedded-runtime-access-entrypoint.md)
 
 ## Superseded
 
