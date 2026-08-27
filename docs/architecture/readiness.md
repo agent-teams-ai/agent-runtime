@@ -114,10 +114,13 @@ AR-1 implementation present; implementation and deployment qualification open:
   and binds an immutable inspection scope; the application query composes
   owner-local Runtime Security path authorization, Agent Execution installation
   observation, and Runtime Configuration configuration inspection. Cancellation
-  is local to the observation, and Host disposal invalidates its bound handles;
+  is local to the observation, and Host disposal invalidates its bound handles.
+  A bounded disposal timeout is an explicit typed failure, not false success;
 - the Node adapters passively canonicalize predeclared roots, configuration
   sources, explicit executable candidates, known-location candidates, and
-  `PATH` candidates. Reads are bounded and tied to the authorized canonical
+  `PATH` candidates. The host platform and Codex executable-name expansion are
+  owned by composition rather than caller-controlled scope. Reads are bounded
+  and tied to the authorized canonical
   path and file identity. Installation results are alias-grouped observations
   with status `found_unverified`; no Codex binary or provider-controlled code is
   executed;

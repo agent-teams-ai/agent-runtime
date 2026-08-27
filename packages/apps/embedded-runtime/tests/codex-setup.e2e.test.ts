@@ -6,7 +6,9 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
 import {
+  AgentRuntimeHostDisposalIncompleteError,
   createAgentRuntimeHost,
+  createCodexSetupInspectionPlanner,
   createDefaultAgentRuntimeHost,
 } from "../dist/composition.js";
 
@@ -15,6 +17,11 @@ const isDeeplyFrozen = (value: unknown): boolean => {
     return true;
   }
   return Object.isFrozen(value) && Object.values(value).every(isDeeplyFrozen);
+};
+
+const supportedInspectionPlanner = createCodexSetupInspectionPlanner("darwin");
+const unavailableInspectionDependency = (): never => {
+  throw new Error("unsupported platform must not reach inspection dependencies");
 };
 
 test(
@@ -47,7 +54,7 @@ test(
   );
   await writeFile(
     join(home, ".codex", "research.config.toml"),
-    "model_reasoning_effort = 'max'\n",
+    "model_reasoning_effort = 'high'\n",
   );
   await writeFile(
     join(workspace, ".codex", "config.toml"),
@@ -67,7 +74,6 @@ test(
     knownExecutableDirectories: [aliasBin],
     observationEpoch: "synthetic-epoch-1",
     pathEntries: [bin],
-    platform: process.platform,
     roots: [
       { absolutePath: home, kind: "home" },
       { absolutePath: workspace, kind: "workspace" },
@@ -87,7 +93,7 @@ test(
   assert.equal(first.installations[0]?.aliases.length, 2);
   assert.deepEqual(first.settings, [
     { key: "model", sourceRef: first.sources.find(source => source.kind === "user")?.sourceRef, value: "gpt-5.6-codex" },
-    { key: "model_reasoning_effort", sourceRef: first.sources.find(source => source.kind === "external-profile")?.sourceRef, value: "max" },
+    { key: "model_reasoning_effort", sourceRef: first.sources.find(source => source.kind === "external-profile")?.sourceRef, value: "high" },
     { key: "personality", sourceRef: first.sources.find(source => source.kind === "workspace")?.sourceRef, value: "pragmatic" },
   ]);
   const serialized = JSON.stringify(first);
@@ -98,7 +104,10 @@ test(
   },
 );
 
-test("scope binding is copied, cancellation is local, and disposal invalidates handles", async t => {
+test(
+  "scope binding is copied, cancellation is local, and disposal invalidates handles",
+  { skip: process.platform !== "darwin" },
+  async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-scope-e2e-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const mutableEntries = [join(root, "bin")];
@@ -111,7 +120,6 @@ test("scope binding is copied, cancellation is local, and disposal invalidates h
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: mutableEntries,
-    platform: "darwin",
     roots: [{ absolutePath: root, kind: "home" }],
     scopeId: "scope-1",
   });
@@ -138,15 +146,18 @@ test("scope binding is copied, cancellation is local, and disposal invalidates h
       knownExecutableDirectories: [],
       observationEpoch: "epoch-2",
       pathEntries: [],
-      platform: "darwin",
       roots: [],
       scopeId: "scope-2",
     }),
     /Host is disposed/u,
   );
-});
+  },
+);
 
-test("canonicalizes diagnostics and recommends reviewing an invalid native profile", async t => {
+test(
+  "canonicalizes diagnostics and recommends reviewing an invalid native profile",
+  { skip: process.platform !== "darwin" },
+  async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-codex-diagnostics-e2e-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const config = join(root, "config.toml");
@@ -167,7 +178,6 @@ test("canonicalizes diagnostics and recommends reviewing an invalid native profi
     knownExecutableDirectories: [],
     observationEpoch: "epoch-diagnostics",
     pathEntries: [],
-    platform: "darwin",
     roots: [{ absolutePath: root, kind: "home" }],
     scopeId: "scope-diagnostics",
   });
@@ -182,39 +192,50 @@ test("canonicalizes diagnostics and recommends reviewing an invalid native profi
     ["config_parse_failed", "native_profile_invalid"],
   );
   assert.deepEqual(result.nextActions, ["install_codex", "review_configuration"]);
-});
+  },
+);
 
-test("unsupported and denied scopes fail closed", async t => {
-  const host = createDefaultAgentRuntimeHost();
-  t.after(() => host.dispose());
-  const unsupported = host.bindAccess({
+test("host-owned platform support and denied scopes fail closed", async t => {
+  const scope = {
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: [],
-    platform: "linux",
     roots: [],
-    scopeId: "scope-linux",
+    scopeId: "scope-platform",
+  } as const;
+  const unsupportedHost = createAgentRuntimeHost({
+    authorizeSetupInspection: { execute: unavailableInspectionDependency },
+    discoverCodexInstallations: { execute: unavailableInspectionDependency },
+    inspectCodexConfiguration: { execute: unavailableInspectionDependency },
+    planCodexSetupInspection: createCodexSetupInspectionPlanner("linux"),
   });
-  assert.deepEqual(await unsupported.codexSetup.inspect({}), {
+  t.after(() => unsupportedHost.dispose());
+  assert.deepEqual(await unsupportedHost.bindAccess(scope).codexSetup.inspect({}), {
     diagnostics: [],
     status: "unsupported",
   });
 
-  const denied = host.bindAccess({
-    configurationDialect: "codex-0.134",
-    configurationSources: [],
-    explicitCodexExecutablePaths: [],
-    knownExecutableDirectories: [],
-    observationEpoch: "",
-    pathEntries: [],
-    platform: "darwin",
-    roots: [],
-    scopeId: "scope-denied",
+  const deniedHost = createAgentRuntimeHost({
+    authorizeSetupInspection: {
+      async execute() {
+        return {
+          diagnostics: [{ code: "path_outside_scope", subject: "scope" }],
+          status: "denied" as const,
+        };
+      },
+    },
+    discoverCodexInstallations: { execute: unavailableInspectionDependency },
+    inspectCodexConfiguration: { execute: unavailableInspectionDependency },
+    planCodexSetupInspection: supportedInspectionPlanner,
   });
-  assert.equal((await denied.codexSetup.inspect({})).status, "denied");
+  t.after(() => deniedHost.dispose());
+  assert.deepEqual(await deniedHost.bindAccess(scope).codexSetup.inspect({}), {
+    diagnostics: [{ code: "path_outside_scope", subject: "scope" }],
+    status: "denied",
+  });
 });
 
 test("snapshots getter-backed input and revokes an in-flight inspection on disposal", async () => {
@@ -223,6 +244,7 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
     releaseAuthorization = resolve;
   });
   const host = createAgentRuntimeHost({
+    planCodexSetupInspection: supportedInspectionPlanner,
     authorizeSetupInspection: {
       async execute() {
         await authorizationGate;
@@ -258,7 +280,6 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: [],
-    platform: "darwin",
     roots: [],
     scopeId: "scope-1",
   });
@@ -289,6 +310,7 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
     releaseAuthorization = resolve;
   });
   const host = createAgentRuntimeHost({
+    planCodexSetupInspection: supportedInspectionPlanner,
     authorizeSetupInspection: {
       async execute() {
         await authorizationGate;
@@ -323,7 +345,6 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: [],
-    platform: "darwin",
     roots: [],
     scopeId: "scope-caller-abort",
   });
@@ -359,6 +380,7 @@ test("disposal tracks every parallel branch after a sibling rejects", async () =
     releaseConfiguration = resolve;
   });
   const host = createAgentRuntimeHost({
+    planCodexSetupInspection: supportedInspectionPlanner,
     authorizeSetupInspection: {
       async execute() {
         return {
@@ -400,7 +422,6 @@ test("disposal tracks every parallel branch after a sibling rejects", async () =
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: [],
-    platform: "darwin",
     roots: [],
     scopeId: "scope-parallel-drain",
   });
@@ -428,6 +449,7 @@ test("disposal remains bounded when a dependency never settles", async () => {
     configurationStarted = resolve;
   });
   const host = createAgentRuntimeHost({
+    planCodexSetupInspection: supportedInspectionPlanner,
     authorizeSetupInspection: {
       async execute() {
         return {
@@ -461,7 +483,6 @@ test("disposal remains bounded when a dependency never settles", async () => {
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: [],
-    platform: "darwin",
     roots: [],
     scopeId: "scope-bounded-disposal",
   });
@@ -469,12 +490,18 @@ test("disposal remains bounded when a dependency never settles", async () => {
   await started;
   const disposal = host.dispose();
   await assert.rejects(inspection, { name: "AbortError" });
-  await Promise.race([
-    disposal,
-    delay(1_500, null, { ref: false }).then(() => {
-      throw new Error("Host disposal exceeded its deadline");
-    }),
-  ]);
+  await assert.rejects(
+    Promise.race([
+      disposal,
+      delay(1_500, null, { ref: false }).then(() => {
+        throw new Error("Host disposal exceeded its deadline");
+      }),
+    ]),
+    error =>
+      error instanceof AgentRuntimeHostDisposalIncompleteError &&
+      error.activeCallCount === 1,
+  );
+  await assert.rejects(host.dispose(), AgentRuntimeHostDisposalIncompleteError);
 });
 
 test("a synchronous branch throw cannot escape parallel drain custody", async () => {
@@ -485,6 +512,7 @@ test("a synchronous branch throw cannot escape parallel drain custody", async ()
   let rejectInstallation: (() => void) | undefined;
   const synchronousFailure = new Error("synthetic synchronous validation failure");
   const host = createAgentRuntimeHost({
+    planCodexSetupInspection: supportedInspectionPlanner,
     authorizeSetupInspection: {
       async execute() {
         return {
@@ -518,7 +546,6 @@ test("a synchronous branch throw cannot escape parallel drain custody", async ()
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: [],
-    platform: "darwin",
     roots: [],
     scopeId: "scope-synchronous-throw",
   });
@@ -542,6 +569,7 @@ test("a synchronous branch throw cannot escape parallel drain custody", async ()
 
 test("product installation references are stable within and isolated across trusted scopes", async t => {
   const host = createAgentRuntimeHost({
+    planCodexSetupInspection: supportedInspectionPlanner,
     authorizeSetupInspection: {
       async execute(input) {
         return {
@@ -581,7 +609,6 @@ test("product installation references are stable within and isolated across trus
     knownExecutableDirectories: [],
     observationEpoch: "epoch-1",
     pathEntries: [],
-    platform: "darwin",
     roots: [{ absolutePath: "/synthetic-home", kind: "home" }],
     scopeId,
   });
@@ -589,10 +616,10 @@ test("product installation references are stable within and isolated across trus
   const first = await bind("scope-a").codexSetup.inspect({});
   const replay = await bind("scope-a").codexSetup.inspect({});
   const otherScope = await bind("scope-b").codexSetup.inspect({});
-  assert.equal(first.status, "complete");
-  assert.equal(replay.status, "complete");
-  assert.equal(otherScope.status, "complete");
-  if (first.status !== "complete" || replay.status !== "complete" || otherScope.status !== "complete") {
+  assert.equal(first.status, "observed");
+  assert.equal(replay.status, "observed");
+  assert.equal(otherScope.status, "observed");
+  if (first.status !== "observed" || replay.status !== "observed" || otherScope.status !== "observed") {
     return;
   }
   assert.equal(first.installations[0]?.installationRef, replay.installations[0]?.installationRef);

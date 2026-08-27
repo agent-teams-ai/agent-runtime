@@ -17,12 +17,8 @@ export const createSmolTomlParser = (): CodexTomlParser => ({
       return { kind: "invalid-utf8" };
     }
     try {
-      const document = parse(text);
-      if (typeof document !== "object" || document === null || Array.isArray(document)) {
-        return { kind: "malformed" };
-      }
       return {
-        document: document as Readonly<Record<string, unknown>>,
+        document: parse(text),
         kind: "parsed",
       };
     } catch {

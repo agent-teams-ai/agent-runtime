@@ -79,7 +79,7 @@ export type InspectCodexRuntimeSetupOutcome =
       readonly observationRef: string;
       readonly settings: readonly CodexSetupSettingView[];
       readonly sources: readonly CodexSetupSourceView[];
-      readonly status: "complete" | "partial";
+      readonly status: "observed" | "partial";
     };
 
 export interface CodexRuntimeSetupQueries {

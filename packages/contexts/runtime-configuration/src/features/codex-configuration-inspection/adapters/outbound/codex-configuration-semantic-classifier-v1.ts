@@ -4,6 +4,7 @@ import {
   type CodexConfigurationSemanticClassification,
   type CodexConfigurationSemanticClassifier,
 } from "../../application/ports/outbound/codex-configuration-semantic-classifier.js";
+import { isSecretShapedValue } from "../../application/safe-semantic-boundary.js";
 
 const dialect = "codex-0.134";
 const portableKeys = new Set<PortableCodexSettingKey>([
@@ -41,28 +42,10 @@ const supportedReasoningEfforts = new Set([
   "medium",
   "high",
   "xhigh",
-  "max",
-  "ultra",
 ]);
 const supportedPersonalities = new Set(["none", "friendly", "pragmatic"]);
-const supportedModelIdentifiers = new Set([
-  "gpt-5.3-codex-spark",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-  "gpt-5.5",
-  "gpt-5.6",
-  "gpt-5.6-codex",
-  "gpt-5.6-luna",
-  "gpt-5.6-sol",
-  "gpt-5.6-terra",
-  "o1",
-  "o3",
-  "o3-mini",
-  "o4-mini",
-]);
+const supportedModelIdentifier = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u;
 const secretShape = /(api[_-]?key|credential|oauth|password|secret|token)/i;
-const secretValueShape =
-  /(?:\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
 
 const diagnosticForSetting = (
   key: string,
@@ -87,7 +70,7 @@ const isSupportedPortableValue = (
   value: string,
 ): boolean => {
   if (key === "model") {
-    return supportedModelIdentifiers.has(value);
+    return supportedModelIdentifier.test(value);
   }
   if (key === "model_reasoning_effort") {
     return supportedReasoningEfforts.has(value);
@@ -98,7 +81,7 @@ const isSupportedPortableValue = (
 export const createCodexConfigurationSemanticClassifierV1 =
   (): CodexConfigurationSemanticClassifier => Object.freeze({
     contract: codexConfigurationSemanticClassifierContract,
-    revision: "codex-0.134-semantic-classifier/1",
+    revision: "codex-0.134-semantic-classifier/2",
     classify(
       selectedDialect: string,
       document: Readonly<Record<string, unknown>>,
@@ -118,7 +101,7 @@ export const createCodexConfigurationSemanticClassifierV1 =
           diagnostics.push({ code: "setting_type_unsupported", setting: key });
           continue;
         }
-        if (secretValueShape.test(value)) {
+        if (isSecretShapedValue(value)) {
           diagnostics.push({ code: "secret_setting_ignored" });
           continue;
         }
