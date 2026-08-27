@@ -7,8 +7,6 @@ summary: Index of supporting Agent Runtime architecture documents.
 related:
   - ADR-0001
   - ADR-0002
-blocked_by: []
-code_anchors: []
 ---
 
 # Architecture

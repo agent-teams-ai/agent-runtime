@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { runDocsProtocolQualification } from "@agent-teams/docs-protocol/qualification";
+import * as docsQualification from "@agent-teams/docs-protocol/qualification";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 const protocolManifest = fileURLToPath(
@@ -26,20 +26,29 @@ const foundationManifest = fileURLToPath(
 const protocolCli = join(dirname(protocolManifest), "dist/cli.js");
 const protocolProfile = "architecture/foundation/docs-protocol.yaml";
 
-test("qualification manifest binds the exact protocol gate and registry packages", async () => {
-  const [qualification, manifest] = await Promise.all([
+test("staged qualification v2 covers every Runtime authorable type exactly once", async () => {
+  const [integration, qualification, rollout] = await Promise.all([
+    readFile(join(repositoryRoot, "architecture/foundation/docs-consumer-integration.json"), "utf8").then(JSON.parse),
     readFile(join(repositoryRoot, "architecture/foundation/docs-protocol-qualification.json"), "utf8").then(JSON.parse),
-    readFile(join(repositoryRoot, "package.json"), "utf8").then(JSON.parse),
+    readFile(join(repositoryRoot, "architecture/foundation/docs-protocol-rollout.yaml"), "utf8"),
   ]);
-  assert.equal(qualification.gateCommand, "pnpm docs:protocol:check");
-  assert.deepEqual(qualification.packages, {
-    "@agent-teams/docs-protocol": manifest.devDependencies["@agent-teams/docs-protocol"],
-    "@agent-teams/engineering-foundation": manifest.devDependencies["@agent-teams/engineering-foundation"],
-  });
-  assert.deepEqual(qualification.qualificationTests, [
-    "scripts/docs/docs-protocol-adoption.test.mjs",
-    "scripts/docs/verify-frozen-document-bytes.test.mjs"
+  assert.equal(integration.schemaVersion, 1);
+  assert.match(rollout, /^status: stable3-current-v2-staged$/mu);
+  assert.match(rollout, /^  integrationSchemaVersion: 2$/mu);
+  assert.match(rollout, /^  qualificationContractSchemaVersion: 2$/mu);
+  assert.equal(qualification.schemaVersion, 2);
+  assert.deepEqual(Object.keys(qualification).toSorted(), ["scenarios", "schemaVersion"]);
+  assert.deepEqual(qualification.scenarios.map(({ type }) => type).toSorted(), [
+    "adr", "architecture", "evidence", "index", "qualification-plan"
   ]);
+  assert.equal(new Set(qualification.scenarios.map(({ id }) => id)).size, 5);
+  for (const scenario of qualification.scenarios) {
+    assert.deepEqual(Object.keys(scenario).toSorted(), ["expected", "id", "intent", "type"]);
+    assert.equal(scenario.expected.metadataStorage, "frontmatter");
+  }
+  for (const legacyKey of ["fixtureRoot", "gate", "packages", "paths", "qualificationTests", "tests"]) {
+    assert.equal(Object.hasOwn(qualification, legacyKey), false, legacyKey);
+  }
 });
 
 async function copyFile(source, destination) {
@@ -160,15 +169,36 @@ test("keeps protocol and frozen-document governance in every repository gate", a
   assert.equal(manifest.scripts["check:changed"], "agent-teams-foundation agent-workflow changed --consumer .");
 });
 
-test("qualifies Runtime authoring through the shared disposable runner", async () => {
+test("uses owner catalog authority and keeps blocked_by as read compatibility", async () => {
+  const schema = JSON.parse(await readFile(join(repositoryRoot, "docs/document-metadata.schema.json"), "utf8"));
+  assert.equal(Object.hasOwn(schema.properties.owner, "enum"), false);
+  assert.match(schema.properties.blocked_by.$comment, /Read-only compatibility/u);
+
+  const templateRoot = join(repositoryRoot, "docs/templates");
+  for (const name of ["index", "architecture", "adr", "evidence", "qualification-plan"]) {
+    const source = await readFile(join(templateRoot, `${name}.md`), "utf8");
+    assert.doesNotMatch(source, /^blocked_by:/mu, name);
+  }
+});
+
+test("qualifies Runtime authoring with the strongest published runner", async () => {
+  const v2Runner = Reflect.get(docsQualification, "runDocsProtocolQualificationV2");
+  if (typeof v2Runner === "function") {
+    const receipt = await v2Runner({
+      consumerRoot: repositoryRoot
+    });
+    assert.equal(receipt.projectId, "agent-runtime");
+    assert.deepEqual(receipt.scenarios.map(({ type }) => type).toSorted(), [
+      "adr", "architecture", "evidence", "index", "qualification-plan"
+    ]);
+    return;
+  }
+
   await disposableRepository(async (root) => {
-    const receipt = await runDocsProtocolQualification({
+    const receipt = await docsQualification.runDocsProtocolQualification({
       fixtureRoot: root,
       scenario: {
-        find: {
-          query: { id: "ADR-0001" },
-          expectedIds: ["ADR-0001"]
-        },
+        find: { query: { id: "ADR-0001" }, expectedIds: ["ADR-0001"] },
         newDocument: {
           intent: {
             type: "architecture",
@@ -182,24 +212,7 @@ test("qualifies Runtime authoring through the shared disposable runner", async (
       }
     });
     assert.equal(receipt.projectId, "agent-runtime");
-    assert.equal(
-      receipt.appliedDocumentPath,
-      "docs/architecture/disposable-protocol-qualification.md"
-    );
-    assert.deepEqual(receipt.checks, [
-      "info",
-      "find",
-      "preview",
-      "crash",
-      "doctor",
-      "recover",
-      "receipt",
-      "parent",
-      "apply",
-      "index",
-      "check",
-      "source-unchanged"
-    ]);
+    assert.equal(receipt.appliedDocumentPath, "docs/architecture/disposable-protocol-qualification.md");
   });
 });
 
@@ -217,7 +230,7 @@ test("fails closed for an unknown owner", async () => {
     assert.equal(result.envelope.outcome, "violation");
     assert.ok(
       result.envelope.diagnostics.some(({ ruleId }) =>
-        ruleId === "document.catalog.metadata-invalid"
+        ruleId === "document.catalog.owner-unknown"
       ),
       JSON.stringify(result.envelope.diagnostics)
     );

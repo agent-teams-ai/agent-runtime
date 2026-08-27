@@ -25,7 +25,9 @@
       "enum": ["active", "accepted", "proposed", "evidence-reference", "superseded"]
     },
     "owner": {
-      "enum": ["architecture", "architecture/tooling", "architecture/qualification"]
+      "type": "string",
+      "maxLength": 214,
+      "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._/-]*$"
     },
     "summary": {
       "type": "string",
@@ -34,7 +36,10 @@
       "pattern": "^[^\\r\\n]+$"
     },
     "related": { "$ref": "#/$defs/idList" },
-    "blocked_by": { "$ref": "#/$defs/idList" },
+    "blocked_by": {
+      "$comment": "Read-only compatibility for immutable ADR-0007; Runtime authoring does not emit blockers.",
+      "$ref": "#/$defs/idList"
+    },
     "code_anchors": {
       "type": "array",
       "maxItems": 64,
