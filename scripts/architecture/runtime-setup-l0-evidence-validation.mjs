@@ -61,17 +61,24 @@ export const isHistoricalObjectClosureUnavailable = error => {
   if (!(error instanceof GitCommandFailure) || !Number.isInteger(error.status) || error.status === 0) {
     return false;
   }
-  const details = error.stderr;
-  return [
-    /ambiguous argument .*unknown revision or path not in the working tree/isu,
-    /bad object/iu,
-    /could not parse object/iu,
-    /missing (?:blob|tree)/iu,
-    /not a valid object name/iu,
-    /object [a-f0-9]+ not found/iu,
-    /promised object .* unavailable/iu,
-    /unable to read tree/iu,
-  ].some(pattern => pattern.test(details));
+  const lines = error.stderr.trim().split(/\r?\n/u);
+  const [diagnostic, ...details] = lines;
+  const ambiguousRevision = /^fatal: ambiguous argument .+: unknown revision or path not in the working tree\.$/iu;
+  if (ambiguousRevision.test(diagnostic)) {
+    return details.length === 0 ||
+      (details.length === 2 &&
+        details[0] === "Use '--' to separate paths from revisions, like this:" &&
+        details[1] === "'git <command> [<revision>...] -- [<file>...]'");
+  }
+  return details.length === 0 && [
+    /^fatal: bad object \S+$/iu,
+    /^fatal: could not parse object \S+$/iu,
+    /^fatal: missing (?:blob|tree)(?: object)? ['"]?[a-f0-9]+['"]?$/iu,
+    /^fatal: not a valid object name .+$/iu,
+    /^fatal: object [a-f0-9]+ not found$/iu,
+    /^fatal: promised object [a-f0-9]+ unavailable$/iu,
+    /^fatal: unable to read tree [a-f0-9]+$/iu,
+  ].some(pattern => pattern.test(diagnostic));
 };
 
 export const parseTrackedEvidenceEntries = output => output

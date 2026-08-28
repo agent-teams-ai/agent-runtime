@@ -61,7 +61,9 @@ test("recognizes only failed Git commands with missing historical objects", () =
   assert.equal(isHistoricalObjectClosureUnavailable(new GitCommandFailure({
     message: "git failed",
     status: 128,
-    stderr: "fatal: ambiguous argument 'deadbeef^': unknown revision or path not in the working tree.",
+    stderr: "fatal: ambiguous argument 'deadbeef^': unknown revision or path not in the working tree.\n" +
+      "Use '--' to separate paths from revisions, like this:\n" +
+      "'git <command> [<revision>...] -- [<file>...]'\n",
   })), true);
   assert.equal(isHistoricalObjectClosureUnavailable(new Error("bad object")), false);
   assert.equal(isHistoricalObjectClosureUnavailable({
@@ -77,6 +79,16 @@ test("recognizes only failed Git commands with missing historical objects", () =
     message: "git failed",
     status: 128,
     stderr: "fatal: permission denied",
+  })), false);
+  assert.equal(isHistoricalObjectClosureUnavailable(new GitCommandFailure({
+    message: "corrupt repository",
+    status: 128,
+    stderr: "error: object deadbeef is corrupt\nfatal: unable to read tree deadbeef",
+  })), false);
+  assert.equal(isHistoricalObjectClosureUnavailable(new GitCommandFailure({
+    message: "permission failure",
+    status: 128,
+    stderr: "fatal: unable to read tree deadbeef\nfatal: permission denied",
   })), false);
 });
 
