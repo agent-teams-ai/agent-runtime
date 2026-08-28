@@ -40,6 +40,12 @@ const secretName = /(?:secret|token)/iu;
 const secretValue = /(?:api[_-]?key|credential|oauth|password|secret|token|\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|glpat-|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
 const routeValue = /(?:^claude-[a-z0-9]|(?:^|[.:/])anthropic(?:[.:/]|$)|^arn:aws:bedrock:|^https?:\/\/|bedrock|vertex|foundry|gateway)/iu;
 
+interface PortableClassificationContext {
+  readonly definitions: PortableClaudeCodeDefinition[];
+  readonly diagnostics: Set<ClaudeCodeConfigurationDiagnosticCode>;
+  readonly tainted: Set<"model" | "effortLevel">;
+}
+
 const classifyName = (key: string): ClaudeCodeConfigurationDiagnosticCode => {
   if (credentialName.test(key)) {
     return "credential_material_rejected";
@@ -104,33 +110,31 @@ const scanNonportableValue = (
 const classifyPortable = (
   key: "model" | "effortLevel",
   value: unknown,
-  definitions: PortableClaudeCodeDefinition[],
-  diagnostics: Set<ClaudeCodeConfigurationDiagnosticCode>,
-  tainted: Set<"model" | "effortLevel">,
+  context: PortableClassificationContext,
 ): void => {
   if (typeof value !== "string" || value.length === 0) {
-    diagnostics.add("setting_type_unsupported");
-    tainted.add(key);
+    context.diagnostics.add("setting_type_unsupported");
+    context.tainted.add(key);
     return;
   }
   const unsafe = classifyString(value);
   if (unsafe !== undefined) {
-    diagnostics.add(unsafe);
-    tainted.add(key);
+    context.diagnostics.add(unsafe);
+    context.tainted.add(key);
     return;
   }
   if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength) {
-    diagnostics.add("setting_value_unsupported");
-    tainted.add(key);
+    context.diagnostics.add("setting_value_unsupported");
+    context.tainted.add(key);
     return;
   }
   const supported = key === "model" ? modelAliases.has(value) : effortValues.has(value);
   if (!supported) {
-    diagnostics.add("setting_value_unsupported");
-    tainted.add(key);
+    context.diagnostics.add("setting_value_unsupported");
+    context.tainted.add(key);
     return;
   }
-  definitions.push(key === "model"
+  context.definitions.push(key === "model"
     ? { key, value: value as ClaudeCodeModelAlias }
     : { key, value: value as ClaudeCodeEffort });
 };
@@ -151,13 +155,14 @@ export const createClaudeCodeConfigurationSemanticClassifierV1 =
       const diagnostics = new Set<ClaudeCodeConfigurationDiagnosticCode>();
       const defined = new Set<"model" | "effortLevel">();
       const tainted = new Set<"model" | "effortLevel">();
+      const portableContext = { definitions, diagnostics, tainted };
       for (const key of Object.keys(data).toSorted()) {
         options?.signal?.throwIfAborted();
         const value = data[key];
         if (portableKeys.has(key)) {
           const portableKey = key as "model" | "effortLevel";
           defined.add(portableKey);
-          classifyPortable(portableKey, value, definitions, diagnostics, tainted);
+          classifyPortable(portableKey, value, portableContext);
           continue;
         }
         if (transparentContainers.has(key)) {

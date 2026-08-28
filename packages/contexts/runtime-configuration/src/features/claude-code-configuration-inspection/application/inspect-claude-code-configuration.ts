@@ -44,6 +44,20 @@ interface EvaluatedSource {
   readonly taintedKeys: ReadonlySet<"model" | "effortLevel">;
 }
 
+interface SourceEvaluationContext {
+  readonly dependencies: Dependencies;
+  readonly diagnostics: ClaudeCodeConfigurationDiagnostic[];
+  readonly input: InspectClaudeCodeConfigurationInput;
+  readonly observations: ClaudeCodeSourceObservation[];
+  readonly signal?: AbortSignal;
+}
+
+interface RejectedSourceDetails {
+  readonly code?: ClaudeCodeConfigurationDiagnostic["code"];
+  readonly grossTaint?: boolean;
+  readonly status: ClaudeCodeSourceObservation["status"];
+}
+
 const sourceRanks: Readonly<Record<ClaudeCodeConfigurationSourceKind, number>> = {
   user: 1, "shared-project": 2, "project-local": 3,
 };
@@ -160,141 +174,179 @@ const normalizeReadResult = (value: unknown):
   return undefined;
 };
 
-const evaluateSources = async (
-  dependencies: Dependencies,
-  input: InspectClaudeCodeConfigurationInput,
-  sources: readonly BoundSource[],
-  diagnostics: ClaudeCodeConfigurationDiagnostic[],
-  observations: ClaudeCodeSourceObservation[],
-  signal?: AbortSignal,
-): Promise<readonly EvaluatedSource[]> => {
-  const evaluated: EvaluatedSource[] = [];
-  for (const source of sources) {
-    signal?.throwIfAborted();
-    if (source.structurallyRejected) {
-      observations.push(Object.freeze({
-        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "rejected",
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
-      continue;
-    }
-    if (source.access !== "authorized") {
-      diagnostics.push({
-        code: source.access === "untrusted"
-          ? "source_untrusted"
-          : "source_epoch_stale",
-        safeRef: source.sourceRef,
-      });
-      observations.push(Object.freeze({
-        displayPath: source.displayPath,
-        kind: source.kind,
-        sourceRef: source.sourceRef,
+const rejectedEvaluation = (
+  source: BoundSource,
+  grossTaint = true,
+): EvaluatedSource => ({
+  definitions: new Map(), grossTaint, source, taintedKeys: new Set(),
+});
+
+const observeRejectedSource = (
+  context: SourceEvaluationContext,
+  source: BoundSource,
+  details: RejectedSourceDetails,
+): EvaluatedSource => {
+  if (details.code !== undefined) {
+    context.diagnostics.push({ code: details.code, safeRef: source.sourceRef });
+  }
+  context.observations.push(Object.freeze({
+    displayPath: source.displayPath, kind: source.kind,
+    sourceRef: source.sourceRef, status: details.status,
+  }));
+  return rejectedEvaluation(source, details.grossTaint);
+};
+
+const rejectUnavailableSource = (
+  context: SourceEvaluationContext,
+  source: BoundSource,
+): EvaluatedSource | undefined => {
+  if (source.structurallyRejected) {
+    return observeRejectedSource(context, source, { status: "rejected" });
+  }
+  if (source.access !== "authorized") {
+    return observeRejectedSource(
+      context,
+      source,
+      {
+        code: source.access === "untrusted" ? "source_untrusted" : "source_epoch_stale",
         status: source.access === "stale" ? "stale" : "rejected",
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
-      continue;
-    }
-    if (source.observationEpoch !== input.observationEpoch) {
-      diagnostics.push({ code: "source_epoch_stale", safeRef: source.sourceRef });
-      observations.push(Object.freeze({
-        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "stale",
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
-      continue;
-    }
-    let read;
-    try {
-      read = normalizeReadResult(await dependencies.sourceReader.read(
-        source,
-        CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource,
-        signal === undefined ? undefined : { signal },
-      ));
-    } catch {
-      signal?.throwIfAborted();
-      diagnostics.push({ code: "config_unreadable", safeRef: source.sourceRef });
-      observations.push(Object.freeze({
-        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "unreadable",
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
-      continue;
-    }
-    signal?.throwIfAborted();
-    if (read === undefined) {
-      diagnostics.push({ code: "config_unreadable", safeRef: source.sourceRef });
-      observations.push(Object.freeze({
-        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "unreadable",
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
-      continue;
-    }
-    if (read.status !== "read") {
-      if (read.status !== "missing") diagnostics.push({ code: readFailureDiagnostic(read.status), safeRef: source.sourceRef });
-      observations.push(Object.freeze({
-        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef,
-        status: read.status === "too-large" ? "unreadable" : read.status,
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: read.status !== "missing", source, taintedKeys: new Set() });
-      continue;
-    }
-    let parsed;
-    try {
-      parsed = validateClaudeCodeJsonParseResult(dependencies.parser.parse(
-        read.bytes,
-        signal === undefined ? undefined : { signal },
-      )) ??
-        { diagnostic: "config_parse_failed" as const, status: "rejected" as const };
-    } catch {
-      parsed = { diagnostic: "config_parse_failed" as const, status: "rejected" as const };
-    }
-    signal?.throwIfAborted();
-    if (parsed.status !== "parsed") {
-      diagnostics.push({ code: parsed.diagnostic, safeRef: source.sourceRef });
-      observations.push(Object.freeze({
-        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "malformed",
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
-      continue;
-    }
-    const document = normalizeParsedClaudeCodeDocument(parsed.data);
-    if (document === undefined) {
-      diagnostics.push({ code: "config_parse_failed", safeRef: source.sourceRef });
-      observations.push(Object.freeze({
-        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "malformed",
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
-      continue;
-    }
-    let classification;
-    try {
-      classification = validateClaudeCodeSemanticClassification(
-        dependencies.semanticClassifier.classify(input.dialect, document,
-          signal === undefined ? undefined : { signal }),
-      );
-    } catch (error) {
-      signal?.throwIfAborted();
-      diagnostics.push({ code: "config_parse_failed", safeRef: source.sourceRef });
-      observations.push(Object.freeze({
-        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "malformed",
-      }));
-      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
-      continue;
-    }
-    signal?.throwIfAborted();
-    const definitionMap = new Map(classification.definitions.map(definition => [definition.key, definition]));
-    for (const diagnostic of classification.diagnostics) {
-      if (diagnostics.length >= CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics) break;
-      diagnostics.push({ code: diagnostic.code, safeRef: source.sourceRef });
-    }
-    observations.push(Object.freeze({
-      displayPath: source.displayPath, kind: source.kind,
-      semanticDigest: semanticDigest(definitionMap, input.dialect, dependencies.semanticClassifier),
-      sourceRef: source.sourceRef, status: "applied",
-    }));
-    evaluated.push({
-      definitions: definitionMap, grossTaint: false, source,
-      taintedKeys: new Set(classification.taintedPortableKeys),
+      },
+    );
+  }
+  if (source.observationEpoch !== context.input.observationEpoch) {
+    return observeRejectedSource(context, source, {
+      code: "source_epoch_stale", status: "stale",
     });
   }
+  return undefined;
+};
+
+const readSource = async (
+  context: SourceEvaluationContext,
+  source: BoundSource,
+): Promise<ReturnType<typeof normalizeReadResult>> => {
+  try {
+    return normalizeReadResult(await context.dependencies.sourceReader.read(
+      source,
+      CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource,
+      context.signal === undefined ? undefined : { signal: context.signal },
+    ));
+  } catch {
+    context.signal?.throwIfAborted();
+    return undefined;
+  }
+};
+
+const evaluateReadFailure = (
+  context: SourceEvaluationContext,
+  source: BoundSource,
+  read: Exclude<NonNullable<ReturnType<typeof normalizeReadResult>>, { readonly status: "read" }> | undefined,
+): EvaluatedSource => {
+  if (read === undefined) {
+    return observeRejectedSource(context, source, {
+      code: "config_unreadable", status: "unreadable",
+    });
+  }
+  const code = read.status === "missing" ? undefined : readFailureDiagnostic(read.status);
+  return observeRejectedSource(
+    context,
+    source,
+    {
+      ...(code === undefined ? {} : { code }),
+      grossTaint: read.status !== "missing",
+      status: read.status === "too-large" ? "unreadable" : read.status,
+    },
+  );
+};
+
+const parseSource = (
+  context: SourceEvaluationContext,
+  bytes: Uint8Array,
+) => {
+  try {
+    return validateClaudeCodeJsonParseResult(context.dependencies.parser.parse(
+      bytes,
+      context.signal === undefined ? undefined : { signal: context.signal },
+    )) ?? { diagnostic: "config_parse_failed" as const, status: "rejected" as const };
+  } catch {
+    return { diagnostic: "config_parse_failed" as const, status: "rejected" as const };
+  }
+};
+
+const classifySource = (
+  context: SourceEvaluationContext,
+  document: Readonly<Record<string, unknown>>,
+) => {
+  try {
+    return validateClaudeCodeSemanticClassification(
+      context.dependencies.semanticClassifier.classify(
+        context.input.dialect,
+        document,
+        context.signal === undefined ? undefined : { signal: context.signal },
+      ),
+    );
+  } catch {
+    context.signal?.throwIfAborted();
+    return undefined;
+  }
+};
+
+const evaluateSource = async (
+  context: SourceEvaluationContext,
+  source: BoundSource,
+): Promise<EvaluatedSource> => {
+  context.signal?.throwIfAborted();
+  const unavailable = rejectUnavailableSource(context, source);
+  if (unavailable !== undefined) return unavailable;
+
+  const read = await readSource(context, source);
+  context.signal?.throwIfAborted();
+  if (read?.status !== "read") return evaluateReadFailure(context, source, read);
+
+  const parsed = parseSource(context, read.bytes);
+  context.signal?.throwIfAborted();
+  if (parsed.status !== "parsed") {
+    return observeRejectedSource(context, source, {
+      code: parsed.diagnostic, status: "malformed",
+    });
+  }
+  const document = normalizeParsedClaudeCodeDocument(parsed.data);
+  if (document === undefined) {
+    return observeRejectedSource(context, source, {
+      code: "config_parse_failed", status: "malformed",
+    });
+  }
+  const classification = classifySource(context, document);
+  context.signal?.throwIfAborted();
+  if (classification === undefined) {
+    return observeRejectedSource(context, source, {
+      code: "config_parse_failed", status: "malformed",
+    });
+  }
+  const definitionMap = new Map(classification.definitions.map(definition => [definition.key, definition]));
+  for (const diagnostic of classification.diagnostics) {
+    if (context.diagnostics.length >= CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics) break;
+    context.diagnostics.push({ code: diagnostic.code, safeRef: source.sourceRef });
+  }
+  context.observations.push(Object.freeze({
+    displayPath: source.displayPath, kind: source.kind,
+    semanticDigest: semanticDigest(
+      definitionMap, context.input.dialect, context.dependencies.semanticClassifier,
+    ),
+    sourceRef: source.sourceRef, status: "applied",
+  }));
+  return {
+    definitions: definitionMap, grossTaint: false, source,
+    taintedKeys: new Set(classification.taintedPortableKeys),
+  };
+};
+
+const evaluateSources = async (
+  context: SourceEvaluationContext,
+  sources: readonly BoundSource[],
+): Promise<readonly EvaluatedSource[]> => {
+  const evaluated: EvaluatedSource[] = [];
+  for (const source of sources) evaluated.push(await evaluateSource(context, source));
   return evaluated;
 };
 
@@ -358,9 +410,13 @@ export const createInspectClaudeCodeConfiguration = (
         }));
         return buildResult(diagnostics, Object.freeze([]), observations);
       }
-      const evaluated = await evaluateSources(
-        dependencies, input, binding.sources, diagnostics, observations, options?.signal,
-      );
+      const evaluated = await evaluateSources({
+        dependencies,
+        diagnostics,
+        input,
+        observations,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      }, binding.sources);
       options?.signal?.throwIfAborted();
       return buildResult(diagnostics, resolveIntent(evaluated), observations);
     },

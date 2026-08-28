@@ -23,48 +23,58 @@ const rejected = (
 
 const objectChildren = (node: Node): readonly Node[] => node.children ?? [];
 
-const materialize = (
+const materializeString = (node: Node): string => {
+  if (typeof node.value !== "string" ||
+      node.value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.stringLength) {
+    throw new RangeError("json string budget exceeded");
+  }
+  return node.value;
+};
+
+const materializeNumber = (node: Node): number => {
+  if (typeof node.value !== "number" || !Number.isFinite(node.value)) {
+    throw new TypeError("invalid json number");
+  }
+  return node.value;
+};
+
+const materializeArray = (
   node: Node,
   depth: number,
   state: ParseBudgetState,
   signal?: AbortSignal,
-): unknown => {
+): readonly unknown[] => {
+  const children = objectChildren(node);
+  state.arrayItems += children.length;
+  if (state.arrayItems > CLAUDE_CODE_CONFIGURATION_BUDGETS.arrayItems) {
+    throw new RangeError("json array budget exceeded");
+  }
+  return Object.freeze(children.map(child => materialize(child, depth + 1, state, signal)));
+};
+
+const materializeProperty = (
+  property: Node,
+  signal?: AbortSignal,
+): readonly [string, Node] => {
   signal?.throwIfAborted();
-  state.nodes += 1;
-  if (depth > CLAUDE_CODE_CONFIGURATION_BUDGETS.depth ||
-      state.nodes > CLAUDE_CODE_CONFIGURATION_BUDGETS.nodes) {
-    throw new RangeError("json budget exceeded");
+  const [keyNode, valueNode] = property.children ?? [];
+  if (property.type !== "property" || keyNode?.type !== "string" ||
+      typeof keyNode.value !== "string" || valueNode === undefined) {
+    throw new TypeError("invalid json property");
   }
-  if (node.type === "string") {
-    if (typeof node.value !== "string" ||
-        node.value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.stringLength) {
-      throw new RangeError("json string budget exceeded");
-    }
-    return node.value;
+  const key = keyNode.value;
+  if (key.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.keyLength) {
+    throw new RangeError("json key budget exceeded");
   }
-  if (node.type === "number") {
-    if (typeof node.value !== "number" || !Number.isFinite(node.value)) {
-      throw new TypeError("invalid json number");
-    }
-    return node.value;
-  }
-  if (node.type === "boolean") {
-    return node.value === true;
-  }
-  if (node.type === "null") {
-    return null;
-  }
-  if (node.type === "array") {
-    const children = objectChildren(node);
-    state.arrayItems += children.length;
-    if (state.arrayItems > CLAUDE_CODE_CONFIGURATION_BUDGETS.arrayItems) {
-      throw new RangeError("json array budget exceeded");
-    }
-    return Object.freeze(children.map(child => materialize(child, depth + 1, state, signal)));
-  }
-  if (node.type !== "object") {
-    throw new TypeError("invalid json tree");
-  }
+  return [key, valueNode];
+};
+
+const materializeObject = (
+  node: Node,
+  depth: number,
+  state: ParseBudgetState,
+  signal?: AbortSignal,
+): Readonly<Record<string, unknown>> => {
   const properties = objectChildren(node);
   state.objectKeys += properties.length;
   if (state.objectKeys > CLAUDE_CODE_CONFIGURATION_BUDGETS.objectKeys) {
@@ -73,24 +83,46 @@ const materialize = (
   const seen = new Set<string>();
   const output: Record<string, unknown> = Object.create(null);
   for (const property of properties) {
-    signal?.throwIfAborted();
-    const [keyNode, valueNode] = property.children ?? [];
-    if (property.type !== "property" || keyNode?.type !== "string" ||
-        typeof keyNode.value !== "string" || valueNode === undefined) {
-      throw new TypeError("invalid json property");
-    }
-    const key = keyNode.value;
-    if (key.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.keyLength) {
-      throw new RangeError("json key budget exceeded");
-    }
-    if (seen.has(key)) {
-      throw new DuplicateKeyError("duplicate json key");
-    }
+    const [key, valueNode] = materializeProperty(property, signal);
+    if (seen.has(key)) throw new DuplicateKeyError("duplicate json key");
     seen.add(key);
     output[key] = materialize(valueNode, depth + 1, state, signal);
   }
   return Object.freeze(output);
 };
+
+function materialize(
+  node: Node,
+  depth: number,
+  state: ParseBudgetState,
+  signal?: AbortSignal,
+): unknown {
+  signal?.throwIfAborted();
+  state.nodes += 1;
+  if (depth > CLAUDE_CODE_CONFIGURATION_BUDGETS.depth ||
+      state.nodes > CLAUDE_CODE_CONFIGURATION_BUDGETS.nodes) {
+    throw new RangeError("json budget exceeded");
+  }
+  if (node.type === "string") {
+    return materializeString(node);
+  }
+  if (node.type === "number") {
+    return materializeNumber(node);
+  }
+  if (node.type === "boolean") {
+    return node.value === true;
+  }
+  if (node.type === "null") {
+    return null;
+  }
+  if (node.type === "array") {
+    return materializeArray(node, depth, state, signal);
+  }
+  if (node.type !== "object") {
+    throw new TypeError("invalid json tree");
+  }
+  return materializeObject(node, depth, state, signal);
+}
 
 const hasUtf8Bom = (bytes: Uint8Array): boolean =>
   bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;

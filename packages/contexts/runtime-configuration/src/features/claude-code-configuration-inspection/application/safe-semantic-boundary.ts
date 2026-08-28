@@ -64,46 +64,78 @@ const denseArray = (value: readonly unknown[]): readonly unknown[] | undefined =
   return output;
 };
 
-const normalize = (value: unknown, depth: number, state: NormalizationState): unknown => {
-  state.nodes += 1;
-  if (depth > CLAUDE_CODE_CONFIGURATION_BUDGETS.depth ||
-      state.nodes > CLAUDE_CODE_CONFIGURATION_BUDGETS.nodes) throw new TypeError("budget");
+const normalizeScalar = (value: unknown): unknown => {
   if (value === null || typeof value === "boolean") return value;
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new TypeError("number");
-    return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" &&
+      value.length <= CLAUDE_CODE_CONFIGURATION_BUDGETS.stringLength) return value;
+  throw new TypeError("scalar");
+};
+
+const normalizeArray = (
+  value: readonly unknown[],
+  depth: number,
+  state: NormalizationState,
+): readonly unknown[] => {
+  const items = denseArray(value);
+  if (items === undefined) throw new TypeError("array");
+  state.arrayItems += items.length;
+  if (state.arrayItems > CLAUDE_CODE_CONFIGURATION_BUDGETS.arrayItems) {
+    throw new TypeError("array budget");
   }
-  if (typeof value === "string") {
-    if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.stringLength) throw new TypeError("string");
-    return value;
+  return Object.freeze(items.map(item => normalize(item, depth + 1, state)));
+};
+
+const normalizeRecord = (
+  value: object,
+  depth: number,
+  state: NormalizationState,
+): Readonly<Record<string, unknown>> => {
+  if (!isPlainRecord(value)) throw new TypeError("record");
+  const descriptors = dataDescriptors(value);
+  if (descriptors === undefined) throw new TypeError("properties");
+  const keys = Object.keys(descriptors);
+  state.objectKeys += keys.length;
+  if (state.objectKeys > CLAUDE_CODE_CONFIGURATION_BUDGETS.objectKeys) {
+    throw new TypeError("key budget");
   }
-  if (typeof value !== "object") throw new TypeError("value");
+  const output: Record<string, unknown> = Object.create(null);
+  for (const key of keys) {
+    if (key.length === 0 || key.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.keyLength) {
+      throw new TypeError("key");
+    }
+    output[key] = normalize(descriptors[key]?.value, depth + 1, state);
+  }
+  return Object.freeze(output);
+};
+
+const normalizeContainer = (
+  value: object,
+  depth: number,
+  state: NormalizationState,
+): unknown => {
   if (state.ancestors.has(value)) throw new TypeError("cycle");
   state.ancestors.add(value);
   try {
-    if (Array.isArray(value)) {
-      const items = denseArray(value);
-      if (items === undefined) throw new TypeError("array");
-      state.arrayItems += items.length;
-      if (state.arrayItems > CLAUDE_CODE_CONFIGURATION_BUDGETS.arrayItems) throw new TypeError("array budget");
-      return Object.freeze(items.map(item => normalize(item, depth + 1, state)));
-    }
-    if (!isPlainRecord(value)) throw new TypeError("record");
-    const descriptors = dataDescriptors(value);
-    if (descriptors === undefined) throw new TypeError("properties");
-    const keys = Object.keys(descriptors);
-    state.objectKeys += keys.length;
-    if (state.objectKeys > CLAUDE_CODE_CONFIGURATION_BUDGETS.objectKeys) throw new TypeError("key budget");
-    const output: Record<string, unknown> = Object.create(null);
-    for (const key of keys) {
-      if (key.length === 0 || key.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.keyLength) throw new TypeError("key");
-      output[key] = normalize(descriptors[key]?.value, depth + 1, state);
-    }
-    return Object.freeze(output);
+    return Array.isArray(value)
+      ? normalizeArray(value, depth, state)
+      : normalizeRecord(value, depth, state);
   } finally {
     state.ancestors.delete(value);
   }
 };
+
+function normalize(value: unknown, depth: number, state: NormalizationState): unknown {
+  state.nodes += 1;
+  if (depth > CLAUDE_CODE_CONFIGURATION_BUDGETS.depth ||
+      state.nodes > CLAUDE_CODE_CONFIGURATION_BUDGETS.nodes) {
+    throw new TypeError("budget");
+  }
+  if (typeof value === "object" && value !== null) {
+    return normalizeContainer(value, depth, state);
+  }
+  return normalizeScalar(value);
+}
 
 export const normalizeParsedClaudeCodeDocument = (
   value: unknown,
