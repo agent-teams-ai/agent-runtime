@@ -61,6 +61,12 @@ const input = (sources: readonly ClaudeCodeConfigurationSource[]) => ({
   dialect: CLAUDE_CODE_SETTINGS_DIALECT, identityScope: "scope-a", sourcePlan: plan(sources),
 });
 
+const classifyClaudeModelAsExactName = (value: string) => ({
+  definitions: [{ key: "model" as const, selection: { kind: "exact-name" as const, value } }],
+  deferredObservations: [], diagnostics: [], definedPortableKeys: ["model" as const],
+  taintedPortableKeys: [],
+});
+
 test("strict parser rejects duplicate escape-equivalent keys and bounded JSON hazards", () => {
   const parser = createStrictClaudeCodeJsonParser();
   const cases: readonly [Uint8Array, string][] = [
@@ -340,11 +346,6 @@ test("contains hostile deferred classifier output and rejects value-bearing obse
 
 test("rejects hostile classifier model definitions that cross the portable semantic boundary", async () => {
   const base = createClaudeCodeConfigurationSemanticClassifierV2();
-  const classifyAsExactName = (value: string) => ({
-    definitions: [{ key: "model" as const, selection: { kind: "exact-name" as const, value } }],
-    deferredObservations: [], diagnostics: [], definedPortableKeys: ["model" as const],
-    taintedPortableKeys: [],
-  });
   const hostileValues = [
     "claude-credential-material", "claude-auth-token", "claude-bedrock-route",
     "claude-foundry-deployment", "claude-opus-4-1-20250805\u0007",
@@ -352,7 +353,7 @@ test("rejects hostile classifier model definitions that cross the portable seman
   for (const value of hostileValues) {
     const result = await inspector(readerFor({ one: "{}" }), { semanticClassifier: {
       ...base, contract: claudeCodeConfigurationSemanticClassifierContract,
-      classify: () => classifyAsExactName(value),
+      classify: () => classifyClaudeModelAsExactName(value),
     } }).execute(input([source("one")]));
     assert.equal(result.sources[0]?.status, "malformed");
     assert.deepEqual(result.observedPortableIntent, []);
@@ -362,7 +363,7 @@ test("rejects hostile classifier model definitions that cross the portable seman
   const documentedExactName = "claude-opus-4-1-20250805";
   const safe = await inspector(readerFor({ one: "{}" }), { semanticClassifier: {
     ...base, contract: claudeCodeConfigurationSemanticClassifierContract,
-    classify: () => classifyAsExactName(documentedExactName),
+    classify: () => classifyClaudeModelAsExactName(documentedExactName),
   } }).execute(input([source("one")]));
   assert.equal(safe.sources[0]?.status, "applied");
   assert.deepEqual(safe.observedPortableIntent[0]?.key === "model"
