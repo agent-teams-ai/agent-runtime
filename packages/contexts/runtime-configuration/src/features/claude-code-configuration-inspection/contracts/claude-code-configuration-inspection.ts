@@ -32,18 +32,26 @@ export type ClaudeCodeModelAlias = typeof CLAUDE_CODE_MODEL_ALIASES[number];
 export type ClaudeCodeEffort = typeof CLAUDE_CODE_EFFORT_VALUES[number];
 export type ClaudeCodeConfigurationSourceKind = "user" | "shared-project" | "project-local";
 
-export interface ClaudeCodeConfigurationSource {
-  readonly absolutePath: string;
-  readonly authorizedFileIdentity?: string;
-  readonly canonicalPath: string;
-  readonly custodyRoot: {
-    readonly absolutePath: string;
-    readonly canonicalPath: string;
-  };
+interface ClaudeCodeConfigurationSourceEvidence {
   readonly displayPath: string;
   readonly kind: ClaudeCodeConfigurationSourceKind;
   readonly observationEpoch: string;
 }
+
+export type ClaudeCodeConfigurationSource =
+  | (ClaudeCodeConfigurationSourceEvidence & {
+      readonly access: "authorized";
+      readonly absolutePath: string;
+      readonly authorizedFileIdentity?: string;
+      readonly canonicalPath: string;
+      readonly custodyRoot: {
+        readonly absolutePath: string;
+        readonly canonicalPath: string;
+      };
+    })
+  | (ClaudeCodeConfigurationSourceEvidence & {
+      readonly access: "rejected" | "stale" | "untrusted";
+    });
 
 export interface ClaudeCodeSourceObservation {
   readonly displayPath: string;

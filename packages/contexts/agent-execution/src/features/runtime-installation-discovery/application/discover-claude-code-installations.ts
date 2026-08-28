@@ -21,12 +21,6 @@ const diagnosticCode = {
   unreadable: "candidate_unreadable",
 } as const;
 
-const sourceRank = {
-  explicit: 0,
-  "path-entry": 1,
-  "known-location": 2,
-} as const;
-
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
@@ -37,44 +31,18 @@ const installationRef = (identity: string): string =>
   hashRef("claude-code-installation", identity);
 
 const candidateRef = (candidate: ClaudeCodeInstallationCandidate): string =>
-  hashRef(
-    "claude-code-candidate",
-    `${candidate.source}\u0000${candidate.displayPath}`,
-  );
-
-const knownLocationRank = (displayPath: string): number => {
-  if (
-    displayPath === "$HOME/.local/bin/claude" ||
-    displayPath === "~/.local/bin/claude"
-  ) {
-    return 0;
-  }
-  if (displayPath === "/opt/homebrew/bin/claude") {
-    return 1;
-  }
-  if (displayPath === "/usr/local/bin/claude") {
-    return 2;
-  }
-  return 3;
-};
+  hashRef("claude-code-candidate", candidate.candidateIdentity);
 
 const compareCandidates = (
   left: ClaudeCodeInstallationCandidate,
   right: ClaudeCodeInstallationCandidate,
 ): number => {
-  const sourceDifference = sourceRank[left.source] - sourceRank[right.source];
-  if (sourceDifference !== 0) {
-    return sourceDifference;
-  }
-  if (left.source === "known-location" && right.source === "known-location") {
-    const locationDifference =
-      knownLocationRank(left.displayPath) - knownLocationRank(right.displayPath);
-    if (locationDifference !== 0) {
-      return locationDifference;
-    }
+  const priorityDifference = left.priorityRank - right.priorityRank;
+  if (priorityDifference !== 0) {
+    return priorityDifference;
   }
   return (
-    compareText(left.displayPath, right.displayPath) ||
+    compareText(left.candidateIdentity, right.candidateIdentity) ||
     compareText(left.canonicalPath, right.canonicalPath) ||
     compareText(left.absolutePath, right.absolutePath)
   );
@@ -83,7 +51,8 @@ const compareCandidates = (
 const candidateKey = (candidate: ClaudeCodeInstallationCandidate): string =>
   [
     candidate.source,
-    candidate.displayPath,
+    candidate.candidateIdentity,
+    String(candidate.priorityRank),
     candidate.absolutePath,
     candidate.canonicalPath,
     candidate.authorizedFileIdentity ?? "",
@@ -100,12 +69,14 @@ const detachCandidate = (
     ...(candidate.authorizedFileIdentity === undefined
       ? {}
       : { authorizedFileIdentity: candidate.authorizedFileIdentity }),
+    candidateIdentity: candidate.candidateIdentity,
     canonicalPath: candidate.canonicalPath,
     custodyRoot: Object.freeze({
       absolutePath: candidate.custodyRoot.absolutePath,
       canonicalPath: candidate.custodyRoot.canonicalPath,
     }),
     displayPath: candidate.displayPath,
+    priorityRank: candidate.priorityRank,
     required: candidate.required,
     source: candidate.source,
   });

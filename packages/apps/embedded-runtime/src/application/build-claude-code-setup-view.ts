@@ -63,26 +63,36 @@ const mapCandidate = (
   ...(candidate.authorizedFileIdentity === undefined
     ? {}
     : { authorizedFileIdentity: candidate.authorizedFileIdentity }),
+  candidateIdentity: candidate.candidateIdentity,
   canonicalPath: candidate.canonicalPath,
   custodyRoot: { ...candidate.custodyRoot },
   displayPath: candidate.displayPath,
+  priorityRank: candidate.priorityRank,
   required: candidate.source === "explicit",
   source: candidate.source,
 });
 
 const mapSource = (
   source: AuthorizedClaudeCodePortableSource,
-): ClaudeCodeConfigurationSource => ({
-  absolutePath: source.absolutePath,
-  ...(source.authorizedFileIdentity === undefined
-    ? {}
-    : { authorizedFileIdentity: source.authorizedFileIdentity }),
-  canonicalPath: source.canonicalPath,
-  custodyRoot: { ...source.custodyRoot },
-  displayPath: source.displayPath,
-  kind: source.kind,
-  observationEpoch: source.observationEpoch,
-});
+): ClaudeCodeConfigurationSource => source.access === "authorized"
+  ? {
+      access: "authorized",
+      absolutePath: source.absolutePath,
+      ...(source.authorizedFileIdentity === undefined
+        ? {}
+        : { authorizedFileIdentity: source.authorizedFileIdentity }),
+      canonicalPath: source.canonicalPath,
+      custodyRoot: { ...source.custodyRoot },
+      displayPath: source.displayPath,
+      kind: source.kind,
+      observationEpoch: source.observationEpoch,
+    }
+  : {
+      access: source.access,
+      displayPath: source.displayPath,
+      kind: source.kind,
+      observationEpoch: source.observationEpoch,
+    };
 
 const mapAuthorizationDiagnostic = (
   diagnostic: ClaudeCodeSetupAuthorizationDiagnostic,
@@ -105,8 +115,13 @@ export const createBuildClaudeCodeSetupView = (
   ): Promise<InspectClaudeCodeRuntimeSetupOutcome> => {
     options?.signal?.throwIfAborted();
     const plan = dependencies.planClaudeCodeSetupInspection.plan(scope);
+    options?.signal?.throwIfAborted();
     if (plan.status === "unsupported") {
-      return deepFreeze({ diagnostics: [], expectedLimitations, status: "unsupported" });
+      return deepFreeze({
+        diagnostics: [{ code: "unsupported_platform" }],
+        expectedLimitations,
+        status: "unsupported",
+      });
     }
 
     const authorization = await dependencies.authorizeClaudeCodeSetupInspection.execute(

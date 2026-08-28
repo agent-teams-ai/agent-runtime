@@ -32,10 +32,10 @@ interface Dependencies {
   readonly sourceReader: ClaudeCodeConfigurationSourceReader;
 }
 
-interface BoundSource extends ClaudeCodeConfigurationSource {
-  readonly rejected: boolean;
+type BoundSource = ClaudeCodeConfigurationSource & {
+  readonly structurallyRejected: boolean;
   readonly sourceRef: string;
-}
+};
 
 interface EvaluatedSource {
   readonly definitions: ReadonlyMap<"model" | "effortLevel", PortableClaudeCodeDefinition>;
@@ -61,13 +61,14 @@ const sourceRef = (
   scope: string,
   source: ClaudeCodeConfigurationSource,
 ): string => `claude-config-source:${createHmac("sha256", key)
-  .update(`${scope}\0${source.kind}\0${source.canonicalPath}`)
+  .update(`${scope}\0${source.kind}`)
   .digest("hex")}`;
 
 const validSource = (source: ClaudeCodeConfigurationSource): boolean =>
-  source.absolutePath.length > 0 && source.canonicalPath.length > 0 &&
-  source.custodyRoot.absolutePath.length > 0 &&
-  source.custodyRoot.canonicalPath.length > 0;
+  source.access !== "authorized" ||
+  (source.absolutePath.length > 0 && source.canonicalPath.length > 0 &&
+    source.custodyRoot.absolutePath.length > 0 &&
+    source.custodyRoot.canonicalPath.length > 0);
 
 const bindSources = (
   input: InspectClaudeCodeConfigurationInput,
@@ -76,7 +77,7 @@ const bindSources = (
   const allSources = input.sources.map(source => ({
     ...source,
     displayPath: safeDisplayPaths[source.kind],
-    rejected: false,
+    structurallyRejected: false,
     sourceRef: sourceRef(identityKey, input.identityScope, source),
   })).toSorted((left, right) =>
     sourceRanks[left.kind] - sourceRanks[right.kind] ||
@@ -90,9 +91,11 @@ const bindSources = (
     const matchingKind = byKind.get(source.kind) ?? [];
     matchingKind.push(source);
     byKind.set(source.kind, matchingKind);
-    const matchingPath = byCanonicalPath.get(source.canonicalPath) ?? [];
-    matchingPath.push(source);
-    byCanonicalPath.set(source.canonicalPath, matchingPath);
+    if (source.access === "authorized") {
+      const matchingPath = byCanonicalPath.get(source.canonicalPath) ?? [];
+      matchingPath.push(source);
+      byCanonicalPath.set(source.canonicalPath, matchingPath);
+    }
     if (!validSource(source)) rejected.add(source);
   }
   for (const group of [...byKind.values(), ...byCanonicalPath.values()]) {
@@ -101,9 +104,12 @@ const bindSources = (
   if (tooManySources) {
     for (const source of sources) rejected.add(source);
   }
-  const bound = sources.map(source => ({ ...source, rejected: rejected.has(source) }));
+  const bound = sources.map(source => ({
+    ...source,
+    structurallyRejected: rejected.has(source),
+  }));
   return {
-    diagnostics: bound.filter(source => source.rejected).map(source =>
+    diagnostics: bound.filter(source => source.structurallyRejected).map(source =>
       Object.freeze({ code: "source_untrusted" as const, safeRef: source.sourceRef })),
     sources: bound,
   };
@@ -165,9 +171,25 @@ const evaluateSources = async (
   const evaluated: EvaluatedSource[] = [];
   for (const source of sources) {
     signal?.throwIfAborted();
-    if (source.rejected) {
+    if (source.structurallyRejected) {
       observations.push(Object.freeze({
         displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "rejected",
+      }));
+      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
+      continue;
+    }
+    if (source.access !== "authorized") {
+      diagnostics.push({
+        code: source.access === "untrusted"
+          ? "source_untrusted"
+          : "source_epoch_stale",
+        safeRef: source.sourceRef,
+      });
+      observations.push(Object.freeze({
+        displayPath: source.displayPath,
+        kind: source.kind,
+        sourceRef: source.sourceRef,
+        status: source.access === "stale" ? "stale" : "rejected",
       }));
       evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
       continue;

@@ -101,7 +101,14 @@ test("accepts only composition-bound portable sources and known locations", asyn
   if (sourceResult.status !== "authorized") {
     return;
   }
-  assert.deepEqual(sourceResult.sources, []);
+  assert.deepEqual(
+    sourceResult.sources.map(source => [source.kind, source.access]),
+    [
+      ["user", "rejected"],
+      ["shared-project", "rejected"],
+      ["project-local", "rejected"],
+    ],
+  );
   assert.equal(sourceCalls.includes(`${home}/caller-selected.json`), false);
   assert.ok(sourceResult.diagnostics.some(item =>
     item.code === "source_epoch_stale" && item.safeRef === "scope"

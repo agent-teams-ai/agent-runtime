@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import type {
@@ -18,7 +19,7 @@ import type {
   PathCanonicalizer,
 } from "./ports/outbound/path-canonicalizer.js";
 
-type RootKind = "home" | "system" | "workspace";
+type RootKind = "home" | "homebrew" | "local" | "workspace";
 
 interface CanonicalRoot {
   readonly absolutePath: string;
@@ -31,16 +32,26 @@ const MAX_PATH_LENGTH = 16_384;
 const MAX_EPOCH_LENGTH = 256;
 const ROOT_SLOTS = 4;
 const SOURCE_SLOTS = 3;
-const fixedSystemRoots = Object.freeze(["/opt/homebrew", "/usr/local"] as const);
+const fixedSystemRoots = Object.freeze([
+  { absolutePath: "/opt/homebrew", kind: "homebrew" as const },
+  { absolutePath: "/usr/local", kind: "local" as const },
+]);
 
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
 const rootLabels: Readonly<Record<RootKind, string>> = {
   home: "$HOME",
-  system: "$SYSTEM",
+  homebrew: "$HOMEBREW",
+  local: "$LOCAL",
   workspace: "$WORKSPACE",
 };
+
+const sourceDisplayPaths = Object.freeze({
+  "project-local": "$WORKSPACE/.claude/settings.local.json",
+  "shared-project": "$WORKSPACE/.claude/settings.json",
+  user: "$HOME/.claude/settings.json",
+} as const);
 
 const safePathSegment = (value: string): string =>
   [...value]
@@ -179,7 +190,7 @@ const canonicalizeRoots = async (
   const requests: readonly { readonly absolutePath: string; readonly kind: RootKind }[] = [
     { absolutePath: scope.homeRoot, kind: "home" },
     { absolutePath: scope.workspaceRoot, kind: "workspace" },
-    ...fixedSystemRoots.map(absolutePath => ({ absolutePath, kind: "system" as const })),
+    ...fixedSystemRoots,
   ];
   if (
     requests.length !== ROOT_SLOTS ||
@@ -277,6 +288,18 @@ const invalidExistingPath = (observation: CanonicalPathObservation): boolean =>
     (observation.linkCount ?? 0) !== 1
   );
 
+const candidateIdentity = (
+  request: { readonly absolutePath: string; readonly priorityRank: number; readonly source: string },
+  canonicalPath: string,
+): string => `claude-code-candidate-identity:sha256:${createHash("sha256")
+  .update([
+    request.source,
+    String(request.priorityRank),
+    request.absolutePath,
+    canonicalPath,
+  ].join("\0"))
+  .digest("hex")}`;
+
 const authorizeCandidates = async (
   scope: TrustedClaudeCodeSetupInspectionScope,
   roots: readonly CanonicalRoot[],
@@ -323,6 +346,10 @@ const authorizeCandidates = async (
         ...(verified.observation.fileIdentity === undefined
           ? {}
           : { authorizedFileIdentity: verified.observation.fileIdentity }),
+        candidateIdentity: candidateIdentity(
+          request,
+          verified.observation.absolutePath,
+        ),
         canonicalPath: verified.observation.absolutePath,
         custodyRoot: {
           absolutePath: verified.root.absolutePath,
@@ -345,12 +372,10 @@ const authorizeCandidates = async (
   for (const candidate of candidates.toSorted(
     (left, right) =>
       left.priorityRank - right.priorityRank ||
-      compareText(left.displayPath, right.displayPath) ||
-      compareText(left.canonicalPath, right.canonicalPath),
+      compareText(left.candidateIdentity, right.candidateIdentity),
   )) {
-    const key = `${candidate.canonicalPath}\0${candidate.displayPath}`;
-    if (!unique.has(key)) {
-      unique.set(key, candidate);
+    if (!unique.has(candidate.candidateIdentity)) {
+      unique.set(candidate.candidateIdentity, candidate);
     }
   }
   return { candidates: [...unique.values()], diagnostics };
@@ -371,13 +396,24 @@ const authorizeSources = async (
   if (requests === undefined) {
     return {
       diagnostics: [{ code: "source_epoch_stale", safeRef: "scope" }],
-      sources: [],
+      sources: (["user", "shared-project", "project-local"] as const).map(kind => ({
+        access: "rejected" as const,
+        displayPath: sourceDisplayPaths[kind],
+        kind,
+        observationEpoch: scope.observationEpoch,
+      })),
     };
   }
   for (const request of requests) {
     signal?.throwIfAborted();
     if (request.rootKind === "workspace" && !scope.workspaceTrusted) {
       diagnostics.push({ code: "source_untrusted", safeRef: request.kind });
+      sources.push({
+        access: "untrusted",
+        displayPath: sourceDisplayPaths[request.kind],
+        kind: request.kind,
+        observationEpoch: scope.observationEpoch,
+      });
       continue;
     }
     try {
@@ -393,9 +429,16 @@ const authorizeSources = async (
         invalidExistingPath(verified.observation)
       ) {
         diagnostics.push({ code: "source_epoch_stale", safeRef: request.kind });
+        sources.push({
+          access: "stale",
+          displayPath: sourceDisplayPaths[request.kind],
+          kind: request.kind,
+          observationEpoch: scope.observationEpoch,
+        });
         continue;
       }
       sources.push({
+        access: "authorized",
         absolutePath: request.absolutePath,
         ...(verified.observation.fileIdentity === undefined
           ? {}
@@ -416,25 +459,44 @@ const authorizeSources = async (
     } catch (error) {
       rethrowCancellation(error, signal);
       diagnostics.push({ code: "source_epoch_stale", safeRef: request.kind });
+      sources.push({
+        access: "stale",
+        displayPath: sourceDisplayPaths[request.kind],
+        kind: request.kind,
+        observationEpoch: scope.observationEpoch,
+      });
     }
   }
-  const canonicalPaths = new Set<string>();
-  const duplicate = sources.some(source => {
-    if (canonicalPaths.has(source.canonicalPath)) {
-      return true;
+  const canonicalCounts = new Map<string, number>();
+  for (const source of sources) {
+    if (source.access === "authorized") {
+      canonicalCounts.set(
+        source.canonicalPath,
+        (canonicalCounts.get(source.canonicalPath) ?? 0) + 1,
+      );
     }
-    canonicalPaths.add(source.canonicalPath);
-    return false;
-  });
-  return duplicate
-    ? {
-        diagnostics: [
+  }
+  const duplicate = [...canonicalCounts.values()].some(count => count > 1);
+  const boundedSources = sources.map(source =>
+    source.access === "authorized" &&
+      (canonicalCounts.get(source.canonicalPath) ?? 0) > 1
+      ? {
+          access: "rejected" as const,
+          displayPath: source.displayPath,
+          kind: source.kind,
+          observationEpoch: source.observationEpoch,
+        }
+      : source
+  );
+  return {
+    diagnostics: duplicate
+      ? [
           ...diagnostics,
           { code: "source_epoch_stale", safeRef: "duplicate-source" },
-        ],
-        sources: [],
-      }
-    : { diagnostics, sources };
+        ]
+      : diagnostics,
+    sources: boundedSources,
+  };
 };
 
 const sortDiagnostics = (

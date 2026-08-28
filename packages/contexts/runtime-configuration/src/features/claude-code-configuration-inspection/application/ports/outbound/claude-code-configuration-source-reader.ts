@@ -6,7 +6,7 @@ export type ReadClaudeCodeConfigurationSourceResult =
 
 export interface ClaudeCodeConfigurationSourceReader {
   read(
-    source: ClaudeCodeConfigurationSource,
+    source: Extract<ClaudeCodeConfigurationSource, { readonly access: "authorized" }>,
     maximumBytes: number,
     options?: { readonly signal?: AbortSignal },
   ): Promise<ReadClaudeCodeConfigurationSourceResult>;

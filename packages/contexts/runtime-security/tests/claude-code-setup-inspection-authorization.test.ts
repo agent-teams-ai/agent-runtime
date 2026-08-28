@@ -163,7 +163,11 @@ test("rejects non-regular portable sources", async t => {
   );
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") return;
-  assert.deepEqual(result.sources.map(source => source.kind), ["project-local"]);
+  assert.deepEqual(result.sources.map(source => [source.kind, source.access]), [
+    ["user", "stale"],
+    ["shared-project", "stale"],
+    ["project-local", "authorized"],
+  ]);
   assert.deepEqual(
     result.diagnostics.filter(item => item.code === "source_epoch_stale"),
     [
@@ -237,9 +241,13 @@ test("authorizes the three planned fixed sources and preserves provider candidat
     result.executableCandidates.map(candidate => candidate.priorityRank),
     [1, 2, 3, 4, 5],
   );
+  assert.deepEqual(
+    result.executableCandidates.slice(-2).map(candidate => candidate.displayPath),
+    ["$HOMEBREW/bin/claude", "$LOCAL/bin/claude"],
+  );
   assert.equal(
-    result.executableCandidates.at(-1)?.displayPath,
-    "$SYSTEM/bin/claude",
+    new Set(result.executableCandidates.map(candidate => candidate.candidateIdentity)).size,
+    result.executableCandidates.length,
   );
 });
 
@@ -329,7 +337,11 @@ test("rejects untrusted workspace sources without observing their paths", async 
 
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") return;
-  assert.deepEqual(result.sources.map(source => source.kind), ["user"]);
+  assert.deepEqual(result.sources.map(source => [source.kind, source.access]), [
+    ["user", "authorized"],
+    ["shared-project", "untrusted"],
+    ["project-local", "untrusted"],
+  ]);
   assert.equal(
     calls.some(path => path.startsWith(`${workspace}/.claude/`)),
     false,
@@ -437,7 +449,10 @@ test("detects candidate and source identity changes on repeat checks", async () 
     result.executableCandidates.some(item => item.source === "explicit"),
     false,
   );
-  assert.equal(result.sources.some(source => source.kind === "user"), false);
+  assert.equal(
+    result.sources.find(source => source.kind === "user")?.access,
+    "stale",
+  );
   assert.ok(result.diagnostics.some(item => item.code === "candidate_unstable"));
   assert.ok(result.diagnostics.some(item =>
     item.code === "source_epoch_stale" && item.safeRef === "user"
@@ -522,7 +537,14 @@ test("fails closed for duplicate roots and duplicate canonical sources", async (
   }).authorizeClaudeCodeSetupInspection.execute(scope(home, workspace));
   assert.equal(duplicateSources.status, "authorized");
   if (duplicateSources.status !== "authorized") return;
-  assert.deepEqual(duplicateSources.sources, []);
+  assert.deepEqual(
+    duplicateSources.sources.map(source => [source.kind, source.access]),
+    [
+      ["user", "authorized"],
+      ["shared-project", "rejected"],
+      ["project-local", "rejected"],
+    ],
+  );
   assert.ok(duplicateSources.diagnostics.some(item =>
     item.code === "source_epoch_stale" && item.safeRef === "duplicate-source"
   ));
@@ -590,8 +612,8 @@ test("enforces candidate and path budgets with redacted diagnostics", async () =
   assert.equal(derivedPathBudget.status, "authorized");
   if (derivedPathBudget.status !== "authorized") return;
   assert.equal(
-    derivedPathBudget.sources.some(source => source.kind === "user"),
-    false,
+    derivedPathBudget.sources.find(source => source.kind === "user")?.access,
+    "rejected",
   );
   assert.ok(derivedPathBudget.diagnostics.some(item =>
     item.code === "source_epoch_stale" && item.safeRef === "scope"
@@ -665,7 +687,10 @@ test("rejects an ancestor symlink escape for a fixed source", async t => {
   );
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") return;
-  assert.equal(result.sources.some(source => source.kind === "user"), false);
+  assert.equal(
+    result.sources.find(source => source.kind === "user")?.access,
+    "stale",
+  );
   assert.ok(result.diagnostics.some(item =>
     item.code === "source_epoch_stale" && item.safeRef === "user"
   ));

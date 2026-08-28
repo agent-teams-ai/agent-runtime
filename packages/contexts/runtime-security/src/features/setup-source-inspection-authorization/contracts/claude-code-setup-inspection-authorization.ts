@@ -20,22 +20,31 @@ export interface TrustedClaudeCodeSetupInspectionScope {
   readonly workspaceTrusted: boolean;
 }
 
-export interface AuthorizedClaudeCodePortableSource {
-  readonly absolutePath: string;
-  readonly authorizedFileIdentity?: string;
-  readonly canonicalPath: string;
-  readonly custodyRoot: {
-    readonly absolutePath: string;
-    readonly canonicalPath: string;
-  };
+interface ClaudeCodePortableSourceEvidence {
   readonly displayPath: string;
   readonly kind: ClaudeCodePortableSourceKind;
   readonly observationEpoch: string;
 }
 
+export type AuthorizedClaudeCodePortableSource =
+  | (ClaudeCodePortableSourceEvidence & {
+      readonly access: "authorized";
+      readonly absolutePath: string;
+      readonly authorizedFileIdentity?: string;
+      readonly canonicalPath: string;
+      readonly custodyRoot: {
+        readonly absolutePath: string;
+        readonly canonicalPath: string;
+      };
+    })
+  | (ClaudeCodePortableSourceEvidence & {
+      readonly access: "rejected" | "stale" | "untrusted";
+    });
+
 export interface AuthorizedClaudeCodeExecutableCandidate {
   readonly absolutePath: string;
   readonly authorizedFileIdentity?: string;
+  readonly candidateIdentity: string;
   readonly canonicalPath: string;
   readonly custodyRoot: {
     readonly absolutePath: string;

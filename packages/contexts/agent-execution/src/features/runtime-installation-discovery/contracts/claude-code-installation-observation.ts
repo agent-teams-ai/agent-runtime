@@ -6,12 +6,14 @@ export type ClaudeCodeInstallationCandidateSource =
 export interface ClaudeCodeInstallationCandidate {
   readonly absolutePath: string;
   readonly authorizedFileIdentity?: string;
+  readonly candidateIdentity: string;
   readonly canonicalPath: string;
   readonly custodyRoot: {
     readonly absolutePath: string;
     readonly canonicalPath: string;
   };
   readonly displayPath: string;
+  readonly priorityRank: 1 | 2 | 3 | 4 | 5;
   readonly required: boolean;
   readonly source: ClaudeCodeInstallationCandidateSource;
 }

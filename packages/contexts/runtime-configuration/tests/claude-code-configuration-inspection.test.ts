@@ -24,6 +24,7 @@ const source = (
   kind: ClaudeCodeConfigurationSourceKind,
   observationEpoch = "epoch-1",
 ): ClaudeCodeConfigurationSource => ({
+  access: "authorized",
   absolutePath: `/synthetic/${kind}.json`,
   authorizedFileIdentity: `identity:${kind}`,
   canonicalPath: `/synthetic/${kind}.json`,
@@ -109,6 +110,37 @@ test("taints lower values per key when a higher source is malformed, unreadable,
   ]));
   assert.deepEqual(duplicated.portableIntent, []);
   assert.ok(duplicated.diagnostics.every(item => item.code === "source_untrusted"));
+});
+
+test("preserves rejected higher slots as non-readable precedence evidence", async () => {
+  for (const access of ["untrusted", "stale", "rejected"] as const) {
+    const reads: ClaudeCodeConfigurationSourceKind[] = [];
+    const configured = inspector({
+      async read(selected) {
+        reads.push(selected.kind);
+        return {
+          bytes: encoder.encode('{"model":"haiku","effortLevel":"low"}'),
+          status: "read",
+        };
+      },
+    });
+    const higher: ClaudeCodeConfigurationSource = {
+      access,
+      displayPath: "$WORKSPACE/.claude/settings.local.json",
+      kind: "project-local",
+      observationEpoch: "epoch-1",
+    };
+
+    const result = await configured.execute(input([source("user"), higher]));
+
+    assert.deepEqual(reads, ["user"]);
+    assert.deepEqual(result.portableIntent, []);
+    assert.equal(result.sources.find(item => item.kind === "project-local")?.status,
+      access === "stale" ? "stale" : "rejected");
+    assert.ok(result.diagnostics.some(diagnostic =>
+      diagnostic.code === (access === "untrusted" ? "source_untrusted" : "source_epoch_stale")
+    ));
+  }
 });
 
 test("strict parser rejects duplicate escape-equivalent keys at depth and all frozen JSON hazards", () => {

@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+import { semanticCorrectionProofsRegistered } from "./claude-code-semantic-correction.e2e.test.ts";
 
 import {
   createNodeExecutableFileObserver,
@@ -29,6 +34,10 @@ import {
 const unavailable = (): never => {
   throw new Error("dependency must not be reached");
 };
+
+assert.equal(semanticCorrectionProofsRegistered, true);
+
+const execFile = promisify(execFileCallback);
 
 const codexDependencies = Object.freeze({
   authorizeSetupInspection: { execute: unavailable },
@@ -80,12 +89,23 @@ const syntheticSystemPath = (path: string): boolean =>
   path === "/opt/homebrew" || path.startsWith("/opt/homebrew/") ||
   path === "/usr/local" || path.startsWith("/usr/local/");
 
-const createSyntheticClaudeOwners = () => {
+const createSyntheticClaudeOwners = (systemInstallations = false) => {
   const nodeCanonicalizer = createNodePathCanonicalizer();
   const security = createSetupInspectionAuthorizationFeature({
     pathCanonicalizer: {
       async canonicalize(path, options) {
         options?.signal?.throwIfAborted();
+        if (systemInstallations &&
+          (path === "/opt/homebrew/bin/claude" || path === "/usr/local/bin/claude")) {
+          return {
+            absolutePath: path,
+            canonicalLocationPath: path,
+            exists: true,
+            fileIdentity: `synthetic-system:${path}`,
+            isFile: true,
+            linkCount: 1,
+          };
+        }
         return syntheticSystemPath(path)
           ? { absolutePath: path, canonicalLocationPath: path, exists: false }
           : nodeCanonicalizer.canonicalize(path, options);
@@ -97,6 +117,10 @@ const createSyntheticClaudeOwners = () => {
     executableFileObserver: {
       async observe(path, expectedPath, identity, custodyRoot, options) {
         options?.signal?.throwIfAborted();
+        if (systemInstallations &&
+          (path === "/opt/homebrew/bin/claude" || path === "/usr/local/bin/claude")) {
+          return { identity: `system-installation:${path}`, kind: "found" as const };
+        }
         return syntheticSystemPath(path)
           ? { kind: "missing" as const }
           : nodeExecutableObserver.observe(
@@ -189,7 +213,7 @@ test("returns unsupported and denied before downstream filesystem work", async t
   });
   t.after(() => unsupportedHost.dispose());
   assert.deepEqual(await unsupportedHost.bindAccess(scope).claudeCodeSetup.inspect(), {
-    diagnostics: [],
+    diagnostics: [{ code: "unsupported_platform" }],
     expectedLimitations: {
       interactiveShellPath: "unobserved",
       managedPolicy: "unobserved",
@@ -341,14 +365,13 @@ test("isolates caller cancellation and invalidates Claude handles on bounded ide
   );
 });
 
-test("reports clean absence and degrades safely without touching executable or network canaries", async t => {
+test("reports clean absence and degrades safely without touching the executable canary", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-setup-adversarial-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const home = join(root, "home");
   const workspace = join(root, "workspace");
   const executable = join(home, ".local", "bin", "claude");
   const executionCanary = join(root, "execution-canary");
-  const networkCanary = join(root, "network-canary");
   await Promise.all([
     mkdir(join(home, ".local", "bin"), { recursive: true }),
     mkdir(join(home, ".claude"), { recursive: true }),
@@ -373,11 +396,9 @@ test("reports clean absence and degrades safely without touching executable or n
   assert.deepEqual(absent.nextActions, ["install_claude_code"]);
 
   const executableBytes = `#!/bin/sh\nprintf touched > ${executionCanary}\n`;
-  const networkCanaryBytes = "inert network canary";
   const secret = "sk-secret-sentinel-that-must-never-escape";
   await Promise.all([
     writeFile(executable, executableBytes),
-    writeFile(networkCanary, networkCanaryBytes),
     writeFile(join(home, ".claude", "settings.json"), JSON.stringify({
       apiKeyHelper: secret,
       env: { ANTHROPIC_BASE_URL: `https://canary.invalid/${secret}` },
@@ -401,8 +422,18 @@ test("reports clean absence and degrades safely without touching executable or n
   assert.doesNotMatch(serialized, new RegExp(root, "u"));
   assert.doesNotMatch(serialized, new RegExp(secret, "u"));
   assert.equal(await readFile(executable, "utf8"), executableBytes);
-  assert.equal(await readFile(networkCanary, "utf8"), networkCanaryBytes);
   await assert.rejects(readFile(executionCanary), { code: "ENOENT" });
+});
+
+test("traps fetch, DNS, HTTP(S), TCP/TLS, and datagram APIs in an isolated process", async () => {
+  const helper = fileURLToPath(new URL(
+    "./helpers/claude-network-trap-process.ts",
+    import.meta.url,
+  ));
+  await execFile(process.execPath, [helper], {
+    env: Object.freeze({ ...process.env, NODE_OPTIONS: "--no-warnings" }),
+    timeout: 10_000,
+  });
 });
 
 test("detaches owner results and domain-separates deterministic product references", async t => {
@@ -534,9 +565,9 @@ test("honors cancellation before and during every composition stage", async () =
     discoverClaudeCodeInstallations: { execute: unavailable },
     inspectClaudeCodeConfiguration: { execute: unavailable },
     planClaudeCodeSetupInspection: {
-      plan(input) {
+      plan() {
         plannerCancelled.abort(new DOMException("cancelled during planning", "AbortError"));
-        return darwinPlanner.plan(input);
+        return { status: "unsupported" as const };
       },
     },
   });
@@ -546,7 +577,7 @@ test("honors cancellation before and during every composition stage", async () =
     }),
     { name: "AbortError" },
   );
-  assert.equal(authorizationCalls, 1);
+  assert.equal(authorizationCalls, 0);
   await plannerCancellationHost.dispose();
 
   let authorizationStarted: (() => void) | undefined;

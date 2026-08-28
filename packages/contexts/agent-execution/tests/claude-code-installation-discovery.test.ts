@@ -55,12 +55,14 @@ const candidate = (
 ) => ({
   absolutePath: `/authorized/${displayPath}`,
   authorizedFileIdentity: `authorized-${displayPath}`,
+  candidateIdentity: `candidate:${source}:${displayPath}`,
   canonicalPath: `/canonical/${displayPath}`,
   custodyRoot: {
     absolutePath: "/authorized",
     canonicalPath: "/canonical",
   },
   displayPath,
+  priorityRank: source === "explicit" ? 1 as const : source === "path-entry" ? 2 as const : 3 as const,
   required: source === "explicit",
   source,
   ...overrides,
@@ -75,12 +77,14 @@ const filesystemCandidate = async (
 ) => ({
   absolutePath,
   authorizedFileIdentity: await fileIdentity(absolutePath),
+  candidateIdentity: `candidate:${source}:${absolutePath}`,
   canonicalPath: await realpath(absolutePath),
   custodyRoot: {
     absolutePath: root,
     canonicalPath: await realpath(root),
   },
   displayPath,
+  priorityRank: source === "explicit" ? 1 as const : source === "path-entry" ? 2 as const : 3 as const,
   required,
   source,
 });
@@ -90,8 +94,8 @@ test("orders explicit, PATH, and frozen known-location aliases deterministically
     ["explicit-b", "shared"],
     ["path-b", "shared"],
     ["$HOME/.local/bin/claude", "shared"],
-    ["/opt/homebrew/bin/claude", "shared"],
-    ["/usr/local/bin/claude", "shared"],
+    ["$HOMEBREW/bin/claude", "shared"],
+    ["$LOCAL/bin/claude", "shared"],
     ["explicit-a", "first"],
   ]);
   const observer: ExecutableFileObserver = {
@@ -106,12 +110,12 @@ test("orders explicit, PATH, and frozen known-location aliases deterministically
     executableFileObserver: observer,
   });
   const candidates = [
-    candidate("/usr/local/bin/claude", "known-location"),
+    candidate("$LOCAL/bin/claude", "known-location", { priorityRank: 5 }),
     candidate("path-b", "path-entry"),
     candidate("explicit-b", "explicit"),
-    candidate("/opt/homebrew/bin/claude", "known-location"),
+    candidate("$HOMEBREW/bin/claude", "known-location", { priorityRank: 4 }),
     candidate("explicit-a", "explicit"),
-    candidate("$HOME/.local/bin/claude", "known-location"),
+    candidate("$HOME/.local/bin/claude", "known-location", { priorityRank: 3 }),
   ].map(item => ({ ...item, authorizedFileIdentity: item.displayPath }));
 
   const first = await feature.discoverClaudeCodeInstallations.execute({
@@ -134,8 +138,8 @@ test("orders explicit, PATH, and frozen known-location aliases deterministically
         "explicit-b",
         "path-b",
         "$HOME/.local/bin/claude",
-        "/opt/homebrew/bin/claude",
-        "/usr/local/bin/claude",
+        "$HOMEBREW/bin/claude",
+        "$LOCAL/bin/claude",
       ],
     ],
   );
@@ -154,6 +158,43 @@ test("orders explicit, PATH, and frozen known-location aliases deterministically
   assert.ok(Object.isFrozen(first));
   assert.ok(Object.isFrozen(first.installations));
   assert.ok(Object.isFrozen(first.installations[0]?.aliases));
+});
+
+test("uses authorized rank and identity while keeping simultaneous system labels distinct", async () => {
+  const observed: string[] = [];
+  const feature = createRuntimeInstallationDiscoveryFeature({
+    executableFileObserver: {
+      async observe(_absolutePath, _canonicalPath, identity) {
+        observed.push(identity ?? "");
+        return { identity: identity ?? "", kind: "found" };
+      },
+    },
+  });
+  const homebrew = candidate("$HOMEBREW/bin/claude", "known-location", {
+    authorizedFileIdentity: "homebrew-file",
+    candidateIdentity: "known:homebrew",
+    priorityRank: 4,
+  });
+  const local = candidate("$LOCAL/bin/claude", "known-location", {
+    authorizedFileIdentity: "local-file",
+    candidateIdentity: "known:local",
+    priorityRank: 5,
+  });
+
+  const result = await feature.discoverClaudeCodeInstallations.execute({
+    candidates: [local, homebrew],
+    observationEpoch: "epoch-system-locations",
+  });
+
+  assert.deepEqual(observed, ["homebrew-file", "local-file"]);
+  assert.deepEqual(
+    result.installations.map(installation => installation.aliases[0]?.displayPath),
+    ["$HOMEBREW/bin/claude", "$LOCAL/bin/claude"],
+  );
+  assert.notEqual(
+    result.installations[0]?.installationRef,
+    result.installations[1]?.installationRef,
+  );
 });
 
 test("deduplicates candidates and groups same-file symbolic aliases", async t => {
