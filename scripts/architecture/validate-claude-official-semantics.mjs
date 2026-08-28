@@ -159,16 +159,27 @@ const deriveProviderEvidence = markdown => {
 };
 
 const deriveEvidence = (id, responseBytes) => {
-  if (id === "settings-keys-and-effort") return deriveSchemaEvidence(responseBytes);
+  if (id === "settings-keys-and-effort") {
+    return deriveSchemaEvidence(responseBytes);
+  }
   const markdown = decodeUtf8(responseBytes, `${id} response`);
-  if (id === "settings-scopes") return deriveSettingsEvidence(markdown);
-  if (id === "model-aliases") return deriveModelEvidence(markdown);
-  if (id === "managed-policy") return deriveManagedEvidence(markdown);
-  if (id === "provider-route") return deriveProviderEvidence(markdown);
+  if (id === "settings-scopes") {
+    return deriveSettingsEvidence(markdown);
+  }
+  if (id === "model-aliases") {
+    return deriveModelEvidence(markdown);
+  }
+  if (id === "managed-policy") {
+    return deriveManagedEvidence(markdown);
+  }
+  if (id === "provider-route") {
+    return deriveProviderEvidence(markdown);
+  }
   assert.fail(`unsupported official evidence document ${id}`);
 };
 
-const validateDocument = async (document, expected, retrievalDate, coordinates, retainedEvidence, root) => {
+const validateDocument = async (document, context) => {
+  const { coordinates, expected, retainedEvidence, retrievalDate, root } = context;
   exactKeys(document, [
     "id", "requestUrl", "finalUrl", "retrievalDate", "contentType",
     "rawResponseByteLength", "rawResponseSha256", "gzipByteLength", "gzipSha256", "artifactPath",
@@ -200,7 +211,9 @@ const validateDocument = async (document, expected, retrievalDate, coordinates, 
   assert.ok(retainedBytes.byteLength > 0 && retainedBytes.byteLength < 1024, `${document.id} compact evidence boundary`);
   assert.equal(deriveEvidence(document.id, responseBytes), document.retainedBytesUtf8, `${document.id} retained evidence derivation`);
   retainedEvidence.set(document.id, document.retainedBytesUtf8);
-  for (const coordinate of document.sourceCoordinates) coordinates.add(`${document.id}#${coordinate}`);
+  for (const coordinate of document.sourceCoordinates) {
+    coordinates.add(`${document.id}#${coordinate}`);
+  }
 };
 
 const validateFactCoordinates = (frozenFacts, coordinates) => {
@@ -295,7 +308,13 @@ export const validateOfficialSemantics = async (semanticArtifact, root = reposit
   const coordinates = new Set();
   const retainedEvidence = new Map();
   for (const [index, document] of semanticArtifact.documents.entries()) {
-    await validateDocument(document, DOCUMENTS[index], semanticArtifact.retrieval.date, coordinates, retainedEvidence, root);
+    await validateDocument(document, {
+      coordinates,
+      expected: DOCUMENTS[index],
+      retainedEvidence,
+      retrievalDate: semanticArtifact.retrieval.date,
+      root,
+    });
   }
   validateFactCoordinates(semanticArtifact.frozenFacts, coordinates);
   validateFacts(semanticArtifact.frozenFacts, retainedEvidence);
