@@ -190,11 +190,13 @@ test("rejects a symbolic alias to a FIFO without blocking", { timeout: 2_000 }, 
   await symlink(fifo, alias);
 
   const observer = createNodeExecutableFileObserver();
-  const result = await observer.observe(
-    alias,
-    await realpath(fifo),
-    "synthetic-authorized-identity",
-  );
+  const canonicalPath = await realpath(fifo);
+  const result = await observer.observe({
+    absolutePath: alias,
+    authorizedFileIdentity: "synthetic-authorized-identity",
+    custodyBoundary: { absolutePath: alias, canonicalPath },
+    expectedCanonicalPath: canonicalPath,
+  });
 
   assert.deepEqual(result, { kind: "invalid" });
 });

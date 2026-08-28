@@ -166,13 +166,13 @@ export const createDiscoverClaudeCodeInstallations = (
       }
       seenCandidates.add(key);
 
-      const observation = await fileObserver.observe(
-        candidate.absolutePath,
-        candidate.canonicalPath,
-        candidate.authorizedFileIdentity,
-        candidate.custodyRoot,
-        options,
-      );
+      const observation = await fileObserver.observe({
+        absolutePath: candidate.absolutePath,
+        authorizedFileIdentity: candidate.authorizedFileIdentity,
+        custodyBoundary: candidate.custodyRoot,
+        expectedCanonicalPath: candidate.canonicalPath,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
       options?.signal?.throwIfAborted();
 
       if (observation.kind === "missing") {

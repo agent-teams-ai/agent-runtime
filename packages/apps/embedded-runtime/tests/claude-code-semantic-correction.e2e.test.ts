@@ -91,12 +91,12 @@ const createFourOwnerDependencies = () => {
   const nodeObserver = createNodeExecutableFileObserver();
   const discovery = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      async observe(path, expectedPath, identity, custodyRoot, options) {
-        options?.signal?.throwIfAborted();
-        if (path === "/opt/homebrew/bin/claude" || path === "/usr/local/bin/claude") {
-          return { identity: `system-installation:${path}`, kind: "found" as const };
+      async observe(request) {
+        request.signal?.throwIfAborted();
+        if (request.absolutePath === "/opt/homebrew/bin/claude" || request.absolutePath === "/usr/local/bin/claude") {
+          return { identity: `system-installation:${request.absolutePath}`, kind: "found" as const };
         }
-        return nodeObserver.observe(path, expectedPath, identity, custodyRoot, options);
+        return nodeObserver.observe(request);
       },
     },
   });

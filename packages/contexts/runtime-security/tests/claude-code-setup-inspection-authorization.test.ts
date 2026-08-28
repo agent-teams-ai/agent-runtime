@@ -355,7 +355,7 @@ test("rejects untrusted workspace sources without observing their paths", async 
   );
 });
 
-test("rejects relative, outside, sibling-prefix, and symlink escape candidates", async t => {
+test("allows an approved external-target alias but rejects direct external candidates", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-scope-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const home = join(root, "home");
@@ -386,15 +386,20 @@ test("rejects relative, outside, sibling-prefix, and symlink escape candidates",
   );
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") {return;}
-  assert.equal(
-    result.executableCandidates.some(candidate => candidate.source === "explicit"),
-    false,
+  const externalAlias = result.executableCandidates.find(candidate =>
+    candidate.absolutePath === escapedAlias
   );
+  assert.ok(externalAlias);
+  assert.equal(externalAlias.canonicalPath, outsideTarget);
+  assert.deepEqual(externalAlias.custodyRoot, {
+    absolutePath: escapedAlias,
+    canonicalPath: outsideTarget,
+  });
   assert.deepEqual(
     result.diagnostics.filter(item => item.safeRef === "explicit" || item.safeRef === "explicit-path")
       .map(item => item.code)
       .toSorted(),
-    ["candidate_denied", "candidate_denied", "candidate_denied", "candidate_invalid"],
+    ["candidate_denied", "candidate_denied", "candidate_invalid"],
   );
 });
 

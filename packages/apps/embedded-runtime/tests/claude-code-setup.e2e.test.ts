@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -116,21 +116,15 @@ const createSyntheticClaudeOwners = (systemInstallations = false) => {
   const nodeExecutableObserver = createNodeExecutableFileObserver();
   const execution = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      async observe(path, expectedPath, identity, custodyRoot, options) {
-        options?.signal?.throwIfAborted();
+      async observe(request) {
+        request.signal?.throwIfAborted();
         if (systemInstallations &&
-          (path === "/opt/homebrew/bin/claude" || path === "/usr/local/bin/claude")) {
-          return { identity: `system-installation:${path}`, kind: "found" as const };
+          (request.absolutePath === "/opt/homebrew/bin/claude" || request.absolutePath === "/usr/local/bin/claude")) {
+          return { identity: `system-installation:${request.absolutePath}`, kind: "found" as const };
         }
-        return syntheticSystemPath(path)
+        return syntheticSystemPath(request.absolutePath)
           ? { kind: "missing" as const }
-          : nodeExecutableObserver.observe(
-            path,
-            expectedPath,
-            identity,
-            custodyRoot,
-            options,
-          );
+          : nodeExecutableObserver.observe(request);
       },
     },
   });
@@ -149,19 +143,21 @@ const createSyntheticClaudeOwners = (systemInstallations = false) => {
   };
 };
 
-test("crosses all four owner layers for a synthetic macOS setup without executing Claude", async t => {
+test("crosses all four owner layers for a relocated synthetic macOS launcher without executing Claude", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-setup-e2e-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const home = join(root, "home");
   const workspace = join(root, "workspace");
   const executable = join(home, ".local", "bin", "claude");
+  const externalTarget = join(root, "relocated-share", "claude", "versions", "2.1.205");
   await Promise.all([
     mkdir(join(home, ".local", "bin"), { recursive: true }),
     mkdir(join(home, ".claude"), { recursive: true }),
     mkdir(join(workspace, ".claude"), { recursive: true }),
+    mkdir(join(root, "relocated-share", "claude", "versions"), { recursive: true }),
   ]);
-  await writeFile(executable, "synthetic provider bytes that must never execute");
-  await chmod(executable, 0o755);
+  await writeFile(externalTarget, "synthetic provider bytes that must never execute", { mode: 0o755 });
+  await symlink(externalTarget, executable);
   await Promise.all([
     writeFile(join(home, ".claude", "settings.json"), JSON.stringify({ model: "sonnet" })),
     writeFile(join(workspace, ".claude", "settings.json"), JSON.stringify({ effortLevel: "low" })),
@@ -176,8 +172,7 @@ test("crosses all four owner layers for a synthetic macOS setup without executin
   const access = host.bindAccess(runtimeScope(root, claudeScope(home, workspace)));
 
   const first = await access.claudeCodeSetup.inspect();
-  const second = await access.claudeCodeSetup.inspect();
-  assert.deepEqual(first, second);
+  assert.deepEqual(first, await access.claudeCodeSetup.inspect());
   assert.ok(isDeeplyFrozen(first));
   assert.equal(first.status, "observed", JSON.stringify(first));
   assert.equal(first.installations.length, 1);

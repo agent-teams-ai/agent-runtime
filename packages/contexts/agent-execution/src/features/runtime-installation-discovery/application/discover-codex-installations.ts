@@ -38,13 +38,13 @@ export const createDiscoverCodexInstallations = (
 
     for (const candidate of candidates) {
       options?.signal?.throwIfAborted();
-      const observation = await fileObserver.observe(
-        candidate.absolutePath,
-        candidate.canonicalPath,
-        candidate.authorizedFileIdentity,
-        candidate.custodyRoot,
-        options,
-      );
+      const observation = await fileObserver.observe({
+        absolutePath: candidate.absolutePath,
+        authorizedFileIdentity: candidate.authorizedFileIdentity,
+        custodyBoundary: candidate.custodyRoot,
+        expectedCanonicalPath: candidate.canonicalPath,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
       if (observation.kind === "missing") {
         if (candidate.required) {
           diagnostics.push({

@@ -25,7 +25,10 @@ import {
   createRuntimeInstallationDiscoveryFeature,
   type ExecutableFileObserver,
 } from "../dist/composition.js";
-import { isSupportedExecutableAliasKind } from "../dist/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.js";
+import {
+  isExecutableByEffectiveIdentity,
+  isSupportedExecutableAliasKind,
+} from "../dist/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.js";
 
 const execFile = promisify(execFileCallback);
 const packageRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,6 +37,12 @@ const fileIdentity = async (path: string): Promise<string> => {
   const observation = await stat(path, { bigint: true });
   return `${observation.dev}:${observation.ino}:${observation.ctimeNs}:${observation.size}`;
 };
+
+const executableModeStats = (mode: bigint) => ({
+  gid: 2000n,
+  mode,
+  uid: 1000n,
+});
 
 const collectTypeScriptSources = async (directory: string): Promise<string[]> => {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -69,7 +78,7 @@ const candidate = (
 });
 
 const filesystemCandidate = async (
-  root: string,
+  _root: string,
   absolutePath: string,
   displayPath: string,
   required: boolean,
@@ -80,8 +89,8 @@ const filesystemCandidate = async (
   candidateIdentity: `candidate:${source}:${absolutePath}`,
   canonicalPath: await realpath(absolutePath),
   custodyRoot: {
-    absolutePath: root,
-    canonicalPath: await realpath(root),
+    absolutePath,
+    canonicalPath: await realpath(absolutePath),
   },
   displayPath,
   priorityRank: source === "explicit" ? 1 as const : source === "path-entry" ? 2 as const : 3 as const,
@@ -99,7 +108,7 @@ test("orders explicit, PATH, and frozen known-location aliases deterministically
     ["explicit-a", "first"],
   ]);
   const observer: ExecutableFileObserver = {
-    async observe(_absolutePath, _canonicalPath, authorizedFileIdentity) {
+    async observe({ authorizedFileIdentity }) {
       return {
         identity: identities.get(authorizedFileIdentity ?? "") ?? "unknown",
         kind: "found",
@@ -164,9 +173,9 @@ test("uses authorized rank and identity while keeping simultaneous system labels
   const observed: string[] = [];
   const feature = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      async observe(_absolutePath, _canonicalPath, identity) {
-        observed.push(identity ?? "");
-        return { identity: identity ?? "", kind: "found" };
+      async observe({ authorizedFileIdentity }) {
+        observed.push(authorizedFileIdentity ?? "");
+        return { identity: authorizedFileIdentity ?? "", kind: "found" };
       },
     },
   });
@@ -242,6 +251,42 @@ test("deduplicates candidates and groups same-file symbolic aliases", async t =>
   );
 });
 
+test("observes an approved alias and external executable with a file-level boundary", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-claude-external-target-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const approved = join(root, "home", ".local", "bin");
+  const external = join(root, "relocated-share", "versions", "2.1.205");
+  const alias = join(approved, "claude");
+  await Promise.all([
+    mkdir(approved, { recursive: true }),
+    mkdir(dirname(external), { recursive: true }),
+  ]);
+  await writeFile(external, "synthetic provider bytes");
+  await chmod(external, 0o755);
+  await symlink(external, alias);
+  const authorized = await filesystemCandidate(
+    approved,
+    alias,
+    "$HOME/.local/bin/claude",
+    false,
+    "known-location",
+  );
+  assert.deepEqual(authorized.custodyRoot, {
+    absolutePath: alias,
+    canonicalPath: external,
+  });
+
+  const result = await createRuntimeInstallationDiscoveryFeature({
+    executableFileObserver: createNodeExecutableFileObserver(),
+  }).discoverClaudeCodeInstallations.execute({
+    candidates: [authorized],
+    observationEpoch: "epoch-external-target",
+  });
+
+  assert.equal(result.installations[0]?.status, "found_unverified");
+  assert.deepEqual(result.diagnostics, []);
+});
+
 test("delegates macOS case and Unicode alias identity to the observer without rewriting display paths", async () => {
   const identities = new Map([
     ["case-upper", "same-file"],
@@ -251,8 +296,8 @@ test("delegates macOS case and Unicode alias identity to the observer without re
   ]);
   const feature = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      async observe(_absolutePath, _canonicalPath, identity) {
-        return { identity: identities.get(identity ?? "") ?? "unexpected", kind: "found" };
+      async observe({ authorizedFileIdentity }) {
+        return { identity: identities.get(authorizedFileIdentity ?? "") ?? "unexpected", kind: "found" };
       },
     },
   });
@@ -354,10 +399,12 @@ test("rejects device and ancestor-retargeted candidates without opening them", a
   t.after(() => rm(root, { force: true, recursive: true }));
   const trusted = join(root, "trusted");
   const retired = join(root, "retired");
+  const broken = join(root, "broken");
   const executable = join(trusted, "bin", "claude");
   await mkdir(dirname(executable), { recursive: true });
   await writeFile(executable, "synthetic");
   await chmod(executable, 0o755);
+  await symlink(join(root, "missing-target"), broken);
   const retargetedCandidate = await filesystemCandidate(
     trusted,
     executable,
@@ -368,21 +415,36 @@ test("rejects device and ancestor-retargeted candidates without opening them", a
   await symlink(retired, trusted);
 
   const observer = createNodeExecutableFileObserver();
-  const [retargeted, device] = await Promise.all([
-    observer.observe(
-      retargetedCandidate.absolutePath,
-      retargetedCandidate.canonicalPath,
-      retargetedCandidate.authorizedFileIdentity,
-      retargetedCandidate.custodyRoot,
-    ),
-    observer.observe("/dev/null", "/dev/null", "synthetic-device", {
-      absolutePath: "/dev",
-      canonicalPath: await realpath("/dev"),
+  const [retargeted, device, brokenAlias] = await Promise.all([
+    observer.observe({
+      absolutePath: retargetedCandidate.absolutePath,
+      authorizedFileIdentity: retargetedCandidate.authorizedFileIdentity,
+      custodyBoundary: retargetedCandidate.custodyRoot,
+      expectedCanonicalPath: retargetedCandidate.canonicalPath,
+    }),
+    observer.observe({
+      absolutePath: "/dev/null",
+      authorizedFileIdentity: "synthetic-device",
+      custodyBoundary: {
+        absolutePath: "/dev",
+        canonicalPath: await realpath("/dev"),
+      },
+      expectedCanonicalPath: "/dev/null",
+    }),
+    observer.observe({
+      absolutePath: broken,
+      authorizedFileIdentity: undefined,
+      custodyBoundary: {
+        absolutePath: broken,
+        canonicalPath: join(root, "missing-target"),
+      },
+      expectedCanonicalPath: join(root, "missing-target"),
     }),
   ]);
 
   assert.deepEqual(retargeted, { kind: "unstable" });
   assert.deepEqual(device, { kind: "invalid" });
+  assert.deepEqual(brokenAlias, { kind: "missing" });
 });
 
 test("rejects a socket stat through the non-file alias gate", () => {
@@ -394,6 +456,45 @@ test("rejects a socket stat through the non-file alias gate", () => {
 
   assert.equal(socketStat.isSocket(), true);
   assert.equal(isSupportedExecutableAliasKind(socketStat), false);
+});
+
+test("checks owner, group, and other execute permission for the effective identity", () => {
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o100n), { gid: 3000, groups: [], uid: 1000 }),
+    true,
+  );
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o010n), { gid: 2000, groups: [], uid: 3000 }),
+    true,
+  );
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o010n), { gid: 3000, groups: [2000], uid: 3000 }),
+    true,
+  );
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o001n), { gid: 3000, groups: [], uid: 3000 }),
+    true,
+  );
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o010n), { gid: 3000, groups: [], uid: 1000 }),
+    false,
+  );
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o100n), { gid: 3000, groups: [], uid: 3000 }),
+    false,
+  );
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o001n), { gid: 2000, groups: [], uid: 3000 }),
+    false,
+  );
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o001n), { gid: 0, groups: [], uid: 0 }),
+    true,
+  );
+  assert.equal(
+    isExecutableByEffectiveIdentity(executableModeStats(0o000n), { gid: 0, groups: [], uid: 0 }),
+    false,
+  );
 });
 
 test("never executes an executable candidate", async t => {
@@ -437,8 +538,8 @@ test("maps denied, invalid, unreadable, and unstable observer outcomes", async (
   ]);
   const feature = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      async observe(_absolutePath, _canonicalPath, identity) {
-        return outcomes.get(identity ?? "") ?? { kind: "missing" };
+      async observe({ authorizedFileIdentity }) {
+        return outcomes.get(authorizedFileIdentity ?? "") ?? { kind: "missing" };
       },
     },
   });
@@ -481,8 +582,8 @@ test("propagates cancellation before and during candidate observation", async ()
   const during = new AbortController();
   const cancellingFeature = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      async observe(_absolutePath, _canonicalPath, _identity, _root, options) {
-        assert.equal(options?.signal, during.signal);
+      async observe({ signal }) {
+        assert.equal(signal, during.signal);
         during.abort();
         return { identity: "not-returned", kind: "found" };
       },
@@ -508,11 +609,11 @@ test("snapshots caller-owned candidates and returns detached deeply frozen outpu
   let observedRoot: { readonly absolutePath: string; readonly canonicalPath: string } | undefined;
   const feature = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      async observe(_absolutePath, _canonicalPath, identity, custodyRoot) {
-        if (identity === "authorized-missing") {
+      async observe({ authorizedFileIdentity, custodyBoundary }) {
+        if (authorizedFileIdentity === "authorized-missing") {
           return { kind: "missing" };
         }
-        observedRoot = custodyRoot;
+        observedRoot = custodyBoundary;
         await observationMayFinish;
         return { identity: "detached-file", kind: "found" };
       },

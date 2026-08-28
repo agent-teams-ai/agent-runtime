@@ -102,25 +102,13 @@ try {
   const nodeExecutableObserver = executionComposition.createNodeExecutableFileObserver();
   const execution = executionComposition.createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      observe(
-        path: string,
-        expectedPath: string,
-        identity: string | undefined,
-        custodyRoot: { readonly absolutePath: string; readonly canonicalPath: string },
-        options?: { readonly signal?: AbortSignal },
-      ) {
-        options?.signal?.throwIfAborted();
-        if (path === "/opt/homebrew/bin/claude" || path === "/usr/local/bin/claude") {
+      observe(request) {
+        request.signal?.throwIfAborted();
+        if (request.absolutePath === "/opt/homebrew/bin/claude" || request.absolutePath === "/usr/local/bin/claude") {
           return Promise.resolve({ kind: "missing" as const });
         }
-        assert.ok(path.startsWith(`${root}/`), `unexpected executable input: ${path}`);
-        return nodeExecutableObserver.observe(
-          path,
-          expectedPath,
-          identity,
-          custodyRoot,
-          options,
-        );
+        assert.ok(request.absolutePath.startsWith(`${root}/`), `unexpected executable input: ${request.absolutePath}`);
+        return nodeExecutableObserver.observe(request);
       },
     },
   });
