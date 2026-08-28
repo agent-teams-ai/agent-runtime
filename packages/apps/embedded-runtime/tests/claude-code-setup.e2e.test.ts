@@ -26,9 +26,11 @@ import {
 } from "@agent-teams/runtime-security/composition";
 
 import {
-  createAgentRuntimeHost,
+  createAgentRuntimeHost as createClosedAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
+  type BuildClaudeCodeSetupViewDependencies,
+  type BuildCodexSetupViewDependencies,
 } from "../dist/composition.js";
 
 const unavailable = (): never => {
@@ -45,6 +47,23 @@ const codexDependencies = Object.freeze({
   discoverCodexInstallations: { execute: unavailable },
   inspectCodexConfiguration: { execute: unavailable },
   planCodexSetupInspection: createCodexSetupInspectionPlanner("linux"),
+});
+
+const createAgentRuntimeHost = (
+  dependencies: BuildCodexSetupViewDependencies & BuildClaudeCodeSetupViewDependencies,
+) => createClosedAgentRuntimeHost({
+  claudeCodeSetup: {
+    authorizeClaudeCodeSetupInspection: dependencies.authorizeClaudeCodeSetupInspection,
+    discoverClaudeCodeInstallations: dependencies.discoverClaudeCodeInstallations,
+    inspectClaudeCodeConfiguration: dependencies.inspectClaudeCodeConfiguration,
+    planClaudeCodeSetupInspection: dependencies.planClaudeCodeSetupInspection,
+  },
+  codexSetup: {
+    authorizeSetupInspection: dependencies.authorizeSetupInspection,
+    discoverCodexInstallations: dependencies.discoverCodexInstallations,
+    inspectCodexConfiguration: dependencies.inspectCodexConfiguration,
+    planCodexSetupInspection: dependencies.planCodexSetupInspection,
+  },
 });
 
 const runtimeScope = (

@@ -7,9 +7,11 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import {
   AgentRuntimeHostDisposalIncompleteError,
-  createAgentRuntimeHost,
+  createAgentRuntimeHost as createClosedAgentRuntimeHost,
+  createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
   createDefaultAgentRuntimeHost,
+  type BuildCodexSetupViewDependencies,
 } from "../dist/composition.js";
 
 const isDeeplyFrozen = (value: unknown): boolean => {
@@ -23,6 +25,117 @@ const supportedInspectionPlanner = createCodexSetupInspectionPlanner("darwin");
 const unavailableInspectionDependency = (): never => {
   throw new Error("unsupported platform must not reach inspection dependencies");
 };
+
+const unavailableClaudeCodeSetup = Object.freeze({
+  authorizeClaudeCodeSetupInspection: { execute: unavailableInspectionDependency },
+  discoverClaudeCodeInstallations: { execute: unavailableInspectionDependency },
+  inspectClaudeCodeConfiguration: { execute: unavailableInspectionDependency },
+  planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("linux"),
+});
+
+const createAgentRuntimeHost = (codexSetup: BuildCodexSetupViewDependencies) =>
+  createClosedAgentRuntimeHost({
+    claudeCodeSetup: unavailableClaudeCodeSetup,
+    codexSetup,
+  });
+
+const unavailableCodexSetup = Object.freeze({
+  authorizeSetupInspection: { execute: unavailableInspectionDependency },
+  discoverCodexInstallations: { execute: unavailableInspectionDependency },
+  inspectCodexConfiguration: { execute: unavailableInspectionDependency },
+  planCodexSetupInspection: createCodexSetupInspectionPlanner("linux"),
+});
+
+test("rejects missing, partial, malformed, and unknown capability bindings synchronously", () => {
+  const invalidDependencies: readonly unknown[] = [
+    {},
+    { claudeCodeSetup: unavailableClaudeCodeSetup },
+    {
+      claudeCodeSetup: {
+        authorizeClaudeCodeSetupInspection:
+          unavailableClaudeCodeSetup.authorizeClaudeCodeSetupInspection,
+      },
+      codexSetup: unavailableCodexSetup,
+    },
+    {
+      claudeCodeSetup: unavailableClaudeCodeSetup,
+      codexSetup: {
+        ...unavailableCodexSetup,
+        unknownCapabilityBinding: { execute: unavailableInspectionDependency },
+      },
+    },
+    {
+      claudeCodeSetup: unavailableClaudeCodeSetup,
+      codexSetup: {
+        ...unavailableCodexSetup,
+        authorizeSetupInspection: { execute: "not a function" },
+      },
+    },
+  ];
+
+  for (const dependencies of invalidDependencies) {
+    assert.throws(
+      () => createClosedAgentRuntimeHost(dependencies as never),
+      TypeError,
+    );
+  }
+});
+
+test("snapshots accessor-backed capability bundles and binding methods exactly once", async t => {
+  let codexBundleReads = 0;
+  let authorizationMethodReads = 0;
+  const accessorBackedCodexSetup = Object.defineProperty(
+    { ...unavailableCodexSetup },
+    "authorizeSetupInspection",
+    {
+      enumerable: true,
+      get() {
+        return Object.defineProperty({}, "execute", {
+          enumerable: true,
+          get() {
+            authorizationMethodReads += 1;
+            return authorizationMethodReads === 1
+              ? unavailableInspectionDependency
+              : "malformed second read";
+          },
+        });
+      },
+    },
+  );
+  const dependencies = Object.defineProperties({}, {
+    claudeCodeSetup: {
+      enumerable: true,
+      value: unavailableClaudeCodeSetup,
+    },
+    codexSetup: {
+      enumerable: true,
+      get() {
+        codexBundleReads += 1;
+        return codexBundleReads === 1 ? accessorBackedCodexSetup : {};
+      },
+    },
+  });
+
+  const host = createClosedAgentRuntimeHost(dependencies as never);
+  t.after(() => host.dispose());
+  const access = host.bindAccess({
+    configurationDialect: "codex-0.134",
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "accessor-snapshot-epoch",
+    pathEntries: [],
+    roots: [],
+    scopeId: "accessor-snapshot-scope",
+  });
+
+  assert.deepEqual(await access.codexSetup.inspect({}), {
+    diagnostics: [],
+    status: "unsupported",
+  });
+  assert.equal(codexBundleReads, 1);
+  assert.equal(authorizationMethodReads, 1);
+});
 
 test(
   "inspects a synthetic Codex setup deterministically without leaking paths or secrets",

@@ -4,6 +4,8 @@ export {
   createDefaultAgentRuntimeHost,
   type AgentRuntimeHost,
   type AgentRuntimeHostDependencies,
+  type ClaudeCodeSetupCapabilityBundle,
+  type CodexSetupCapabilityBundle,
 } from "./composition/agent-runtime-host.js";
 export type { BuildCodexSetupViewDependencies } from "./application/build-codex-setup-view.js";
 export type { BuildClaudeCodeSetupViewDependencies } from "./application/build-claude-code-setup-view.js";
