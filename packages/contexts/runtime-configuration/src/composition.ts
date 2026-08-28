@@ -12,3 +12,14 @@ export {
   createCodexConfigurationInspectionFeature,
   type CodexConfigurationInspectionDependencies,
 } from "./features/codex-configuration-inspection/composition/feature-module-factory.js";
+export { createStrictClaudeCodeJsonParser } from "./features/claude-code-configuration-inspection/adapters/outbound/strict-claude-code-json-parser.js";
+export { createClaudeCodeConfigurationSemanticClassifierV1 } from "./features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-semantic-classifier-v1.js";
+export { createClaudeCodeConfigurationSourceReaderAdapter } from "./features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-source-reader-adapter.js";
+export {
+  claudeCodeConfigurationSemanticClassifierContract,
+  type PortableClaudeCodeDefinition,
+} from "./features/claude-code-configuration-inspection/application/ports/outbound/claude-code-configuration-semantic-classifier.js";
+export {
+  createClaudeCodeConfigurationInspectionFeature,
+  type ClaudeCodeConfigurationInspectionDependencies,
+} from "./features/claude-code-configuration-inspection/composition/feature-module-factory.js";

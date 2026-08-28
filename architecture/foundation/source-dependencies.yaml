@@ -38,6 +38,7 @@ boundaries:
       boundaries: []
       packages:
         - "@agent-teams/filesystem-custody"
+        - jsonc-parser
         - smol-toml
       builtins:
         - node:crypto

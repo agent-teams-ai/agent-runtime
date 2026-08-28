@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "contractId": "ar-2-claude-code-setup-preview@1",
+  "dialect": "claude-code-settings@2026-08-28",
+  "classifierContract": "claude-code-portable-intent@1",
+  "qualifiesExecutable": false,
+  "platform": "darwin",
+  "sourcesLowToHigh": ["user", "shared-project", "project-local"],
+  "paths": {
+    "user": "~/.claude/settings.json",
+    "shared-project": "<workspace>/.claude/settings.json",
+    "project-local": "<workspace>/.claude/settings.local.json"
+  },
+  "modelAliases": ["default", "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan"],
+  "effortValues": ["low", "medium", "high", "xhigh"],
+  "expectedLimitations": {
+    "managedPolicy": "unobserved",
+    "sessionOverrides": "unobserved",
+    "interactiveShellPath": "unobserved"
+  },
+  "negativeManifest": "./negative-fixtures.json",
+  "contractCoverage": "./contract-coverage.json",
+  "provenance": {
+    "freezePacket": "docs/architecture/claude-code-setup-freeze.json",
+    "snapshotDate": "2026-08-28"
+  }
+}

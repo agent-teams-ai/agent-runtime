@@ -10,7 +10,7 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm lint && pnpm test",
+    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:ar2-contract && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm lint && pnpm test",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
     "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm lint",
     "docs:check": "agent-teams-docs check --consumer . --profile architecture/foundation/docs-protocol.yaml",
@@ -36,6 +36,8 @@
     "product:build": "pnpm --filter './packages/**' -r run build",
     "product:check": "pnpm --filter './packages/**' -r run clean && pnpm product:build && pnpm --filter './packages/**' -r run test",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
+    "architecture:ar2-contract": "node scripts/architecture/validate-ar2-contract-artifacts.mjs",
+    "test:ar2-contract": "node --test scripts/architecture/validate-ar2-contract-artifacts.test.mjs",
     "architecture:operation-oracle": "pnpm architecture:operation-oracle:type-generation && pnpm architecture:operation-oracle:property && pnpm architecture:operation-oracle:mutation && pnpm architecture:operation-oracle:model && node experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts",
     "architecture:operation-oracle:generate": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --write",
     "architecture:operation-oracle:generated": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --check",

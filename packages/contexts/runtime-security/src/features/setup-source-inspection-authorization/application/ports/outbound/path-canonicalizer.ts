@@ -7,15 +7,17 @@ export interface CanonicalPathObservation {
   readonly linkCount?: number;
 }
 
+export interface PathCanonicalizationOptions {
+  readonly custodyBoundary?: {
+    readonly absolutePath: string;
+    readonly canonicalPath: string;
+  };
+  readonly signal?: AbortSignal;
+}
+
 export interface PathCanonicalizer {
   canonicalize(
     absolutePath: string,
-    options?: {
-      readonly custodyBoundary?: {
-        readonly absolutePath: string;
-        readonly canonicalPath: string;
-      };
-      readonly signal?: AbortSignal;
-    },
+    options?: PathCanonicalizationOptions,
   ): Promise<CanonicalPathObservation>;
 }

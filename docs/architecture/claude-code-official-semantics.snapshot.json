@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 3,
+  "snapshotId": "claude-code-settings-semantics@2026-08-28.r3",
+  "retrieval": {
+    "date": "2026-08-28",
+    "method": "HTTPS GET with redirects followed; exact response bodies retained as deterministic gzip artifacts; compact UTF-8 evidence records deterministically derived offline",
+    "authority": "retained-exact-response-bytes",
+    "statement": "Revision 3 binds every normalized record to retained exact official response bytes. The fresh raw response SHA-256 is source authority. Provider and executable qualification remain open."
+  },
+  "historicalNonAuthority": {
+    "snapshotId": "claude-code-settings-semantics@2026-08-28",
+    "responseBodiesRetained": false,
+    "documentCount": 13,
+    "statement": "Revision 1 covered thirteen documents whose response bytes were not retained. Those old hashes are omitted and have no authority; only the five fresh retained response bodies in this snapshot are source evidence."
+  },
+  "documents": [
+    {
+      "id": "settings-scopes",
+      "requestUrl": "https://code.claude.com/docs/en/settings.md",
+      "finalUrl": "https://code.claude.com/docs/en/settings.md",
+      "retrievalDate": "2026-08-28",
+      "contentType": "text/markdown; charset=utf-8",
+      "rawResponseByteLength": 57166,
+      "rawResponseSha256": "a6f10afd9d41fffa2b14e1f113ef641ea6fbe9b319c114bb986efc3e186de009",
+      "gzipByteLength": 16087,
+      "gzipSha256": "79c7cf92310b9c56e06a2eae15c7bf5cd1192097cb59c80099da8fae61392471",
+      "artifactPath": "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/settings.md.gz",
+      "sourceCoordinates": ["Settings files and who they affect", "Settings precedence"],
+      "normalization": "Parse the bounded Markdown settings table and ordered portable-file precedence rows; emit scope/path records and canonical source-kind precedence with one ASCII space around | and LF terminators.",
+      "retainedBytesUtf8": "User | ~/.claude/settings.json\nShared project | .claude/settings.json\nProject local | .claude/settings.local.json\nPrecedence, highest to lowest | project-local, shared-project, user\n",
+      "retainedByteLength": 182,
+      "retainedSha256": "309e8dfafd5146af11274d9af8a31b63568d121a8bb52f74e5e3f605a3ee3bbf"
+    },
+    {
+      "id": "settings-keys-and-effort",
+      "requestUrl": "https://json.schemastore.org/claude-code-settings.json",
+      "finalUrl": "https://www.schemastore.org/claude-code-settings.json",
+      "retrievalDate": "2026-08-28",
+      "contentType": "application/json; charset=utf-8",
+      "rawResponseByteLength": 230217,
+      "rawResponseSha256": "6d4a6e3c7adedffce8079ccaef0a4bab5f5718b054421b4475c788a0ae4bedfe",
+      "gzipByteLength": 45175,
+      "gzipSha256": "34f588ae50f55640199c1c5592f3e695e507376f80ad0a21c13cd9e07e5790da",
+      "artifactPath": "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/settings-schema.json.gz",
+      "sourceCoordinates": ["/properties/model", "/properties/effortLevel/enum"],
+      "normalization": "RFC 6901 pointer/value records serialized as compact JSON with object members in pointer,value order and records terminated by LF.",
+      "retainedBytesUtf8": "{\"pointer\":\"/properties/model\",\"value\":{\"type\":\"string\",\"description\":\"Override the default model used by Claude Code. For finer control, use environment variables: ANTHROPIC_MODEL (runtime override), ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_HAIKU_MODEL (per-class pinning), CLAUDE_CODE_SUBAGENT_MODEL (subagent model). See https://code.claude.com/docs/en/model-config\"}}\n{\"pointer\":\"/properties/effortLevel/enum\",\"value\":[\"low\",\"medium\",\"high\",\"xhigh\"]}\n",
+      "retainedByteLength": 494,
+      "retainedSha256": "e3d89f1d298d9e5a19fb511b01e06c5a78fdfec507836013bfcb5a55487666a7"
+    },
+    {
+      "id": "model-aliases",
+      "requestUrl": "https://code.claude.com/docs/en/model-config.md",
+      "finalUrl": "https://code.claude.com/docs/en/model-config.md",
+      "retrievalDate": "2026-08-28",
+      "contentType": "text/markdown; charset=utf-8",
+      "rawResponseByteLength": 99776,
+      "rawResponseSha256": "a2a75c5004cf424cb50ef54a18204bc01260e36cb3f037234c67b5fec1b6a7f8",
+      "gzipByteLength": 26273,
+      "gzipSha256": "8f7aec9663dee447234959f3b3d25180764fa4e9382036c5014a3a9412aba010",
+      "artifactPath": "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/model-config.md.gz",
+      "sourceCoordinates": ["Model aliases"],
+      "normalization": "Alias tokens retained in documented order, joined by comma plus one ASCII space, and terminated by LF.",
+      "retainedBytesUtf8": "default, best, fable, sonnet, opus, haiku, sonnet[1m], opus[1m], opusplan\n",
+      "retainedByteLength": 74,
+      "retainedSha256": "57019025e893bc02234a702548909733fc5e6fa1ec727977d475e4d540a8b5fd"
+    },
+    {
+      "id": "managed-policy",
+      "requestUrl": "https://code.claude.com/docs/en/managed-settings.md",
+      "finalUrl": "https://code.claude.com/docs/en/managed-settings.md",
+      "retrievalDate": "2026-08-28",
+      "contentType": "text/markdown; charset=utf-8",
+      "rawResponseByteLength": 56117,
+      "rawResponseSha256": "a1307d6828e4e3d0a8c341a8f745fcfc40b3e0e5e8fbddc15942ff35572fbe65",
+      "gzipByteLength": 13153,
+      "gzipSha256": "a3c40ba4df9f99cd600b60c979abd432eb532d16aafa4b598cef6dd45405c9b3",
+      "artifactPath": "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/managed-settings.md.gz",
+      "sourceCoordinates": ["Introduction"],
+      "normalization": "Retain the single bounded introductory Markdown paragraph exactly and append one LF.",
+      "retainedBytesUtf8": "Managed settings are the settings your organization deploys to every developer's machine. Claude Code applies them above every other level, so no user, project, local, or `--settings` value overrides them, apart from a few [security-sensitive exceptions](/docs/en/settings#exceptions-to-managed-settings-precedence) where a stricter value from a lower level still counts.\n",
+      "retainedByteLength": 372,
+      "retainedSha256": "047a7c7f7505697960b661ed46028c4321bb36a2b81297a67e59c7c939ebc6c5"
+    },
+    {
+      "id": "provider-route",
+      "requestUrl": "https://code.claude.com/docs/en/amazon-bedrock.md",
+      "finalUrl": "https://code.claude.com/docs/en/amazon-bedrock.md",
+      "retrievalDate": "2026-08-28",
+      "contentType": "text/markdown; charset=utf-8",
+      "rawResponseByteLength": 40958,
+      "rawResponseSha256": "2143018a3a195c7a805b84383adb932ad838b013c9b710758fa34e25a481509c",
+      "gzipByteLength": 12899,
+      "gzipSha256": "417d982efa303a546f2c036d5c4436944aaa495c7d6736f34a46e84dd489ef9d",
+      "artifactPath": "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/amazon-bedrock.md.gz",
+      "sourceCoordinates": ["3. Configure Claude Code", "4. Pin model versions"],
+      "normalization": "Match the bounded configuration and model-pin Markdown sections for the closed provider-selection and model-routing identifier set; emit in declared order with LF terminators.",
+      "retainedBytesUtf8": "CLAUDE_CODE_USE_BEDROCK\nANTHROPIC_MODEL\nANTHROPIC_DEFAULT_HAIKU_MODEL\nANTHROPIC_DEFAULT_SONNET_MODEL\nANTHROPIC_DEFAULT_OPUS_MODEL\n",
+      "retainedByteLength": 130,
+      "retainedSha256": "f7a12e1f0cdf3dc68b0f7b34dd8666867c4c6ae82929725c05ec7a0535c717ef"
+    }
+  ],
+  "frozenFacts": {
+    "portableSourcesLowToHigh": {
+      "value": ["user", "shared-project", "project-local"],
+      "evidence": ["settings-scopes#Settings files and who they affect", "settings-scopes#Settings precedence"]
+    },
+    "portablePaths": {
+      "value": ["~/.claude/settings.json", "<workspace>/.claude/settings.json", "<workspace>/.claude/settings.local.json"],
+      "evidence": ["settings-scopes#Settings files and who they affect"]
+    },
+    "portableKeys": {
+      "value": ["model", "effortLevel"],
+      "evidence": ["settings-keys-and-effort#/properties/model", "settings-keys-and-effort#/properties/effortLevel/enum"]
+    },
+    "modelAliases": {
+      "value": ["default", "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan"],
+      "evidence": ["model-aliases#Model aliases"]
+    },
+    "effortValues": {
+      "value": ["low", "medium", "high", "xhigh"],
+      "evidence": ["settings-keys-and-effort#/properties/effortLevel/enum"]
+    },
+    "managedPolicySeparateFromPortableIntent": {
+      "value": true,
+      "evidence": ["managed-policy#Introduction"]
+    },
+    "providerRoutesSeparateFromPortableIntent": {
+      "value": true,
+      "evidence": ["provider-route#3. Configure Claude Code", "provider-route#4. Pin model versions", "settings-keys-and-effort#/properties/model"]
+    }
+  }
+}

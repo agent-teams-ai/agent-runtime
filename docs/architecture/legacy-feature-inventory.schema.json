@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-runtime://architecture/legacy-feature-inventory.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "implementationAuthority", "legacyCommit", "items"],
+  "properties": {
+    "$schema": { "const": "./legacy-feature-inventory.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "implementationAuthority": { "const": "current-repository-tree" },
+    "legacyCommit": { "const": "f6afac73cced62d943a0e891ad08d7b8f88f802f" },
+    "items": {
+      "type": "array",
+      "minItems": 56,
+      "maxItems": 56,
+      "items": { "$ref": "#/$defs/inventoryItem" }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "inventoryItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId", "provider", "userJob", "userValue", "legacyBehavior",
+        "exactLegacyEvidence", "failureAndEdgeCases", "reuseDecision", "newOwner",
+        "proposedDisposition", "authorityStatus", "acceptanceEvidence", "futureExtensionSeam"
+      ],
+      "properties": {
+        "capabilityId": { "type": "string", "pattern": "^(?:CODEX-[A-Z]+-[0-9]{2}|CLF-[0-9]{2}|OC-[0-9]{2})$" },
+        "provider": { "enum": ["codex", "claude-code", "opencode"] },
+        "userJob": { "$ref": "#/$defs/nonEmptyString" },
+        "userValue": { "$ref": "#/$defs/nonEmptyString" },
+        "legacyBehavior": { "$ref": "#/$defs/nonEmptyString" },
+        "exactLegacyEvidence": {
+          "type": "string",
+          "pattern": "^f6afac73cced62d943a0e891ad08d7b8f88f802f: .*(?:src|test)/"
+        },
+        "failureAndEdgeCases": { "$ref": "#/$defs/nonEmptyString" },
+        "reuseDecision": { "enum": ["reuse_fixture", "reuse_concept", "refactor_pattern", "keep_provider_specific", "reject_legacy_approach"] },
+        "newOwner": { "$ref": "#/$defs/nonEmptyString" },
+        "proposedDisposition": { "enum": ["approved_now", "recommended_next", "recommended_later", "rejected", "needs_owner"] },
+        "authorityStatus": { "$ref": "#/$defs/nonEmptyString" },
+        "acceptanceEvidence": { "$ref": "#/$defs/nonEmptyString" },
+        "futureExtensionSeam": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  }
+}

@@ -129,6 +129,9 @@ importers:
       '@agent-teams/filesystem-custody':
         specifier: workspace:*
         version: link:../../platform/filesystem-custody
+      jsonc-parser:
+        specifier: 'catalog:'
+        version: 3.3.1
       smol-toml:
         specifier: 'catalog:'
         version: 1.8.0

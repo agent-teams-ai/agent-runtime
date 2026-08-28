@@ -15,7 +15,6 @@ policies:
     - ajv
     - fast-check
     - json-schema-to-typescript
-    - jsonc-parser
     - oxlint
     - typescript
     - xstate

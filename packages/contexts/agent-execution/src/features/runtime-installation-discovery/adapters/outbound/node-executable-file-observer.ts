@@ -37,6 +37,11 @@ const authorizationFileIdentity = (stats: {
   readonly size: bigint;
 }): string => `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.size}`;
 
+export const isSupportedExecutableAliasKind = (stats: {
+  readonly isFile: () => boolean;
+  readonly isSymbolicLink: () => boolean;
+}): boolean => stats.isFile() || stats.isSymbolicLink();
+
 const observeAuthorizedExecutable = async (
   openedPath: OpenedStablePath,
   authorizedFileIdentity: string,
@@ -65,11 +70,14 @@ export const createNodeExecutableFileObserver = (): ExecutableFileObserver => ({
     options?.signal?.throwIfAborted();
     try {
       const alias = await lstat(absolutePath);
-      if (!alias.isFile() && !alias.isSymbolicLink()) {
+      if (!isSupportedExecutableAliasKind(alias)) {
         return { kind: "invalid" };
       }
       if ((await realpath(absolutePath)) !== expectedCanonicalPath) {
         return { kind: "unstable" };
+      }
+      if (!(await lstat(expectedCanonicalPath)).isFile()) {
+        return { kind: "invalid" };
       }
       if (authorizedFileIdentity === undefined) {
         return { kind: "unstable" };

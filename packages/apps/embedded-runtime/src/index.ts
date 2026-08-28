@@ -1,4 +1,12 @@
 export type {
+  ClaudeCodePortableIntentView,
+  ClaudeCodeRuntimeAccessHandle,
+  ClaudeCodeRuntimeSetupQueries,
+  ClaudeCodeSetupDiagnostic,
+  ClaudeCodeSetupDiagnosticCode,
+  ClaudeCodeSetupExpectedLimitations,
+  ClaudeCodeSetupInstallationView,
+  ClaudeCodeSetupSourceObservationView,
   CodexRuntimeSetupQueries,
   CodexSetupDiagnostic,
   CodexSetupDiagnosticCode,
@@ -7,5 +15,6 @@ export type {
   CodexSetupSourceView,
   InspectCodexRuntimeSetup,
   InspectCodexRuntimeSetupOutcome,
+  InspectClaudeCodeRuntimeSetupOutcome,
   RuntimeAccessHandle,
 } from "./contracts/runtime-access.js";

@@ -89,6 +89,91 @@ export interface CodexRuntimeSetupQueries {
   ): Promise<InspectCodexRuntimeSetupOutcome>;
 }
 
-export interface RuntimeAccessHandle {
+export type ClaudeCodeSetupDiagnosticCode =
+  | "candidate_denied"
+  | "candidate_invalid"
+  | "candidate_unreadable"
+  | "candidate_unstable"
+  | "configuration_dialect_unsupported"
+  | "config_duplicate_key"
+  | "config_invalid_utf8"
+  | "config_parse_failed"
+  | "config_too_large"
+  | "config_unreadable"
+  | "credential_material_rejected"
+  | "provider_route_deferred"
+  | "secret_setting_rejected"
+  | "setting_type_unsupported"
+  | "setting_value_unsupported"
+  | "source_untrusted"
+  | "source_epoch_stale"
+  | "unsupported_platform";
+
+export interface ClaudeCodeSetupDiagnostic {
+  readonly code: ClaudeCodeSetupDiagnosticCode;
+  readonly safeRef?: string;
+}
+
+export interface ClaudeCodeSetupInstallationView {
+  readonly aliases: readonly {
+    readonly displayPath: string;
+    readonly source: "explicit" | "known-location" | "path-entry";
+  }[];
+  readonly installationRef: string;
+  readonly status: "found_unverified";
+}
+
+export type ClaudeCodePortableIntentView =
+  | {
+      readonly key: "model";
+      readonly sourceRef: string;
+      readonly value: "default" | "best" | "fable" | "sonnet" | "opus" | "haiku" | "sonnet[1m]" | "opus[1m]" | "opusplan";
+    }
+  | {
+      readonly key: "effortLevel";
+      readonly sourceRef: string;
+      readonly value: "low" | "medium" | "high" | "xhigh";
+    };
+
+export interface ClaudeCodeSetupSourceObservationView {
+  readonly displayPath: string;
+  readonly kind: "user" | "shared-project" | "project-local";
+  readonly sourceRef: string;
+  readonly status: "applied" | "malformed" | "missing" | "rejected" | "stale" | "unreadable";
+}
+
+export interface ClaudeCodeSetupExpectedLimitations {
+  readonly interactiveShellPath: "unobserved";
+  readonly managedPolicy: "unobserved";
+  readonly sessionOverrides: "unobserved";
+}
+
+interface ClaudeCodeSetupOutcomeBase {
+  readonly diagnostics: readonly ClaudeCodeSetupDiagnostic[];
+  readonly expectedLimitations: ClaudeCodeSetupExpectedLimitations;
+}
+
+export type InspectClaudeCodeRuntimeSetupOutcome =
+  | (ClaudeCodeSetupOutcomeBase & { readonly status: "denied" | "unsupported" })
+  | (ClaudeCodeSetupOutcomeBase & {
+      readonly installations: readonly ClaudeCodeSetupInstallationView[];
+      readonly nextActions: readonly ("install_claude_code" | "review_configuration" | "trust_workspace")[];
+      readonly observationRef: string;
+      readonly portableIntent: readonly ClaudeCodePortableIntentView[];
+      readonly sourceObservations: readonly ClaudeCodeSetupSourceObservationView[];
+      readonly status: "observed" | "partial";
+    });
+
+export interface ClaudeCodeRuntimeSetupQueries {
+  inspect(
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<InspectClaudeCodeRuntimeSetupOutcome>;
+}
+
+export interface ClaudeCodeRuntimeAccessHandle {
+  readonly claudeCodeSetup: ClaudeCodeRuntimeSetupQueries;
+}
+
+export interface RuntimeAccessHandle extends ClaudeCodeRuntimeAccessHandle {
   readonly codexSetup: CodexRuntimeSetupQueries;
 }
