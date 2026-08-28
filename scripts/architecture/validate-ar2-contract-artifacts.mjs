@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import Ajv2020 from "ajv/dist/2020.js";
 
+export { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
+import { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
+
 const inventoryPath = new URL("../../docs/architecture/legacy-feature-inventory.json", import.meta.url);
 const inventorySchemaPath = new URL("../../docs/architecture/legacy-feature-inventory.schema.json", import.meta.url);
 const freezePath = new URL("../../docs/architecture/claude-code-setup-freeze.json", import.meta.url);
@@ -313,40 +316,22 @@ const validateFreeze = async freeze => {
     deepFrozen: true,
     deterministic: true,
   });
-  unique(freeze.snapshot.documents.map(document => document.url), "snapshot URLs");
+  unique(freeze.snapshot.documents.map(document => document.id), "snapshot document IDs");
   const semanticArtifactUrl = new URL(`../../${freeze.snapshot.semanticArtifact.path}`, import.meta.url);
   const semanticArtifactBytes = await readFile(semanticArtifactUrl);
   assert.equal(sha256(semanticArtifactBytes), freeze.snapshot.semanticArtifact.sha256, "official semantic artifact content hash");
   const semanticArtifact = JSON.parse(semanticArtifactBytes.toString("utf8"));
-  exactKeys(
-    semanticArtifact,
-    ["schemaVersion", "snapshotId", "retrieval", "documents", "frozenFacts"],
-    "official semantic artifact",
-  );
-  exactKeys(
-    semanticArtifact.retrieval,
-    ["method", "date", "exactPriorResponseBytesAvailable", "status", "statement"],
-    "official semantic artifact retrieval",
-  );
-  assert.equal(semanticArtifact.schemaVersion, 1);
-  assert.equal(semanticArtifact.snapshotId, "claude-code-settings-semantics@2026-08-28");
-  assert.equal(
-    semanticArtifact.retrieval.method,
-    "HTTPS GET with redirects followed; SHA-256 over response bytes",
-  );
-  assert.equal(semanticArtifact.retrieval.exactPriorResponseBytesAvailable, false);
-  assert.equal(semanticArtifact.retrieval.status, "historical-response-hashes-only");
-  assert.match(semanticArtifact.retrieval.statement, /not claimed to be reproducible/u);
+  const frozenFacts = validateOfficialSemantics(semanticArtifact);
   assert.deepEqual(
-    semanticArtifact.documents.map(({ url, responseSha256 }) => ({ sha256: responseSha256, url })),
+    semanticArtifact.documents.map(({ id, finalUrl: url, retainedSha256: sha256Value }) => ({
+      id,
+      sha256: sha256Value,
+      url,
+    })),
     freeze.snapshot.documents,
-    "freeze response hashes correspond exactly to the semantic artifact",
+    "freeze retained evidence hashes correspond exactly to the semantic artifact",
   );
-  for (const document of semanticArtifact.documents) {
-    exactKeys(document, ["url", "responseSha256", "immutableReference"], document.url);
-    assert.equal(document.immutableReference, null);
-  }
-  assert.deepEqual(semanticArtifact.frozenFacts, {
+  assert.deepEqual(Object.fromEntries(Object.entries(frozenFacts).map(([name, fact]) => [name, fact.value])), {
     portableSourcesLowToHigh: ["user", "shared-project", "project-local"],
     portablePaths: [
       "~/.claude/settings.json", "<workspace>/.claude/settings.json",

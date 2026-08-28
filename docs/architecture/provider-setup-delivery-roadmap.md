@@ -246,13 +246,16 @@ fixture rows to map to exactly one declared Node test selected by its owning
 package test script, and rejects fixture, title, file, or package-script drift.
 Its documented settings dialect does not qualify or establish compatibility of
 any executable.
-The linked content-addressed
-[`semantic artifact`](claude-code-official-semantics.snapshot.json) records all
-13 official source URLs and the minimal facts consumed by this freeze. Because
-the committed semantic artifact's own bytes are reproducibly verified against
-the SHA-256 recorded by the freeze packet. The first-capture response bytes
-were not retained, so its historical response hashes are recorded as
-non-reproducible rather than being presented as immutable source evidence.
+Revision 2 of the linked content-addressed
+[`semantic artifact`](claude-code-official-semantics.snapshot.json) retains five
+compact normalized evidence records from `code.claude.com` and
+`json.schemastore.org`. Every frozen fact cites retained section or JSON-pointer
+coordinates. The contract gate recomputes each record's byte length and
+SHA-256 and verifies the enclosing artifact digest recorded by the freeze
+packet. Revision 1's response hashes remain labeled historical non-authority
+and are not presented as recoverable source evidence. This is
+official-document evidence for the named dialect only; executable and provider
+qualification remain open.
 
 The private handle adds a sibling capability:
 
@@ -377,7 +380,8 @@ The contract-and-fixture handoff freezes:
 
 1. the exact Claude Code configuration dialect, explicitly separate from any
    executable version or compatibility claim;
-2. the exact source list and precedence verified from official behavior;
+2. the three portable source paths and their documented precedence as captured
+   at retained official-evidence coordinates;
 3. the closed portable setting allowlist;
 4. the route-owned and secret-shaped denylist plus stable deferred/rejected
    diagnostics;

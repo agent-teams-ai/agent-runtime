@@ -25,22 +25,14 @@
         },
         "documents": {
           "type": "array",
-          "minItems": 13,
-          "maxItems": 13,
+          "minItems": 5,
+          "maxItems": 5,
           "prefixItems": [
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/settings.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/settings-reference.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/model-config.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/setup.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/managed-settings.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/authentication.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/env-vars.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/claude-directory.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/amazon-bedrock.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/google-vertex-ai.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/microsoft-foundry.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://code.claude.com/docs/en/llm-gateway-connect.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "url": { "const": "https://json.schemastore.org/claude-code-settings.json" } } }
+            { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "settings-scopes" }, "url": { "const": "https://code.claude.com/docs/en/settings.md" } } },
+            { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "settings-keys-and-effort" }, "url": { "const": "https://json.schemastore.org/claude-code-settings.json" } } },
+            { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "model-aliases" }, "url": { "const": "https://code.claude.com/docs/en/model-config.md" } } },
+            { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "managed-policy" }, "url": { "const": "https://code.claude.com/docs/en/managed-settings.md" } } },
+            { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "provider-route" }, "url": { "const": "https://code.claude.com/docs/en/amazon-bedrock.md" } } }
           ],
           "items": false
         }
@@ -68,8 +60,8 @@
     "snapshotDocument": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url", "sha256"],
-      "properties": { "url": { "type": "string", "pattern": "^https://" }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+      "required": ["id", "url", "sha256"],
+      "properties": { "id": { "type": "string", "pattern": "^[a-z0-9-]+$" }, "url": { "type": "string", "pattern": "^https://" }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
     },
     "fixtureCase": {
       "oneOf": [

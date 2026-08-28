@@ -6,22 +6,14 @@
     "date": "2026-08-28",
     "semanticArtifact": {
       "path": "docs/architecture/claude-code-official-semantics.snapshot.json",
-      "sha256": "448fe097c1bc546ba02c2930316a9bb200431bc6aaf15dc35907f5e88bb3e14f"
+      "sha256": "e297f4b534f87255dc4230630a8056b2e4ff9c7ad3906c174b71b871b0d972d3"
     },
     "documents": [
-      { "url": "https://code.claude.com/docs/en/settings.md", "sha256": "bbc2a21f5e1b7b2f3871f221a42eada00ff042a1e9f455b179965a8ff53bf69b" },
-      { "url": "https://code.claude.com/docs/en/settings-reference.md", "sha256": "635576acdb3ce7b9313eb7a3261c9a031fee9bd29cdaf771e9a90beb0993d8bd" },
-      { "url": "https://code.claude.com/docs/en/model-config.md", "sha256": "153c914ab71eab7bebb084f8e4ac1dd4c808f0e5f799f2c7acbfd9e1e1305cdb" },
-      { "url": "https://code.claude.com/docs/en/setup.md", "sha256": "519f37d769814f3bb872b982a7718d2d9fc47eea934be4aa8b384c31cfb38083" },
-      { "url": "https://code.claude.com/docs/en/managed-settings.md", "sha256": "93a2d2c24a1d05a10417ff601d4bade91dbf9d48dec16a784154e24b1756dddb" },
-      { "url": "https://code.claude.com/docs/en/authentication.md", "sha256": "9bebf8122c2084254be0b88bbd0d19d13964f17f43685e5a006a7c67730de24f" },
-      { "url": "https://code.claude.com/docs/en/env-vars.md", "sha256": "4c58d7fd43621a92e74826d542faa603b3d8f83fdbbe4bef5f336a6554d8f177" },
-      { "url": "https://code.claude.com/docs/en/claude-directory.md", "sha256": "e430a95a7b98260d47af6a3d07c35e3ebedfa65db745e07ecfa0152baf0384f8" },
-      { "url": "https://code.claude.com/docs/en/amazon-bedrock.md", "sha256": "2143018a3a195c7a805b84383adb932ad838b013c9b710758fa34e25a481509c" },
-      { "url": "https://code.claude.com/docs/en/google-vertex-ai.md", "sha256": "d8a8c30e6919d6159446387f6f0512eb035c8f59fa0d299daec56fdaa37657ed" },
-      { "url": "https://code.claude.com/docs/en/microsoft-foundry.md", "sha256": "2b5f9e4235f1dda584b53ee1d2d96bef8b4ca13dde339afb3572d9194cfdc7f7" },
-      { "url": "https://code.claude.com/docs/en/llm-gateway-connect.md", "sha256": "dcc1d6f06862d12807e8aafad3d9e5203472613ed4ddeae22658d45c24ffa4f4" },
-      { "url": "https://json.schemastore.org/claude-code-settings.json", "sha256": "6d4a6e3c7adedffce8079ccaef0a4bab5f5718b054421b4475c788a0ae4bedfe" }
+      { "id": "settings-scopes", "url": "https://code.claude.com/docs/en/settings.md", "sha256": "acfdd0798bf6ed486295e02d1721e51ddf0db13dec96bee8ed046d985be0e3ab" },
+      { "id": "settings-keys-and-effort", "url": "https://json.schemastore.org/claude-code-settings.json", "sha256": "23cf54189e65be1eb30e3842d9bae451f5a7e5228f8946d64487bd12ed1dcbc0" },
+      { "id": "model-aliases", "url": "https://code.claude.com/docs/en/model-config.md", "sha256": "57019025e893bc02234a702548909733fc5e6fa1ec727977d475e4d540a8b5fd" },
+      { "id": "managed-policy", "url": "https://code.claude.com/docs/en/managed-settings.md", "sha256": "e500e63f924b75dd530f33c9e2a4ea52d294219a3fb3c4965af68a9dacd8eb2f" },
+      { "id": "provider-route", "url": "https://code.claude.com/docs/en/amazon-bedrock.md", "sha256": "f7a12e1f0cdf3dc68b0f7b34dd8666867c4c6ae82929725c05ec7a0535c717ef" }
     ]
   },
   "dialect": {
