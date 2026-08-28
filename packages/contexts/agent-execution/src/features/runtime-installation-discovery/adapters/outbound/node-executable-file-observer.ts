@@ -45,6 +45,7 @@ export interface EffectiveIdentity {
 
 export interface NodeExecutableFileObserverDependencies {
   readonly effectiveIdentity?: EffectiveIdentity;
+  readonly effectiveIdentitySupplier?: () => EffectiveIdentity | undefined;
 }
 
 const currentEffectiveIdentity = (): EffectiveIdentity | undefined => {
@@ -108,8 +109,11 @@ const observeAuthorizedExecutable = async (
 export const createNodeExecutableFileObserver = (
   dependencies: NodeExecutableFileObserverDependencies = {},
 ): ExecutableFileObserver => {
-  const effectiveIdentity =
-    dependencies.effectiveIdentity ?? currentEffectiveIdentity();
+  const effectiveIdentitySupplier =
+    dependencies.effectiveIdentitySupplier ??
+    (dependencies.effectiveIdentity === undefined
+      ? currentEffectiveIdentity
+      : () => dependencies.effectiveIdentity);
   return {
     async observe(request) {
       request.signal?.throwIfAborted();
@@ -138,7 +142,7 @@ export const createNodeExecutableFileObserver = (
             observeAuthorizedExecutable(
               opened,
               authorizedFileIdentity,
-              effectiveIdentity,
+              effectiveIdentitySupplier(),
             ),
           {
             custodyBoundary: request.custodyBoundary,

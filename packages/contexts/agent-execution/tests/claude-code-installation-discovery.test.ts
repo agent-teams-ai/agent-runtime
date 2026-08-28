@@ -497,6 +497,68 @@ test("checks owner, group, and other execute permission for the effective identi
   );
 });
 
+test("resolves the effective identity again for each executable observation", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-claude-effective-identity-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const executable = join(root, "claude");
+  await writeFile(executable, "synthetic");
+  await chmod(executable, 0o100);
+  const stats = await stat(executable, { bigint: true });
+  const unrelatedUid = Number(stats.uid) === 1 ? 2 : 1;
+  const unrelatedGid = Number(stats.gid) === 1 ? 2 : 1;
+  const identities = [
+    { gid: unrelatedGid, groups: [], uid: unrelatedUid },
+    { gid: Number(stats.gid), groups: [], uid: Number(stats.uid) },
+  ];
+  let observation = 0;
+  const observer = createNodeExecutableFileObserver({
+    effectiveIdentitySupplier: () => identities[observation++],
+  });
+  const request = {
+    absolutePath: executable,
+    authorizedFileIdentity: await fileIdentity(executable),
+    custodyBoundary: {
+      absolutePath: executable,
+      canonicalPath: await realpath(executable),
+    },
+    expectedCanonicalPath: await realpath(executable),
+  };
+
+  assert.deepEqual(await observer.observe(request), { kind: "invalid" });
+  assert.equal((await observer.observe(request)).kind, "found");
+  assert.equal(observation, 2);
+});
+
+test("reclassifies an executable after a supplied root privilege drop", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-claude-privilege-drop-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const executable = join(root, "claude");
+  await writeFile(executable, "synthetic");
+  await chmod(executable, 0o100);
+  const stats = await stat(executable, { bigint: true });
+  const droppedUid = Number(stats.uid) === 1 ? 2 : 1;
+  const droppedGid = Number(stats.gid) === 1 ? 2 : 1;
+  const identities = [
+    { gid: 0, groups: [], uid: 0 },
+    { gid: droppedGid, groups: [], uid: droppedUid },
+  ];
+  let observation = 0;
+  const observer = createNodeExecutableFileObserver({
+    effectiveIdentitySupplier: () => identities[observation++],
+  });
+  const canonicalPath = await realpath(executable);
+  const request = {
+    absolutePath: executable,
+    authorizedFileIdentity: await fileIdentity(executable),
+    custodyBoundary: { absolutePath: executable, canonicalPath },
+    expectedCanonicalPath: canonicalPath,
+  };
+
+  assert.equal((await observer.observe(request)).kind, "found");
+  assert.deepEqual(await observer.observe(request), { kind: "invalid" });
+  assert.equal(observation, 2);
+});
+
 test("never executes an executable candidate", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-passive-"));
   t.after(() => rm(root, { force: true, recursive: true }));
