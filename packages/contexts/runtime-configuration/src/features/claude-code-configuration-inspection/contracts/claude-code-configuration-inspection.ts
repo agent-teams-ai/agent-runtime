@@ -104,19 +104,3 @@ export interface InspectClaudeCodeConfiguration {
     options?: { readonly signal?: AbortSignal },
   ): Promise<InspectClaudeCodeConfigurationResult>;
 }
-
-export const CLAUDE_CODE_PORTABLE_INTENT_EXAMPLE = Object.freeze({
-  diagnostics: Object.freeze([]),
-  portableIntent: Object.freeze([
-    Object.freeze({ key: "model" as const, sourceRef: "claude-source:example", value: "sonnet" as const }),
-    Object.freeze({ key: "effortLevel" as const, sourceRef: "claude-source:example", value: "high" as const }),
-  ]),
-  sources: Object.freeze([
-    Object.freeze({
-      displayPath: "$WORKSPACE/.claude/settings.local.json",
-      kind: "project-local" as const,
-      sourceRef: "claude-source:example",
-      status: "applied" as const,
-    }),
-  ]),
-}) satisfies InspectClaudeCodeConfigurationResult;

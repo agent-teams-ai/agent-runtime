@@ -19,7 +19,3 @@ export type {
   ClaudeCodeSetupInspectionPlan,
   ClaudeCodeSetupInspectionPlanner,
 } from "./application/ports/outbound/claude-code-setup-inspection-planner.js";
-export {
-  assertClaudeCodeContractSpine,
-  type ClaudeCodeContractSpineDependencies,
-} from "./composition/claude-code-contract-spine.js";

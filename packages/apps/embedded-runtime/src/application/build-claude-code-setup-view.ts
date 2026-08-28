@@ -4,9 +4,10 @@ import type {
   ClaudeCodeInstallationCandidate,
   DiscoverClaudeCodeInstallations,
 } from "@agent-teams/agent-execution";
-import type {
-  ClaudeCodeConfigurationSource,
-  InspectClaudeCodeConfiguration,
+import {
+  CLAUDE_CODE_CONFIGURATION_BUDGETS,
+  type ClaudeCodeConfigurationSource,
+  type InspectClaudeCodeConfiguration,
 } from "@agent-teams/runtime-configuration";
 import type {
   AuthorizeClaudeCodeSetupInspection,
@@ -100,10 +101,23 @@ const mapSource = (
 
 const mapAuthorizationDiagnostic = (
   diagnostic: ClaudeCodeSetupAuthorizationDiagnostic,
+  publicSourceReference?: ReadonlyMap<string, string>,
 ): ClaudeCodeSetupDiagnostic => ({
   code: diagnostic.code,
-  ...(diagnostic.safeRef === undefined ? {} : { safeRef: diagnostic.safeRef }),
+  ...(diagnostic.safeRef === undefined
+    ? {}
+    : { safeRef: publicSourceReference?.get(diagnostic.safeRef) ?? diagnostic.safeRef }),
 });
+
+const normalizeDiagnostics = (
+  candidates: readonly ClaudeCodeSetupDiagnostic[],
+): readonly ClaudeCodeSetupDiagnostic[] => [...new Map(candidates.map(diagnostic => [
+  `${diagnostic.code}:${diagnostic.safeRef ?? ""}`,
+  diagnostic,
+])).values()].toSorted((left, right) => compareText(
+  `${left.code}:${left.safeRef ?? ""}`,
+  `${right.code}:${right.safeRef ?? ""}`,
+)).slice(0, CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics);
 
 export const createBuildClaudeCodeSetupView = (
   dependencies: BuildClaudeCodeSetupViewDependencies,
@@ -143,7 +157,8 @@ export const createBuildClaudeCodeSetupView = (
     options?.signal?.throwIfAborted();
     if (authorization.status === "denied") {
       return deepFreeze({
-        diagnostics: authorization.diagnostics.map(mapAuthorizationDiagnostic),
+        diagnostics: authorization.diagnostics.map(diagnostic =>
+          mapAuthorizationDiagnostic(diagnostic)),
         expectedLimitations,
         status: "denied",
       });
@@ -181,8 +196,13 @@ export const createBuildClaudeCodeSetupView = (
         ? undefined
         : sourceReferences.get(safeRef) ??
           hmacRef(referenceKey, "claude-code-setup-source", scope, safeRef);
-    const diagnostics: ClaudeCodeSetupDiagnostic[] = [
-      ...authorization.diagnostics.map(mapAuthorizationDiagnostic),
+    const publicSourceReference = new Map(configuration.sources.map(source => [
+      source.kind,
+      mapSafeRef(source.sourceRef)!,
+    ]));
+    const diagnosticCandidates: ClaudeCodeSetupDiagnostic[] = [
+      ...authorization.diagnostics.map(diagnostic =>
+        mapAuthorizationDiagnostic(diagnostic, publicSourceReference)),
       ...installations.diagnostics.map(diagnostic => ({
         code: diagnostic.code,
         ...(diagnostic.candidateRef === undefined
@@ -203,10 +223,8 @@ export const createBuildClaudeCodeSetupView = (
           ...(safeRef === undefined ? {} : { safeRef }),
         };
       }),
-    ].toSorted((left, right) => compareText(
-      `${left.code}:${left.safeRef ?? ""}`,
-      `${right.code}:${right.safeRef ?? ""}`,
-    ));
+    ];
+    const diagnostics = normalizeDiagnostics(diagnosticCandidates);
 
     const nextActions = new Set<
       "install_claude_code" | "review_configuration" | "trust_workspace"

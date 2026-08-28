@@ -14,7 +14,6 @@ export {
   CLAUDE_CODE_CONFIGURATION_BUDGETS,
   CLAUDE_CODE_EFFORT_VALUES,
   CLAUDE_CODE_MODEL_ALIASES,
-  CLAUDE_CODE_PORTABLE_INTENT_EXAMPLE,
   CLAUDE_CODE_SETTINGS_DIALECT,
 } from "./features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.js";
 export type {
