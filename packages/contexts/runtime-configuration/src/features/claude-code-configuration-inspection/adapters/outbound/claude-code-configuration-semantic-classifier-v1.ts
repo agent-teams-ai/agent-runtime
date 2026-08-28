@@ -1,4 +1,5 @@
 import {
+  CLAUDE_CODE_CONFIGURATION_BUDGETS,
   CLAUDE_CODE_EFFORT_VALUES,
   CLAUDE_CODE_MODEL_ALIASES,
   CLAUDE_CODE_SETTINGS_DIALECT,
@@ -75,7 +76,7 @@ const scanNonportableValue = (
 ): void => {
   signal?.throwIfAborted();
   if (typeof value === "string") {
-    if (value.length > 256) {
+    if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength) {
       diagnostics.add("setting_value_unsupported");
       return;
     }
@@ -92,7 +93,11 @@ const scanNonportableValue = (
     signal?.throwIfAborted();
     const nested = (value as Readonly<Record<string, unknown>>)[key];
     diagnostics.add(classifyName(key));
-    scanNonportableValue(nested, diagnostics, signal);
+    // Values identified by a sensitive name remain opaque so rotations cannot
+    // alter diagnostics or any other output at this boundary.
+    if (!credentialName.test(key) && !secretName.test(key) && !routeKeys.has(key)) {
+      scanNonportableValue(nested, diagnostics, signal);
+    }
   }
 };
 
@@ -108,14 +113,14 @@ const classifyPortable = (
     tainted.add(key);
     return;
   }
-  if (value.length > 256) {
-    diagnostics.add("setting_value_unsupported");
-    tainted.add(key);
-    return;
-  }
   const unsafe = classifyString(value);
   if (unsafe !== undefined) {
     diagnostics.add(unsafe);
+    tainted.add(key);
+    return;
+  }
+  if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength) {
+    diagnostics.add("setting_value_unsupported");
     tainted.add(key);
     return;
   }
@@ -155,8 +160,14 @@ export const createClaudeCodeConfigurationSemanticClassifierV1 =
           classifyPortable(portableKey, value, definitions, diagnostics, tainted);
           continue;
         }
-        if (!transparentContainers.has(key)) diagnostics.add(classifyName(key));
-        scanNonportableValue(value, diagnostics, options?.signal);
+        if (transparentContainers.has(key)) {
+          scanNonportableValue(value, diagnostics, options?.signal);
+          continue;
+        }
+        diagnostics.add(classifyName(key));
+        if (!credentialName.test(key) && !secretName.test(key) && !routeKeys.has(key)) {
+          scanNonportableValue(value, diagnostics, options?.signal);
+        }
       }
       options?.signal?.throwIfAborted();
       return {

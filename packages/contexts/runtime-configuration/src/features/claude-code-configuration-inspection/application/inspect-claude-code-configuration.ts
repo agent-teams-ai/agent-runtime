@@ -48,6 +48,12 @@ const sourceRanks: Readonly<Record<ClaudeCodeConfigurationSourceKind, number>> =
   user: 1, "shared-project": 2, "project-local": 3,
 };
 
+const safeDisplayPaths: Readonly<Record<ClaudeCodeConfigurationSourceKind, string>> = Object.freeze({
+  user: "$HOME/.claude/settings.json",
+  "shared-project": "$WORKSPACE/.claude/settings.json",
+  "project-local": "$WORKSPACE/.claude/settings.local.json",
+});
+
 const compareText = (left: string, right: string): number => left === right ? 0 : left < right ? -1 : 1;
 
 const sourceRef = (
@@ -60,7 +66,7 @@ const sourceRef = (
 
 const validSource = (source: ClaudeCodeConfigurationSource): boolean =>
   source.absolutePath.length > 0 && source.canonicalPath.length > 0 &&
-  source.displayPath.length > 0 && source.custodyRoot.absolutePath.length > 0 &&
+  source.custodyRoot.absolutePath.length > 0 &&
   source.custodyRoot.canonicalPath.length > 0;
 
 const bindSources = (
@@ -68,7 +74,10 @@ const bindSources = (
   identityKey: Uint8Array,
 ): { readonly diagnostics: readonly ClaudeCodeConfigurationDiagnostic[]; readonly sources: readonly BoundSource[] } => {
   const allSources = input.sources.map(source => ({
-    ...source, rejected: false, sourceRef: sourceRef(identityKey, input.identityScope, source),
+    ...source,
+    displayPath: safeDisplayPaths[source.kind],
+    rejected: false,
+    sourceRef: sourceRef(identityKey, input.identityScope, source),
   })).toSorted((left, right) =>
     sourceRanks[left.kind] - sourceRanks[right.kind] ||
     compareText(left.sourceRef, right.sourceRef) || compareText(left.displayPath, right.displayPath));
@@ -125,6 +134,26 @@ const readFailureDiagnostic = (
   status === "stale" ? "source_epoch_stale" :
     status === "too-large" ? "config_too_large" : "config_unreadable";
 
+const normalizeReadResult = (value: unknown):
+  | { readonly bytes: Uint8Array; readonly status: "read" }
+  | { readonly status: "missing" | "stale" | "too-large" | "unreadable" }
+  | undefined => {
+  if (typeof value !== "object" || value === null || Array.isArray(value) ||
+      Object.getOwnPropertySymbols(value).length > 0) return undefined;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (!Object.values(descriptors).every(descriptor =>
+    descriptor.enumerable === true && "value" in descriptor &&
+    descriptor.get === undefined && descriptor.set === undefined)) return undefined;
+  const status = descriptors["status"]?.value;
+  if (status === "read" && Object.keys(descriptors).length === 2 &&
+      descriptors["bytes"]?.value instanceof Uint8Array) {
+    return { bytes: Uint8Array.from(descriptors["bytes"].value), status };
+  }
+  if ((status === "missing" || status === "stale" || status === "too-large" || status === "unreadable") &&
+      Object.keys(descriptors).length === 1) return { status };
+  return undefined;
+};
+
 const evaluateSources = async (
   dependencies: Dependencies,
   input: InspectClaudeCodeConfigurationInput,
@@ -151,12 +180,31 @@ const evaluateSources = async (
       evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
       continue;
     }
-    const read = await dependencies.sourceReader.read(
-      source,
-      CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource,
-      signal === undefined ? undefined : { signal },
-    );
+    let read;
+    try {
+      read = normalizeReadResult(await dependencies.sourceReader.read(
+        source,
+        CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource,
+        signal === undefined ? undefined : { signal },
+      ));
+    } catch {
+      signal?.throwIfAborted();
+      diagnostics.push({ code: "config_unreadable", safeRef: source.sourceRef });
+      observations.push(Object.freeze({
+        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "unreadable",
+      }));
+      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
+      continue;
+    }
     signal?.throwIfAborted();
+    if (read === undefined) {
+      diagnostics.push({ code: "config_unreadable", safeRef: source.sourceRef });
+      observations.push(Object.freeze({
+        displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "unreadable",
+      }));
+      evaluated.push({ definitions: new Map(), grossTaint: true, source, taintedKeys: new Set() });
+      continue;
+    }
     if (read.status !== "read") {
       if (read.status !== "missing") diagnostics.push({ code: readFailureDiagnostic(read.status), safeRef: source.sourceRef });
       observations.push(Object.freeze({
@@ -168,7 +216,10 @@ const evaluateSources = async (
     }
     let parsed;
     try {
-      parsed = validateClaudeCodeJsonParseResult(dependencies.parser.parse(read.bytes)) ??
+      parsed = validateClaudeCodeJsonParseResult(dependencies.parser.parse(
+        read.bytes,
+        signal === undefined ? undefined : { signal },
+      )) ??
         { diagnostic: "config_parse_failed" as const, status: "rejected" as const };
     } catch {
       parsed = { diagnostic: "config_parse_failed" as const, status: "rejected" as const };

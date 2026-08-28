@@ -23,7 +23,13 @@ const rejected = (
 
 const objectChildren = (node: Node): readonly Node[] => node.children ?? [];
 
-const materialize = (node: Node, depth: number, state: ParseBudgetState): unknown => {
+const materialize = (
+  node: Node,
+  depth: number,
+  state: ParseBudgetState,
+  signal?: AbortSignal,
+): unknown => {
+  signal?.throwIfAborted();
   state.nodes += 1;
   if (depth > CLAUDE_CODE_CONFIGURATION_BUDGETS.depth ||
       state.nodes > CLAUDE_CODE_CONFIGURATION_BUDGETS.nodes) {
@@ -54,7 +60,7 @@ const materialize = (node: Node, depth: number, state: ParseBudgetState): unknow
     if (state.arrayItems > CLAUDE_CODE_CONFIGURATION_BUDGETS.arrayItems) {
       throw new RangeError("json array budget exceeded");
     }
-    return Object.freeze(children.map(child => materialize(child, depth + 1, state)));
+    return Object.freeze(children.map(child => materialize(child, depth + 1, state, signal)));
   }
   if (node.type !== "object") {
     throw new TypeError("invalid json tree");
@@ -67,20 +73,21 @@ const materialize = (node: Node, depth: number, state: ParseBudgetState): unknow
   const seen = new Set<string>();
   const output: Record<string, unknown> = Object.create(null);
   for (const property of properties) {
+    signal?.throwIfAborted();
     const [keyNode, valueNode] = property.children ?? [];
     if (property.type !== "property" || keyNode?.type !== "string" ||
         typeof keyNode.value !== "string" || valueNode === undefined) {
       throw new TypeError("invalid json property");
     }
     const key = keyNode.value;
-    if (key.length === 0 || key.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.keyLength) {
+    if (key.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.keyLength) {
       throw new RangeError("json key budget exceeded");
     }
     if (seen.has(key)) {
       throw new DuplicateKeyError("duplicate json key");
     }
     seen.add(key);
-    output[key] = materialize(valueNode, depth + 1, state);
+    output[key] = materialize(valueNode, depth + 1, state, signal);
   }
   return Object.freeze(output);
 };
@@ -89,7 +96,8 @@ const hasUtf8Bom = (bytes: Uint8Array): boolean =>
   bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
 
 export const createStrictClaudeCodeJsonParser = (): ClaudeCodeJsonParser => ({
-  parse(bytes) {
+  parse(bytes, options) {
+    options?.signal?.throwIfAborted();
     if (bytes.byteLength > CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource) {
       return rejected("config_too_large");
     }
@@ -102,6 +110,7 @@ export const createStrictClaudeCodeJsonParser = (): ClaudeCodeJsonParser => ({
     } catch {
       return rejected("config_invalid_utf8");
     }
+    options?.signal?.throwIfAborted();
     const errors: ParseError[] = [];
     const tree = parseTree(text, errors, {
       allowEmptyContent: false,
@@ -111,12 +120,19 @@ export const createStrictClaudeCodeJsonParser = (): ClaudeCodeJsonParser => ({
     if (tree === undefined || errors.length > 0 || tree.type !== "object") {
       return rejected("config_parse_failed");
     }
+    options?.signal?.throwIfAborted();
     try {
-      const data = materialize(tree, 0, { arrayItems: 0, nodes: 0, objectKeys: 0 });
+      const data = materialize(
+        tree,
+        0,
+        { arrayItems: 0, nodes: 0, objectKeys: 0 },
+        options?.signal,
+      );
       return data !== null && typeof data === "object" && !Array.isArray(data)
         ? { data: data as Readonly<Record<string, unknown>>, status: "parsed" }
         : rejected("config_parse_failed");
     } catch (error) {
+      options?.signal?.throwIfAborted();
       return rejected(
         error instanceof DuplicateKeyError
           ? "config_duplicate_key"

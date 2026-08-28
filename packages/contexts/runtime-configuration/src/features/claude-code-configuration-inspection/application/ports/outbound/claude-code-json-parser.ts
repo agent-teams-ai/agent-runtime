@@ -5,5 +5,8 @@ export type ParseClaudeCodeJsonResult =
   | { readonly diagnostic: ClaudeCodeConfigurationDiagnosticCode; readonly status: "rejected" };
 
 export interface ClaudeCodeJsonParser {
-  parse(bytes: Uint8Array): ParseClaudeCodeJsonResult;
+  parse(
+    bytes: Uint8Array,
+    options?: { readonly signal?: AbortSignal },
+  ): ParseClaudeCodeJsonResult;
 }

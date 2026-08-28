@@ -187,6 +187,33 @@ test("defers full IDs and routes and rejects secrets without affecting safe sibl
   }
 });
 
+test("makes secret and route value bytes non-interfering across every exported field", async () => {
+  const inspectSecretVariant = async (secret: string, route: string) => inspector(readerFor({
+    user: JSON.stringify({
+      ANTHROPIC_API_KEY: secret,
+      env: {
+        ANTHROPIC_BASE_URL: route,
+        nestedPassword: secret,
+      },
+      effortLevel: "high",
+      model: "sonnet",
+    }),
+  })).execute(input([source("user")]));
+
+  const first = await inspectSecretVariant(
+    "AR2_SECRET_VALUE_MUST_NEVER_APPEAR_A",
+    "https://AR2_ROUTE_ID_MUST_NEVER_APPEAR_A.invalid",
+  );
+  const second = await inspectSecretVariant(
+    "a-completely-different-secret-with-a-different-length-000000000000000000000000000000000000",
+    "arn:aws:bedrock:region:account:route-b",
+  );
+  assert.equal(JSON.stringify(first), JSON.stringify(second));
+  assert.deepEqual(first.diagnostics.map(item => item.code), [
+    "credential_material_rejected", "provider_route_deferred",
+  ]);
+});
+
 test("semantic digest covers only the sorted safe projection and classifier authority", async () => {
   const first = await inspector(readerFor({ user: '{"model":"sonnet","unknownA":1}' })).execute(input([source("user")]));
   const second = await inspector(readerFor({ user: '{"unknownB":2,"model":"sonnet"}' })).execute(input([source("user")]));
@@ -281,11 +308,43 @@ test("returns detached deeply frozen deterministic results", async () => {
   assert.equal(Object.isFrozen(first), true);
   assert.equal(Object.isFrozen(first.sources), true);
   assert.equal(Object.isFrozen(first.sources[0]), true);
+  assert.equal(Object.isFrozen(first.diagnostics), true);
   assert.equal(Object.isFrozen(first.portableIntent[0]), true);
   assert.notEqual(first, second);
 });
 
-test("honors cancellation before reads, during reads, and during classification", async () => {
+test("replaces caller paths with frozen symbolic paths and contains reader errors", async () => {
+  const rawPath = "/Users/private/AR2_RAW_PATH_MUST_NEVER_APPEAR/settings.json";
+  const selected = { ...source("user"), displayPath: rawPath };
+  const observed = await inspector(readerFor({ user: "{}" })).execute(input([selected]));
+  assert.equal(observed.sources[0]?.displayPath, "$HOME/.claude/settings.json");
+  assert.doesNotMatch(JSON.stringify(observed), /AR2_RAW_PATH_MUST_NEVER_APPEAR/u);
+
+  const failed = await inspector({
+    async read() { throw new Error(`${rawPath}: AR2_SECRET_VALUE_MUST_NEVER_APPEAR`); },
+  }).execute(input([selected]));
+  assert.deepEqual(failed.diagnostics.map(item => item.code), ["config_unreadable"]);
+  assert.equal(failed.sources[0]?.status, "unreadable");
+  assert.doesNotMatch(JSON.stringify(failed), /AR2_(?:RAW_PATH|SECRET_VALUE)_MUST_NEVER_APPEAR/u);
+});
+
+test("contains malformed reader envelopes without observing accessors", async () => {
+  let invoked = false;
+  const result = await inspector({
+    async read() {
+      const hostile = Object.create(null) as Record<string, unknown>;
+      Object.defineProperty(hostile, "status", {
+        enumerable: true,
+        get() { invoked = true; throw new Error("raw-reader-secret"); },
+      });
+      return hostile as never;
+    },
+  }).execute(input([source("user")]));
+  assert.equal(invoked, false);
+  assert.deepEqual(result.diagnostics.map(item => item.code), ["config_unreadable"]);
+});
+
+test("honors cancellation before and during reads, parsing, and classification", async () => {
   const before = new AbortController();
   before.abort(new Error("before"));
   await assert.rejects(inspector(readerFor({})).execute(input([source("user")]), { signal: before.signal }));
@@ -298,6 +357,19 @@ test("honors cancellation before reads, during reads, and during classification"
     },
   }).execute(input([source("user")]), { signal: duringRead.signal }));
 
+  const duringParsing = new AbortController();
+  let parserReceivedSignal = false;
+  await assert.rejects(inspector(readerFor({ user: "{}" }), {
+    parser: {
+      parse(_bytes: Uint8Array, options?: { readonly signal?: AbortSignal }) {
+        parserReceivedSignal = options?.signal === duringParsing.signal;
+        duringParsing.abort(new Error("parsing"));
+        return { data: {}, status: "parsed" as const };
+      },
+    },
+  }).execute(input([source("user")]), { signal: duringParsing.signal }));
+  assert.equal(parserReceivedSignal, true);
+
   const duringClassification = new AbortController();
   const baseClassifier = createClaudeCodeConfigurationSemanticClassifierV1();
   await assert.rejects(inspector(readerFor({ user: "{}" }), {
@@ -309,4 +381,10 @@ test("honors cancellation before reads, during reads, and during classification"
       },
     },
   }).execute(input([source("user")]), { signal: duringClassification.signal }));
+
+  const direct = new AbortController();
+  direct.abort(new Error("direct parser cancellation"));
+  assert.throws(() => createStrictClaudeCodeJsonParser().parse(
+    encoder.encode("{}"), { signal: direct.signal },
+  ));
 });
