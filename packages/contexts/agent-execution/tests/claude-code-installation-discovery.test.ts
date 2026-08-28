@@ -502,7 +502,7 @@ test("resolves the effective identity again for each executable observation", as
   t.after(() => rm(root, { force: true, recursive: true }));
   const executable = join(root, "claude");
   await writeFile(executable, "synthetic");
-  await chmod(executable, 0o100);
+  await chmod(executable, 0o500);
   const stats = await stat(executable, { bigint: true });
   const unrelatedUid = Number(stats.uid) === 1 ? 2 : 1;
   const unrelatedGid = Number(stats.gid) === 1 ? 2 : 1;
@@ -534,7 +534,7 @@ test("reclassifies an executable after a supplied root privilege drop", async t 
   t.after(() => rm(root, { force: true, recursive: true }));
   const executable = join(root, "claude");
   await writeFile(executable, "synthetic");
-  await chmod(executable, 0o100);
+  await chmod(executable, 0o500);
   const stats = await stat(executable, { bigint: true });
   const droppedUid = Number(stats.uid) === 1 ? 2 : 1;
   const droppedGid = Number(stats.gid) === 1 ? 2 : 1;
