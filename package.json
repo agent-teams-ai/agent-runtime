@@ -36,7 +36,7 @@
     "product:build": "pnpm --filter './packages/**' -r run build",
     "product:check": "pnpm --filter './packages/**' -r run clean && pnpm product:build && pnpm --filter './packages/**' -r run test",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
-    "architecture:runtime-setup-l0-evidence": "node scripts/architecture/runtime-setup-l0-evidence.mjs --check",
+    "architecture:runtime-setup-l0-evidence": "node --test scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs && node scripts/architecture/runtime-setup-l0-evidence.mjs --check",
     "architecture:runtime-setup-l0-evidence:capture": "node scripts/architecture/runtime-setup-l0-evidence.mjs --capture",
     "architecture:ar2-contract": "node scripts/architecture/validate-ar2-contract-artifacts.mjs",
     "test:ar2-contract": "node --test scripts/architecture/validate-ar2-contract-artifacts.test.mjs",

@@ -14,6 +14,10 @@ import {
   prospectiveBenchmarks,
   traces,
 } from "./runtime-setup-l0-evidence-spec.mjs";
+import {
+  isHistoricalObjectClosureUnavailable,
+  validateStoredReportShape,
+} from "./runtime-setup-l0-evidence-validation.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const evidencePath = join(
@@ -114,20 +118,7 @@ const loadHistoricalChanges = (summarize = summarizeChange) => {
   try {
     return changes.map(summarize);
   } catch (error) {
-    const details = [error?.message, error?.stderr]
-      .filter(Boolean)
-      .map(String)
-      .join("\n");
-    const objectClosureUnavailable = [
-      /bad object/iu,
-      /could not parse object/iu,
-      /missing (?:blob|tree)/iu,
-      /not a valid object name/iu,
-      /object [a-f0-9]+ not found/iu,
-      /promised object .* unavailable/iu,
-      /unable to read tree/iu,
-    ].some(pattern => pattern.test(details));
-    if (!objectClosureUnavailable) {
+    if (!isHistoricalObjectClosureUnavailable(error)) {
       throw error;
     }
   }
@@ -135,6 +126,7 @@ const loadHistoricalChanges = (summarize = summarizeChange) => {
 
 const missingHistoricalObject = new Error("historical object unavailable");
 missingHistoricalObject.stderr = "fatal: promised object f00 unavailable";
+missingHistoricalObject.status = 128;
 assert.equal(
   loadHistoricalChanges(() => {
     throw missingHistoricalObject;
@@ -422,6 +414,7 @@ const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
 });
 
 const validateStoredReport = async report => {
+  validateStoredReportShape(report, changes);
   assert.equal(report.schemaVersion, 3);
   assert.match(report.sourceRevision, /^[a-f0-9]{40}$/u);
   assert.equal(
@@ -474,6 +467,15 @@ const validateStoredReport = async report => {
     assert.equal(benchmark.promptEncoding, "utf8-lf-terminated");
     assert.match(benchmark.retainedEnvelopeSha256, /^[a-f0-9]{64}$/u);
   }
+  assert.deepEqual(
+    report,
+    await buildReport({
+      capture: report.capture,
+      historicalChanges: report.historicalChanges,
+      sourceRevision: report.sourceRevision,
+    }),
+    "canonical non-historical evidence content drifted",
+  );
 };
 
 await verifyCurrentArchitecture();
@@ -497,13 +499,9 @@ if (mode === "--capture") {
   const historicalChanges = loadHistoricalChanges();
   if (historicalChanges !== undefined) {
     assert.deepEqual(
-      stored,
-      await buildReport({
-        capture: stored.capture,
-        historicalChanges,
-        sourceRevision: stored.sourceRevision,
-      }),
-      "runtime setup L0 evidence is stale",
+      stored.historicalChanges,
+      historicalChanges,
+      "runtime setup L0 historical evidence is stale",
     );
   }
 } else {
