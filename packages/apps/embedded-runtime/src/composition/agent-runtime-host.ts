@@ -104,9 +104,11 @@ const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T
   });
 
 const expectedClaudeCodeLimitations = Object.freeze({
+  executableCompatibility: "unqualified" as const,
   interactiveShellPath: "unobserved" as const,
   managedPolicy: "unobserved" as const,
   modelCompatibility: "unobserved" as const,
+  precedence: "not-evaluated" as const,
   sessionOverrides: "unobserved" as const,
 });
 
