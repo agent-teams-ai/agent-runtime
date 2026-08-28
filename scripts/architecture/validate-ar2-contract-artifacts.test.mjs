@@ -56,35 +56,35 @@ test("AR-2 inventory and Claude freeze packet satisfy the frozen contract", asyn
   assert.deepEqual(result.approvals, ["CLF-01", "CLF-02", "CLF-03", "CLF-04"]);
   assert.equal(
     result.semanticArtifactSha256,
-    "e297f4b534f87255dc4230630a8056b2e4ff9c7ad3906c174b71b871b0d972d3",
+    "9eff9540cb54c1aae9aafbbf5688c6a516d24b13af3341da064a8a1806e5b786",
   );
   assert.equal(result.snapshotDocuments, 5);
 });
 
-test("AR-2 validator rejects retained official-evidence byte drift", async () => {
+test("AR-2 validator rejects gzip metadata drift and a fabricated retained excerpt", async () => {
   const snapshot = await readJson(new URL(
     "docs/architecture/claude-code-official-semantics.snapshot.json",
     repositoryRoot,
   ));
-  snapshot.documents[0].retainedBytesUtf8 = snapshot.documents[0].retainedBytesUtf8.replace("User", "user");
-  assert.throws(
-    () => validateOfficialSemantics(snapshot),
-    /retained content hash/u,
+  snapshot.documents[0].gzipSha256 = "0".repeat(64);
+  await assert.rejects(
+    validateOfficialSemantics(snapshot),
+    /deterministic gzip hash/u,
   );
 
-  const synchronizedDrift = await readJson(new URL(
+  const fabricatedExcerpt = await readJson(new URL(
     "docs/architecture/claude-code-official-semantics.snapshot.json",
     repositoryRoot,
   ));
-  synchronizedDrift.documents[0].retainedBytesUtf8 = synchronizedDrift.documents[0]
+  fabricatedExcerpt.documents[0].retainedBytesUtf8 = fabricatedExcerpt.documents[0]
     .retainedBytesUtf8
-    .replace("settings.json", "settingx.json");
-  synchronizedDrift.documents[0].retainedSha256 = createHash("sha256")
-    .update(synchronizedDrift.documents[0].retainedBytesUtf8)
+    .replace("User |", "Fake |");
+  fabricatedExcerpt.documents[0].retainedSha256 = createHash("sha256")
+    .update(fabricatedExcerpt.documents[0].retainedBytesUtf8)
     .digest("hex");
-  assert.throws(
-    () => validateOfficialSemantics(synchronizedDrift),
-    /portable paths must derive from retained settings evidence/u,
+  await assert.rejects(
+    validateOfficialSemantics(fabricatedExcerpt),
+    /retained evidence derivation/u,
   );
 });
 

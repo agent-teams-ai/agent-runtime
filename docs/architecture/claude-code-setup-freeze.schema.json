@@ -29,7 +29,7 @@
           "maxItems": 5,
           "prefixItems": [
             { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "settings-scopes" }, "url": { "const": "https://code.claude.com/docs/en/settings.md" } } },
-            { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "settings-keys-and-effort" }, "url": { "const": "https://json.schemastore.org/claude-code-settings.json" } } },
+            { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "settings-keys-and-effort" }, "url": { "const": "https://www.schemastore.org/claude-code-settings.json" } } },
             { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "model-aliases" }, "url": { "const": "https://code.claude.com/docs/en/model-config.md" } } },
             { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "managed-policy" }, "url": { "const": "https://code.claude.com/docs/en/managed-settings.md" } } },
             { "$ref": "#/$defs/snapshotDocument", "properties": { "id": { "const": "provider-route" }, "url": { "const": "https://code.claude.com/docs/en/amazon-bedrock.md" } } }
@@ -60,8 +60,13 @@
     "snapshotDocument": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "url", "sha256"],
-      "properties": { "id": { "type": "string", "pattern": "^[a-z0-9-]+$" }, "url": { "type": "string", "pattern": "^https://" }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+      "required": ["id", "url", "rawResponseSha256", "artifactPath"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "url": { "type": "string", "pattern": "^https://" },
+        "rawResponseSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "artifactPath": { "type": "string", "pattern": "^docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/[a-z0-9.-]+\\.gz$" }
+      }
     },
     "fixtureCase": {
       "oneOf": [

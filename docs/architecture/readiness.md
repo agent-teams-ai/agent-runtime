@@ -170,16 +170,16 @@ AR-2 implementation present; synthetic evidence present; qualification open:
 - the frozen `claude-code-settings@2026-08-28` dialect identifies official
   documentation semantics only. It does not qualify, version, or prove
   compatibility of a discovered executable;
-- revision 2 of the compact content-addressed
+- revision 3 of the content-addressed
   [official-semantics artifact](claude-code-official-semantics.snapshot.json)
-  retains five normalized evidence records from the two permitted official
-  origins. Each frozen fact cites a retained section or JSON-pointer
-  coordinate. The artifact gate recomputes every record's byte length and
-  SHA-256 as well as the enclosing artifact digest. Revision 1's 13 response
-  hashes are historical non-authority because their response bodies were not
-  retained; they are not carried forward as evidence. This qualifies only the
-  documented settings dialect; provider and executable qualification remain
-  open;
+  binds five normalized evidence records to five exact official response bodies
+  retained as deterministic gzip artifacts. The offline artifact gate reads
+  and decompresses each artifact, recomputes the gzip and raw-response lengths
+  and SHA-256 values, and re-derives every normalized record with bounded
+  Markdown parsing or explicit SchemaStore JSON pointers. Revision 1's thirteen
+  unretained-document hashes are omitted historical non-authority. This
+  qualifies only the documented settings dialect; provider and executable
+  qualification remain open;
 - on macOS, trusted scope planning derives the three fixed portable source
   paths and fixed known executable locations from synthetic home/workspace
   roots. Runtime Security authorizes roots, paths, trust, stable identity, and

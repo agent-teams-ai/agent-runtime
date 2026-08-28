@@ -246,16 +246,17 @@ fixture rows to map to exactly one declared Node test selected by its owning
 package test script, and rejects fixture, title, file, or package-script drift.
 Its documented settings dialect does not qualify or establish compatibility of
 any executable.
-Revision 2 of the linked content-addressed
-[`semantic artifact`](claude-code-official-semantics.snapshot.json) retains five
-compact normalized evidence records from `code.claude.com` and
-`json.schemastore.org`. Every frozen fact cites retained section or JSON-pointer
-coordinates. The contract gate recomputes each record's byte length and
-SHA-256 and verifies the enclosing artifact digest recorded by the freeze
-packet. Revision 1's response hashes remain labeled historical non-authority
-and are not presented as recoverable source evidence. This is
-official-document evidence for the named dialect only; executable and provider
-qualification remain open.
+Revision 3 of the linked content-addressed
+[`semantic artifact`](claude-code-official-semantics.snapshot.json) binds five
+compact normalized evidence records to exactly five official response bodies
+retained as deterministic gzip artifacts. Every frozen fact cites a retained
+section or JSON pointer. The offline contract gate reads and decompresses each
+artifact, recomputes its gzip and raw-response lengths and SHA-256 values, and
+re-derives every record with bounded Markdown parsing or explicit SchemaStore
+JSON pointers before verifying the enclosing artifact digest recorded by the
+freeze packet. Revision 1's thirteen unretained-document hashes are omitted
+historical non-authority. This is official-document evidence for the named
+dialect only; executable and provider qualification remain open.
 
 The private handle adds a sibling capability:
 

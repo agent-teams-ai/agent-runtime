@@ -321,15 +321,16 @@ const validateFreeze = async freeze => {
   const semanticArtifactBytes = await readFile(semanticArtifactUrl);
   assert.equal(sha256(semanticArtifactBytes), freeze.snapshot.semanticArtifact.sha256, "official semantic artifact content hash");
   const semanticArtifact = JSON.parse(semanticArtifactBytes.toString("utf8"));
-  const frozenFacts = validateOfficialSemantics(semanticArtifact);
+  const frozenFacts = await validateOfficialSemantics(semanticArtifact);
   assert.deepEqual(
-    semanticArtifact.documents.map(({ id, finalUrl: url, retainedSha256: sha256Value }) => ({
+    semanticArtifact.documents.map(({ id, finalUrl: url, rawResponseSha256, artifactPath }) => ({
+      artifactPath,
       id,
-      sha256: sha256Value,
+      rawResponseSha256,
       url,
     })),
     freeze.snapshot.documents,
-    "freeze retained evidence hashes correspond exactly to the semantic artifact",
+    "freeze raw response authorities correspond exactly to the semantic artifact",
   );
   assert.deepEqual(Object.fromEntries(Object.entries(frozenFacts).map(([name, fact]) => [name, fact.value])), {
     portableSourcesLowToHigh: ["user", "shared-project", "project-local"],
