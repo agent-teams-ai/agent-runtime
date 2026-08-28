@@ -154,6 +154,32 @@ implementation or deployment qualification:
   of a released Codex binary or qualify a Desktop collector or target
   filesystem.
 
+AR-2 contract frozen; implementation and qualification open:
+
+- the normalized three-provider
+  [`Legacy Feature Inventory`](legacy-feature-inventory.json) and the
+  machine-readable Claude Code
+  [`freeze packet`](claude-code-setup-freeze.json) are present and pass a
+  deterministic artifact gate;
+- provider-specific TypeScript DTOs and application-owned ports exist across
+  Agent Execution, Runtime Security, Runtime Configuration, and Embedded
+  Runtime, with a compile-only composition seam and retained negative fixture
+  manifest;
+- the frozen `claude-code-settings@2026-08-28` dialect identifies official
+  documentation semantics only. It does not qualify, version, or prove
+  compatibility of a discovered executable;
+- the prospective private `RuntimeAccessHandle.claudeCodeSetup.inspect` shape
+  is contract-only and is not exposed by the working runtime host. No Claude
+  authorization, candidate discovery, file reading/parsing, configuration
+  reduction, result builder, default composition, synthetic macOS E2E, or
+  production collector is implemented;
+- managed policy, session overrides, and interactive-shell PATH are fixed
+  expected limitations with value `unobserved`. They are neither read nor
+  listed and do not by themselves make a result `partial`;
+- no Claude setup target is added to the qualification registry. Provider
+  qualification, production collector evidence, and deployment qualification
+  remain open.
+
 Scoped qualified:
 
 - synthetic deterministic source precedence over 5,000 randomized input

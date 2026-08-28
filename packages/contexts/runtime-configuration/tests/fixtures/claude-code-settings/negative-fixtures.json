@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "groups": [
+    { "id": "installation-absent", "expected": "observed-with-install-action" },
+    { "id": "installation-one-alias", "expected": "found-unverified" },
+    { "id": "installation-multiple-aliases", "expected": "identity-grouped" },
+    { "id": "source-user-only", "expected": "user-intent" },
+    { "id": "source-shared-project-only", "expected": "shared-project-intent" },
+    { "id": "source-project-local-only", "expected": "project-local-intent" },
+    { "id": "sources-conflict", "expected": "project-local-wins-per-key" },
+    { "id": "malformed-higher-precedence", "expected": "lower-resolution-tainted" },
+    { "id": "duplicate-json-keys", "diagnostic": "config_duplicate_key" },
+    { "id": "bom", "diagnostic": "config_parse_failed" },
+    { "id": "invalid-utf8", "diagnostic": "config_invalid_utf8" },
+    { "id": "oversized-json", "diagnostic": "config_too_large" },
+    { "id": "deep-json", "diagnostic": "config_parse_failed" },
+    { "id": "unsupported-effort-max", "diagnostic": "setting_value_unsupported" },
+    { "id": "provider-route-model", "diagnostic": "provider_route_deferred" },
+    { "id": "secret-sentinels", "diagnostic": "secret_setting_rejected" },
+    { "id": "credential-material", "diagnostic": "credential_material_rejected" },
+    { "id": "untrusted-workspace", "diagnostic": "source_untrusted" },
+    { "id": "stale-source", "diagnostic": "source_epoch_stale" },
+    { "id": "unsupported-platform", "diagnostic": "unsupported_platform" },
+    { "id": "unsupported-dialect", "diagnostic": "configuration_dialect_unsupported" }
+  ],
+  "redactionSentinels": [
+    "AR2_SECRET_VALUE_MUST_NEVER_APPEAR",
+    "AR2_ROUTE_ID_MUST_NEVER_APPEAR",
+    "AR2_RAW_PATH_MUST_NEVER_APPEAR"
+  ]
+}

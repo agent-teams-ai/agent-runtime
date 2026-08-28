@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-runtime://architecture/claude-code-setup-freeze.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "contractId", "snapshot", "dialect", "platform", "entryPoint", "trustedScope", "candidateOrder", "sources", "precedenceHighToLow", "portableIntent", "strictJson", "routeCategories", "secretCategories", "expectedLimitations", "diagnostics", "diagnosticRedaction", "budgets", "resultSemantics", "fixtureMatrix"],
+  "properties": {
+    "$schema": { "const": "./claude-code-setup-freeze.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "contractId": { "const": "ar-2-claude-code-setup-preview@1" },
+    "snapshot": { "type": "object", "additionalProperties": false, "required": ["date", "documents"], "properties": { "date": { "const": "2026-08-28" }, "documents": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["url", "sha256"], "properties": { "url": { "type": "string", "pattern": "^https://" }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } } } } },
+    "dialect": { "type": "object", "additionalProperties": false, "required": ["id", "qualifiesExecutable", "statement"], "properties": { "id": { "const": "claude-code-settings@2026-08-28" }, "qualifiesExecutable": { "const": false }, "statement": { "type": "string", "minLength": 1 } } },
+    "platform": { "const": "darwin" },
+    "entryPoint": { "type": "object" },
+    "trustedScope": { "type": "object" },
+    "candidateOrder": { "const": ["explicit-paths", "supplied-path-entries", "~/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"] },
+    "sources": { "type": "array", "minItems": 3, "maxItems": 3 },
+    "precedenceHighToLow": { "const": ["project-local", "shared-project", "user"] },
+    "portableIntent": { "type": "object" },
+    "strictJson": { "type": "object" },
+    "routeCategories": { "type": "array", "minItems": 1, "uniqueItems": true },
+    "secretCategories": { "type": "array", "minItems": 1, "uniqueItems": true },
+    "expectedLimitations": { "const": { "managedPolicy": "unobserved", "sessionOverrides": "unobserved", "interactiveShellPath": "unobserved" } },
+    "diagnostics": { "type": "array", "minItems": 18, "maxItems": 18, "uniqueItems": true },
+    "diagnosticRedaction": { "type": "array", "minItems": 8, "uniqueItems": true },
+    "budgets": { "type": "object" },
+    "resultSemantics": { "type": "object" },
+    "fixtureMatrix": { "type": "array", "minItems": 19, "uniqueItems": true }
+  }
+}

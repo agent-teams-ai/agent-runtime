@@ -29,10 +29,17 @@ authority for the new design.
 
 Evidence baseline:
 
-- Agent Runtime `7cc6ed573a785c868b17e84a42a49c7bc9da0894`;
+- Agent Runtime `25b2b7f383347466fa74fdd5586c485f5181d8d9`;
 - legacy `777genius/agent-teams-ai`
   `f6afac73cced62d943a0e891ad08d7b8f88f802f`;
 - official provider documentation linked under each provider below.
+
+The complete normalized 13-field inventory is
+[`legacy-feature-inventory.json`](legacy-feature-inventory.json). Its
+`approved_now | recommended_next | recommended_later | rejected | needs_owner`
+values supersede the older shorthand used by the summary tables in this
+document. Only the Claude Code passive preview is `approved_now`; every other
+priority remains a recommendation or rejection.
 
 The legacy repository may contain newer uncommitted work in developer
 workspaces. Such work is not part of this baseline and cannot establish product
@@ -222,7 +229,15 @@ saved-profile database hidden inside `codexSetup.inspect`.
 
 ### Slice AR-2 - Claude Code passive setup inspection
 
-This is the recommended next implementation slice.
+Status: contract and fixture spine frozen; working provider flow, synthetic
+composition evidence, collector evidence, implementation qualification, and
+deployment qualification are not present.
+
+The machine-readable authority is the
+[`claude-code-setup-freeze.json`](claude-code-setup-freeze.json) packet and its
+[schema](claude-code-setup-freeze.schema.json). The packet is validated by the
+deterministic `architecture:ar2-contract` gate. Its documented settings
+dialect does not qualify or establish compatibility of any executable.
 
 The private handle adds a sibling capability:
 
@@ -323,11 +338,12 @@ agnostic; SQLite and PostgreSQL are adapters under ADR-0001.
 | authorize a provider account | not in first MVP | Provider Access login/import/refresh/revoke flows |
 | launch agents | not part of Runtime Setup | Agent Execution operations after their own decisions and gates |
 
-## Decisions before AR-2 code
+## Frozen AR-2 contract decisions
 
-The implementation handoff must freeze:
+The contract-and-fixture handoff freezes:
 
-1. the exact Claude Code configuration dialect and supported version range;
+1. the exact Claude Code configuration dialect, explicitly separate from any
+   executable version or compatibility claim;
 2. the exact source list and precedence verified from official behavior;
 3. the closed portable setting allowlist;
 4. the route-owned and secret-shaped denylist plus stable deferred/rejected
@@ -335,6 +351,15 @@ The implementation handoff must freeze:
 5. trusted macOS collector inputs and display-path redaction;
 6. stable diagnostic and result variants;
 7. provider-specific fixtures and the required negative test matrix.
+
+The TypeScript artifacts are provider-specific contracts, application-owned
+ports, trusted-scope and planner shapes, dialect constants/examples, and a
+compile-only four-owner composition seam. They are not a working inspection
+implementation. Fixed known paths and the three fixed source paths are derived
+later in composition; scope supplies only trusted explicit executable paths,
+caller-supplied PATH entries, the exact dialect, home/workspace roots, and the
+explicit workspace trust decision. Ambient `CLAUDE_CONFIG_DIR`, process
+environment, process cwd, and interactive-shell PATH are not inputs.
 
 The following do not block AR-2 and remain explicit future decisions:
 

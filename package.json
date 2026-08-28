@@ -36,6 +36,8 @@
     "product:build": "pnpm --filter './packages/**' -r run build",
     "product:check": "pnpm --filter './packages/**' -r run clean && pnpm product:build && pnpm --filter './packages/**' -r run test",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
+    "architecture:ar2-contract": "node scripts/architecture/validate-ar2-contract-artifacts.mjs",
+    "test:ar2-contract": "node --test scripts/architecture/validate-ar2-contract-artifacts.test.mjs",
     "architecture:operation-oracle": "pnpm architecture:operation-oracle:type-generation && pnpm architecture:operation-oracle:property && pnpm architecture:operation-oracle:mutation && pnpm architecture:operation-oracle:model && node experiments/runtime-profile-behavior/src/features/evidence/validate-runtime-operation-oracle.ts",
     "architecture:operation-oracle:generate": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --write",
     "architecture:operation-oracle:generated": "node experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts --check",

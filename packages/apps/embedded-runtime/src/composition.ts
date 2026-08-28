@@ -9,3 +9,12 @@ export {
   createCodexSetupInspectionPlanner,
 } from "./composition/codex-setup-inspection-planner.js";
 export type { TrustedRuntimeAccessScope } from "./composition/trusted-runtime-access-scope.js";
+export type { TrustedClaudeCodeSetupScope } from "./application/trusted-claude-code-setup-scope.js";
+export type {
+  ClaudeCodeSetupInspectionPlan,
+  ClaudeCodeSetupInspectionPlanner,
+} from "./application/ports/outbound/claude-code-setup-inspection-planner.js";
+export {
+  assertClaudeCodeContractSpine,
+  type ClaudeCodeContractSpineDependencies,
+} from "./composition/claude-code-contract-spine.js";
