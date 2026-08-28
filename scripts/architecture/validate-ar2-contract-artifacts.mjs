@@ -19,6 +19,7 @@ const contractCoveragePath = new URL("contract-coverage.json", fixtureRoot);
 const packagePath = new URL("../../package.json", import.meta.url);
 const roadmapPath = new URL("../../docs/architecture/provider-setup-delivery-roadmap.md", import.meta.url);
 const readinessPath = new URL("../../docs/architecture/readiness.md", import.meta.url);
+const runtimeAccessPath = new URL("../../packages/apps/embedded-runtime/src/contracts/runtime-access.ts", import.meta.url);
 const repositoryRoot = new URL("../../", import.meta.url);
 
 const readJson = async path => JSON.parse(await readFile(path, "utf8"));
@@ -63,6 +64,8 @@ export const EXPECTED_FIXTURE_MATRIX = Object.freeze([
   { id: "stale-source", diagnostic: "source_epoch_stale" },
   { id: "unsupported-platform", diagnostic: "unsupported_platform" },
   { id: "unsupported-dialect", diagnostic: "configuration_dialect_unsupported" },
+  { id: "access-scope-limit-exceeded", diagnostic: "access_scope_limit_exceeded" },
+  { id: "capability-unavailable", diagnostic: "capability_unavailable" },
   { id: "model-default-special", expected: "provider-default" },
   { id: "model-exact-name", expected: "exact-name" },
   { id: "model-arbitrary-selector-deferred", expected: "unclassified-selector-deferred" },
@@ -91,8 +94,8 @@ export const validateContractCoverage = ({
   exactKeys(contractCoverage, ["schemaVersion", "contractId", "cases"], "contract coverage");
   assert.equal(contractCoverage.schemaVersion, 2);
   assert.equal(contractCoverage.contractId, "ar-2-claude-code-setup-preview@2");
-  assert.equal(contractCoverage.cases.length, 24, "contract coverage row count");
-  assert.equal(fixtureMatrix.length, 24, "frozen fixture row count");
+  assert.equal(contractCoverage.cases.length, 26, "contract coverage row count");
+  assert.equal(fixtureMatrix.length, 26, "frozen fixture row count");
   assert.deepEqual(fixtureMatrix, EXPECTED_FIXTURE_MATRIX, "frozen fixture matrix");
   assert.deepEqual(negativeGroups, fixtureMatrix, "freeze/negative fixture correspondence");
   assert.deepEqual(
@@ -128,6 +131,26 @@ export const validateContractCoverage = ({
       `${entry.id} test file must be executed by ${packageRoot}/package.json`,
     );
   }
+};
+
+export const validateClaudeDiagnosticParity = (frozenDiagnostics, runtimeAccessSource) => {
+  const declaration = /export type ClaudeCodeSetupDiagnosticCode =(?<members>[\s\S]*?);/u
+    .exec(runtimeAccessSource);
+  assert.ok(declaration?.groups?.members, "public Claude diagnostic union must be declared");
+  const members = [...declaration.groups.members.matchAll(/^\s*\|\s*"([a-z0-9_]+)"\s*$/gmu)]
+    .map(match => match[1]);
+  assert.equal(
+    declaration.groups.members.replace(/^\s*\|\s*"[a-z0-9_]+"\s*$/gmu, "").trim(),
+    "",
+    "public Claude diagnostic union must contain only literal diagnostic codes",
+  );
+  unique(frozenDiagnostics, "frozen Claude diagnostics");
+  unique(members, "public Claude diagnostic union members");
+  assert.deepEqual(
+    [...frozenDiagnostics].toSorted(),
+    members.toSorted(),
+    "Claude runtime/freeze diagnostic set parity",
+  );
 };
 
 const loadContractCoverageEvidence = async contractCoverage => {
@@ -401,7 +424,7 @@ const validateFreeze = async freeze => {
 export const validateAr2ContractArtifacts = async () => {
   const [
     inventory, inventorySchema, freeze, freezeSchema, fixtureManifest,
-    negativeFixtures, contractCoverage, rootPackage, roadmap, readiness,
+    negativeFixtures, contractCoverage, rootPackage, roadmap, readiness, runtimeAccessSource,
   ] = await Promise.all([
     readJson(inventoryPath),
     readJson(inventorySchemaPath),
@@ -413,6 +436,7 @@ export const validateAr2ContractArtifacts = async () => {
     readJson(packagePath),
     readFile(roadmapPath, "utf8"),
     readFile(readinessPath, "utf8"),
+    readFile(runtimeAccessPath, "utf8"),
   ]);
   validateSchema(inventorySchema, inventory, "legacy inventory");
   validateSchema(freezeSchema, freeze, "Claude freeze");
@@ -435,6 +459,7 @@ export const validateAr2ContractArtifacts = async () => {
   assert.match(readiness, /does not prove\s+a real Claude Code installation/u);
 
   await validateFreeze(freeze);
+  validateClaudeDiagnosticParity(freeze.diagnostics, runtimeAccessSource);
 
   assert.equal(fixtureManifest.contractId, freeze.contractId);
   assert.equal(fixtureManifest.dialect, freeze.dialect.id);

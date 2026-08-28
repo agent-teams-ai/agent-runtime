@@ -63,7 +63,8 @@
       "modelCompatibility": "unobserved", "executableCompatibility": "unqualified", "precedence": "not-evaluated"
     } },
     "diagnostics": { "const": [
-      "candidate_denied", "candidate_invalid", "candidate_unreadable", "candidate_unstable",
+      "access_scope_limit_exceeded", "candidate_denied", "candidate_invalid", "candidate_unreadable", "candidate_unstable",
+      "capability_unavailable",
       "configuration_dialect_unsupported", "config_duplicate_key", "config_invalid_utf8", "config_parse_failed",
       "config_too_large", "config_unreadable", "credential_material_rejected", "provider_route_deferred",
       "secret_setting_rejected", "setting_type_unsupported", "setting_value_unsupported", "source_epoch_stale",
@@ -87,7 +88,7 @@
       "futureHandoff": ["qualified-topology-dialect", "ProfileDraft", "ProfileRevision"],
       "detached": true, "deepFrozen": true, "deterministic": true
     } },
-    "fixtureMatrix": { "type": "array", "minItems": 24, "maxItems": 24, "items": { "$ref": "#/$defs/fixtureCase" } }
+    "fixtureMatrix": { "type": "array", "minItems": 26, "maxItems": 26, "items": { "$ref": "#/$defs/fixtureCase" } }
   },
   "$defs": {
     "snapshotDocument": {

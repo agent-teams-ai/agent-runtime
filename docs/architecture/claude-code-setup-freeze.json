@@ -75,7 +75,8 @@
     "precedence": "not-evaluated"
   },
   "diagnostics": [
-    "candidate_denied", "candidate_invalid", "candidate_unreadable", "candidate_unstable",
+    "access_scope_limit_exceeded", "candidate_denied", "candidate_invalid", "candidate_unreadable", "candidate_unstable",
+    "capability_unavailable",
     "configuration_dialect_unsupported", "config_duplicate_key", "config_invalid_utf8", "config_parse_failed",
     "config_too_large", "config_unreadable", "credential_material_rejected", "provider_route_deferred",
     "secret_setting_rejected", "setting_type_unsupported", "setting_value_unsupported", "source_epoch_stale",
@@ -122,6 +123,8 @@
     { "id": "stale-source", "diagnostic": "source_epoch_stale" },
     { "id": "unsupported-platform", "diagnostic": "unsupported_platform" },
     { "id": "unsupported-dialect", "diagnostic": "configuration_dialect_unsupported" },
+    { "id": "access-scope-limit-exceeded", "diagnostic": "access_scope_limit_exceeded" },
+    { "id": "capability-unavailable", "diagnostic": "capability_unavailable" },
     { "id": "model-default-special", "expected": "provider-default" },
     { "id": "model-exact-name", "expected": "exact-name" },
     { "id": "model-arbitrary-selector-deferred", "expected": "unclassified-selector-deferred" }

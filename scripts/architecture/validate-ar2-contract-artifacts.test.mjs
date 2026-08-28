@@ -9,6 +9,7 @@ import {
   auditLegacyInventoryEvidence,
   validateAr2ContractArtifacts,
   validateContractCoverage,
+  validateClaudeDiagnosticParity,
   validateInventory,
   validateOfficialSemantics,
 } from "./validate-ar2-contract-artifacts.mjs";
@@ -62,6 +63,25 @@ test("AR-2 inventory and Claude freeze packet satisfy the frozen contract", asyn
     "150474d9b869fac16169c23e14e6be296f2d0f13fe0c763d509cdd897ff07404",
   );
   assert.equal(result.snapshotDocuments, 5);
+});
+
+test("Claude public diagnostics have exact set parity with the freeze", async () => {
+  const [freeze, runtimeAccessSource] = await Promise.all([
+    readJson(new URL("docs/architecture/claude-code-setup-freeze.json", repositoryRoot)),
+    readFile(new URL(
+      "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+      repositoryRoot,
+    ), "utf8"),
+  ]);
+  assert.doesNotThrow(() => validateClaudeDiagnosticParity(freeze.diagnostics, runtimeAccessSource));
+  assert.throws(
+    () => validateClaudeDiagnosticParity(freeze.diagnostics.slice(1), runtimeAccessSource),
+    /diagnostic set parity/u,
+  );
+  assert.throws(
+    () => validateClaudeDiagnosticParity([...freeze.diagnostics, "future_drift"], runtimeAccessSource),
+    /diagnostic set parity/u,
+  );
 });
 
 test("inventory preserves omitted jobs and explicit supersession without defining completeness", async () => {
