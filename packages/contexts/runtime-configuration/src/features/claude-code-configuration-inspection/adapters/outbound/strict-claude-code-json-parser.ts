@@ -84,7 +84,9 @@ const materializeObject = (
   const output: Record<string, unknown> = Object.create(null);
   for (const property of properties) {
     const [key, valueNode] = materializeProperty(property, signal);
-    if (seen.has(key)) throw new DuplicateKeyError("duplicate json key");
+    if (seen.has(key)) {
+      throw new DuplicateKeyError("duplicate json key");
+    }
     seen.add(key);
     output[key] = materialize(valueNode, depth + 1, state, signal);
   }
@@ -127,6 +129,41 @@ function materialize(
 const hasUtf8Bom = (bytes: Uint8Array): boolean =>
   bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
 
+const parseObject = (
+  text: string,
+  signal?: AbortSignal,
+): ParseClaudeCodeJsonResult => {
+  signal?.throwIfAborted();
+  const errors: ParseError[] = [];
+  const tree = parseTree(text, errors, {
+    allowEmptyContent: false,
+    allowTrailingComma: false,
+    disallowComments: true,
+  });
+  if (tree === undefined || errors.length > 0 || tree.type !== "object") {
+    return rejected("config_parse_failed");
+  }
+  signal?.throwIfAborted();
+  try {
+    const data = materialize(
+      tree,
+      0,
+      { arrayItems: 0, nodes: 0, objectKeys: 0 },
+      signal,
+    );
+    return data !== null && typeof data === "object" && !Array.isArray(data)
+      ? { data: data as Readonly<Record<string, unknown>>, status: "parsed" }
+      : rejected("config_parse_failed");
+  } catch (error) {
+    signal?.throwIfAborted();
+    return rejected(
+      error instanceof DuplicateKeyError
+        ? "config_duplicate_key"
+        : "config_parse_failed",
+    );
+  }
+};
+
 export const createStrictClaudeCodeJsonParser = (): ClaudeCodeJsonParser => ({
   parse(bytes, options) {
     options?.signal?.throwIfAborted();
@@ -142,34 +179,6 @@ export const createStrictClaudeCodeJsonParser = (): ClaudeCodeJsonParser => ({
     } catch {
       return rejected("config_invalid_utf8");
     }
-    options?.signal?.throwIfAborted();
-    const errors: ParseError[] = [];
-    const tree = parseTree(text, errors, {
-      allowEmptyContent: false,
-      allowTrailingComma: false,
-      disallowComments: true,
-    });
-    if (tree === undefined || errors.length > 0 || tree.type !== "object") {
-      return rejected("config_parse_failed");
-    }
-    options?.signal?.throwIfAborted();
-    try {
-      const data = materialize(
-        tree,
-        0,
-        { arrayItems: 0, nodes: 0, objectKeys: 0 },
-        options?.signal,
-      );
-      return data !== null && typeof data === "object" && !Array.isArray(data)
-        ? { data: data as Readonly<Record<string, unknown>>, status: "parsed" }
-        : rejected("config_parse_failed");
-    } catch (error) {
-      options?.signal?.throwIfAborted();
-      return rejected(
-        error instanceof DuplicateKeyError
-          ? "config_duplicate_key"
-          : "config_parse_failed",
-      );
-    }
+    return parseObject(text, options?.signal);
   },
 });

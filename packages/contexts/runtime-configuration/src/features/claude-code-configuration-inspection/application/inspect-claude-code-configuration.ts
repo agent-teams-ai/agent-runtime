@@ -37,6 +37,8 @@ type BoundSource = ClaudeCodeConfigurationSource & {
   readonly sourceRef: string;
 };
 
+type AuthorizedBoundSource = Extract<BoundSource, { readonly access: "authorized" }>;
+
 interface EvaluatedSource {
   readonly definitions: ReadonlyMap<"model" | "effortLevel", PortableClaudeCodeDefinition>;
   readonly grossTaint: boolean;
@@ -110,13 +112,17 @@ const bindSources = (
       matchingPath.push(source);
       byCanonicalPath.set(source.canonicalPath, matchingPath);
     }
-    if (!validSource(source)) rejected.add(source);
+    if (!validSource(source)) {rejected.add(source);}
   }
   for (const group of [...byKind.values(), ...byCanonicalPath.values()]) {
-    if (group.length > 1) for (const source of group) rejected.add(source);
+    if (group.length > 1) {
+      for (const source of group) {
+        rejected.add(source);
+      }
+    }
   }
   if (tooManySources) {
-    for (const source of sources) rejected.add(source);
+    for (const source of sources) {rejected.add(source);}
   }
   const bound = sources.map(source => ({
     ...source,
@@ -159,18 +165,18 @@ const normalizeReadResult = (value: unknown):
   | { readonly status: "missing" | "stale" | "too-large" | "unreadable" }
   | undefined => {
   if (typeof value !== "object" || value === null || Array.isArray(value) ||
-      Object.getOwnPropertySymbols(value).length > 0) return undefined;
+      Object.getOwnPropertySymbols(value).length > 0) {return undefined;}
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (!Object.values(descriptors).every(descriptor =>
     descriptor.enumerable === true && "value" in descriptor &&
-    descriptor.get === undefined && descriptor.set === undefined)) return undefined;
+    descriptor.get === undefined && descriptor.set === undefined)) {return undefined;}
   const status = descriptors["status"]?.value;
   if (status === "read" && Object.keys(descriptors).length === 2 &&
       descriptors["bytes"]?.value instanceof Uint8Array) {
     return { bytes: Uint8Array.from(descriptors["bytes"].value), status };
   }
   if ((status === "missing" || status === "stale" || status === "too-large" || status === "unreadable") &&
-      Object.keys(descriptors).length === 1) return { status };
+      Object.keys(descriptors).length === 1) {return { status };}
   return undefined;
 };
 
@@ -223,7 +229,7 @@ const rejectUnavailableSource = (
 
 const readSource = async (
   context: SourceEvaluationContext,
-  source: BoundSource,
+  source: AuthorizedBoundSource,
 ): Promise<ReturnType<typeof normalizeReadResult>> => {
   try {
     return normalizeReadResult(await context.dependencies.sourceReader.read(
@@ -287,7 +293,7 @@ const classifySource = (
     );
   } catch {
     context.signal?.throwIfAborted();
-    return undefined;
+    return;
   }
 };
 
@@ -297,11 +303,14 @@ const evaluateSource = async (
 ): Promise<EvaluatedSource> => {
   context.signal?.throwIfAborted();
   const unavailable = rejectUnavailableSource(context, source);
-  if (unavailable !== undefined) return unavailable;
+  if (unavailable !== undefined) {return unavailable;}
+  if (source.access !== "authorized") {
+    return observeRejectedSource(context, source, { status: "rejected" });
+  }
 
   const read = await readSource(context, source);
   context.signal?.throwIfAborted();
-  if (read?.status !== "read") return evaluateReadFailure(context, source, read);
+  if (read?.status !== "read") {return evaluateReadFailure(context, source, read);}
 
   const parsed = parseSource(context, read.bytes);
   context.signal?.throwIfAborted();
@@ -325,7 +334,7 @@ const evaluateSource = async (
   }
   const definitionMap = new Map(classification.definitions.map(definition => [definition.key, definition]));
   for (const diagnostic of classification.diagnostics) {
-    if (context.diagnostics.length >= CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics) break;
+    if (context.diagnostics.length >= CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics) {break;}
     context.diagnostics.push({ code: diagnostic.code, safeRef: source.sourceRef });
   }
   context.observations.push(Object.freeze({
@@ -346,7 +355,7 @@ const evaluateSources = async (
   sources: readonly BoundSource[],
 ): Promise<readonly EvaluatedSource[]> => {
   const evaluated: EvaluatedSource[] = [];
-  for (const source of sources) evaluated.push(await evaluateSource(context, source));
+  for (const source of sources) {evaluated.push(await evaluateSource(context, source));}
   return evaluated;
 };
 
@@ -354,7 +363,7 @@ const resolveIntent = (evaluated: readonly EvaluatedSource[]): readonly Portable
   const output: PortableClaudeCodeIntent[] = [];
   for (const key of ["effortLevel", "model"] as const) {
     for (const source of evaluated.toReversed()) {
-      if (source.grossTaint || source.taintedKeys.has(key)) break;
+      if (source.grossTaint || source.taintedKeys.has(key)) {break;}
       const definition = source.definitions.get(key);
       if (definition !== undefined) {
         output.push(Object.freeze({ key, sourceRef: source.source.sourceRef, value: definition.value }) as PortableClaudeCodeIntent);
@@ -405,9 +414,9 @@ export const createInspectClaudeCodeConfiguration = (
       if (input.dialect !== CLAUDE_CODE_SETTINGS_DIALECT ||
           !dependencies.semanticClassifier.supportsDialect(input.dialect)) {
         diagnostics.push({ code: "configuration_dialect_unsupported" });
-        for (const source of binding.sources) observations.push(Object.freeze({
+        for (const source of binding.sources) {observations.push(Object.freeze({
           displayPath: source.displayPath, kind: source.kind, sourceRef: source.sourceRef, status: "rejected",
-        }));
+        }));}
         return buildResult(diagnostics, Object.freeze([]), observations);
       }
       const evaluated = await evaluateSources({

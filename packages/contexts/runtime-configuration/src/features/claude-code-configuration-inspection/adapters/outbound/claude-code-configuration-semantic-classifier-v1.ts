@@ -87,14 +87,14 @@ const scanNonportableValue = (
       return;
     }
     const code = classifyString(value);
-    if (code !== undefined) diagnostics.add(code);
+    if (code !== undefined) {diagnostics.add(code);}
     return;
   }
   if (Array.isArray(value)) {
-    for (const item of value) scanNonportableValue(item, diagnostics, signal);
+    for (const item of value) {scanNonportableValue(item, diagnostics, signal);}
     return;
   }
-  if (typeof value !== "object" || value === null) return;
+  if (typeof value !== "object" || value === null) {return;}
   for (const key of Object.keys(value).toSorted()) {
     signal?.throwIfAborted();
     const nested = (value as Readonly<Record<string, unknown>>)[key];

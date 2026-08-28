@@ -174,7 +174,7 @@ const rejectStructuralConflicts = (
     rejectSources(matching, duplicateSourceSetting(matching), conflicts);
   }
   const userSources = sources.filter(source => source.kind === "user");
-  if (userSources.length > 1) rejectSources(userSources, "user", conflicts);
+  if (userSources.length > 1) {rejectSources(userSources, "user", conflicts);}
 
   const workspaceSources = sources.filter(source => source.kind === "workspace");
   if (workspaceSources.length > 1 && !hasValidWorkspaceOrder(workspaceSources)) {
@@ -352,7 +352,7 @@ const prepareSources = async (
   const preparedSources: PreparedSource[] = [];
   for (const source of context.binding.sources) {
     const prepared = await prepareSource(context, source);
-    if (prepared !== undefined) preparedSources.push(prepared);
+    if (prepared !== undefined) {preparedSources.push(prepared);}
   }
   return preparedSources;
 };

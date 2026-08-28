@@ -206,7 +206,7 @@ test("defers full IDs and routes and rejects secrets without affecting safe sibl
   const codes = result.diagnostics.map(item => item.code);
   for (const code of [
     "credential_material_rejected", "provider_route_deferred", "setting_value_unsupported",
-  ]) assert.ok(codes.includes(code as never));
+  ]) {assert.ok(codes.includes(code as never));}
   const serialized = JSON.stringify(result);
   for (const sentinel of ["SECRET_VALUE", "ROUTE_ID", "EXECUTABLE", "UNKNOWN", "SECURITY", "ANTHROPIC_API_KEY"]) {
     assert.doesNotMatch(serialized, new RegExp(sentinel, "u"));

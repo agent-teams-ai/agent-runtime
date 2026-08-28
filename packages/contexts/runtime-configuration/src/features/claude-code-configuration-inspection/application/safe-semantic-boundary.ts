@@ -34,13 +34,13 @@ const parserDiagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
 ]);
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {return false;}
   const prototype = Object.getPrototypeOf(value);
   return prototype === null || prototype === Object.prototype;
 };
 
 const dataDescriptors = (value: object): Readonly<Record<string, PropertyDescriptor>> | undefined => {
-  if (Object.getOwnPropertySymbols(value).length > 0) return undefined;
+  if (Object.getOwnPropertySymbols(value).length > 0) {return undefined;}
   const descriptors = Object.getOwnPropertyDescriptors(value);
   return Object.values(descriptors).every(descriptor =>
     descriptor.enumerable === true && "value" in descriptor &&
@@ -50,25 +50,25 @@ const dataDescriptors = (value: object): Readonly<Record<string, PropertyDescrip
 };
 
 const denseArray = (value: readonly unknown[]): readonly unknown[] | undefined => {
-  if (Object.getOwnPropertySymbols(value).length > 0) return undefined;
+  if (Object.getOwnPropertySymbols(value).length > 0) {return undefined;}
   const descriptors = Object.getOwnPropertyDescriptors(value) as Readonly<Record<string, PropertyDescriptor>>;
   if (descriptors["length"]?.value !== value.length ||
-      Object.keys(descriptors).length !== value.length + 1) return undefined;
+      Object.keys(descriptors).length !== value.length + 1) {return undefined;}
   const output: unknown[] = [];
   for (let index = 0; index < value.length; index += 1) {
     const descriptor = descriptors[String(index)];
     if (descriptor === undefined || descriptor.enumerable !== true ||
-        !("value" in descriptor) || descriptor.get !== undefined || descriptor.set !== undefined) return undefined;
+        !("value" in descriptor) || descriptor.get !== undefined || descriptor.set !== undefined) {return undefined;}
     output.push(descriptor.value);
   }
   return output;
 };
 
 const normalizeScalar = (value: unknown): unknown => {
-  if (value === null || typeof value === "boolean") return value;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value === null || typeof value === "boolean") {return value;}
+  if (typeof value === "number" && Number.isFinite(value)) {return value;}
   if (typeof value === "string" &&
-      value.length <= CLAUDE_CODE_CONFIGURATION_BUDGETS.stringLength) return value;
+      value.length <= CLAUDE_CODE_CONFIGURATION_BUDGETS.stringLength) {return value;}
   throw new TypeError("scalar");
 };
 
@@ -78,7 +78,7 @@ const normalizeArray = (
   state: NormalizationState,
 ): readonly unknown[] => {
   const items = denseArray(value);
-  if (items === undefined) throw new TypeError("array");
+  if (items === undefined) {throw new TypeError("array");}
   state.arrayItems += items.length;
   if (state.arrayItems > CLAUDE_CODE_CONFIGURATION_BUDGETS.arrayItems) {
     throw new TypeError("array budget");
@@ -91,9 +91,9 @@ const normalizeRecord = (
   depth: number,
   state: NormalizationState,
 ): Readonly<Record<string, unknown>> => {
-  if (!isPlainRecord(value)) throw new TypeError("record");
+  if (!isPlainRecord(value)) {throw new TypeError("record");}
   const descriptors = dataDescriptors(value);
-  if (descriptors === undefined) throw new TypeError("properties");
+  if (descriptors === undefined) {throw new TypeError("properties");}
   const keys = Object.keys(descriptors);
   state.objectKeys += keys.length;
   if (state.objectKeys > CLAUDE_CODE_CONFIGURATION_BUDGETS.objectKeys) {
@@ -114,7 +114,7 @@ const normalizeContainer = (
   depth: number,
   state: NormalizationState,
 ): unknown => {
-  if (state.ancestors.has(value)) throw new TypeError("cycle");
+  if (state.ancestors.has(value)) {throw new TypeError("cycle");}
   state.ancestors.add(value);
   try {
     return Array.isArray(value)
@@ -141,7 +141,7 @@ export const normalizeParsedClaudeCodeDocument = (
   value: unknown,
 ): Readonly<Record<string, unknown>> | undefined => {
   try {
-    if (!isPlainRecord(value)) return undefined;
+    if (!isPlainRecord(value)) {return undefined;}
     const normalized = normalize(value, 0, {
       ancestors: new Set(), arrayItems: 0, nodes: 0, objectKeys: 0,
     });
@@ -152,11 +152,11 @@ export const normalizeParsedClaudeCodeDocument = (
 };
 
 const exactRecord = (value: unknown, keys: ReadonlySet<string>): Readonly<Record<string, unknown>> | undefined => {
-  if (!isPlainRecord(value)) return undefined;
+  if (!isPlainRecord(value)) {return undefined;}
   const descriptors = dataDescriptors(value);
-  if (descriptors === undefined || Object.keys(descriptors).some(key => !keys.has(key))) return undefined;
+  if (descriptors === undefined || Object.keys(descriptors).some(key => !keys.has(key))) {return undefined;}
   const output: Record<string, unknown> = Object.create(null);
-  for (const key of Object.keys(descriptors)) output[key] = descriptors[key]?.value;
+  for (const key of Object.keys(descriptors)) {output[key] = descriptors[key]?.value;}
   return output;
 };
 
@@ -164,7 +164,7 @@ export const validateClaudeCodeJsonParseResult = (
   value: unknown,
 ): ParseClaudeCodeJsonResult | undefined => {
   const record = exactRecord(value, new Set(["data", "diagnostic", "status"]));
-  if (record === undefined || typeof record.status !== "string") return undefined;
+  if (record === undefined || typeof record.status !== "string") {return undefined;}
   if (record.status === "parsed" && Object.keys(record).length === 2 && "data" in record) {
     return { data: record.data as Readonly<Record<string, unknown>>, status: "parsed" };
   }
@@ -183,24 +183,24 @@ export const validateClaudeCodeJsonParseResult = (
 };
 
 const exactPortableKeys = (value: unknown): readonly ("model" | "effortLevel")[] => {
-  if (!Array.isArray(value)) throw new TypeError("keys");
+  if (!Array.isArray(value)) {throw new TypeError("keys");}
   const items = denseArray(value);
-  if (items === undefined || items.length > 2) throw new TypeError("keys");
+  if (items === undefined || items.length > 2) {throw new TypeError("keys");}
   const keys = items.map(item => {
-    if (typeof item !== "string" || !portableKeys.has(item as "model" | "effortLevel")) throw new TypeError("key");
+    if (typeof item !== "string" || !portableKeys.has(item as "model" | "effortLevel")) {throw new TypeError("key");}
     return item as "model" | "effortLevel";
   });
-  if (new Set(keys).size !== keys.length) throw new TypeError("duplicate key");
+  if (new Set(keys).size !== keys.length) {throw new TypeError("duplicate key");}
   return Object.freeze(keys.toSorted());
 };
 
 const definitions = (value: unknown): readonly PortableClaudeCodeDefinition[] => {
-  if (!Array.isArray(value)) throw new TypeError("definitions");
+  if (!Array.isArray(value)) {throw new TypeError("definitions");}
   const items = denseArray(value);
-  if (items === undefined || items.length > 2) throw new TypeError("definitions");
+  if (items === undefined || items.length > 2) {throw new TypeError("definitions");}
   const output = items.map(item => {
     const record = exactRecord(item, new Set(["key", "value"]));
-    if (record === undefined || typeof record.key !== "string" || typeof record.value !== "string") throw new TypeError("definition");
+    if (record === undefined || typeof record.key !== "string" || typeof record.value !== "string") {throw new TypeError("definition");}
     if (record.key === "model" && modelAliases.has(record.value)) {
       return Object.freeze({ key: "model" as const, value: record.value as ClaudeCodeModelAlias });
     }
@@ -209,21 +209,21 @@ const definitions = (value: unknown): readonly PortableClaudeCodeDefinition[] =>
     }
     throw new TypeError("definition value");
   });
-  if (new Set(output.map(item => item.key)).size !== output.length) throw new TypeError("duplicate definition");
+  if (new Set(output.map(item => item.key)).size !== output.length) {throw new TypeError("duplicate definition");}
   return Object.freeze(output.toSorted((left, right) => left.key < right.key ? -1 : 1));
 };
 
 const diagnostics = (value: unknown): ClassifyClaudeCodeConfigurationResult["diagnostics"] => {
-  if (!Array.isArray(value)) throw new TypeError("diagnostics");
+  if (!Array.isArray(value)) {throw new TypeError("diagnostics");}
   const items = denseArray(value);
-  if (items === undefined || items.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics) throw new TypeError("diagnostics");
+  if (items === undefined || items.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics) {throw new TypeError("diagnostics");}
   const output = items.map(item => {
     const record = exactRecord(item, new Set(["code"]));
     if (record === undefined || typeof record.code !== "string" ||
-        !diagnosticCodes.has(record.code as ClaudeCodeConfigurationDiagnosticCode)) throw new TypeError("diagnostic");
+        !diagnosticCodes.has(record.code as ClaudeCodeConfigurationDiagnosticCode)) {throw new TypeError("diagnostic");}
     return Object.freeze({ code: record.code as ClaudeCodeConfigurationDiagnosticCode });
   });
-  if (new Set(output.map(item => item.code)).size !== output.length) throw new TypeError("duplicate diagnostic");
+  if (new Set(output.map(item => item.code)).size !== output.length) {throw new TypeError("duplicate diagnostic");}
   return Object.freeze(output.toSorted((left, right) => left.code < right.code ? -1 : 1));
 };
 
@@ -234,7 +234,7 @@ export const validateClaudeCodeSemanticClassification = (
     const record = exactRecord(value, new Set([
       "definitions", "diagnostics", "definedPortableKeys", "taintedPortableKeys",
     ]));
-    if (record === undefined || Object.keys(record).length !== 4) throw new TypeError("classification");
+    if (record === undefined || Object.keys(record).length !== 4) {throw new TypeError("classification");}
     const safeDefinitions = definitions(record.definitions);
     const safeDiagnostics = diagnostics(record.diagnostics);
     const defined = exactPortableKeys(record.definedPortableKeys);
