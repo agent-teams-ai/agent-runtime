@@ -35,18 +35,20 @@ import type {
   RuntimeAccessHandle,
 } from "../contracts/runtime-access.js";
 import {
+  copyTrustedCodexSetupScope,
   copyTrustedClaudeCodeSetupScope,
-  copyTrustedRuntimeAccessScope,
   type TrustedRuntimeAccessScope,
 } from "./trusted-runtime-access-scope.js";
 import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
 import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
 
-export interface AgentRuntimeHostDependencies extends BuildCodexSetupViewDependencies {
-  readonly authorizeClaudeCodeSetupInspection?: BuildClaudeCodeSetupViewDependencies["authorizeClaudeCodeSetupInspection"];
-  readonly discoverClaudeCodeInstallations?: BuildClaudeCodeSetupViewDependencies["discoverClaudeCodeInstallations"];
-  readonly inspectClaudeCodeConfiguration?: BuildClaudeCodeSetupViewDependencies["inspectClaudeCodeConfiguration"];
-  readonly planClaudeCodeSetupInspection?: BuildClaudeCodeSetupViewDependencies["planClaudeCodeSetupInspection"];
+export type CodexSetupCapabilityBundle = BuildCodexSetupViewDependencies;
+
+export type ClaudeCodeSetupCapabilityBundle = BuildClaudeCodeSetupViewDependencies;
+
+export interface AgentRuntimeHostDependencies {
+  readonly claudeCodeSetup: ClaudeCodeSetupCapabilityBundle;
+  readonly codexSetup: CodexSetupCapabilityBundle;
 }
 
 export interface AgentRuntimeHost extends AsyncDisposable {
@@ -135,25 +137,148 @@ const codexScopeLimitOutcome: InspectCodexRuntimeSetupOutcome = Object.freeze({
   status: "unsupported" as const,
 });
 
+const codexUnavailableOutcome: InspectCodexRuntimeSetupOutcome = Object.freeze({
+  diagnostics: Object.freeze([Object.freeze({
+    code: "capability_unavailable" as const,
+  })]),
+  status: "unsupported" as const,
+});
+
+type ProviderScopeSnapshot<Scope> =
+  | { readonly status: "absent" }
+  | { readonly status: "invalid" }
+  | { readonly scope: Scope; readonly status: "available" };
+
+const snapshotProviderScope = <Scope>(
+  read: () => Scope | undefined,
+  copy: (scope: Scope) => Scope | undefined,
+): ProviderScopeSnapshot<Scope> => {
+  try {
+    const scope = read();
+    if (scope === undefined) {
+      return Object.freeze({ status: "absent" });
+    }
+    const copied = copy(scope);
+    return copied === undefined
+      ? Object.freeze({ status: "invalid" })
+      : Object.freeze({ scope: copied, status: "available" });
+  } catch {
+    return Object.freeze({ status: "invalid" });
+  }
+};
+
+function assertClosedPlainBundle(
+  value: unknown,
+  bundleName: string,
+  expectedBindings: readonly string[],
+): asserts value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError(`${bundleName} must be a plain capability bundle`);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(`${bundleName} must be a plain capability bundle`);
+  }
+
+  const expectedKeys = expectedBindings.toSorted();
+  const actualKeys = Reflect.ownKeys(value);
+  if (actualKeys.some(key => typeof key !== "string") ||
+    actualKeys.map(String).toSorted().join("\0") !== expectedKeys.join("\0")) {
+    throw new TypeError(`${bundleName} must contain exactly: ${expectedKeys.join(", ")}`);
+  }
+}
+
+const snapshotCapabilityMethod = <Method>(
+  bundle: Record<string, unknown>,
+  bundleName: string,
+  bindingName: string,
+  methodName: "execute" | "plan",
+): Method => {
+  const binding = bundle[bindingName];
+  if ((typeof binding !== "object" && typeof binding !== "function") || binding === null) {
+    throw new TypeError(`${bundleName}.${bindingName} must provide ${methodName}()`);
+  }
+  const method = (binding as Record<"execute" | "plan", unknown>)[methodName];
+  if (typeof method !== "function") {
+    throw new TypeError(`${bundleName}.${bindingName} must provide ${methodName}()`);
+  }
+  return method.bind(binding) as Method;
+};
+
+const snapshotAgentRuntimeHostDependencies = (
+  value: unknown,
+): AgentRuntimeHostDependencies => {
+  assertClosedPlainBundle(value, "Agent Runtime capability dependencies", [
+    "claudeCodeSetup",
+    "codexSetup",
+  ]);
+  const claudeCodeSetup = value.claudeCodeSetup;
+  const codexSetup = value.codexSetup;
+  assertClosedPlainBundle(
+    claudeCodeSetup,
+    "Claude Code setup capability bundle",
+    [
+      "authorizeClaudeCodeSetupInspection",
+      "discoverClaudeCodeInstallations",
+      "inspectClaudeCodeConfiguration",
+      "planClaudeCodeSetupInspection",
+    ],
+  );
+  assertClosedPlainBundle(
+    codexSetup,
+    "Codex setup capability bundle",
+    [
+      "authorizeSetupInspection",
+      "discoverCodexInstallations",
+      "inspectCodexConfiguration",
+      "planCodexSetupInspection",
+    ],
+  );
+
+  return Object.freeze({
+    claudeCodeSetup: Object.freeze({
+      authorizeClaudeCodeSetupInspection: Object.freeze({
+        execute: snapshotCapabilityMethod<ClaudeCodeSetupCapabilityBundle["authorizeClaudeCodeSetupInspection"]["execute"]>(claudeCodeSetup, "Claude Code setup capability bundle", "authorizeClaudeCodeSetupInspection", "execute"),
+      }),
+      discoverClaudeCodeInstallations: Object.freeze({
+        execute: snapshotCapabilityMethod<ClaudeCodeSetupCapabilityBundle["discoverClaudeCodeInstallations"]["execute"]>(claudeCodeSetup, "Claude Code setup capability bundle", "discoverClaudeCodeInstallations", "execute"),
+      }),
+      inspectClaudeCodeConfiguration: Object.freeze({
+        execute: snapshotCapabilityMethod<ClaudeCodeSetupCapabilityBundle["inspectClaudeCodeConfiguration"]["execute"]>(claudeCodeSetup, "Claude Code setup capability bundle", "inspectClaudeCodeConfiguration", "execute"),
+      }),
+      planClaudeCodeSetupInspection: Object.freeze({
+        plan: snapshotCapabilityMethod<ClaudeCodeSetupCapabilityBundle["planClaudeCodeSetupInspection"]["plan"]>(claudeCodeSetup, "Claude Code setup capability bundle", "planClaudeCodeSetupInspection", "plan"),
+      }),
+    }),
+    codexSetup: Object.freeze({
+      authorizeSetupInspection: Object.freeze({
+        execute: snapshotCapabilityMethod<CodexSetupCapabilityBundle["authorizeSetupInspection"]["execute"]>(codexSetup, "Codex setup capability bundle", "authorizeSetupInspection", "execute"),
+      }),
+      discoverCodexInstallations: Object.freeze({
+        execute: snapshotCapabilityMethod<CodexSetupCapabilityBundle["discoverCodexInstallations"]["execute"]>(codexSetup, "Codex setup capability bundle", "discoverCodexInstallations", "execute"),
+      }),
+      inspectCodexConfiguration: Object.freeze({
+        execute: snapshotCapabilityMethod<CodexSetupCapabilityBundle["inspectCodexConfiguration"]["execute"]>(codexSetup, "Codex setup capability bundle", "inspectCodexConfiguration", "execute"),
+      }),
+      planCodexSetupInspection: Object.freeze({
+        plan: snapshotCapabilityMethod<CodexSetupCapabilityBundle["planCodexSetupInspection"]["plan"]>(codexSetup, "Codex setup capability bundle", "planCodexSetupInspection", "plan"),
+      }),
+    }),
+  });
+};
+
 export const createAgentRuntimeHost = (
   dependencies: AgentRuntimeHostDependencies,
 ): AgentRuntimeHost => {
-  const buildCodexSetupView = createBuildCodexSetupView(dependencies, randomBytes(32));
-  const claudeDependencyCount = [
-    dependencies.authorizeClaudeCodeSetupInspection,
-    dependencies.discoverClaudeCodeInstallations,
-    dependencies.inspectClaudeCodeConfiguration,
-    dependencies.planClaudeCodeSetupInspection,
-  ].filter(dependency => dependency !== undefined).length;
-  if (claudeDependencyCount !== 0 && claudeDependencyCount !== 4) {
-    throw new TypeError("Claude Code setup inspection dependencies must be supplied together");
-  }
-  const buildClaudeCodeSetupView = claudeDependencyCount === 0
-    ? undefined
-    : createBuildClaudeCodeSetupView(
-      dependencies as BuildClaudeCodeSetupViewDependencies,
-      randomBytes(32),
-    );
+  const capabilityDependencies = snapshotAgentRuntimeHostDependencies(dependencies);
+  const buildCodexSetupView = createBuildCodexSetupView(
+    capabilityDependencies.codexSetup,
+    randomBytes(32),
+  );
+  const buildClaudeCodeSetupView = createBuildClaudeCodeSetupView(
+    capabilityDependencies.claudeCodeSetup,
+    randomBytes(32),
+  );
   const hostAbort = new AbortController();
   const activeCalls = new Set<Promise<unknown>>();
   let disposed = false;
@@ -181,21 +306,14 @@ export const createAgentRuntimeHost = (
   return Object.freeze({
     bindAccess(scope: TrustedRuntimeAccessScope) {
       assertActive();
-      let claudeCodeScope: TrustedRuntimeAccessScope["claudeCodeSetup"];
-      let claudeCodeScopeReadable = true;
-      try {
-        claudeCodeScope = scope.claudeCodeSetup;
-      } catch {
-        claudeCodeScopeReadable = false;
-      }
-      const claudeCodeUnavailable =
-        buildClaudeCodeSetupView === undefined ||
-        (claudeCodeScopeReadable && claudeCodeScope === undefined);
-      const boundClaudeCodeScope = claudeCodeUnavailable || !claudeCodeScopeReadable ||
-        claudeCodeScope === undefined
-        ? undefined
-        : copyTrustedClaudeCodeSetupScope(claudeCodeScope);
-      const boundCodexScope = copyTrustedRuntimeAccessScope(scope);
+      const boundClaudeCodeScope = snapshotProviderScope(
+        () => scope.claudeCodeSetup,
+        copyTrustedClaudeCodeSetupScope,
+      );
+      const boundCodexScope = snapshotProviderScope(
+        () => scope.codexSetup,
+        copyTrustedCodexSetupScope,
+      );
       return Object.freeze({
         claudeCodeSetup: Object.freeze({
           inspect: async (options?: { readonly signal?: AbortSignal }) => {
@@ -206,11 +324,11 @@ export const createAgentRuntimeHost = (
               : AbortSignal.any([hostAbort.signal, callerSignal]);
             signal.throwIfAborted();
             const operation: Promise<InspectClaudeCodeRuntimeSetupOutcome> =
-              claudeCodeUnavailable
+              boundClaudeCodeScope.status === "absent"
                 ? Promise.resolve(claudeCodeUnavailableOutcome)
-                : boundClaudeCodeScope === undefined
+                : boundClaudeCodeScope.status === "invalid"
                   ? Promise.resolve(claudeCodeScopeLimitOutcome)
-                  : buildClaudeCodeSetupView(boundClaudeCodeScope, { signal });
+                  : buildClaudeCodeSetupView(boundClaudeCodeScope.scope, { signal });
             activeCalls.add(operation);
             operation.then(
               () => activeCalls.delete(operation),
@@ -231,9 +349,11 @@ export const createAgentRuntimeHost = (
                 : AbortSignal.any([hostAbort.signal, options.signal]);
             signal.throwIfAborted();
             const operation: Promise<InspectCodexRuntimeSetupOutcome> =
-              boundCodexScope === undefined
-              ? Promise.resolve(codexScopeLimitOutcome)
-              : buildCodexSetupView(boundCodexScope, input, { signal });
+              boundCodexScope.status === "absent"
+                ? Promise.resolve(codexUnavailableOutcome)
+                : boundCodexScope.status === "invalid"
+                  ? Promise.resolve(codexScopeLimitOutcome)
+                  : buildCodexSetupView(boundCodexScope.scope, input, { signal });
             activeCalls.add(operation);
             operation.then(
               () => activeCalls.delete(operation),
@@ -271,13 +391,17 @@ export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
   });
 
   return createAgentRuntimeHost({
-    authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
-    authorizeSetupInspection: security.authorizeSetupInspection,
-    discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,
-    discoverCodexInstallations: execution.discoverCodexInstallations,
-    inspectClaudeCodeConfiguration: claudeConfiguration,
-    inspectCodexConfiguration: configuration.inspectCodexConfiguration,
-    planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner(process.platform),
-    planCodexSetupInspection: createCodexSetupInspectionPlanner(process.platform),
+    claudeCodeSetup: {
+      authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
+      discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,
+      inspectClaudeCodeConfiguration: claudeConfiguration,
+      planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner(process.platform),
+    },
+    codexSetup: {
+      authorizeSetupInspection: security.authorizeSetupInspection,
+      discoverCodexInstallations: execution.discoverCodexInstallations,
+      inspectCodexConfiguration: configuration.inspectCodexConfiguration,
+      planCodexSetupInspection: createCodexSetupInspectionPlanner(process.platform),
+    },
   });
 };

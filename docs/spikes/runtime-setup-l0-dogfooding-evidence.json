@@ -1,0 +1,576 @@
+{
+  "schemaVersion": 3,
+  "evidenceKind": "runtime-setup-l0-direct-composition",
+  "sourceRevision": "d490a2308be1b777931d2de0df7196d6b5f128a4",
+  "authority": "ADR-0008",
+  "productOutcome": "detached-safe-runtime-setup-preview",
+  "taxonomyAuthority": "experiment-local-non-qualification-rubric",
+  "ownership": [
+    {
+      "owner": "embedded-runtime",
+      "responsibility": "private API, trusted scope, cross-context composition, and Host disposal"
+    },
+    {
+      "owner": "runtime-security",
+      "responsibility": "setup-inspection authorization"
+    },
+    {
+      "owner": "agent-execution",
+      "responsibility": "runtime installation observation"
+    },
+    {
+      "owner": "runtime-configuration",
+      "responsibility": "provider-specific configuration inspection"
+    }
+  ],
+  "verdicts": {
+    "L0": "demonstrated-product-pure-di",
+    "L1": "no-go-measurement-candidate",
+    "L2": "no-go",
+    "L3": "no-go",
+    "L4": "no-go",
+    "L5": "no-go"
+  },
+  "guidanceThresholds": {
+    "compositionFilesPerOrdinaryChange": 3,
+    "compositionGlueLinesPerOrdinaryChange": 60,
+    "behaviorFixtureReusePercent": 80
+  },
+  "promotionRule": "hold-unless-two-of-three-prospective-changes-show-the-same-neutral-composition-problem",
+  "capture": {
+    "command": "pnpm --filter @agent-teams/embedded-runtime check",
+    "exitCode": 0,
+    "outputSha256": "9c233c48e217245a6206d6d830a68a076e8a70334ff2842854a4b6f48d0ad04c",
+    "architecture": "arm64",
+    "nodeVersion": "v24.18.0",
+    "platform": "darwin",
+    "testSummary": {
+      "tests": 57,
+      "pass": 57,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  "artifactDigests": {
+    "fixtures": {
+      "fileCount": 4,
+      "sha256": "0f1f9f916883c35abae1761f19271062c3825382b943434361eb8160ee145c19"
+    },
+    "sources": {
+      "fileCount": 59,
+      "sha256": "4a2ff3522d563b36125c55505c9c4cfaad25de30e99a9b36152c654be9ce211a"
+    },
+    "tests": {
+      "fileCount": 27,
+      "sha256": "775eac71209c9904a6fcd15a6ec761e8c7ba824db9044b6b79420572fe57c1c6"
+    }
+  },
+  "historicalChanges": [
+    {
+      "id": "codex-initial-slice",
+      "revision": "f277cd55640c892f8bef3384407b73f2f366f434",
+      "files": 63,
+      "additions": 5456,
+      "deletions": 17,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 9,
+        "additions": 254,
+        "deletions": 0
+      },
+      "production": {
+        "files": 34,
+        "additions": 2692,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 6,
+        "additions": 2209,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 0,
+        "after": 13,
+        "retained": 0,
+        "reusePercent": null
+      }
+    },
+    {
+      "id": "codex-boundary-hardening",
+      "revision": "3c4dcddc70e6b70c8e457a22235843368cc90dd9",
+      "files": 24,
+      "additions": 1058,
+      "deletions": 208,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 4,
+        "additions": 112,
+        "deletions": 3
+      },
+      "production": {
+        "files": 17,
+        "additions": 612,
+        "deletions": 95
+      },
+      "tests": {
+        "files": 5,
+        "additions": 436,
+        "deletions": 106
+      },
+      "behaviorFixtures": {
+        "before": 13,
+        "after": 13,
+        "retained": 12,
+        "reusePercent": 92.31
+      }
+    },
+    {
+      "id": "claude-code-sibling-slice",
+      "revision": "493c6c37e247f021fc110c5fc624b72f1502d743",
+      "files": 81,
+      "additions": 9766,
+      "deletions": 93,
+      "binaryFiles": 5,
+      "composition": {
+        "files": 9,
+        "additions": 210,
+        "deletions": 2
+      },
+      "production": {
+        "files": 40,
+        "additions": 3263,
+        "deletions": 31
+      },
+      "tests": {
+        "files": 17,
+        "additions": 4191,
+        "deletions": 1
+      },
+      "behaviorFixtures": {
+        "before": 13,
+        "after": 32,
+        "retained": 13,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "claude-code-reliability-qualification",
+      "revision": "dbbb1c8fe585d3df6ff0251265d70086409aa99a",
+      "files": 54,
+      "additions": 8553,
+      "deletions": 2190,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 4,
+        "additions": 264,
+        "deletions": 50
+      },
+      "production": {
+        "files": 23,
+        "additions": 1478,
+        "deletions": 773
+      },
+      "tests": {
+        "files": 18,
+        "additions": 1556,
+        "deletions": 601
+      },
+      "behaviorFixtures": {
+        "before": 32,
+        "after": 46,
+        "retained": 31,
+        "reusePercent": 96.88
+      }
+    },
+    {
+      "id": "closed-capability-bundle-hardening",
+      "revision": "ff82eb593bad665937bae5ffdf10593f4179387d",
+      "files": 10,
+      "additions": 308,
+      "deletions": 55,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 2,
+        "additions": 130,
+        "deletions": 29
+      },
+      "production": {
+        "files": 2,
+        "additions": 130,
+        "deletions": 29
+      },
+      "tests": {
+        "files": 7,
+        "additions": 177,
+        "deletions": 25
+      },
+      "behaviorFixtures": {
+        "before": 46,
+        "after": 48,
+        "retained": 46,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "provider-symmetric-access-scopes",
+      "revision": "089ee44e9ccc43336ca32bd6a7be07b71d995e48",
+      "files": 15,
+      "additions": 283,
+      "deletions": 212,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 3,
+        "additions": 59,
+        "deletions": 29
+      },
+      "production": {
+        "files": 7,
+        "additions": 67,
+        "deletions": 39
+      },
+      "tests": {
+        "files": 8,
+        "additions": 216,
+        "deletions": 173
+      },
+      "behaviorFixtures": {
+        "before": 48,
+        "after": 49,
+        "retained": 46,
+        "reusePercent": 95.83
+      }
+    },
+    {
+      "id": "provider-symmetric-scope-contract-evidence",
+      "revision": "d490a2308be1b777931d2de0df7196d6b5f128a4",
+      "files": 1,
+      "additions": 1,
+      "deletions": 1,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 1,
+        "deletions": 1
+      },
+      "behaviorFixtures": {
+        "before": 49,
+        "after": 49,
+        "retained": 49,
+        "reusePercent": 100
+      }
+    }
+  ],
+  "prospectiveBenchmarks": [
+    {
+      "id": "owner-and-composition-root-navigation",
+      "jobId": "ar-l0-requal-trace-20260828-final-r1",
+      "sourceRevision": "d490a2308be1b777931d2de0df7196d6b5f128a4",
+      "execution": {
+        "editMode": "read-only",
+        "model": "gpt-5.6-sol",
+        "reasoningEffort": "xhigh",
+        "serviceTier": "fast"
+      },
+      "prompt": "You are a read-only architecture benchmark worker. Inspect the Agent Runtime repository at exact commit d490a2308be1b777931d2de0df7196d6b5f128a4. Start a monotonic timer before inspection. Do not edit files, install dependencies, run providers, launch agents, or access user projects.\n\nLocate and verify: (1) the product owner and private Runtime Setup API, (2) createAgentRuntimeHost and createDefaultAgentRuntimeHost, (3) complete required Codex and Claude Code capability bundles, (4) symmetric optional codexSetup and claudeCodeSetup trusted scope sections, (5) owner-local adapters, feature factories, use cases, authorization, and result contracts. Expected ownership: embedded-runtime owns private API, provider-neutral trusted scope envelope, composition, and disposal; runtime-security owns authorization; agent-execution owns installation observation; runtime-configuration owns provider configuration inspection. Verify that application/contracts do not import module runtime, container, registry, Cordis, Awilix, or Foundation runtime types.\n\nReturn only strict JSON with: sourceRevision, elapsedSeconds, filesRead, searches, ownerMatrixPass, compositionRootPass, bundleClosurePass, symmetricScopesPass, frameworkLeakFound, evidence (array of paths/symbols), verdict (HOLD or FAIL), and concise reason. HOLD means the exact code remains valid L0 Pure DI evidence and does not prove a need for L1-L3.",
+      "promptEncoding": "utf8-lf-terminated",
+      "promptSha256": "ca6df4d0c273c0e4e9587cadcb8d2514fea2bde8574a0cd29b2f73fe467e3ec7",
+      "retainedEnvelopeSha256": "f45def4c80424a7df427161092f8687c018537628d578d34b812a732f8ac1225",
+      "status": "done",
+      "changedFiles": [],
+      "measurements": {
+        "elapsedSeconds": 223.93,
+        "filesRead": 64,
+        "searches": 12
+      },
+      "oracle": {
+        "bundleClosurePass": true,
+        "compositionRootPass": true,
+        "frameworkLeakFound": false,
+        "ownerMatrixPass": true,
+        "symmetricScopesPass": true
+      },
+      "promotionEvidence": false,
+      "verdict": "hold",
+      "reason": "The exact clean SHA retains one product-owned Pure DI root, complete mandatory provider bundles, symmetric optional trusted scopes, owner-local behavior, and framework-free application/contracts."
+    },
+    {
+      "id": "fail-closed-binding-diagnostics",
+      "jobId": "ar-l0-requal-gates-20260828-final-r1",
+      "sourceRevision": "d490a2308be1b777931d2de0df7196d6b5f128a4",
+      "execution": {
+        "editMode": "read-only",
+        "model": "gpt-5.6-sol",
+        "reasoningEffort": "xhigh",
+        "serviceTier": "fast"
+      },
+      "prompt": "You are a read-only fail-closed benchmark worker. Inspect Agent Runtime at exact commit d490a2308be1b777931d2de0df7196d6b5f128a4. Start a monotonic timer before inspection. Do not edit files, install dependencies, run providers, launch agents, or access user projects.\n\nVerify from source and focused tests that: (1) missing, partial, malformed, accessor-hostile, and unknown AgentRuntimeHost dependency bindings fail synchronously before bindAccess publishes a handle; (2) Codex and Claude dependency bundles are both required and snapshotted; (3) absent codexSetup or claudeCodeSetup scope returns typed capability_unavailable without downstream calls; (4) malformed/over-limit provider scope returns access_scope_limit_exceeded; (5) Codex-only and Claude-only grants are isolated; (6) composition defects are not converted into authorization denial. Focus on packages/apps/embedded-runtime/tests/capability-bundle-contract.test.ts, runtime-access-boundaries.e2e.test.ts, and src/composition/agent-runtime-host.ts.\n\nReturn only strict JSON with: sourceRevision, elapsedSeconds, filesRead, searches, closedDependenciesPass, unknownBindingPass, accessorSnapshotPass, beforeBindAccessPass, absentScopePass, invalidScopePass, providerIsolationPass, denialSeparationPass, focusedTestPathPass, repeatedNeutralProblemFound, evidence (array of test titles and source symbols), verdict (HOLD or FAIL), and concise reason. HOLD requires every pass field true and no repeated neutral composition problem.",
+      "promptEncoding": "utf8-lf-terminated",
+      "promptSha256": "30273fa92243b29877d9318d68153183c682e46be96ea638446d62049253149b",
+      "retainedEnvelopeSha256": "5f413b7f220ce55e5f93622281c275d131aaa683868b37ce7d8c43ffb96c0a93",
+      "status": "done",
+      "changedFiles": [],
+      "measurements": {
+        "elapsedSeconds": 239,
+        "filesRead": 14,
+        "searches": 17
+      },
+      "oracle": {
+        "absentScopePass": true,
+        "accessorSnapshotPass": true,
+        "beforeBindAccessPass": true,
+        "closedDependenciesPass": true,
+        "denialSeparationPass": true,
+        "focusedTestPathPass": true,
+        "invalidScopePass": true,
+        "providerIsolationPass": true,
+        "repeatedNeutralProblemFound": false,
+        "unknownBindingPass": true
+      },
+      "promotionEvidence": false,
+      "verdict": "hold",
+      "reason": "Closed dual-provider bundles fail synchronously before handle publication, scopes distinguish absence from invalidity, grants remain isolated, and composition exceptions do not become authorization denial."
+    },
+    {
+      "id": "prospective-opencode-sibling-capability",
+      "jobId": "ar-l0-requal-change-20260828-final-r1",
+      "sourceRevision": "d490a2308be1b777931d2de0df7196d6b5f128a4",
+      "execution": {
+        "editMode": "read-only",
+        "model": "gpt-5.6-sol",
+        "reasoningEffort": "xhigh",
+        "serviceTier": "fast"
+      },
+      "prompt": "You are a read-only prospective change benchmark worker. Inspect Agent Runtime at exact commit d490a2308be1b777931d2de0df7196d6b5f128a4. Start a monotonic timer before inspection. Plan, but do not implement, an OpenCode passive Runtime Setup sibling capability following the current Codex and Claude Code patterns, required closed dependency bundles, and symmetric provider scope envelope. Do not edit files, install dependencies, run providers, launch agents, or access user projects.\n\nIdentify product owners, concrete files that would change, composition files, estimated composition glue LOC, reusable behavior fixtures/tests, and every binding fact tuple: consumer factory, dependency slot, provider symbol, scope/lifetime, authority owner. Evaluate whether this third provider proves repeated neutral binding drift, whether a small product-local helper is enough, or whether it justifies a dynamic module graph. Do not invent runtime selection or lifecycle needs.\n\nReturn only strict JSON with: sourceRevision, elapsedSeconds, filesRead, searches, owners, proposedFiles, compositionFileCount, estimatedGlueLoc, reusableFixturePercent, bindingFacts, duplicateBindingFactsFound, incorrectEditRisk, repeatedNeutralProblemFound, architectureFreezeRequired, verdict (HOLD, GO_L1, or FAIL), and concise reason. GO_L1 requires a concrete repeated neutral problem demonstrated by the exact source, not future preference.",
+      "promptEncoding": "utf8-lf-terminated",
+      "promptSha256": "f01af93933bbdbaec48179c831d0ec6d9b18395202eef9b9d1828d3e646ac3b1",
+      "retainedEnvelopeSha256": "43638a875172a0a1fd59fb6ce60e29c7c263b5e4d1a3c291ba6fce48ce1ae598",
+      "status": "done",
+      "changedFiles": [],
+      "measurements": {
+        "compositionFiles": 8,
+        "duplicateBindingFacts": 0,
+        "elapsedSeconds": 257.7,
+        "estimatedGlueLines": 230,
+        "filesRead": 41,
+        "reusableFixturePercent": 87,
+        "searches": 12
+      },
+      "oracle": {
+        "architectureFreezeRequired": true,
+        "incorrectEditRisk": "medium",
+        "repeatedNeutralProblemFound": false
+      },
+      "promotionEvidence": false,
+      "verdict": "hold",
+      "reason": "The prospective sibling is composition-heavy, but every binding tuple remains provider- or owner-specific; no repeated neutral drift, runtime selection, or generic lifecycle justifies a module graph."
+    }
+  ],
+  "traces": {
+    "construction": [
+      {
+        "owner": "embedded-runtime",
+        "path": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+        "symbols": [
+          "createDefaultAgentRuntimeHost",
+          "createAgentRuntimeHost"
+        ]
+      },
+      {
+        "owner": "agent-execution",
+        "path": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.ts",
+        "symbols": [
+          "createNodeExecutableFileObserver"
+        ]
+      },
+      {
+        "owner": "agent-execution",
+        "path": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/composition/feature-module-factory.ts",
+        "symbols": [
+          "createRuntimeInstallationDiscoveryFeature"
+        ]
+      },
+      {
+        "owner": "runtime-security",
+        "path": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
+        "symbols": [
+          "createNodePathCanonicalizer"
+        ]
+      },
+      {
+        "owner": "runtime-security",
+        "path": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/composition/feature-module-factory.ts",
+        "symbols": [
+          "createSetupInspectionAuthorizationFeature"
+        ]
+      },
+      {
+        "owner": "runtime-configuration",
+        "path": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/node-configuration-source-reader.ts",
+        "symbols": [
+          "createNodeConfigurationSourceReader"
+        ]
+      },
+      {
+        "owner": "runtime-configuration",
+        "path": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/smol-toml-parser.ts",
+        "symbols": [
+          "createSmolTomlParser"
+        ]
+      },
+      {
+        "owner": "runtime-configuration",
+        "path": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/codex-configuration-semantic-classifier-v1.ts",
+        "symbols": [
+          "createCodexConfigurationSemanticClassifierV1"
+        ]
+      },
+      {
+        "owner": "runtime-configuration",
+        "path": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/composition/feature-module-factory.ts",
+        "symbols": [
+          "createCodexConfigurationInspectionFeature"
+        ]
+      },
+      {
+        "owner": "runtime-configuration",
+        "path": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-source-reader-adapter.ts",
+        "symbols": [
+          "createClaudeCodeConfigurationSourceReaderAdapter"
+        ]
+      },
+      {
+        "owner": "runtime-configuration",
+        "path": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/strict-claude-code-json-parser.ts",
+        "symbols": [
+          "createStrictClaudeCodeJsonParser"
+        ]
+      },
+      {
+        "owner": "runtime-configuration",
+        "path": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-semantic-classifier-v2.ts",
+        "symbols": [
+          "createClaudeCodeConfigurationSemanticClassifierV2"
+        ]
+      },
+      {
+        "owner": "runtime-configuration",
+        "path": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/composition/feature-module-factory.ts",
+        "symbols": [
+          "createClaudeCodeConfigurationInspectionFeature"
+        ]
+      },
+      {
+        "owner": "embedded-runtime",
+        "path": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+        "symbols": [
+          "createCodexSetupInspectionPlanner"
+        ]
+      },
+      {
+        "owner": "embedded-runtime",
+        "path": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+        "symbols": [
+          "createClaudeCodeSetupInspectionPlanner"
+        ]
+      }
+    ],
+    "invocations": {
+      "claudeCode": [
+        {
+          "owner": "embedded-runtime",
+          "path": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "symbols": [
+            "RuntimeAccessHandle",
+            "ClaudeCodeRuntimeSetupQueries"
+          ]
+        },
+        {
+          "owner": "embedded-runtime",
+          "path": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
+          "symbols": [
+            "createBuildClaudeCodeSetupView"
+          ]
+        },
+        {
+          "owner": "runtime-security",
+          "path": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.ts",
+          "symbols": [
+            "createAuthorizeClaudeCodeSetupInspection"
+          ]
+        },
+        {
+          "owner": "agent-execution",
+          "path": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/application/discover-claude-code-installations.ts",
+          "symbols": [
+            "createDiscoverClaudeCodeInstallations"
+          ]
+        },
+        {
+          "owner": "runtime-configuration",
+          "path": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/application/inspect-claude-code-configuration.ts",
+          "symbols": [
+            "createInspectClaudeCodeConfiguration"
+          ]
+        }
+      ],
+      "codex": [
+        {
+          "owner": "embedded-runtime",
+          "path": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "symbols": [
+            "RuntimeAccessHandle",
+            "CodexRuntimeSetupQueries"
+          ]
+        },
+        {
+          "owner": "embedded-runtime",
+          "path": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
+          "symbols": [
+            "createBuildCodexSetupView"
+          ]
+        },
+        {
+          "owner": "runtime-security",
+          "path": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/authorize-setup-inspection.ts",
+          "symbols": [
+            "createAuthorizeSetupInspection"
+          ]
+        },
+        {
+          "owner": "agent-execution",
+          "path": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/application/discover-codex-installations.ts",
+          "symbols": [
+            "createDiscoverCodexInstallations"
+          ]
+        },
+        {
+          "owner": "runtime-configuration",
+          "path": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/application/inspect-codex-configuration.ts",
+          "symbols": [
+            "createInspectCodexConfiguration"
+          ]
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "historical-change-size-is-not-an-authoring-benchmark",
+    "historical-data-does-not-prove-incorrect-edit-count",
+    "codex-and-claude-code-are-sibling-capabilities-not-one-provider-slot",
+    "no-runtime-provider-selection-without-rebuild-is-proved",
+    "host-disposal-does-not-prove-generic-module-lifecycle",
+    "prospective-benchmarks-are-exploratory-and-do-not-satisfy-the-promotion-rule",
+    "no-shared-foundation-runtime-is-authorized"
+  ]
+}

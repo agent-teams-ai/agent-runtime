@@ -151,6 +151,9 @@ Read documents in this order:
 40. `architecture/foundation-adoption.md` - executable Engineering Foundation
    capabilities, deferred applicability gates, maintainability budgets, and the
    reviewed bounded-context scaffolding workflow.
+41. `spikes/runtime-setup-l0-dogfooding-evidence.md` - executable evidence for
+   the product-owned Runtime Setup Pure DI baseline and fail-closed gates for
+   any later module layer.
 
 Document status vocabulary:
 

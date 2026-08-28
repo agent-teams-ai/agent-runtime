@@ -21,7 +21,7 @@ import type {
   InspectCodexRuntimeSetupOutcome,
 } from "../contracts/runtime-access.js";
 import type { CodexSetupInspectionPlanner } from "./ports/outbound/codex-setup-inspection-planner.js";
-import type { TrustedRuntimeAccessScope } from "./trusted-runtime-access-scope.js";
+import type { TrustedCodexSetupScope } from "./trusted-runtime-access-scope.js";
 
 export interface BuildCodexSetupViewDependencies {
   readonly authorizeSetupInspection: AuthorizeSetupInspection;
@@ -50,7 +50,7 @@ const deepFreeze = <T>(value: T): T => {
 
 const observationRef = (
   opaqueReferenceKey: Uint8Array,
-  scope: TrustedRuntimeAccessScope,
+  scope: TrustedCodexSetupScope,
 ): string =>
   `codex-setup-observation:${createHmac("sha256", opaqueReferenceKey)
     .update(JSON.stringify([
@@ -62,7 +62,7 @@ const observationRef = (
 
 const installationObservationRef = (
   opaqueReferenceKey: Uint8Array,
-  scope: TrustedRuntimeAccessScope,
+  scope: TrustedCodexSetupScope,
   internalInstallationRef: string,
 ): string =>
   `codex-installation:${createHmac("sha256", opaqueReferenceKey)
@@ -122,7 +122,7 @@ export const createBuildCodexSetupView = (
   }
   const referenceKey = Uint8Array.from(opaqueReferenceKey);
   return async (
-    scope: TrustedRuntimeAccessScope,
+    scope: TrustedCodexSetupScope,
     input: InspectCodexRuntimeSetup,
     options?: { readonly signal?: AbortSignal },
   ): Promise<InspectCodexRuntimeSetupOutcome> => {

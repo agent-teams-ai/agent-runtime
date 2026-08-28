@@ -3,7 +3,7 @@ import type {
   TrustedInstallationCandidate,
 } from "@agent-teams/runtime-security";
 
-import type { TrustedRuntimeAccessScope } from "../../trusted-runtime-access-scope.js";
+import type { TrustedCodexSetupScope } from "../../trusted-runtime-access-scope.js";
 
 export type CodexSetupInspectionPlan =
   | { readonly status: "unsupported" }
@@ -14,5 +14,5 @@ export type CodexSetupInspectionPlan =
     };
 
 export interface CodexSetupInspectionPlanner {
-  plan(scope: TrustedRuntimeAccessScope): CodexSetupInspectionPlan;
+  plan(scope: TrustedCodexSetupScope): CodexSetupInspectionPlan;
 }

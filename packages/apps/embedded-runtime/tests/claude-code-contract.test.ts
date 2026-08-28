@@ -39,21 +39,33 @@ test("freezes the prospective provider-specific no-product-input Claude contract
 });
 
 test("the real host composition owns the complete Claude dependency contract", async () => {
-  const source = await readFile(
-    join(packageRoot, "src", "composition", "agent-runtime-host.ts"),
-    "utf8",
-  );
+  const [source, declaration, scopeDeclaration] = await Promise.all([
+    readFile(join(packageRoot, "src", "composition", "agent-runtime-host.ts"), "utf8"),
+    readFile(join(packageRoot, "dist", "composition", "agent-runtime-host.d.ts"), "utf8"),
+    readFile(
+      join(packageRoot, "dist", "composition", "trusted-runtime-access-scope.d.ts"),
+      "utf8",
+    ),
+  ]);
   assert.doesNotMatch(source, /child_process|fetch|node:(?:http|https|net|tls)|process\.(?:env|cwd)/u);
-  assert.match(source, /interface AgentRuntimeHostDependencies extends BuildCodexSetupViewDependencies/u);
-  for (const dependency of [
-    "authorizeClaudeCodeSetupInspection",
-    "discoverClaudeCodeInstallations",
-    "inspectClaudeCodeConfiguration",
-    "planClaudeCodeSetupInspection",
-  ]) {
-    assert.match(source, new RegExp(`readonly ${dependency}\\?: BuildClaudeCodeSetupViewDependencies`, "u"));
-  }
-  assert.match(source, /createBuildClaudeCodeSetupView\([\s\S]*?BuildClaudeCodeSetupViewDependencies/u);
+  assert.match(declaration, /type ClaudeCodeSetupCapabilityBundle = BuildClaudeCodeSetupViewDependencies/u);
+  assert.match(declaration, /type CodexSetupCapabilityBundle = BuildCodexSetupViewDependencies/u);
+  assert.match(
+    declaration,
+    /interface AgentRuntimeHostDependencies[\s\S]*?readonly claudeCodeSetup: ClaudeCodeSetupCapabilityBundle;[\s\S]*?readonly codexSetup: CodexSetupCapabilityBundle;/u,
+  );
+  assert.doesNotMatch(
+    declaration.match(/interface AgentRuntimeHostDependencies[\s\S]*?\n\}/u)?.[0] ?? "",
+    /\?:/u,
+  );
+  assert.match(source, /snapshotAgentRuntimeHostDependencies\(dependencies\)/u);
+  assert.match(source, /createBuildClaudeCodeSetupView\([\s\S]*?capabilityDependencies\.claudeCodeSetup/u);
+  const runtimeScope = scopeDeclaration.match(
+    /interface TrustedRuntimeAccessScope[\s\S]*?\n\}/u,
+  )?.[0] ?? "";
+  assert.match(runtimeScope, /readonly claudeCodeSetup\?: TrustedClaudeCodeSetupScope/u);
+  assert.match(runtimeScope, /readonly codexSetup\?: TrustedCodexSetupScope/u);
+  assert.doesNotMatch(runtimeScope, /configurationDialect|observationEpoch|scopeId/u);
 });
 
 test("production declarations contain no test-only Claude contract seam or example", async () => {
