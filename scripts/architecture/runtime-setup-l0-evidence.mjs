@@ -12,6 +12,7 @@ import {
   evidenceRoots,
   ownership,
   prospectiveBenchmarks,
+  sourceRevisionArtifactDigests,
   traces,
 } from "./runtime-setup-l0-evidence-spec.mjs";
 import {
@@ -422,9 +423,15 @@ const validateStoredReport = async report => {
     changes.at(-1)?.revision,
     "captured source revision must be the latest retained product change",
   );
+  const currentArtifactDigests = await artifactDigests();
+  assert.deepEqual(
+    currentArtifactDigests,
+    sourceRevisionArtifactDigests,
+    "current product roots no longer match the pinned source revision",
+  );
   assert.deepEqual(
     report.artifactDigests,
-    await artifactDigests(),
+    currentArtifactDigests,
     "captured product source, tests, or fixtures drifted",
   );
   assert.deepEqual(report.ownership, ownership);
@@ -496,6 +503,13 @@ if (mode === "--capture") {
 } else if (mode === "--check") {
   const stored = JSON.parse(await readFile(evidencePath, "utf8"));
   await validateStoredReport(stored);
+  try {
+    assertEvidenceRootsMatchRevision(stored.sourceRevision);
+  } catch (error) {
+    if (!isHistoricalObjectClosureUnavailable(error)) {
+      throw error;
+    }
+  }
   const historicalChanges = loadHistoricalChanges();
   if (historicalChanges !== undefined) {
     assert.deepEqual(

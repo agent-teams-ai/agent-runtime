@@ -74,8 +74,16 @@ barrels are not represented as runtime calls.
 - fails closed on non-literal dynamic dependencies in inward-facing code;
 - rejects outward-layer, container, registry, Cordis, Awilix, Module Runtime,
   and Foundation imports from application and contract code; and
-- recomputes content digests and historical measurements when full history is
+- binds current product roots to the captured source revision through pinned
+  content digests, additionally verifies the exact Git diff when that revision
+  closure is locally available, and
+- recomputes historical measurements when the older Git object closure is
   available.
+
+In a shallow or partial clone, unavailable old Git objects may disable only the
+corresponding historical recomputation. Exact report shape, canonical
+non-historical content, pinned current product digests, ownership, traces, and
+retained benchmark envelopes remain mandatory.
 
 The general Engineering Foundation source-dependency gate remains authoritative
 for package boundaries. This evidence adds only the narrower product claim and

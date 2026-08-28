@@ -17,6 +17,21 @@ export const changes = Object.freeze([
   }),
 ]);
 
+export const sourceRevisionArtifactDigests = Object.freeze({
+  fixtures: Object.freeze({
+    fileCount: 4,
+    sha256: "64fa47c95f70c283e22ae3b413927c1cb5966644fa627fd952904df0b6f488a5",
+  }),
+  sources: Object.freeze({
+    fileCount: 57,
+    sha256: "69a87dab3f5031581db980daa0e38142ce8187328de2243262b197ec52054b42",
+  }),
+  tests: Object.freeze({
+    fileCount: 23,
+    sha256: "9a528a517aa7d7ad5ecfdb87690fc74181e0b0a2739b1d8d9f6f81b4055bf26f",
+  }),
+});
+
 const execution = Object.freeze({
   editMode: "read-only",
   model: "gpt-5.6-sol",
