@@ -1,61 +1,66 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "redacted-hosted-worker-result-envelopes",
-  "sourceRevision": "7be998237a4c262bee9c4198d554b43cd2757ac6",
+  "sourceRevision": "d490a2308be1b777931d2de0df7196d6b5f128a4",
   "redaction": "Retains the requested decision fields and drops raw logs, absolute host paths, and provider telemetry.",
   "envelopes": [
     {
-      "jobId": "ar-l0-final-trace-20260828-r2",
+      "jobId": "ar-l0-requal-trace-20260828-final-r1",
       "status": "done",
       "changedFiles": [],
       "measurements": {
-        "elapsedSeconds": 221.18,
-        "filesRead": 52,
-        "searches": 9
+        "elapsedSeconds": 223.93,
+        "filesRead": 64,
+        "searches": 12
       },
       "oracle": {
         "bundleClosurePass": true,
         "compositionRootPass": true,
         "frameworkLeakFound": false,
-        "ownerMatrixPass": true
+        "ownerMatrixPass": true,
+        "symmetricScopesPass": true
       },
       "promotionEvidence": false,
       "verdict": "hold",
-      "reason": "Ownership, the composition root, and closed bundles were discoverable without framework leakage."
+      "reason": "The exact clean SHA retains one product-owned Pure DI root, complete mandatory provider bundles, symmetric optional trusted scopes, owner-local behavior, and framework-free application/contracts."
     },
     {
-      "jobId": "ar-l0-final-gates-20260828-r2",
+      "jobId": "ar-l0-requal-gates-20260828-final-r1",
       "status": "done",
       "changedFiles": [],
       "measurements": {
-        "elapsedSeconds": 345,
-        "filesRead": 3,
-        "searches": 3
+        "elapsedSeconds": 239,
+        "filesRead": 14,
+        "searches": 17
       },
       "oracle": {
+        "absentScopePass": true,
+        "accessorSnapshotPass": true,
         "beforeBindAccessPass": true,
+        "closedDependenciesPass": true,
         "denialSeparationPass": true,
         "focusedTestPathPass": true,
-        "missingDependencyPass": true,
+        "invalidScopePass": true,
+        "providerIsolationPass": true,
         "repeatedNeutralProblemFound": false,
         "unknownBindingPass": true
       },
       "promotionEvidence": false,
       "verdict": "hold",
-      "reason": "Both composition defects fail synchronously and remain distinct from authorization denial."
+      "reason": "Closed dual-provider bundles fail synchronously before handle publication, scopes distinguish absence from invalidity, grants remain isolated, and composition exceptions do not become authorization denial."
     },
     {
-      "jobId": "ar-l0-final-change-20260828-r2",
+      "jobId": "ar-l0-requal-change-20260828-final-r1",
       "status": "done",
       "changedFiles": [],
       "measurements": {
         "compositionFiles": 8,
         "duplicateBindingFacts": 0,
-        "elapsedSeconds": 467,
+        "elapsedSeconds": 257.7,
         "estimatedGlueLines": 230,
-        "filesRead": 52,
+        "filesRead": 41,
         "reusableFixturePercent": 87,
-        "searches": 9
+        "searches": 12
       },
       "oracle": {
         "architectureFreezeRequired": true,
@@ -64,7 +69,7 @@
       },
       "promotionEvidence": false,
       "verdict": "hold",
-      "reason": "The slice is composition-heavy, but its provider-specific binding facts remain product-owned and are not duplicated neutral semantics."
+      "reason": "The prospective sibling is composition-heavy, but every binding tuple remains provider- or owner-specific; no repeated neutral drift, runtime selection, or generic lifecycle justifies a module graph."
     }
   ]
 }

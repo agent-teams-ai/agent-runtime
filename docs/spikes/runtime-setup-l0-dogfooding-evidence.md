@@ -16,7 +16,9 @@ The exact product source revision and content digests are retained in
 [the machine evidence](runtime-setup-l0-dogfooding-evidence.json).
 The observable outcomes are detached, safe Codex and Claude Code setup
 previews. They are sibling capabilities with distinct contracts, not
-implementations competing for one module slot.
+implementations competing for one module slot. The Host receives both complete
+capability bundles, while each bound access handle may grant either provider
+scope independently.
 
 L0-L5 in this evidence are an experiment-local composition rubric. They do not
 replace the repository readiness or qualification vocabulary and cannot
@@ -42,6 +44,7 @@ Construction and invocation are separate traces.
     -> owner-local feature factories
     -> closed Codex and Claude capability dependency bundles
     -> createAgentRuntimeHost
+    -> provider-neutral trusted scope envelope
     -> frozen, scope-bound RuntimeAccessHandle
 
     Invocation, once per capability
@@ -102,6 +105,10 @@ The L0 contract suite must cover:
   owner branches;
 - sibling failure and branch settlement;
 - concurrent caller and trusted-scope isolation;
+- independent Codex-only and Claude-only grants;
+- typed `capability_unavailable` outcomes for an absent provider scope;
+- typed `access_scope_limit_exceeded` outcomes for malformed or over-limit
+  provider scopes, without downstream calls;
 - a non-cooperative dependency;
 - repeated and concurrent disposal;
 - bounded disposal timeout; and
@@ -159,8 +166,11 @@ ambiguous evidence means HOLD, not promotion.
 
 L0 is the only admitted product shape: literal imports, closed plain dependency
 objects, feature-local factories, one trusted composition root, and one
-Host-owned lifetime. Capability contracts expose no module, container,
-registry, repository, transport, or lifecycle framework type.
+Host-owned lifetime. The aggregate access scope is provider-neutral and contains
+independent optional Codex and Claude Code sections; absence is a typed product
+outcome rather than an optional composition dependency. Capability contracts
+expose no module, container, registry, repository, transport, or lifecycle
+framework type.
 
 L1 remains a measurement candidate. Existing changes show legitimate
 cross-context composition work but do not prove a useful declaration grammar,
