@@ -3,6 +3,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
+  realpath,
   rename,
   rm,
   symlink,
@@ -298,13 +299,14 @@ test(
       item.absolutePath === aliases[0]
     );
     assert.ok(externalCandidate);
-    assert.equal(externalCandidate.canonicalPath, outsideFile);
+    const canonicalOutsideFile = await realpath(outsideFile);
+    assert.equal(externalCandidate.canonicalPath, canonicalOutsideFile);
     assert.deepEqual(externalCandidate.custodyRoot, {
       absolutePath: aliases[0],
-      canonicalPath: outsideFile,
+      canonicalPath: canonicalOutsideFile,
     });
     assert.equal(openedCanonicalPaths.includes(home), false);
-    assert.deepEqual(openedCanonicalPaths, [outsideFile]);
+    assert.deepEqual(openedCanonicalPaths, [canonicalOutsideFile]);
     assert.ok(result.diagnostics.some(item =>
       item.code === "candidate_invalid" && item.safeRef === "$HOME/outside-alias-1"
     ));

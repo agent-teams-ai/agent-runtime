@@ -4,6 +4,7 @@ import {
   link,
   mkdir,
   mkdtemp,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -390,10 +391,11 @@ test("allows an approved external-target alias but rejects direct external candi
     candidate.absolutePath === escapedAlias
   );
   assert.ok(externalAlias);
-  assert.equal(externalAlias.canonicalPath, outsideTarget);
+  const canonicalOutsideTarget = await realpath(outsideTarget);
+  assert.equal(externalAlias.canonicalPath, canonicalOutsideTarget);
   assert.deepEqual(externalAlias.custodyRoot, {
     absolutePath: escapedAlias,
-    canonicalPath: outsideTarget,
+    canonicalPath: canonicalOutsideTarget,
   });
   assert.deepEqual(
     result.diagnostics.filter(item => item.safeRef === "explicit" || item.safeRef === "explicit-path")

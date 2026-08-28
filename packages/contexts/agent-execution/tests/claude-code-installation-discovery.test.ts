@@ -273,7 +273,7 @@ test("observes an approved alias and external executable with a file-level bound
   );
   assert.deepEqual(authorized.custodyRoot, {
     absolutePath: alias,
-    canonicalPath: external,
+    canonicalPath: await realpath(external),
   });
 
   const result = await createRuntimeInstallationDiscoveryFeature({
