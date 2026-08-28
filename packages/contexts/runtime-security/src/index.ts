@@ -12,6 +12,7 @@ export type {
 export type {
   AuthorizeClaudeCodeSetupInspection,
   AuthorizeClaudeCodeSetupInspectionResult,
+  AuthorizedClaudeCodeCanonicalRoot,
   AuthorizedClaudeCodeExecutableCandidate,
   AuthorizedClaudeCodePortableSource,
   ClaudeCodePortableSourceKind,

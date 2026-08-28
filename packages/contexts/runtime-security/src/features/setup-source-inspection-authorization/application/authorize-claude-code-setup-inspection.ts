@@ -320,6 +320,14 @@ export const createAuthorizeClaudeCodeSetupInspection = (
     );
     signal?.throwIfAborted();
     return deepFreezeAuthorization({
+      canonicalRoots: roots
+        .filter((root): root is ClaudeCodeCanonicalRoot & { readonly kind: "home" | "workspace" } =>
+          root.kind === "home" || root.kind === "workspace")
+        .map(root => ({
+          absolutePath: root.absolutePath,
+          canonicalPath: root.canonicalPath,
+          kind: root.kind,
+        })),
       diagnostics: sortDiagnostics([
         ...candidates.diagnostics,
         ...sources.diagnostics,

@@ -80,15 +80,15 @@ const mapCandidate = (
 
 const mapSource = (
   source: AuthorizedClaudeCodePortableSource,
-  sourceIndex: number,
 ): ClaudeCodeConfigurationSource => {
   const rootId = source.kind === "user" ? "declared-home-root" : "declared-workspace-root";
+  const selectionBasis = "static-preview" as const;
   const common = {
     displayPath: source.displayPath,
     observationEpoch: source.observationEpoch,
     role: source.kind,
-    selectionBasis: "static-preview" as const,
-    sourceId: `static-source-${sourceIndex + 1}`,
+    selectionBasis,
+    sourceId: `static-source-${source.kind}-${selectionBasis}`,
     trust: source.kind === "user" ? "user" as const :
       source.access === "untrusted" ? "workspace-untrusted" as const : "workspace-trusted" as const,
   };
@@ -280,14 +280,11 @@ const inspectClaudeCodeSetup = async (
   }
   const installationCandidates = authorization.executableCandidates.map(mapCandidate);
   const configurationSources = authorization.sources.map(mapSource);
-  const configurationRoots = [
-    { absolutePath: scope.homeRoot, canonicalPath: scope.homeRoot, rootId: "declared-home-root" },
-    { absolutePath: scope.workspaceRoot, canonicalPath: scope.workspaceRoot, rootId: "declared-workspace-root" },
-  ].map(root => {
-    const source = configurationSources.find(candidate =>
-      candidate.access === "authorized" && candidate.custodyRoot.rootId === root.rootId);
-    return source?.access === "authorized" ? source.custodyRoot : root;
-  });
+  const configurationRoots = authorization.canonicalRoots.map(root => ({
+    absolutePath: root.absolutePath,
+    canonicalPath: root.canonicalPath,
+    rootId: root.kind === "home" ? "declared-home-root" : "declared-workspace-root",
+  }));
   const [installationSettlement, configurationSettlement] = await Promise.allSettled([
     invokeAsPromise(() => dependencies.discoverClaudeCodeInstallations.execute({
       candidates: installationCandidates, observationEpoch: authorization.observationEpoch,
