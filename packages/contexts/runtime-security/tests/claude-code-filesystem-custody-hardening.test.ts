@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
@@ -11,11 +12,15 @@ import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
+import { openStablePath } from "@agent-teams/filesystem-custody";
 import {
   createNodePathCanonicalizer,
   createSetupInspectionAuthorizationFeature,
 } from "../dist/composition.js";
+
+const execFile = promisify(execFileCallback);
 
 const scope = (
   homeRoot: string,
@@ -241,6 +246,60 @@ test("rejects an ancestor replacement between candidate custody checks", async t
     item.code === "candidate_unstable" && item.safeRef === "explicit"
   ));
 });
+
+test(
+  "never opens canonical targets outside an authorized root",
+  { skip: process.platform === "win32", timeout: 5_000 },
+  async t => {
+    const root = await mkdtemp(join(tmpdir(), "ar-claude-preopen-containment-"));
+    t.after(() => rm(root, { force: true, recursive: true }));
+    const home = join(root, "home");
+    const workspace = join(root, "workspace");
+    const outside = join(root, "outside");
+    await Promise.all([
+      mkdir(home),
+      mkdir(workspace),
+      mkdir(outside),
+    ]);
+    const outsideFile = join(outside, "regular-file");
+    const outsideFifo = join(outside, "fifo");
+    await writeFile(outsideFile, "outside");
+    await execFile("/usr/bin/mkfifo", [outsideFifo]);
+    const targets = [outsideFile, "/dev/null", outsideFifo] as const;
+    const aliases = await Promise.all(targets.map(async (target, index) => {
+      const alias = join(home, `outside-alias-${index}`);
+      await symlink(target, alias);
+      return alias;
+    }));
+    const openedCanonicalPaths: string[] = [];
+    const canonicalizer = createNodePathCanonicalizer({
+      async openStablePath(absolutePath, canonicalPath, operation, options) {
+        openedCanonicalPaths.push(canonicalPath);
+        return openStablePath(absolutePath, canonicalPath, operation, options);
+      },
+    });
+
+    const result = await createSetupInspectionAuthorizationFeature({
+      pathCanonicalizer: canonicalizer,
+    }).authorizeClaudeCodeSetupInspection.execute(scope(home, workspace, aliases));
+
+    assert.equal(result.status, "authorized");
+    if (result.status !== "authorized") {
+      return;
+    }
+    assert.equal(
+      result.executableCandidates.some(item => item.source === "explicit"),
+      false,
+    );
+    assert.ok(result.diagnostics.some(item =>
+      item.code === "candidate_denied" && item.safeRef === "explicit"
+    ));
+    assert.equal(openedCanonicalPaths.includes(home), true);
+    for (const target of targets) {
+      assert.equal(openedCanonicalPaths.includes(target), false);
+    }
+  },
+);
 
 test(
   "refuses a device reached through an in-scope alias",

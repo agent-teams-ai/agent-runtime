@@ -5,6 +5,7 @@ import {
   realpath,
   rename,
   rm,
+  type FileHandle,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -31,6 +32,36 @@ test("opens a synthetic file through stable descriptor custody", async t => {
 
   assert.equal(result.bytes.toString("utf8"), "model = 'synthetic'\n");
   assert.match(result.identity, /^\d+:\d+$/u);
+});
+
+test("closes descriptor custody when the operation is cancelled", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-path-custody-cancel-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const path = join(root, "config.toml");
+  await writeFile(path, "model = 'synthetic'\n");
+  const controller = new AbortController();
+  let retainedHandle: FileHandle | undefined;
+
+  await assert.rejects(
+    openStablePath(
+      path,
+      await realpath(path),
+      async opened => {
+        retainedHandle = opened.handle;
+        controller.abort(new Error("cancelled during descriptor custody"));
+        controller.signal.throwIfAborted();
+      },
+      { signal: controller.signal },
+    ),
+    /cancelled during descriptor custody/u,
+  );
+  assert.ok(retainedHandle);
+  await assert.rejects(retainedHandle.readFile(), error =>
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "EBADF"
+  );
 });
 
 test("detects an ancestor that was renamed and restored", async t => {

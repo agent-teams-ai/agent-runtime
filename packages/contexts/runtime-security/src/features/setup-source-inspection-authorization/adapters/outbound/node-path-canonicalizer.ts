@@ -1,6 +1,6 @@
-import { openStablePath } from "@agent-teams/filesystem-custody";
-import { dirname, isAbsolute, join, parse } from "node:path";
-import { realpath } from "node:fs/promises";
+import { openStablePath as openPathUnderCustody } from "@agent-teams/filesystem-custody";
+import { realpath, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, parse } from "node:path";
 
 import type { PathCanonicalizer } from "../../application/ports/outbound/path-canonicalizer.js";
 
@@ -16,7 +16,15 @@ const authorizationFileIdentity = (stats: {
   readonly size: bigint;
 }): string => `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.size}`;
 
-export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
+type OpenStablePath = typeof openPathUnderCustody;
+
+export interface NodePathCanonicalizerDependencies {
+  readonly openStablePath?: OpenStablePath;
+}
+
+export const createNodePathCanonicalizer = (
+  dependencies: NodePathCanonicalizerDependencies = {},
+): PathCanonicalizer => ({
   async canonicalize(absolutePath, options) {
     if (!isAbsolute(absolutePath)) {
       throw new TypeError("Only absolute paths can be canonicalized");
@@ -24,6 +32,22 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
     options?.signal?.throwIfAborted();
     try {
       const canonicalPath = await realpath(absolutePath);
+      if (options?.custodyBoundary === undefined) {
+        const [canonicalParentPath, metadata] = await Promise.all([
+          realpath(dirname(absolutePath)),
+          stat(canonicalPath, { bigint: true }),
+        ]);
+        options?.signal?.throwIfAborted();
+        return {
+          absolutePath: canonicalPath,
+          canonicalLocationPath: join(canonicalParentPath, basename(absolutePath)),
+          exists: true,
+          fileIdentity: authorizationFileIdentity(metadata),
+          isFile: metadata.isFile(),
+          linkCount: Number(metadata.nlink),
+        };
+      }
+      const openStablePath = dependencies.openStablePath ?? openPathUnderCustody;
       return await openStablePath(
         absolutePath,
         canonicalPath,
@@ -36,10 +60,7 @@ export const createNodePathCanonicalizer = (): PathCanonicalizer => ({
           linkCount: Number(opened.stats.nlink),
         }),
         {
-          custodyBoundary: options?.custodyBoundary ?? {
-            absolutePath,
-            canonicalPath,
-          },
+          custodyBoundary: options.custodyBoundary,
           ...(options?.signal === undefined ? {} : { signal: options.signal }),
         },
       );
