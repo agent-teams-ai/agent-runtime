@@ -32,6 +32,7 @@ export interface CodexSetupSettingView {
 }
 
 export type CodexSetupDiagnosticCode =
+  | "access_scope_limit_exceeded"
   | "candidate_denied"
   | "candidate_invalid"
   | "candidate_unreadable"
@@ -90,6 +91,7 @@ export interface CodexRuntimeSetupQueries {
 }
 
 export type ClaudeCodeSetupDiagnosticCode =
+  | "access_scope_limit_exceeded"
   | "candidate_denied"
   | "candidate_invalid"
   | "candidate_unreadable"
@@ -100,6 +102,7 @@ export type ClaudeCodeSetupDiagnosticCode =
   | "config_parse_failed"
   | "config_too_large"
   | "config_unreadable"
+  | "capability_unavailable"
   | "credential_material_rejected"
   | "provider_route_deferred"
   | "secret_setting_rejected"

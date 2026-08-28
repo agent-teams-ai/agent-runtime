@@ -30,10 +30,12 @@ import {
 } from "../application/build-codex-setup-view.js";
 import type {
   InspectCodexRuntimeSetup,
+  InspectCodexRuntimeSetupOutcome,
   InspectClaudeCodeRuntimeSetupOutcome,
   RuntimeAccessHandle,
 } from "../contracts/runtime-access.js";
 import {
+  copyTrustedClaudeCodeSetupScope,
   copyTrustedRuntimeAccessScope,
   type TrustedRuntimeAccessScope,
 } from "./trusted-runtime-access-scope.js";
@@ -101,6 +103,35 @@ const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T
     );
   });
 
+const expectedClaudeCodeLimitations = Object.freeze({
+  interactiveShellPath: "unobserved" as const,
+  managedPolicy: "unobserved" as const,
+  sessionOverrides: "unobserved" as const,
+});
+
+const claudeCodeUnavailableOutcome: InspectClaudeCodeRuntimeSetupOutcome = Object.freeze({
+  diagnostics: Object.freeze([Object.freeze({
+    code: "capability_unavailable" as const,
+  })]),
+  expectedLimitations: expectedClaudeCodeLimitations,
+  status: "unsupported" as const,
+});
+
+const claudeCodeScopeLimitOutcome: InspectClaudeCodeRuntimeSetupOutcome = Object.freeze({
+  diagnostics: Object.freeze([Object.freeze({
+    code: "access_scope_limit_exceeded" as const,
+  })]),
+  expectedLimitations: expectedClaudeCodeLimitations,
+  status: "unsupported" as const,
+});
+
+const codexScopeLimitOutcome: InspectCodexRuntimeSetupOutcome = Object.freeze({
+  diagnostics: Object.freeze([Object.freeze({
+    code: "access_scope_limit_exceeded" as const,
+  })]),
+  status: "unsupported" as const,
+});
+
 export const createAgentRuntimeHost = (
   dependencies: AgentRuntimeHostDependencies,
 ): AgentRuntimeHost => {
@@ -147,7 +178,21 @@ export const createAgentRuntimeHost = (
   return Object.freeze({
     bindAccess(scope: TrustedRuntimeAccessScope) {
       assertActive();
-      const boundScope = copyTrustedRuntimeAccessScope(scope);
+      let claudeCodeScope: TrustedRuntimeAccessScope["claudeCodeSetup"];
+      let claudeCodeScopeReadable = true;
+      try {
+        claudeCodeScope = scope.claudeCodeSetup;
+      } catch {
+        claudeCodeScopeReadable = false;
+      }
+      const claudeCodeUnavailable =
+        buildClaudeCodeSetupView === undefined ||
+        (claudeCodeScopeReadable && claudeCodeScope === undefined);
+      const boundClaudeCodeScope = claudeCodeUnavailable || !claudeCodeScopeReadable ||
+        claudeCodeScope === undefined
+        ? undefined
+        : copyTrustedClaudeCodeSetupScope(claudeCodeScope);
+      const boundCodexScope = copyTrustedRuntimeAccessScope(scope);
       return Object.freeze({
         claudeCodeSetup: Object.freeze({
           inspect: async (options?: { readonly signal?: AbortSignal }) => {
@@ -158,20 +203,11 @@ export const createAgentRuntimeHost = (
               : AbortSignal.any([hostAbort.signal, callerSignal]);
             signal.throwIfAborted();
             const operation: Promise<InspectClaudeCodeRuntimeSetupOutcome> =
-              buildClaudeCodeSetupView === undefined || boundScope.claudeCodeSetup === undefined
-                ? Promise.resolve(Object.freeze({
-                  diagnostics: Object.freeze([Object.freeze({
-                    code: "source_epoch_stale" as const,
-                    safeRef: "scope",
-                  })]),
-                  expectedLimitations: Object.freeze({
-                    interactiveShellPath: "unobserved" as const,
-                    managedPolicy: "unobserved" as const,
-                    sessionOverrides: "unobserved" as const,
-                  }),
-                  status: "denied" as const,
-                }))
-                : buildClaudeCodeSetupView(boundScope.claudeCodeSetup, { signal });
+              claudeCodeUnavailable
+                ? Promise.resolve(claudeCodeUnavailableOutcome)
+                : boundClaudeCodeScope === undefined
+                  ? Promise.resolve(claudeCodeScopeLimitOutcome)
+                  : buildClaudeCodeSetupView(boundClaudeCodeScope, { signal });
             activeCalls.add(operation);
             operation.then(
               () => activeCalls.delete(operation),
@@ -191,7 +227,10 @@ export const createAgentRuntimeHost = (
                 ? hostAbort.signal
                 : AbortSignal.any([hostAbort.signal, options.signal]);
             signal.throwIfAborted();
-            const operation = buildCodexSetupView(boundScope, input, { signal });
+            const operation: Promise<InspectCodexRuntimeSetupOutcome> =
+              boundCodexScope === undefined
+              ? Promise.resolve(codexScopeLimitOutcome)
+              : buildCodexSetupView(boundCodexScope, input, { signal });
             activeCalls.add(operation);
             operation.then(
               () => activeCalls.delete(operation),

@@ -28,6 +28,8 @@ test("freezes the prospective provider-specific no-product-input Claude contract
   assert.match(declaration, /managedPolicy: "unobserved"/u);
   assert.match(declaration, /sessionOverrides: "unobserved"/u);
   assert.match(declaration, /interactiveShellPath: "unobserved"/u);
+  assert.match(declaration, /"capability_unavailable"/u);
+  assert.match(declaration, /"access_scope_limit_exceeded"/u);
   assert.doesNotMatch(declaration, /"max"/u);
 });
 
