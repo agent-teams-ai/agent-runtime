@@ -169,6 +169,13 @@ AR-2 implementation present; synthetic evidence present; qualification open:
 - the frozen `claude-code-settings@2026-08-28` dialect identifies official
   documentation semantics only. It does not qualify, version, or prove
   compatibility of a discovered executable;
+- the compact content-addressed
+  [official-semantics artifact](claude-code-official-semantics.snapshot.json)
+  records the 13
+  source URLs, retrieval method, first-capture response hashes, and only the
+  provider facts frozen by AR-2. The first-capture response bytes were not
+  retained, so those historical response hashes are explicitly not presented
+  as reproducible source-byte evidence; provider qualification remains open;
 - on macOS, trusted scope planning derives the three fixed portable source
   paths and fixed known executable locations from synthetic home/workspace
   roots. Runtime Security authorizes roots, paths, trust, stable identity, and

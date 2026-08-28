@@ -19,6 +19,7 @@
     "interactiveShellPath": "unobserved"
   },
   "negativeManifest": "./negative-fixtures.json",
+  "contractCoverage": "./contract-coverage.json",
   "provenance": {
     "freezePacket": "docs/architecture/claude-code-setup-freeze.json",
     "snapshotDate": "2026-08-28"

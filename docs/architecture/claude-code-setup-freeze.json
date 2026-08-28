@@ -4,6 +4,10 @@
   "contractId": "ar-2-claude-code-setup-preview@1",
   "snapshot": {
     "date": "2026-08-28",
+    "semanticArtifact": {
+      "path": "docs/architecture/claude-code-official-semantics.snapshot.json",
+      "sha256": "448fe097c1bc546ba02c2930316a9bb200431bc6aaf15dc35907f5e88bb3e14f"
+    },
     "documents": [
       { "url": "https://code.claude.com/docs/en/settings.md", "sha256": "bbc2a21f5e1b7b2f3871f221a42eada00ff042a1e9f455b179965a8ff53bf69b" },
       { "url": "https://code.claude.com/docs/en/settings-reference.md", "sha256": "635576acdb3ce7b9313eb7a3261c9a031fee9bd29cdaf771e9a90beb0993d8bd" },
@@ -115,24 +119,26 @@
     "deterministic": true
   },
   "fixtureMatrix": [
-    "installation-absent",
-    "installation-one-alias",
-    "installation-multiple-aliases",
-    "source-user-only",
-    "source-shared-project-only",
-    "source-project-local-only",
-    "sources-conflict",
-    "malformed-higher-precedence",
-    "duplicate-json-keys",
-    "bom",
-    "invalid-utf8",
-    "oversized-json",
-    "deep-json",
-    "unsupported-effort",
-    "provider-route-model",
-    "secret-sentinels",
-    "untrusted-workspace",
-    "unsupported-platform",
-    "unsupported-dialect"
+    { "id": "installation-absent", "expected": "observed-with-install-action" },
+    { "id": "installation-one-alias", "expected": "found-unverified" },
+    { "id": "installation-multiple-aliases", "expected": "identity-grouped" },
+    { "id": "source-user-only", "expected": "user-intent" },
+    { "id": "source-shared-project-only", "expected": "shared-project-intent" },
+    { "id": "source-project-local-only", "expected": "project-local-intent" },
+    { "id": "sources-conflict", "expected": "project-local-wins-per-key" },
+    { "id": "malformed-higher-precedence", "expected": "lower-resolution-tainted" },
+    { "id": "duplicate-json-keys", "diagnostic": "config_duplicate_key" },
+    { "id": "bom", "diagnostic": "config_parse_failed" },
+    { "id": "invalid-utf8", "diagnostic": "config_invalid_utf8" },
+    { "id": "oversized-json", "diagnostic": "config_too_large" },
+    { "id": "deep-json", "diagnostic": "config_parse_failed" },
+    { "id": "unsupported-effort-max", "diagnostic": "setting_value_unsupported" },
+    { "id": "provider-route-model", "diagnostic": "provider_route_deferred" },
+    { "id": "secret-sentinels", "diagnostic": "secret_setting_rejected" },
+    { "id": "credential-material", "diagnostic": "credential_material_rejected" },
+    { "id": "untrusted-workspace", "diagnostic": "source_untrusted" },
+    { "id": "stale-source", "diagnostic": "source_epoch_stale" },
+    { "id": "unsupported-platform", "expected": "unsupported-without-diagnostic" },
+    { "id": "unsupported-dialect", "diagnostic": "configuration_dialect_unsupported" }
   ]
 }

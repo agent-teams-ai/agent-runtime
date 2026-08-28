@@ -25,11 +25,7 @@ test("freezes the Claude Code dialect, allowlists, budgets and detached example"
     new URL("./fixtures/claude-code-settings/manifest.json", import.meta.url),
     "utf8",
   ));
-  const negatives = JSON.parse(await readFile(
-    new URL("./fixtures/claude-code-settings/negative-fixtures.json", import.meta.url),
-    "utf8",
-  ));
   assert.equal(manifest.qualifiesExecutable, false);
   assert.deepEqual(manifest.sourcesLowToHigh, ["user", "shared-project", "project-local"]);
-  assert.ok(negatives.groups.length >= 19);
+  assert.equal(manifest.contractCoverage, "./contract-coverage.json");
 });

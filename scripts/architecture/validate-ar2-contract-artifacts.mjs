@@ -1,8 +1,17 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import Ajv2020 from "ajv/dist/2020.js";
 
 const inventoryPath = new URL("../../docs/architecture/legacy-feature-inventory.json", import.meta.url);
+const inventorySchemaPath = new URL("../../docs/architecture/legacy-feature-inventory.schema.json", import.meta.url);
 const freezePath = new URL("../../docs/architecture/claude-code-setup-freeze.json", import.meta.url);
+const freezeSchemaPath = new URL("../../docs/architecture/claude-code-setup-freeze.schema.json", import.meta.url);
+const fixtureRoot = new URL("../../packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings/", import.meta.url);
+const fixtureManifestPath = new URL("manifest.json", fixtureRoot);
+const negativeFixturesPath = new URL("negative-fixtures.json", fixtureRoot);
+const contractCoveragePath = new URL("contract-coverage.json", fixtureRoot);
+const packagePath = new URL("../../package.json", import.meta.url);
 const roadmapPath = new URL("../../docs/architecture/provider-setup-delivery-roadmap.md", import.meta.url);
 const readinessPath = new URL("../../docs/architecture/readiness.md", import.meta.url);
 
@@ -12,6 +21,11 @@ const exactKeys = (value, keys, label) => {
 };
 const unique = (values, label) => {
   assert.equal(new Set(values).size, values.length, `${label} must be unique`);
+};
+const sha256 = value => createHash("sha256").update(value).digest("hex");
+const validateSchema = (schema, value, label) => {
+  const validate = new Ajv2020({ allErrors: true, strict: true, strictTypes: false }).compile(schema);
+  assert.equal(validate(value), true, `${label} schema errors: ${JSON.stringify(validate.errors)}`);
 };
 
 export const EXPECTED_CAPABILITY_IDS = Object.freeze([
@@ -44,18 +58,11 @@ const EXPECTED_RECOMMENDED_NEXT = Object.freeze([
 const EXPECTED_REJECTED = Object.freeze([
   "CODEX-ACCESS-07", "OC-21", "OC-22", "OC-23",
 ]);
-const AGENT_RUNTIME_COMMIT = "2811435f6a3944f68e25b3966c98b54026486c21";
 const LEGACY_COMMIT = "f6afac73cced62d943a0e891ad08d7b8f88f802f";
 const hostedAbsolutePath = /\/(?:home|Users)\//u;
 const secretShapedValue = /(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|\b(?:sk|xox[baprs]|gh[opusr])-[A-Za-z0-9_-]{16,}\b|\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b)/u;
 
-export const validateAr2ContractArtifacts = async () => {
-  const inventory = await readJson(inventoryPath);
-  const freeze = await readJson(freezePath);
-  const [roadmap, readiness] = await Promise.all([
-    readFile(roadmapPath, "utf8"),
-    readFile(readinessPath, "utf8"),
-  ]);
+const validateInventory = inventory => {
   const itemKeys = [
     "capabilityId", "provider", "userJob", "userValue", "legacyBehavior",
     "exactLegacyEvidence", "failureAndEdgeCases", "reuseDecision", "newOwner",
@@ -69,7 +76,7 @@ export const validateAr2ContractArtifacts = async () => {
     "reject_legacy_approach",
   ]);
   assert.equal(inventory.schemaVersion, 1);
-  assert.equal(inventory.agentRuntimeCommit, AGENT_RUNTIME_COMMIT);
+  assert.equal(inventory.implementationAuthority, "current-repository-tree");
   assert.equal(inventory.legacyCommit, LEGACY_COMMIT);
   assert.equal(inventory.items.length, 56, "inventory row count");
   const capabilityIds = inventory.items.map(item => item.capabilityId);
@@ -101,53 +108,66 @@ export const validateAr2ContractArtifacts = async () => {
     .filter(item => item.proposedDisposition === "approved_now")
     .map(item => item.capabilityId)
     .toSorted();
-  assert.deepEqual(approvals, [...EXPECTED_APPROVALS].toSorted(), "approved-now Claude preview rows");
   const recommendedNext = inventory.items
     .filter(item => item.proposedDisposition === "recommended_next")
     .map(item => item.capabilityId)
     .toSorted();
-  assert.deepEqual(
-    recommendedNext,
-    [...EXPECTED_RECOMMENDED_NEXT].toSorted(),
-    "recommended-next inventory rows",
-  );
   const rejected = inventory.items
     .filter(item => item.proposedDisposition === "rejected")
     .map(item => item.capabilityId)
     .toSorted();
+  assert.deepEqual(approvals, [...EXPECTED_APPROVALS].toSorted(), "approved-now Claude preview rows");
+  assert.deepEqual(recommendedNext, [...EXPECTED_RECOMMENDED_NEXT].toSorted(), "recommended-next inventory rows");
   assert.deepEqual(rejected, [...EXPECTED_REJECTED].toSorted(), "rejected inventory rows");
   assert.equal(
     inventory.items.filter(item => item.proposedDisposition === "recommended_later").length,
     inventory.items.length - approvals.length - recommendedNext.length - rejected.length,
     "all remaining inventory rows stay recommended-later",
   );
-  assert.equal(
-    inventory.items.some(item => item.proposedDisposition === "needs_owner"),
-    false,
-    "inventory has no ownerless row",
-  );
+  assert.equal(inventory.items.some(item => item.proposedDisposition === "needs_owner"), false, "inventory has no ownerless row");
+  return { approvals, capabilityIds, providerCounts };
+};
 
-  for (const [label, document] of [
-    ["inventory", JSON.stringify(inventory)],
-    ["freeze", JSON.stringify(freeze)],
-    ["roadmap", roadmap],
-    ["readiness", readiness],
-  ]) {
-    assert.doesNotMatch(document, /\bPacket[ -]?A\b/iu, `${label} retired label`);
-  }
-  assert.match(roadmap, /passive macOS synthetic preview only/u);
-  assert.match(roadmap, /It does not inspect or prove\s+a real Claude Code installation/u);
-  assert.match(readiness, /AR-2 implementation present; synthetic evidence present; qualification open/u);
-  assert.match(readiness, /does not prove\s+a real Claude Code installation/u);
-
+const validateFreeze = async freeze => {
   assert.equal(freeze.schemaVersion, 1);
   assert.equal(freeze.dialect.id, "claude-code-settings@2026-08-28");
   assert.equal(freeze.dialect.qualifiesExecutable, false);
+  assert.deepEqual(freeze.entryPoint, {
+    member: "RuntimeAccessHandle.claudeCodeSetup.inspect",
+    productInput: "none",
+    cancellation: "options.signal",
+  });
+  assert.deepEqual(freeze.trustedScope, {
+    supplied: [
+      "explicitExecutablePaths", "pathEntries", "dialect", "homeRoot",
+      "workspaceRoot", "workspaceTrusted",
+    ],
+    derivedInComposition: [
+      "userSourcePath", "sharedProjectSourcePath", "projectLocalSourcePath",
+      "knownExecutablePaths",
+    ],
+    forbiddenAmbientInputs: [
+      "process.env", "process.cwd", "interactiveShellPath", "CLAUDE_CONFIG_DIR",
+    ],
+  });
   assert.deepEqual(freeze.candidateOrder, [
     "explicit-paths", "supplied-path-entries", "~/.local/bin/claude",
     "/opt/homebrew/bin/claude", "/usr/local/bin/claude",
   ]);
+  assert.deepEqual(freeze.sources, [
+    { kind: "user", rank: 1, pathTemplate: "~/.claude/settings.json" },
+    { kind: "shared-project", rank: 2, pathTemplate: "<workspace>/.claude/settings.json" },
+    { kind: "project-local", rank: 3, pathTemplate: "<workspace>/.claude/settings.local.json" },
+  ]);
   assert.deepEqual(freeze.precedenceHighToLow, ["project-local", "shared-project", "user"]);
+  assert.deepEqual(freeze.strictJson, {
+    encoding: "utf-8",
+    root: "object",
+    reject: [
+      "bom", "comments", "trailing-commas", "duplicate-keys-at-any-depth",
+      "invalid-utf8", "non-object-root",
+    ],
+  });
   assert.deepEqual(freeze.portableIntent.effortValues, ["low", "medium", "high", "xhigh"]);
   assert.deepEqual(freeze.portableIntent.modelAliases, [
     "default", "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]",
@@ -167,24 +187,125 @@ export const validateAr2ContractArtifacts = async () => {
     "source_epoch_stale", "unsupported_platform",
   ]);
   assert.deepEqual(freeze.budgets, {
-    bytesPerSource: 131072,
-    depth: 16,
-    nodes: 4096,
-    objectKeys: 1024,
-    arrayItems: 1024,
-    keyLength: 256,
-    stringLength: 16384,
-    classifierValueLength: 256,
-    sourceSlots: 3,
-    explicitPaths: 16,
-    suppliedPathEntries: 64,
-    totalCandidates: 256,
-    diagnostics: 1024,
+    bytesPerSource: 131072, depth: 16, nodes: 4096, objectKeys: 1024,
+    arrayItems: 1024, keyLength: 256, stringLength: 16384,
+    classifierValueLength: 256, sourceSlots: 3, explicitPaths: 16,
+    suppliedPathEntries: 64, totalCandidates: 256, diagnostics: 1024,
+  });
+  assert.deepEqual(freeze.resultSemantics, {
+    sections: [
+      "installations", "portableIntent", "sourceObservations",
+      "expectedLimitations", "diagnostics", "nextActions",
+    ],
+    statuses: ["observed", "partial", "denied", "unsupported"],
+    installationStatus: "found_unverified",
+    partial: "Only actual degradation of the declared V1 scope. Expected limitations, a clean absent optional setting, or no installation do not cause partial.",
+    absence: "A clean absent installation is observed and includes install_claude_code as a next action.",
+    detached: true,
+    deepFrozen: true,
+    deterministic: true,
   });
   unique(freeze.snapshot.documents.map(document => document.url), "snapshot URLs");
-  for (const document of freeze.snapshot.documents) {
-    assert.match(document.sha256, /^[0-9a-f]{64}$/u);
+  const semanticArtifactUrl = new URL(`../../${freeze.snapshot.semanticArtifact.path}`, import.meta.url);
+  const semanticArtifactBytes = await readFile(semanticArtifactUrl);
+  assert.equal(sha256(semanticArtifactBytes), freeze.snapshot.semanticArtifact.sha256, "official semantic artifact content hash");
+  const semanticArtifact = JSON.parse(semanticArtifactBytes.toString("utf8"));
+  exactKeys(
+    semanticArtifact,
+    ["schemaVersion", "snapshotId", "retrieval", "documents", "frozenFacts"],
+    "official semantic artifact",
+  );
+  exactKeys(
+    semanticArtifact.retrieval,
+    ["method", "date", "exactPriorResponseBytesAvailable", "status", "statement"],
+    "official semantic artifact retrieval",
+  );
+  assert.equal(semanticArtifact.schemaVersion, 1);
+  assert.equal(semanticArtifact.snapshotId, "claude-code-settings-semantics@2026-08-28");
+  assert.equal(
+    semanticArtifact.retrieval.method,
+    "HTTPS GET with redirects followed; SHA-256 over response bytes",
+  );
+  assert.equal(semanticArtifact.retrieval.exactPriorResponseBytesAvailable, false);
+  assert.equal(semanticArtifact.retrieval.status, "historical-response-hashes-only");
+  assert.match(semanticArtifact.retrieval.statement, /not claimed to be reproducible/u);
+  assert.deepEqual(
+    semanticArtifact.documents.map(({ url, responseSha256 }) => ({ sha256: responseSha256, url })),
+    freeze.snapshot.documents,
+    "freeze response hashes correspond exactly to the semantic artifact",
+  );
+  for (const document of semanticArtifact.documents) {
+    exactKeys(document, ["url", "responseSha256", "immutableReference"], document.url);
+    assert.equal(document.immutableReference, null);
   }
+  assert.deepEqual(semanticArtifact.frozenFacts, {
+    portableSourcesLowToHigh: ["user", "shared-project", "project-local"],
+    portablePaths: [
+      "~/.claude/settings.json", "<workspace>/.claude/settings.json",
+      "<workspace>/.claude/settings.local.json",
+    ],
+    portableKeys: ["model", "effortLevel"],
+    modelAliases: freeze.portableIntent.modelAliases,
+    effortValues: freeze.portableIntent.effortValues,
+    managedPolicySeparateFromPortableIntent: true,
+    providerRoutesSeparateFromPortableIntent: true,
+  });
+};
+
+export const validateAr2ContractArtifacts = async () => {
+  const [
+    inventory, inventorySchema, freeze, freezeSchema, fixtureManifest,
+    negativeFixtures, contractCoverage, rootPackage, roadmap, readiness,
+  ] = await Promise.all([
+    readJson(inventoryPath),
+    readJson(inventorySchemaPath),
+    readJson(freezePath),
+    readJson(freezeSchemaPath),
+    readJson(fixtureManifestPath),
+    readJson(negativeFixturesPath),
+    readJson(contractCoveragePath),
+    readJson(packagePath),
+    readFile(roadmapPath, "utf8"),
+    readFile(readinessPath, "utf8"),
+  ]);
+  validateSchema(inventorySchema, inventory, "legacy inventory");
+  validateSchema(freezeSchema, freeze, "Claude freeze");
+  const { approvals, capabilityIds, providerCounts } = validateInventory(inventory);
+
+  for (const [label, document] of [
+    ["inventory", JSON.stringify(inventory)],
+    ["freeze", JSON.stringify(freeze)],
+    ["roadmap", roadmap],
+    ["readiness", readiness],
+  ]) {
+    assert.doesNotMatch(document, /\bPacket[ -]?A\b/iu, `${label} retired label`);
+  }
+  assert.match(roadmap, /passive macOS synthetic preview only/u);
+  assert.match(roadmap, /It does not inspect or prove\s+a real Claude Code installation/u);
+  assert.doesNotMatch(roadmap, /implementation\s+`[0-9a-f]{40}`/u);
+  assert.match(roadmap, /implementation present in the current repository tree/u);
+  assert.match(readiness, /AR-2 implementation present; synthetic evidence present; qualification open/u);
+  assert.match(readiness, /does not prove\s+a real Claude Code installation/u);
+
+  await validateFreeze(freeze);
+
+  assert.equal(fixtureManifest.contractId, freeze.contractId);
+  assert.equal(fixtureManifest.dialect, freeze.dialect.id);
+  assert.equal(fixtureManifest.contractCoverage, "./contract-coverage.json");
+  assert.equal(fixtureManifest.negativeManifest, "./negative-fixtures.json");
+  assert.deepEqual(negativeFixtures.groups, freeze.fixtureMatrix, "freeze/negative fixture correspondence");
+  assert.deepEqual(
+    contractCoverage.cases.map(({ id, expected, diagnostic }) => ({
+      ...(diagnostic === undefined ? {} : { diagnostic }),
+      ...(expected === undefined ? {} : { expected }),
+      id,
+    })),
+    freeze.fixtureMatrix,
+    "every frozen fixture has an executable coverage entry",
+  );
+  unique(contractCoverage.cases.map(entry => entry.id), "contract coverage IDs");
+  const checkInvocations = rootPackage.scripts.check.match(/pnpm test:ar2-contract/gu) ?? [];
+  assert.equal(checkInvocations.length, 1, "pnpm check runs the AR-2 test exactly once");
   assert.equal(JSON.stringify(freeze).includes("interactive-shell"), false);
   assert.equal(JSON.stringify(freeze).includes("managed-settings.json"), false);
   return {
@@ -192,6 +313,7 @@ export const validateAr2ContractArtifacts = async () => {
     capabilityIds: capabilityIds.toSorted(),
     inventoryItems: inventory.items.length,
     providerCounts,
+    semanticArtifactSha256: freeze.snapshot.semanticArtifact.sha256,
     snapshotDocuments: freeze.snapshot.documents.length,
   };
 };

@@ -29,7 +29,7 @@ authority for the new design.
 
 Evidence baseline:
 
-- Agent Runtime implementation `2811435f6a3944f68e25b3966c98b54026486c21`;
+- Agent Runtime implementation in the current repository tree;
 - legacy `777genius/agent-teams-ai`
   `f6afac73cced62d943a0e891ad08d7b8f88f802f`;
 - official provider documentation linked under each provider below.
@@ -233,16 +233,22 @@ saved-profile database hidden inside `codexSetup.inspect`.
 
 ### Slice AR-2 - Claude Code passive setup inspection
 
-Status: implementation present at
-`2811435f6a3944f68e25b3966c98b54026486c21` and synthetic macOS composition
-evidence present. Provider qualification, a production collector, and
-deployment qualification remain open.
+Status: implementation present in the current repository tree and synthetic
+macOS composition evidence present. Provider qualification, a production
+collector, and deployment qualification remain open.
 
 The machine-readable authority is the
 [`claude-code-setup-freeze.json`](claude-code-setup-freeze.json) packet and its
 [schema](claude-code-setup-freeze.schema.json). The packet is validated by the
-deterministic `architecture:ar2-contract` gate. Its documented settings
+deterministic `test:ar2-contract` gate, which runs exactly once through the
+authoritative `pnpm check` chain. Its documented settings
 dialect does not qualify or establish compatibility of any executable.
+The linked content-addressed
+[`semantic artifact`](claude-code-official-semantics.snapshot.json) records all
+13 official source URLs and the minimal facts consumed by this freeze. Because
+the first-capture response bytes were not retained, its historical response
+hashes are recorded as non-reproducible rather than being presented as
+immutable source evidence.
 
 The private handle adds a sibling capability:
 

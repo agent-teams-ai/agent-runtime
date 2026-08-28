@@ -1,7 +1,7 @@
 {
   "$schema": "./legacy-feature-inventory.schema.json",
   "schemaVersion": 1,
-  "agentRuntimeCommit": "2811435f6a3944f68e25b3966c98b54026486c21",
+  "implementationAuthority": "current-repository-tree",
   "legacyCommit": "f6afac73cced62d943a0e891ad08d7b8f88f802f",
   "items": [
     {
