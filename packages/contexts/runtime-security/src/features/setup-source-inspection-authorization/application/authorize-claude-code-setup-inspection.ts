@@ -1,4 +1,4 @@
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import type {
   AuthorizeClaudeCodeSetupInspection,
@@ -289,8 +289,11 @@ const makeCandidateRequests = (
 } => {
   const diagnostics: ClaudeCodeSetupAuthorizationDiagnostic[] = [];
   if (
-    scope.explicitExecutablePaths.length > MAX_EXPLICIT_PATHS ||
-    scope.pathEntries.length > MAX_PATH_ENTRIES
+    scope.candidatePaths.filter(candidate => candidate.source === "explicit").length >
+      MAX_EXPLICIT_PATHS ||
+    scope.candidatePaths.filter(candidate => candidate.source === "path-entry").length >
+      MAX_PATH_ENTRIES ||
+    scope.candidatePaths.length > MAX_TOTAL_CANDIDATES
   ) {
     return {
       diagnostics: [{ code: "candidate_invalid", safeRef: "candidate-budget" }],
@@ -298,64 +301,21 @@ const makeCandidateRequests = (
     };
   }
   const requests: CandidateRequest[] = [];
-  for (const path of scope.explicitExecutablePaths) {
-    if (!pathIsBoundedAbsolute(path)) {
-      diagnostics.push({ code: "candidate_invalid", safeRef: "explicit-path" });
-    } else {
-      requests.push({
-        absolutePath: resolve(path),
-        priorityRank: 1,
-        source: "explicit",
-      });
+  for (const candidate of scope.candidatePaths) {
+    const rankMatchesSource =
+      (candidate.source === "explicit" && candidate.priorityRank === 1) ||
+      (candidate.source === "path-entry" && candidate.priorityRank === 2) ||
+      (candidate.source === "known-location" &&
+        candidate.priorityRank >= 3 && candidate.priorityRank <= 5);
+    if (!pathIsBoundedAbsolute(candidate.absolutePath) || !rankMatchesSource) {
+      diagnostics.push({ code: "candidate_invalid", safeRef: candidate.source });
+      continue;
     }
-  }
-  for (const entry of scope.pathEntries) {
-    if (!pathIsBoundedAbsolute(entry)) {
-      diagnostics.push({ code: "candidate_invalid", safeRef: "path-entry" });
-    } else {
-      const candidatePath = join(resolve(entry), "claude");
-      if (!pathIsBoundedAbsolute(candidatePath)) {
-        diagnostics.push({ code: "candidate_invalid", safeRef: "path-entry" });
-        continue;
-      }
-      requests.push({
-        absolutePath: candidatePath,
-        priorityRank: 2,
-        source: "path-entry",
-      });
-    }
-  }
-  const fixedRequests: readonly CandidateRequest[] = [
-    {
-      absolutePath: join(resolve(scope.homeRoot), ".local", "bin", "claude"),
-      priorityRank: 3,
-      source: "known-location",
-    },
-    {
-      absolutePath: "/opt/homebrew/bin/claude",
-      priorityRank: 4,
-      source: "known-location",
-    },
-    {
-      absolutePath: "/usr/local/bin/claude",
-      priorityRank: 5,
-      source: "known-location",
-    },
-  ];
-  for (const request of fixedRequests) {
-    if (!pathIsBoundedAbsolute(request.absolutePath)) {
-      return {
-        diagnostics: [{ code: "candidate_invalid", safeRef: "candidate-budget" }],
-        requests: [],
-      };
-    }
-    requests.push(request);
-  }
-  if (requests.length > MAX_TOTAL_CANDIDATES) {
-    return {
-      diagnostics: [{ code: "candidate_invalid", safeRef: "candidate-budget" }],
-      requests: [],
-    };
+    requests.push({
+      absolutePath: resolve(candidate.absolutePath),
+      priorityRank: candidate.priorityRank,
+      source: candidate.source,
+    });
   }
   const byLexicalPath = new Map<string, CandidateRequest>();
   for (const request of requests.toSorted(
@@ -455,23 +415,11 @@ const sourceRequests = (
   readonly absolutePath: string;
   readonly kind: ClaudeCodePortableSourceKind;
   readonly rootKind: "home" | "workspace";
-}[] => [
-  {
-    absolutePath: join(resolve(scope.homeRoot), ".claude", "settings.json"),
-    kind: "user",
-    rootKind: "home",
-  },
-  {
-    absolutePath: join(resolve(scope.workspaceRoot), ".claude", "settings.json"),
-    kind: "shared-project",
-    rootKind: "workspace",
-  },
-  {
-    absolutePath: join(resolve(scope.workspaceRoot), ".claude", "settings.local.json"),
-    kind: "project-local",
-    rootKind: "workspace",
-  },
-];
+}[] => scope.sourcePaths.map(source => ({
+  absolutePath: source.absolutePath,
+  kind: source.kind,
+  rootKind: source.kind === "user" ? "home" : "workspace",
+}));
 
 const authorizeSources = async (
   scope: TrustedClaudeCodeSetupInspectionScope,
@@ -487,6 +435,12 @@ const authorizeSources = async (
   const requests = sourceRequests(scope);
   if (
     requests.length !== SOURCE_SLOTS ||
+    new Set(requests.map(request => request.kind)).size !== SOURCE_SLOTS ||
+    requests.some(request =>
+      request.kind !== "user" &&
+      request.kind !== "shared-project" &&
+      request.kind !== "project-local"
+    ) ||
     requests.some(request => !pathIsBoundedAbsolute(request.absolutePath))
   ) {
     return {
@@ -576,15 +530,22 @@ export const createAuthorizeClaudeCodeSetupInspection = (
     const signal = options?.signal;
     signal?.throwIfAborted();
     const trustedScope: TrustedClaudeCodeSetupInspectionScope = Object.freeze({
+      candidatePaths: Object.freeze(scope.candidatePaths
+        .slice(0, MAX_TOTAL_CANDIDATES + 1)
+        .map(candidate => Object.freeze({
+          absolutePath: candidate.absolutePath,
+          priorityRank: candidate.priorityRank,
+          source: candidate.source,
+        }))),
       dialect: scope.dialect,
-      explicitExecutablePaths: Object.freeze(
-        scope.explicitExecutablePaths.slice(0, MAX_EXPLICIT_PATHS + 1),
-      ),
       homeRoot: scope.homeRoot,
       observationEpoch: scope.observationEpoch,
-      pathEntries: Object.freeze(
-        scope.pathEntries.slice(0, MAX_PATH_ENTRIES + 1),
-      ),
+      sourcePaths: Object.freeze(scope.sourcePaths
+        .slice(0, SOURCE_SLOTS + 1)
+        .map(source => Object.freeze({
+          absolutePath: source.absolutePath,
+          kind: source.kind,
+        }))),
       workspaceRoot: scope.workspaceRoot,
       workspaceTrusted: scope.workspaceTrusted,
     });

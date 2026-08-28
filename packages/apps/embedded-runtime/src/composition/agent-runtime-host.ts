@@ -6,10 +6,14 @@ import {
   createRuntimeInstallationDiscoveryFeature,
 } from "@agent-teams/agent-execution/composition";
 import {
+  createClaudeCodeConfigurationInspectionFeature,
+  createClaudeCodeConfigurationSemanticClassifierV1,
+  createClaudeCodeConfigurationSourceReaderAdapter,
   createCodexConfigurationInspectionFeature,
   createCodexConfigurationSemanticClassifierV1,
   createNodeConfigurationSourceReader,
   createSmolTomlParser,
+  createStrictClaudeCodeJsonParser,
 } from "@agent-teams/runtime-configuration/composition";
 import {
   createNodePathCanonicalizer,
@@ -17,11 +21,16 @@ import {
 } from "@agent-teams/runtime-security/composition";
 
 import {
+  createBuildClaudeCodeSetupView,
+  type BuildClaudeCodeSetupViewDependencies,
+} from "../application/build-claude-code-setup-view.js";
+import {
   createBuildCodexSetupView,
   type BuildCodexSetupViewDependencies,
 } from "../application/build-codex-setup-view.js";
 import type {
   InspectCodexRuntimeSetup,
+  InspectClaudeCodeRuntimeSetupOutcome,
   RuntimeAccessHandle,
 } from "../contracts/runtime-access.js";
 import {
@@ -29,6 +38,14 @@ import {
   type TrustedRuntimeAccessScope,
 } from "./trusted-runtime-access-scope.js";
 import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
+import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
+
+export interface AgentRuntimeHostDependencies extends BuildCodexSetupViewDependencies {
+  readonly authorizeClaudeCodeSetupInspection?: BuildClaudeCodeSetupViewDependencies["authorizeClaudeCodeSetupInspection"];
+  readonly discoverClaudeCodeInstallations?: BuildClaudeCodeSetupViewDependencies["discoverClaudeCodeInstallations"];
+  readonly inspectClaudeCodeConfiguration?: BuildClaudeCodeSetupViewDependencies["inspectClaudeCodeConfiguration"];
+  readonly planClaudeCodeSetupInspection?: BuildClaudeCodeSetupViewDependencies["planClaudeCodeSetupInspection"];
+}
 
 export interface AgentRuntimeHost extends AsyncDisposable {
   bindAccess(scope: TrustedRuntimeAccessScope): RuntimeAccessHandle;
@@ -85,9 +102,24 @@ const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T
   });
 
 export const createAgentRuntimeHost = (
-  dependencies: BuildCodexSetupViewDependencies,
+  dependencies: AgentRuntimeHostDependencies,
 ): AgentRuntimeHost => {
   const buildCodexSetupView = createBuildCodexSetupView(dependencies, randomBytes(32));
+  const claudeDependencyCount = [
+    dependencies.authorizeClaudeCodeSetupInspection,
+    dependencies.discoverClaudeCodeInstallations,
+    dependencies.inspectClaudeCodeConfiguration,
+    dependencies.planClaudeCodeSetupInspection,
+  ].filter(dependency => dependency !== undefined).length;
+  if (claudeDependencyCount !== 0 && claudeDependencyCount !== 4) {
+    throw new TypeError("Claude Code setup inspection dependencies must be supplied together");
+  }
+  const buildClaudeCodeSetupView = claudeDependencyCount === 0
+    ? undefined
+    : createBuildClaudeCodeSetupView(
+      dependencies as BuildClaudeCodeSetupViewDependencies,
+      randomBytes(32),
+    );
   const hostAbort = new AbortController();
   const activeCalls = new Set<Promise<unknown>>();
   let disposed = false;
@@ -117,6 +149,37 @@ export const createAgentRuntimeHost = (
       assertActive();
       const boundScope = copyTrustedRuntimeAccessScope(scope);
       return Object.freeze({
+        claudeCodeSetup: Object.freeze({
+          inspect: async (options?: { readonly signal?: AbortSignal }) => {
+            assertActive();
+            const callerSignal = options?.signal;
+            const signal = callerSignal === undefined
+              ? hostAbort.signal
+              : AbortSignal.any([hostAbort.signal, callerSignal]);
+            signal.throwIfAborted();
+            const operation: Promise<InspectClaudeCodeRuntimeSetupOutcome> =
+              buildClaudeCodeSetupView === undefined || boundScope.claudeCodeSetup === undefined
+                ? Promise.resolve(Object.freeze({
+                  diagnostics: Object.freeze([Object.freeze({
+                    code: "source_epoch_stale" as const,
+                    safeRef: "scope",
+                  })]),
+                  expectedLimitations: Object.freeze({
+                    interactiveShellPath: "unobserved" as const,
+                    managedPolicy: "unobserved" as const,
+                    sessionOverrides: "unobserved" as const,
+                  }),
+                  status: "denied" as const,
+                }))
+                : buildClaudeCodeSetupView(boundScope.claudeCodeSetup, { signal });
+            activeCalls.add(operation);
+            operation.then(
+              () => activeCalls.delete(operation),
+              () => activeCalls.delete(operation),
+            );
+            return raceWithAbort(operation, signal);
+          },
+        }),
         codexSetup: Object.freeze({
           inspect: async (
             input: InspectCodexRuntimeSetup,
@@ -151,17 +214,30 @@ export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
   const execution = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: createNodeExecutableFileObserver(),
   });
+  const nodeConfigurationSourceReader = createNodeConfigurationSourceReader();
   const configuration = createCodexConfigurationInspectionFeature({
     parser: createSmolTomlParser(),
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
     sourceIdentityKey: randomBytes(32),
-    sourceReader: createNodeConfigurationSourceReader(),
+    sourceReader: nodeConfigurationSourceReader,
+  });
+  const claudeConfiguration = createClaudeCodeConfigurationInspectionFeature({
+    parser: createStrictClaudeCodeJsonParser(),
+    semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV1(),
+    sourceIdentityKey: randomBytes(32),
+    sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(
+      nodeConfigurationSourceReader,
+    ),
   });
 
   return createAgentRuntimeHost({
+    authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
     authorizeSetupInspection: security.authorizeSetupInspection,
+    discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,
     discoverCodexInstallations: execution.discoverCodexInstallations,
+    inspectClaudeCodeConfiguration: claudeConfiguration,
     inspectCodexConfiguration: configuration.inspectCodexConfiguration,
+    planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner(process.platform),
     planCodexSetupInspection: createCodexSetupInspectionPlanner(process.platform),
   });
 };

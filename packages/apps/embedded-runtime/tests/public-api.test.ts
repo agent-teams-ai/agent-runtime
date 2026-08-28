@@ -15,6 +15,7 @@ test("root API exposes only product capabilities and keeps Host in composition",
   const publicSurface = `${rootDeclaration}\n${capabilityDeclaration}`;
   assert.match(publicSurface, /RuntimeAccessHandle/u);
   assert.match(publicSurface, /codexSetup/u);
+  assert.match(publicSurface, /claudeCodeSetup/u);
   assert.match(publicSurface, /inspect/u);
   assert.doesNotMatch(
     publicSurface,

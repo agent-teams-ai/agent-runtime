@@ -170,11 +170,10 @@ export interface ClaudeCodeRuntimeSetupQueries {
   ): Promise<InspectClaudeCodeRuntimeSetupOutcome>;
 }
 
-/** Prospective private handle shape; the contract spine does not compose it yet. */
 export interface ClaudeCodeRuntimeAccessHandle {
   readonly claudeCodeSetup: ClaudeCodeRuntimeSetupQueries;
 }
 
-export interface RuntimeAccessHandle {
+export interface RuntimeAccessHandle extends ClaudeCodeRuntimeAccessHandle {
   readonly codexSetup: CodexRuntimeSetupQueries;
 }

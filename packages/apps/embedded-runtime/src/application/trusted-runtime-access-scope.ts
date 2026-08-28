@@ -1,4 +1,7 @@
+import type { TrustedClaudeCodeSetupScope } from "./trusted-claude-code-setup-scope.js";
+
 export interface TrustedRuntimeAccessScope {
+  readonly claudeCodeSetup?: TrustedClaudeCodeSetupScope;
   readonly configurationSources: readonly {
     readonly absolutePath: string;
     readonly kind: "external-profile" | "user" | "workspace";

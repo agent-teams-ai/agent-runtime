@@ -4,11 +4,18 @@ export type ClaudeCodePortableSourceKind =
   | "project-local";
 
 export interface TrustedClaudeCodeSetupInspectionScope {
+  readonly candidatePaths: readonly {
+    readonly absolutePath: string;
+    readonly priorityRank: 1 | 2 | 3 | 4 | 5;
+    readonly source: "explicit" | "known-location" | "path-entry";
+  }[];
   readonly dialect: "claude-code-settings@2026-08-28";
-  readonly explicitExecutablePaths: readonly string[];
   readonly homeRoot: string;
   readonly observationEpoch: string;
-  readonly pathEntries: readonly string[];
+  readonly sourcePaths: readonly {
+    readonly absolutePath: string;
+    readonly kind: ClaudeCodePortableSourceKind;
+  }[];
   readonly workspaceRoot: string;
   readonly workspaceTrusted: boolean;
 }

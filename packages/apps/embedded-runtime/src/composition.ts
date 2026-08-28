@@ -3,8 +3,13 @@ export {
   createAgentRuntimeHost,
   createDefaultAgentRuntimeHost,
   type AgentRuntimeHost,
+  type AgentRuntimeHostDependencies,
 } from "./composition/agent-runtime-host.js";
 export type { BuildCodexSetupViewDependencies } from "./application/build-codex-setup-view.js";
+export type { BuildClaudeCodeSetupViewDependencies } from "./application/build-claude-code-setup-view.js";
+export {
+  createClaudeCodeSetupInspectionPlanner,
+} from "./composition/claude-code-setup-inspection-planner.js";
 export {
   createCodexSetupInspectionPlanner,
 } from "./composition/codex-setup-inspection-planner.js";

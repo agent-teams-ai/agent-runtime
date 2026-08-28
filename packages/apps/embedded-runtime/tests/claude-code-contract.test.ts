@@ -29,7 +29,7 @@ test("freezes the prospective provider-specific no-product-input Claude contract
   assert.doesNotMatch(declaration, /"max"/u);
 });
 
-test("keeps the Claude composition seam compile-only", async () => {
+test("keeps the Claude composition provider-passive", async () => {
   const source = await readFile(
     join(packageRoot, "src", "composition", "claude-code-contract-spine.ts"),
     "utf8",
@@ -38,10 +38,14 @@ test("keeps the Claude composition seam compile-only", async () => {
   assert.match(source, /assertClaudeCodeContractSpine/u);
 });
 
-test("does not expose a fake callable from the working host", async () => {
+test("composes the private callable without provider execution or ambient input", async () => {
   const source = await readFile(
     join(packageRoot, "src", "composition", "agent-runtime-host.ts"),
     "utf8",
   );
-  assert.doesNotMatch(source, /claudeCodeSetup|ClaudeCodeSetupNotImplementedError/u);
+  assert.match(source, /claudeCodeSetup/u);
+  assert.doesNotMatch(
+    source,
+    /ClaudeCodeSetupNotImplementedError|child_process|fetch|process\.(?:env|cwd)|claude --version|claude doctor/u,
+  );
 });

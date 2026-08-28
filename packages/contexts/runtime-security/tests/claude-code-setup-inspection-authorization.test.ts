@@ -30,16 +30,55 @@ const scope = (
     pathEntries: readonly string[];
     workspaceTrusted: boolean;
   }> = {},
-) => ({
-  dialect: "claude-code-settings@2026-08-28" as const,
-  explicitExecutablePaths: [],
-  homeRoot,
-  observationEpoch: "claude-epoch-1",
-  pathEntries: [],
-  workspaceRoot,
-  workspaceTrusted: true,
-  ...overrides,
-});
+) => {
+  const values = {
+    dialect: "claude-code-settings@2026-08-28" as const,
+    explicitExecutablePaths: [],
+    observationEpoch: "claude-epoch-1",
+    pathEntries: [],
+    workspaceTrusted: true,
+    ...overrides,
+  };
+  return {
+    candidatePaths: [
+      ...values.explicitExecutablePaths.map(absolutePath => ({
+        absolutePath,
+        priorityRank: 1 as const,
+        source: "explicit" as const,
+      })),
+      ...values.pathEntries.map(entry => ({
+        absolutePath: join(entry, "claude"),
+        priorityRank: 2 as const,
+        source: "path-entry" as const,
+      })),
+      {
+        absolutePath: join(homeRoot, ".local", "bin", "claude"),
+        priorityRank: 3 as const,
+        source: "known-location" as const,
+      },
+      {
+        absolutePath: "/opt/homebrew/bin/claude",
+        priorityRank: 4 as const,
+        source: "known-location" as const,
+      },
+      {
+        absolutePath: "/usr/local/bin/claude",
+        priorityRank: 5 as const,
+        source: "known-location" as const,
+      },
+    ],
+    dialect: values.dialect,
+    homeRoot,
+    observationEpoch: values.observationEpoch,
+    sourcePaths: [
+      { absolutePath: join(homeRoot, ".claude", "settings.json"), kind: "user" as const },
+      { absolutePath: join(workspaceRoot, ".claude", "settings.json"), kind: "shared-project" as const },
+      { absolutePath: join(workspaceRoot, ".claude", "settings.local.json"), kind: "project-local" as const },
+    ],
+    workspaceRoot,
+    workspaceTrusted: values.workspaceTrusted,
+  };
+};
 
 test("rejects hardlinks, directories, and FIFOs", { skip: process.platform === "win32" }, async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-file-type-"));
@@ -138,7 +177,7 @@ const feature = () => createSetupInspectionAuthorizationFeature({
   pathCanonicalizer: createNodePathCanonicalizer(),
 });
 
-test("derives the three fixed sources and preserves provider candidate priority", async t => {
+test("authorizes the three planned fixed sources and preserves provider candidate priority", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-map-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const home = join(root, "home");
@@ -242,8 +281,15 @@ test("snapshots trusted roots and candidate inputs before asynchronous work", as
           mutated = true;
           mutableScope.homeRoot = "/attacker/home";
           mutableScope.workspaceRoot = "/attacker/workspace";
-          mutableScope.explicitExecutablePaths = ["/attacker/claude"];
-          mutableScope.pathEntries = ["/attacker/bin"];
+          mutableScope.candidatePaths = [{
+            absolutePath: "/attacker/claude",
+            priorityRank: 1,
+            source: "explicit",
+          }];
+          mutableScope.sourcePaths = [{
+            absolutePath: "/attacker/settings.json",
+            kind: "user",
+          }];
         }
         return {
           absolutePath: path,
