@@ -174,6 +174,112 @@ test("deduplicates owner diagnostics on their public source reference", async ()
   assert.doesNotMatch(JSON.stringify(first), /private-user-source/u);
 });
 
+test("projects only declared public fields from hostile configuration owner results", async () => {
+  const sentinelValues = [
+    "sentinel-deferred-extra",
+    "sentinel-intent-extra",
+    "sentinel-selection-extra",
+    "sentinel-source-model-extra",
+  ] as const;
+  const ownerSourceRef = "private-owner-source";
+  const inspect = createBuildClaudeCodeSetupView({
+    authorizeClaudeCodeSetupInspection: {
+      async execute() {
+        return {
+          diagnostics: [], executableCandidates: [], observationEpoch: "epoch",
+          sources: [], status: "authorized" as const,
+        };
+      },
+    },
+    discoverClaudeCodeInstallations: {
+      async execute() { return { diagnostics: [], installations: [] }; },
+    },
+    inspectClaudeCodeConfiguration: {
+      async execute() {
+        return {
+          deferredObservations: [
+            {
+              extraDeferredField: sentinelValues[0], form: "provider-deployment" as const,
+              key: "model" as const, sourceRef: ownerSourceRef, status: "deferred" as const,
+            },
+            {
+              extraDeferredField: sentinelValues[0], form: "unclassified-selector" as const,
+              key: "model" as const, sourceRef: ownerSourceRef, status: "deferred" as const,
+            },
+          ],
+          diagnostics: [],
+          observedPortableIntent: [
+            {
+              extraIntentField: sentinelValues[1], key: "model" as const,
+              selection: {
+                extraSelectionField: sentinelValues[2], kind: "provider-default" as const,
+              },
+              sourceRef: ownerSourceRef,
+            },
+            {
+              extraIntentField: sentinelValues[1], key: "model" as const,
+              selection: {
+                extraSelectionField: sentinelValues[2], kind: "alias" as const,
+                value: "sonnet" as const,
+              },
+              sourceRef: ownerSourceRef,
+            },
+            {
+              extraIntentField: sentinelValues[1], key: "model" as const,
+              selection: {
+                extraSelectionField: sentinelValues[2], kind: "exact-name" as const,
+                value: "synthetic-model",
+              },
+              sourceRef: ownerSourceRef,
+            },
+            {
+              extraIntentField: sentinelValues[1], key: "effortLevel" as const,
+              sourceRef: ownerSourceRef, value: "high" as const,
+            },
+          ],
+          sourceModel: {
+            ...emptyConfiguration().sourceModel,
+            extraSourceModelField: sentinelValues[3],
+          },
+          sources: [{
+            displayPath: "$HOME/.claude/settings.json", role: "user" as const,
+            selectionBasis: "static-preview" as const, sourceRef: ownerSourceRef,
+            status: "applied" as const,
+          }],
+        };
+      },
+    },
+    planClaudeCodeSetupInspection: {
+      plan() {
+        return {
+          candidatePaths: [], dialect: "claude-code-settings@2026-08-28" as const,
+          sourcePaths: [], status: "planned" as const,
+        };
+      },
+    },
+  }, new Uint8Array(32).fill(7));
+
+  const result = await inspect(trustedScope);
+  assert.equal(result.status, "observed");
+  if (result.status !== "observed") { return; }
+  const sourceRef = result.sourceObservations[0]!.sourceRef;
+  assert.deepEqual(result.deferredObservations, [
+    { form: "provider-deployment", key: "model", sourceRef, status: "deferred" },
+    { form: "unclassified-selector", key: "model", sourceRef, status: "deferred" },
+  ]);
+  assert.deepEqual(result.observedPortableIntent, [
+    { key: "model", selection: { kind: "provider-default" }, sourceRef },
+    { key: "model", selection: { kind: "alias", value: "sonnet" }, sourceRef },
+    { key: "model", selection: { kind: "exact-name", value: "synthetic-model" }, sourceRef },
+    { key: "effortLevel", sourceRef, value: "high" },
+  ]);
+  assert.deepEqual(result.sourceModel, emptyConfiguration().sourceModel);
+  const serialized = JSON.stringify(result);
+  for (const sentinel of sentinelValues) {
+    assert.equal(serialized.includes(sentinel), false, sentinel);
+  }
+});
+
 test("applies the public diagnostic budget after deterministic normalization", async () => {
   const candidateDiagnostics = Array.from({ length: 1_025 }, (_, index) => ({
     candidateRef: `candidate-${index.toString().padStart(4, "0")}`,

@@ -225,16 +225,25 @@ const projectObservedSetup = ({
         })),
       })),
       deferredObservations: deferredConfiguration.map(observation => ({
-        ...observation,
+        form: observation.form,
+        key: observation.key,
         sourceRef: sourceReferences.get(observation.sourceRef) ??
           hmacRef(referenceKey, "claude-code-setup-source", scope, observation.sourceRef),
+        status: observation.status,
       })),
-      observedPortableIntent: observedConfiguration.map(intent => ({
-        ...intent,
-        ...(intent.key === "model" ? { selection: { ...intent.selection } } : {}),
-        sourceRef: sourceReferences.get(intent.sourceRef) ??
-          hmacRef(referenceKey, "claude-code-setup-source", scope, intent.sourceRef),
-      })),
+      observedPortableIntent: observedConfiguration.map(intent => {
+        const sourceRef = sourceReferences.get(intent.sourceRef) ??
+          hmacRef(referenceKey, "claude-code-setup-source", scope, intent.sourceRef);
+        if (intent.key === "effortLevel") {
+          return { key: intent.key, sourceRef, value: intent.value };
+        }
+        const selection = intent.selection.kind === "provider-default"
+          ? { kind: intent.selection.kind }
+          : intent.selection.kind === "alias"
+            ? { kind: intent.selection.kind, value: intent.selection.value }
+            : { kind: intent.selection.kind, value: intent.selection.value };
+        return { key: intent.key, selection, sourceRef };
+      }),
       sourceObservations: configuration.sources.map(source => ({
         displayPath: source.displayPath,
         role: source.role,
@@ -244,7 +253,16 @@ const projectObservedSetup = ({
           hmacRef(referenceKey, "claude-code-setup-source", scope, source.sourceRef),
         status: source.status,
       })),
-      sourceModel: { ...sourceModel },
+      sourceModel: {
+        claim: sourceModel.claim,
+        classifierRevision: sourceModel.classifierRevision,
+        collectorRef: sourceModel.collectorRef,
+        compatibility: sourceModel.compatibility,
+        contract: sourceModel.contract,
+        dialect: sourceModel.dialect,
+        precedence: sourceModel.precedence,
+        topologyRef: sourceModel.topologyRef,
+      },
       status: diagnostics.length === 0 ? "observed" : "partial",
     });
 };
