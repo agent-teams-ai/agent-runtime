@@ -54,6 +54,7 @@ export const isHistoricalObjectClosureUnavailable = error => {
   }
   const details = String(error.stderr ?? "");
   return [
+    /ambiguous argument .*unknown revision or path not in the working tree/isu,
     /bad object/iu,
     /could not parse object/iu,
     /missing (?:blob|tree)/iu,

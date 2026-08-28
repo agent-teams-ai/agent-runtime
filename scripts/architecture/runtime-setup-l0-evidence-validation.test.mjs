@@ -55,6 +55,10 @@ test("recognizes only failed Git commands with missing historical objects", () =
     status: 128,
     stderr: "fatal: promised object deadbeef unavailable",
   }), true);
+  assert.equal(isHistoricalObjectClosureUnavailable({
+    status: 128,
+    stderr: "fatal: ambiguous argument 'deadbeef^': unknown revision or path not in the working tree.",
+  }), true);
   assert.equal(isHistoricalObjectClosureUnavailable(new Error("bad object")), false);
   assert.equal(isHistoricalObjectClosureUnavailable({
     status: 128,
