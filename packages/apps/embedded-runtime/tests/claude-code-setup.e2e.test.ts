@@ -477,7 +477,7 @@ test("traps fetch, DNS, HTTP(S), TCP/TLS, and datagram APIs in an isolated proce
     import.meta.url,
   ));
   await execFile(process.execPath, [helper], {
-    env: Object.freeze({ ...process.env, NODE_OPTIONS: "--no-warnings" }),
+    env: Object.freeze({ NODE_OPTIONS: "--no-warnings" }),
     timeout: 10_000,
   });
 });
