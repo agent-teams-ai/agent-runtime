@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "redacted-hosted-worker-result-envelopes",
+  "sourceRevision": "7be998237a4c262bee9c4198d554b43cd2757ac6",
+  "redaction": "Retains the requested decision fields and drops raw logs, absolute host paths, and provider telemetry.",
+  "envelopes": [
+    {
+      "jobId": "ar-l0-final-trace-20260828-r2",
+      "status": "done",
+      "changedFiles": [],
+      "measurements": {
+        "elapsedSeconds": 221.18,
+        "filesRead": 52,
+        "searches": 9
+      },
+      "oracle": {
+        "bundleClosurePass": true,
+        "compositionRootPass": true,
+        "frameworkLeakFound": false,
+        "ownerMatrixPass": true
+      },
+      "promotionEvidence": false,
+      "verdict": "hold",
+      "reason": "Ownership, the composition root, and closed bundles were discoverable without framework leakage."
+    },
+    {
+      "jobId": "ar-l0-final-gates-20260828-r2",
+      "status": "done",
+      "changedFiles": [],
+      "measurements": {
+        "elapsedSeconds": 345,
+        "filesRead": 3,
+        "searches": 3
+      },
+      "oracle": {
+        "beforeBindAccessPass": true,
+        "denialSeparationPass": true,
+        "focusedTestPathPass": true,
+        "missingDependencyPass": true,
+        "repeatedNeutralProblemFound": false,
+        "unknownBindingPass": true
+      },
+      "promotionEvidence": false,
+      "verdict": "hold",
+      "reason": "Both composition defects fail synchronously and remain distinct from authorization denial."
+    },
+    {
+      "jobId": "ar-l0-final-change-20260828-r2",
+      "status": "done",
+      "changedFiles": [],
+      "measurements": {
+        "compositionFiles": 8,
+        "duplicateBindingFacts": 0,
+        "elapsedSeconds": 467,
+        "estimatedGlueLines": 230,
+        "filesRead": 52,
+        "reusableFixturePercent": 87,
+        "searches": 9
+      },
+      "oracle": {
+        "architectureFreezeRequired": true,
+        "incorrectEditRisk": "medium",
+        "repeatedNeutralProblemFound": false
+      },
+      "promotionEvidence": false,
+      "verdict": "hold",
+      "reason": "The slice is composition-heavy, but its provider-specific binding facts remain product-owned and are not duplicated neutral semantics."
+    }
+  ]
+}

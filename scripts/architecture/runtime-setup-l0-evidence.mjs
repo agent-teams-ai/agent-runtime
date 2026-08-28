@@ -20,6 +20,10 @@ const evidencePath = join(
   repositoryRoot,
   "docs/spikes/runtime-setup-l0-dogfooding-evidence.json",
 );
+const benchmarkEnvelopePath = join(
+  repositoryRoot,
+  "docs/spikes/runtime-setup-l0-benchmark-envelopes.json",
+);
 
 const git = (...args) => execFileSync("git", args, {
   cwd: repositoryRoot,
@@ -187,6 +191,13 @@ const importSpecifiers = (source, path) => {
         specifiers.push(expression.value);
       }
     },
+    TSImportType(node) {
+      if (node.source.type === "Literal" && typeof node.source.value === "string") {
+        specifiers.push(node.source.value);
+      } else {
+        unresolvedImports.push("import-type");
+      }
+    },
   }).visit(parsed.program);
   assert.deepEqual(
     unresolvedImports,
@@ -199,11 +210,22 @@ const importSpecifiers = (source, path) => {
 assert.deepEqual(
   importSpecifiers(
     "import a from 'a'; export * from 'b'; import c = require('c'); " +
-      "const d = require('d'); void import('e');",
+      "const d = require('d'); void import('e'); type F = import('f').F;",
     "evidence-import-parser-self-test.ts",
   ),
-  ["a", "b", "c", "d", "e"],
+  ["a", "b", "c", "d", "e", "f"],
   "evidence import parser must cover every supported dependency form",
+);
+
+const forbiddenInwardDependency = /@agent-teams\/(?:engineering|extension)-foundation|cordis|awilix|(?:^|\/)(?:adapters|composition)(?:\/|$)|(?:^|[-/])(?:container|module-(?:graph|runtime)|registry)(?:[-/]|$)/iu;
+
+assert.equal(
+  importSpecifiers(
+    "type Forbidden = import('@agent-teams/extension-foundation').Runtime;",
+    "evidence-import-type-boundary-self-test.ts",
+  ).some(specifier => forbiddenInwardDependency.test(specifier)),
+  true,
+  "TypeScript import types must participate in the inward dependency gate",
 );
 
 const verifyCurrentArchitecture = async () => {
@@ -223,11 +245,10 @@ const verifyCurrentArchitecture = async () => {
   const inwardFiles = sourceFiles.filter(path =>
     path.endsWith(".ts") &&
     (path.includes("/application/") || path.includes("/contracts/")));
-  const forbidden = /@agent-teams\/(?:engineering|extension)-foundation|cordis|awilix|(?:^|\/)(?:adapters|composition)(?:\/|$)|(?:^|[-/])(?:container|module-(?:graph|runtime)|registry)(?:[-/]|$)/iu;
   for (const path of inwardFiles) {
     const source = await readFile(path, "utf8");
     assert.equal(
-      importSpecifiers(source, path).some(specifier => forbidden.test(specifier)),
+      importSpecifiers(source, path).some(specifier => forbiddenInwardDependency.test(specifier)),
       false,
       `module runtime or outward layer leaked into ${relative(repositoryRoot, path)}`,
     );
@@ -246,6 +267,15 @@ const assertEvidenceRootsClean = () => {
     git("status", "--porcelain=v1", "--untracked-files=all", "--", ...roots).trim(),
     "",
     "captured product source, tests, and fixtures must match the source revision",
+  );
+};
+
+const assertEvidenceRootsMatchRevision = revision => {
+  const roots = [...evidenceRoots.fixtures, ...evidenceRoots.sources, ...evidenceRoots.tests];
+  assert.equal(
+    git("diff", "--name-only", revision, "HEAD", "--", ...roots).trim(),
+    "",
+    "captured product source, tests, and fixtures must match the retained product revision",
   );
 };
 
@@ -277,6 +307,46 @@ const captureProductCheck = () => {
   };
 };
 
+const canonicalJsonBytes = value => `${JSON.stringify(value, null, 2)}\n`;
+
+const loadProspectiveBenchmarks = async () => {
+  const document = JSON.parse(await readFile(benchmarkEnvelopePath, "utf8"));
+  assert.equal(document.schemaVersion, 1);
+  assert.equal(document.evidenceKind, "redacted-hosted-worker-result-envelopes");
+  assert.equal(document.sourceRevision, changes.at(-1)?.revision);
+  assert.equal(document.envelopes.length, prospectiveBenchmarks.length);
+
+  const envelopes = new Map(document.envelopes.map(envelope => [envelope.jobId, envelope]));
+  assert.equal(envelopes.size, document.envelopes.length, "benchmark job IDs must be unique");
+
+  return prospectiveBenchmarks.map(benchmark => {
+    assert.equal(benchmark.sourceRevision, document.sourceRevision);
+    assert.equal(benchmark.promptEncoding, "utf8-lf-terminated");
+    assert.equal(
+      createHash("sha256").update(`${benchmark.prompt}\n`).digest("hex"),
+      benchmark.promptSha256,
+      `${benchmark.id} prompt hash drifted`,
+    );
+
+    const envelope = envelopes.get(benchmark.jobId);
+    assert.ok(envelope, `${benchmark.id} retained result envelope is missing`);
+    assert.equal(
+      createHash("sha256").update(canonicalJsonBytes(envelope)).digest("hex"),
+      benchmark.retainedEnvelopeSha256,
+      `${benchmark.id} retained result envelope hash drifted`,
+    );
+    assert.equal(envelope.status, "done");
+    assert.deepEqual(envelope.changedFiles, []);
+    assert.equal(envelope.verdict, "hold");
+    assert.equal(envelope.promotionEvidence, false);
+    assert.ok(typeof envelope.reason === "string" && envelope.reason.length > 0);
+    assert.ok(typeof envelope.measurements === "object" && envelope.measurements !== null);
+    assert.ok(typeof envelope.oracle === "object" && envelope.oracle !== null);
+
+    return Object.freeze({ ...benchmark, ...envelope });
+  });
+};
+
 const buildReport = async ({ capture, sourceRevision }) => ({
   schemaVersion: 3,
   evidenceKind: "runtime-setup-l0-direct-composition",
@@ -302,7 +372,7 @@ const buildReport = async ({ capture, sourceRevision }) => ({
   capture,
   artifactDigests: await artifactDigests(),
   historicalChanges: changes.map(summarizeChange),
-  prospectiveBenchmarks,
+  prospectiveBenchmarks: await loadProspectiveBenchmarks(),
   traces,
   limitations: [
     "historical-change-size-is-not-an-authoring-benchmark",
@@ -354,12 +424,8 @@ const validateStoredReport = report => {
     assert.equal(benchmark.execution.editMode, "read-only");
     assert.equal(benchmark.verdict, "hold");
     assert.equal(benchmark.promotionEvidence, false);
-    assert.equal(
-      createHash("sha256").update(`${benchmark.prompt}\n`).digest("hex"),
-      benchmark.promptSha256,
-      `${benchmark.id} prompt hash drifted`,
-    );
-    assert.match(benchmark.resultEnvelopeSha256, /^[a-f0-9]{64}$/u);
+    assert.equal(benchmark.promptEncoding, "utf8-lf-terminated");
+    assert.match(benchmark.retainedEnvelopeSha256, /^[a-f0-9]{64}$/u);
   }
 };
 
@@ -368,7 +434,9 @@ assertEvidenceRootsClean();
 const mode = process.argv[2] ?? "--check";
 if (mode === "--capture") {
   assert.ok(changes.every(({ revision }) => hasCommit(revision)), "full evidence history is required");
-  const sourceRevision = git("rev-parse", "HEAD").trim();
+  const sourceRevision = changes.at(-1)?.revision;
+  assert.ok(sourceRevision, "a retained product source revision is required");
+  assertEvidenceRootsMatchRevision(sourceRevision);
   const report = await buildReport({ capture: captureProductCheck(), sourceRevision });
   await writeFile(evidencePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 } else if (mode === "--check") {

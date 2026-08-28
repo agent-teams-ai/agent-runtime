@@ -118,8 +118,11 @@ Those measures require a prospectively declared task, model, source revision,
 timer boundaries, expected owner/root, and scored final recommendation.
 
 Three exact-SHA, read-only hosted benchmarks retain their complete prompts,
-prompt hashes, result-envelope hashes, normalized measurements, and verdicts in
-the machine evidence. They cover owner/root navigation, fail-closed binding
+prompt hashes, canonical redacted result envelopes, normalized measurements,
+and verdicts in the machine evidence. Prompts are hashed as UTF-8 bytes with
+one terminating LF. The checker reads every retained envelope, recomputes its
+canonical JSON hash, and derives the generated evidence row from those bytes.
+The benchmarks cover owner/root navigation, fail-closed binding
 diagnostics, and planning a prospective passive OpenCode sibling capability.
 All three returned HOLD. The OpenCode probe estimated eight composition files
 and about 230 glue lines, but found no duplicated neutral binding fact; it also
