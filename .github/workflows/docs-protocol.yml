@@ -4,16 +4,10 @@ on:
   pull_request:
   merge_group:
   push:
-    branches:
-      - main
 
 permissions:
   contents: read
   id-token: write
-
-concurrency:
-  group: docs-protocol-${{ github.workflow }}-${{ github.ref || github.sha }}
-  cancel-in-progress: true
 
 jobs:
   docs-protocol:
