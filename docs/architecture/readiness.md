@@ -161,7 +161,8 @@ AR-2 implementation present; synthetic evidence present; qualification open:
   [`Legacy Feature Inventory`](legacy-feature-inventory.json) and the
   machine-readable Claude Code
   [`freeze packet`](claude-code-setup-freeze.json) are present and pass a
-  deterministic artifact gate;
+  deterministic artifact gate. Each of its 21 frozen fixture rows maps to
+  exactly one declared Node test selected by its owning package test script;
 - provider-specific TypeScript DTOs and application-owned ports exist across
   Agent Execution, Runtime Security, Runtime Configuration, and Embedded
   Runtime. The default Pure DI composition exposes the private headless
@@ -173,9 +174,11 @@ AR-2 implementation present; synthetic evidence present; qualification open:
   [official-semantics artifact](claude-code-official-semantics.snapshot.json)
   records the 13
   source URLs, retrieval method, first-capture response hashes, and only the
-  provider facts frozen by AR-2. The first-capture response bytes were not
-  retained, so those historical response hashes are explicitly not presented
-  as reproducible source-byte evidence; provider qualification remains open;
+  provider facts frozen by AR-2. The committed semantic artifact's own bytes
+  are content-addressed and reproducibly checked by the artifact gate. The
+  first-capture response bytes were not retained, so those historical response
+  hashes are explicitly not presented as reproducible source-byte evidence;
+  provider qualification remains open;
 - on macOS, trusted scope planning derives the three fixed portable source
   paths and fixed known executable locations from synthetic home/workspace
   roots. Runtime Security authorizes roots, paths, trust, stable identity, and
@@ -190,7 +193,8 @@ AR-2 implementation present; synthetic evidence present; qualification open:
 - discovered installations remain `found_unverified`. The query reports
   observed file intent, not effective runtime configuration, and does not
   infer executable version, compatibility, provider route, authentication, or
-  production support. Non-macOS hosts return typed `unsupported`;
+  production support. Non-macOS hosts return typed `unsupported` with the
+  `unsupported_platform` diagnostic;
 - managed policy, session overrides, and interactive-shell PATH are fixed
   expected limitations with value `unobserved`. They are neither read nor
   listed and do not by themselves make a result `partial`;

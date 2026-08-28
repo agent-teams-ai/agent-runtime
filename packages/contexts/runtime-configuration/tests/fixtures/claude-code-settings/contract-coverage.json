@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "contractId": "ar-2-claude-code-setup-preview@1",
   "cases": [
-    { "id": "installation-absent", "expected": "observed-with-install-action", "testFile": "packages/apps/embedded-runtime/tests/claude-code-setup.e2e.test.ts", "testName": "reports clean absence and degrades safely without touching executable or network canaries" },
+    { "id": "installation-absent", "expected": "observed-with-install-action", "testFile": "packages/apps/embedded-runtime/tests/claude-code-setup.e2e.test.ts", "testName": "reports clean absence and degrades safely without touching the executable canary" },
     { "id": "installation-one-alias", "expected": "found-unverified", "testFile": "packages/contexts/agent-execution/tests/claude-code-installation-discovery.test.ts", "testName": "reports required missing candidates and ignores optional missing candidates" },
     { "id": "installation-multiple-aliases", "expected": "identity-grouped", "testFile": "packages/contexts/agent-execution/tests/claude-code-installation-discovery.test.ts", "testName": "deduplicates candidates and groups same-file symbolic aliases" },
     { "id": "source-user-only", "expected": "user-intent", "testFile": "packages/contexts/runtime-configuration/tests/claude-code-configuration-inspection.test.ts", "testName": "resolves every source slot and all caller-order permutations with independent key winners" },
@@ -21,7 +21,7 @@
     { "id": "credential-material", "diagnostic": "credential_material_rejected", "testFile": "packages/contexts/runtime-configuration/tests/claude-code-configuration-inspection.test.ts", "testName": "defers full IDs and routes and rejects secrets without affecting safe sibling intent or leaking sentinels" },
     { "id": "untrusted-workspace", "diagnostic": "source_untrusted", "testFile": "packages/contexts/runtime-security/tests/claude-code-setup-inspection-authorization.test.ts", "testName": "rejects untrusted workspace sources without observing their paths" },
     { "id": "stale-source", "diagnostic": "source_epoch_stale", "testFile": "packages/contexts/runtime-configuration/tests/claude-code-configuration-inspection.test.ts", "testName": "reports stale epochs and stale reader identities without reading lower intent through them" },
-    { "id": "unsupported-platform", "expected": "unsupported-without-diagnostic", "testFile": "packages/apps/embedded-runtime/tests/claude-code-setup.e2e.test.ts", "testName": "returns unsupported and denied before downstream filesystem work" },
+    { "id": "unsupported-platform", "diagnostic": "unsupported_platform", "testFile": "packages/apps/embedded-runtime/tests/claude-code-setup.e2e.test.ts", "testName": "returns unsupported and denied before downstream filesystem work" },
     { "id": "unsupported-dialect", "diagnostic": "configuration_dialect_unsupported", "testFile": "packages/contexts/runtime-configuration/tests/claude-code-configuration-inspection.test.ts", "testName": "rejects any non-frozen dialect without reading sources" }
   ]
 }

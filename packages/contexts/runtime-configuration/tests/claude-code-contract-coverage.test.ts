@@ -8,6 +8,13 @@ import { createClaudeCodeConfigurationSemanticClassifierV1 } from "../dist/compo
 const fixtureRoot = new URL("./fixtures/claude-code-settings/", import.meta.url);
 const repositoryRoot = new URL("../../../..", import.meta.url);
 const readJson = async (path: URL) => JSON.parse(await readFile(path, "utf8"));
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+const testScriptExecutes = (script: string, relativeTestFile: string) => script
+  .split(/\s+/u)
+  .some(token => new RegExp(
+    `^${escapeRegExp(token).replaceAll("\\*", "[^/]+")}$`,
+    "u",
+  ).test(relativeTestFile));
 
 test("executes the secret-setting negative fixture", () => {
   const result = createClaudeCodeConfigurationSemanticClassifierV1().classify(
@@ -51,9 +58,23 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         ["id", entry.diagnostic === undefined ? "expected" : "diagnostic", "testFile", "testName"].toSorted(),
       );
       const source = await readFile(new URL(entry.testFile, repositoryRoot), "utf8");
-      assert.ok(
-        source.includes(entry.testName),
-        `${entry.id} executable test ${JSON.stringify(entry.testName)} is missing`,
+      const declaration = new RegExp(
+        `\\btest\\(\\s*${escapeRegExp(JSON.stringify(entry.testName))}\\s*,`,
+        "gu",
+      );
+      assert.equal(
+        [...source.matchAll(declaration)].length,
+        1,
+        `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
+      );
+      const coordinates = /^(packages\/[^/]+\/[^/]+)\/(tests\/[^/]+\.test\.ts)$/u.exec(entry.testFile);
+      assert.ok(coordinates, `${entry.testFile} must be a package-owned top-level test file`);
+      const [, packageRoot, relativeTestFile] = coordinates;
+      const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
+      assert.equal(
+        testScriptExecutes(packageManifest.scripts?.test ?? "", relativeTestFile),
+        true,
+        `${entry.id} test file must be executed by ${packageRoot}/package.json`,
       );
     });
   }

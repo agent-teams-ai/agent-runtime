@@ -14,6 +14,7 @@ const contractCoveragePath = new URL("contract-coverage.json", fixtureRoot);
 const packagePath = new URL("../../package.json", import.meta.url);
 const roadmapPath = new URL("../../docs/architecture/provider-setup-delivery-roadmap.md", import.meta.url);
 const readinessPath = new URL("../../docs/architecture/readiness.md", import.meta.url);
+const repositoryRoot = new URL("../../", import.meta.url);
 
 const readJson = async path => JSON.parse(await readFile(path, "utf8"));
 const exactKeys = (value, keys, label) => {
@@ -23,9 +24,116 @@ const unique = (values, label) => {
   assert.equal(new Set(values).size, values.length, `${label} must be unique`);
 };
 const sha256 = value => createHash("sha256").update(value).digest("hex");
+const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 const validateSchema = (schema, value, label) => {
   const validate = new Ajv2020({ allErrors: true, strict: true, strictTypes: false }).compile(schema);
   assert.equal(validate(value), true, `${label} schema errors: ${JSON.stringify(validate.errors)}`);
+};
+
+const fixtureProjection = ({ id, expected, diagnostic }) => ({
+  ...(diagnostic === undefined ? {} : { diagnostic }),
+  ...(expected === undefined ? {} : { expected }),
+  id,
+});
+
+export const EXPECTED_FIXTURE_MATRIX = Object.freeze([
+  { id: "installation-absent", expected: "observed-with-install-action" },
+  { id: "installation-one-alias", expected: "found-unverified" },
+  { id: "installation-multiple-aliases", expected: "identity-grouped" },
+  { id: "source-user-only", expected: "user-intent" },
+  { id: "source-shared-project-only", expected: "shared-project-intent" },
+  { id: "source-project-local-only", expected: "project-local-intent" },
+  { id: "sources-conflict", expected: "project-local-wins-per-key" },
+  { id: "malformed-higher-precedence", expected: "lower-resolution-tainted" },
+  { id: "duplicate-json-keys", diagnostic: "config_duplicate_key" },
+  { id: "bom", diagnostic: "config_parse_failed" },
+  { id: "invalid-utf8", diagnostic: "config_invalid_utf8" },
+  { id: "oversized-json", diagnostic: "config_too_large" },
+  { id: "deep-json", diagnostic: "config_parse_failed" },
+  { id: "unsupported-effort-max", diagnostic: "setting_value_unsupported" },
+  { id: "provider-route-model", diagnostic: "provider_route_deferred" },
+  { id: "secret-sentinels", diagnostic: "secret_setting_rejected" },
+  { id: "credential-material", diagnostic: "credential_material_rejected" },
+  { id: "untrusted-workspace", diagnostic: "source_untrusted" },
+  { id: "stale-source", diagnostic: "source_epoch_stale" },
+  { id: "unsupported-platform", diagnostic: "unsupported_platform" },
+  { id: "unsupported-dialect", diagnostic: "configuration_dialect_unsupported" },
+]);
+
+const packageTestCoordinates = testFile => {
+  const match = /^(packages\/[^/]+\/[^/]+)\/(tests\/[^/]+\.test\.ts)$/u.exec(testFile);
+  assert.ok(match, `${testFile} must be a package-owned top-level test file`);
+  return { packageRoot: match[1], relativeTestFile: match[2] };
+};
+
+const testScriptExecutes = (script, relativeTestFile) => script
+  .split(/\s+/u)
+  .some(token => {
+    const pattern = escapeRegExp(token).replaceAll("\\*", "[^/]+");
+    return new RegExp(`^${pattern}$`, "u").test(relativeTestFile);
+  });
+
+export const validateContractCoverage = ({
+  contractCoverage,
+  fixtureMatrix,
+  negativeGroups,
+  packageTestScripts,
+  testSources,
+}) => {
+  exactKeys(contractCoverage, ["schemaVersion", "contractId", "cases"], "contract coverage");
+  assert.equal(contractCoverage.schemaVersion, 1);
+  assert.equal(contractCoverage.contractId, "ar-2-claude-code-setup-preview@1");
+  assert.equal(contractCoverage.cases.length, 21, "contract coverage row count");
+  assert.equal(fixtureMatrix.length, 21, "frozen fixture row count");
+  assert.deepEqual(fixtureMatrix, EXPECTED_FIXTURE_MATRIX, "frozen fixture matrix");
+  assert.deepEqual(negativeGroups, fixtureMatrix, "freeze/negative fixture correspondence");
+  assert.deepEqual(
+    contractCoverage.cases.map(fixtureProjection),
+    fixtureMatrix,
+    "every frozen fixture has exactly one executable coverage entry",
+  );
+  unique(contractCoverage.cases.map(entry => entry.id), "contract coverage IDs");
+
+  for (const entry of contractCoverage.cases) {
+    exactKeys(
+      entry,
+      ["id", entry.diagnostic === undefined ? "expected" : "diagnostic", "testFile", "testName"],
+      `contract coverage ${entry.id}`,
+    );
+    const source = testSources.get(entry.testFile);
+    assert.equal(typeof source, "string", `${entry.id} test source must be retained by the validator`);
+    const declaration = new RegExp(
+      `\\btest\\(\\s*${escapeRegExp(JSON.stringify(entry.testName))}\\s*,`,
+      "gu",
+    );
+    assert.equal(
+      [...source.matchAll(declaration)].length,
+      1,
+      `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
+    );
+    const { packageRoot, relativeTestFile } = packageTestCoordinates(entry.testFile);
+    const packageTestScript = packageTestScripts.get(packageRoot);
+    assert.equal(typeof packageTestScript, "string", `${packageRoot} must declare a test script`);
+    assert.equal(
+      testScriptExecutes(packageTestScript, relativeTestFile),
+      true,
+      `${entry.id} test file must be executed by ${packageRoot}/package.json`,
+    );
+  }
+};
+
+const loadContractCoverageEvidence = async contractCoverage => {
+  const testFiles = [...new Set(contractCoverage.cases.map(entry => entry.testFile))];
+  const testSources = new Map(await Promise.all(testFiles.map(async testFile => [
+    testFile,
+    await readFile(new URL(testFile, repositoryRoot), "utf8"),
+  ])));
+  const packageRoots = [...new Set(testFiles.map(testFile => packageTestCoordinates(testFile).packageRoot))];
+  const packageTestScripts = new Map(await Promise.all(packageRoots.map(async packageRoot => {
+    const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
+    return [packageRoot, packageManifest.scripts?.test];
+  })));
+  return { packageTestScripts, testSources };
 };
 
 export const EXPECTED_CAPABILITY_IDS = Object.freeze([
@@ -293,19 +401,17 @@ export const validateAr2ContractArtifacts = async () => {
   assert.equal(fixtureManifest.dialect, freeze.dialect.id);
   assert.equal(fixtureManifest.contractCoverage, "./contract-coverage.json");
   assert.equal(fixtureManifest.negativeManifest, "./negative-fixtures.json");
-  assert.deepEqual(negativeFixtures.groups, freeze.fixtureMatrix, "freeze/negative fixture correspondence");
-  assert.deepEqual(
-    contractCoverage.cases.map(({ id, expected, diagnostic }) => ({
-      ...(diagnostic === undefined ? {} : { diagnostic }),
-      ...(expected === undefined ? {} : { expected }),
-      id,
-    })),
-    freeze.fixtureMatrix,
-    "every frozen fixture has an executable coverage entry",
-  );
-  unique(contractCoverage.cases.map(entry => entry.id), "contract coverage IDs");
+  const coverageEvidence = await loadContractCoverageEvidence(contractCoverage);
+  validateContractCoverage({
+    contractCoverage,
+    fixtureMatrix: freeze.fixtureMatrix,
+    negativeGroups: negativeFixtures.groups,
+    ...coverageEvidence,
+  });
   const checkInvocations = rootPackage.scripts.check.match(/pnpm test:ar2-contract/gu) ?? [];
   assert.equal(checkInvocations.length, 1, "pnpm check runs the AR-2 test exactly once");
+  assert.match(rootPackage.scripts.check, /\bpnpm product:check\b/u, "pnpm check runs package tests");
+  assert.match(rootPackage.scripts["product:check"], /\brun test\b/u, "product check executes package test scripts");
   assert.equal(JSON.stringify(freeze).includes("interactive-shell"), false);
   assert.equal(JSON.stringify(freeze).includes("managed-settings.json"), false);
   return {

@@ -241,14 +241,18 @@ The machine-readable authority is the
 [`claude-code-setup-freeze.json`](claude-code-setup-freeze.json) packet and its
 [schema](claude-code-setup-freeze.schema.json). The packet is validated by the
 deterministic `test:ar2-contract` gate, which runs exactly once through the
-authoritative `pnpm check` chain. Its documented settings
-dialect does not qualify or establish compatibility of any executable.
+authoritative `pnpm check` chain. The gate requires each of the 21 frozen
+fixture rows to map to exactly one declared Node test selected by its owning
+package test script, and rejects fixture, title, file, or package-script drift.
+Its documented settings dialect does not qualify or establish compatibility of
+any executable.
 The linked content-addressed
 [`semantic artifact`](claude-code-official-semantics.snapshot.json) records all
 13 official source URLs and the minimal facts consumed by this freeze. Because
-the first-capture response bytes were not retained, its historical response
-hashes are recorded as non-reproducible rather than being presented as
-immutable source evidence.
+the committed semantic artifact's own bytes are reproducibly verified against
+the SHA-256 recorded by the freeze packet. The first-capture response bytes
+were not retained, so its historical response hashes are recorded as
+non-reproducible rather than being presented as immutable source evidence.
 
 The private handle adds a sibling capability:
 
@@ -274,7 +278,7 @@ The implemented private headless TypeScript query crosses the accepted owners:
 V1 constraints:
 
 - passive macOS synthetic preview only; other platforms return typed
-  `unsupported`;
+  `unsupported` with the `unsupported_platform` diagnostic;
 - passive filesystem and installation metadata observation only;
 - no `claude` process execution;
 - no login, logout, installation, update, network, saved profile, or launch;

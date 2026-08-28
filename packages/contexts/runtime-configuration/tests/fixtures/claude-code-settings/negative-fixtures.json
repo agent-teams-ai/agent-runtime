@@ -20,7 +20,7 @@
     { "id": "credential-material", "diagnostic": "credential_material_rejected" },
     { "id": "untrusted-workspace", "diagnostic": "source_untrusted" },
     { "id": "stale-source", "diagnostic": "source_epoch_stale" },
-    { "id": "unsupported-platform", "expected": "unsupported-without-diagnostic" },
+    { "id": "unsupported-platform", "diagnostic": "unsupported_platform" },
     { "id": "unsupported-dialect", "diagnostic": "configuration_dialect_unsupported" }
   ],
   "redactionSentinels": [
