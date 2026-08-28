@@ -450,7 +450,7 @@
       "reuseDecision": "reuse_fixture",
       "newOwner": "Provider Access, with Runtime Security enforcing secret redaction.",
       "proposedDisposition": "approved_now",
-      "authorityStatus": "Official-current authority: Current Bedrock, Vertex, Foundry, authentication, and gateway documentation. Frozen rule: Route selectors and endpoint/location/model-remap settings are provider_access_setting_deferred.",
+      "authorityStatus": "Official-current authority: Current Bedrock, Vertex, Foundry, authentication, and gateway documentation. Frozen rule: Route selectors and endpoint/location/model-remap settings are provider_route_deferred.",
       "acceptanceEvidence": "Category-level diagnostic only; no route value or route-specific model identifier enters the DTO. Required negative fixture: Every route-key permutation must leave settings unchanged and produce no raw value in serialized output.",
       "futureExtensionSeam": "Future opaque Provider Access binding/reference."
     },
