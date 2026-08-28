@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "a427b659ffdd967990d6b04810cfe9d955b64e2d7f222fee861f9c39066a3689",
+    "outputSha256": "5fd532bd592ca3662870734e560106e2cbd5cf51584a7058941fd4c30c354b56",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -55,15 +55,15 @@
   "artifactDigests": {
     "fixtures": {
       "fileCount": 4,
-      "sha256": "64fa47c95f70c283e22ae3b413927c1cb5966644fa627fd952904df0b6f488a5"
+      "sha256": "b7c03b440508319977e02ebd452f4c69138c0d3420826e8aba080d712dd7feec"
     },
     "sources": {
-      "fileCount": 57,
-      "sha256": "69a87dab3f5031581db980daa0e38142ce8187328de2243262b197ec52054b42"
+      "fileCount": 59,
+      "sha256": "a855d16c9b31da3d6597d7ac86e72841510032e34669c53b9d4f93c78869eaa7"
     },
     "tests": {
-      "fileCount": 23,
-      "sha256": "9a528a517aa7d7ad5ecfdb87690fc74181e0b0a2739b1d8d9f6f81b4055bf26f"
+      "fileCount": 24,
+      "sha256": "23982ad991451957063674e6b94762c3c27edf522f2a4421e1c2a807115c6ee7"
     }
   },
   "historicalChanges": [

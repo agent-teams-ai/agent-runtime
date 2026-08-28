@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GitCommandFailure,
   isHistoricalObjectClosureUnavailable,
+  parseTrackedEvidenceEntries,
   validateStoredReportShape,
 } from "./runtime-setup-l0-evidence-validation.mjs";
 
@@ -51,19 +53,48 @@ const report = {
 };
 
 test("recognizes only failed Git commands with missing historical objects", () => {
-  assert.equal(isHistoricalObjectClosureUnavailable({
+  assert.equal(isHistoricalObjectClosureUnavailable(new GitCommandFailure({
+    message: "git failed",
     status: 128,
     stderr: "fatal: promised object deadbeef unavailable",
-  }), true);
-  assert.equal(isHistoricalObjectClosureUnavailable({
+  })), true);
+  assert.equal(isHistoricalObjectClosureUnavailable(new GitCommandFailure({
+    message: "git failed",
     status: 128,
     stderr: "fatal: ambiguous argument 'deadbeef^': unknown revision or path not in the working tree.",
-  }), true);
+  })), true);
   assert.equal(isHistoricalObjectClosureUnavailable(new Error("bad object")), false);
   assert.equal(isHistoricalObjectClosureUnavailable({
     status: 128,
-    stderr: "fatal: permission denied",
+    stderr: "fatal: bad object deadbeef",
   }), false);
+  assert.equal(isHistoricalObjectClosureUnavailable(new GitCommandFailure({
+    message: "git returned success",
+    status: 0,
+    stderr: "fatal: bad object deadbeef",
+  })), false);
+  assert.equal(isHistoricalObjectClosureUnavailable(new GitCommandFailure({
+    message: "git failed",
+    status: 128,
+    stderr: "fatal: permission denied",
+  })), false);
+});
+
+test("retains executable modes and rejects non-regular evidence entries", () => {
+  assert.deepEqual(
+    parseTrackedEvidenceEntries(
+      `100755 ${"a".repeat(40)} 0\tbin/tool\0` +
+      `100644 ${"b".repeat(40)} 0\tsrc/index.ts\0`,
+    ),
+    [
+      { mode: "100755", path: "bin/tool" },
+      { mode: "100644", path: "src/index.ts" },
+    ],
+  );
+  assert.throws(
+    () => parseTrackedEvidenceEntries(`120000 ${"c".repeat(40)} 0\tsrc/link.ts\0`),
+    /evidence roots allow regular files only/u,
+  );
 });
 
 test("accepts the complete retained evidence shape", () => {

@@ -48,11 +48,20 @@ const validateHistoricalChangeShape = (change, index) => {
   );
 };
 
+export class GitCommandFailure extends Error {
+  constructor(error) {
+    super(error.message, { cause: error });
+    this.name = "GitCommandFailure";
+    this.status = error.status;
+    this.stderr = String(error.stderr ?? "");
+  }
+}
+
 export const isHistoricalObjectClosureUnavailable = error => {
-  if (!Number.isInteger(error?.status)) {
+  if (!(error instanceof GitCommandFailure) || !Number.isInteger(error.status) || error.status === 0) {
     return false;
   }
-  const details = String(error.stderr ?? "");
+  const details = error.stderr;
   return [
     /ambiguous argument .*unknown revision or path not in the working tree/isu,
     /bad object/iu,
@@ -64,6 +73,24 @@ export const isHistoricalObjectClosureUnavailable = error => {
     /unable to read tree/iu,
   ].some(pattern => pattern.test(details));
 };
+
+export const parseTrackedEvidenceEntries = output => output
+  .split("\0")
+  .filter(Boolean)
+  .map(row => {
+    const separator = row.indexOf("\t");
+    assert.notEqual(separator, -1, "tracked evidence entry lacks a path separator");
+    const [mode, objectId, stage] = row.slice(0, separator).split(" ");
+    const path = row.slice(separator + 1);
+    assert.equal(stage, "0", `${path} has an unresolved Git index stage`);
+    assert.match(objectId, /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u, `${path} has an invalid object ID`);
+    assert.ok(
+      mode === "100644" || mode === "100755",
+      `${path} uses unsupported Git mode ${mode}; evidence roots allow regular files only`,
+    );
+    return { mode, path };
+  })
+  .toSorted((left, right) => left.path.localeCompare(right.path));
 
 export const validateStoredReportShape = (report, changes) => {
   assertExactKeys(report, [

@@ -20,15 +20,15 @@ export const changes = Object.freeze([
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
     fileCount: 4,
-    sha256: "64fa47c95f70c283e22ae3b413927c1cb5966644fa627fd952904df0b6f488a5",
+    sha256: "b7c03b440508319977e02ebd452f4c69138c0d3420826e8aba080d712dd7feec",
   }),
   sources: Object.freeze({
-    fileCount: 57,
-    sha256: "69a87dab3f5031581db980daa0e38142ce8187328de2243262b197ec52054b42",
+    fileCount: 59,
+    sha256: "a855d16c9b31da3d6597d7ac86e72841510032e34669c53b9d4f93c78869eaa7",
   }),
   tests: Object.freeze({
-    fileCount: 23,
-    sha256: "9a528a517aa7d7ad5ecfdb87690fc74181e0b0a2739b1d8d9f6f81b4055bf26f",
+    fileCount: 24,
+    sha256: "23982ad991451957063674e6b94762c3c27edf522f2a4421e1c2a807115c6ee7",
   }),
 });
 
@@ -238,11 +238,13 @@ export const evidenceRoots = Object.freeze({
     "packages/contexts/agent-execution/src",
     "packages/contexts/runtime-configuration/src",
     "packages/contexts/runtime-security/src",
+    "packages/platform/filesystem-custody/src",
   ]),
   tests: Object.freeze([
     "packages/apps/embedded-runtime/tests",
     "packages/contexts/agent-execution/tests",
     "packages/contexts/runtime-configuration/tests",
     "packages/contexts/runtime-security/tests",
+    "packages/platform/filesystem-custody/tests",
   ]),
 });

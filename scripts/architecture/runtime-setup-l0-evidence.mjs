@@ -16,7 +16,9 @@ import {
   traces,
 } from "./runtime-setup-l0-evidence-spec.mjs";
 import {
+  GitCommandFailure,
   isHistoricalObjectClosureUnavailable,
+  parseTrackedEvidenceEntries,
   validateStoredReportShape,
 } from "./runtime-setup-l0-evidence-validation.mjs";
 
@@ -30,16 +32,22 @@ const benchmarkEnvelopePath = join(
   "docs/spikes/runtime-setup-l0-benchmark-envelopes.json",
 );
 
-const git = (...args) => execFileSync("git", args, {
-  cwd: repositoryRoot,
-  encoding: "utf8",
-  env: {
-    ...process.env,
-    GIT_NO_LAZY_FETCH: "1",
-    GIT_OPTIONAL_LOCKS: "0",
-  },
-  stdio: ["ignore", "pipe", "pipe"],
-});
+const git = (...args) => {
+  try {
+    return execFileSync("git", args, {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_NO_LAZY_FETCH: "1",
+        GIT_OPTIONAL_LOCKS: "0",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    throw new GitCommandFailure(error);
+  }
+};
 
 const sum = (items, field) => items.reduce((total, item) => total + item[field], 0);
 
@@ -125,24 +133,6 @@ const loadHistoricalChanges = (summarize = summarizeChange) => {
   }
 };
 
-const missingHistoricalObject = new Error("historical object unavailable");
-missingHistoricalObject.stderr = "fatal: promised object f00 unavailable";
-missingHistoricalObject.status = 128;
-assert.equal(
-  loadHistoricalChanges(() => {
-    throw missingHistoricalObject;
-  }),
-  undefined,
-  "a missing historical object closure must disable only optional recomputation",
-);
-assert.throws(
-  () => loadHistoricalChanges(() => {
-    throw new Error("historical evidence validator bug");
-  }),
-  /historical evidence validator bug/u,
-  "historical recomputation must not hide validator defects",
-);
-
 const walkFiles = async directory => {
   const files = [];
   let entries;
@@ -170,12 +160,18 @@ const collectEvidenceFiles = async roots => {
   return files.flat().toSorted();
 };
 
+const trackedEvidenceFiles = roots => parseTrackedEvidenceEntries(
+  git("ls-files", "--stage", "-z", "--", ...roots),
+);
+
 const hashFileSet = async roots => {
-  const files = await collectEvidenceFiles(roots);
+  const files = trackedEvidenceFiles(roots);
   const digest = createHash("sha256");
-  for (const path of files) {
-    const content = await readFile(path);
-    digest.update(relative(repositoryRoot, path));
+  for (const { mode, path } of files) {
+    const content = await readFile(join(repositoryRoot, path));
+    digest.update(path);
+    digest.update("\0");
+    digest.update(mode);
     digest.update("\0");
     digest.update(createHash("sha256").update(content).digest("hex"));
     digest.update("\n");

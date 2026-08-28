@@ -62,7 +62,9 @@ barrels are not represented as runtime calls.
 - runs the exact embedded-runtime package check on the capture platform;
 - rejects skipped tests;
 - hashes the package-check output;
-- hashes the complete relevant source, test, and fixture sets; and
+- hashes the complete relevant source, test, and fixture sets, including the
+  filesystem-custody boundary, tracked file modes, and bytes; rejects symlinks,
+  gitlinks, and unresolved index stages inside evidence roots; and
 - writes the evidence manifest at the current product source revision.
 
 **pnpm architecture:runtime-setup-l0-evidence** then:
