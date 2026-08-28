@@ -28,19 +28,15 @@ const benchmarkEnvelopePath = join(
 const git = (...args) => execFileSync("git", args, {
   cwd: repositoryRoot,
   encoding: "utf8",
+  env: {
+    ...process.env,
+    GIT_NO_LAZY_FETCH: "1",
+    GIT_OPTIONAL_LOCKS: "0",
+  },
   stdio: ["ignore", "pipe", "pipe"],
 });
 
 const sum = (items, field) => items.reduce((total, item) => total + item[field], 0);
-
-const hasCommit = revision => {
-  try {
-    git("cat-file", "-e", `${revision}^{commit}`);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const behaviorTestTitles = revision => {
   const root = "packages/apps/embedded-runtime/tests";
@@ -113,6 +109,22 @@ const summarizeChange = ({ id, revision }) => {
     },
   };
 };
+
+const loadHistoricalChanges = (summarize = summarizeChange) => {
+  try {
+    return changes.map(summarize);
+  } catch {
+    return undefined;
+  }
+};
+
+assert.equal(
+  loadHistoricalChanges(() => {
+    throw new Error("historical object unavailable");
+  }),
+  undefined,
+  "a missing historical object closure must disable only optional recomputation",
+);
 
 const walkFiles = async directory => {
   const files = [];
@@ -347,7 +359,7 @@ const loadProspectiveBenchmarks = async () => {
   });
 };
 
-const buildReport = async ({ capture, sourceRevision }) => ({
+const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
   schemaVersion: 3,
   evidenceKind: "runtime-setup-l0-direct-composition",
   sourceRevision,
@@ -371,7 +383,7 @@ const buildReport = async ({ capture, sourceRevision }) => ({
   promotionRule: "hold-unless-two-of-three-prospective-changes-show-the-same-neutral-composition-problem",
   capture,
   artifactDigests: await artifactDigests(),
-  historicalChanges: changes.map(summarizeChange),
+  historicalChanges,
   prospectiveBenchmarks: await loadProspectiveBenchmarks(),
   traces,
   limitations: [
@@ -444,19 +456,29 @@ await verifyCurrentArchitecture();
 assertEvidenceRootsClean();
 const mode = process.argv[2] ?? "--check";
 if (mode === "--capture") {
-  assert.ok(changes.every(({ revision }) => hasCommit(revision)), "full evidence history is required");
+  const historicalChanges = loadHistoricalChanges();
+  assert.ok(historicalChanges, "full evidence object closure is required");
   const sourceRevision = changes.at(-1)?.revision;
   assert.ok(sourceRevision, "a retained product source revision is required");
   assertEvidenceRootsMatchRevision(sourceRevision);
-  const report = await buildReport({ capture: captureProductCheck(), sourceRevision });
+  const report = await buildReport({
+    capture: captureProductCheck(),
+    historicalChanges,
+    sourceRevision,
+  });
   await writeFile(evidencePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 } else if (mode === "--check") {
   const stored = JSON.parse(await readFile(evidencePath, "utf8"));
   await validateStoredReport(stored);
-  if (changes.every(({ revision }) => hasCommit(revision))) {
+  const historicalChanges = loadHistoricalChanges();
+  if (historicalChanges !== undefined) {
     assert.deepEqual(
       stored,
-      await buildReport({ capture: stored.capture, sourceRevision: stored.sourceRevision }),
+      await buildReport({
+        capture: stored.capture,
+        historicalChanges,
+        sourceRevision: stored.sourceRevision,
+      }),
       "runtime setup L0 evidence is stale",
     );
   }
