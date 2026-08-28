@@ -8,9 +8,9 @@ export const TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS = Object.freeze({
     explicitExecutablePaths: 16,
     pathEntries: 64,
     text: Object.freeze({
-      observationEpoch: 256,
+      observationEpoch: 128,
       path: 16_384,
-      scopeId: 256,
+      scopeId: 128,
     }),
   }),
   codexSetup: Object.freeze({
@@ -30,6 +30,12 @@ export const TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS = Object.freeze({
 
 const copyBoundedText = (value: string, limit: number): string | undefined =>
   typeof value === "string" && value.length <= limit ? value : undefined;
+
+const copyBoundedIdentifier = (value: string, limit: number): string | undefined =>
+  typeof value === "string" && value.length > 0 && value.length <= limit &&
+    /^[A-Za-z0-9]/u.test(value) && !/[^A-Za-z0-9._/-]/u.test(value)
+    ? value
+    : undefined;
 
 const copyBounded = <Input, Output>(
   values: readonly Input[],
@@ -80,11 +86,11 @@ export const copyTrustedClaudeCodeSetupScope = (
       value => copyBoundedText(value, limits.text.path),
     );
     const homeRoot = copyBoundedText(scope.homeRoot, limits.text.path);
-    const observationEpoch = copyBoundedText(
+    const observationEpoch = copyBoundedIdentifier(
       scope.observationEpoch,
       limits.text.observationEpoch,
     );
-    const scopeId = copyBoundedText(scope.scopeId, limits.text.scopeId);
+    const scopeId = copyBoundedIdentifier(scope.scopeId, limits.text.scopeId);
     const workspaceRoot = copyBoundedText(scope.workspaceRoot, limits.text.path);
     return explicitExecutablePaths === undefined || pathEntries === undefined ||
       homeRoot === undefined || observationEpoch === undefined || scopeId === undefined ||

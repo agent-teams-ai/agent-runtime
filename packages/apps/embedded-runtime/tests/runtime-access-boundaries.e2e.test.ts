@@ -201,6 +201,67 @@ test("returns frozen redacted overflow outcomes before any downstream call", asy
   assert.doesNotMatch(JSON.stringify([codex, claude]), /sensitive/u);
 });
 
+test("accepts 128-character Claude scope identifiers at the product boundary", async t => {
+  const { calls, dependencies } = createDependencies();
+  const host = createAgentRuntimeHost(dependencies);
+  t.after(() => host.dispose());
+  const scope = runtimeScope();
+  Object.assign(scope.claudeCodeSetup!, {
+    observationEpoch: "o".repeat(128),
+    scopeId: "s".repeat(128),
+  });
+
+  assert.match(
+    (await host.bindAccess(scope).claudeCodeSetup.inspect()).status,
+    /^(?:observed|partial)$/u,
+  );
+  assert.equal(calls.claudePlanner, 1);
+  assert.equal(calls.claudeAuthorization, 1);
+  assert.equal(calls.claudeDiscovery, 1);
+  assert.equal(calls.claudeConfiguration, 1);
+});
+
+test("rejects invalid Claude scope identifiers before downstream calls", async t => {
+  const cases = [
+    ["observationEpoch", "o".repeat(129)],
+    ["scopeId", "s".repeat(129)],
+    ["observationEpoch", ""],
+    ["scopeId", ""],
+    ["observationEpoch", "epoch\u0000control"],
+    ["scopeId", "scope\u0000control"],
+  ] as const;
+
+  for (const [field, value] of cases) {
+    await t.test(`${field} rejects ${value.length === 129 ? "129 characters" : value.length === 0 ? "empty text" : "control characters"}`, async () => {
+      const { calls, dependencies } = createDependencies();
+      const host = createAgentRuntimeHost(dependencies);
+      const scope = runtimeScope();
+      Object.assign(scope.claudeCodeSetup!, { [field]: value });
+      try {
+        assert.deepEqual(
+          await host.bindAccess(scope).claudeCodeSetup.inspect(),
+          {
+            diagnostics: [{ code: "access_scope_limit_exceeded" }],
+            expectedLimitations,
+            status: "unsupported",
+          },
+        );
+        assert.deepEqual(
+          [
+            calls.claudePlanner,
+            calls.claudeAuthorization,
+            calls.claudeDiscovery,
+            calls.claudeConfiguration,
+          ],
+          [0, 0, 0, 0],
+        );
+      } finally {
+        await host.dispose();
+      }
+    });
+  }
+});
+
 test("rejects over-limit strings and scope mutation without downstream calls", async t => {
   const { calls, dependencies } = createDependencies();
   const host = createAgentRuntimeHost(dependencies);
