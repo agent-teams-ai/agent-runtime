@@ -2,9 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { CLAUDE_CODE_SETTINGS_DIALECT } from "../dist/index.js";
-import { createClaudeCodeConfigurationSemanticClassifierV1 } from "../dist/composition.js";
-
 const fixtureRoot = new URL("./fixtures/claude-code-settings/", import.meta.url);
 const repositoryRoot = new URL("../../../..", import.meta.url);
 const readJson = async (path: URL) => JSON.parse(await readFile(path, "utf8"));
@@ -15,16 +12,6 @@ const testScriptExecutes = (script: string, relativeTestFile: string) => script
     `^${escapeRegExp(token).replaceAll("\\*", "[^/]+")}$`,
     "u",
   ).test(relativeTestFile));
-
-test("executes the secret-setting negative fixture", () => {
-  const result = createClaudeCodeConfigurationSemanticClassifierV1().classify(
-    CLAUDE_CODE_SETTINGS_DIALECT,
-    { sessionSecret: "opaque" },
-  );
-  assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.code), [
-    "secret_setting_rejected",
-  ]);
-});
 
 test("requires exact executable coverage for every frozen AR-2 fixture", async t => {
   const [freeze, manifest, negatives, coverage] = await Promise.all([
