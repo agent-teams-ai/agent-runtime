@@ -49,20 +49,6 @@ interface InspectionDependencies {
   readonly sourceReader: ConfigurationSourceReader;
 }
 
-interface SourceConflictCollections {
-  readonly diagnostics: CodexConfigurationDiagnostic[];
-  readonly rejectedSourceRefs: Set<string>;
-  readonly reportedConflicts: Set<string>;
-}
-
-interface SourcePreparationContext {
-  readonly binding: SourceBindingPlan;
-  readonly collections: InspectionCollections;
-  readonly dependencies: InspectionDependencies;
-  readonly input: InspectCodexConfigurationInput;
-  readonly signal?: AbortSignal;
-}
-
 const sourceRanks: Readonly<Record<CodexConfigurationSourceKind, number>> = {
   user: 10,
   "external-profile": 20,
@@ -105,14 +91,16 @@ const semanticDigest = (
 const rejectSources = (
   conflicting: readonly BoundSource[],
   setting: string,
-  collections: SourceConflictCollections,
+  rejectedSourceRefs: Set<string>,
+  reportedConflicts: Set<string>,
+  diagnostics: CodexConfigurationDiagnostic[],
 ): void => {
   for (const source of conflicting) {
-    collections.rejectedSourceRefs.add(source.sourceRef);
+    rejectedSourceRefs.add(source.sourceRef);
   }
-  if (!collections.reportedConflicts.has(setting)) {
-    collections.reportedConflicts.add(setting);
-    collections.diagnostics.push({ code: "source_precedence_conflict", setting });
+  if (!reportedConflicts.has(setting)) {
+    reportedConflicts.add(setting);
+    diagnostics.push({ code: "source_precedence_conflict", setting });
   }
 };
 
@@ -145,88 +133,98 @@ const hasValidWorkspaceOrder = (sources: readonly BoundSource[]): boolean =>
     Number.isSafeInteger(source.workspaceLayer) && (source.workspaceLayer ?? -1) >= 0,
   ) && new Set(sources.map(source => source.workspaceLayer)).size === sources.length;
 
-const createBoundSources = (
-  input: InspectCodexConfigurationInput,
-  identityKey: Uint8Array,
-): readonly BoundSource[] => input.sources
-  .map(source => ({
-    ...source,
-    sourceRef: createSourceRef(
-      identityKey,
-      input.identityScope,
-      source.kind,
-      source.canonicalPath,
-    ),
-  }))
-  .toSorted(
-    (left, right) =>
-      sourceRanks[left.kind] - sourceRanks[right.kind] ||
-      (right.kind === "workspace" ? (right.workspaceLayer ?? 0) : 0) -
-        (left.kind === "workspace" ? (left.workspaceLayer ?? 0) : 0) ||
-      compareText(left.sourceRef, right.sourceRef),
-  );
-
-const rejectStructuralConflicts = (
-  sources: readonly BoundSource[],
-  conflicts: SourceConflictCollections,
-): void => {
-  for (const matching of duplicateSourceGroups(sources)) {
-    rejectSources(matching, duplicateSourceSetting(matching), conflicts);
-  }
-  const userSources = sources.filter(source => source.kind === "user");
-  if (userSources.length > 1) {rejectSources(userSources, "user", conflicts);}
-
-  const workspaceSources = sources.filter(source => source.kind === "workspace");
-  if (workspaceSources.length > 1 && !hasValidWorkspaceOrder(workspaceSources)) {
-    rejectSources(workspaceSources, "workspace", conflicts);
-  }
-};
-
-const rejectInvalidMetadata = (
-  sources: readonly BoundSource[],
-  nativeProfile: string | undefined,
-  conflicts: SourceConflictCollections,
-): void => {
-  for (const source of sources) {
-    if (!hasValidSourceMetadata(source)) {
-      rejectSources([source], source.kind, conflicts);
-    } else if (source.kind === "external-profile" && source.profileName !== nativeProfile) {
-      conflicts.rejectedSourceRefs.add(source.sourceRef);
-    }
-  }
-};
-
-const selectExternalProfile = (
-  sources: readonly BoundSource[],
-  nativeProfile: string | undefined,
-  conflicts: SourceConflictCollections,
-): void => {
-  const selectedProfiles = sources.filter(source =>
-    source.kind === "external-profile" &&
-    source.profileName === nativeProfile &&
-    !conflicts.rejectedSourceRefs.has(source.sourceRef),
-  );
-  if (selectedProfiles.length > 1) {
-    rejectSources(selectedProfiles, "external-profile", conflicts);
-  }
-  if (nativeProfile !== undefined &&
-      selectedProfiles.every(source => conflicts.rejectedSourceRefs.has(source.sourceRef))) {
-    conflicts.diagnostics.push({ code: "profile_missing" });
-  }
-};
-
 const bindSources = (
   input: InspectCodexConfigurationInput,
   identityKey: Uint8Array,
   diagnostics: CodexConfigurationDiagnostic[],
 ): SourceBindingPlan => {
-  const sources = createBoundSources(input, identityKey);
+  const sources = input.sources
+    .map(source => ({
+      ...source,
+      sourceRef: createSourceRef(
+        identityKey,
+        input.identityScope,
+        source.kind,
+        source.canonicalPath,
+      ),
+    }))
+    .toSorted(
+      (left, right) =>
+        sourceRanks[left.kind] - sourceRanks[right.kind] ||
+        (right.kind === "workspace" ? (right.workspaceLayer ?? 0) : 0) -
+          (left.kind === "workspace" ? (left.workspaceLayer ?? 0) : 0) ||
+        compareText(left.sourceRef, right.sourceRef),
+    );
   const rejectedSourceRefs = new Set<string>();
   const reportedConflicts = new Set<string>();
-  const conflicts = { diagnostics, rejectedSourceRefs, reportedConflicts };
-  rejectStructuralConflicts(sources, conflicts);
-  rejectInvalidMetadata(sources, input.nativeProfile, conflicts);
-  selectExternalProfile(sources, input.nativeProfile, conflicts);
+  for (const matching of duplicateSourceGroups(sources)) {
+    rejectSources(
+      matching,
+      duplicateSourceSetting(matching),
+      rejectedSourceRefs,
+      reportedConflicts,
+      diagnostics,
+    );
+  }
+
+  const userSources = sources.filter(source => source.kind === "user");
+  if (userSources.length > 1) {
+    rejectSources(
+      userSources,
+      "user",
+      rejectedSourceRefs,
+      reportedConflicts,
+      diagnostics,
+    );
+  }
+
+  const workspaceSources = sources.filter(source => source.kind === "workspace");
+  if (workspaceSources.length > 1 && !hasValidWorkspaceOrder(workspaceSources)) {
+    rejectSources(
+      workspaceSources,
+      "workspace",
+      rejectedSourceRefs,
+      reportedConflicts,
+      diagnostics,
+    );
+  }
+
+  for (const source of sources) {
+    if (!hasValidSourceMetadata(source)) {
+      rejectSources(
+        [source],
+        source.kind,
+        rejectedSourceRefs,
+        reportedConflicts,
+        diagnostics,
+      );
+    } else if (
+      source.kind === "external-profile" && source.profileName !== input.nativeProfile
+    ) {
+      rejectedSourceRefs.add(source.sourceRef);
+    }
+  }
+
+  const selectedProfiles = sources.filter(source =>
+    source.kind === "external-profile" &&
+    source.profileName === input.nativeProfile &&
+    !rejectedSourceRefs.has(source.sourceRef),
+  );
+  if (selectedProfiles.length > 1) {
+    rejectSources(
+      selectedProfiles,
+      "external-profile",
+      rejectedSourceRefs,
+      reportedConflicts,
+      diagnostics,
+    );
+  }
+  if (
+    input.nativeProfile !== undefined &&
+    selectedProfiles.every(source => rejectedSourceRefs.has(source.sourceRef))
+  ) {
+    diagnostics.push({ code: "profile_missing" });
+  }
   return { rejectedSourceRefs, sources };
 };
 
@@ -270,89 +268,95 @@ const malformedDiagnostic = (
   return "config_parse_failed";
 };
 
-const observeSource = (
-  context: SourcePreparationContext,
-  source: BoundSource,
-  status: CodexConfigurationSourceObservation["status"],
-): void => {
-  context.collections.sourceObservations.push({
-    displayPath: source.displayPath,
-    kind: source.kind,
-    sourceRef: source.sourceRef,
-    status,
-  });
-};
-
-const diagnoseReadFailure = (
-  context: SourcePreparationContext,
-  source: BoundSource,
-  kind: "missing" | "too-large" | "unreadable",
-): void => {
-  if (kind === "missing" && source.kind === "external-profile" &&
-      source.profileName === context.input.nativeProfile) {
-    context.collections.diagnostics.push({ code: "profile_missing" });
-  } else if (kind !== "missing") {
-    context.collections.diagnostics.push({
-      code: kind === "too-large" ? "config_too_large" : "config_unreadable",
-      sourceRef: source.sourceRef,
-    });
-  }
-  observeSource(context, source, kind === "missing" ? "missing" : "unreadable");
-};
-
-const prepareSource = async (
-  context: SourcePreparationContext,
-  source: BoundSource,
-): Promise<PreparedSource | undefined> => {
-  context.signal?.throwIfAborted();
-  if (context.binding.rejectedSourceRefs.has(source.sourceRef)) {
-    observeSource(context, source, "rejected");
-    return undefined;
-  }
-  if (source.observationEpoch !== context.input.observationEpoch) {
-    context.collections.diagnostics.push({
-      code: "source_epoch_stale", sourceRef: source.sourceRef,
-    });
-    observeSource(context, source, "stale");
-    return undefined;
-  }
-  const read = await context.dependencies.sourceReader.read(
-    source.absolutePath,
-    source.canonicalPath,
-    source.authorizedFileIdentity,
-    source.custodyRoot,
-    context.signal === undefined ? undefined : { signal: context.signal },
-  );
-  if (read.kind !== "read") {
-    diagnoseReadFailure(context, source, read.kind);
-    return undefined;
-  }
-  const parsed = context.dependencies.parser.parse(read.bytes);
-  if (parsed.kind !== "parsed") {
-    context.collections.diagnostics.push({
-      code: malformedDiagnostic(parsed.kind), sourceRef: source.sourceRef,
-    });
-    observeSource(context, source, "malformed");
-    return undefined;
-  }
-  const document = normalizeParsedCodexDocument(parsed.document);
-  if (document === undefined) {
-    context.collections.diagnostics.push({
-      code: "config_parse_failed", sourceRef: source.sourceRef,
-    });
-    observeSource(context, source, "malformed");
-    return undefined;
-  }
-  return { ...source, document };
-};
-
 const prepareSources = async (
-  context: SourcePreparationContext,
+  dependencies: InspectionDependencies,
+  input: InspectCodexConfigurationInput,
+  binding: SourceBindingPlan,
+  collections: InspectionCollections,
+  signal?: AbortSignal,
 ): Promise<readonly PreparedSource[]> => {
   const preparedSources: PreparedSource[] = [];
-  for (const source of context.binding.sources) {
-    const prepared = await prepareSource(context, source);
-    if (prepared !== undefined) {preparedSources.push(prepared);}
+  for (const source of binding.sources) {
+    signal?.throwIfAborted();
+    if (binding.rejectedSourceRefs.has(source.sourceRef)) {
+      collections.sourceObservations.push({
+        displayPath: source.displayPath,
+        kind: source.kind,
+        sourceRef: source.sourceRef,
+        status: "rejected",
+      });
+      continue;
+    }
+    if (source.observationEpoch !== input.observationEpoch) {
+      collections.diagnostics.push({
+        code: "source_epoch_stale",
+        sourceRef: source.sourceRef,
+      });
+      collections.sourceObservations.push({
+        displayPath: source.displayPath,
+        kind: source.kind,
+        sourceRef: source.sourceRef,
+        status: "stale",
+      });
+      continue;
+    }
+    const read = await dependencies.sourceReader.read(
+      source.absolutePath,
+      source.canonicalPath,
+      source.authorizedFileIdentity,
+      source.custodyRoot,
+      signal === undefined ? undefined : { signal },
+    );
+    if (read.kind !== "read") {
+      if (
+        read.kind === "missing" &&
+        source.kind === "external-profile" &&
+        source.profileName === input.nativeProfile
+      ) {
+        collections.diagnostics.push({ code: "profile_missing" });
+      } else if (read.kind !== "missing") {
+        collections.diagnostics.push({
+          code: read.kind === "too-large" ? "config_too_large" : "config_unreadable",
+          sourceRef: source.sourceRef,
+        });
+      }
+      collections.sourceObservations.push({
+        displayPath: source.displayPath,
+        kind: source.kind,
+        sourceRef: source.sourceRef,
+        status: read.kind === "missing" ? "missing" : "unreadable",
+      });
+      continue;
+    }
+    const parsed = dependencies.parser.parse(read.bytes);
+    if (parsed.kind !== "parsed") {
+      collections.diagnostics.push({
+        code: malformedDiagnostic(parsed.kind),
+        sourceRef: source.sourceRef,
+      });
+      collections.sourceObservations.push({
+        displayPath: source.displayPath,
+        kind: source.kind,
+        sourceRef: source.sourceRef,
+        status: "malformed",
+      });
+      continue;
+    }
+    const document = normalizeParsedCodexDocument(parsed.document);
+    if (document === undefined) {
+      collections.diagnostics.push({
+        code: "config_parse_failed",
+        sourceRef: source.sourceRef,
+      });
+      collections.sourceObservations.push({
+        displayPath: source.displayPath,
+        kind: source.kind,
+        sourceRef: source.sourceRef,
+        status: "malformed",
+      });
+      continue;
+    }
+    preparedSources.push({ ...source, document });
   }
   return preparedSources;
 };
@@ -427,13 +431,13 @@ const executeInspection = async (
     return buildResult(collections);
   }
   collections.diagnostics.push(...bindingDiagnostics);
-  const preparedSources = await prepareSources({
-    binding: bound,
-    collections,
+  const preparedSources = await prepareSources(
     dependencies,
     input,
-    ...(signal === undefined ? {} : { signal }),
-  });
+    bound,
+    collections,
+    signal,
+  );
   applyPreparedSources(
     preparedSources,
     dependencies.semanticClassifier,
