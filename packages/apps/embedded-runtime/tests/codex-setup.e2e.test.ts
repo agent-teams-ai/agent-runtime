@@ -39,6 +39,8 @@ const createAgentRuntimeHost = (codexSetup: BuildCodexSetupViewDependencies) =>
     codexSetup,
   });
 
+const runtimeScope = <Scope extends object>(codexSetup: Scope) => ({ codexSetup });
+
 test(
   "inspects a synthetic Codex setup deterministically without leaking paths or secrets",
   { skip: process.platform !== "darwin" },
@@ -78,7 +80,7 @@ test(
 
   const host = createDefaultAgentRuntimeHost();
   t.after(() => host.dispose());
-  const access = host.bindAccess({
+  const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [
       { absolutePath: join(home, ".codex", "config.toml"), kind: "user", workspaceTrusted: true },
@@ -94,7 +96,7 @@ test(
       { absolutePath: workspace, kind: "workspace" },
     ],
     scopeId: "synthetic-scope",
-  });
+  }));
 
   const first = await access.codexSetup.inspect({ nativeProfile: "research" });
   const second = await access.codexSetup.inspect({ nativeProfile: "research" });
@@ -128,7 +130,7 @@ test(
   const mutableEntries = [join(root, "bin")];
   await mkdir(mutableEntries[0]!, { recursive: true });
   const host = createDefaultAgentRuntimeHost();
-  const access = host.bindAccess({
+  const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
@@ -137,7 +139,7 @@ test(
     pathEntries: mutableEntries,
     roots: [{ absolutePath: root, kind: "home" }],
     scopeId: "scope-1",
-  });
+  }));
   mutableEntries.push("relative-path-that-must-not-enter-bound-scope");
 
   const controller = new AbortController();
@@ -154,7 +156,7 @@ test(
   await host.dispose();
   await assert.rejects(access.codexSetup.inspect({}), /Host is disposed/u);
   assert.throws(
-    () => host.bindAccess({
+    () => host.bindAccess(runtimeScope({
       configurationDialect: "codex-0.134",
       configurationSources: [],
       explicitCodexExecutablePaths: [],
@@ -163,7 +165,7 @@ test(
       pathEntries: [],
       roots: [],
       scopeId: "scope-2",
-    }),
+    })),
     /Host is disposed/u,
   );
   },
@@ -180,7 +182,7 @@ test(
 
   const host = createDefaultAgentRuntimeHost();
   t.after(() => host.dispose());
-  const access = host.bindAccess({
+  const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [
       {
@@ -195,7 +197,7 @@ test(
     pathEntries: [],
     roots: [{ absolutePath: root, kind: "home" }],
     scopeId: "scope-diagnostics",
-  });
+  }));
 
   const result = await access.codexSetup.inspect({ nativeProfile: "invalid profile" });
   assert.equal(result.status, "partial");
@@ -211,7 +213,7 @@ test(
 );
 
 test("host-owned platform support and denied scopes fail closed", async t => {
-  const scope = {
+  const scope = runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
@@ -220,7 +222,7 @@ test("host-owned platform support and denied scopes fail closed", async t => {
     pathEntries: [],
     roots: [],
     scopeId: "scope-platform",
-  } as const;
+  } as const);
   const unsupportedHost = createAgentRuntimeHost({
     authorizeSetupInspection: { execute: unavailableInspectionDependency },
     discoverCodexInstallations: { execute: unavailableInspectionDependency },
@@ -288,7 +290,7 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
       },
     },
   });
-  const access = host.bindAccess({
+  const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
@@ -297,7 +299,7 @@ test("snapshots getter-backed input and revokes an in-flight inspection on dispo
     pathEntries: [],
     roots: [],
     scopeId: "scope-1",
-  });
+  }));
   let getterReads = 0;
   const input = Object.defineProperty({}, "nativeProfile", {
     enumerable: true,
@@ -353,7 +355,7 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
     },
   });
   t.after(() => host.dispose());
-  const access = host.bindAccess({
+  const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
@@ -362,7 +364,7 @@ test("caller cancellation revokes an in-flight inspection even when a dependency
     pathEntries: [],
     roots: [],
     scopeId: "scope-caller-abort",
-  });
+  }));
   const controller = new AbortController();
   const inspection = access.codexSetup.inspect({}, { signal: controller.signal });
   await Promise.resolve();
@@ -430,7 +432,7 @@ test("disposal tracks every parallel branch after a sibling rejects", async () =
       },
     },
   });
-  const access = host.bindAccess({
+  const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
@@ -439,7 +441,7 @@ test("disposal tracks every parallel branch after a sibling rejects", async () =
     pathEntries: [],
     roots: [],
     scopeId: "scope-parallel-drain",
-  });
+  }));
   const controller = new AbortController();
   const inspection = access.codexSetup.inspect({}, { signal: controller.signal });
   await started;
@@ -491,7 +493,7 @@ test("disposal remains bounded when a dependency never settles", async () => {
       },
     },
   });
-  const access = host.bindAccess({
+  const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
@@ -500,7 +502,7 @@ test("disposal remains bounded when a dependency never settles", async () => {
     pathEntries: [],
     roots: [],
     scopeId: "scope-bounded-disposal",
-  });
+  }));
   const inspection = access.codexSetup.inspect({});
   await started;
   const disposal = host.dispose();
@@ -554,7 +556,7 @@ test("a synchronous branch throw cannot escape parallel drain custody", async ()
       },
     },
   });
-  const access = host.bindAccess({
+  const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
@@ -563,7 +565,7 @@ test("a synchronous branch throw cannot escape parallel drain custody", async ()
     pathEntries: [],
     roots: [],
     scopeId: "scope-synchronous-throw",
-  });
+  }));
   const controller = new AbortController();
   const inspection = access.codexSetup.inspect({}, { signal: controller.signal });
   await started;
@@ -617,7 +619,7 @@ test("product installation references are stable within and isolated across trus
     },
   });
   t.after(() => host.dispose());
-  const bind = (scopeId: string) => host.bindAccess({
+  const bind = (scopeId: string) => host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
     explicitCodexExecutablePaths: [],
@@ -626,7 +628,7 @@ test("product installation references are stable within and isolated across trus
     pathEntries: [],
     roots: [{ absolutePath: "/synthetic-home", kind: "home" }],
     scopeId,
-  });
+  }));
 
   const first = await bind("scope-a").codexSetup.inspect({});
   const replay = await bind("scope-a").codexSetup.inspect({});

@@ -39,9 +39,13 @@ test("freezes the prospective provider-specific no-product-input Claude contract
 });
 
 test("the real host composition owns the complete Claude dependency contract", async () => {
-  const [source, declaration] = await Promise.all([
+  const [source, declaration, scopeDeclaration] = await Promise.all([
     readFile(join(packageRoot, "src", "composition", "agent-runtime-host.ts"), "utf8"),
     readFile(join(packageRoot, "dist", "composition", "agent-runtime-host.d.ts"), "utf8"),
+    readFile(
+      join(packageRoot, "dist", "composition", "trusted-runtime-access-scope.d.ts"),
+      "utf8",
+    ),
   ]);
   assert.doesNotMatch(source, /child_process|fetch|node:(?:http|https|net|tls)|process\.(?:env|cwd)/u);
   assert.match(declaration, /type ClaudeCodeSetupCapabilityBundle = BuildClaudeCodeSetupViewDependencies/u);
@@ -56,6 +60,12 @@ test("the real host composition owns the complete Claude dependency contract", a
   );
   assert.match(source, /snapshotAgentRuntimeHostDependencies\(dependencies\)/u);
   assert.match(source, /createBuildClaudeCodeSetupView\([\s\S]*?capabilityDependencies\.claudeCodeSetup/u);
+  const runtimeScope = scopeDeclaration.match(
+    /interface TrustedRuntimeAccessScope[\s\S]*?\n\}/u,
+  )?.[0] ?? "";
+  assert.match(runtimeScope, /readonly claudeCodeSetup\?: TrustedClaudeCodeSetupScope/u);
+  assert.match(runtimeScope, /readonly codexSetup\?: TrustedCodexSetupScope/u);
+  assert.doesNotMatch(runtimeScope, /configurationDialect|observationEpoch|scopeId/u);
 });
 
 test("production declarations contain no test-only Claude contract seam or example", async () => {

@@ -35,8 +35,8 @@ import type {
   RuntimeAccessHandle,
 } from "../contracts/runtime-access.js";
 import {
+  copyTrustedCodexSetupScope,
   copyTrustedClaudeCodeSetupScope,
-  copyTrustedRuntimeAccessScope,
   type TrustedRuntimeAccessScope,
 } from "./trusted-runtime-access-scope.js";
 import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
@@ -136,6 +136,36 @@ const codexScopeLimitOutcome: InspectCodexRuntimeSetupOutcome = Object.freeze({
   })]),
   status: "unsupported" as const,
 });
+
+const codexUnavailableOutcome: InspectCodexRuntimeSetupOutcome = Object.freeze({
+  diagnostics: Object.freeze([Object.freeze({
+    code: "capability_unavailable" as const,
+  })]),
+  status: "unsupported" as const,
+});
+
+type ProviderScopeSnapshot<Scope> =
+  | { readonly status: "absent" }
+  | { readonly status: "invalid" }
+  | { readonly scope: Scope; readonly status: "available" };
+
+const snapshotProviderScope = <Scope>(
+  read: () => Scope | undefined,
+  copy: (scope: Scope) => Scope | undefined,
+): ProviderScopeSnapshot<Scope> => {
+  try {
+    const scope = read();
+    if (scope === undefined) {
+      return Object.freeze({ status: "absent" });
+    }
+    const copied = copy(scope);
+    return copied === undefined
+      ? Object.freeze({ status: "invalid" })
+      : Object.freeze({ scope: copied, status: "available" });
+  } catch {
+    return Object.freeze({ status: "invalid" });
+  }
+};
 
 function assertClosedPlainBundle(
   value: unknown,
@@ -276,21 +306,14 @@ export const createAgentRuntimeHost = (
   return Object.freeze({
     bindAccess(scope: TrustedRuntimeAccessScope) {
       assertActive();
-      let claudeCodeScope: TrustedRuntimeAccessScope["claudeCodeSetup"];
-      let claudeCodeScopeReadable = true;
-      try {
-        claudeCodeScope = scope.claudeCodeSetup;
-      } catch {
-        claudeCodeScopeReadable = false;
-      }
-      const claudeCodeUnavailable =
-        buildClaudeCodeSetupView === undefined ||
-        (claudeCodeScopeReadable && claudeCodeScope === undefined);
-      const boundClaudeCodeScope = claudeCodeUnavailable || !claudeCodeScopeReadable ||
-        claudeCodeScope === undefined
-        ? undefined
-        : copyTrustedClaudeCodeSetupScope(claudeCodeScope);
-      const boundCodexScope = copyTrustedRuntimeAccessScope(scope);
+      const boundClaudeCodeScope = snapshotProviderScope(
+        () => scope.claudeCodeSetup,
+        copyTrustedClaudeCodeSetupScope,
+      );
+      const boundCodexScope = snapshotProviderScope(
+        () => scope.codexSetup,
+        copyTrustedCodexSetupScope,
+      );
       return Object.freeze({
         claudeCodeSetup: Object.freeze({
           inspect: async (options?: { readonly signal?: AbortSignal }) => {
@@ -301,11 +324,11 @@ export const createAgentRuntimeHost = (
               : AbortSignal.any([hostAbort.signal, callerSignal]);
             signal.throwIfAborted();
             const operation: Promise<InspectClaudeCodeRuntimeSetupOutcome> =
-              claudeCodeUnavailable
+              boundClaudeCodeScope.status === "absent"
                 ? Promise.resolve(claudeCodeUnavailableOutcome)
-                : boundClaudeCodeScope === undefined
+                : boundClaudeCodeScope.status === "invalid"
                   ? Promise.resolve(claudeCodeScopeLimitOutcome)
-                  : buildClaudeCodeSetupView(boundClaudeCodeScope, { signal });
+                  : buildClaudeCodeSetupView(boundClaudeCodeScope.scope, { signal });
             activeCalls.add(operation);
             operation.then(
               () => activeCalls.delete(operation),
@@ -326,9 +349,11 @@ export const createAgentRuntimeHost = (
                 : AbortSignal.any([hostAbort.signal, options.signal]);
             signal.throwIfAborted();
             const operation: Promise<InspectCodexRuntimeSetupOutcome> =
-              boundCodexScope === undefined
-              ? Promise.resolve(codexScopeLimitOutcome)
-              : buildCodexSetupView(boundCodexScope, input, { signal });
+              boundCodexScope.status === "absent"
+                ? Promise.resolve(codexUnavailableOutcome)
+                : boundCodexScope.status === "invalid"
+                  ? Promise.resolve(codexScopeLimitOutcome)
+                  : buildCodexSetupView(boundCodexScope.scope, input, { signal });
             activeCalls.add(operation);
             operation.then(
               () => activeCalls.delete(operation),

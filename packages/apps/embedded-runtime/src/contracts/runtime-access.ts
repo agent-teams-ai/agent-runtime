@@ -33,6 +33,7 @@ export interface CodexSetupSettingView {
 
 export type CodexSetupDiagnosticCode =
   | "access_scope_limit_exceeded"
+  | "capability_unavailable"
   | "candidate_denied"
   | "candidate_invalid"
   | "candidate_unreadable"

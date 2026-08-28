@@ -65,14 +65,16 @@ const emptyConfiguration = () => ({
 
 const runtimeScope = (root: string, setup: ReturnType<typeof claudeScope>) => ({
   claudeCodeSetup: setup,
-  configurationDialect: "codex-0.134" as const,
-  configurationSources: [],
-  explicitCodexExecutablePaths: [],
-  knownExecutableDirectories: [],
-  observationEpoch: "codex-epoch",
-  pathEntries: [],
-  roots: [{ absolutePath: root, kind: "home" as const }],
-  scopeId: "codex-correction-scope",
+  codexSetup: {
+    configurationDialect: "codex-0.134" as const,
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "codex-epoch",
+    pathEntries: [],
+    roots: [{ absolutePath: root, kind: "home" as const }],
+    scopeId: "codex-correction-scope",
+  },
 });
 
 const isSystemPath = (path: string): boolean =>

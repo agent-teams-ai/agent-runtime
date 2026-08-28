@@ -90,14 +90,16 @@ test("snapshots accessor-backed capability bundles and binding methods exactly o
   const host = createAgentRuntimeHost(dependencies as never);
   t.after(() => host.dispose());
   const access = host.bindAccess({
-    configurationDialect: "codex-0.134",
-    configurationSources: [],
-    explicitCodexExecutablePaths: [],
-    knownExecutableDirectories: [],
-    observationEpoch: "accessor-snapshot-epoch",
-    pathEntries: [],
-    roots: [],
-    scopeId: "accessor-snapshot-scope",
+    codexSetup: {
+      configurationDialect: "codex-0.134",
+      configurationSources: [],
+      explicitCodexExecutablePaths: [],
+      knownExecutableDirectories: [],
+      observationEpoch: "accessor-snapshot-epoch",
+      pathEntries: [],
+      roots: [],
+      scopeId: "accessor-snapshot-scope",
+    },
   });
 
   assert.deepEqual(await access.codexSetup.inspect({}), {

@@ -46,14 +46,16 @@ const runtimeScope = (
   },
 ) => ({
   claudeCodeSetup,
-  configurationDialect: "codex-0.134" as const,
-  configurationSources: [],
-  explicitCodexExecutablePaths: [],
-  knownExecutableDirectories: [],
-  observationEpoch: "codex-epoch",
-  pathEntries: [],
-  roots: [{ absolutePath: root, kind: "home" as const }],
-  scopeId: "codex-scope",
+  codexSetup: {
+    configurationDialect: "codex-0.134" as const,
+    configurationSources: [],
+    explicitCodexExecutablePaths: [],
+    knownExecutableDirectories: [],
+    observationEpoch: "codex-epoch",
+    pathEntries: [],
+    roots: [{ absolutePath: root, kind: "home" as const }],
+    scopeId: "codex-scope",
+  },
 });
 
 const claudeScope = (homeRoot: string, workspaceRoot: string) => ({

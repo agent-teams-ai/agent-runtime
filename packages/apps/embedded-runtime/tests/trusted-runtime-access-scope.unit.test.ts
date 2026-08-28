@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   copyTrustedClaudeCodeSetupScope,
-  copyTrustedRuntimeAccessScope,
+  copyTrustedCodexSetupScope,
   TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS,
 } from "../dist/composition/trusted-runtime-access-scope.js";
 
@@ -88,7 +88,7 @@ test("copies every trusted collection at its owner-local limit without using ite
     });
   }
 
-  const copiedCodex = copyTrustedRuntimeAccessScope(codex);
+  const copiedCodex = copyTrustedCodexSetupScope(codex);
   const copiedClaude = copyTrustedClaudeCodeSetupScope(claude);
   assert.ok(copiedCodex !== undefined && isDeeplyFrozen(copiedCodex));
   assert.ok(copiedClaude !== undefined && isDeeplyFrozen(copiedClaude));
@@ -119,7 +119,7 @@ test("accepts every bounded path, profile, epoch, and scope string at its limit"
   claude.scopeId = "s".repeat(claudeText.scopeId);
   claude.workspaceRoot = "w".repeat(claudeText.path);
 
-  assert.ok(copyTrustedRuntimeAccessScope(codex) !== undefined);
+  assert.ok(copyTrustedCodexSetupScope(codex) !== undefined);
   assert.ok(copyTrustedClaudeCodeSetupScope(claude) !== undefined);
 });
 
@@ -141,7 +141,7 @@ test("rejects each over-limit collection before reading an element", () => {
         return Reflect.get(target, property, receiver);
       },
     }) });
-    assert.equal(copyTrustedRuntimeAccessScope(scope), undefined, field);
+    assert.equal(copyTrustedCodexSetupScope(scope), undefined, field);
   }
 
   for (const [field, limit] of [
@@ -197,7 +197,7 @@ test("rejects every over-limit path, profile, epoch, and scope string", () => {
   for (const mutate of codexCases) {
     const scope = codexScope();
     mutate(scope);
-    assert.equal(copyTrustedRuntimeAccessScope(scope), undefined);
+    assert.equal(copyTrustedCodexSetupScope(scope), undefined);
   }
 
   const claudeText = TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.claudeCodeSetup.text;
@@ -231,7 +231,7 @@ test("rejects every over-limit path, profile, epoch, and scope string", () => {
 test("rejects a collection whose length mutates between precheck and copy", () => {
   const codex = codexScope();
   codex.pathEntries = withMutatingLength(codex.pathEntries);
-  assert.equal(copyTrustedRuntimeAccessScope(codex), undefined);
+  assert.equal(copyTrustedCodexSetupScope(codex), undefined);
 
   const claude = claudeScope();
   claude.pathEntries = withMutatingLength(claude.pathEntries);

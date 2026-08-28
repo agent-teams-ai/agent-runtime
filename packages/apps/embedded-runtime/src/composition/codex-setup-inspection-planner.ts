@@ -7,7 +7,7 @@ import type {
   CodexSetupInspectionPlan,
   CodexSetupInspectionPlanner,
 } from "../application/ports/outbound/codex-setup-inspection-planner.js";
-import type { TrustedRuntimeAccessScope } from "../application/trusted-runtime-access-scope.js";
+import type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
 
 const isDarwinAbsolutePath = (value: string): boolean => value.startsWith("/");
 
@@ -45,7 +45,7 @@ export const createCodexSetupInspectionPlanner = (
   hostPlatform: NodeJS.Platform,
 ): CodexSetupInspectionPlanner =>
   Object.freeze({
-    plan(scope: TrustedRuntimeAccessScope): CodexSetupInspectionPlan {
+    plan(scope: TrustedCodexSetupScope): CodexSetupInspectionPlan {
       if (hostPlatform !== "darwin") {
         return { status: "unsupported" };
       }

@@ -156,14 +156,16 @@ try {
       workspaceRoot: workspace,
       workspaceTrusted: true,
     },
-    configurationDialect: "codex-0.134",
-    configurationSources: [],
-    explicitCodexExecutablePaths: [],
-    knownExecutableDirectories: [],
-    observationEpoch: "codex-network-trap-epoch",
-    pathEntries: [],
-    roots: [{ absolutePath: root, kind: "home" }],
-    scopeId: "codex-network-trap-scope",
+    codexSetup: {
+      configurationDialect: "codex-0.134",
+      configurationSources: [],
+      explicitCodexExecutablePaths: [],
+      knownExecutableDirectories: [],
+      observationEpoch: "codex-network-trap-epoch",
+      pathEntries: [],
+      roots: [{ absolutePath: root, kind: "home" }],
+      scopeId: "codex-network-trap-scope",
+    },
   });
 
   const controller = new AbortController();

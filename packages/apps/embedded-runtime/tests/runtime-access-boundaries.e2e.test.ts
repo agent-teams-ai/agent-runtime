@@ -45,7 +45,7 @@ const withMutatingLength = <T>(items: T[]): T[] => {
   });
 };
 
-const runtimeScope = (withClaude = true) => ({
+const runtimeScope = (withClaude = true, withCodex = true) => ({
   ...(withClaude ? { claudeCodeSetup: {
     dialect: "claude-code-settings@2026-08-28" as const,
     explicitExecutablePaths: values(
@@ -62,30 +62,35 @@ const runtimeScope = (withClaude = true) => ({
     workspaceRoot: "/workspace",
     workspaceTrusted: true,
   } } : {}),
-  configurationDialect: "codex-0.134" as const,
-  configurationSources: Array.from(
-    { length: TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.configurationSources },
-    (_, index) => ({
-      absolutePath: `/configuration-${index}`,
-      kind: "user" as const,
-      workspaceTrusted: true,
-    }),
-  ),
-  explicitCodexExecutablePaths: values(
-    TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.explicitExecutablePaths,
-    "codex-explicit",
-  ),
-  knownExecutableDirectories: values(
-    TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.knownExecutableDirectories,
-    "codex-known",
-  ),
-  observationEpoch: "codex-epoch",
-  pathEntries: values(TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.pathEntries, "codex-path"),
-  roots: Array.from(
-    { length: TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.roots },
-    (_, index) => ({ absolutePath: `/root-${index}`, kind: "home" as const }),
-  ),
-  scopeId: "codex-scope",
+  ...(withCodex ? { codexSetup: {
+    configurationDialect: "codex-0.134" as const,
+    configurationSources: Array.from(
+      { length: TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.configurationSources },
+      (_, index) => ({
+        absolutePath: `/configuration-${index}`,
+        kind: "user" as const,
+        workspaceTrusted: true,
+      }),
+    ),
+    explicitCodexExecutablePaths: values(
+      TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.explicitExecutablePaths,
+      "codex-explicit",
+    ),
+    knownExecutableDirectories: values(
+      TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.knownExecutableDirectories,
+      "codex-known",
+    ),
+    observationEpoch: "codex-epoch",
+    pathEntries: values(
+      TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.pathEntries,
+      "codex-path",
+    ),
+    roots: Array.from(
+      { length: TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.roots },
+      (_, index) => ({ absolutePath: `/root-${index}`, kind: "home" as const }),
+    ),
+    scopeId: "codex-scope",
+  } } : {}),
 });
 
 const createDependencies = () => {
@@ -102,61 +107,65 @@ const createDependencies = () => {
   return {
     calls,
     dependencies: {
-      authorizeClaudeCodeSetupInspection: {
-        async execute() {
-          calls.claudeAuthorization += 1;
-          return {
-            canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "claude-epoch",
-            sources: [], status: "authorized" as const,
-          };
+      claudeCodeSetup: {
+        authorizeClaudeCodeSetupInspection: {
+          async execute() {
+            calls.claudeAuthorization += 1;
+            return {
+              canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "claude-epoch",
+              sources: [], status: "authorized" as const,
+            };
+          },
+        },
+        discoverClaudeCodeInstallations: {
+          async execute() {
+            calls.claudeDiscovery += 1;
+            return { diagnostics: [], installations: [] };
+          },
+        },
+        inspectClaudeCodeConfiguration: {
+          async execute() {
+            calls.claudeConfiguration += 1;
+            return emptyClaudeConfiguration();
+          },
+        },
+        planClaudeCodeSetupInspection: {
+          plan() {
+            calls.claudePlanner += 1;
+            return {
+              candidatePaths: [], dialect: "claude-code-settings@2026-08-28" as const,
+              sourcePaths: [], status: "planned" as const,
+            };
+          },
         },
       },
-      authorizeSetupInspection: {
-        async execute() {
-          calls.codexAuthorization += 1;
-          return {
-            configurationSources: [], diagnostics: [], installationCandidates: [],
-            observationEpoch: "codex-epoch", status: "authorized" as const,
-          };
+      codexSetup: {
+        authorizeSetupInspection: {
+          async execute() {
+            calls.codexAuthorization += 1;
+            return {
+              configurationSources: [], diagnostics: [], installationCandidates: [],
+              observationEpoch: "codex-epoch", status: "authorized" as const,
+            };
+          },
         },
-      },
-      discoverClaudeCodeInstallations: {
-        async execute() {
-          calls.claudeDiscovery += 1;
-          return { diagnostics: [], installations: [] };
+        discoverCodexInstallations: {
+          async execute() {
+            calls.codexDiscovery += 1;
+            return { diagnostics: [], installations: [] };
+          },
         },
-      },
-      discoverCodexInstallations: {
-        async execute() {
-          calls.codexDiscovery += 1;
-          return { diagnostics: [], installations: [] };
+        inspectCodexConfiguration: {
+          async execute() {
+            calls.codexConfiguration += 1;
+            return { diagnostics: [], settings: [], sources: [] };
+          },
         },
-      },
-      inspectClaudeCodeConfiguration: {
-        async execute() {
-          calls.claudeConfiguration += 1;
-          return emptyClaudeConfiguration();
-        },
-      },
-      inspectCodexConfiguration: {
-        async execute() {
-          calls.codexConfiguration += 1;
-          return { diagnostics: [], settings: [], sources: [] };
-        },
-      },
-      planClaudeCodeSetupInspection: {
-        plan() {
-          calls.claudePlanner += 1;
-          return {
-            candidatePaths: [], dialect: "claude-code-settings@2026-08-28" as const,
-            sourcePaths: [], status: "planned" as const,
-          };
-        },
-      },
-      planCodexSetupInspection: {
-        plan() {
-          calls.codexPlanner += 1;
-          return { diagnostics: [], installationCandidates: [], status: "planned" as const };
+        planCodexSetupInspection: {
+          plan() {
+            calls.codexPlanner += 1;
+            return { diagnostics: [], installationCandidates: [], status: "planned" as const };
+          },
         },
       },
     },
@@ -183,7 +192,7 @@ test("returns frozen redacted overflow outcomes before any downstream call", asy
   const host = createAgentRuntimeHost(dependencies);
   t.after(() => host.dispose());
   const scope = runtimeScope();
-  scope.pathEntries.push("/sensitive-codex-overflow");
+  scope.codexSetup?.pathEntries.push("/sensitive-codex-overflow");
   scope.claudeCodeSetup?.explicitExecutablePaths.push("/sensitive-claude-overflow");
   const access = host.bindAccess(scope);
 
@@ -270,7 +279,7 @@ test("rejects over-limit strings and scope mutation without downstream calls", a
   t.after(() => host.dispose());
 
   const stringScope = runtimeScope();
-  Object.assign(stringScope.configurationSources[0]!, {
+  Object.assign(stringScope.codexSetup!.configurationSources[0]!, {
     kind: "external-profile",
     profileName: "sensitive".repeat(
       TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup.text.profileName + 1,
@@ -284,7 +293,9 @@ test("rejects over-limit strings and scope mutation without downstream calls", a
   const stringAccess = host.bindAccess(stringScope);
 
   const mutationScope = runtimeScope();
-  mutationScope.pathEntries = withMutatingLength(mutationScope.pathEntries);
+  mutationScope.codexSetup!.pathEntries = withMutatingLength(
+    mutationScope.codexSetup!.pathEntries,
+  );
   mutationScope.claudeCodeSetup!.pathEntries = withMutatingLength(
     mutationScope.claudeCodeSetup!.pathEntries,
   );
@@ -304,47 +315,59 @@ test("rejects over-limit strings and scope mutation without downstream calls", a
   assert.deepEqual(Object.values(calls), Object.values(calls).map(() => 0));
 });
 
-test("distinguishes missing Claude dependencies and scope as capability unavailable", async t => {
-  const first = createDependencies();
-  const {
-    authorizeClaudeCodeSetupInspection: _authorization,
-    discoverClaudeCodeInstallations: _discovery,
-    inspectClaudeCodeConfiguration: _configuration,
-    planClaudeCodeSetupInspection: _planner,
-    ...codexDependencies
-  } = first.dependencies;
-  const missingDependenciesHost = createAgentRuntimeHost(codexDependencies);
-  const second = createDependencies();
-  const missingScopeHost = createAgentRuntimeHost(second.dependencies);
-  t.after(() => Promise.all([missingDependenciesHost.dispose(), missingScopeHost.dispose()]));
+test("distinguishes absent provider scopes as capability unavailable", async t => {
+  const { calls, dependencies } = createDependencies();
+  const host = createAgentRuntimeHost(dependencies);
+  t.after(() => host.dispose());
+  const access = host.bindAccess({});
 
-  for (const result of [
-    await missingDependenciesHost.bindAccess(runtimeScope()).claudeCodeSetup.inspect(),
-    await missingScopeHost.bindAccess(runtimeScope(false)).claudeCodeSetup.inspect(),
-  ]) {
-    assert.deepEqual(result, {
-      diagnostics: [{ code: "capability_unavailable" }],
-      expectedLimitations,
-      status: "unsupported",
-    });
-    assert.ok(isDeeplyFrozen(result));
-    assert.doesNotMatch(JSON.stringify(result), /source_epoch_stale/u);
-  }
-  assert.equal(first.calls.claudePlanner, 0);
-  assert.equal(second.calls.claudePlanner, 0);
+  const codex = await access.codexSetup.inspect({});
+  const claude = await access.claudeCodeSetup.inspect();
+  assert.deepEqual(codex, {
+    diagnostics: [{ code: "capability_unavailable" }],
+    status: "unsupported",
+  });
+  assert.deepEqual(claude, {
+    diagnostics: [{ code: "capability_unavailable" }],
+    expectedLimitations,
+    status: "unsupported",
+  });
+  assert.ok(isDeeplyFrozen(codex) && isDeeplyFrozen(claude));
+  assert.deepEqual(Object.values(calls), Object.values(calls).map(() => 0));
 });
 
-test("unavailable capability preserves cancellation, disposal, and default-host behavior", async t => {
+test("keeps Codex-only and Claude-only scope grants independent", async t => {
+  const codexOnly = createDependencies();
+  const codexOnlyHost = createAgentRuntimeHost(codexOnly.dependencies);
+  const claudeOnly = createDependencies();
+  const claudeOnlyHost = createAgentRuntimeHost(claudeOnly.dependencies);
+  t.after(() => Promise.all([codexOnlyHost.dispose(), claudeOnlyHost.dispose()]));
+
+  const codexAccess = codexOnlyHost.bindAccess(runtimeScope(false, true));
+  assert.match((await codexAccess.codexSetup.inspect({})).status, /^(?:observed|partial)$/u);
+  assert.equal((await codexAccess.claudeCodeSetup.inspect()).status, "unsupported");
+  assert.deepEqual([
+    codexOnly.calls.claudePlanner,
+    codexOnly.calls.claudeAuthorization,
+    codexOnly.calls.claudeDiscovery,
+    codexOnly.calls.claudeConfiguration,
+  ], [0, 0, 0, 0]);
+
+  const claudeAccess = claudeOnlyHost.bindAccess(runtimeScope(true, false));
+  assert.match((await claudeAccess.claudeCodeSetup.inspect()).status, /^(?:observed|partial)$/u);
+  assert.equal((await claudeAccess.codexSetup.inspect({})).status, "unsupported");
+  assert.deepEqual([
+    claudeOnly.calls.codexPlanner,
+    claudeOnly.calls.codexAuthorization,
+    claudeOnly.calls.codexDiscovery,
+    claudeOnly.calls.codexConfiguration,
+  ], [0, 0, 0, 0]);
+});
+
+test("absent capability scope preserves cancellation, disposal, and default-host behavior", async t => {
   const { dependencies } = createDependencies();
-  const {
-    authorizeClaudeCodeSetupInspection: _authorization,
-    discoverClaudeCodeInstallations: _discovery,
-    inspectClaudeCodeConfiguration: _configuration,
-    planClaudeCodeSetupInspection: _planner,
-    ...codexDependencies
-  } = dependencies;
-  const host = createAgentRuntimeHost(codexDependencies);
-  const access = host.bindAccess(runtimeScope());
+  const host = createAgentRuntimeHost(dependencies);
+  const access = host.bindAccess(runtimeScope(false));
   const cancelled = new AbortController();
   cancelled.abort();
   await assert.rejects(access.claudeCodeSetup.inspect({ signal: cancelled.signal }), {

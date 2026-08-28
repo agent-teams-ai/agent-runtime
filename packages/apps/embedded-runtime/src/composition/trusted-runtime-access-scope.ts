@@ -1,7 +1,12 @@
-export type { TrustedRuntimeAccessScope } from "../application/trusted-runtime-access-scope.js";
+export type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
 
-import type { TrustedRuntimeAccessScope } from "../application/trusted-runtime-access-scope.js";
+import type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
 import type { TrustedClaudeCodeSetupScope } from "../application/trusted-claude-code-setup-scope.js";
+
+export interface TrustedRuntimeAccessScope {
+  readonly claudeCodeSetup?: TrustedClaudeCodeSetupScope;
+  readonly codexSetup?: TrustedCodexSetupScope;
+}
 
 export const TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS = Object.freeze({
   claudeCodeSetup: Object.freeze({
@@ -111,9 +116,9 @@ export const copyTrustedClaudeCodeSetupScope = (
   }
 };
 
-export const copyTrustedRuntimeAccessScope = (
-  scope: TrustedRuntimeAccessScope,
-): TrustedRuntimeAccessScope | undefined => {
+export const copyTrustedCodexSetupScope = (
+  scope: TrustedCodexSetupScope,
+): TrustedCodexSetupScope | undefined => {
   try {
     const limits = TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.codexSetup;
     const configurationSourceValues = scope.configurationSources;
