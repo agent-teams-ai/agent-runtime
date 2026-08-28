@@ -33,6 +33,7 @@ export interface BuildClaudeCodeSetupViewDependencies {
 const expectedLimitations = Object.freeze({
   interactiveShellPath: "unobserved" as const,
   managedPolicy: "unobserved" as const,
+  modelCompatibility: "unobserved" as const,
   sessionOverrides: "unobserved" as const,
 });
 
@@ -79,7 +80,19 @@ const mapCandidate = (
 
 const mapSource = (
   source: AuthorizedClaudeCodePortableSource,
-): ClaudeCodeConfigurationSource => source.access === "authorized"
+  sourceIndex: number,
+): ClaudeCodeConfigurationSource => {
+  const rootId = source.kind === "user" ? "declared-home-root" : "declared-workspace-root";
+  const common = {
+    displayPath: source.displayPath,
+    observationEpoch: source.observationEpoch,
+    role: source.kind,
+    selectionBasis: "static-preview" as const,
+    sourceId: `static-source-${sourceIndex + 1}`,
+    trust: source.kind === "user" ? "user" as const :
+      source.access === "untrusted" ? "workspace-untrusted" as const : "workspace-trusted" as const,
+  };
+  return source.access === "authorized"
   ? {
       access: "authorized",
       absolutePath: source.absolutePath,
@@ -87,17 +100,15 @@ const mapSource = (
         ? {}
         : { authorizedFileIdentity: source.authorizedFileIdentity }),
       canonicalPath: source.canonicalPath,
-      custodyRoot: { ...source.custodyRoot },
-      displayPath: source.displayPath,
-      kind: source.kind,
-      observationEpoch: source.observationEpoch,
+      custodyRoot: { ...source.custodyRoot, rootId },
+      ...common,
     }
   : {
       access: source.access,
-      displayPath: source.displayPath,
-      kind: source.kind,
-      observationEpoch: source.observationEpoch,
+      custodyRootRef: rootId,
+      ...common,
     };
+};
 
 const mapAuthorizationDiagnostic = (
   diagnostic: ClaudeCodeSetupAuthorizationDiagnostic,
@@ -119,74 +130,27 @@ const normalizeDiagnostics = (
   `${right.code}:${right.safeRef ?? ""}`,
 )).slice(0, CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics);
 
-export const createBuildClaudeCodeSetupView = (
-  dependencies: BuildClaudeCodeSetupViewDependencies,
-  opaqueReferenceKey: Uint8Array,
-) => {
-  if (opaqueReferenceKey.byteLength < 32) {
-    throw new TypeError("opaqueReferenceKey must contain at least 32 bytes");
-  }
-  const referenceKey = Uint8Array.from(opaqueReferenceKey);
-  return async (
-    scope: TrustedClaudeCodeSetupScope,
-    options?: { readonly signal?: AbortSignal },
-  ): Promise<InspectClaudeCodeRuntimeSetupOutcome> => {
-    options?.signal?.throwIfAborted();
-    const plan = dependencies.planClaudeCodeSetupInspection.plan(scope);
-    options?.signal?.throwIfAborted();
-    if (plan.status === "unsupported") {
-      return deepFreeze({
-        diagnostics: [{ code: "unsupported_platform" }],
-        expectedLimitations,
-        status: "unsupported",
-      });
-    }
+type AuthorizedInspection = Extract<
+  Awaited<ReturnType<AuthorizeClaudeCodeSetupInspection["execute"]>>,
+  { readonly status: "authorized" }
+>;
+type InstallationInspection = Awaited<ReturnType<DiscoverClaudeCodeInstallations["execute"]>>;
+type ConfigurationInspection = Awaited<ReturnType<InspectClaudeCodeConfiguration["execute"]>>;
 
-    const authorization = await dependencies.authorizeClaudeCodeSetupInspection.execute(
-      {
-        candidatePaths: plan.candidatePaths,
-        dialect: plan.dialect,
-        homeRoot: scope.homeRoot,
-        observationEpoch: scope.observationEpoch,
-        sourcePaths: plan.sourcePaths,
-        workspaceRoot: scope.workspaceRoot,
-        workspaceTrusted: scope.workspaceTrusted,
-      },
-      options,
-    );
-    options?.signal?.throwIfAborted();
-    if (authorization.status === "denied") {
-      return deepFreeze({
-        diagnostics: authorization.diagnostics.map(diagnostic =>
-          mapAuthorizationDiagnostic(diagnostic)),
-        expectedLimitations,
-        status: "denied",
-      });
-    }
+interface ProjectionInput {
+  readonly authorization: AuthorizedInspection;
+  readonly configuration: ConfigurationInspection;
+  readonly installations: InstallationInspection;
+  readonly referenceKey: Uint8Array;
+  readonly scope: TrustedClaudeCodeSetupScope;
+}
 
-    const installationCandidates = authorization.executableCandidates.map(mapCandidate);
-    const configurationSources = authorization.sources.map(mapSource);
-    const [installationSettlement, configurationSettlement] = await Promise.allSettled([
-      invokeAsPromise(() => dependencies.discoverClaudeCodeInstallations.execute({
-        candidates: installationCandidates,
-        observationEpoch: authorization.observationEpoch,
-      }, options)),
-      invokeAsPromise(() => dependencies.inspectClaudeCodeConfiguration.execute({
-        dialect: plan.dialect,
-        identityScope: scope.scopeId,
-        observationEpoch: authorization.observationEpoch,
-        sources: configurationSources,
-      }, options)),
-    ]);
-    if (installationSettlement.status === "rejected") {
-      throw installationSettlement.reason;
-    }
-    if (configurationSettlement.status === "rejected") {
-      throw configurationSettlement.reason;
-    }
-
-    const installations = installationSettlement.value;
-    const configuration = configurationSettlement.value;
+const projectObservedSetup = ({
+  authorization, configuration, installations, referenceKey, scope,
+}: ProjectionInput): InspectClaudeCodeRuntimeSetupOutcome => {
+    const deferredConfiguration = configuration.deferredObservations;
+    const observedConfiguration = configuration.observedPortableIntent;
+    const sourceModel = configuration.sourceModel;
     const sourceReferences = new Map(configuration.sources.map(source => [
       source.sourceRef,
       hmacRef(referenceKey, "claude-code-setup-source", scope, source.sourceRef),
@@ -196,10 +160,11 @@ export const createBuildClaudeCodeSetupView = (
         ? undefined
         : sourceReferences.get(safeRef) ??
           hmacRef(referenceKey, "claude-code-setup-source", scope, safeRef);
-    const publicSourceReference = new Map(configuration.sources.map(source => [
-      source.kind,
-      mapSafeRef(source.sourceRef)!,
-    ]));
+    const referencesByRole = Map.groupBy(configuration.sources, source => source.role);
+    const publicSourceReference = new Map<string, string>();
+    for (const [role, sources] of referencesByRole) {
+      if (sources.length === 1) {publicSourceReference.set(role, mapSafeRef(sources[0]!.sourceRef)!);}
+    }
     const diagnosticCandidates: ClaudeCodeSetupDiagnostic[] = [
       ...authorization.diagnostics.map(diagnostic =>
         mapAuthorizationDiagnostic(diagnostic, publicSourceReference)),
@@ -239,7 +204,7 @@ export const createBuildClaudeCodeSetupView = (
       nextActions.add("trust_workspace");
     }
 
-    return deepFreeze({
+  return deepFreeze({
       diagnostics,
       expectedLimitations,
       installations: installations.installations.map(installation => ({
@@ -253,20 +218,113 @@ export const createBuildClaudeCodeSetupView = (
         status: installation.status,
       })),
       nextActions: [...nextActions].toSorted(),
-      observationRef: hmacRef(referenceKey, "claude-code-setup-observation", scope),
-      portableIntent: configuration.portableIntent.map(intent => ({
+      observationRef: hmacRef(referenceKey, "claude-code-setup-observation", scope, JSON.stringify({
+        sourceModel,
+        sources: configuration.sources.map(source => ({
+          semanticDigest: source.semanticDigest ?? null, sourceRef: source.sourceRef, status: source.status,
+        })),
+      })),
+      deferredObservations: deferredConfiguration.map(observation => ({
+        ...observation,
+        sourceRef: sourceReferences.get(observation.sourceRef) ??
+          hmacRef(referenceKey, "claude-code-setup-source", scope, observation.sourceRef),
+      })),
+      observedPortableIntent: observedConfiguration.map(intent => ({
         ...intent,
+        ...(intent.key === "model" ? { selection: { ...intent.selection } } : {}),
         sourceRef: sourceReferences.get(intent.sourceRef) ??
           hmacRef(referenceKey, "claude-code-setup-source", scope, intent.sourceRef),
       })),
       sourceObservations: configuration.sources.map(source => ({
         displayPath: source.displayPath,
-        kind: source.kind,
+        role: source.role,
+        selectionBasis: source.selectionBasis,
+        ...(source.semanticDigest === undefined ? {} : { semanticDigest: source.semanticDigest }),
         sourceRef: sourceReferences.get(source.sourceRef) ??
           hmacRef(referenceKey, "claude-code-setup-source", scope, source.sourceRef),
         status: source.status,
       })),
+      sourceModel: { ...sourceModel },
       status: diagnostics.length === 0 ? "observed" : "partial",
     });
-  };
+};
+
+const inspectClaudeCodeSetup = async (
+  scope: TrustedClaudeCodeSetupScope,
+  dependencies: BuildClaudeCodeSetupViewDependencies,
+  referenceKey: Uint8Array,
+  options?: { readonly signal?: AbortSignal },
+): Promise<InspectClaudeCodeRuntimeSetupOutcome> => {
+  options?.signal?.throwIfAborted();
+  const plan = dependencies.planClaudeCodeSetupInspection.plan(scope);
+  options?.signal?.throwIfAborted();
+  if (plan.status === "unsupported") {
+    return deepFreeze({
+      diagnostics: [{ code: "unsupported_platform" }],
+      expectedLimitations,
+      status: "unsupported",
+    });
+  }
+  const authorization = await dependencies.authorizeClaudeCodeSetupInspection.execute({
+    candidatePaths: plan.candidatePaths, dialect: plan.dialect, homeRoot: scope.homeRoot,
+    observationEpoch: scope.observationEpoch, sourcePaths: plan.sourcePaths,
+    workspaceRoot: scope.workspaceRoot, workspaceTrusted: scope.workspaceTrusted,
+  }, options);
+  options?.signal?.throwIfAborted();
+  if (authorization.status === "denied") {
+    return deepFreeze({
+      diagnostics: authorization.diagnostics.map(diagnostic => mapAuthorizationDiagnostic(diagnostic)),
+      expectedLimitations,
+      status: "denied",
+    });
+  }
+  const installationCandidates = authorization.executableCandidates.map(mapCandidate);
+  const configurationSources = authorization.sources.map(mapSource);
+  const configurationRoots = [
+    { absolutePath: scope.homeRoot, canonicalPath: scope.homeRoot, rootId: "declared-home-root" },
+    { absolutePath: scope.workspaceRoot, canonicalPath: scope.workspaceRoot, rootId: "declared-workspace-root" },
+  ].map(root => {
+    const source = configurationSources.find(candidate =>
+      candidate.access === "authorized" && candidate.custodyRoot.rootId === root.rootId);
+    return source?.access === "authorized" ? source.custodyRoot : root;
+  });
+  const [installationSettlement, configurationSettlement] = await Promise.allSettled([
+    invokeAsPromise(() => dependencies.discoverClaudeCodeInstallations.execute({
+      candidates: installationCandidates, observationEpoch: authorization.observationEpoch,
+    }, options)),
+    invokeAsPromise(() => dependencies.inspectClaudeCodeConfiguration.execute({
+      dialect: plan.dialect, identityScope: scope.scopeId,
+      sourcePlan: {
+        claim: "observed-files-only",
+        collector: {
+          bundleId: "embedded-runtime-static-planner-v2", id: "embedded-runtime",
+          observationEpoch: authorization.observationEpoch, platform: "darwin", version: "2",
+        },
+        contract: "claude-code-observed-source-plan/v1",
+        roots: configurationRoots,
+        sources: configurationSources,
+      },
+    }, options)),
+  ]);
+  if (installationSettlement.status === "rejected") {throw installationSettlement.reason;}
+  if (configurationSettlement.status === "rejected") {throw configurationSettlement.reason;}
+  return projectObservedSetup({
+    authorization, configuration: configurationSettlement.value,
+    installations: installationSettlement.value, referenceKey, scope,
+  });
+};
+
+export const createBuildClaudeCodeSetupView = (
+  dependencies: BuildClaudeCodeSetupViewDependencies,
+  opaqueReferenceKey: Uint8Array,
+) => {
+  if (opaqueReferenceKey.byteLength < 32) {
+    throw new TypeError("opaqueReferenceKey must contain at least 32 bytes");
+  }
+  const referenceKey = Uint8Array.from(opaqueReferenceKey);
+  return (
+    scope: TrustedClaudeCodeSetupScope,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<InspectClaudeCodeRuntimeSetupOutcome> =>
+    inspectClaudeCodeSetup(scope, dependencies, referenceKey, options);
 };

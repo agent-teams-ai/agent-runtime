@@ -6,6 +6,8 @@ import {
   CLAUDE_CODE_CONFIGURATION_BUDGETS,
   CLAUDE_CODE_EFFORT_VALUES,
   CLAUDE_CODE_MODEL_ALIASES,
+  CLAUDE_CODE_MODEL_DEFAULT,
+  CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT,
   CLAUDE_CODE_SETTINGS_DIALECT,
 } from "../dist/index.js";
 import { claudeCodePortableIntentExample } from "./fixtures/claude-code-portable-intent-example.ts";
@@ -14,11 +16,14 @@ test("freezes the Claude Code dialect, allowlists, budgets and test-fixture exam
   assert.equal(CLAUDE_CODE_SETTINGS_DIALECT, "claude-code-settings@2026-08-28");
   assert.deepEqual(CLAUDE_CODE_EFFORT_VALUES, ["low", "medium", "high", "xhigh"]);
   assert.deepEqual(CLAUDE_CODE_MODEL_ALIASES, [
-    "default", "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]",
+    "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]",
     "opus[1m]", "opusplan",
   ]);
+  assert.equal(CLAUDE_CODE_MODEL_DEFAULT, "default");
+  assert.equal(CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT, "claude-code-observed-source-plan/v1");
   assert.equal(CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource, 131_072);
-  assert.equal(CLAUDE_CODE_CONFIGURATION_BUDGETS.sourceSlots, 3);
+  assert.equal(CLAUDE_CODE_CONFIGURATION_BUDGETS.sourceSlots, 16);
+  assert.equal(CLAUDE_CODE_CONFIGURATION_BUDGETS.rootSlots, 16);
   assert.equal(Object.isFrozen(claudeCodePortableIntentExample), true);
 
   const manifest = JSON.parse(await readFile(
@@ -26,7 +31,9 @@ test("freezes the Claude Code dialect, allowlists, budgets and test-fixture exam
     "utf8",
   ));
   assert.equal(manifest.qualifiesExecutable, false);
-  assert.deepEqual(manifest.sourcesLowToHigh, ["user", "shared-project", "project-local"]);
+  assert.equal(manifest.sourceModel.claim, "observed-files-only");
+  assert.equal(manifest.sourceModel.precedence, "not-evaluated");
+  assert.equal(manifest.providerRouteVocabularyRevision, "claude-code-provider-route-vocabulary/v2");
   assert.equal(manifest.contractCoverage, "./contract-coverage.json");
 });
 

@@ -61,8 +61,11 @@ try {
   ]);
   await Promise.all([
     writeFile(executable, executableBytes),
-    writeFile(join(home, ".claude", "settings.json"), JSON.stringify({ model: "sonnet" })),
-    writeFile(join(workspace, ".claude", "settings.json"), JSON.stringify({ effortLevel: "low" })),
+    writeFile(join(home, ".claude", "settings.json"), JSON.stringify({ model: "claude-opus-4-8[1m]" })),
+    writeFile(join(workspace, ".claude", "settings.json"), JSON.stringify({
+      effortLevel: "low",
+      model: "arn:aws:bedrock:us-east-1:111111111111:application-inference-profile/AR2_ROUTE_ID_MUST_NEVER_APPEAR",
+    })),
     writeFile(join(workspace, ".claude", "settings.local.json"), JSON.stringify({ effortLevel: "high" })),
   ]);
   await chmod(executable, 0o755);
@@ -122,7 +125,7 @@ try {
   });
   const claudeConfiguration = configurationComposition.createClaudeCodeConfigurationInspectionFeature({
     parser: configurationComposition.createStrictClaudeCodeJsonParser(),
-    semanticClassifier: configurationComposition.createClaudeCodeConfigurationSemanticClassifierV1(),
+    semanticClassifier: configurationComposition.createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: new Uint8Array(32).fill(5),
     sourceReader: configurationComposition.createClaudeCodeConfigurationSourceReaderAdapter(sourceReader),
   });
@@ -172,10 +175,21 @@ try {
   assert.deepEqual(result.installations.map(installation => installation.status), [
     "found_unverified",
   ]);
-  assert.deepEqual(result.portableIntent.map(intent => [intent.key, intent.value]), [
-    ["effortLevel", "high"],
-    ["model", "sonnet"],
+  assert.deepEqual(result.observedPortableIntent.map(intent => JSON.stringify([
+    intent.key, intent.key === "model" ? intent.selection : intent.value,
+  ])).toSorted(), [
+    ["effortLevel", "low"], ["effortLevel", "high"],
+    ["model", { kind: "exact-name", value: "claude-opus-4-8[1m]" }],
+  ].map(item => JSON.stringify(item)).toSorted());
+  assert.deepEqual(result.deferredObservations.map(item => [item.key, item.form, item.status]), [
+    ["model", "provider-deployment", "deferred"],
   ]);
+  assert.equal(Object.isFrozen(result.deferredObservations), true);
+  assert.equal(Object.isFrozen(result.deferredObservations[0]), true);
+  assert.equal(result.status, "observed");
+  assert.equal(result.nextActions.includes("review_configuration"), false);
+  assert.equal(result.expectedLimitations.modelCompatibility, "unobserved");
+  assert.doesNotMatch(JSON.stringify(result), /AR2_ROUTE_ID_MUST_NEVER_APPEAR|111111111111/u);
   assert.deepEqual(result.sourceObservations.map(source => source.status), [
     "applied",
     "applied",

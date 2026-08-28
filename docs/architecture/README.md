@@ -33,6 +33,10 @@ Documents:
 - [Provider setup delivery roadmap](provider-setup-delivery-roadmap.md): legacy
   capability disposition and delivery order for Codex, Claude Code, and
   OpenCode setup.
+- [Legacy feature inventory](legacy-feature-inventory.json): commit-pinned,
+  structured legacy/current/authority/implementation/qualification/backlog
+  traceability. Its validator permits additions and uses explicit
+  supersession; an authored row count is not completeness proof.
 
 Decision status:
 

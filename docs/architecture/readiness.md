@@ -163,6 +163,17 @@ AR-2 implementation present; synthetic evidence present; qualification open:
   [`freeze packet`](claude-code-setup-freeze.json) are present and pass a
   deterministic artifact gate. Each of its 21 frozen fixture rows maps to
   exactly one declared Node test selected by its owning package test script;
+- inventory schema V2 does not use a fixed row count or authored ID list as
+  completeness proof. It validates unique IDs, provider/ID consistency,
+  structured commit/path/locator/claim evidence, independent architecture,
+  implementation, qualification, and backlog axes, explicit supersession,
+  and cutover severity/dependency/owner/acceptance fields;
+- the inventory records Codex and Claude workspace-trust jobs, Claude
+  installed/latest version status, Claude live model/effort/Fast eligibility,
+  and Claude disconnect/logout without claiming current implementation.
+  Passive setup/profile preview is already present but unqualified;
+  compatibility and installer/update are next, while auth/access/trust/live
+  capability remains later or subject to a future explicit decision;
 - provider-specific TypeScript DTOs and application-owned ports exist across
   Agent Execution, Runtime Security, Runtime Configuration, and Embedded
   Runtime. The default Pure DI composition exposes the private headless

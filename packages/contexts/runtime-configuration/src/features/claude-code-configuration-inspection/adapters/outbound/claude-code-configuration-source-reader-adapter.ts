@@ -6,7 +6,9 @@ import type {
   ReadClaudeCodeConfigurationSourceResult,
 } from "../../application/ports/outbound/claude-code-configuration-source-reader.js";
 
-const classifyError = (error: unknown): ReadClaudeCodeConfigurationSourceResult => {
+type ClassifiedReadError = { readonly status: "missing" | "unreadable" };
+
+const classifyError = (error: unknown): ClassifiedReadError => {
   const code =
     typeof error === "object" && error !== null && "code" in error
       ? String(error.code)
@@ -90,6 +92,27 @@ const readStableAuthorizedFile = async (
 
 export const createClaudeCodeConfigurationSourceReaderAdapter =
   (): ClaudeCodeConfigurationSourceReader => ({
+    async measure(source, options) {
+      options?.signal?.throwIfAborted();
+      try {
+        if ((await realpath(source.absolutePath)) !== source.canonicalPath ||
+            source.authorizedFileIdentity === undefined) {return { status: "unreadable" };}
+        const authorizedFileIdentity = source.authorizedFileIdentity;
+        return await openStablePath(
+          source.absolutePath, source.canonicalPath,
+          async opened => {
+            const observation = await opened.handle.stat({ bigint: true });
+            if (!observation.isFile() || authorizationFileIdentity(observation) !== authorizedFileIdentity ||
+                observation.size > BigInt(Number.MAX_SAFE_INTEGER)) {return { status: "unreadable" as const };}
+            return { bytes: Number(observation.size), status: "measured" as const };
+          },
+          { custodyBoundary: source.custodyRoot, ...(options?.signal === undefined ? {} : { signal: options.signal }) },
+        );
+      } catch (error) {
+        options?.signal?.throwIfAborted();
+        return classifyError(error);
+      }
+    },
     async read(source, maximumBytes, options) {
       options?.signal?.throwIfAborted();
       try {

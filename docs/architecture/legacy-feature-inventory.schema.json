@@ -3,45 +3,215 @@
   "$id": "agent-runtime://architecture/legacy-feature-inventory.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "schemaVersion", "implementationAuthority", "legacyCommit", "items"],
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "legacyCommit",
+    "currentCommit",
+    "crossCuttingInvariants",
+    "items"
+  ],
   "properties": {
     "$schema": { "const": "./legacy-feature-inventory.schema.json" },
-    "schemaVersion": { "const": 1 },
-    "implementationAuthority": { "const": "current-repository-tree" },
+    "schemaVersion": { "const": 2 },
     "legacyCommit": { "const": "f6afac73cced62d943a0e891ad08d7b8f88f802f" },
+    "currentCommit": { "const": "493c6c37e247f021fc110c5fc624b72f1502d743" },
+    "crossCuttingInvariants": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/crossCuttingInvariant" }
+    },
     "items": {
       "type": "array",
-      "minItems": 56,
-      "maxItems": 56,
       "items": { "$ref": "#/$defs/inventoryItem" }
     }
   },
   "$defs": {
     "nonEmptyString": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "capabilityId": {
+      "type": "string",
+      "pattern": "^(?:CODEX-[A-Z]+-[0-9]{2}|CLF-[0-9]{2}|OC-[0-9]{2})$"
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit", "path", "locator", "claim"],
+      "properties": {
+        "repository": { "enum": ["legacy", "current"] },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "path": {
+          "type": "string",
+          "pattern": "^(?:docs|packages|scripts|src|test)/[^\\s]+$"
+        },
+        "locator": {
+          "type": "string",
+          "pattern": "^(?:line:[1-9][0-9]*|symbol:[^\\s].*|test:[^\\s].*|heading:[^\\s].*|json-pointer:/.*)$"
+        },
+        "claim": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "claim", "evidence"],
+      "properties": {
+        "status": { "enum": ["observed", "verified", "unverified", "not_observed", "not_applicable"] },
+        "claim": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "claim", "evidence"],
+      "properties": {
+        "status": { "enum": ["accepted", "proposed", "none"] },
+        "claim": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "role"],
+      "properties": {
+        "kind": {
+          "enum": ["bounded-context", "application-composition", "external-consumer"]
+        },
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "role": { "$ref": "#/$defs/nonEmptyString" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "bounded-context" } } },
+          "then": {
+            "properties": {
+              "id": {
+                "enum": [
+                  "runtime-configuration",
+                  "runtime-security",
+                  "provider-access",
+                  "agent-execution"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "application-composition" } } },
+          "then": { "properties": { "id": { "const": "embedded-runtime" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "external-consumer" } } },
+          "then": { "properties": { "id": { "const": "desktop" } } }
+        }
+      ]
+    },
+    "priority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["userLossSeverity", "rationale", "dependencies", "productOwner", "externalConsumer"],
+      "properties": {
+        "userLossSeverity": { "enum": ["critical", "high", "medium", "low"] },
+        "rationale": { "$ref": "#/$defs/nonEmptyString" },
+        "dependencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capabilityId" }
+        },
+        "productOwner": { "enum": ["agent-runtime", "external-desktop-consumer", "unassigned"] },
+        "externalConsumer": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "evidence"],
+      "properties": {
+        "kind": { "enum": ["observed_current", "required_future", "not_applicable"] },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "crossCuttingInvariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "claim", "acceptanceEvidence"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^INV-[A-Z0-9-]+$" },
+        "claim": { "$ref": "#/$defs/nonEmptyString" },
+        "acceptanceEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/acceptance" }
+        }
+      }
+    },
     "inventoryItem": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "capabilityId", "provider", "userJob", "userValue", "legacyBehavior",
-        "exactLegacyEvidence", "failureAndEdgeCases", "reuseDecision", "newOwner",
-        "proposedDisposition", "authorityStatus", "acceptanceEvidence", "futureExtensionSeam"
+        "capabilityId",
+        "provider",
+        "lifecycleStatus",
+        "supersededBy",
+        "relatedCapabilities",
+        "userJob",
+        "userValue",
+        "legacyFact",
+        "currentProviderFact",
+        "architectureAuthority",
+        "implementationStatus",
+        "qualificationStatus",
+        "backlogDisposition",
+        "priority",
+        "failureAndEdgeCases",
+        "reuseDecision",
+        "owners",
+        "acceptanceEvidence",
+        "futureExtensionSeam"
       ],
       "properties": {
-        "capabilityId": { "type": "string", "pattern": "^(?:CODEX-[A-Z]+-[0-9]{2}|CLF-[0-9]{2}|OC-[0-9]{2})$" },
+        "capabilityId": { "$ref": "#/$defs/capabilityId" },
         "provider": { "enum": ["codex", "claude-code", "opencode"] },
+        "lifecycleStatus": { "enum": ["active", "superseded"] },
+        "supersededBy": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capabilityId" }
+        },
+        "relatedCapabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capabilityId" }
+        },
         "userJob": { "$ref": "#/$defs/nonEmptyString" },
         "userValue": { "$ref": "#/$defs/nonEmptyString" },
-        "legacyBehavior": { "$ref": "#/$defs/nonEmptyString" },
-        "exactLegacyEvidence": {
-          "type": "string",
-          "pattern": "^f6afac73cced62d943a0e891ad08d7b8f88f802f: .*(?:src|test)/"
+        "legacyFact": { "$ref": "#/$defs/fact" },
+        "currentProviderFact": { "$ref": "#/$defs/fact" },
+        "architectureAuthority": { "$ref": "#/$defs/authority" },
+        "implementationStatus": { "enum": ["implemented", "not_implemented", "not_applicable"] },
+        "qualificationStatus": { "enum": ["qualified", "unqualified", "not_applicable"] },
+        "backlogDisposition": { "enum": ["now", "next", "later", "rejected", "not_applicable"] },
+        "priority": { "$ref": "#/$defs/priority" },
+        "failureAndEdgeCases": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
         },
-        "failureAndEdgeCases": { "$ref": "#/$defs/nonEmptyString" },
         "reuseDecision": { "enum": ["reuse_fixture", "reuse_concept", "refactor_pattern", "keep_provider_specific", "reject_legacy_approach"] },
-        "newOwner": { "$ref": "#/$defs/nonEmptyString" },
-        "proposedDisposition": { "enum": ["approved_now", "recommended_next", "recommended_later", "rejected", "needs_owner"] },
-        "authorityStatus": { "$ref": "#/$defs/nonEmptyString" },
-        "acceptanceEvidence": { "$ref": "#/$defs/nonEmptyString" },
+        "owners": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/owner" }
+        },
+        "acceptanceEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/acceptance" }
+        },
         "futureExtensionSeam": { "$ref": "#/$defs/nonEmptyString" }
       }
     }

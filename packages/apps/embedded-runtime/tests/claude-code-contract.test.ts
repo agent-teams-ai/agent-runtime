@@ -30,6 +30,11 @@ test("freezes the prospective provider-specific no-product-input Claude contract
   assert.match(declaration, /interactiveShellPath: "unobserved"/u);
   assert.match(declaration, /"capability_unavailable"/u);
   assert.match(declaration, /"access_scope_limit_exceeded"/u);
+  assert.match(declaration, /modelCompatibility: "unobserved"/u);
+  assert.match(declaration, /kind: "provider-default"/u);
+  assert.match(declaration, /kind: "exact-name"/u);
+  assert.match(declaration, /form: "provider-deployment" \| "unclassified-selector"/u);
+  assert.match(declaration, /contract: "claude-code-observed-source-plan\/v1"/u);
   assert.doesNotMatch(declaration, /"max"/u);
 });
 
@@ -89,11 +94,25 @@ const trustedScope = Object.freeze({
   workspaceTrusted: true,
 });
 
+const emptyConfiguration = () => ({
+  deferredObservations: [], diagnostics: [], observedPortableIntent: [],
+  sourceModel: {
+    claim: "observed-files-only" as const,
+    classifierRevision: "claude-code-settings-2026-08-28-semantic-classifier/2",
+    collectorRef: "collector-ref", compatibility: "unqualified" as const,
+    contract: "claude-code-observed-source-plan/v1" as const,
+    dialect: "claude-code-settings@2026-08-28" as const,
+    precedence: "not-evaluated" as const, topologyRef: "topology-ref",
+  },
+  sources: [],
+});
+
 test("deduplicates owner diagnostics on their public source reference", async () => {
   const inspect = createBuildClaudeCodeSetupView({
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          ...emptyConfiguration(),
           diagnostics: [
             { code: "source_untrusted" as const, safeRef: "user" },
             { code: "source_epoch_stale" as const, safeRef: "user" },
@@ -112,14 +131,15 @@ test("deduplicates owner diagnostics on their public source reference", async ()
     inspectClaudeCodeConfiguration: {
       async execute() {
         return {
+          ...emptyConfiguration(),
           diagnostics: [
             { code: "source_untrusted" as const, safeRef: "private-user-source" },
             { code: "config_unreadable" as const, safeRef: "private-user-source" },
           ],
-          portableIntent: [],
           sources: [{
             displayPath: "$HOME/.claude/settings.json",
-            kind: "user" as const,
+            role: "user" as const,
+            selectionBasis: "static-preview" as const,
             sourceRef: "private-user-source",
             status: "rejected" as const,
           }],
@@ -172,7 +192,7 @@ test("applies the public diagnostic budget after deterministic normalization", a
       async execute() { return { diagnostics: candidateDiagnostics, installations: [] }; },
     },
     inspectClaudeCodeConfiguration: {
-      async execute() { return { diagnostics: [], portableIntent: [], sources: [] }; },
+      async execute() { return emptyConfiguration(); },
     },
     planClaudeCodeSetupInspection: {
       plan() {

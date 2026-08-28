@@ -7,7 +7,7 @@ import {
 } from "@agent-teams/agent-execution/composition";
 import {
   createClaudeCodeConfigurationInspectionFeature,
-  createClaudeCodeConfigurationSemanticClassifierV1,
+  createClaudeCodeConfigurationSemanticClassifierV2,
   createClaudeCodeConfigurationSourceReaderAdapter,
   createCodexConfigurationInspectionFeature,
   createCodexConfigurationSemanticClassifierV1,
@@ -106,6 +106,7 @@ const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T
 const expectedClaudeCodeLimitations = Object.freeze({
   interactiveShellPath: "unobserved" as const,
   managedPolicy: "unobserved" as const,
+  modelCompatibility: "unobserved" as const,
   sessionOverrides: "unobserved" as const,
 });
 
@@ -262,7 +263,7 @@ export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
   });
   const claudeConfiguration = createClaudeCodeConfigurationInspectionFeature({
     parser: createStrictClaudeCodeJsonParser(),
-    semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV1(),
+    semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: randomBytes(32),
     sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(),
   });

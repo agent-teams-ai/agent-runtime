@@ -10,8 +10,22 @@ import {
 const expectedLimitations = {
   interactiveShellPath: "unobserved",
   managedPolicy: "unobserved",
+  modelCompatibility: "unobserved",
   sessionOverrides: "unobserved",
 } as const;
+
+const emptyClaudeConfiguration = () => ({
+  deferredObservations: [], diagnostics: [], observedPortableIntent: [],
+  sourceModel: {
+    claim: "observed-files-only" as const,
+    classifierRevision: "claude-code-settings-2026-08-28-semantic-classifier/2",
+    collectorRef: "collector-ref", compatibility: "unqualified" as const,
+    contract: "claude-code-observed-source-plan/v1" as const,
+    dialect: "claude-code-settings@2026-08-28" as const,
+    precedence: "not-evaluated" as const, topologyRef: "topology-ref",
+  },
+  sources: [],
+});
 
 const values = (length: number, prefix: string): string[] =>
   Array.from({ length }, (_, index) => `/${prefix}-${index}`);
@@ -119,7 +133,7 @@ const createDependencies = () => {
       inspectClaudeCodeConfiguration: {
         async execute() {
           calls.claudeConfiguration += 1;
-          return { diagnostics: [], portableIntent: [], sources: [] };
+          return emptyClaudeConfiguration();
         },
       },
       inspectCodexConfiguration: {
