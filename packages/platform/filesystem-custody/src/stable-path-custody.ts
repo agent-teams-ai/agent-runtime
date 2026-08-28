@@ -1,5 +1,5 @@
 import { constants, type BigIntStats } from "node:fs";
-import { lstat, open, realpath, stat, type FileHandle } from "node:fs/promises";
+import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -120,11 +120,35 @@ export const pathLineagesEqual = (
     return comparison !== undefined && componentsEqual(component, comparison);
   });
 
-const descriptorMatchesPath = (
-  descriptor: BigIntStats,
-  pathObservation: BigIntStats,
+const isSingleLinkRegularFile = (observation: BigIntStats): boolean =>
+  observation.isFile() && observation.nlink === 1n;
+
+const fileIdentitiesEqual = (
+  left: BigIntStats,
+  right: BigIntStats,
 ): boolean =>
-  descriptor.dev === pathObservation.dev && descriptor.ino === pathObservation.ino;
+  left.dev === right.dev &&
+  left.ino === right.ino &&
+  left.mode === right.mode &&
+  left.nlink === right.nlink &&
+  left.size === right.size &&
+  left.mtimeNs === right.mtimeNs &&
+  left.ctimeNs === right.ctimeNs;
+
+const lineageEndsWithIdentity = (
+  lineage: PathLineage,
+  observation: BigIntStats,
+): boolean => {
+  const terminal = lineage.components.at(-1);
+  return terminal !== undefined &&
+    terminal.dev === observation.dev &&
+    terminal.ino === observation.ino &&
+    terminal.mode === observation.mode &&
+    terminal.nlink === observation.nlink &&
+    terminal.size === observation.size &&
+    terminal.mtimeNs === observation.mtimeNs &&
+    terminal.ctimeNs === observation.ctimeNs;
+};
 
 const captureLineages = async (
   absolutePath: string,
@@ -193,12 +217,18 @@ const assertExpectedPathCustody = (
 
 const assertStableOpenedPath = (
   opened: BigIntStats,
-  pathObservation: BigIntStats,
+  preflight: BigIntStats,
+  current: BigIntStats,
   before: readonly [PathLineage, PathLineage],
   after: readonly [PathLineage, PathLineage],
 ): void => {
   if (
-    !descriptorMatchesPath(opened, pathObservation) ||
+    !isSingleLinkRegularFile(opened) ||
+    !isSingleLinkRegularFile(current) ||
+    !fileIdentitiesEqual(opened, preflight) ||
+    !fileIdentitiesEqual(opened, current) ||
+    !lineageEndsWithIdentity(before[1], preflight) ||
+    !lineageEndsWithIdentity(after[1], current) ||
     !pathLineagesEqual(before[0], after[0]) ||
     !pathLineagesEqual(before[1], after[1])
   ) {
@@ -212,6 +242,10 @@ export const openStablePath = async <Result>(
   operation: (opened: OpenedStablePath) => Promise<Result>,
   options?: {
     readonly custodyBoundary?: PathCustodyBoundary;
+    readonly openFile?: (
+      path: string,
+      flags: number,
+    ) => Promise<FileHandle>;
     readonly signal?: AbortSignal;
   },
 ): Promise<Result> => {
@@ -242,22 +276,30 @@ export const openStablePath = async <Result>(
     boundary,
   );
   assertExpectedPathCustody(initialResolution, expectedCanonicalPath, boundary);
-  const handle = await open(
+  const preflight = await lstat(expectedCanonicalPath, { bigint: true });
+  if (!isSingleLinkRegularFile(preflight)) {
+    throw new PathCustodyError("Stable path must be a single-link regular file");
+  }
+  const openFile = options?.openFile ?? open;
+  const handle = await openFile(
     expectedCanonicalPath,
     constants.O_RDONLY |
       constants.O_NONBLOCK |
       (constants.O_NOFOLLOW ?? 0),
   );
   try {
-    const [opened, finalResolution, pathObservation, after] = await Promise.all([
-      handle.stat({ bigint: true }),
+    const opened = await handle.stat({ bigint: true });
+    if (!isSingleLinkRegularFile(opened)) {
+      throw new PathCustodyError("Stable path must be a single-link regular file");
+    }
+    const [finalResolution, pathObservation, after] = await Promise.all([
       resolvePathCustody(absolutePath, expectedCanonicalPath, boundary),
-      stat(expectedCanonicalPath, { bigint: true }),
+      lstat(expectedCanonicalPath, { bigint: true }),
       captureLineages(absolutePath, expectedCanonicalPath, boundary, signal),
     ]);
     signal?.throwIfAborted();
     assertExpectedPathCustody(finalResolution, expectedCanonicalPath, boundary);
-    assertStableOpenedPath(opened, pathObservation, before, after);
+    assertStableOpenedPath(opened, preflight, pathObservation, before, after);
     return await operation({
       canonicalLocationPath: join(
         initialResolution.canonicalParentPath,

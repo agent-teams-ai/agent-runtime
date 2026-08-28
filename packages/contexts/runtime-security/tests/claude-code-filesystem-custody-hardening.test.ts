@@ -301,7 +301,7 @@ test(
     assert.ok(result.diagnostics.some(item =>
       item.code === "candidate_denied" && item.safeRef === "explicit"
     ));
-    assert.equal(openedCanonicalPaths.includes(home), true);
+    assert.equal(openedCanonicalPaths.includes(home), false);
     for (const target of targets) {
       assert.equal(openedCanonicalPaths.includes(target), false);
     }

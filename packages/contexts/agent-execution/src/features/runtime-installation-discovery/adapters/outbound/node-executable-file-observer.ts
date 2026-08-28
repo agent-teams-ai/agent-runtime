@@ -76,6 +76,9 @@ export const createNodeExecutableFileObserver = (): ExecutableFileObserver => ({
       if ((await realpath(absolutePath)) !== expectedCanonicalPath) {
         return { kind: "unstable" };
       }
+      if (!(await lstat(expectedCanonicalPath)).isFile()) {
+        return { kind: "invalid" };
+      }
       if (authorizedFileIdentity === undefined) {
         return { kind: "unstable" };
       }

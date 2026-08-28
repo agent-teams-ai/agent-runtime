@@ -204,6 +204,14 @@ AR-2 implementation present; synthetic evidence present; qualification open:
   budget failures, nonportable/secret rejection, workspace trust, filesystem
   identity and link/race negatives, DTO detachment/redaction, cancellation,
   Codex coexistence, Host disposal, and post-disposal rejection;
+- portable filesystem custody performs a non-opening `lstat` preflight and
+  rejects non-regular or multiply-linked targets before open. After the
+  nonblocking, no-follow open it fails closed before callback unless descriptor,
+  current path, and lineage observations retain the same full regular-file
+  identity. On macOS this detects but cannot atomically prevent a same-user
+  regular-to-special replacement after preflight: one nonblocking open may be
+  attempted, but descriptor verification rejects the replacement before any
+  callback or read;
 - the synthetic macOS end-to-end test proves only composition, filesystem
   custody, passivity, DTO shaping, and cancellation/disposal. It does not prove
   a real Claude Code installation, executable compatibility, a Desktop

@@ -185,6 +185,15 @@ const canonicalizeWithinRoot = async (
   if (observedRoot === undefined) {
     return undefined;
   }
+  if (
+    observed.exists &&
+    (
+      observed.isFile !== true ||
+      (observed.linkCount ?? 0) > 1
+    )
+  ) {
+    return { canonical: observed, root: observedRoot };
+  }
   const canonical = await canonicalizer.canonicalize(
     lexicalPath,
     custodyOptions(observedRoot, signal),

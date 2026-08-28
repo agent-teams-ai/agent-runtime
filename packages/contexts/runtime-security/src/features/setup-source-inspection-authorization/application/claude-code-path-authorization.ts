@@ -203,13 +203,7 @@ export const canonicalizeClaudeCodeRoots = async (
       const observation = await canonicalize(
         canonicalizer,
         request.absolutePath,
-        {
-          custodyBoundary: {
-            absolutePath: resolve(request.absolutePath),
-            canonicalPath: first.absolutePath,
-          },
-          ...(signal === undefined ? {} : { signal }),
-        },
+        cancellationOptions(signal),
       );
       if (!observationsEqual(first, observation)) {
         return undefined;
@@ -251,6 +245,9 @@ export const verifyClaudeCodePathWithinRoot = async (
   const firstRoot = selectSameRoot(first, roots, expectedKind);
   if (firstRoot === undefined) {
     return { status: "outside" };
+  }
+  if (invalidExistingClaudeCodePath(first)) {
+    return { observation: first, root: firstRoot, status: "verified" };
   }
   const second = await canonicalize(
     canonicalizer,
