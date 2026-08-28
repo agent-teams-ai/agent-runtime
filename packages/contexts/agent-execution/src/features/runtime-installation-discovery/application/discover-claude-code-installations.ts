@@ -92,6 +92,24 @@ const candidateKey = (candidate: ClaudeCodeInstallationCandidate): string =>
     String(candidate.required),
   ].join("\u0000");
 
+const detachCandidate = (
+  candidate: ClaudeCodeInstallationCandidate,
+): ClaudeCodeInstallationCandidate =>
+  Object.freeze({
+    absolutePath: candidate.absolutePath,
+    ...(candidate.authorizedFileIdentity === undefined
+      ? {}
+      : { authorizedFileIdentity: candidate.authorizedFileIdentity }),
+    canonicalPath: candidate.canonicalPath,
+    custodyRoot: Object.freeze({
+      absolutePath: candidate.custodyRoot.absolutePath,
+      canonicalPath: candidate.custodyRoot.canonicalPath,
+    }),
+    displayPath: candidate.displayPath,
+    required: candidate.required,
+    source: candidate.source,
+  });
+
 interface GroupedInstallation {
   readonly aliases: Array<{
     readonly displayPath: string;
@@ -164,7 +182,7 @@ export const createDiscoverClaudeCodeInstallations = (
       );
     }
 
-    const candidates = input.candidates.toSorted(compareCandidates);
+    const candidates = input.candidates.map(detachCandidate).toSorted(compareCandidates);
     const seenCandidates = new Set<string>();
     const grouped = new Map<string, GroupedInstallation>();
     const diagnostics: ClaudeCodeInstallationDiagnostic[] = [];

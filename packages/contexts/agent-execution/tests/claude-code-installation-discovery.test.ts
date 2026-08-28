@@ -3,16 +3,19 @@ import { execFile as execFileCallback } from "node:child_process";
 import {
   chmod,
   link,
+  mkdir,
   mkdtemp,
   readFile,
+  readdir,
   realpath,
+  rename,
   rm,
   stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -22,13 +25,27 @@ import {
   createRuntimeInstallationDiscoveryFeature,
   type ExecutableFileObserver,
 } from "../dist/composition.js";
+import { isSupportedExecutableAliasKind } from "../dist/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.js";
 
 const execFile = promisify(execFileCallback);
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const packageRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), "..");
 
 const fileIdentity = async (path: string): Promise<string> => {
   const observation = await stat(path, { bigint: true });
   return `${observation.dev}:${observation.ino}:${observation.ctimeNs}:${observation.size}`;
+};
+
+const collectTypeScriptSources = async (directory: string): Promise<string[]> => {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map(entry => {
+      const path = join(directory, entry.name);
+      return entry.isDirectory()
+        ? collectTypeScriptSources(path)
+        : Promise.resolve(entry.name.endsWith(".ts") ? [path] : []);
+    }),
+  );
+  return nested.flat();
 };
 
 const candidate = (
@@ -184,6 +201,43 @@ test("deduplicates candidates and groups same-file symbolic aliases", async t =>
   );
 });
 
+test("delegates macOS case and Unicode alias identity to the observer without rewriting display paths", async () => {
+  const identities = new Map([
+    ["case-upper", "same-file"],
+    ["case-lower", "same-file"],
+    ["unicode-composed", "same-file"],
+    ["unicode-decomposed-other", "different-file"],
+  ]);
+  const feature = createRuntimeInstallationDiscoveryFeature({
+    executableFileObserver: {
+      async observe(_absolutePath, _canonicalPath, identity) {
+        return { identity: identities.get(identity ?? "") ?? "unexpected", kind: "found" };
+      },
+    },
+  });
+  const candidates = [
+    candidate("$HOME/bin/Claude", "explicit", { authorizedFileIdentity: "case-upper" }),
+    candidate("$HOME/bin/claude", "path-entry", { authorizedFileIdentity: "case-lower" }),
+    candidate("$HOME/bin/claud\u00e9", "path-entry", { authorizedFileIdentity: "unicode-composed" }),
+    candidate("$HOME/bin/claude\u0301", "path-entry", {
+      authorizedFileIdentity: "unicode-decomposed-other",
+    }),
+  ];
+
+  const result = await feature.discoverClaudeCodeInstallations.execute({
+    candidates: candidates.toReversed(),
+    observationEpoch: "epoch-macos-alias-semantics",
+  });
+
+  assert.deepEqual(
+    result.installations.map(item => item.aliases.map(alias => alias.displayPath)),
+    [
+      ["$HOME/bin/Claude", "$HOME/bin/claude", "$HOME/bin/claud\u00e9"],
+      ["$HOME/bin/claude\u0301"],
+    ],
+  );
+});
+
 test("reports required missing candidates and ignores optional missing candidates", async () => {
   const observer: ExecutableFileObserver = {
     async observe() {
@@ -252,6 +306,53 @@ test("classifies non-executable, hard-linked, FIFO, and replaced candidates", { 
     ],
   );
   assert.deepEqual(result.installations, []);
+});
+
+test("rejects device and ancestor-retargeted candidates without opening them", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-claude-special-files-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const trusted = join(root, "trusted");
+  const retired = join(root, "retired");
+  const executable = join(trusted, "bin", "claude");
+  await mkdir(dirname(executable), { recursive: true });
+  await writeFile(executable, "synthetic");
+  await chmod(executable, 0o755);
+  const retargetedCandidate = await filesystemCandidate(
+    trusted,
+    executable,
+    "$HOME/retargeted/claude",
+    true,
+  );
+  await rename(trusted, retired);
+  await symlink(retired, trusted);
+
+  const observer = createNodeExecutableFileObserver();
+  const [retargeted, device] = await Promise.all([
+    observer.observe(
+      retargetedCandidate.absolutePath,
+      retargetedCandidate.canonicalPath,
+      retargetedCandidate.authorizedFileIdentity,
+      retargetedCandidate.custodyRoot,
+    ),
+    observer.observe("/dev/null", "/dev/null", "synthetic-device", {
+      absolutePath: "/dev",
+      canonicalPath: await realpath("/dev"),
+    }),
+  ]);
+
+  assert.deepEqual(retargeted, { kind: "unstable" });
+  assert.deepEqual(device, { kind: "invalid" });
+});
+
+test("rejects a socket stat through the non-file alias gate", () => {
+  const socketStat = {
+    isFile: () => false,
+    isSocket: () => true,
+    isSymbolicLink: () => false,
+  };
+
+  assert.equal(socketStat.isSocket(), true);
+  assert.equal(isSupportedExecutableAliasKind(socketStat), false);
 });
 
 test("never executes an executable candidate", async t => {
@@ -355,6 +456,68 @@ test("propagates cancellation before and during candidate observation", async ()
       { signal: during.signal },
     ),
     { name: "AbortError" },
+  );
+});
+
+test("snapshots caller-owned candidates and returns detached deeply frozen output", async () => {
+  let releaseObservation!: () => void;
+  const observationMayFinish = new Promise<void>(resolve => {
+    releaseObservation = resolve;
+  });
+  let observedRoot: { readonly absolutePath: string; readonly canonicalPath: string } | undefined;
+  const feature = createRuntimeInstallationDiscoveryFeature({
+    executableFileObserver: {
+      async observe(_absolutePath, _canonicalPath, identity, custodyRoot) {
+        if (identity === "authorized-missing") {
+          return { kind: "missing" };
+        }
+        observedRoot = custodyRoot;
+        await observationMayFinish;
+        return { identity: "detached-file", kind: "found" };
+      },
+    },
+  });
+  const mutableCandidate = candidate("original", "explicit");
+  const mutableCandidates = [
+    mutableCandidate,
+    candidate("missing", "explicit"),
+  ];
+  const pending = feature.discoverClaudeCodeInstallations.execute({
+    candidates: mutableCandidates,
+    observationEpoch: "epoch-detached",
+  });
+
+  mutableCandidate.displayPath = "mutated";
+  mutableCandidate.source = "path-entry";
+  mutableCandidate.custodyRoot.absolutePath = "/mutated";
+  mutableCandidates.length = 0;
+  releaseObservation();
+  const result = await pending;
+
+  assert.equal(observedRoot?.absolutePath, "/authorized");
+  assert.deepEqual(result.installations[0]?.aliases, [
+    { displayPath: "original", source: "explicit" },
+  ]);
+  assert.ok(Object.isFrozen(result));
+  assert.ok(Object.isFrozen(result.diagnostics));
+  assert.ok(Object.isFrozen(result.diagnostics[0]));
+  assert.ok(Object.isFrozen(result.installations));
+  assert.ok(Object.isFrozen(result.installations[0]));
+  assert.ok(Object.isFrozen(result.installations[0]?.aliases));
+  assert.ok(Object.isFrozen(result.installations[0]?.aliases[0]));
+});
+
+test("Claude production discovery graph has no process, network, ambient-state, or shell dependency", async () => {
+  const sourceRoot = join(packageRoot, "src/features/runtime-installation-discovery");
+  const productionSource = (
+    await Promise.all(
+      (await collectTypeScriptSources(sourceRoot)).map(path => readFile(path, "utf8")),
+    )
+  ).join("\n");
+
+  assert.doesNotMatch(
+    productionSource,
+    /from\s+["']node:(?:child_process|cluster|dgram|dns|http|https|net|readline|repl|tls|worker_threads)["']|process\.(?:cwd|env)|\b(?:fetch|spawn|exec|execFile|fork)\s*\(|interactive[- ]?shell/iu,
   );
 });
 
