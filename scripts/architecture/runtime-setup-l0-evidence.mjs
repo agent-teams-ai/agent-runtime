@@ -385,14 +385,21 @@ const buildReport = async ({ capture, sourceRevision }) => ({
   ],
 });
 
-const validateStoredReport = report => {
+const validateStoredReport = async report => {
   assert.equal(report.schemaVersion, 3);
-  assert.ok(hasCommit(report.sourceRevision), "captured source revision must exist");
+  assert.match(report.sourceRevision, /^[a-f0-9]{40}$/u);
   assert.equal(
     report.sourceRevision,
     changes.at(-1)?.revision,
     "captured source revision must be the latest retained product change",
   );
+  assert.deepEqual(
+    report.artifactDigests,
+    await artifactDigests(),
+    "captured product source, tests, or fixtures drifted",
+  );
+  assert.deepEqual(report.ownership, ownership);
+  assert.deepEqual(report.traces, traces);
   assert.equal(report.taxonomyAuthority, "experiment-local-non-qualification-rubric");
   assert.equal(report.verdicts.L0, "demonstrated-product-pure-di");
   assert.deepEqual(report.verdicts, {
@@ -418,7 +425,11 @@ const validateStoredReport = report => {
     report.historicalChanges.map(({ id, revision }) => ({ id, revision })),
     changes,
   );
-  assert.equal(report.prospectiveBenchmarks.length, 3);
+  assert.deepEqual(
+    report.prospectiveBenchmarks,
+    await loadProspectiveBenchmarks(),
+    "retained prospective benchmark evidence drifted",
+  );
   for (const benchmark of report.prospectiveBenchmarks) {
     assert.equal(benchmark.sourceRevision, changes.at(-1)?.revision);
     assert.equal(benchmark.execution.editMode, "read-only");
@@ -441,7 +452,7 @@ if (mode === "--capture") {
   await writeFile(evidencePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 } else if (mode === "--check") {
   const stored = JSON.parse(await readFile(evidencePath, "utf8"));
-  validateStoredReport(stored);
+  await validateStoredReport(stored);
   if (changes.every(({ revision }) => hasCommit(revision))) {
     assert.deepEqual(
       stored,
