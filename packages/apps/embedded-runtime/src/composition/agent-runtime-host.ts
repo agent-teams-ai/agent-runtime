@@ -225,9 +225,7 @@ export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
     parser: createStrictClaudeCodeJsonParser(),
     semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV1(),
     sourceIdentityKey: randomBytes(32),
-    sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(
-      nodeConfigurationSourceReader,
-    ),
+    sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(),
   });
 
   return createAgentRuntimeHost({
