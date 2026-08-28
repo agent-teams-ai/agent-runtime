@@ -35,6 +35,20 @@ const diagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
 const parserDiagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
   "config_duplicate_key", "config_invalid_utf8", "config_parse_failed", "config_too_large",
 ]);
+const secretValueShape = /(?:api[_-]?key|credential|oauth|password|secret|token|\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|glpat-|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
+const providerRouteOrDeploymentShape = /(?:^arn:(?:aws|aws-us-gov|aws-cn):bedrock:|^https?:\/\/|^(?:[a-z]{2}(?:-[a-z]+)?|global)\.anthropic\.|^anthropic\.claude-|(?:^|[.:/])anthropic(?:[.:/]|$)|bedrock|vertex|foundry|gateway)/iu;
+
+export const isSecretShapedClaudeCodeValue = (value: string): boolean =>
+  secretValueShape.test(value);
+
+export const isProviderRouteOrDeploymentShapedClaudeCodeValue = (value: string): boolean =>
+  providerRouteOrDeploymentShape.test(value);
+
+export const isControlBearingClaudeCodeValue = (value: string): boolean =>
+  [...value].some(character => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint < 32 || codePoint === 127);
+  });
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {return false;}
@@ -210,7 +224,11 @@ const modelSelection = (value: unknown): ClaudeCodeModelSelection => {
   }
   if (record.kind === "exact-name" && Object.keys(record).length === 2 &&
       typeof record.value === "string" &&
-      /^claude-[a-z0-9]+(?:-[a-z0-9]+)*(?:\[1m\])?$/u.test(record.value)) {
+      record.value.length <= CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength &&
+      /^claude-[a-z0-9]+(?:-[a-z0-9]+)*(?:\[1m\])?$/u.test(record.value) &&
+      !isSecretShapedClaudeCodeValue(record.value) &&
+      !isControlBearingClaudeCodeValue(record.value) &&
+      !isProviderRouteOrDeploymentShapedClaudeCodeValue(record.value)) {
     return Object.freeze({ kind: "exact-name", value: record.value });
   }
   throw new TypeError("selection");

@@ -9,6 +9,11 @@ import {
   type ClaudeCodeConfigurationSemanticClassifier, type DeferredClaudeCodeDefinition,
   type PortableClaudeCodeDefinition,
 } from "../../application/ports/outbound/claude-code-configuration-semantic-classifier.js";
+import {
+  isControlBearingClaudeCodeValue,
+  isProviderRouteOrDeploymentShapedClaudeCodeValue,
+  isSecretShapedClaudeCodeValue,
+} from "../../application/safe-semantic-boundary.js";
 
 const modelAliases: ReadonlySet<string> = new Set(CLAUDE_CODE_MODEL_ALIASES);
 const effortValues: ReadonlySet<string> = new Set(CLAUDE_CODE_EFFORT_VALUES);
@@ -21,14 +26,7 @@ const securityOrExecutableKeys = new Set([
 ]);
 const credentialName = /(?:api[_-]?key|auth[_-]?token|credential|oauth|password|private[_-]?key)/iu;
 const secretName = /(?:secret|token)/iu;
-const secretValue = /(?:api[_-]?key|credential|oauth|password|secret|token|\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|glpat-|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
 const exactModelName = /^claude-[a-z0-9]+(?:-[a-z0-9]+)*(?:\[1m\])?$/u;
-const providerDeployment = /(?:^arn:(?:aws|aws-us-gov|aws-cn):bedrock:|^https?:\/\/|^(?:[a-z]{2}(?:-[a-z]+)?|global)\.anthropic\.|^anthropic\.claude-|(?:^|[.:/])anthropic(?:[.:/]|$)|bedrock|vertex|foundry|gateway)/iu;
-const controlBearing = (value: string): boolean =>
-  [...value].some(character => {
-    const codePoint = character.codePointAt(0);
-    return codePoint !== undefined && (codePoint < 32 || codePoint === 127);
-  });
 
 const isModelAlias = (value: string): value is ClaudeCodeModelAlias => modelAliases.has(value);
 const isEffort = (value: string): value is ClaudeCodeEffort => effortValues.has(value);
@@ -53,10 +51,13 @@ const scanNonportableValue = (
 ): void => {
   signal?.throwIfAborted();
   if (typeof value === "string") {
-    if (secretValue.test(value)) {diagnostics.add("secret_setting_rejected");}
-    else if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength || controlBearing(value)) {
+    if (isSecretShapedClaudeCodeValue(value)) {diagnostics.add("secret_setting_rejected");}
+    else if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength ||
+        isControlBearingClaudeCodeValue(value)) {
       diagnostics.add("setting_value_unsupported");
-    } else if (providerDeployment.test(value)) {diagnostics.add("provider_route_deferred");}
+    } else if (isProviderRouteOrDeploymentShapedClaudeCodeValue(value)) {
+      diagnostics.add("provider_route_deferred");
+    }
     return;
   }
   if (Array.isArray(value)) {
@@ -81,19 +82,24 @@ const reject = (
 
 const classifyModel = (value: unknown, context: Context): void => {
   if (typeof value !== "string" || value.length === 0) {reject("model", context, "setting_type_unsupported"); return;}
-  if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength || controlBearing(value)) {
+  if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength ||
+      isControlBearingClaudeCodeValue(value)) {
     reject("model", context, "setting_value_unsupported"); return;
   }
-  if (secretValue.test(value)) {reject("model", context, "secret_setting_rejected"); return;}
+  if (isSecretShapedClaudeCodeValue(value)) {
+    reject("model", context, "secret_setting_rejected"); return;
+  }
   if (value === CLAUDE_CODE_MODEL_DEFAULT) {
     context.definitions.push({ key: "model", selection: { kind: "provider-default" } });
   } else if (isModelAlias(value)) {
     context.definitions.push({ key: "model", selection: { kind: "alias", value } });
-  } else if (exactModelName.test(value)) {
+  } else if (exactModelName.test(value) &&
+      !isProviderRouteOrDeploymentShapedClaudeCodeValue(value)) {
     context.definitions.push({ key: "model", selection: { kind: "exact-name", value } });
   } else {
     context.deferredObservations.push({
-      form: providerDeployment.test(value) ? "provider-deployment" : "unclassified-selector",
+      form: isProviderRouteOrDeploymentShapedClaudeCodeValue(value)
+        ? "provider-deployment" : "unclassified-selector",
       key: "model", status: "deferred",
     });
   }
@@ -102,10 +108,12 @@ const classifyModel = (value: unknown, context: Context): void => {
 const classifyEffort = (value: unknown, context: Context): void => {
   if (typeof value !== "string" || value.length === 0) {reject("effortLevel", context, "setting_type_unsupported"); return;}
   if (value.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength ||
-      controlBearing(value)) {
+      isControlBearingClaudeCodeValue(value)) {
     reject("effortLevel", context, "setting_value_unsupported"); return;
   }
-  if (secretValue.test(value)) {reject("effortLevel", context, "secret_setting_rejected"); return;}
+  if (isSecretShapedClaudeCodeValue(value)) {
+    reject("effortLevel", context, "secret_setting_rejected"); return;
+  }
   if (!isEffort(value)) {reject("effortLevel", context, "setting_value_unsupported"); return;}
   context.definitions.push({ key: "effortLevel", value });
 };
