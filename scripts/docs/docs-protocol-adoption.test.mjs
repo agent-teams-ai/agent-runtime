@@ -68,6 +68,10 @@ test("canonical qualification v2 covers every Runtime authorable type exactly on
     readFile(join(repositoryRoot, "architecture/foundation/rollouts/docs-protocol-v2/docs-protocol.yaml"), "utf8"),
     { code: "ENOENT" }
   );
+  await assert.rejects(
+    readFile(join(repositoryRoot, "architecture/foundation/rollouts/docs-protocol-v2/document-authoring.yaml"), "utf8"),
+    { code: "ENOENT" }
+  );
 });
 
 async function copyFile(source, destination) {
