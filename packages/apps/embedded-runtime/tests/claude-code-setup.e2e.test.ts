@@ -125,9 +125,11 @@ test("crosses all four owner layers for a relocated synthetic macOS launcher wit
     ["model", { kind: "alias", value: "sonnet" }],
   ].map(item => JSON.stringify(item)).toSorted());
   assert.deepEqual(first.expectedLimitations, {
+    executableCompatibility: "unqualified",
     interactiveShellPath: "unobserved",
     managedPolicy: "unobserved",
     modelCompatibility: "unobserved",
+    precedence: "not-evaluated",
     sessionOverrides: "unobserved",
   });
   assert.deepEqual(first.nextActions, []);
@@ -201,9 +203,11 @@ test("returns unsupported and denied before downstream filesystem work", async t
   assert.deepEqual(await unsupportedHost.bindAccess(scope).claudeCodeSetup.inspect(), {
     diagnostics: [{ code: "unsupported_platform" }],
     expectedLimitations: {
+      executableCompatibility: "unqualified",
       interactiveShellPath: "unobserved",
       managedPolicy: "unobserved",
       modelCompatibility: "unobserved",
+      precedence: "not-evaluated",
       sessionOverrides: "unobserved",
     },
     status: "unsupported",
@@ -236,6 +240,7 @@ test("waits for both parallel owner branches and HMAC-maps candidate diagnostics
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "epoch",
@@ -276,7 +281,7 @@ test("waits for both parallel owner branches and HMAC-maps candidate diagnostics
     ...codexDependencies,
     authorizeClaudeCodeSetupInspection: {
       async execute() {
-        return { diagnostics: [], executableCandidates: [], observationEpoch: "epoch", sources: [], status: "authorized" as const };
+        return { canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "epoch", sources: [], status: "authorized" as const };
       },
     },
     discoverClaudeCodeInstallations: {
@@ -313,7 +318,7 @@ test("isolates caller cancellation and invalidates Claude handles on bounded ide
     ...codexDependencies,
     authorizeClaudeCodeSetupInspection: {
       async execute() {
-        return { diagnostics: [], executableCandidates: [], observationEpoch: "epoch", sources: [], status: "authorized" as const };
+        return { canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "epoch", sources: [], status: "authorized" as const };
       },
     },
     discoverClaudeCodeInstallations: {
@@ -457,6 +462,7 @@ test("detaches owner results and domain-separates deterministic product referenc
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "epoch",
@@ -593,6 +599,7 @@ test("honors cancellation before and during every composition stage", async () =
         authorizationStarted?.();
         await authorizationGate;
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "epoch",
@@ -647,6 +654,7 @@ test("honors cancellation before and during every composition stage", async () =
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "epoch",
@@ -745,6 +753,7 @@ test("runs Codex and Claude inspections concurrently without cross-cancellation"
       async execute() {
         await startOwner();
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "claude-epoch-1",

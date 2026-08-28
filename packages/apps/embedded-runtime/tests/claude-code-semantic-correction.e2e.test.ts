@@ -210,6 +210,7 @@ test("isolates cancellation between two concurrent Claude callers", async t => {
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "claude-epoch-1",
@@ -254,6 +255,7 @@ test("settles symmetric owner failures and reports them in stable sibling order"
       authorizeClaudeCodeSetupInspection: {
         async execute() {
           return {
+            canonicalRoots: [],
             diagnostics: [],
             executableCandidates: [],
             observationEpoch: "epoch",

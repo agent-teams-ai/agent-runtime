@@ -153,6 +153,27 @@ export const validateClaudeDiagnosticParity = (frozenDiagnostics, runtimeAccessS
   );
 };
 
+export const validateClaudeExpectedLimitationsParity = (frozenLimitations, runtimeAccessSource) => {
+  const declaration = /export interface ClaudeCodeSetupExpectedLimitations \{(?<members>[\s\S]*?)\n\}/u
+    .exec(runtimeAccessSource);
+  assert.ok(declaration?.groups?.members, "public Claude expected-limitations interface must be declared");
+  const entries = [...declaration.groups.members.matchAll(
+    /^\s*readonly\s+([A-Za-z][A-Za-z0-9]*):\s*"([a-z-]+)";\s*$/gmu,
+  )].map(([, key, value]) => [key, value]);
+  assert.equal(
+    declaration.groups.members
+      .replace(/^\s*readonly\s+[A-Za-z][A-Za-z0-9]*:\s*"[a-z-]+";\s*$/gmu, "")
+      .trim(),
+    "",
+    "public Claude expected limitations must contain only literal fields",
+  );
+  assert.deepEqual(
+    Object.fromEntries(entries),
+    frozenLimitations,
+    "Claude runtime/freeze expected-limitations parity",
+  );
+};
+
 const loadContractCoverageEvidence = async contractCoverage => {
   const testFiles = [...new Set(contractCoverage.cases.map(entry => entry.testFile))];
   const testSources = new Map(await Promise.all(testFiles.map(async testFile => [
@@ -460,6 +481,7 @@ export const validateAr2ContractArtifacts = async () => {
 
   await validateFreeze(freeze);
   validateClaudeDiagnosticParity(freeze.diagnostics, runtimeAccessSource);
+  validateClaudeExpectedLimitationsParity(freeze.expectedLimitations, runtimeAccessSource);
 
   assert.equal(fixtureManifest.contractId, freeze.contractId);
   assert.equal(fixtureManifest.dialect, freeze.dialect.id);

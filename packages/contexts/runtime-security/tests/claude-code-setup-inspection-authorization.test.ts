@@ -101,6 +101,10 @@ test("rejects hardlinks, directories, and FIFOs", { skip: process.platform === "
   );
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") {return;}
+  assert.deepEqual(result.canonicalRoots, [
+    { absolutePath: home, canonicalPath: await realpath(home), kind: "home" },
+    { absolutePath: workspace, canonicalPath: await realpath(workspace), kind: "workspace" },
+  ]);
   assert.equal(
     result.executableCandidates.some(candidate => candidate.source === "explicit"),
     false,

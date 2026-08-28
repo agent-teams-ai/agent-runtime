@@ -155,9 +155,11 @@ export interface ClaudeCodeSetupSourceObservationView {
 }
 
 export interface ClaudeCodeSetupExpectedLimitations {
+  readonly executableCompatibility: "unqualified";
   readonly interactiveShellPath: "unobserved";
   readonly managedPolicy: "unobserved";
   readonly modelCompatibility: "unobserved";
+  readonly precedence: "not-evaluated";
   readonly sessionOverrides: "unobserved";
 }
 

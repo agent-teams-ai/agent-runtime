@@ -10,6 +10,7 @@ import {
   validateAr2ContractArtifacts,
   validateContractCoverage,
   validateClaudeDiagnosticParity,
+  validateClaudeExpectedLimitationsParity,
   validateInventory,
   validateOfficialSemantics,
 } from "./validate-ar2-contract-artifacts.mjs";
@@ -81,6 +82,27 @@ test("Claude public diagnostics have exact set parity with the freeze", async ()
   assert.throws(
     () => validateClaudeDiagnosticParity([...freeze.diagnostics, "future_drift"], runtimeAccessSource),
     /diagnostic set parity/u,
+  );
+});
+
+test("Claude public expected limitations have exact field parity with the freeze", async () => {
+  const [freeze, runtimeAccessSource] = await Promise.all([
+    readJson(new URL("docs/architecture/claude-code-setup-freeze.json", repositoryRoot)),
+    readFile(new URL(
+      "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+      repositoryRoot,
+    ), "utf8"),
+  ]);
+  assert.doesNotThrow(() => validateClaudeExpectedLimitationsParity(
+    freeze.expectedLimitations,
+    runtimeAccessSource,
+  ));
+  assert.throws(
+    () => validateClaudeExpectedLimitationsParity(
+      { ...freeze.expectedLimitations, precedence: "evaluated" },
+      runtimeAccessSource,
+    ),
+    /expected-limitations parity/u,
   );
 });
 

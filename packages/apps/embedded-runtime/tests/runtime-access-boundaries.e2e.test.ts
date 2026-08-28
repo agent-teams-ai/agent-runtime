@@ -8,9 +8,11 @@ import {
 } from "../dist/composition.js";
 
 const expectedLimitations = {
+  executableCompatibility: "unqualified",
   interactiveShellPath: "unobserved",
   managedPolicy: "unobserved",
   modelCompatibility: "unobserved",
+  precedence: "not-evaluated",
   sessionOverrides: "unobserved",
 } as const;
 
@@ -104,7 +106,7 @@ const createDependencies = () => {
         async execute() {
           calls.claudeAuthorization += 1;
           return {
-            diagnostics: [], executableCandidates: [], observationEpoch: "claude-epoch",
+            canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "claude-epoch",
             sources: [], status: "authorized" as const,
           };
         },

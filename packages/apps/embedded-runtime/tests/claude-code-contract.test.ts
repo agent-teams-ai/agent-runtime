@@ -113,6 +113,7 @@ test("deduplicates owner diagnostics on their public source reference", async ()
       async execute() {
         return {
           ...emptyConfiguration(),
+          canonicalRoots: [],
           diagnostics: [
             { code: "source_untrusted" as const, safeRef: "user" },
             { code: "source_epoch_stale" as const, safeRef: "user" },
@@ -186,7 +187,7 @@ test("projects only declared public fields from hostile configuration owner resu
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
-          diagnostics: [], executableCandidates: [], observationEpoch: "epoch",
+          canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "epoch",
           sources: [], status: "authorized" as const,
         };
       },
@@ -289,7 +290,7 @@ test("applies the public diagnostic budget after deterministic normalization", a
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
-          diagnostics: [], executableCandidates: [], observationEpoch: "epoch",
+          canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "epoch",
           sources: [], status: "authorized" as const,
         };
       },

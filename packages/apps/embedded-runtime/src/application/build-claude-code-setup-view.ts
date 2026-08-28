@@ -20,6 +20,7 @@ import type { ClaudeCodeSetupInspectionPlanner } from "./ports/outbound/claude-c
 import type { TrustedClaudeCodeSetupScope } from "./trusted-claude-code-setup-scope.js";
 import type {
   ClaudeCodeSetupDiagnostic,
+  ClaudeCodeSetupExpectedLimitations,
   InspectClaudeCodeRuntimeSetupOutcome,
 } from "../contracts/runtime-access.js";
 
@@ -30,10 +31,12 @@ export interface BuildClaudeCodeSetupViewDependencies {
   readonly planClaudeCodeSetupInspection: ClaudeCodeSetupInspectionPlanner;
 }
 
-const expectedLimitations = Object.freeze({
+const expectedLimitations: ClaudeCodeSetupExpectedLimitations = Object.freeze({
+  executableCompatibility: "unqualified" as const,
   interactiveShellPath: "unobserved" as const,
   managedPolicy: "unobserved" as const,
   modelCompatibility: "unobserved" as const,
+  precedence: "not-evaluated" as const,
   sessionOverrides: "unobserved" as const,
 });
 
