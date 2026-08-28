@@ -38,6 +38,7 @@ export type {
 export type {
   ClaudeCodeConfigurationSemanticClassifier,
   ClassifyClaudeCodeConfigurationResult,
+  PortableClaudeCodeDefinition,
 } from "./features/claude-code-configuration-inspection/application/ports/outbound/claude-code-configuration-semantic-classifier.js";
 export type {
   ClaudeCodeConfigurationSourceReader,

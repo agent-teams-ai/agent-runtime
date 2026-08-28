@@ -48,6 +48,7 @@ export interface ClaudeCodeConfigurationSource {
 export interface ClaudeCodeSourceObservation {
   readonly displayPath: string;
   readonly kind: ClaudeCodeConfigurationSourceKind;
+  readonly semanticDigest?: string;
   readonly sourceRef: string;
   readonly status: "applied" | "malformed" | "missing" | "rejected" | "stale" | "unreadable";
 }

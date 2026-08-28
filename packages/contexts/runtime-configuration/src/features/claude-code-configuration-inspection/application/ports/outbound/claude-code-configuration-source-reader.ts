@@ -2,7 +2,7 @@ import type { ClaudeCodeConfigurationSource } from "../../../contracts/claude-co
 
 export type ReadClaudeCodeConfigurationSourceResult =
   | { readonly bytes: Uint8Array; readonly status: "read" }
-  | { readonly status: "missing" | "stale" | "unreadable" };
+  | { readonly status: "missing" | "stale" | "too-large" | "unreadable" };
 
 export interface ClaudeCodeConfigurationSourceReader {
   read(
