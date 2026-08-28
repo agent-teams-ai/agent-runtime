@@ -35,11 +35,18 @@ export interface AuthorizedClaudeCodeExecutableCandidate {
     readonly canonicalPath: string;
   };
   readonly displayPath: string;
+  readonly priorityRank: 1 | 2 | 3 | 4 | 5;
   readonly source: "explicit" | "known-location" | "path-entry";
 }
 
 export interface ClaudeCodeSetupAuthorizationDiagnostic {
-  readonly code: "candidate_denied" | "source_untrusted" | "source_epoch_stale";
+  readonly code:
+    | "candidate_denied"
+    | "candidate_invalid"
+    | "candidate_unreadable"
+    | "candidate_unstable"
+    | "source_untrusted"
+    | "source_epoch_stale";
   readonly safeRef?: string;
 }
 
