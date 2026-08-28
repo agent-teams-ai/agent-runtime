@@ -12,6 +12,7 @@ export interface ClaudeCodeInstallationCandidate {
     readonly canonicalPath: string;
   };
   readonly displayPath: string;
+  readonly required: boolean;
   readonly source: ClaudeCodeInstallationCandidateSource;
 }
 
