@@ -44,6 +44,12 @@ const selectionBases = new Set([
   "home-default", "claude-config-dir", "session-primary-working-directory", "repository-root",
   "main-worktree-root", "legacy-starting-directory", "caller-explicit", "static-preview",
 ]);
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const typedArrayByteLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLength")
+  ?.get as (this: Uint8Array) => number;
+const typedArrayName = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)
+  ?.get as (this: Uint8Array) => string | undefined;
+const uint8ArraySet = Uint8Array.prototype.set;
 const exactObjectKeys = (value: unknown, allowed: readonly string[], required = allowed): boolean =>
   typeof value === "object" && value !== null && !Array.isArray(value) &&
   Object.getOwnPropertySymbols(value).length === 0 &&
@@ -250,8 +256,18 @@ const normalizeReadResult = (value: unknown):
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (!Object.values(descriptors).every(item => item.enumerable && "value" in item && !item.get && !item.set)) {return undefined;}
   const status = descriptors["status"]?.value;
-  if (status === "read" && Object.keys(descriptors).length === 2 && descriptors["bytes"]?.value instanceof Uint8Array) {
-    return { bytes: Uint8Array.from(descriptors["bytes"].value), status };
+  if (status === "read" && Object.keys(descriptors).length === 2) {
+    const sourceBytes: unknown = descriptors["bytes"]?.value;
+    let byteLength: number;
+    try {
+      if (Reflect.apply(typedArrayName, sourceBytes, []) !== "Uint8Array") {return undefined;}
+      byteLength = Reflect.apply(typedArrayByteLength, sourceBytes, []);
+    } catch {return undefined;}
+    if (byteLength > CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource) {return { status: "too-large" };}
+    const bytes = new Uint8Array(byteLength);
+    try {Reflect.apply(uint8ArraySet, bytes, [sourceBytes]);}
+    catch {return undefined;}
+    return { bytes, status };
   }
   if (Object.keys(descriptors).length === 1 &&
       (status === "missing" || status === "stale" || status === "too-large" || status === "unreadable")) {

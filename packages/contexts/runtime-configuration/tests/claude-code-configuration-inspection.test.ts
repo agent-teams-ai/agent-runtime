@@ -75,6 +75,41 @@ test("strict parser rejects duplicate escape-equivalent keys and bounded JSON ha
   }
 });
 
+test("bounds and safely copies hostile source-reader byte output before parsing", async () => {
+  let parses = 0;
+  const oversized = await inspector({
+    async read() {
+      return { bytes: new Uint8Array(CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource + 1), status: "read" };
+    },
+  }, { parser: { parse() { parses += 1; return { data: {}, status: "parsed" }; } } })
+    .execute(input([source("oversized")]));
+  assert.equal(oversized.diagnostics[0]?.code, "config_too_large");
+  assert.equal(oversized.sources[0]?.status, "unreadable");
+  assert.equal(parses, 0);
+
+  const iterableBytes = encoder.encode('{"model":"sonnet"}');
+  Object.defineProperty(iterableBytes, Symbol.iterator, {
+    get() {throw new Error("byte iterator must not be read");},
+  });
+  const safelyCopied = await inspector({
+    async read() {return { bytes: iterableBytes, status: "read" };},
+  }).execute(input([source("hostile-iterator")]));
+  assert.equal(safelyCopied.sources[0]?.status, "applied");
+  assert.equal(safelyCopied.observedPortableIntent[0]?.key, "model");
+
+  let proxyTraps = 0;
+  const proxiedBytes = new Proxy(encoder.encode("{}"), {
+    get() {proxyTraps += 1; throw new Error("proxy property access must not run");},
+    getPrototypeOf() {proxyTraps += 1; throw new Error("proxy prototype access must not run");},
+  });
+  const rejectedProxy = await inspector({
+    async read() {return { bytes: proxiedBytes, status: "read" };},
+  }).execute(input([source("hostile-proxy")]));
+  assert.equal(rejectedProxy.diagnostics[0]?.code, "config_unreadable");
+  assert.equal(rejectedProxy.sources[0]?.status, "unreadable");
+  assert.equal(proxyTraps, 0);
+});
+
 test("classifies default, every alias, exact dated names and 1m names without claiming compatibility", async () => {
   assert.equal(CLAUDE_CODE_MODEL_DEFAULT, "default");
   assert.equal(CLAUDE_CODE_MODEL_ALIASES.includes("default" as never), false);
