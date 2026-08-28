@@ -4,10 +4,15 @@ import type {
   AuthorizeClaudeCodeSetupInspection,
   AuthorizedClaudeCodeExecutableCandidate,
   AuthorizedClaudeCodePortableSource,
-  ClaudeCodePortableSourceKind,
   ClaudeCodeSetupAuthorizationDiagnostic,
   TrustedClaudeCodeSetupInspectionScope,
 } from "../contracts/claude-code-setup-inspection-authorization.js";
+import {
+  MAX_TOTAL_CANDIDATES,
+  prepareClaudeCodeCandidateRequests,
+} from "./claude-code-candidate-scope.js";
+import { prepareClaudeCodeSourceRequests } from "./claude-code-source-scope.js";
+import { deepFreezeAuthorization } from "./deep-freeze-authorization.js";
 import type {
   CanonicalPathObservation,
   PathCanonicalizer,
@@ -21,15 +26,6 @@ interface CanonicalRoot {
   readonly kind: RootKind;
 }
 
-interface CandidateRequest {
-  readonly absolutePath: string;
-  readonly priorityRank: 1 | 2 | 3 | 4 | 5;
-  readonly source: AuthorizedClaudeCodeExecutableCandidate["source"];
-}
-
-const MAX_EXPLICIT_PATHS = 16;
-const MAX_PATH_ENTRIES = 64;
-const MAX_TOTAL_CANDIDATES = 256;
 const MAX_DIAGNOSTICS = 1_024;
 const MAX_PATH_LENGTH = 16_384;
 const MAX_EPOCH_LENGTH = 256;
@@ -281,55 +277,6 @@ const invalidExistingPath = (observation: CanonicalPathObservation): boolean =>
     (observation.linkCount ?? 0) !== 1
   );
 
-const makeCandidateRequests = (
-  scope: TrustedClaudeCodeSetupInspectionScope,
-): {
-  readonly diagnostics: readonly ClaudeCodeSetupAuthorizationDiagnostic[];
-  readonly requests: readonly CandidateRequest[];
-} => {
-  const diagnostics: ClaudeCodeSetupAuthorizationDiagnostic[] = [];
-  if (
-    scope.candidatePaths.filter(candidate => candidate.source === "explicit").length >
-      MAX_EXPLICIT_PATHS ||
-    scope.candidatePaths.filter(candidate => candidate.source === "path-entry").length >
-      MAX_PATH_ENTRIES ||
-    scope.candidatePaths.length > MAX_TOTAL_CANDIDATES
-  ) {
-    return {
-      diagnostics: [{ code: "candidate_invalid", safeRef: "candidate-budget" }],
-      requests: [],
-    };
-  }
-  const requests: CandidateRequest[] = [];
-  for (const candidate of scope.candidatePaths) {
-    const rankMatchesSource =
-      (candidate.source === "explicit" && candidate.priorityRank === 1) ||
-      (candidate.source === "path-entry" && candidate.priorityRank === 2) ||
-      (candidate.source === "known-location" &&
-        candidate.priorityRank >= 3 && candidate.priorityRank <= 5);
-    if (!pathIsBoundedAbsolute(candidate.absolutePath) || !rankMatchesSource) {
-      diagnostics.push({ code: "candidate_invalid", safeRef: candidate.source });
-      continue;
-    }
-    requests.push({
-      absolutePath: resolve(candidate.absolutePath),
-      priorityRank: candidate.priorityRank,
-      source: candidate.source,
-    });
-  }
-  const byLexicalPath = new Map<string, CandidateRequest>();
-  for (const request of requests.toSorted(
-    (left, right) =>
-      left.priorityRank - right.priorityRank ||
-      compareText(left.absolutePath, right.absolutePath),
-  )) {
-    if (!byLexicalPath.has(request.absolutePath)) {
-      byLexicalPath.set(request.absolutePath, request);
-    }
-  }
-  return { diagnostics, requests: [...byLexicalPath.values()] };
-};
-
 const authorizeCandidates = async (
   scope: TrustedClaudeCodeSetupInspectionScope,
   roots: readonly CanonicalRoot[],
@@ -339,7 +286,7 @@ const authorizeCandidates = async (
   readonly candidates: readonly AuthorizedClaudeCodeExecutableCandidate[];
   readonly diagnostics: readonly ClaudeCodeSetupAuthorizationDiagnostic[];
 }> => {
-  const prepared = makeCandidateRequests(scope);
+  const prepared = prepareClaudeCodeCandidateRequests(scope);
   const candidates: AuthorizedClaudeCodeExecutableCandidate[] = [];
   const diagnostics = [...prepared.diagnostics];
   for (const request of prepared.requests) {
@@ -409,18 +356,6 @@ const authorizeCandidates = async (
   return { candidates: [...unique.values()], diagnostics };
 };
 
-const sourceRequests = (
-  scope: TrustedClaudeCodeSetupInspectionScope,
-): readonly {
-  readonly absolutePath: string;
-  readonly kind: ClaudeCodePortableSourceKind;
-  readonly rootKind: "home" | "workspace";
-}[] => scope.sourcePaths.map(source => ({
-  absolutePath: source.absolutePath,
-  kind: source.kind,
-  rootKind: source.kind === "user" ? "home" : "workspace",
-}));
-
 const authorizeSources = async (
   scope: TrustedClaudeCodeSetupInspectionScope,
   roots: readonly CanonicalRoot[],
@@ -432,17 +367,8 @@ const authorizeSources = async (
 }> => {
   const diagnostics: ClaudeCodeSetupAuthorizationDiagnostic[] = [];
   const sources: AuthorizedClaudeCodePortableSource[] = [];
-  const requests = sourceRequests(scope);
-  if (
-    requests.length !== SOURCE_SLOTS ||
-    new Set(requests.map(request => request.kind)).size !== SOURCE_SLOTS ||
-    requests.some(request =>
-      request.kind !== "user" &&
-      request.kind !== "shared-project" &&
-      request.kind !== "project-local"
-    ) ||
-    requests.some(request => !pathIsBoundedAbsolute(request.absolutePath))
-  ) {
+  const requests = prepareClaudeCodeSourceRequests(scope);
+  if (requests === undefined) {
     return {
       diagnostics: [{ code: "source_epoch_stale", safeRef: "scope" }],
       sources: [],
@@ -554,18 +480,18 @@ export const createAuthorizeClaudeCodeSetupInspection = (
       trustedScope.observationEpoch.length === 0 ||
       trustedScope.observationEpoch.length > MAX_EPOCH_LENGTH
     ) {
-      return {
+      return deepFreezeAuthorization({
         diagnostics: [{ code: "source_epoch_stale", safeRef: "scope" }],
         status: "denied",
-      };
+      });
     }
     const roots = await canonicalizeRoots(trustedScope, canonicalizer, signal);
     signal?.throwIfAborted();
     if (roots === undefined) {
-      return {
+      return deepFreezeAuthorization({
         diagnostics: [{ code: "source_epoch_stale", safeRef: "scope" }],
         status: "denied",
-      };
+      });
     }
     const candidates = await authorizeCandidates(
       trustedScope,
@@ -581,7 +507,7 @@ export const createAuthorizeClaudeCodeSetupInspection = (
       signal,
     );
     signal?.throwIfAborted();
-    return {
+    return deepFreezeAuthorization({
       diagnostics: sortDiagnostics([
         ...candidates.diagnostics,
         ...sources.diagnostics,
@@ -590,6 +516,6 @@ export const createAuthorizeClaudeCodeSetupInspection = (
       observationEpoch: trustedScope.observationEpoch,
       sources: sources.sources,
       status: "authorized",
-    };
+    });
   },
 });

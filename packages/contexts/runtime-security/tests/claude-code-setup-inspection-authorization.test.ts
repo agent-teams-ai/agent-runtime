@@ -88,7 +88,7 @@ test("rejects hardlinks, directories, and FIFOs", { skip: process.platform === "
   const hardlinked = join(home, "hardlinked");
   const fifo = join(home, "fifo");
   const directory = join(home, "directory");
-  await Promise.all([mkdir(home), mkdir(workspace), mkdir(directory)]);
+  await Promise.all([mkdir(home), mkdir(workspace), mkdir(directory, { recursive: true })]);
   await writeFile(hardlinked, "synthetic");
   await link(hardlinked, join(home, "peer"));
   await execFile("mkfifo", [fifo]);
@@ -531,7 +531,12 @@ test("fails closed for duplicate roots and duplicate canonical sources", async (
 test("enforces candidate and path budgets with redacted diagnostics", async () => {
   const home = "/synthetic/home";
   const workspace = "/synthetic/workspace";
-  const secretPath = `/outside/${"secret-sentinel\n".repeat(2)}`;
+  const sensitivePaths = [
+    `/outside/${"secret-sentinel\n".repeat(2)}`,
+    "/outside/route-bedrock-project-123",
+    "/outside/credential-anthropic-api-key",
+    "/outside/managed-policy-value",
+  ];
   const canonicalizer = {
     async canonicalize(path: string) {
       return { absolutePath: path, canonicalLocationPath: path, exists: false };
@@ -596,12 +601,15 @@ test("enforces candidate and path budgets with redacted diagnostics", async () =
     pathCanonicalizer: canonicalizer,
   }).authorizeClaudeCodeSetupInspection.execute(
     scope(home, workspace, {
-      explicitExecutablePaths: [secretPath, `/${"x".repeat(16_384)}`],
+      explicitExecutablePaths: [...sensitivePaths, `/${"x".repeat(16_384)}`],
     }),
   );
   assert.equal(redacted.status, "authorized");
   const serialized = JSON.stringify(redacted);
   assert.equal(serialized.includes("secret-sentinel"), false);
+  assert.equal(serialized.includes("bedrock-project-123"), false);
+  assert.equal(serialized.includes("anthropic-api-key"), false);
+  assert.equal(serialized.includes("managed-policy-value"), false);
   assert.equal(serialized.includes("/outside"), false);
   assert.equal(serialized.includes("\n"), false);
 });
@@ -639,6 +647,7 @@ test("propagates cancellation before work and after awaited boundaries", async (
     boundaryAuthorization.execute(scope(home, workspace), { signal: during.signal }),
     /boundary-cancelled/u,
   );
+
 });
 
 test("rejects an ancestor symlink escape for a fixed source", async t => {
