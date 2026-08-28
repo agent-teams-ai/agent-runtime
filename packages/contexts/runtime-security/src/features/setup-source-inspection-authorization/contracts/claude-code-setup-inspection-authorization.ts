@@ -41,6 +41,12 @@ export type AuthorizedClaudeCodePortableSource =
       readonly access: "rejected" | "stale" | "untrusted";
     });
 
+export interface AuthorizedClaudeCodeCanonicalRoot {
+  readonly absolutePath: string;
+  readonly canonicalPath: string;
+  readonly kind: "home" | "workspace";
+}
+
 export interface AuthorizedClaudeCodeExecutableCandidate {
   readonly absolutePath: string;
   readonly authorizedFileIdentity?: string;
@@ -72,6 +78,7 @@ export type AuthorizeClaudeCodeSetupInspectionResult =
       readonly status: "denied";
     }
   | {
+      readonly canonicalRoots: readonly AuthorizedClaudeCodeCanonicalRoot[];
       readonly diagnostics: readonly ClaudeCodeSetupAuthorizationDiagnostic[];
       readonly executableCandidates: readonly AuthorizedClaudeCodeExecutableCandidate[];
       readonly observationEpoch: string;

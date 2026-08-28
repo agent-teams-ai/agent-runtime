@@ -34,12 +34,19 @@ Evidence baseline:
   `f6afac73cced62d943a0e891ad08d7b8f88f802f`;
 - official provider documentation linked under each provider below.
 
-The complete normalized 13-field inventory is
-[`legacy-feature-inventory.json`](legacy-feature-inventory.json). Its
-`approved_now | recommended_next | recommended_later | rejected | needs_owner`
-values are the only disposition authority used in this document. Only the
-Claude Code passive preview is `approved_now`; every other priority remains a
-recommendation or rejection.
+The bounded provider-setup catalog is
+[`legacy-feature-inventory.json`](legacy-feature-inventory.json). It is pinned
+to the exact legacy and Agent Runtime commits above, but it does not claim that
+an authored row count proves completeness. Stable IDs are retained when useful
+for traceability; additions are allowed, and merged or invariant-only IDs are
+marked as superseded instead of being counted as independent user jobs.
+
+The inventory is an implementation guide, not a product database. It keeps six
+questions independent: what legacy did, what retained current-provider evidence
+establishes, what architecture accepts, what this repository implements, what
+has been qualified, and where an unimplemented capability sits in the backlog.
+An accepted or implemented capability is not thereby qualified, and a severe
+cutover loss does not automatically become `now` work.
 
 The legacy repository may contain newer uncommitted work in developer
 workspaces. Such work is not part of this baseline and cannot establish product
@@ -47,7 +54,7 @@ or architecture truth.
 
 ## What a Legacy Feature Inventory records
 
-Each inventory item records the following fields:
+Each inventory item records the following field groups:
 
 | Field | Question answered |
 | --- | --- |
@@ -55,15 +62,24 @@ Each inventory item records the following fields:
 | `provider` | Which provider owns the observed legacy behavior? |
 | `userJob` | What can the user accomplish? |
 | `userValue` | Why is that job useful? |
-| `legacyBehavior` | What did the old product actually show or do? |
-| `exactLegacyEvidence` | Which exact commit, file, symbol, line, or test proves it? |
-| `failureAndEdgeCases` | Which missing, stale, corrupt, incompatible, or partial states already matter? |
-| `reuseDecision` | Is the evidence reusable as a fixture, concept, pattern, provider-specific behavior, or rejection? |
-| `newOwner` | Which Agent Runtime bounded context owns the new meaning? |
-| `proposedDisposition` | Which exact approved/recommended/rejected authority value applies? |
-| `authorityStatus` | Which accepted decision or current recommendation authorizes the statement? |
-| `acceptanceEvidence` | What deterministic evidence proves the current or future result? |
+| `legacyFact`, `currentProviderFact` | Which exact commit/path/line-or-symbol evidence supports each distinct factual claim? |
+| `architectureAuthority` | Is the target shape accepted, proposed, or absent, and which governed anchor says so? |
+| `implementationStatus`, `qualificationStatus` | Is code present, and has an exact target been qualified? |
+| `lifecycleStatus`, relationships | Is this an active job, a superseded traceability ID, a dependency, or a related split? |
+| `failureAndEdgeCases`, `reuseDecision` | Which cases matter and what, if anything, transfers? |
+| `owners` | Which bounded context, application-composition layer, or external consumer owns each role? |
+| `backlogDisposition`, `priority` | Is unimplemented work `now`, `next`, `later`, or rejected; what is the user-loss severity, prerequisite, product owner, and external consumer? |
+| `acceptanceEvidence` | Which exact current test proves implementation, or which deterministic future evidence is required? |
 | `futureExtensionSeam` | Which future capability must remain possible without widening the current contract? |
+
+`now | next | later` orders only unimplemented product work. Implemented rows
+use `not_applicable` on the backlog axis. User-loss severity records cutover
+impact separately, dependencies record prerequisites, and no usage metric is
+inferred. The current product order is fixed: passive setup/profile preview
+first, installer/update second, and authentication, account access, workspace
+trust mutation, and live route/account capability later unless a future
+accepted decision changes it. Desktop remains the external consumer and owns
+its interaction and cutover acceptance, never an Agent Runtime bounded context.
 
 The inventory deliberately separates capabilities that the old Desktop often
 combined in one screen or service:
@@ -118,12 +134,13 @@ The following data must remain separate:
 
 | Capability | Legacy evidence | New disposition |
 | --- | --- | --- |
-| detect installed runtime and version | `src/features/codex-runtime-installer`, PATH and app-managed manifest probes | `recommended_later` for passive discovery; version-bound compatibility is `recommended_next` |
-| inspect user, selected native profile, and workspace configuration | legacy settings/profile flows plus current AR-1 classifier | `recommended_later`; AR-1 already projects only `model`, `model_reasoning_effort`, and `personality` |
-| install or update with progress | `CodexRuntimeInstallerService` | `recommended_next`; separate from passive setup inspection |
-| choose ChatGPT or API-key access and inspect login readiness | `src/features/codex-account` | `recommended_later`; Provider Access owns it |
-| browser/device login, logout, account and rate-limit display | `CodexLoginSessionManager` and account contracts | `recommended_later`; preserve the user jobs and redesign credential custody and transport |
-| model catalog, fast-mode eligibility, launch readiness | `src/features/codex-model-catalog` and `src/features/codex-runtime-profile` | `recommended_later`; live provider facts must not become portable profile truth |
+| passively observe installed runtime candidates and inspect portable configuration/profile intent | resolver and settings/profile flows | implemented and unqualified; backlog is not applicable |
+| qualify exact version compatibility | resolver and app-server degradation behavior | `next`, prerequisite to version-authoritative activation |
+| install or update with progress | `CodexRuntimeInstallerService` | `next`; separate from passive setup inspection |
+| choose ChatGPT or API-key access and inspect login readiness | `src/features/codex-account` | `later`; Provider Access owns it |
+| browser/device login, logout, account and rate-limit display | `CodexLoginSessionManager` and account contracts | `later`; preserve the user jobs and redesign credential custody and transport |
+| inspect and decide workspace trust | workspace-trust coordinator and Codex trust settings | `later`; Runtime Security owns the decision and Agent Execution enforces it |
+| model catalog, fast-mode eligibility, launch readiness | model-catalog and runtime-profile flows | `later`; live provider facts must not become portable profile truth |
 
 Reusable legacy evidence:
 
@@ -150,13 +167,15 @@ and [Codex authentication documentation](https://developers.openai.com/codex/aut
 
 | Capability | Legacy evidence | New disposition |
 | --- | --- | --- |
-| detect runtime through interactive-shell and process PATHs | `ClaudeBinaryResolver` and `CliInstallerService` | `approved_now` only as passive trusted-input discovery with `found_unverified`; interactive-shell discovery is excluded |
-| inspect user, project, local, and managed setting sources | legacy Claude settings readers and launch environment builders | `approved_now` only for the three portable file sources; managed policy stays `unobserved` |
-| inspect model and reasoning/effort preferences | `src/features/anthropic-runtime-profile` and shared effort utilities | `approved_now` only for the frozen model aliases and `low | medium | high | xhigh` allowlists |
-| classify direct Anthropic, Bedrock, Vertex AI, Foundry, or compatible route | connection-mode constants and runtime environment builders | `approved_now` only for value-free deferred/rejected diagnostics; route behavior remains Provider Access work |
-| inspect login status | `claude auth status` flow in `CliInstallerService` | `recommended_next`; it may execute provider code and is outside the passive slice |
-| install/update native CLI with checksum and progress | GCS manifest/download plus `claude install` flow | `recommended_next` as a separate recoverable installation capability |
-| configure or switch access | legacy provider settings UI | `recommended_later`; preserve the user job, not the Electron implementation |
+| passively observe installation candidates | `ClaudeBinaryResolver` and doctor fallback evidence | implemented and unqualified; the current slice never uses the active doctor fallback |
+| inspect portable settings sources | user-settings and explicit-settings legacy readers plus retained current documentation | implemented and unqualified for user, shared-project, and project-local slots only; managed policy and session overrides remain `unobserved` |
+| inspect portable model and effort intent | anthropic runtime-profile evidence plus retained settings schema | implemented and unqualified for the frozen preview classifier; exact model IDs are not declared impossible, and live availability is separate |
+| classify route-owned values without exposing them | connection-mode and runtime-environment evidence | implemented and unqualified as value-free deferred diagnostics only; retained evidence does not establish every provider topology |
+| inspect installed/latest version, then install/update separately | `CliInstallerService` status, manifest, checksum, and progress flows | `next`; mutation remains outside passive inspection |
+| inspect login status | `claude auth status` flow in `CliInstallerService` | `later`; it executes provider code and belongs to Provider Access plus explicit Agent Execution custody |
+| inspect workspace trust and obtain separate consent | Claude workspace-trust strategy | `later`; passive source inspection grants no consent |
+| inspect live model/effort/Fast eligibility | anthropic runtime-profile reconciliation | `later`; requires exact binary and route/account facts |
+| configure, switch, disconnect, or log out | legacy provider settings and disconnect UI | `later`; preserve the jobs, not the Electron implementation |
 
 Reusable legacy evidence:
 
@@ -190,12 +209,12 @@ documentation.
 
 | Capability | Legacy evidence | New disposition |
 | --- | --- | --- |
-| detect PATH/app-managed runtime and supported version | `OpenCodeRuntimeInstallerService` and version policy | `recommended_later`; no OpenCode implementation is present |
-| inspect global/project configuration and managed overlay intent | OpenCode config and managed-overlay modules | `recommended_later`; user-owned config is never mutated by inspection |
-| install/update native platform package | `OpenCodeRuntimeInstallerService` | `recommended_later`; separate from setup inspection |
-| list providers, connections, setup methods, and models | `src/features/runtime-provider-management` | `recommended_later`; primarily Provider Access and provider catalog work |
-| OAuth/API-key connection and forgetting credentials | runtime-provider-management use cases | `recommended_later`; credential custody and ambiguous completion require dedicated contracts |
-| local model endpoint configuration and proof | local-provider adapters and UI | `recommended_later`; useful product behavior outside passive setup inspection |
+| detect PATH/app-managed runtime and supported version | `OpenCodeRuntimeInstallerService` and version policy | `later`; no OpenCode implementation is present |
+| inspect global/project configuration and managed overlay intent | OpenCode config and managed-overlay modules | `later`; user-owned config is never mutated by inspection |
+| install/update native platform package | `OpenCodeRuntimeInstallerService` | `later`; separate from setup inspection |
+| list providers, connections, setup methods, and models | `src/features/runtime-provider-management` | `later`; primarily Provider Access and provider catalog work |
+| OAuth/API-key connection and forgetting credentials | runtime-provider-management use cases | `later`; credential custody and ambiguous completion require dedicated contracts |
+| local model endpoint configuration and proof | local-provider adapters and UI | `later`; useful product behavior outside passive setup inspection |
 | team launch, prompt delivery, recovery, and inbox behavior | `src/main/services/team/opencode` and provisioning code | `rejected`; Orchestrator behavior is not runtime setup |
 
 Reusable legacy evidence:
@@ -311,17 +330,18 @@ Only after both slices pass provider-specific fixtures:
 This is the DRY point. Earlier extraction would encode Codex assumptions;
 later extraction would knowingly retain proven duplicate semantics.
 
-### Recommended next work
+### Prioritized remaining work
 
-The next product and provider capabilities remain recommendations, not approval
-to widen `claudeCodeSetup.inspect`:
+These priorities do not widen either passive inspection query:
 
-1. Installer/update as a separate mutation capability.
-2. Saved Profiles as an explicit reviewed publication workflow.
-3. Provider Access for authentication, credentials, routes, Bedrock, Vertex,
-   Foundry, compatible endpoints, and access status.
-4. OpenCode passive setup inspection as AR-3.
-5. A production macOS collector and separate Claude qualification campaign.
+1. `next`: exact compatibility evidence and installer/update as separate
+   capabilities, including installed/latest status, transaction recovery, and
+   immutable `BinaryRevision` evidence.
+2. `later`: saved-profile publication, workspace trust/consent mutation,
+   authentication, credentials, routes, access status, disconnect/logout, and
+   live model/effort/Fast eligibility.
+3. Future explicit decision: OpenCode passive setup inspection as AR-3 and a
+   production collector/qualification campaign for each supported platform.
 
 Desktop owns every UI workflow, label, progress display, confirmation, and
 presentation integration for those capabilities in its separate repository.
@@ -367,12 +387,13 @@ agnostic; SQLite and PostgreSQL are adapters under ADR-0001.
 
 | User capability | Current authority | Future recommendation |
 | --- | --- | --- |
-| see which runtimes appear present | Claude passive macOS preview is `approved_now`; results are `found_unverified` | OpenCode, Windows, Linux, and verified compatibility |
-| understand portable Claude file intent | `approved_now` for the frozen provider-specific allowlist | plugins, MCP, skills, commands, hooks, and instructions |
-| understand why Claude setup observation degraded | `approved_now` for typed local diagnostics and next actions | provider health and repair workflows |
+| see which runtimes appear present | Codex and Claude passive queries are implemented, unqualified, and report `found_unverified` | OpenCode, production collectors, and verified compatibility |
+| understand portable Claude file intent | implemented and unqualified for the frozen three-source provider-specific classifier | managed/session topology, plugins, MCP, skills, commands, hooks, and instructions |
+| understand why setup observation degraded | implemented typed local diagnostics and next actions; redaction is a cross-cutting invariant | provider health and repair workflows |
 | create reusable profiles | not implemented by inspection | reviewed profile publication, import/export, inheritance, and organization policy |
-| install or update a runtime | `recommended_next` and separate from inspection | channels, rollback, and fleet policy |
-| authorize a provider account | not implemented by inspection | Provider Access login/import/refresh/revoke flows |
+| install or update a runtime | `next` and separate from inspection | channels, rollback, and fleet policy |
+| authorize, inspect, or disconnect a provider account | `later` and not implemented by inspection | Provider Access login/import/refresh/revoke/disconnect flows |
+| decide workspace trust or inspect live eligibility | `later`; passive preview supplies no consent or live proof | revisioned trust and binary/route/account-bound capability evidence |
 | launch agents | outside Runtime Setup | Agent Execution operations after their own decisions and gates |
 
 ## Frozen AR-2 contract decisions

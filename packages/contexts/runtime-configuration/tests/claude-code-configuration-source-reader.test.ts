@@ -29,10 +29,13 @@ test("honors smaller and larger per-call byte limits on one Claude reader", asyn
     absolutePath: path,
     authorizedFileIdentity: await fileIdentity(path),
     canonicalPath,
-    custodyRoot: { absolutePath: root, canonicalPath: await realpath(root) },
+    custodyRoot: { absolutePath: root, canonicalPath: await realpath(root), rootId: "home-root" },
     displayPath: "$HOME/.claude/settings.json",
-    kind: "user" as const,
     observationEpoch: "epoch-1",
+    role: "user" as const,
+    selectionBasis: "home-default" as const,
+    sourceId: "user-settings",
+    trust: "user" as const,
   };
   const reader = createClaudeCodeConfigurationSourceReaderAdapter();
 

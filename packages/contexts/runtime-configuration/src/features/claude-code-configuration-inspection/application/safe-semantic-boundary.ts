@@ -2,9 +2,10 @@ import {
   CLAUDE_CODE_CONFIGURATION_BUDGETS,
   CLAUDE_CODE_EFFORT_VALUES,
   CLAUDE_CODE_MODEL_ALIASES,
+  CLAUDE_CODE_MODEL_DEFAULT,
   type ClaudeCodeConfigurationDiagnosticCode,
   type ClaudeCodeEffort,
-  type ClaudeCodeModelAlias,
+  type ClaudeCodeModelAlias, type ClaudeCodeModelSelection,
 } from "../contracts/claude-code-configuration-inspection.js";
 import type {
   ClassifyClaudeCodeConfigurationResult,
@@ -28,10 +29,26 @@ const diagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
   "credential_material_rejected", "provider_route_deferred", "secret_setting_rejected",
   "setting_type_unsupported", "setting_value_unsupported", "source_epoch_stale",
   "source_untrusted",
+  "source_inventory_overflow", "source_plan_invalid", "source_plan_unsupported",
+  "source_total_too_large",
 ]);
 const parserDiagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
   "config_duplicate_key", "config_invalid_utf8", "config_parse_failed", "config_too_large",
 ]);
+const secretValueShape = /(?:api[_-]?key|credential|oauth|password|secret|token|\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|glpat-|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
+const providerRouteOrDeploymentShape = /(?:^arn:(?:aws|aws-us-gov|aws-cn):bedrock:|^https?:\/\/|^(?:[a-z]{2}(?:-[a-z]+)?|global)\.anthropic\.|^anthropic\.claude-|(?:^|[.:/])anthropic(?:[.:/]|$)|bedrock|vertex|foundry|gateway)/iu;
+
+export const isSecretShapedClaudeCodeValue = (value: string): boolean =>
+  secretValueShape.test(value);
+
+export const isProviderRouteOrDeploymentShapedClaudeCodeValue = (value: string): boolean =>
+  providerRouteOrDeploymentShape.test(value);
+
+export const isControlBearingClaudeCodeValue = (value: string): boolean =>
+  [...value].some(character => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint < 32 || codePoint === 127);
+  });
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {return false;}
@@ -194,23 +211,62 @@ const exactPortableKeys = (value: unknown): readonly ("model" | "effortLevel")[]
   return Object.freeze(keys.toSorted());
 };
 
+const modelSelection = (value: unknown): ClaudeCodeModelSelection => {
+  const record = exactRecord(value, new Set(["kind", "value"]));
+  if (record === undefined || typeof record.kind !== "string") {throw new TypeError("selection");}
+  if (record.kind === "provider-default" && Object.keys(record).length === 1) {
+    return Object.freeze({ kind: "provider-default" });
+  }
+  if (record.kind === "alias" && Object.keys(record).length === 2 &&
+      typeof record.value === "string" && modelAliases.has(record.value) &&
+      record.value !== CLAUDE_CODE_MODEL_DEFAULT) {
+    return Object.freeze({ kind: "alias", value: record.value as ClaudeCodeModelAlias });
+  }
+  if (record.kind === "exact-name" && Object.keys(record).length === 2 &&
+      typeof record.value === "string" &&
+      record.value.length <= CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength &&
+      /^claude-[a-z0-9]+(?:-[a-z0-9]+)*(?:\[1m\])?$/u.test(record.value) &&
+      !isSecretShapedClaudeCodeValue(record.value) &&
+      !isControlBearingClaudeCodeValue(record.value) &&
+      !isProviderRouteOrDeploymentShapedClaudeCodeValue(record.value)) {
+    return Object.freeze({ kind: "exact-name", value: record.value });
+  }
+  throw new TypeError("selection");
+};
+
 const definitions = (value: unknown): readonly PortableClaudeCodeDefinition[] => {
   if (!Array.isArray(value)) {throw new TypeError("definitions");}
   const items = denseArray(value);
   if (items === undefined || items.length > 2) {throw new TypeError("definitions");}
   const output = items.map(item => {
-    const record = exactRecord(item, new Set(["key", "value"]));
-    if (record === undefined || typeof record.key !== "string" || typeof record.value !== "string") {throw new TypeError("definition");}
-    if (record.key === "model" && modelAliases.has(record.value)) {
-      return Object.freeze({ key: "model" as const, value: record.value as ClaudeCodeModelAlias });
+    const record = exactRecord(item, new Set(["key", "selection", "value"]));
+    if (record === undefined || typeof record.key !== "string") {throw new TypeError("definition");}
+    if (record.key === "model" && Object.keys(record).length === 2 && "selection" in record) {
+      return Object.freeze({ key: "model" as const, selection: modelSelection(record.selection) });
     }
-    if (record.key === "effortLevel" && effortValues.has(record.value)) {
+    if (record.key === "effortLevel" && Object.keys(record).length === 2 &&
+        typeof record.value === "string" && effortValues.has(record.value)) {
       return Object.freeze({ key: "effortLevel" as const, value: record.value as ClaudeCodeEffort });
     }
     throw new TypeError("definition value");
   });
   if (new Set(output.map(item => item.key)).size !== output.length) {throw new TypeError("duplicate definition");}
   return Object.freeze(output.toSorted((left, right) => left.key < right.key ? -1 : 1));
+};
+
+const deferredObservations = (value: unknown): ClassifyClaudeCodeConfigurationResult["deferredObservations"] => {
+  if (!Array.isArray(value)) {throw new TypeError("deferred observations");}
+  const items = denseArray(value);
+  if (items === undefined || items.length > 1) {throw new TypeError("deferred observations");}
+  return Object.freeze(items.map(item => {
+    const record = exactRecord(item, new Set(["form", "key", "status"]));
+    if (record === undefined || Object.keys(record).length !== 3 || record.key !== "model" ||
+        record.status !== "deferred" ||
+        (record.form !== "provider-deployment" && record.form !== "unclassified-selector")) {
+      throw new TypeError("deferred observation");
+    }
+    return Object.freeze({ form: record.form, key: "model" as const, status: "deferred" as const });
+  }));
 };
 
 const diagnostics = (value: unknown): ClassifyClaudeCodeConfigurationResult["diagnostics"] => {
@@ -232,20 +288,25 @@ export const validateClaudeCodeSemanticClassification = (
 ): ClassifyClaudeCodeConfigurationResult => {
   try {
     const record = exactRecord(value, new Set([
-      "definitions", "diagnostics", "definedPortableKeys", "taintedPortableKeys",
+      "definitions", "deferredObservations", "diagnostics", "definedPortableKeys", "taintedPortableKeys",
     ]));
-    if (record === undefined || Object.keys(record).length !== 4) {throw new TypeError("classification");}
+    if (record === undefined || Object.keys(record).length !== 5) {throw new TypeError("classification");}
     const safeDefinitions = definitions(record.definitions);
+    const safeDeferred = deferredObservations(record.deferredObservations);
     const safeDiagnostics = diagnostics(record.diagnostics);
     const defined = exactPortableKeys(record.definedPortableKeys);
     const tainted = exactPortableKeys(record.taintedPortableKeys);
     const definitionKeys = safeDefinitions.map(item => item.key);
-    if (tainted.some(key => definitionKeys.includes(key)) ||
-        [...new Set([...definitionKeys, ...tainted])].toSorted().join("\0") !== defined.join("\0")) {
+    const deferredKeys = safeDeferred.map(item => item.key);
+    if (new Set(definitionKeys).size !== definitionKeys.length ||
+        new Set(deferredKeys).size !== deferredKeys.length ||
+        definitionKeys.some(key => key === "model" && deferredKeys.includes(key)) ||
+        tainted.some(key => definitionKeys.includes(key) || (key === "model" && deferredKeys.includes(key))) ||
+        [...new Set([...definitionKeys, ...deferredKeys, ...tainted])].toSorted().join("\0") !== defined.join("\0")) {
       throw new TypeError("classification consistency");
     }
     return Object.freeze({
-      definitions: safeDefinitions, diagnostics: safeDiagnostics,
+      definitions: safeDefinitions, deferredObservations: safeDeferred, diagnostics: safeDiagnostics,
       definedPortableKeys: defined, taintedPortableKeys: tainted,
     });
   } catch {

@@ -1,11 +1,11 @@
 {
-  "schemaVersion": 3,
-  "snapshotId": "claude-code-settings-semantics@2026-08-28.r3",
+  "schemaVersion": 4,
+  "snapshotId": "claude-code-settings-semantics@2026-08-28.r4",
   "retrieval": {
     "date": "2026-08-28",
     "method": "HTTPS GET with redirects followed; exact response bodies retained as deterministic gzip artifacts; compact UTF-8 evidence records deterministically derived offline",
     "authority": "retained-exact-response-bytes",
-    "statement": "Revision 3 binds every normalized record to retained exact official response bytes. The fresh raw response SHA-256 is source authority. Provider and executable qualification remain open."
+    "statement": "Revision 4 binds the corrected model forms and provider-route vocabulary to retained exact official response bytes. The fresh raw response SHA-256 is source authority. Provider and executable qualification remain open."
   },
   "historicalNonAuthority": {
     "snapshotId": "claude-code-settings-semantics@2026-08-28",
@@ -59,11 +59,11 @@
       "gzipByteLength": 26273,
       "gzipSha256": "8f7aec9663dee447234959f3b3d25180764fa4e9382036c5014a3a9412aba010",
       "artifactPath": "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/model-config.md.gz",
-      "sourceCoordinates": ["Model aliases"],
-      "normalization": "Alias tokens retained in documented order, joined by comma plus one ASCII space, and terminated by LF.",
-      "retainedBytesUtf8": "default, best, fable, sonnet, opus, haiku, sonnet[1m], opus[1m], opusplan\n",
-      "retainedByteLength": 74,
-      "retainedSha256": "57019025e893bc02234a702548909733fc5e6fa1ec727977d475e4d540a8b5fd"
+      "sourceCoordinates": ["Available models", "Model aliases", "Setting your model"],
+      "normalization": "Derive the bounded documented model forms, remove the separately documented default token from the actual alias set, and retain the third-party pass-through disposition without raw deployment values.",
+      "retainedBytesUtf8": "Available model forms | alias, full-anthropic-name, bedrock-inference-profile-arn, agent-platform-version-name, foundry-deployment-name\nAliases | best, fable, sonnet, opus, haiku, sonnet[1m], opus[1m], opusplan\nDefault token | provider-default-not-alias\nUnclassified provider selector | pass-through-without-startup-validation\n",
+      "retainedByteLength": 327,
+      "retainedSha256": "167ff0d567750c96f14e07359c010c837235be5759d3312ffeb4cfb7ea9fa3c8"
     },
     {
       "id": "managed-policy",
@@ -93,11 +93,11 @@
       "gzipByteLength": 12899,
       "gzipSha256": "417d982efa303a546f2c036d5c4436944aaa495c7d6736f34a46e84dd489ef9d",
       "artifactPath": "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/amazon-bedrock.md.gz",
-      "sourceCoordinates": ["3. Configure Claude Code", "4. Pin model versions"],
-      "normalization": "Match the bounded configuration and model-pin Markdown sections for the closed provider-selection and model-routing identifier set; emit in declared order with LF terminators.",
-      "retainedBytesUtf8": "CLAUDE_CODE_USE_BEDROCK\nANTHROPIC_MODEL\nANTHROPIC_DEFAULT_HAIKU_MODEL\nANTHROPIC_DEFAULT_SONNET_MODEL\nANTHROPIC_DEFAULT_OPUS_MODEL\n",
-      "retainedByteLength": 130,
-      "retainedSha256": "f7a12e1f0cdf3dc68b0f7b34dd8666867c4c6ae82929725c05ec7a0535c717ef"
+      "sourceCoordinates": ["3. Configure Claude Code", "4. Pin model versions", "Cross-region inference profile prefixes", "Service tiers", "Use the Mantle endpoint"],
+      "normalization": "Match the bounded Bedrock configuration, model-pin, region-prefix, service-tier and Mantle sections for the closed evidenced route-key set; emit in declared order with LF terminators.",
+      "retainedBytesUtf8": "CLAUDE_CODE_USE_BEDROCK\nAWS_REGION\nAWS_DEFAULT_REGION\nANTHROPIC_MODEL\nANTHROPIC_DEFAULT_HAIKU_MODEL\nANTHROPIC_DEFAULT_SONNET_MODEL\nANTHROPIC_DEFAULT_OPUS_MODEL\nANTHROPIC_BEDROCK_REGION_PREFIX\nANTHROPIC_BEDROCK_SERVICE_TIER\nCLAUDE_CODE_USE_MANTLE\nCLAUDE_CODE_SKIP_MANTLE_AUTH\nANTHROPIC_BEDROCK_MANTLE_BASE_URL\n",
+      "retainedByteLength": 309,
+      "retainedSha256": "9113463b7ab698d6a89ee845453b60cb4d58211be5fb7e7989bb65330a2438c0"
     }
   ],
   "frozenFacts": {
@@ -114,8 +114,16 @@
       "evidence": ["settings-keys-and-effort#/properties/model", "settings-keys-and-effort#/properties/effortLevel/enum"]
     },
     "modelAliases": {
-      "value": ["default", "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan"],
+      "value": ["best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan"],
       "evidence": ["model-aliases#Model aliases"]
+    },
+    "modelDefaultIsNotAlias": {
+      "value": true,
+      "evidence": ["model-aliases#Model aliases"]
+    },
+    "exactModelNamesAreValidSettings": {
+      "value": true,
+      "evidence": ["model-aliases#Available models"]
     },
     "effortValues": {
       "value": ["low", "medium", "high", "xhigh"],
@@ -125,9 +133,17 @@
       "value": true,
       "evidence": ["managed-policy#Introduction"]
     },
-    "providerRoutesSeparateFromPortableIntent": {
+    "routeAccountFactsProviderAccessOwned": {
       "value": true,
-      "evidence": ["provider-route#3. Configure Claude Code", "provider-route#4. Pin model versions", "settings-keys-and-effort#/properties/model"]
+      "evidence": ["provider-route#3. Configure Claude Code", "provider-route#Cross-region inference profile prefixes", "provider-route#Service tiers", "provider-route#Use the Mantle endpoint"]
+    },
+    "modelSettingsMayContainProviderDeployments": {
+      "value": true,
+      "evidence": ["model-aliases#Available models", "settings-keys-and-effort#/properties/model"]
+    },
+    "providerDeploymentsDeferredUntilRouteBinding": {
+      "value": true,
+      "evidence": ["model-aliases#Setting your model", "provider-route#4. Pin model versions"]
     }
   }
 }

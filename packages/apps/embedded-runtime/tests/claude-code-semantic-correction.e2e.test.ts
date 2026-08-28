@@ -10,7 +10,7 @@ import {
 } from "@agent-teams/agent-execution/composition";
 import {
   createClaudeCodeConfigurationInspectionFeature,
-  createClaudeCodeConfigurationSemanticClassifierV1,
+  createClaudeCodeConfigurationSemanticClassifierV2,
   createClaudeCodeConfigurationSourceReaderAdapter,
   createNodeConfigurationSourceReader,
   createStrictClaudeCodeJsonParser,
@@ -48,6 +48,19 @@ const claudeScope = (homeRoot: string, workspaceRoot: string) => ({
   scopeId: "claude-correction-scope",
   workspaceRoot,
   workspaceTrusted: true,
+});
+
+const emptyConfiguration = () => ({
+  deferredObservations: [], diagnostics: [], observedPortableIntent: [],
+  sourceModel: {
+    claim: "observed-files-only" as const,
+    classifierRevision: "claude-code-settings-2026-08-28-semantic-classifier/2",
+    collectorRef: "collector-ref", compatibility: "unqualified" as const,
+    contract: "claude-code-observed-source-plan/v1" as const,
+    dialect: "claude-code-settings@2026-08-28" as const,
+    precedence: "not-evaluated" as const, topologyRef: "topology-ref",
+  },
+  sources: [],
 });
 
 const runtimeScope = (root: string, setup: ReturnType<typeof claudeScope>) => ({
@@ -91,18 +104,18 @@ const createFourOwnerDependencies = () => {
   const nodeObserver = createNodeExecutableFileObserver();
   const discovery = createRuntimeInstallationDiscoveryFeature({
     executableFileObserver: {
-      async observe(path, expectedPath, identity, custodyRoot, options) {
-        options?.signal?.throwIfAborted();
-        if (path === "/opt/homebrew/bin/claude" || path === "/usr/local/bin/claude") {
-          return { identity: `system-installation:${path}`, kind: "found" as const };
+      async observe(request) {
+        request.signal?.throwIfAborted();
+        if (request.absolutePath === "/opt/homebrew/bin/claude" || request.absolutePath === "/usr/local/bin/claude") {
+          return { identity: `system-installation:${request.absolutePath}`, kind: "found" as const };
         }
-        return nodeObserver.observe(path, expectedPath, identity, custodyRoot, options);
+        return nodeObserver.observe(request);
       },
     },
   });
   const configuration = createClaudeCodeConfigurationInspectionFeature({
     parser: createStrictClaudeCodeJsonParser(),
-    semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV1(),
+    semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: new Uint8Array(32).fill(11),
     sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(
       createNodeConfigurationSourceReader(),
@@ -145,11 +158,18 @@ test("keeps rejected higher source slots and simultaneous system locations acros
   if (result.status !== "partial") {
     return;
   }
-  assert.deepEqual(result.portableIntent, []);
-  assert.deepEqual(result.sourceObservations.map(source => [source.kind, source.status]), [
-    ["user", "applied"],
-    ["shared-project", "rejected"],
+  assert.deepEqual(result.observedPortableIntent.map(intent => intent.key === "model"
+    ? { key: intent.key, selection: intent.selection }
+    : { key: intent.key, value: intent.value }), [
+    { key: "effortLevel", value: "high" },
+    { key: "model", selection: { kind: "alias", value: "sonnet" } },
+  ]);
+  const userSourceRef = result.sourceObservations.find(source => source.role === "user")?.sourceRef;
+  assert.ok(result.observedPortableIntent.every(intent => intent.sourceRef === userSourceRef));
+  assert.deepEqual(result.sourceObservations.map(source => [source.role, source.status]).toSorted(), [
     ["project-local", "rejected"],
+    ["shared-project", "rejected"],
+    ["user", "applied"],
   ]);
   assert.deepEqual(
     result.installations.map(installation => installation.aliases[0]?.displayPath),
@@ -190,6 +210,7 @@ test("isolates cancellation between two concurrent Claude callers", async t => {
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "claude-epoch-1",
@@ -207,7 +228,7 @@ test("isolates cancellation between two concurrent Claude callers", async t => {
     inspectClaudeCodeConfiguration: {
       async execute(_input, options) {
         await waitForOwner(options);
-        return { diagnostics: [], portableIntent: [], sources: [] };
+        return emptyConfiguration();
       },
     },
     planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("darwin"),
@@ -234,6 +255,7 @@ test("settles symmetric owner failures and reports them in stable sibling order"
       authorizeClaudeCodeSetupInspection: {
         async execute() {
           return {
+            canonicalRoots: [],
             diagnostics: [],
             executableCandidates: [],
             observationEpoch: "epoch",
@@ -255,7 +277,7 @@ test("settles symmetric owner failures and reports them in stable sibling order"
           if (configurationFailure) {
             throw new Error("symmetric configuration failure");
           }
-          return { diagnostics: [], portableIntent: [], sources: [] };
+          return emptyConfiguration();
         },
       },
       planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("darwin"),

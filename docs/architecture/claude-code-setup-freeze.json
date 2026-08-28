@@ -1,12 +1,12 @@
 {
   "$schema": "./claude-code-setup-freeze.schema.json",
-  "schemaVersion": 1,
-  "contractId": "ar-2-claude-code-setup-preview@1",
+  "schemaVersion": 2,
+  "contractId": "ar-2-claude-code-setup-preview@2",
   "snapshot": {
     "date": "2026-08-28",
     "semanticArtifact": {
       "path": "docs/architecture/claude-code-official-semantics.snapshot.json",
-      "sha256": "9eff9540cb54c1aae9aafbbf5688c6a516d24b13af3341da064a8a1806e5b786"
+      "sha256": "150474d9b869fac16169c23e14e6be296f2d0f13fe0c763d509cdd897ff07404"
     },
     "documents": [
       { "id": "settings-scopes", "url": "https://code.claude.com/docs/en/settings.md", "rawResponseSha256": "a6f10afd9d41fffa2b14e1f113ef641ea6fbe9b319c114bb986efc3e186de009", "artifactPath": "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/settings.md.gz" },
@@ -27,110 +27,106 @@
     "productInput": "none",
     "cancellation": "options.signal"
   },
-  "trustedScope": {
-    "supplied": ["explicitExecutablePaths", "pathEntries", "dialect", "homeRoot", "workspaceRoot", "workspaceTrusted"],
-    "derivedInComposition": ["userSourcePath", "sharedProjectSourcePath", "projectLocalSourcePath", "knownExecutablePaths"],
-    "forbiddenAmbientInputs": ["process.env", "process.cwd", "interactiveShellPath", "CLAUDE_CONFIG_DIR"]
+  "sourceModel": {
+    "contract": "claude-code-observed-source-plan/v1",
+    "claim": "observed-files-only",
+    "hostComposed": ["collector", "custodyRoots", "sourcePaths", "sourceIds", "rootIds", "roles", "trust", "selectionBases"],
+    "staticPreviewSelectionBasis": "static-preview",
+    "precedence": "not-evaluated",
+    "compatibility": "unqualified",
+    "arrayOrder": "presentation-only",
+    "malformedIsolation": "one malformed source does not suppress an unrelated source",
+    "forbiddenDiscovery": ["process.cwd", "process.env.CLAUDE_CONFIG_DIR", "git-discovery", "binary-revision-inference", "arbitrary-caller-ranks"]
   },
-  "candidateOrder": [
-    "explicit-paths",
-    "supplied-path-entries",
-    "~/.local/bin/claude",
-    "/opt/homebrew/bin/claude",
-    "/usr/local/bin/claude"
-  ],
-  "sources": [
-    { "kind": "user", "rank": 1, "pathTemplate": "~/.claude/settings.json" },
-    { "kind": "shared-project", "rank": 2, "pathTemplate": "<workspace>/.claude/settings.json" },
-    { "kind": "project-local", "rank": 3, "pathTemplate": "<workspace>/.claude/settings.local.json" }
-  ],
-  "precedenceHighToLow": ["project-local", "shared-project", "user"],
   "portableIntent": {
     "keys": ["model", "effortLevel"],
-    "modelAliases": ["default", "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan"],
+    "modelDefault": "default",
+    "modelAliases": ["best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan"],
+    "exactNameSyntax": "^claude-[a-z0-9]+(?:-[a-z0-9]+)*(?:\\[1m\\])?$",
+    "exactNameClaim": "syntax-only intent; catalog presence, provider interpretation, and compatibility remain unobserved",
+    "deferredModelForms": ["provider-deployment", "unclassified-selector"],
+    "deferredObservation": "value-free",
+    "modelCompatibility": "unobserved",
     "effortValues": ["low", "medium", "high", "xhigh"],
-    "resolution": "For each key, return the highest valid file value only when every higher source proves absence or validity. Malformed, unreadable, stale, or untrusted higher sources taint lower resolution. An invalid, secret-shaped, or route-shaped higher definition taints that key.",
-    "legacyMax": "rejected"
+    "resolution": "Every declared file is parsed independently and emits source-bound observations; no cross-source winner or effective configuration is selected."
+  },
+  "routeVocabulary": {
+    "revision": "claude-code-provider-route-vocabulary/v2",
+    "ownership": "Provider Access future route/account binding",
+    "retainedBedrockKeys": [
+      "CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "AWS_DEFAULT_REGION", "ANTHROPIC_MODEL",
+      "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+      "ANTHROPIC_BEDROCK_REGION_PREFIX", "ANTHROPIC_BEDROCK_SERVICE_TIER", "CLAUDE_CODE_USE_MANTLE",
+      "CLAUDE_CODE_SKIP_MANTLE_AUTH", "ANTHROPIC_BEDROCK_MANTLE_BASE_URL"
+    ],
+    "redaction": "category-only; no raw route value, account, endpoint, deployment, hash, length, or value-derived reference"
   },
   "strictJson": {
     "encoding": "utf-8",
     "root": "object",
     "reject": ["bom", "comments", "trailing-commas", "duplicate-keys-at-any-depth", "invalid-utf8", "non-object-root"]
   },
-  "routeCategories": ["provider-selector", "skip-auth-selector", "endpoint", "cloud-location-account", "model-routing-remap", "credential-reference", "executable-credential-helper"],
-  "secretCategories": ["direct-secret", "cloud-secret", "oauth-token", "custom-header", "private-key", "password", "credential", "secret-shaped-name", "secret-shaped-value"],
   "expectedLimitations": {
     "managedPolicy": "unobserved",
     "sessionOverrides": "unobserved",
-    "interactiveShellPath": "unobserved"
+    "interactiveShellPath": "unobserved",
+    "modelCompatibility": "unobserved",
+    "executableCompatibility": "unqualified",
+    "precedence": "not-evaluated"
   },
   "diagnostics": [
-    "candidate_denied",
-    "candidate_invalid",
-    "candidate_unreadable",
-    "candidate_unstable",
-    "configuration_dialect_unsupported",
-    "config_duplicate_key",
-    "config_invalid_utf8",
-    "config_parse_failed",
-    "config_too_large",
-    "config_unreadable",
-    "credential_material_rejected",
-    "provider_route_deferred",
-    "secret_setting_rejected",
-    "setting_type_unsupported",
-    "setting_value_unsupported",
-    "source_untrusted",
-    "source_epoch_stale",
-    "unsupported_platform"
+    "access_scope_limit_exceeded", "candidate_denied", "candidate_invalid", "candidate_unreadable", "candidate_unstable",
+    "capability_unavailable",
+    "configuration_dialect_unsupported", "config_duplicate_key", "config_invalid_utf8", "config_parse_failed",
+    "config_too_large", "config_unreadable", "credential_material_rejected", "provider_route_deferred",
+    "secret_setting_rejected", "setting_type_unsupported", "setting_value_unsupported", "source_epoch_stale",
+    "source_inventory_overflow", "source_plan_invalid", "source_plan_unsupported", "source_total_too_large",
+    "source_untrusted", "unsupported_platform"
   ],
-  "diagnosticRedaction": ["values", "unknown-key-names", "raw-paths", "raw-parser-snippets", "raw-os-errors", "raw-file-digests", "route-ids", "credentials"],
+  "diagnosticRedaction": ["values", "unknown-key-names", "raw-paths", "raw-parser-snippets", "raw-os-errors", "raw-file-digests", "route-ids", "credentials", "length-derived-references"],
   "budgets": {
-    "bytesPerSource": 131072,
-    "depth": 16,
-    "nodes": 4096,
-    "objectKeys": 1024,
-    "arrayItems": 1024,
-    "keyLength": 256,
-    "stringLength": 16384,
-    "classifierValueLength": 256,
-    "sourceSlots": 3,
-    "explicitPaths": 16,
-    "suppliedPathEntries": 64,
-    "totalCandidates": 256,
-    "diagnostics": 1024
+    "bytesPerSource": 131072, "aggregateSourceBytes": 1048576, "depth": 16, "nodes": 4096,
+    "objectKeys": 1024, "arrayItems": 1024, "keyLength": 256, "stringLength": 16384,
+    "classifierValueLength": 256, "identifierLength": 128, "pathLength": 16384,
+    "sourceSlots": 16, "rootSlots": 16, "locationClaimsPerSource": 4,
+    "explicitPaths": 16, "suppliedPathEntries": 64, "totalCandidates": 256, "diagnostics": 1024
   },
   "resultSemantics": {
-    "sections": ["installations", "portableIntent", "sourceObservations", "expectedLimitations", "diagnostics", "nextActions"],
+    "sections": ["installations", "observedPortableIntent", "deferredObservations", "sourceModel", "sourceObservations", "expectedLimitations", "diagnostics", "nextActions"],
     "statuses": ["observed", "partial", "denied", "unsupported"],
     "installationStatus": "found_unverified",
-    "partial": "Only actual degradation of the declared V1 scope. Expected limitations, a clean absent optional setting, or no installation do not cause partial.",
+    "partial": "Only an actual failure in the bounded declared observation causes partial. A valid deferred model or an expected limitation does not.",
     "absence": "A clean absent installation is observed and includes install_claude_code as a next action.",
-    "detached": true,
-    "deepFrozen": true,
-    "deterministic": true
+    "provenance": "Opaque references bind topology, collector, dialect, classifier revision, and ordered source observations without raw paths or file digests.",
+    "futureHandoff": ["qualified-topology-dialect", "ProfileDraft", "ProfileRevision"],
+    "detached": true, "deepFrozen": true, "deterministic": true
   },
   "fixtureMatrix": [
     { "id": "installation-absent", "expected": "observed-with-install-action" },
     { "id": "installation-one-alias", "expected": "found-unverified" },
     { "id": "installation-multiple-aliases", "expected": "identity-grouped" },
-    { "id": "source-user-only", "expected": "user-intent" },
-    { "id": "source-shared-project-only", "expected": "shared-project-intent" },
-    { "id": "source-project-local-only", "expected": "project-local-intent" },
-    { "id": "sources-conflict", "expected": "project-local-wins-per-key" },
-    { "id": "malformed-higher-precedence", "expected": "lower-resolution-tainted" },
+    { "id": "source-user-only", "expected": "source-bound-intent" },
+    { "id": "source-shared-project-only", "expected": "source-bound-intent" },
+    { "id": "source-project-local-only", "expected": "source-bound-intent" },
+    { "id": "sources-conflict", "expected": "two-observations-no-winner" },
+    { "id": "malformed-higher-precedence", "expected": "unrelated-source-preserved" },
     { "id": "duplicate-json-keys", "diagnostic": "config_duplicate_key" },
     { "id": "bom", "diagnostic": "config_parse_failed" },
     { "id": "invalid-utf8", "diagnostic": "config_invalid_utf8" },
     { "id": "oversized-json", "diagnostic": "config_too_large" },
     { "id": "deep-json", "diagnostic": "config_parse_failed" },
     { "id": "unsupported-effort-max", "diagnostic": "setting_value_unsupported" },
-    { "id": "provider-route-model", "diagnostic": "provider_route_deferred" },
+    { "id": "provider-route-model", "expected": "provider-deployment-deferred" },
     { "id": "secret-sentinels", "diagnostic": "secret_setting_rejected" },
     { "id": "credential-material", "diagnostic": "credential_material_rejected" },
     { "id": "untrusted-workspace", "diagnostic": "source_untrusted" },
     { "id": "stale-source", "diagnostic": "source_epoch_stale" },
     { "id": "unsupported-platform", "diagnostic": "unsupported_platform" },
-    { "id": "unsupported-dialect", "diagnostic": "configuration_dialect_unsupported" }
+    { "id": "unsupported-dialect", "diagnostic": "configuration_dialect_unsupported" },
+    { "id": "access-scope-limit-exceeded", "diagnostic": "access_scope_limit_exceeded" },
+    { "id": "capability-unavailable", "diagnostic": "capability_unavailable" },
+    { "id": "model-default-special", "expected": "provider-default" },
+    { "id": "model-exact-name", "expected": "exact-name" },
+    { "id": "model-arbitrary-selector-deferred", "expected": "unclassified-selector-deferred" }
   ]
 }

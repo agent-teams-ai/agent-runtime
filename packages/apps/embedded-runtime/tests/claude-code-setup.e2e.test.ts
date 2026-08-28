@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -8,22 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { semanticCorrectionProofsRegistered } from "./claude-code-semantic-correction.e2e.test.ts";
-
-import {
-  createNodeExecutableFileObserver,
-  createRuntimeInstallationDiscoveryFeature,
-} from "@agent-teams/agent-execution/composition";
-import {
-  createClaudeCodeConfigurationInspectionFeature,
-  createClaudeCodeConfigurationSemanticClassifierV1,
-  createClaudeCodeConfigurationSourceReaderAdapter,
-  createNodeConfigurationSourceReader,
-  createStrictClaudeCodeJsonParser,
-} from "@agent-teams/runtime-configuration/composition";
-import {
-  createNodePathCanonicalizer,
-  createSetupInspectionAuthorizationFeature,
-} from "@agent-teams/runtime-security/composition";
+import { createSyntheticClaudeOwners } from "./helpers/synthetic-claude-owners.ts";
 
 import {
   createAgentRuntimeHost,
@@ -82,86 +67,38 @@ const claudeScope = (homeRoot: string, workspaceRoot: string) => ({
   workspaceTrusted: true,
 });
 
+const emptyConfiguration = () => ({
+  deferredObservations: [], diagnostics: [], observedPortableIntent: [],
+  sourceModel: {
+    claim: "observed-files-only" as const,
+    classifierRevision: "claude-code-settings-2026-08-28-semantic-classifier/2",
+    collectorRef: "collector-ref", compatibility: "unqualified" as const,
+    contract: "claude-code-observed-source-plan/v1" as const,
+    dialect: "claude-code-settings@2026-08-28" as const,
+    precedence: "not-evaluated" as const, topologyRef: "topology-ref",
+  },
+  sources: [],
+});
+
 const isDeeplyFrozen = (value: unknown): boolean =>
   typeof value !== "object" || value === null ||
   (Object.isFrozen(value) && Object.values(value).every(isDeeplyFrozen));
 
-const syntheticSystemPath = (path: string): boolean =>
-  path === "/opt/homebrew" || path.startsWith("/opt/homebrew/") ||
-  path === "/usr/local" || path.startsWith("/usr/local/");
-
-const createSyntheticClaudeOwners = (systemInstallations = false) => {
-  const nodeCanonicalizer = createNodePathCanonicalizer();
-  const security = createSetupInspectionAuthorizationFeature({
-    pathCanonicalizer: {
-      async canonicalize(path, options) {
-        options?.signal?.throwIfAborted();
-        if (systemInstallations &&
-          (path === "/opt/homebrew/bin/claude" || path === "/usr/local/bin/claude")) {
-          return {
-            absolutePath: path,
-            canonicalLocationPath: path,
-            exists: true,
-            fileIdentity: `synthetic-system:${path}`,
-            isFile: true,
-            linkCount: 1,
-          };
-        }
-        return syntheticSystemPath(path)
-          ? { absolutePath: path, canonicalLocationPath: path, exists: false }
-          : nodeCanonicalizer.canonicalize(path, options);
-      },
-    },
-  });
-  const nodeExecutableObserver = createNodeExecutableFileObserver();
-  const execution = createRuntimeInstallationDiscoveryFeature({
-    executableFileObserver: {
-      async observe(path, expectedPath, identity, custodyRoot, options) {
-        options?.signal?.throwIfAborted();
-        if (systemInstallations &&
-          (path === "/opt/homebrew/bin/claude" || path === "/usr/local/bin/claude")) {
-          return { identity: `system-installation:${path}`, kind: "found" as const };
-        }
-        return syntheticSystemPath(path)
-          ? { kind: "missing" as const }
-          : nodeExecutableObserver.observe(
-            path,
-            expectedPath,
-            identity,
-            custodyRoot,
-            options,
-          );
-      },
-    },
-  });
-  const sourceReader = createNodeConfigurationSourceReader();
-  const configuration = createClaudeCodeConfigurationInspectionFeature({
-    parser: createStrictClaudeCodeJsonParser(),
-    semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV1(),
-    sourceIdentityKey: new Uint8Array(32).fill(7),
-    sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(sourceReader),
-  });
-  return {
-    authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
-    discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,
-    inspectClaudeCodeConfiguration: configuration,
-    planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("darwin"),
-  };
-};
-
-test("crosses all four owner layers for a synthetic macOS setup without executing Claude", async t => {
+test("crosses all four owner layers for a relocated synthetic macOS launcher without executing Claude", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-setup-e2e-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const home = join(root, "home");
   const workspace = join(root, "workspace");
   const executable = join(home, ".local", "bin", "claude");
+  const externalTarget = join(root, "relocated-share", "claude", "versions", "2.1.205");
   await Promise.all([
     mkdir(join(home, ".local", "bin"), { recursive: true }),
     mkdir(join(home, ".claude"), { recursive: true }),
     mkdir(join(workspace, ".claude"), { recursive: true }),
+    mkdir(join(root, "relocated-share", "claude", "versions"), { recursive: true }),
   ]);
-  await writeFile(executable, "synthetic provider bytes that must never execute");
-  await chmod(executable, 0o755);
+  await writeFile(externalTarget, "synthetic provider bytes that must never execute", { mode: 0o755 });
+  await symlink(externalTarget, executable);
   await Promise.all([
     writeFile(join(home, ".claude", "settings.json"), JSON.stringify({ model: "sonnet" })),
     writeFile(join(workspace, ".claude", "settings.json"), JSON.stringify({ effortLevel: "low" })),
@@ -176,19 +113,23 @@ test("crosses all four owner layers for a synthetic macOS setup without executin
   const access = host.bindAccess(runtimeScope(root, claudeScope(home, workspace)));
 
   const first = await access.claudeCodeSetup.inspect();
-  const second = await access.claudeCodeSetup.inspect();
-  assert.deepEqual(first, second);
+  assert.deepEqual(first, await access.claudeCodeSetup.inspect());
   assert.ok(isDeeplyFrozen(first));
   assert.equal(first.status, "observed", JSON.stringify(first));
   assert.equal(first.installations.length, 1);
   assert.equal(first.installations[0]?.status, "found_unverified");
-  assert.deepEqual(first.portableIntent.map(item => [item.key, item.value]), [
-    ["effortLevel", "high"],
-    ["model", "sonnet"],
-  ]);
+  assert.deepEqual(first.observedPortableIntent.map(item => JSON.stringify([
+    item.key, item.key === "model" ? item.selection : item.value,
+  ])).toSorted(), [
+    ["effortLevel", "low"], ["effortLevel", "high"],
+    ["model", { kind: "alias", value: "sonnet" }],
+  ].map(item => JSON.stringify(item)).toSorted());
   assert.deepEqual(first.expectedLimitations, {
+    executableCompatibility: "unqualified",
     interactiveShellPath: "unobserved",
     managedPolicy: "unobserved",
+    modelCompatibility: "unobserved",
+    precedence: "not-evaluated",
     sessionOverrides: "unobserved",
   });
   assert.deepEqual(first.nextActions, []);
@@ -200,6 +141,7 @@ test("crosses all four owner layers for a synthetic macOS setup without executin
   assert.match(first.installations[0]?.installationRef ?? "", /^claude-code-setup-installation:[a-f0-9]{64}$/u);
   for (const source of first.sourceObservations) {
     assert.match(source.sourceRef, /^claude-code-setup-source:[a-f0-9]{64}$/u);
+    assert.equal(source.selectionBasis, "static-preview");
   }
 });
 
@@ -235,8 +177,10 @@ test("redacts every declared sentinel at the public Claude setup boundary", asyn
   ).claudeCodeSetup.inspect();
 
   assert.equal(result.status, "partial");
-  assert.deepEqual(result.portableIntent.map(item => [item.key, item.value]), [
-    ["effortLevel", "xhigh"], ["model", "sonnet"],
+  assert.deepEqual(result.observedPortableIntent.map(item => [
+    item.key, item.key === "model" ? item.selection : item.value,
+  ]), [
+    ["effortLevel", "xhigh"], ["model", { kind: "alias", value: "sonnet" }],
   ]);
   assert.ok(result.diagnostics.some(diagnostic =>
     diagnostic.code === "secret_setting_rejected"));
@@ -259,8 +203,11 @@ test("returns unsupported and denied before downstream filesystem work", async t
   assert.deepEqual(await unsupportedHost.bindAccess(scope).claudeCodeSetup.inspect(), {
     diagnostics: [{ code: "unsupported_platform" }],
     expectedLimitations: {
+      executableCompatibility: "unqualified",
       interactiveShellPath: "unobserved",
       managedPolicy: "unobserved",
+      modelCompatibility: "unobserved",
+      precedence: "not-evaluated",
       sessionOverrides: "unobserved",
     },
     status: "unsupported",
@@ -293,6 +240,7 @@ test("waits for both parallel owner branches and HMAC-maps candidate diagnostics
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "epoch",
@@ -310,7 +258,7 @@ test("waits for both parallel owner branches and HMAC-maps candidate diagnostics
       async execute() {
         await configurationGate;
         configurationSettled = true;
-        return { diagnostics: [], portableIntent: [], sources: [] };
+        return emptyConfiguration();
       },
     },
     planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("darwin"),
@@ -333,7 +281,7 @@ test("waits for both parallel owner branches and HMAC-maps candidate diagnostics
     ...codexDependencies,
     authorizeClaudeCodeSetupInspection: {
       async execute() {
-        return { diagnostics: [], executableCandidates: [], observationEpoch: "epoch", sources: [], status: "authorized" as const };
+        return { canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "epoch", sources: [], status: "authorized" as const };
       },
     },
     discoverClaudeCodeInstallations: {
@@ -342,7 +290,7 @@ test("waits for both parallel owner branches and HMAC-maps candidate diagnostics
       },
     },
     inspectClaudeCodeConfiguration: {
-      async execute() { return { diagnostics: [], portableIntent: [], sources: [] }; },
+      async execute() { return emptyConfiguration(); },
     },
     planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("darwin"),
   });
@@ -370,7 +318,7 @@ test("isolates caller cancellation and invalidates Claude handles on bounded ide
     ...codexDependencies,
     authorizeClaudeCodeSetupInspection: {
       async execute() {
-        return { diagnostics: [], executableCandidates: [], observationEpoch: "epoch", sources: [], status: "authorized" as const };
+        return { canonicalRoots: [], diagnostics: [], executableCandidates: [], observationEpoch: "epoch", sources: [], status: "authorized" as const };
       },
     },
     discoverClaudeCodeInstallations: {
@@ -382,7 +330,7 @@ test("isolates caller cancellation and invalidates Claude handles on bounded ide
     inspectClaudeCodeConfiguration: {
       async execute(input, options) {
         await cancellable(input, options);
-        return { diagnostics: [], portableIntent: [], sources: [] };
+        return emptyConfiguration();
       },
     },
     planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("darwin"),
@@ -433,7 +381,7 @@ test("reports clean absence and degrades safely without touching the executable 
   const absent = await access.claudeCodeSetup.inspect();
   assert.equal(absent.status, "observed", JSON.stringify(absent));
   assert.deepEqual(absent.installations, []);
-  assert.deepEqual(absent.portableIntent, []);
+  assert.deepEqual(absent.observedPortableIntent, []);
   assert.deepEqual(absent.sourceObservations.map(source => source.status), [
     "missing",
     "missing",
@@ -457,7 +405,11 @@ test("reports clean absence and degrades safely without touching the executable 
   const degraded = await access.claudeCodeSetup.inspect();
   assert.equal(degraded.status, "partial", JSON.stringify(degraded));
   assert.equal(degraded.installations[0]?.status, "found_unverified");
-  assert.deepEqual(degraded.portableIntent, []);
+  assert.deepEqual(degraded.observedPortableIntent.map(intent => intent.key === "model"
+    ? { key: intent.key, selection: intent.selection }
+    : { key: intent.key, value: intent.value }), [
+    { key: "model", selection: { kind: "alias", value: "sonnet" } },
+  ]);
   assert.ok(degraded.diagnostics.some(diagnostic =>
     diagnostic.code === "credential_material_rejected"));
   assert.ok(degraded.diagnostics.some(diagnostic =>
@@ -490,25 +442,27 @@ test("detaches owner results and domain-separates deterministic product referenc
     status: "found_unverified" as const,
   }];
   const mutableSources = [{
-    displayPath: "$HOME/.claude/settings.json",
-    kind: "user" as const,
+    displayPath: "$CLAUDE_OBSERVED/user/caller-explicit/settings.json",
+    role: "user" as const,
+    selectionBasis: "caller-explicit" as const,
     sourceRef: "owner-source-identity",
     status: "applied" as const,
   }];
   const mutableIntent: Array<{
     key: "model";
+    selection: { kind: "alias"; value: "opus" | "sonnet" };
     sourceRef: string;
-    value: "opus" | "sonnet";
   }> = [{
     key: "model" as const,
+    selection: { kind: "alias", value: "sonnet" as const },
     sourceRef: "owner-source-identity",
-    value: "sonnet" as const,
   }];
   const host = createAgentRuntimeHost({
     ...codexDependencies,
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "epoch",
@@ -524,7 +478,7 @@ test("detaches owner results and domain-separates deterministic product referenc
     },
     inspectClaudeCodeConfiguration: {
       async execute() {
-        return { diagnostics: [], portableIntent: mutableIntent, sources: mutableSources };
+        return { ...emptyConfiguration(), observedPortableIntent: mutableIntent, sources: mutableSources };
       },
     },
     planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("darwin"),
@@ -555,10 +509,11 @@ test("detaches owner results and domain-separates deterministic product referenc
   mutableAliases[0]!.displayPath = "mutated alias";
   mutableInstallations.length = 0;
   mutableSources[0]!.displayPath = "mutated source";
-  mutableIntent[0]!.value = "opus";
+  mutableIntent[0]!.selection.value = "opus";
   assert.equal(first.installations[0]?.aliases[0]?.displayPath, "$HOME/bin/claude");
-  assert.equal(first.sourceObservations[0]?.displayPath, "$HOME/.claude/settings.json");
-  assert.equal(first.portableIntent[0]?.value, "sonnet");
+  assert.match(first.sourceObservations[0]?.displayPath ?? "", /^\$CLAUDE_OBSERVED\//u);
+  assert.deepEqual(first.observedPortableIntent[0]?.key === "model"
+    ? first.observedPortableIntent[0].selection : undefined, { kind: "alias", value: "sonnet" });
 
   const otherScope = runtimeScope("/synthetic", {
     ...claudeScope("/synthetic/home", "/synthetic/workspace"),
@@ -644,6 +599,7 @@ test("honors cancellation before and during every composition stage", async () =
         authorizationStarted?.();
         await authorizationGate;
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "epoch",
@@ -661,7 +617,7 @@ test("honors cancellation before and during every composition stage", async () =
     inspectClaudeCodeConfiguration: {
       async execute() {
         postAuthorizationCalls += 1;
-        return { diagnostics: [], portableIntent: [], sources: [] };
+        return emptyConfiguration();
       },
     },
     planClaudeCodeSetupInspection: darwinPlanner,
@@ -698,6 +654,7 @@ test("honors cancellation before and during every composition stage", async () =
     authorizeClaudeCodeSetupInspection: {
       async execute() {
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "epoch",
@@ -715,7 +672,7 @@ test("honors cancellation before and during every composition stage", async () =
     inspectClaudeCodeConfiguration: {
       async execute() {
         await waitInBranch();
-        return { diagnostics: [], portableIntent: [], sources: [] };
+        return emptyConfiguration();
       },
     },
     planClaudeCodeSetupInspection: darwinPlanner,
@@ -796,6 +753,7 @@ test("runs Codex and Claude inspections concurrently without cross-cancellation"
       async execute() {
         await startOwner();
         return {
+          canonicalRoots: [],
           diagnostics: [],
           executableCandidates: [],
           observationEpoch: "claude-epoch-1",
@@ -811,7 +769,7 @@ test("runs Codex and Claude inspections concurrently without cross-cancellation"
     },
     inspectClaudeCodeConfiguration: {
       async execute() {
-        return { diagnostics: [], portableIntent: [], sources: [] };
+        return emptyConfiguration();
       },
     },
     planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("darwin"),

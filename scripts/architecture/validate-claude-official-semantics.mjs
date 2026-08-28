@@ -28,7 +28,7 @@ const DOCUMENTS = Object.freeze([
     finalUrl: "https://code.claude.com/docs/en/model-config.md",
     contentType: "text/markdown; charset=utf-8",
     artifactPath: `${EVIDENCE_DIRECTORY}model-config.md.gz`,
-    sourceCoordinates: ["Model aliases"],
+    sourceCoordinates: ["Available models", "Model aliases", "Setting your model"],
   },
   {
     id: "managed-policy",
@@ -44,7 +44,10 @@ const DOCUMENTS = Object.freeze([
     finalUrl: "https://code.claude.com/docs/en/amazon-bedrock.md",
     contentType: "text/markdown; charset=utf-8",
     artifactPath: `${EVIDENCE_DIRECTORY}amazon-bedrock.md.gz`,
-    sourceCoordinates: ["3. Configure Claude Code", "4. Pin model versions"],
+    sourceCoordinates: [
+      "3. Configure Claude Code", "4. Pin model versions",
+      "Cross-region inference profile prefixes", "Service tiers", "Use the Mantle endpoint",
+    ],
   },
 ]);
 const FACT_NAMES = Object.freeze([
@@ -52,9 +55,13 @@ const FACT_NAMES = Object.freeze([
   "portablePaths",
   "portableKeys",
   "modelAliases",
+  "modelDefaultIsNotAlias",
+  "exactModelNamesAreValidSettings",
   "effortValues",
   "managedPolicySeparateFromPortableIntent",
-  "providerRoutesSeparateFromPortableIntent",
+  "routeAccountFactsProviderAccessOwned",
+  "modelSettingsMayContainProviderDeployments",
+  "providerDeploymentsDeferredUntilRouteBinding",
 ]);
 
 const exactKeys = (value, keys, label) => {
@@ -125,6 +132,12 @@ const deriveSchemaEvidence = bytes => {
 };
 
 const deriveModelEvidence = markdown => {
+  const available = boundedSection(markdown, "## Available models", /^## /mu, 20_000);
+  for (const proposition of [
+    /A \*\*model alias\*\*/u, /Anthropic API: a full \*\*\[model name\]/u,
+    /Amazon Bedrock: an inference profile ARN/u,
+    /Google Cloud's Agent Platform: a version name/u, /Microsoft Foundry: a deployment name/u,
+  ]) {assert.match(available, proposition);}
   const section = boundedSection(markdown, "### Model aliases", /^### /mu, 20_000);
   const aliases = [...section.matchAll(/^\| \*\*`([^`]+)`\*\*\s*\|/gmu)].map(match => match[1]);
   assert.deepEqual(
@@ -132,7 +145,16 @@ const deriveModelEvidence = markdown => {
     ["default", "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan"],
     "model alias rows",
   );
-  return `${aliases.join(", ")}\n`;
+  const actualAliases = aliases.filter(alias => alias !== "default");
+  const setting = boundedSection(markdown, "### Setting your model", /^### /mu, 20_000);
+  assert.match(setting, /passes any string through without checking it/u);
+  assert.match(section, /not itself a model alias/iu);
+  return [
+    "Available model forms | alias, full-anthropic-name, bedrock-inference-profile-arn, agent-platform-version-name, foundry-deployment-name",
+    `Aliases | ${actualAliases.join(", ")}`,
+    "Default token | provider-default-not-alias",
+    "Unclassified provider selector | pass-through-without-startup-validation",
+  ].join("\n") + "\n";
 };
 
 const deriveManagedEvidence = markdown => {
@@ -145,12 +167,21 @@ const deriveManagedEvidence = markdown => {
 const deriveProviderEvidence = markdown => {
   const configure = boundedSection(markdown, "### 3. Configure Claude Code", /^### /mu, 30_000);
   const models = boundedSection(markdown, "### 4. Pin model versions", /^(?:## |### )/mu, 30_000);
+  const regionPrefix = boundedSection(markdown, "## Cross-region inference profile prefixes", /^## /mu, 20_000);
+  const serviceTier = boundedSection(markdown, "## Service tiers", /^## /mu, 10_000);
+  const mantle = boundedSection(markdown, "## Use the Mantle endpoint", /^## /mu, 20_000);
   const identifiers = [
     ["CLAUDE_CODE_USE_BEDROCK", configure],
+    ["AWS_REGION", configure], ["AWS_DEFAULT_REGION", configure],
     ["ANTHROPIC_MODEL", models],
     ["ANTHROPIC_DEFAULT_HAIKU_MODEL", models],
     ["ANTHROPIC_DEFAULT_SONNET_MODEL", models],
     ["ANTHROPIC_DEFAULT_OPUS_MODEL", models],
+    ["ANTHROPIC_BEDROCK_REGION_PREFIX", regionPrefix],
+    ["ANTHROPIC_BEDROCK_SERVICE_TIER", serviceTier],
+    ["CLAUDE_CODE_USE_MANTLE", mantle],
+    ["CLAUDE_CODE_SKIP_MANTLE_AUTH", mantle],
+    ["ANTHROPIC_BEDROCK_MANTLE_BASE_URL", mantle],
   ];
   for (const [identifier, section] of identifiers) {
     assert.match(section, new RegExp(`\\b${identifier}\\b`, "u"), `provider route identifier ${identifier}`);
@@ -256,8 +287,14 @@ const validateFacts = (frozenFacts, retainedEvidence) => {
   );
   assert.deepEqual(frozenFacts.effortValues.value, schemaRecords.get("/properties/effortLevel/enum"),
     "effort allowlist must derive from retained schema evidence");
-  assert.deepEqual(frozenFacts.modelAliases.value, retainedEvidence.get("model-aliases").trimEnd().split(", "),
+  const modelRecords = Object.fromEntries(retainedEvidence.get("model-aliases").trimEnd()
+    .split("\n").map(line => line.split(" | ")));
+  assert.deepEqual(frozenFacts.modelAliases.value, modelRecords.Aliases.split(", "),
     "model allowlist must derive from retained model evidence");
+  assert.equal(frozenFacts.modelDefaultIsNotAlias.value,
+    modelRecords["Default token"] === "provider-default-not-alias");
+  assert.equal(frozenFacts.exactModelNamesAreValidSettings.value,
+    modelRecords["Available model forms"].includes("full-anthropic-name"));
   assert.equal(
     frozenFacts.managedPolicySeparateFromPortableIntent.value,
     retainedEvidence.get("managed-policy").includes("your organization deploys")
@@ -266,14 +303,15 @@ const validateFacts = (frozenFacts, retainedEvidence) => {
     "managed-policy separation must derive from retained managed evidence",
   );
   const routeIdentifiers = new Set(retainedEvidence.get("provider-route").trimEnd().split("\n"));
-  assert.equal(
-    frozenFacts.providerRoutesSeparateFromPortableIntent.value,
-    routeIdentifiers.has("CLAUDE_CODE_USE_BEDROCK")
-      && routeIdentifiers.has("ANTHROPIC_MODEL")
-      && [...routeIdentifiers].some(identifier => identifier.startsWith("ANTHROPIC_DEFAULT_"))
-      && schemaRecords.has("/properties/model"),
-    "provider-route separation must derive from retained route and schema evidence",
-  );
+  const deploymentEvidence = modelRecords["Available model forms"].includes("bedrock-inference-profile-arn") &&
+    modelRecords["Available model forms"].includes("foundry-deployment-name") &&
+    modelRecords["Unclassified provider selector"] === "pass-through-without-startup-validation";
+  assert.equal(frozenFacts.routeAccountFactsProviderAccessOwned.value,
+    routeIdentifiers.has("AWS_DEFAULT_REGION") && routeIdentifiers.has("CLAUDE_CODE_USE_MANTLE"));
+  assert.equal(frozenFacts.modelSettingsMayContainProviderDeployments.value,
+    deploymentEvidence && schemaRecords.has("/properties/model"));
+  assert.equal(frozenFacts.providerDeploymentsDeferredUntilRouteBinding.value,
+    deploymentEvidence && routeIdentifiers.has("ANTHROPIC_MODEL"));
 };
 
 export const validateOfficialSemantics = async (semanticArtifact, root = repositoryRoot) => {
@@ -283,8 +321,8 @@ export const validateOfficialSemantics = async (semanticArtifact, root = reposit
   exactKeys(semanticArtifact.retrieval, ["date", "method", "authority", "statement"], "official semantic artifact retrieval");
   exactKeys(semanticArtifact.historicalNonAuthority,
     ["snapshotId", "responseBodiesRetained", "documentCount", "statement"], "historical non-authority");
-  assert.equal(semanticArtifact.schemaVersion, 3);
-  assert.equal(semanticArtifact.snapshotId, "claude-code-settings-semantics@2026-08-28.r3");
+  assert.equal(semanticArtifact.schemaVersion, 4);
+  assert.equal(semanticArtifact.snapshotId, "claude-code-settings-semantics@2026-08-28.r4");
   assert.equal(semanticArtifact.retrieval.date, "2026-08-28");
   assert.equal(semanticArtifact.retrieval.authority, "retained-exact-response-bytes");
   assert.match(semanticArtifact.retrieval.method, /deterministic gzip artifacts/u);

@@ -36,6 +36,14 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0005: Runtime context package identities](0005-runtime-context-package-identities.md)
 - [ADR-0007: Deterministic documentation governance](0007-deterministic-documentation-governance.md)
 - [ADR-0008: Private embedded Runtime access entrypoint](0008-private-embedded-runtime-access-entrypoint.md)
+  introduced the private scope-bound handle with the AR-1 Codex query. Current
+  traceability in
+  [readiness](../architecture/readiness.md#profiles-settings-and-environment)
+  records the sibling `RuntimeAccessHandle.claudeCodeSetup.inspect`
+  implementation under the same private composition boundary. That additive
+  query does not qualify a Claude executable, provider route, production
+  collector, deployment, or any access, trust, installation, or execution
+  capability; ADR-0008 remains immutable historical authority.
 
 ## Superseded
 

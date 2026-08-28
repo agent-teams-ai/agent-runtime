@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 
 export { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
@@ -17,6 +19,7 @@ const contractCoveragePath = new URL("contract-coverage.json", fixtureRoot);
 const packagePath = new URL("../../package.json", import.meta.url);
 const roadmapPath = new URL("../../docs/architecture/provider-setup-delivery-roadmap.md", import.meta.url);
 const readinessPath = new URL("../../docs/architecture/readiness.md", import.meta.url);
+const runtimeAccessPath = new URL("../../packages/apps/embedded-runtime/src/contracts/runtime-access.ts", import.meta.url);
 const repositoryRoot = new URL("../../", import.meta.url);
 
 const readJson = async path => JSON.parse(await readFile(path, "utf8"));
@@ -43,24 +46,29 @@ export const EXPECTED_FIXTURE_MATRIX = Object.freeze([
   { id: "installation-absent", expected: "observed-with-install-action" },
   { id: "installation-one-alias", expected: "found-unverified" },
   { id: "installation-multiple-aliases", expected: "identity-grouped" },
-  { id: "source-user-only", expected: "user-intent" },
-  { id: "source-shared-project-only", expected: "shared-project-intent" },
-  { id: "source-project-local-only", expected: "project-local-intent" },
-  { id: "sources-conflict", expected: "project-local-wins-per-key" },
-  { id: "malformed-higher-precedence", expected: "lower-resolution-tainted" },
+  { id: "source-user-only", expected: "source-bound-intent" },
+  { id: "source-shared-project-only", expected: "source-bound-intent" },
+  { id: "source-project-local-only", expected: "source-bound-intent" },
+  { id: "sources-conflict", expected: "two-observations-no-winner" },
+  { id: "malformed-higher-precedence", expected: "unrelated-source-preserved" },
   { id: "duplicate-json-keys", diagnostic: "config_duplicate_key" },
   { id: "bom", diagnostic: "config_parse_failed" },
   { id: "invalid-utf8", diagnostic: "config_invalid_utf8" },
   { id: "oversized-json", diagnostic: "config_too_large" },
   { id: "deep-json", diagnostic: "config_parse_failed" },
   { id: "unsupported-effort-max", diagnostic: "setting_value_unsupported" },
-  { id: "provider-route-model", diagnostic: "provider_route_deferred" },
+  { id: "provider-route-model", expected: "provider-deployment-deferred" },
   { id: "secret-sentinels", diagnostic: "secret_setting_rejected" },
   { id: "credential-material", diagnostic: "credential_material_rejected" },
   { id: "untrusted-workspace", diagnostic: "source_untrusted" },
   { id: "stale-source", diagnostic: "source_epoch_stale" },
   { id: "unsupported-platform", diagnostic: "unsupported_platform" },
   { id: "unsupported-dialect", diagnostic: "configuration_dialect_unsupported" },
+  { id: "access-scope-limit-exceeded", diagnostic: "access_scope_limit_exceeded" },
+  { id: "capability-unavailable", diagnostic: "capability_unavailable" },
+  { id: "model-default-special", expected: "provider-default" },
+  { id: "model-exact-name", expected: "exact-name" },
+  { id: "model-arbitrary-selector-deferred", expected: "unclassified-selector-deferred" },
 ]);
 
 const packageTestCoordinates = testFile => {
@@ -84,10 +92,10 @@ export const validateContractCoverage = ({
   testSources,
 }) => {
   exactKeys(contractCoverage, ["schemaVersion", "contractId", "cases"], "contract coverage");
-  assert.equal(contractCoverage.schemaVersion, 1);
-  assert.equal(contractCoverage.contractId, "ar-2-claude-code-setup-preview@1");
-  assert.equal(contractCoverage.cases.length, 21, "contract coverage row count");
-  assert.equal(fixtureMatrix.length, 21, "frozen fixture row count");
+  assert.equal(contractCoverage.schemaVersion, 2);
+  assert.equal(contractCoverage.contractId, "ar-2-claude-code-setup-preview@2");
+  assert.equal(contractCoverage.cases.length, 26, "contract coverage row count");
+  assert.equal(fixtureMatrix.length, 26, "frozen fixture row count");
   assert.deepEqual(fixtureMatrix, EXPECTED_FIXTURE_MATRIX, "frozen fixture matrix");
   assert.deepEqual(negativeGroups, fixtureMatrix, "freeze/negative fixture correspondence");
   assert.deepEqual(
@@ -125,6 +133,47 @@ export const validateContractCoverage = ({
   }
 };
 
+export const validateClaudeDiagnosticParity = (frozenDiagnostics, runtimeAccessSource) => {
+  const declaration = /export type ClaudeCodeSetupDiagnosticCode =(?<members>[\s\S]*?);/u
+    .exec(runtimeAccessSource);
+  assert.ok(declaration?.groups?.members, "public Claude diagnostic union must be declared");
+  const members = [...declaration.groups.members.matchAll(/^\s*\|\s*"([a-z0-9_]+)"\s*$/gmu)]
+    .map(match => match[1]);
+  assert.equal(
+    declaration.groups.members.replace(/^\s*\|\s*"[a-z0-9_]+"\s*$/gmu, "").trim(),
+    "",
+    "public Claude diagnostic union must contain only literal diagnostic codes",
+  );
+  unique(frozenDiagnostics, "frozen Claude diagnostics");
+  unique(members, "public Claude diagnostic union members");
+  assert.deepEqual(
+    [...frozenDiagnostics].toSorted(),
+    members.toSorted(),
+    "Claude runtime/freeze diagnostic set parity",
+  );
+};
+
+export const validateClaudeExpectedLimitationsParity = (frozenLimitations, runtimeAccessSource) => {
+  const declaration = /export interface ClaudeCodeSetupExpectedLimitations \{(?<members>[\s\S]*?)\n\}/u
+    .exec(runtimeAccessSource);
+  assert.ok(declaration?.groups?.members, "public Claude expected-limitations interface must be declared");
+  const entries = [...declaration.groups.members.matchAll(
+    /^\s*readonly\s+([A-Za-z][A-Za-z0-9]*):\s*"([a-z-]+)";\s*$/gmu,
+  )].map(([, key, value]) => [key, value]);
+  assert.equal(
+    declaration.groups.members
+      .replace(/^\s*readonly\s+[A-Za-z][A-Za-z0-9]*:\s*"[a-z-]+";\s*$/gmu, "")
+      .trim(),
+    "",
+    "public Claude expected limitations must contain only literal fields",
+  );
+  assert.deepEqual(
+    Object.fromEntries(entries),
+    frozenLimitations,
+    "Claude runtime/freeze expected-limitations parity",
+  );
+};
+
 const loadContractCoverageEvidence = async contractCoverage => {
   const testFiles = [...new Set(contractCoverage.cases.map(entry => entry.testFile))];
   const testSources = new Map(await Promise.all(testFiles.map(async testFile => [
@@ -139,108 +188,166 @@ const loadContractCoverageEvidence = async contractCoverage => {
   return { packageTestScripts, testSources };
 };
 
-export const EXPECTED_CAPABILITY_IDS = Object.freeze([
-  "CODEX-DISC-01", "CODEX-DISC-02", "CODEX-COMPAT-01",
-  "CODEX-CONFIG-01", "CODEX-CONFIG-02", "CODEX-CONFIG-03",
-  "CODEX-PROFILE-01", "CODEX-PROFILE-02", "CODEX-INSTALL-01",
-  "CODEX-INSTALL-02", "CODEX-INSTALL-03", "CODEX-ACCESS-01",
-  "CODEX-ACCESS-02", "CODEX-ACCESS-03", "CODEX-ACCESS-04",
-  "CODEX-ACCESS-05", "CODEX-ACCESS-06", "CODEX-ACCESS-07",
-  "CODEX-ACCESS-08", "CODEX-MODEL-01", "CODEX-MODEL-02",
-  "CODEX-MODEL-03", "CODEX-LAUNCH-01", "CODEX-LAUNCH-02",
-  "CODEX-LAUNCH-03", "CODEX-SETUP-01",
-  "CLF-01", "CLF-02", "CLF-03", "CLF-04", "CLF-05", "CLF-06", "CLF-07",
-  "OC-01", "OC-02", "OC-03", "OC-04", "OC-05", "OC-06", "OC-07",
-  "OC-08", "OC-09", "OC-10", "OC-11", "OC-12", "OC-13", "OC-14",
-  "OC-15", "OC-16", "OC-17", "OC-18", "OC-19", "OC-20", "OC-21",
-  "OC-22", "OC-23",
-]);
-
-const EXPECTED_PROVIDER_COUNTS = Object.freeze({
-  codex: 26,
-  "claude-code": 7,
-  opencode: 23,
-});
-const EXPECTED_APPROVALS = Object.freeze(["CLF-01", "CLF-02", "CLF-03", "CLF-04"]);
-const EXPECTED_RECOMMENDED_NEXT = Object.freeze([
-  "CODEX-COMPAT-01", "CODEX-INSTALL-01", "CODEX-INSTALL-02",
-  "CODEX-INSTALL-03", "CLF-05", "CLF-06",
-]);
-const EXPECTED_REJECTED = Object.freeze([
-  "CODEX-ACCESS-07", "OC-21", "OC-22", "OC-23",
-]);
 const LEGACY_COMMIT = "f6afac73cced62d943a0e891ad08d7b8f88f802f";
+const CURRENT_COMMIT = "493c6c37e247f021fc110c5fc624b72f1502d743";
+const BOUNDED_CONTEXT_IDS = new Set([
+  "runtime-configuration", "runtime-security", "provider-access", "agent-execution",
+]);
 const hostedAbsolutePath = /\/(?:home|Users)\//u;
 const secretShapedValue = /(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|\b(?:sk|xox[baprs]|gh[opusr])-[A-Za-z0-9_-]{16,}\b|\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b)/u;
 
-const validateInventory = inventory => {
-  const itemKeys = [
-    "capabilityId", "provider", "userJob", "userValue", "legacyBehavior",
-    "exactLegacyEvidence", "failureAndEdgeCases", "reuseDecision", "newOwner",
-    "proposedDisposition", "authorityStatus", "acceptanceEvidence", "futureExtensionSeam",
-  ];
-  const dispositions = new Set([
-    "approved_now", "recommended_next", "recommended_later", "rejected", "needs_owner",
-  ]);
-  const reuseDecisions = new Set([
-    "reuse_fixture", "reuse_concept", "refactor_pattern", "keep_provider_specific",
-    "reject_legacy_approach",
-  ]);
-  assert.equal(inventory.schemaVersion, 1);
-  assert.equal(inventory.implementationAuthority, "current-repository-tree");
+const providerForId = capabilityId => {
+  if (capabilityId.startsWith("CODEX-")) {return "codex";}
+  if (capabilityId.startsWith("CLF-")) {return "claude-code";}
+  if (capabilityId.startsWith("OC-")) {return "opencode";}
+  assert.fail(`unknown capability ID prefix: ${capabilityId}`);
+};
+
+const evidenceEntries = inventory => [
+  ...inventory.crossCuttingInvariants.flatMap(invariant => invariant.acceptanceEvidence.map(entry => entry.evidence)),
+  ...inventory.items.flatMap(item => [
+    ...item.legacyFact.evidence,
+    ...item.currentProviderFact.evidence,
+    ...item.architectureAuthority.evidence,
+    ...item.acceptanceEvidence.map(entry => entry.evidence),
+  ]),
+];
+
+export const validateInventory = inventory => {
+  assert.equal(inventory.schemaVersion, 2);
   assert.equal(inventory.legacyCommit, LEGACY_COMMIT);
-  assert.equal(inventory.items.length, 56, "inventory row count");
+  assert.equal(inventory.currentCommit, CURRENT_COMMIT);
   const capabilityIds = inventory.items.map(item => item.capabilityId);
   unique(capabilityIds, "capability IDs");
-  assert.deepEqual(capabilityIds.toSorted(), [...EXPECTED_CAPABILITY_IDS].toSorted(), "capability ID set");
+  const capabilityIdSet = new Set(capabilityIds);
+  unique(inventory.crossCuttingInvariants.map(invariant => invariant.id), "cross-cutting invariant IDs");
   const providerCounts = Object.fromEntries(
-    Object.keys(EXPECTED_PROVIDER_COUNTS).map(provider => [
+    ["codex", "claude-code", "opencode"].map(provider => [
       provider,
       inventory.items.filter(item => item.provider === provider).length,
     ]),
   );
-  assert.deepEqual(providerCounts, EXPECTED_PROVIDER_COUNTS, "provider counts");
   for (const item of inventory.items) {
-    exactKeys(item, itemKeys, item.capabilityId);
-    for (const key of itemKeys) {
-      assert.equal(typeof item[key], "string", `${item.capabilityId}.${key} type`);
-      assert.ok(item[key].trim().length > 0, `${item.capabilityId}.${key} non-empty`);
+    assert.equal(item.provider, providerForId(item.capabilityId), `${item.capabilityId} provider/ID consistency`);
+    for (const owner of item.owners) {
+      if (owner.kind === "bounded-context") {
+        assert.ok(BOUNDED_CONTEXT_IDS.has(owner.id), `${item.capabilityId} bounded-context owner ID`);
+      } else if (owner.kind === "application-composition") {
+        assert.equal(owner.id, "embedded-runtime", `${item.capabilityId} application-composition owner ID`);
+      } else if (owner.kind === "external-consumer") {
+        assert.equal(owner.id, "desktop", `${item.capabilityId} external-consumer owner ID`);
+      } else {
+        assert.fail(`${item.capabilityId} unknown owner kind ${owner.kind}`);
+      }
     }
-    assert.ok(dispositions.has(item.proposedDisposition), `${item.capabilityId} disposition`);
-    assert.ok(reuseDecisions.has(item.reuseDecision), `${item.capabilityId} reuse decision`);
-    assert.match(item.exactLegacyEvidence, new RegExp(`^${LEGACY_COMMIT}: `, "u"), `${item.capabilityId} exact legacy commit`);
-    assert.match(item.exactLegacyEvidence, /\b(?:src|test)\/[^\s),;]+/u, `${item.capabilityId} repository-relative legacy path`);
-    assert.match(item.exactLegacyEvidence, /(?::\d+\b|\b(?:symbol|symbols|test|tests)\b)/iu, `${item.capabilityId} symbol/test anchor`);
+    for (const relatedId of [...item.supersededBy, ...item.relatedCapabilities, ...item.priority.dependencies]) {
+      assert.ok(capabilityIdSet.has(relatedId), `${item.capabilityId} relationship ${relatedId} must exist`);
+      assert.notEqual(relatedId, item.capabilityId, `${item.capabilityId} cannot relate to itself`);
+    }
+    if (item.lifecycleStatus === "superseded") {
+      assert.equal(item.implementationStatus, "not_applicable", `${item.capabilityId} superseded implementation`);
+      assert.equal(item.backlogDisposition, "not_applicable", `${item.capabilityId} superseded backlog`);
+      assert.ok(
+        item.supersededBy.length > 0 || /INV-[A-Z0-9-]+/u.test(item.architectureAuthority.claim),
+        `${item.capabilityId} supersession target`,
+      );
+    } else {
+      assert.equal(item.supersededBy.length, 0, `${item.capabilityId} active row cannot be superseded`);
+    }
+    if (item.implementationStatus === "implemented") {
+      assert.notEqual(item.qualificationStatus, "not_applicable", `${item.capabilityId} implementation qualification axis`);
+      assert.equal(item.architectureAuthority.status, "accepted", `${item.capabilityId} implementation authority`);
+      assert.equal(item.backlogDisposition, "not_applicable", `${item.capabilityId} implemented backlog axis`);
+      assert.ok(
+        item.acceptanceEvidence.some(entry =>
+          entry.kind === "observed_current"
+          && /\/tests\//u.test(entry.evidence.path)
+          && entry.evidence.locator.startsWith("test:")
+        ),
+        `${item.capabilityId} exact current test evidence`,
+      );
+    } else if (item.implementationStatus === "not_implemented") {
+      assert.equal(item.qualificationStatus, "not_applicable", `${item.capabilityId} absent implementation qualification`);
+      assert.equal(
+        item.acceptanceEvidence.some(entry => entry.kind === "observed_current"),
+        false,
+        `${item.capabilityId} absent implementation cannot claim observed acceptance`,
+      );
+    }
+    if (["observed", "verified"].includes(item.legacyFact.status)) {
+      assert.ok(item.legacyFact.evidence.length > 0, `${item.capabilityId} observed legacy fact evidence`);
+      assert.ok(item.legacyFact.evidence.every(entry => entry.repository === "legacy"), `${item.capabilityId} legacy evidence repository`);
+    }
+    if (item.currentProviderFact.status === "verified") {
+      assert.ok(item.currentProviderFact.evidence.length > 0, `${item.capabilityId} verified current-provider evidence`);
+      assert.ok(item.currentProviderFact.evidence.every(entry => entry.repository === "current"), `${item.capabilityId} current-provider repository`);
+    }
     const serialized = JSON.stringify(item);
     assert.doesNotMatch(serialized, hostedAbsolutePath, `${item.capabilityId} hosted absolute path`);
     assert.doesNotMatch(serialized, secretShapedValue, `${item.capabilityId} secret-shaped value`);
   }
-  const approvals = inventory.items
-    .filter(item => item.proposedDisposition === "approved_now")
-    .map(item => item.capabilityId)
-    .toSorted();
-  const recommendedNext = inventory.items
-    .filter(item => item.proposedDisposition === "recommended_next")
-    .map(item => item.capabilityId)
-    .toSorted();
-  const rejected = inventory.items
-    .filter(item => item.proposedDisposition === "rejected")
-    .map(item => item.capabilityId)
-    .toSorted();
-  assert.deepEqual(approvals, [...EXPECTED_APPROVALS].toSorted(), "approved-now Claude preview rows");
-  assert.deepEqual(recommendedNext, [...EXPECTED_RECOMMENDED_NEXT].toSorted(), "recommended-next inventory rows");
-  assert.deepEqual(rejected, [...EXPECTED_REJECTED].toSorted(), "rejected inventory rows");
-  assert.equal(
-    inventory.items.filter(item => item.proposedDisposition === "recommended_later").length,
-    inventory.items.length - approvals.length - recommendedNext.length - rejected.length,
-    "all remaining inventory rows stay recommended-later",
-  );
-  assert.equal(inventory.items.some(item => item.proposedDisposition === "needs_owner"), false, "inventory has no ownerless row");
-  return { approvals, capabilityIds, providerCounts };
+  for (const entry of evidenceEntries(inventory)) {
+    assert.equal(entry.commit, entry.repository === "legacy" ? LEGACY_COMMIT : CURRENT_COMMIT, `${entry.path} evidence commit/repository consistency`);
+    assert.doesNotMatch(entry.path, /^(?:\/|\.\.?\/)|\\/u, `${entry.path} repository-relative evidence path`);
+    assert.doesNotMatch(entry.claim, hostedAbsolutePath, `${entry.path} evidence claim hosted path`);
+  }
+  return {
+    capabilityIds,
+    providerCounts,
+    implemented: inventory.items.filter(item => item.implementationStatus === "implemented").map(item => item.capabilityId).toSorted(),
+    superseded: inventory.items.filter(item => item.lifecycleStatus === "superseded").map(item => item.capabilityId).toSorted(),
+  };
+};
+
+const resolveJsonPointer = (value, pointer) => pointer
+  .slice(1)
+  .split("/")
+  .reduce((current, token) => current?.[token.replaceAll("~1", "/").replaceAll("~0", "~")], value);
+
+const validateEvidenceAnchor = async (entry, evidenceRoot) => {
+  const path = new URL(entry.path, evidenceRoot);
+  let source;
+  await assert.doesNotReject(async () => {
+    source = await readFile(path, "utf8");
+  }, `${entry.repository}:${entry.path} evidence path must exist`);
+  const [kind, coordinate] = entry.locator.split(/:(.*)/su, 2);
+  if (kind === "line") {
+    assert.ok(Number(coordinate) <= source.split("\n").length, `${entry.path}:${coordinate} line must exist`);
+  } else if (kind === "symbol") {
+    assert.ok(source.includes(coordinate), `${entry.path} symbol ${coordinate} must exist`);
+  } else if (kind === "test") {
+    assert.ok(source.includes(coordinate), `${entry.path} test ${coordinate} must exist`);
+  } else if (kind === "heading") {
+    assert.match(source, new RegExp(`^#{1,6}\\s+${escapeRegExp(coordinate)}\\s*$`, "mu"), `${entry.path} heading ${coordinate}`);
+  } else if (kind === "json-pointer") {
+    assert.notEqual(resolveJsonPointer(JSON.parse(source), coordinate), undefined, `${entry.path} JSON pointer ${coordinate}`);
+  } else {
+    assert.fail(`${entry.path} unsupported locator ${entry.locator}`);
+  }
+};
+
+const asDirectoryUrl = root => {
+  const url = root instanceof URL ? new URL(root) : pathToFileURL(resolve(root));
+  if (!url.pathname.endsWith("/")) {url.pathname += "/";}
+  return url;
+};
+
+const validateInventoryEvidenceFor = async (inventory, repository, evidenceRoot) => {
+  const entries = evidenceEntries(inventory).filter(entry => entry.repository === repository);
+  await Promise.all(entries.map(entry => validateEvidenceAnchor(entry, evidenceRoot)));
+  return entries.length;
+};
+
+export const auditLegacyInventoryEvidence = async (exactLegacyRoot, inventoryOverride) => {
+  assert.ok(exactLegacyRoot, "an explicit exact legacy root is required");
+  const inventory = inventoryOverride ?? await readJson(inventoryPath);
+  validateInventory(inventory);
+  return validateInventoryEvidenceFor(inventory, "legacy", asDirectoryUrl(exactLegacyRoot));
 };
 
 const validateFreeze = async freeze => {
-  assert.equal(freeze.schemaVersion, 1);
+  assert.equal(freeze.schemaVersion, 2);
+  assert.equal(freeze.contractId, "ar-2-claude-code-setup-preview@2");
   assert.equal(freeze.dialect.id, "claude-code-settings@2026-08-28");
   assert.equal(freeze.dialect.qualifiesExecutable, false);
   assert.deepEqual(freeze.entryPoint, {
@@ -248,29 +355,19 @@ const validateFreeze = async freeze => {
     productInput: "none",
     cancellation: "options.signal",
   });
-  assert.deepEqual(freeze.trustedScope, {
-    supplied: [
-      "explicitExecutablePaths", "pathEntries", "dialect", "homeRoot",
-      "workspaceRoot", "workspaceTrusted",
-    ],
-    derivedInComposition: [
-      "userSourcePath", "sharedProjectSourcePath", "projectLocalSourcePath",
-      "knownExecutablePaths",
-    ],
-    forbiddenAmbientInputs: [
-      "process.env", "process.cwd", "interactiveShellPath", "CLAUDE_CONFIG_DIR",
-    ],
-  });
-  assert.deepEqual(freeze.candidateOrder, [
-    "explicit-paths", "supplied-path-entries", "~/.local/bin/claude",
-    "/opt/homebrew/bin/claude", "/usr/local/bin/claude",
+  assert.equal(freeze.sourceModel.contract, "claude-code-observed-source-plan/v1");
+  assert.equal(freeze.sourceModel.claim, "observed-files-only");
+  assert.equal(freeze.sourceModel.precedence, "not-evaluated");
+  assert.equal(freeze.sourceModel.compatibility, "unqualified");
+  assert.equal(freeze.sourceModel.arrayOrder, "presentation-only");
+  assert.deepEqual(freeze.sourceModel.hostComposed, [
+    "collector", "custodyRoots", "sourcePaths", "sourceIds", "rootIds", "roles", "trust", "selectionBases",
   ]);
-  assert.deepEqual(freeze.sources, [
-    { kind: "user", rank: 1, pathTemplate: "~/.claude/settings.json" },
-    { kind: "shared-project", rank: 2, pathTemplate: "<workspace>/.claude/settings.json" },
-    { kind: "project-local", rank: 3, pathTemplate: "<workspace>/.claude/settings.local.json" },
+  assert.equal(freeze.sourceModel.staticPreviewSelectionBasis, "static-preview");
+  assert.deepEqual(freeze.sourceModel.forbiddenDiscovery, [
+    "process.cwd", "process.env.CLAUDE_CONFIG_DIR", "git-discovery",
+    "binary-revision-inference", "arbitrary-caller-ranks",
   ]);
-  assert.deepEqual(freeze.precedenceHighToLow, ["project-local", "shared-project", "user"]);
   assert.deepEqual(freeze.strictJson, {
     encoding: "utf-8",
     root: "object",
@@ -280,42 +377,37 @@ const validateFreeze = async freeze => {
     ],
   });
   assert.deepEqual(freeze.portableIntent.effortValues, ["low", "medium", "high", "xhigh"]);
+  assert.equal(freeze.portableIntent.modelDefault, "default");
   assert.deepEqual(freeze.portableIntent.modelAliases, [
-    "default", "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]",
+    "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]",
     "opus[1m]", "opusplan",
   ]);
+  assert.deepEqual(freeze.portableIntent.deferredModelForms,
+    ["provider-deployment", "unclassified-selector"]);
+  assert.equal(freeze.portableIntent.exactNameSyntax,
+    "^claude-[a-z0-9]+(?:-[a-z0-9]+)*(?:\\[1m\\])?$");
+  assert.match(freeze.portableIntent.exactNameClaim, /syntax-only/u);
+  assert.equal(freeze.portableIntent.deferredObservation, "value-free");
+  assert.equal(freeze.routeVocabulary.revision, "claude-code-provider-route-vocabulary/v2");
+  for (const routeKey of [
+    "AWS_DEFAULT_REGION", "ANTHROPIC_BEDROCK_REGION_PREFIX", "ANTHROPIC_BEDROCK_SERVICE_TIER",
+    "CLAUDE_CODE_USE_MANTLE", "CLAUDE_CODE_SKIP_MANTLE_AUTH", "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
+  ]) {assert.ok(freeze.routeVocabulary.retainedBedrockKeys.includes(routeKey), routeKey);}
   assert.deepEqual(freeze.expectedLimitations, {
     managedPolicy: "unobserved",
     sessionOverrides: "unobserved",
     interactiveShellPath: "unobserved",
+    modelCompatibility: "unobserved",
+    executableCompatibility: "unqualified",
+    precedence: "not-evaluated",
   });
-  assert.deepEqual(freeze.diagnostics, [
-    "candidate_denied", "candidate_invalid", "candidate_unreadable", "candidate_unstable",
-    "configuration_dialect_unsupported", "config_duplicate_key", "config_invalid_utf8",
-    "config_parse_failed", "config_too_large", "config_unreadable",
-    "credential_material_rejected", "provider_route_deferred", "secret_setting_rejected",
-    "setting_type_unsupported", "setting_value_unsupported", "source_untrusted",
-    "source_epoch_stale", "unsupported_platform",
-  ]);
-  assert.deepEqual(freeze.budgets, {
-    bytesPerSource: 131072, depth: 16, nodes: 4096, objectKeys: 1024,
-    arrayItems: 1024, keyLength: 256, stringLength: 16384,
-    classifierValueLength: 256, sourceSlots: 3, explicitPaths: 16,
-    suppliedPathEntries: 64, totalCandidates: 256, diagnostics: 1024,
-  });
-  assert.deepEqual(freeze.resultSemantics, {
-    sections: [
-      "installations", "portableIntent", "sourceObservations",
-      "expectedLimitations", "diagnostics", "nextActions",
-    ],
-    statuses: ["observed", "partial", "denied", "unsupported"],
-    installationStatus: "found_unverified",
-    partial: "Only actual degradation of the declared V1 scope. Expected limitations, a clean absent optional setting, or no installation do not cause partial.",
-    absence: "A clean absent installation is observed and includes install_claude_code as a next action.",
-    detached: true,
-    deepFrozen: true,
-    deterministic: true,
-  });
+  assert.equal(freeze.budgets.sourceSlots, 16);
+  assert.equal(freeze.budgets.rootSlots, 16);
+  assert.equal(freeze.budgets.aggregateSourceBytes, 1048576);
+  assert.deepEqual(freeze.resultSemantics.futureHandoff,
+    ["qualified-topology-dialect", "ProfileDraft", "ProfileRevision"]);
+  assert.ok(freeze.resultSemantics.sections.includes("observedPortableIntent"));
+  assert.ok(freeze.resultSemantics.sections.includes("deferredObservations"));
   unique(freeze.snapshot.documents.map(document => document.id), "snapshot document IDs");
   const semanticArtifactUrl = new URL(`../../${freeze.snapshot.semanticArtifact.path}`, import.meta.url);
   const semanticArtifactBytes = await readFile(semanticArtifactUrl);
@@ -340,16 +432,20 @@ const validateFreeze = async freeze => {
     ],
     portableKeys: ["model", "effortLevel"],
     modelAliases: freeze.portableIntent.modelAliases,
+    modelDefaultIsNotAlias: true,
+    exactModelNamesAreValidSettings: true,
     effortValues: freeze.portableIntent.effortValues,
     managedPolicySeparateFromPortableIntent: true,
-    providerRoutesSeparateFromPortableIntent: true,
+    routeAccountFactsProviderAccessOwned: true,
+    modelSettingsMayContainProviderDeployments: true,
+    providerDeploymentsDeferredUntilRouteBinding: true,
   });
 };
 
 export const validateAr2ContractArtifacts = async () => {
   const [
     inventory, inventorySchema, freeze, freezeSchema, fixtureManifest,
-    negativeFixtures, contractCoverage, rootPackage, roadmap, readiness,
+    negativeFixtures, contractCoverage, rootPackage, roadmap, readiness, runtimeAccessSource,
   ] = await Promise.all([
     readJson(inventoryPath),
     readJson(inventorySchemaPath),
@@ -361,10 +457,12 @@ export const validateAr2ContractArtifacts = async () => {
     readJson(packagePath),
     readFile(roadmapPath, "utf8"),
     readFile(readinessPath, "utf8"),
+    readFile(runtimeAccessPath, "utf8"),
   ]);
   validateSchema(inventorySchema, inventory, "legacy inventory");
   validateSchema(freezeSchema, freeze, "Claude freeze");
-  const { approvals, capabilityIds, providerCounts } = validateInventory(inventory);
+  const { capabilityIds, implemented, providerCounts, superseded } = validateInventory(inventory);
+  await validateInventoryEvidenceFor(inventory, "current", repositoryRoot);
 
   for (const [label, document] of [
     ["inventory", JSON.stringify(inventory)],
@@ -382,9 +480,16 @@ export const validateAr2ContractArtifacts = async () => {
   assert.match(readiness, /does not prove\s+a real Claude Code installation/u);
 
   await validateFreeze(freeze);
+  validateClaudeDiagnosticParity(freeze.diagnostics, runtimeAccessSource);
+  validateClaudeExpectedLimitationsParity(freeze.expectedLimitations, runtimeAccessSource);
 
   assert.equal(fixtureManifest.contractId, freeze.contractId);
   assert.equal(fixtureManifest.dialect, freeze.dialect.id);
+  assert.equal(fixtureManifest.classifierContract, "claude-code-portable-intent@2");
+  assert.equal(fixtureManifest.classifierRevision,
+    "claude-code-settings-2026-08-28-semantic-classifier/2");
+  assert.equal(fixtureManifest.semanticDigest, "claude-code-configuration-semantic-digest/v2");
+  assert.equal(fixtureManifest.providerRouteVocabularyRevision, freeze.routeVocabulary.revision);
   assert.equal(fixtureManifest.contractCoverage, "./contract-coverage.json");
   assert.equal(fixtureManifest.negativeManifest, "./negative-fixtures.json");
   const coverageEvidence = await loadContractCoverageEvidence(contractCoverage);
@@ -401,12 +506,13 @@ export const validateAr2ContractArtifacts = async () => {
   assert.equal(JSON.stringify(freeze).includes("interactive-shell"), false);
   assert.equal(JSON.stringify(freeze).includes("managed-settings.json"), false);
   return {
-    approvals,
     capabilityIds: capabilityIds.toSorted(),
+    implemented,
     inventoryItems: inventory.items.length,
     providerCounts,
     semanticArtifactSha256: freeze.snapshot.semanticArtifact.sha256,
     snapshotDocuments: freeze.snapshot.documents.length,
+    superseded,
   };
 };
 

@@ -18,6 +18,7 @@ import {
   displayClaudeCodePath,
   invalidExistingClaudeCodePath,
   rethrowClaudeCodeCancellation,
+  verifyClaudeCodeExecutablePath,
   verifyClaudeCodePathWithinRoot,
 } from "./claude-code-path-authorization.js";
 import { prepareClaudeCodeSourceRequests } from "./claude-code-source-scope.js";
@@ -61,11 +62,10 @@ const authorizeCandidates = async (
   for (const request of prepared.requests) {
     signal?.throwIfAborted();
     try {
-      const verified = await verifyClaudeCodePathWithinRoot(
+      const verified = await verifyClaudeCodeExecutablePath(
         request.absolutePath,
         roots,
         canonicalizer,
-        undefined,
         signal,
       );
       if (verified.status === "outside") {
@@ -98,8 +98,8 @@ const authorizeCandidates = async (
         ),
         canonicalPath: verified.observation.absolutePath,
         custodyRoot: {
-          absolutePath: verified.root.absolutePath,
-          canonicalPath: verified.root.canonicalPath,
+          absolutePath: request.absolutePath,
+          canonicalPath: verified.observation.absolutePath,
         },
         displayPath: displayClaudeCodePath(
           request.absolutePath,
@@ -320,6 +320,14 @@ export const createAuthorizeClaudeCodeSetupInspection = (
     );
     signal?.throwIfAborted();
     return deepFreezeAuthorization({
+      canonicalRoots: roots
+        .filter((root): root is ClaudeCodeCanonicalRoot & { readonly kind: "home" | "workspace" } =>
+          root.kind === "home" || root.kind === "workspace")
+        .map(root => ({
+          absolutePath: root.absolutePath,
+          canonicalPath: root.canonicalPath,
+          kind: root.kind,
+        })),
       diagnostics: sortDiagnostics([
         ...candidates.diagnostics,
         ...sources.diagnostics,

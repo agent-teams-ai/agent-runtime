@@ -4,6 +4,7 @@ import {
   link,
   mkdir,
   mkdtemp,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -100,6 +101,10 @@ test("rejects hardlinks, directories, and FIFOs", { skip: process.platform === "
   );
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") {return;}
+  assert.deepEqual(result.canonicalRoots, [
+    { absolutePath: home, canonicalPath: await realpath(home), kind: "home" },
+    { absolutePath: workspace, canonicalPath: await realpath(workspace), kind: "workspace" },
+  ]);
   assert.equal(
     result.executableCandidates.some(candidate => candidate.source === "explicit"),
     false,
@@ -355,7 +360,7 @@ test("rejects untrusted workspace sources without observing their paths", async 
   );
 });
 
-test("rejects relative, outside, sibling-prefix, and symlink escape candidates", async t => {
+test("allows an approved external-target alias but rejects direct external candidates", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-scope-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const home = join(root, "home");
@@ -386,15 +391,21 @@ test("rejects relative, outside, sibling-prefix, and symlink escape candidates",
   );
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") {return;}
-  assert.equal(
-    result.executableCandidates.some(candidate => candidate.source === "explicit"),
-    false,
+  const externalAlias = result.executableCandidates.find(candidate =>
+    candidate.absolutePath === escapedAlias
   );
+  assert.ok(externalAlias);
+  const canonicalOutsideTarget = await realpath(outsideTarget);
+  assert.equal(externalAlias.canonicalPath, canonicalOutsideTarget);
+  assert.deepEqual(externalAlias.custodyRoot, {
+    absolutePath: escapedAlias,
+    canonicalPath: canonicalOutsideTarget,
+  });
   assert.deepEqual(
     result.diagnostics.filter(item => item.safeRef === "explicit" || item.safeRef === "explicit-path")
       .map(item => item.code)
       .toSorted(),
-    ["candidate_denied", "candidate_denied", "candidate_denied", "candidate_invalid"],
+    ["candidate_denied", "candidate_denied", "candidate_invalid"],
   );
 });
 

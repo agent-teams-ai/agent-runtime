@@ -66,6 +66,19 @@ const selectContainingRoot = (
         compareClaudeCodeText(left.canonicalPath, right.canonicalPath),
     )[0];
 
+const selectContainingLexicalRoot = (
+  path: string,
+  roots: readonly ClaudeCodeCanonicalRoot[],
+): ClaudeCodeCanonicalRoot | undefined =>
+  roots
+    .filter(root => contains(resolve(root.absolutePath), path))
+    .toSorted(
+      (left, right) =>
+        right.absolutePath.length - left.absolutePath.length ||
+        compareClaudeCodeText(rootLabels[left.kind], rootLabels[right.kind]) ||
+        compareClaudeCodeText(left.absolutePath, right.absolutePath),
+    )[0];
+
 const selectSameRoot = (
   observation: CanonicalPathObservation,
   roots: readonly ClaudeCodeCanonicalRoot[],
@@ -112,6 +125,21 @@ const custodyOptions = (
     absolutePath: resolve(root.absolutePath),
     canonicalPath: root.canonicalPath,
   },
+  ...(signal === undefined ? {} : { signal }),
+});
+
+const executableCustodyOptions = (
+  absolutePath: string,
+  canonicalPath: string,
+  signal?: AbortSignal,
+): {
+  readonly custodyBoundary: {
+    readonly absolutePath: string;
+    readonly canonicalPath: string;
+  };
+  readonly signal?: AbortSignal;
+} => ({
+  custodyBoundary: { absolutePath, canonicalPath },
   ...(signal === undefined ? {} : { signal }),
 });
 
@@ -259,6 +287,35 @@ export const verifyClaudeCodePathWithinRoot = async (
     return { status: "unstable" };
   }
   return { observation: second, root: firstRoot, status: "verified" };
+};
+
+export const verifyClaudeCodeExecutablePath = async (
+  lexicalPath: string,
+  roots: readonly ClaudeCodeCanonicalRoot[],
+  canonicalizer: PathCanonicalizer,
+  signal?: AbortSignal,
+): Promise<VerifiedClaudeCodePath> => {
+  const lexicalRoot = selectContainingLexicalRoot(lexicalPath, roots);
+  if (lexicalRoot === undefined) {
+    return { status: "outside" };
+  }
+  const first = await canonicalize(
+    canonicalizer,
+    lexicalPath,
+    cancellationOptions(signal),
+  );
+  if (invalidExistingClaudeCodePath(first)) {
+    return { observation: first, root: lexicalRoot, status: "verified" };
+  }
+  const second = await canonicalize(
+    canonicalizer,
+    lexicalPath,
+    executableCustodyOptions(lexicalPath, first.absolutePath, signal),
+  );
+  if (!observationsEqual(first, second)) {
+    return { status: "unstable" };
+  }
+  return { observation: second, root: lexicalRoot, status: "verified" };
 };
 
 export const invalidExistingClaudeCodePath = (

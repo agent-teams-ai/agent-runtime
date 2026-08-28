@@ -3,6 +3,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
+  realpath,
   rename,
   rm,
   symlink,
@@ -255,7 +256,7 @@ test("rejects an ancestor replacement between candidate custody checks", async t
 });
 
 test(
-  "never opens canonical targets outside an authorized root",
+  "opens only a stable regular external target through an approved alias boundary",
   { skip: process.platform === "win32", timeout: 5_000 },
   async t => {
     const root = await mkdtemp(join(tmpdir(), "ar-claude-preopen-containment-"));
@@ -294,17 +295,24 @@ test(
     if (result.status !== "authorized") {
       return;
     }
-    assert.equal(
-      result.executableCandidates.some(item => item.source === "explicit"),
-      false,
+    const externalCandidate = result.executableCandidates.find(item =>
+      item.absolutePath === aliases[0]
     );
-    assert.ok(result.diagnostics.some(item =>
-      item.code === "candidate_denied" && item.safeRef === "explicit"
-    ));
+    assert.ok(externalCandidate);
+    const canonicalOutsideFile = await realpath(outsideFile);
+    assert.equal(externalCandidate.canonicalPath, canonicalOutsideFile);
+    assert.deepEqual(externalCandidate.custodyRoot, {
+      absolutePath: aliases[0],
+      canonicalPath: canonicalOutsideFile,
+    });
     assert.equal(openedCanonicalPaths.includes(home), false);
-    for (const target of targets) {
-      assert.equal(openedCanonicalPaths.includes(target), false);
-    }
+    assert.deepEqual(openedCanonicalPaths, [canonicalOutsideFile]);
+    assert.ok(result.diagnostics.some(item =>
+      item.code === "candidate_invalid" && item.safeRef === "$HOME/outside-alias-1"
+    ));
+    assert.ok(result.diagnostics.some(item =>
+      item.code === "candidate_invalid" && item.safeRef === "$HOME/outside-alias-2"
+    ));
   },
 );
 
@@ -332,7 +340,7 @@ test(
       false,
     );
     assert.ok(result.diagnostics.some(item =>
-      item.code === "candidate_denied" && item.safeRef === "explicit"
+      item.code === "candidate_invalid" && item.safeRef === "$HOME/device"
     ));
   },
 );

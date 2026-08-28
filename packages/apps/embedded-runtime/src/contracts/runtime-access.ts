@@ -32,6 +32,7 @@ export interface CodexSetupSettingView {
 }
 
 export type CodexSetupDiagnosticCode =
+  | "access_scope_limit_exceeded"
   | "candidate_denied"
   | "candidate_invalid"
   | "candidate_unreadable"
@@ -90,6 +91,7 @@ export interface CodexRuntimeSetupQueries {
 }
 
 export type ClaudeCodeSetupDiagnosticCode =
+  | "access_scope_limit_exceeded"
   | "candidate_denied"
   | "candidate_invalid"
   | "candidate_unreadable"
@@ -100,13 +102,18 @@ export type ClaudeCodeSetupDiagnosticCode =
   | "config_parse_failed"
   | "config_too_large"
   | "config_unreadable"
+  | "capability_unavailable"
   | "credential_material_rejected"
   | "provider_route_deferred"
   | "secret_setting_rejected"
   | "setting_type_unsupported"
   | "setting_value_unsupported"
-  | "source_untrusted"
   | "source_epoch_stale"
+  | "source_inventory_overflow"
+  | "source_plan_invalid"
+  | "source_plan_unsupported"
+  | "source_total_too_large"
+  | "source_untrusted"
   | "unsupported_platform";
 
 export interface ClaudeCodeSetupDiagnostic {
@@ -126,8 +133,11 @@ export interface ClaudeCodeSetupInstallationView {
 export type ClaudeCodePortableIntentView =
   | {
       readonly key: "model";
+      readonly selection:
+        | { readonly kind: "provider-default" }
+        | { readonly kind: "alias"; readonly value: "best" | "fable" | "sonnet" | "opus" | "haiku" | "sonnet[1m]" | "opus[1m]" | "opusplan" }
+        | { readonly kind: "exact-name"; readonly value: string };
       readonly sourceRef: string;
-      readonly value: "default" | "best" | "fable" | "sonnet" | "opus" | "haiku" | "sonnet[1m]" | "opus[1m]" | "opusplan";
     }
   | {
       readonly key: "effortLevel";
@@ -137,14 +147,19 @@ export type ClaudeCodePortableIntentView =
 
 export interface ClaudeCodeSetupSourceObservationView {
   readonly displayPath: string;
-  readonly kind: "user" | "shared-project" | "project-local";
+  readonly role: "user" | "shared-project" | "project-local";
+  readonly selectionBasis: "home-default" | "claude-config-dir" | "session-primary-working-directory" | "repository-root" | "main-worktree-root" | "legacy-starting-directory" | "caller-explicit" | "static-preview";
+  readonly semanticDigest?: string;
   readonly sourceRef: string;
   readonly status: "applied" | "malformed" | "missing" | "rejected" | "stale" | "unreadable";
 }
 
 export interface ClaudeCodeSetupExpectedLimitations {
+  readonly executableCompatibility: "unqualified";
   readonly interactiveShellPath: "unobserved";
   readonly managedPolicy: "unobserved";
+  readonly modelCompatibility: "unobserved";
+  readonly precedence: "not-evaluated";
   readonly sessionOverrides: "unobserved";
 }
 
@@ -159,7 +174,23 @@ export type InspectClaudeCodeRuntimeSetupOutcome =
       readonly installations: readonly ClaudeCodeSetupInstallationView[];
       readonly nextActions: readonly ("install_claude_code" | "review_configuration" | "trust_workspace")[];
       readonly observationRef: string;
-      readonly portableIntent: readonly ClaudeCodePortableIntentView[];
+      readonly deferredObservations: readonly {
+        readonly form: "provider-deployment" | "unclassified-selector";
+        readonly key: "model";
+        readonly sourceRef: string;
+        readonly status: "deferred";
+      }[];
+      readonly observedPortableIntent: readonly ClaudeCodePortableIntentView[];
+      readonly sourceModel: {
+        readonly claim: "observed-files-only";
+        readonly classifierRevision: string;
+        readonly collectorRef: string;
+        readonly compatibility: "unqualified";
+        readonly contract: "claude-code-observed-source-plan/v1";
+        readonly dialect: "claude-code-settings@2026-08-28";
+        readonly precedence: "not-evaluated";
+        readonly topologyRef: string;
+      };
       readonly sourceObservations: readonly ClaudeCodeSetupSourceObservationView[];
       readonly status: "observed" | "partial";
     });
