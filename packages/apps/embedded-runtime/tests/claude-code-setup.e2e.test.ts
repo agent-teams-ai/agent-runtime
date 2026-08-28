@@ -11,10 +11,10 @@ import { semanticCorrectionProofsRegistered } from "./claude-code-semantic-corre
 import { createSyntheticClaudeOwners } from "./helpers/synthetic-claude-owners.ts";
 
 import {
-  createAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
 } from "../dist/composition.js";
+import { createAgentRuntimeHost } from "./helpers/create-agent-runtime-host.ts";
 
 const unavailable = (): never => {
   throw new Error("dependency must not be reached");

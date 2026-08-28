@@ -7,9 +7,11 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import {
   AgentRuntimeHostDisposalIncompleteError,
-  createAgentRuntimeHost,
+  createAgentRuntimeHost as createClosedAgentRuntimeHost,
+  createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
   createDefaultAgentRuntimeHost,
+  type BuildCodexSetupViewDependencies,
 } from "../dist/composition.js";
 
 const isDeeplyFrozen = (value: unknown): boolean => {
@@ -23,6 +25,19 @@ const supportedInspectionPlanner = createCodexSetupInspectionPlanner("darwin");
 const unavailableInspectionDependency = (): never => {
   throw new Error("unsupported platform must not reach inspection dependencies");
 };
+
+const unavailableClaudeCodeSetup = Object.freeze({
+  authorizeClaudeCodeSetupInspection: { execute: unavailableInspectionDependency },
+  discoverClaudeCodeInstallations: { execute: unavailableInspectionDependency },
+  inspectClaudeCodeConfiguration: { execute: unavailableInspectionDependency },
+  planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("linux"),
+});
+
+const createAgentRuntimeHost = (codexSetup: BuildCodexSetupViewDependencies) =>
+  createClosedAgentRuntimeHost({
+    claudeCodeSetup: unavailableClaudeCodeSetup,
+    codexSetup,
+  });
 
 test(
   "inspects a synthetic Codex setup deterministically without leaking paths or secrets",

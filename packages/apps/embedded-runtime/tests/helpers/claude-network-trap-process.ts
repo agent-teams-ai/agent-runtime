@@ -131,14 +131,18 @@ try {
   });
 
   const host = embeddedComposition.createAgentRuntimeHost({
-    authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
-    authorizeSetupInspection: security.authorizeSetupInspection,
-    discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,
-    discoverCodexInstallations: execution.discoverCodexInstallations,
-    inspectClaudeCodeConfiguration: claudeConfiguration,
-    inspectCodexConfiguration: codexConfiguration.inspectCodexConfiguration,
-    planClaudeCodeSetupInspection: embeddedComposition.createClaudeCodeSetupInspectionPlanner("darwin"),
-    planCodexSetupInspection: embeddedComposition.createCodexSetupInspectionPlanner("linux"),
+    claudeCodeSetup: {
+      authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
+      discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,
+      inspectClaudeCodeConfiguration: claudeConfiguration,
+      planClaudeCodeSetupInspection: embeddedComposition.createClaudeCodeSetupInspectionPlanner("darwin"),
+    },
+    codexSetup: {
+      authorizeSetupInspection: security.authorizeSetupInspection,
+      discoverCodexInstallations: execution.discoverCodexInstallations,
+      inspectCodexConfiguration: codexConfiguration.inspectCodexConfiguration,
+      planCodexSetupInspection: embeddedComposition.createCodexSetupInspectionPlanner("linux"),
+    },
   });
   disposeHost = host.dispose;
   const access = host.bindAccess({
