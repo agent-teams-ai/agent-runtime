@@ -26,16 +26,27 @@ const foundationManifest = fileURLToPath(
 const protocolCli = join(dirname(protocolManifest), "dist/cli.js");
 const protocolProfile = "architecture/foundation/docs-protocol.yaml";
 
-test("staged qualification v2 covers every Runtime authorable type exactly once", async () => {
-  const [integration, qualification, rollout] = await Promise.all([
+test("canonical qualification v2 covers every Runtime authorable type exactly once", async () => {
+  const [integration, qualification, protocolProfileSource, authoringProfileSource, manifest] = await Promise.all([
     readFile(join(repositoryRoot, "architecture/foundation/docs-consumer-integration.json"), "utf8").then(JSON.parse),
     readFile(join(repositoryRoot, "architecture/foundation/docs-protocol-qualification.json"), "utf8").then(JSON.parse),
-    readFile(join(repositoryRoot, "architecture/foundation/docs-protocol-rollout.yaml"), "utf8"),
+    readFile(join(repositoryRoot, "architecture/foundation/docs-protocol.yaml"), "utf8"),
+    readFile(join(repositoryRoot, "architecture/foundation/document-authoring.yaml"), "utf8"),
+    readFile(join(repositoryRoot, "package.json"), "utf8").then(JSON.parse),
   ]);
-  assert.equal(integration.schemaVersion, 1);
-  assert.match(rollout, /^status: stable3-current-v2-staged$/mu);
-  assert.match(rollout, /^  integrationSchemaVersion: 2$/mu);
-  assert.match(rollout, /^  qualificationContractSchemaVersion: 2$/mu);
+  assert.equal(integration.schemaVersion, 2);
+  assert.equal(integration.cohort.cohortId, "docs-2026-08-28-stable8");
+  assert.deepEqual(integration.qualification, {
+    contractPath: "architecture/foundation/docs-protocol-qualification.json",
+    gateCommand: "pnpm docs:protocol:check"
+  });
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.2.0");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "0.20.0");
+  assert.match(protocolProfileSource, /^schemaVersion: 2$/mu);
+  assert.match(protocolProfileSource, /^  path: architecture\/foundation\/document-authoring\.yaml$/mu);
+  assert.match(protocolProfileSource, /^  schemaVersion: 3$/mu);
+  assert.match(authoringProfileSource, /^schemaVersion: 3$/mu);
+  assert.match(authoringProfileSource, /^  ownerSets:$/mu);
   assert.equal(qualification.schemaVersion, 2);
   assert.deepEqual(Object.keys(qualification).toSorted(), ["scenarios", "schemaVersion"]);
   assert.deepEqual(qualification.scenarios.map(({ type }) => type).toSorted(), [
@@ -49,6 +60,18 @@ test("staged qualification v2 covers every Runtime authorable type exactly once"
   for (const legacyKey of ["fixtureRoot", "gate", "packages", "paths", "qualificationTests", "tests"]) {
     assert.equal(Object.hasOwn(qualification, legacyKey), false, legacyKey);
   }
+  await assert.rejects(
+    readFile(join(repositoryRoot, "architecture/foundation/docs-protocol-rollout.yaml"), "utf8"),
+    { code: "ENOENT" }
+  );
+  await assert.rejects(
+    readFile(join(repositoryRoot, "architecture/foundation/rollouts/docs-protocol-v2/docs-protocol.yaml"), "utf8"),
+    { code: "ENOENT" }
+  );
+  await assert.rejects(
+    readFile(join(repositoryRoot, "architecture/foundation/rollouts/docs-protocol-v2/document-authoring.yaml"), "utf8"),
+    { code: "ENOENT" }
+  );
 });
 
 async function copyFile(source, destination) {

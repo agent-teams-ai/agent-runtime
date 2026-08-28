@@ -1,4 +1,4 @@
-schemaVersion: 2
+schemaVersion: 3
 projectId: agent-runtime
 
 catalog:
@@ -17,6 +17,11 @@ catalog:
 
 authoring:
   mode: create-only
+  ownerSets:
+    schemaVersion: 1
+    sets:
+      qualification-owner:
+        - architecture/qualification
   artifactTypes:
     - type: index
       initialStatus: active
@@ -95,8 +100,7 @@ authoring:
 
     - type: evidence
       initialStatus: evidence-reference
-      allowedOwnerIds:
-        - architecture/qualification
+      ownerSetId: qualification-owner
       identity:
         kind: explicit
         format: qualified
@@ -120,8 +124,7 @@ authoring:
 
     - type: qualification-plan
       initialStatus: proposed
-      allowedOwnerIds:
-        - architecture/qualification
+      ownerSetId: qualification-owner
       identity:
         kind: explicit
         format: qualified
