@@ -29,7 +29,7 @@ authority for the new design.
 
 Evidence baseline:
 
-- Agent Runtime `25b2b7f383347466fa74fdd5586c485f5181d8d9`;
+- Agent Runtime implementation `2811435f6a3944f68e25b3966c98b54026486c21`;
 - legacy `777genius/agent-teams-ai`
   `f6afac73cced62d943a0e891ad08d7b8f88f802f`;
 - official provider documentation linked under each provider below.
@@ -37,9 +37,9 @@ Evidence baseline:
 The complete normalized 13-field inventory is
 [`legacy-feature-inventory.json`](legacy-feature-inventory.json). Its
 `approved_now | recommended_next | recommended_later | rejected | needs_owner`
-values supersede the older shorthand used by the summary tables in this
-document. Only the Claude Code passive preview is `approved_now`; every other
-priority remains a recommendation or rejection.
+values are the only disposition authority used in this document. Only the
+Claude Code passive preview is `approved_now`; every other priority remains a
+recommendation or rejection.
 
 The legacy repository may contain newer uncommitted work in developer
 workspaces. Such work is not part of this baseline and cannot establish product
@@ -51,15 +51,19 @@ Each inventory item records the following fields:
 
 | Field | Question answered |
 | --- | --- |
-| user job | What can the user accomplish? |
-| legacy behavior | What did the old product actually show or do? |
-| evidence | Which exact source, test, or official document proves it? |
-| failure cases | Which missing, stale, corrupt, incompatible, or partial states already matter? |
-| disposition | `MVP`, `NEXT`, `LATER`, or `REJECT` |
-| reuse mode | Reuse a fixture/algorithm, rewrite behind a new port, or do not reuse |
-| owner | Which Agent Runtime bounded context owns the new meaning? |
-| acceptance | What deterministic test proves the user-visible result? |
-| extension seam | Which known future capability must remain possible without widening the current contract? |
+| `capabilityId` | Which stable inventory row is this? |
+| `provider` | Which provider owns the observed legacy behavior? |
+| `userJob` | What can the user accomplish? |
+| `userValue` | Why is that job useful? |
+| `legacyBehavior` | What did the old product actually show or do? |
+| `exactLegacyEvidence` | Which exact commit, file, symbol, line, or test proves it? |
+| `failureAndEdgeCases` | Which missing, stale, corrupt, incompatible, or partial states already matter? |
+| `reuseDecision` | Is the evidence reusable as a fixture, concept, pattern, provider-specific behavior, or rejection? |
+| `newOwner` | Which Agent Runtime bounded context owns the new meaning? |
+| `proposedDisposition` | Which exact approved/recommended/rejected authority value applies? |
+| `authorityStatus` | Which accepted decision or current recommendation authorizes the statement? |
+| `acceptanceEvidence` | What deterministic evidence proves the current or future result? |
+| `futureExtensionSeam` | Which future capability must remain possible without widening the current contract? |
 
 The inventory deliberately separates capabilities that the old Desktop often
 combined in one screen or service:
@@ -114,12 +118,12 @@ The following data must remain separate:
 
 | Capability | Legacy evidence | New disposition |
 | --- | --- | --- |
-| detect installed runtime and version | `src/features/codex-runtime-installer`, PATH and app-managed manifest probes | `MVP`: passive candidates already exist in AR-1; real version-bound compatibility is `NEXT` |
-| inspect user, selected native profile, and workspace configuration | legacy settings/profile flows plus current AR-1 classifier | `MVP`: AR-1 supports `model`, `model_reasoning_effort`, and `personality` only |
-| install or update with progress | `CodexRuntimeInstallerService` | `NEXT` product capability, not part of passive setup inspection |
-| choose ChatGPT or API-key access and inspect login readiness | `src/features/codex-account` | `LATER`: Provider Access; AR-1 reports only that access-owned settings were deferred |
-| browser/device login, logout, account and rate-limit display | `CodexLoginSessionManager` and account contracts | `LATER`: preserve the user jobs, redesign credential custody and transport |
-| model catalog, fast-mode eligibility, launch readiness | `src/features/codex-model-catalog` and `src/features/codex-runtime-profile` | `LATER`: live provider facts must not become portable profile truth |
+| detect installed runtime and version | `src/features/codex-runtime-installer`, PATH and app-managed manifest probes | `recommended_later` for passive discovery; version-bound compatibility is `recommended_next` |
+| inspect user, selected native profile, and workspace configuration | legacy settings/profile flows plus current AR-1 classifier | `recommended_later`; AR-1 already projects only `model`, `model_reasoning_effort`, and `personality` |
+| install or update with progress | `CodexRuntimeInstallerService` | `recommended_next`; separate from passive setup inspection |
+| choose ChatGPT or API-key access and inspect login readiness | `src/features/codex-account` | `recommended_later`; Provider Access owns it |
+| browser/device login, logout, account and rate-limit display | `CodexLoginSessionManager` and account contracts | `recommended_later`; preserve the user jobs and redesign credential custody and transport |
+| model catalog, fast-mode eligibility, launch readiness | `src/features/codex-model-catalog` and `src/features/codex-runtime-profile` | `recommended_later`; live provider facts must not become portable profile truth |
 
 Reusable legacy evidence:
 
@@ -146,13 +150,13 @@ and [Codex authentication documentation](https://developers.openai.com/codex/aut
 
 | Capability | Legacy evidence | New disposition |
 | --- | --- | --- |
-| detect runtime through interactive-shell and process PATHs | `ClaudeBinaryResolver` and `CliInstallerService` | `MVP` for the second provider slice, with passive `found_unverified` observations |
-| inspect user, project, local, and managed setting sources | legacy Claude settings readers and launch environment builders | `MVP` only for an explicit version-bound allowlist; no ambient secret values |
-| inspect model and reasoning/effort preferences | `src/features/anthropic-runtime-profile` and shared effort utilities | `MVP` where official Claude settings provide stable semantics; unsupported fields stay absent |
-| classify direct Anthropic, Bedrock, Vertex AI, Foundry, or compatible route | connection-mode constants and runtime environment builders | `NEXT`: Provider Access owns route semantics; the passive slice emits only a typed deferred diagnostic |
-| inspect login status | `claude auth status` flow in `CliInstallerService` | `NEXT`: Provider Access observation; it may execute provider code and is outside the passive slice |
-| install/update native CLI with checksum and progress | GCS manifest/download plus `claude install` flow | `NEXT` installation capability with a new recoverable design |
-| configure or switch access | legacy provider settings UI | `LATER`; preserve the user job, not the Electron implementation |
+| detect runtime through interactive-shell and process PATHs | `ClaudeBinaryResolver` and `CliInstallerService` | `approved_now` only as passive trusted-input discovery with `found_unverified`; interactive-shell discovery is excluded |
+| inspect user, project, local, and managed setting sources | legacy Claude settings readers and launch environment builders | `approved_now` only for the three portable file sources; managed policy stays `unobserved` |
+| inspect model and reasoning/effort preferences | `src/features/anthropic-runtime-profile` and shared effort utilities | `approved_now` only for the frozen model aliases and `low | medium | high | xhigh` allowlists |
+| classify direct Anthropic, Bedrock, Vertex AI, Foundry, or compatible route | connection-mode constants and runtime environment builders | `approved_now` only for value-free deferred/rejected diagnostics; route behavior remains Provider Access work |
+| inspect login status | `claude auth status` flow in `CliInstallerService` | `recommended_next`; it may execute provider code and is outside the passive slice |
+| install/update native CLI with checksum and progress | GCS manifest/download plus `claude install` flow | `recommended_next` as a separate recoverable installation capability |
+| configure or switch access | legacy provider settings UI | `recommended_later`; preserve the user job, not the Electron implementation |
 
 Reusable legacy evidence:
 
@@ -186,13 +190,13 @@ documentation.
 
 | Capability | Legacy evidence | New disposition |
 | --- | --- | --- |
-| detect PATH/app-managed runtime and supported version | `OpenCodeRuntimeInstallerService` and version policy | `NEXT` after the Claude slice proves the shared observation seam |
-| inspect global/project configuration and managed overlay intent | OpenCode config and managed-overlay modules | `NEXT`, but user-owned config is never mutated by inspection |
-| install/update native platform package | `OpenCodeRuntimeInstallerService` | second product capability after passive setup; not copied into setup inspection |
-| list providers, connections, setup methods, and models | `src/features/runtime-provider-management` | `LATER`: primarily Provider Access and provider catalog work |
-| OAuth/API-key connection and forgetting credentials | runtime-provider-management use cases | `LATER`: credential custody and ambiguous completion require dedicated contracts |
-| local model endpoint configuration and proof | local-provider adapters and UI | `LATER`: useful product feature, outside the first setup/profile slice |
-| team launch, prompt delivery, recovery, and inbox behavior | `src/main/services/team/opencode` and provisioning code | `REJECT` from this inventory: Orchestrator behavior, not runtime setup |
+| detect PATH/app-managed runtime and supported version | `OpenCodeRuntimeInstallerService` and version policy | `recommended_later`; no OpenCode implementation is present |
+| inspect global/project configuration and managed overlay intent | OpenCode config and managed-overlay modules | `recommended_later`; user-owned config is never mutated by inspection |
+| install/update native platform package | `OpenCodeRuntimeInstallerService` | `recommended_later`; separate from setup inspection |
+| list providers, connections, setup methods, and models | `src/features/runtime-provider-management` | `recommended_later`; primarily Provider Access and provider catalog work |
+| OAuth/API-key connection and forgetting credentials | runtime-provider-management use cases | `recommended_later`; credential custody and ambiguous completion require dedicated contracts |
+| local model endpoint configuration and proof | local-provider adapters and UI | `recommended_later`; useful product behavior outside passive setup inspection |
+| team launch, prompt delivery, recovery, and inbox behavior | `src/main/services/team/opencode` and provisioning code | `rejected`; Orchestrator behavior is not runtime setup |
 
 Reusable legacy evidence:
 
@@ -229,9 +233,10 @@ saved-profile database hidden inside `codexSetup.inspect`.
 
 ### Slice AR-2 - Claude Code passive setup inspection
 
-Status: contract and fixture spine frozen; working provider flow, synthetic
-composition evidence, collector evidence, implementation qualification, and
-deployment qualification are not present.
+Status: implementation present at
+`2811435f6a3944f68e25b3966c98b54026486c21` and synthetic macOS composition
+evidence present. Provider qualification, a production collector, and
+deployment qualification remain open.
 
 The machine-readable authority is the
 [`claude-code-setup-freeze.json`](claude-code-setup-freeze.json) packet and its
@@ -248,7 +253,7 @@ interface RuntimeAccessHandle {
 }
 ```
 
-It is independently authored through the same accepted bounded contexts:
+The implemented private headless TypeScript query crosses the accepted owners:
 
 - Agent Execution observes candidate installations without executing them;
 - Runtime Security authorizes roots, paths, sources, and file identity;
@@ -257,11 +262,13 @@ It is independently authored through the same accepted bounded contexts:
 - Runtime Configuration classifies route-owned and secret-shaped keys only far
   enough to omit their values and emit stable deferred/rejected diagnostics;
 - Provider Access is not implemented as part of AR-2;
-- embedded-runtime maps those owner-local results into one detached view.
+- embedded-runtime maps those owner-local results into one detached,
+  deeply-frozen view and preserves Host cancellation/disposal custody.
 
 V1 constraints:
 
-- macOS only;
+- passive macOS synthetic preview only; other platforms return typed
+  `unsupported`;
 - passive filesystem and installation metadata observation only;
 - no `claude` process execution;
 - no login, logout, installation, update, network, saved profile, or launch;
@@ -270,9 +277,10 @@ V1 constraints:
 - typed unsupported/partial diagnostics rather than inferred support;
 - cancellation and Host disposal retain the AR-1 meaning.
 
-Expected size: approximately 1,500-2,700 production and focused test lines,
-depending on how much of the existing filesystem authorization can be reused
-without weakening provider-specific semantics.
+The synthetic end-to-end test proves only composition, filesystem custody,
+passivity, DTO shaping, and cancellation/disposal. It does not inspect or prove
+a real Claude Code installation, executable version, compatibility, login,
+route, managed policy, or production Desktop collector.
 
 ### Reconciliation after AR-2
 
@@ -288,6 +296,21 @@ Only after both slices pass provider-specific fixtures:
 
 This is the DRY point. Earlier extraction would encode Codex assumptions;
 later extraction would knowingly retain proven duplicate semantics.
+
+### Recommended next work
+
+The next product and provider capabilities remain recommendations, not approval
+to widen `claudeCodeSetup.inspect`:
+
+1. Installer/update as a separate mutation capability.
+2. Saved Profiles as an explicit reviewed publication workflow.
+3. Provider Access for authentication, credentials, routes, Bedrock, Vertex,
+   Foundry, compatible endpoints, and access status.
+4. OpenCode passive setup inspection as AR-3.
+5. A production macOS collector and separate Claude qualification campaign.
+
+Desktop owns every UI workflow, label, progress display, confirmation, and
+presentation integration for those capabilities in its separate repository.
 
 ### Slice AR-3 - OpenCode passive setup inspection
 
@@ -326,17 +349,17 @@ persistence adapters, migration ownership, tenant/workspace scope, and the
 review contract. The domain and application contract can remain storage-
 agnostic; SQLite and PostgreSQL are adapters under ADR-0001.
 
-## MVP matrix
+## Capability authority matrix
 
-| User capability | First MVP | Later extension |
+| User capability | Current authority | Future recommendation |
 | --- | --- | --- |
-| see which supported runtimes are present | Codex plus Claude passive inspection on macOS | OpenCode, Windows, Linux, verified compatibility |
-| understand portable configuration | provider-specific safe preview | plugins, MCP, skills, commands, hooks, instructions |
-| understand why setup is incomplete | typed local diagnostics and next actions | provider health and repair workflows |
-| create reusable profiles | explicit reviewed profile capability after passive inspection | import/export, inheritance, organization policy |
-| install or update a missing runtime | separate second product capability | channels, rollback, fleet policy |
-| authorize a provider account | not in first MVP | Provider Access login/import/refresh/revoke flows |
-| launch agents | not part of Runtime Setup | Agent Execution operations after their own decisions and gates |
+| see which runtimes appear present | Claude passive macOS preview is `approved_now`; results are `found_unverified` | OpenCode, Windows, Linux, and verified compatibility |
+| understand portable Claude file intent | `approved_now` for the frozen provider-specific allowlist | plugins, MCP, skills, commands, hooks, and instructions |
+| understand why Claude setup observation degraded | `approved_now` for typed local diagnostics and next actions | provider health and repair workflows |
+| create reusable profiles | not implemented by inspection | reviewed profile publication, import/export, inheritance, and organization policy |
+| install or update a runtime | `recommended_next` and separate from inspection | channels, rollback, and fleet policy |
+| authorize a provider account | not implemented by inspection | Provider Access login/import/refresh/revoke flows |
+| launch agents | outside Runtime Setup | Agent Execution operations after their own decisions and gates |
 
 ## Frozen AR-2 contract decisions
 
@@ -352,14 +375,15 @@ The contract-and-fixture handoff freezes:
 6. stable diagnostic and result variants;
 7. provider-specific fixtures and the required negative test matrix.
 
-The TypeScript artifacts are provider-specific contracts, application-owned
-ports, trusted-scope and planner shapes, dialect constants/examples, and a
-compile-only four-owner composition seam. They are not a working inspection
-implementation. Fixed known paths and the three fixed source paths are derived
-later in composition; scope supplies only trusted explicit executable paths,
-caller-supplied PATH entries, the exact dialect, home/workspace roots, and the
-explicit workspace trust decision. Ambient `CLAUDE_CONFIG_DIR`, process
-environment, process cwd, and interactive-shell PATH are not inputs.
+The TypeScript artifacts now implement provider-specific contracts,
+application-owned ports, trusted-scope planning, authorization, passive
+candidate observation, strict file parsing, semantic reduction, default Pure
+DI composition, and the private callable. Fixed known paths and the three fixed
+source paths are derived in composition; scope supplies only trusted explicit
+executable paths, caller-supplied PATH entries, the exact dialect,
+home/workspace roots, and the explicit workspace trust decision. Ambient
+`CLAUDE_CONFIG_DIR`, process environment, process cwd, and interactive-shell
+PATH are not inputs.
 
 The following do not block AR-2 and remain explicit future decisions:
 

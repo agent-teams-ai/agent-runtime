@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 
 const inventoryPath = new URL("../../docs/architecture/legacy-feature-inventory.json", import.meta.url);
 const freezePath = new URL("../../docs/architecture/claude-code-setup-freeze.json", import.meta.url);
+const roadmapPath = new URL("../../docs/architecture/provider-setup-delivery-roadmap.md", import.meta.url);
+const readinessPath = new URL("../../docs/architecture/readiness.md", import.meta.url);
 
 const readJson = async path => JSON.parse(await readFile(path, "utf8"));
 const exactKeys = (value, keys, label) => {
@@ -35,6 +37,14 @@ const EXPECTED_PROVIDER_COUNTS = Object.freeze({
   opencode: 23,
 });
 const EXPECTED_APPROVALS = Object.freeze(["CLF-01", "CLF-02", "CLF-03", "CLF-04"]);
+const EXPECTED_RECOMMENDED_NEXT = Object.freeze([
+  "CODEX-COMPAT-01", "CODEX-INSTALL-01", "CODEX-INSTALL-02",
+  "CODEX-INSTALL-03", "CLF-05", "CLF-06",
+]);
+const EXPECTED_REJECTED = Object.freeze([
+  "CODEX-ACCESS-07", "OC-21", "OC-22", "OC-23",
+]);
+const AGENT_RUNTIME_COMMIT = "2811435f6a3944f68e25b3966c98b54026486c21";
 const LEGACY_COMMIT = "f6afac73cced62d943a0e891ad08d7b8f88f802f";
 const hostedAbsolutePath = /\/(?:home|Users)\//u;
 const secretShapedValue = /(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|\b(?:sk|xox[baprs]|gh[opusr])-[A-Za-z0-9_-]{16,}\b|\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b)/u;
@@ -42,6 +52,10 @@ const secretShapedValue = /(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|
 export const validateAr2ContractArtifacts = async () => {
   const inventory = await readJson(inventoryPath);
   const freeze = await readJson(freezePath);
+  const [roadmap, readiness] = await Promise.all([
+    readFile(roadmapPath, "utf8"),
+    readFile(readinessPath, "utf8"),
+  ]);
   const itemKeys = [
     "capabilityId", "provider", "userJob", "userValue", "legacyBehavior",
     "exactLegacyEvidence", "failureAndEdgeCases", "reuseDecision", "newOwner",
@@ -55,6 +69,7 @@ export const validateAr2ContractArtifacts = async () => {
     "reject_legacy_approach",
   ]);
   assert.equal(inventory.schemaVersion, 1);
+  assert.equal(inventory.agentRuntimeCommit, AGENT_RUNTIME_COMMIT);
   assert.equal(inventory.legacyCommit, LEGACY_COMMIT);
   assert.equal(inventory.items.length, 56, "inventory row count");
   const capabilityIds = inventory.items.map(item => item.capabilityId);
@@ -87,6 +102,43 @@ export const validateAr2ContractArtifacts = async () => {
     .map(item => item.capabilityId)
     .toSorted();
   assert.deepEqual(approvals, [...EXPECTED_APPROVALS].toSorted(), "approved-now Claude preview rows");
+  const recommendedNext = inventory.items
+    .filter(item => item.proposedDisposition === "recommended_next")
+    .map(item => item.capabilityId)
+    .toSorted();
+  assert.deepEqual(
+    recommendedNext,
+    [...EXPECTED_RECOMMENDED_NEXT].toSorted(),
+    "recommended-next inventory rows",
+  );
+  const rejected = inventory.items
+    .filter(item => item.proposedDisposition === "rejected")
+    .map(item => item.capabilityId)
+    .toSorted();
+  assert.deepEqual(rejected, [...EXPECTED_REJECTED].toSorted(), "rejected inventory rows");
+  assert.equal(
+    inventory.items.filter(item => item.proposedDisposition === "recommended_later").length,
+    inventory.items.length - approvals.length - recommendedNext.length - rejected.length,
+    "all remaining inventory rows stay recommended-later",
+  );
+  assert.equal(
+    inventory.items.some(item => item.proposedDisposition === "needs_owner"),
+    false,
+    "inventory has no ownerless row",
+  );
+
+  for (const [label, document] of [
+    ["inventory", JSON.stringify(inventory)],
+    ["freeze", JSON.stringify(freeze)],
+    ["roadmap", roadmap],
+    ["readiness", readiness],
+  ]) {
+    assert.doesNotMatch(document, /\bPacket[ -]?A\b/iu, `${label} retired label`);
+  }
+  assert.match(roadmap, /passive macOS synthetic preview only/u);
+  assert.match(roadmap, /It does not inspect or prove\s+a real Claude Code installation/u);
+  assert.match(readiness, /AR-2 implementation present; synthetic evidence present; qualification open/u);
+  assert.match(readiness, /does not prove\s+a real Claude Code installation/u);
 
   assert.equal(freeze.schemaVersion, 1);
   assert.equal(freeze.dialect.id, "claude-code-settings@2026-08-28");

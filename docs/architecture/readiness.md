@@ -109,8 +109,9 @@ Foundation accepted:
 
 AR-1 implementation present; implementation and deployment qualification open:
 
-- the private `@agent-teams/embedded-runtime` capability implements only
-  `RuntimeAccessHandle.codexSetup.inspect`. A trusted composition root supplies
+- the private `@agent-teams/embedded-runtime` capability implements
+  `RuntimeAccessHandle.codexSetup.inspect` alongside the AR-2 Claude query. A
+  trusted composition root supplies
   and binds an immutable inspection scope; the application query composes
   owner-local Runtime Security path authorization, Agent Execution installation
   observation, and Runtime Configuration configuration inspection. Cancellation
@@ -154,7 +155,7 @@ implementation or deployment qualification:
   of a released Codex binary or qualify a Desktop collector or target
   filesystem.
 
-AR-2 contract frozen; implementation and qualification open:
+AR-2 implementation present; synthetic evidence present; qualification open:
 
 - the normalized three-provider
   [`Legacy Feature Inventory`](legacy-feature-inventory.json) and the
@@ -163,22 +164,41 @@ AR-2 contract frozen; implementation and qualification open:
   deterministic artifact gate;
 - provider-specific TypeScript DTOs and application-owned ports exist across
   Agent Execution, Runtime Security, Runtime Configuration, and Embedded
-  Runtime, with a compile-only composition seam and retained negative fixture
-  manifest;
+  Runtime. The default Pure DI composition exposes the private headless
+  `RuntimeAccessHandle.claudeCodeSetup.inspect` query;
 - the frozen `claude-code-settings@2026-08-28` dialect identifies official
   documentation semantics only. It does not qualify, version, or prove
   compatibility of a discovered executable;
-- the prospective private `RuntimeAccessHandle.claudeCodeSetup.inspect` shape
-  is contract-only and is not exposed by the working runtime host. No Claude
-  authorization, candidate discovery, file reading/parsing, configuration
-  reduction, result builder, default composition, synthetic macOS E2E, or
-  production collector is implemented;
+- on macOS, trusted scope planning derives the three fixed portable source
+  paths and fixed known executable locations from synthetic home/workspace
+  roots. Runtime Security authorizes roots, paths, trust, stable identity, and
+  custody; Agent Execution observes executable metadata without launching it;
+  Runtime Configuration performs bounded duplicate-aware JSON parsing and
+  projects only the frozen `model` and `effortLevel` allowlists; Embedded
+  Runtime shapes detached, deeply-frozen, scope-bound DTOs;
+- explicit executable paths and caller-supplied PATH entries are the only
+  variable discovery inputs. Ambient `process.env`, `process.cwd`, shell
+  profiles, `CLAUDE_CONFIG_DIR`, login state, credentials, network, install,
+  update, mutation, and runtime launch are not observed or invoked;
+- discovered installations remain `found_unverified`. The query reports
+  observed file intent, not effective runtime configuration, and does not
+  infer executable version, compatibility, provider route, authentication, or
+  production support. Non-macOS hosts return typed `unsupported`;
 - managed policy, session overrides, and interactive-shell PATH are fixed
   expected limitations with value `unobserved`. They are neither read nor
   listed and do not by themselves make a result `partial`;
+- focused package and composition tests cover deterministic discovery/order,
+  alias grouping, source precedence, malformed and duplicate JSON, UTF-8 and
+  budget failures, nonportable/secret rejection, workspace trust, filesystem
+  identity and link/race negatives, DTO detachment/redaction, cancellation,
+  Codex coexistence, Host disposal, and post-disposal rejection;
+- the synthetic macOS end-to-end test proves only composition, filesystem
+  custody, passivity, DTO shaping, and cancellation/disposal. It does not prove
+  a real Claude Code installation, executable compatibility, a Desktop
+  collector, or any production target;
 - no Claude setup target is added to the qualification registry. Provider
-  qualification, production collector evidence, and deployment qualification
-  remain open.
+  qualification, a production macOS collector, real-installation conformance,
+  and deployment qualification remain open.
 
 Scoped qualified:
 
@@ -209,6 +229,12 @@ Remaining before implementation qualification:
   Windows environment-key aliases, ADS, device-name, trailing-dot, link, mount,
   and replacement races. The current Node tests do not qualify those target
   tuples;
+- for AR-2, a production macOS Desktop collector that derives and attests the
+  trusted scope without ambient rereads, plus packaging, compromise-boundary,
+  and target-filesystem conformance;
+- for AR-2, a separate real Claude Code installation campaign binding exact
+  executable revision, documented settings dialect, collector version, APFS
+  behavior, and negative cases to an exact qualification-registry tuple;
 - real Claude, Codex, and OpenCode semantic classifiers for every supported
   profile resource and binary revision;
 - provider-by-provider mapping tests for global, workspace, explicit, and
