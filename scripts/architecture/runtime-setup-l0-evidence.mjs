@@ -113,17 +113,41 @@ const summarizeChange = ({ id, revision }) => {
 const loadHistoricalChanges = (summarize = summarizeChange) => {
   try {
     return changes.map(summarize);
-  } catch {
-    return undefined;
+  } catch (error) {
+    const details = [error?.message, error?.stderr]
+      .filter(Boolean)
+      .map(String)
+      .join("\n");
+    const objectClosureUnavailable = [
+      /bad object/iu,
+      /could not parse object/iu,
+      /missing (?:blob|tree)/iu,
+      /not a valid object name/iu,
+      /object [a-f0-9]+ not found/iu,
+      /promised object .* unavailable/iu,
+      /unable to read tree/iu,
+    ].some(pattern => pattern.test(details));
+    if (!objectClosureUnavailable) {
+      throw error;
+    }
   }
 };
 
+const missingHistoricalObject = new Error("historical object unavailable");
+missingHistoricalObject.stderr = "fatal: promised object f00 unavailable";
 assert.equal(
   loadHistoricalChanges(() => {
-    throw new Error("historical object unavailable");
+    throw missingHistoricalObject;
   }),
   undefined,
   "a missing historical object closure must disable only optional recomputation",
+);
+assert.throws(
+  () => loadHistoricalChanges(() => {
+    throw new Error("historical evidence validator bug");
+  }),
+  /historical evidence validator bug/u,
+  "historical recomputation must not hide validator defects",
 );
 
 const walkFiles = async directory => {
