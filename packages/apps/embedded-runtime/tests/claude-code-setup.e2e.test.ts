@@ -274,9 +274,9 @@ test("waits for both parallel owner branches and HMAC-maps candidate diagnostics
   t.after(() => host.dispose());
   const inspection = host.bindAccess(runtimeScope("/synthetic", claudeScope("/synthetic/home", "/synthetic/workspace"))).claudeCodeSetup.inspect();
   let inspectionSettled = false;
-  inspection.then(
-    () => { inspectionSettled = true; },
-    () => { inspectionSettled = true; },
+  void inspection.then(
+    () => (inspectionSettled = true),
+    () => (inspectionSettled = true),
   );
   await Promise.resolve();
   await Promise.resolve();
@@ -313,7 +313,9 @@ test("isolates caller cancellation and invalidates Claude handles on bounded ide
   let branchCalls = 0;
   const cancellable = async (_input: unknown, options?: { readonly signal?: AbortSignal }) => {
     branchCalls += 1;
-    if (branchCalls > 2) return;
+    if (branchCalls > 2) {
+      return;
+    }
     const signal = options?.signal;
     signal?.throwIfAborted();
     await new Promise<never>((_resolve, reject) => {
@@ -494,7 +496,9 @@ test("detaches owner results and domain-separates deterministic product referenc
   assert.deepEqual(first, replay);
   assert.ok(isDeeplyFrozen(first));
   assert.equal(first.status, "observed");
-  if (first.status !== "observed" || replay.status !== "observed") return;
+  if (first.status !== "observed" || replay.status !== "observed") {
+    return;
+  }
   const references = [
     first.observationRef,
     first.installations[0]?.installationRef,
@@ -640,7 +644,9 @@ test("honors cancellation before and during every composition stage", async () =
   });
   const waitInBranch = async (): Promise<void> => {
     branchStarts += 1;
-    if (branchStarts === 2) branchesStarted?.();
+    if (branchStarts === 2) {
+      branchesStarted?.();
+    }
     await branchGate;
   };
   const branchHost = createAgentRuntimeHost({
@@ -680,6 +686,7 @@ test("honors cancellation before and during every composition stage", async () =
   let disposalSettled = false;
   const disposal = branchHost.dispose().then(() => {
     disposalSettled = true;
+    return disposalSettled;
   });
   await Promise.resolve();
   assert.equal(disposalSettled, false);
@@ -699,7 +706,9 @@ test("runs Codex and Claude inspections concurrently without cross-cancellation"
   });
   const startOwner = async (): Promise<void> => {
     ownerStarts += 1;
-    if (ownerStarts === 2) bothStarted?.();
+    if (ownerStarts === 2) {
+      bothStarted?.();
+    }
     await ownerGate;
   };
   const host = createAgentRuntimeHost({

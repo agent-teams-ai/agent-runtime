@@ -39,8 +39,12 @@ const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
 const deepFreeze = <T>(value: T): T => {
-  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
-  for (const child of Object.values(value)) deepFreeze(child);
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
+    return value;
+  }
+  for (const child of Object.values(value)) {
+    deepFreeze(child);
+  }
   return Object.freeze(value);
 };
 
@@ -159,8 +163,12 @@ export const createBuildClaudeCodeSetupView = (
         sources: configurationSources,
       }, options)),
     ]);
-    if (installationSettlement.status === "rejected") throw installationSettlement.reason;
-    if (configurationSettlement.status === "rejected") throw configurationSettlement.reason;
+    if (installationSettlement.status === "rejected") {
+      throw installationSettlement.reason;
+    }
+    if (configurationSettlement.status === "rejected") {
+      throw configurationSettlement.reason;
+    }
 
     const installations = installationSettlement.value;
     const configuration = configurationSettlement.value;
@@ -203,8 +211,12 @@ export const createBuildClaudeCodeSetupView = (
     const nextActions = new Set<
       "install_claude_code" | "review_configuration" | "trust_workspace"
     >();
-    if (installations.installations.length === 0) nextActions.add("install_claude_code");
-    if (configuration.diagnostics.length > 0) nextActions.add("review_configuration");
+    if (installations.installations.length === 0) {
+      nextActions.add("install_claude_code");
+    }
+    if (configuration.diagnostics.length > 0) {
+      nextActions.add("review_configuration");
+    }
     if (diagnostics.some(diagnostic => diagnostic.code === "source_untrusted")) {
       nextActions.add("trust_workspace");
     }
