@@ -99,7 +99,7 @@ test("rejects hardlinks, directories, and FIFOs", { skip: process.platform === "
     }),
   );
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.equal(
     result.executableCandidates.some(candidate => candidate.source === "explicit"),
     false,
@@ -135,7 +135,7 @@ test("rejects a Unix socket observation without opening it", async () => {
   );
 
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.equal(
     result.executableCandidates.some(candidate => candidate.source === "explicit"),
     false,
@@ -162,7 +162,7 @@ test("rejects non-regular portable sources", async t => {
     scope(home, workspace),
   );
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.deepEqual(result.sources.map(source => [source.kind, source.access]), [
     ["user", "stale"],
     ["shared-project", "stale"],
@@ -223,7 +223,7 @@ test("authorizes the three planned fixed sources and preserves provider candidat
   );
 
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.deepEqual(result.sources.map(source => source.kind), [
     "user",
     "shared-project",
@@ -309,7 +309,7 @@ test("snapshots trusted roots and candidate inputs before asynchronous work", as
   }).authorizeClaudeCodeSetupInspection.execute(mutableScope);
 
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.equal(calls.some(path => path.startsWith("/attacker/")), false);
   assert.ok(result.executableCandidates.some(candidate =>
     candidate.absolutePath === explicit && candidate.priorityRank === 1
@@ -336,7 +336,7 @@ test("rejects untrusted workspace sources without observing their paths", async 
   );
 
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.deepEqual(result.sources.map(source => [source.kind, source.access]), [
     ["user", "authorized"],
     ["shared-project", "untrusted"],
@@ -385,7 +385,7 @@ test("rejects relative, outside, sibling-prefix, and symlink escape candidates",
     }),
   );
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.equal(
     result.executableCandidates.some(candidate => candidate.source === "explicit"),
     false,
@@ -442,7 +442,7 @@ test("detects candidate and source identity changes on repeat checks", async () 
   );
 
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.equal(candidateChecks, 2);
   assert.equal(sourceChecks, 2);
   assert.equal(
@@ -490,7 +490,7 @@ test("rejects an executable alias retargeted between authorization checks", asyn
   );
 
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.equal(checks, 2);
   assert.equal(
     result.executableCandidates.some(candidate => candidate.source === "explicit"),
@@ -536,7 +536,7 @@ test("fails closed for duplicate roots and duplicate canonical sources", async (
     },
   }).authorizeClaudeCodeSetupInspection.execute(scope(home, workspace));
   assert.equal(duplicateSources.status, "authorized");
-  if (duplicateSources.status !== "authorized") return;
+  if (duplicateSources.status !== "authorized") {return;}
   assert.deepEqual(
     duplicateSources.sources.map(source => [source.kind, source.access]),
     [
@@ -574,7 +574,7 @@ test("enforces candidate and path budgets with redacted diagnostics", async () =
     }),
   );
   assert.equal(overBudget.status, "authorized");
-  if (overBudget.status !== "authorized") return;
+  if (overBudget.status !== "authorized") {return;}
   assert.ok(overBudget.diagnostics.some(item =>
     item.code === "candidate_invalid" && item.safeRef === "candidate-budget"
   ));
@@ -589,7 +589,7 @@ test("enforces candidate and path budgets with redacted diagnostics", async () =
     }),
   );
   assert.equal(pathEntryBudget.status, "authorized");
-  if (pathEntryBudget.status !== "authorized") return;
+  if (pathEntryBudget.status !== "authorized") {return;}
   assert.ok(pathEntryBudget.diagnostics.some(item =>
     item.code === "candidate_invalid" && item.safeRef === "candidate-budget"
   ));
@@ -610,7 +610,7 @@ test("enforces candidate and path budgets with redacted diagnostics", async () =
     scope(`/${"h".repeat(16_383)}`, workspace),
   );
   assert.equal(derivedPathBudget.status, "authorized");
-  if (derivedPathBudget.status !== "authorized") return;
+  if (derivedPathBudget.status !== "authorized") {return;}
   assert.equal(
     derivedPathBudget.sources.find(source => source.kind === "user")?.access,
     "rejected",
@@ -686,7 +686,7 @@ test("rejects an ancestor symlink escape for a fixed source", async t => {
     scope(home, workspace),
   );
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") return;
+  if (result.status !== "authorized") {return;}
   assert.equal(
     result.sources.find(source => source.kind === "user")?.access,
     "stale",
