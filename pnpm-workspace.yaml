@@ -15,6 +15,7 @@ catalog:
   jsonc-parser: "3.3.1"
   opencode-ai: "1.18.5"
   opencode-previous: "npm:opencode-ai@1.17.20"
+  oxc-parser: "0.147.0"
   oxlint: "1.77.0"
   smol-toml: "1.8.0"
   typescript: "7.0.2"
