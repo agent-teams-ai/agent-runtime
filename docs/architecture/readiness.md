@@ -172,8 +172,9 @@ AR-2 implementation present; synthetic evidence present; qualification open:
   installed/latest version status, Claude live model/effort/Fast eligibility,
   and Claude disconnect/logout without claiming current implementation.
   Passive setup/profile preview is already present but unqualified;
-  compatibility and installer/update are next, while auth/access/trust/live
-  capability remains later or subject to a future explicit decision;
+  exact compatibility evidence is next. Installer/update is reviewed but
+  explicitly deferred from the MVP; auth/access/trust/live capability remains
+  later or subject to a future explicit decision;
 - provider-specific TypeScript DTOs and application-owned ports exist across
   Agent Execution, Runtime Security, Runtime Configuration, and Embedded
   Runtime. The default Pure DI composition exposes the private headless

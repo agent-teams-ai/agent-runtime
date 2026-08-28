@@ -33,6 +33,9 @@ Documents:
 - [Provider setup delivery roadmap](provider-setup-delivery-roadmap.md): legacy
   capability disposition and delivery order for Codex, Claude Code, and
   OpenCode setup.
+- [Managed agent runtime installation plan](managed-agent-runtime-installation-plan.md):
+  deferred implementation plan for safe, recoverable, cross-platform runtime
+  installation and updates after higher-priority MVP capabilities.
 - [Legacy feature inventory](legacy-feature-inventory.json): commit-pinned,
   structured legacy/current/authority/implementation/qualification/backlog
   traceability. Its validator permits additions and uses explicit

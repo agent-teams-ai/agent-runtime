@@ -75,11 +75,15 @@ Each inventory item records the following field groups:
 `now | next | later` orders only unimplemented product work. Implemented rows
 use `not_applicable` on the backlog axis. User-loss severity records cutover
 impact separately, dependencies record prerequisites, and no usage metric is
-inferred. The current product order is fixed: passive setup/profile preview
-first, installer/update second, and authentication, account access, workspace
-trust mutation, and live route/account capability later unless a future
-accepted decision changes it. Desktop remains the external consumer and owns
-its interaction and cutover acceptance, never an Agent Runtime bounded context.
+inferred. Passive setup/profile preview remains the first completed slice.
+Exact compatibility evidence is the next prerequisite for useful execution.
+Installer/update is explicitly deferred from the MVP: user-owned installations
+are sufficient for the first usable journeys, while the reviewed managed
+installation plan remains available for later reprioritization. Authentication,
+account access, workspace trust mutation, and live route/account capability
+remain separate product decisions. Desktop remains the external consumer and
+owns its interaction and cutover acceptance, never an Agent Runtime bounded
+context.
 
 The inventory deliberately separates capabilities that the old Desktop often
 combined in one screen or service:
@@ -136,7 +140,7 @@ The following data must remain separate:
 | --- | --- | --- |
 | passively observe installed runtime candidates and inspect portable configuration/profile intent | resolver and settings/profile flows | implemented and unqualified; backlog is not applicable |
 | qualify exact version compatibility | resolver and app-server degradation behavior | `next`, prerequisite to version-authoritative activation |
-| install or update with progress | `CodexRuntimeInstallerService` | `next`; separate from passive setup inspection |
+| install or update with progress | `CodexRuntimeInstallerService` | `later`; reviewed separately, deferred from the MVP |
 | choose ChatGPT or API-key access and inspect login readiness | `src/features/codex-account` | `later`; Provider Access owns it |
 | browser/device login, logout, account and rate-limit display | `CodexLoginSessionManager` and account contracts | `later`; preserve the user jobs and redesign credential custody and transport |
 | inspect and decide workspace trust | workspace-trust coordinator and Codex trust settings | `later`; Runtime Security owns the decision and Agent Execution enforces it |
@@ -171,7 +175,7 @@ and [Codex authentication documentation](https://developers.openai.com/codex/aut
 | inspect portable settings sources | user-settings and explicit-settings legacy readers plus retained current documentation | implemented and unqualified for user, shared-project, and project-local slots only; managed policy and session overrides remain `unobserved` |
 | inspect portable model and effort intent | anthropic runtime-profile evidence plus retained settings schema | implemented and unqualified for the frozen preview classifier; exact model IDs are not declared impossible, and live availability is separate |
 | classify route-owned values without exposing them | connection-mode and runtime-environment evidence | implemented and unqualified as value-free deferred diagnostics only; retained evidence does not establish every provider topology |
-| inspect installed/latest version, then install/update separately | `CliInstallerService` status, manifest, checksum, and progress flows | `next`; mutation remains outside passive inspection |
+| inspect installed/latest version, then install/update separately | `CliInstallerService` status, manifest, checksum, and progress flows | `later`; mutation remains outside passive inspection and is deferred from the MVP |
 | inspect login status | `claude auth status` flow in `CliInstallerService` | `later`; it executes provider code and belongs to Provider Access plus explicit Agent Execution custody |
 | inspect workspace trust and obtain separate consent | Claude workspace-trust strategy | `later`; passive source inspection grants no consent |
 | inspect live model/effort/Fast eligibility | anthropic runtime-profile reconciliation | `later`; requires exact binary and route/account facts |
@@ -334,12 +338,13 @@ later extraction would knowingly retain proven duplicate semantics.
 
 These priorities do not widen either passive inspection query:
 
-1. `next`: exact compatibility evidence and installer/update as separate
-   capabilities, including installed/latest status, transaction recovery, and
-   immutable `BinaryRevision` evidence.
-2. `later`: saved-profile publication, workspace trust/consent mutation,
-   authentication, credentials, routes, access status, disconnect/logout, and
-   live model/effort/Fast eligibility.
+1. `next`: exact compatibility evidence needed before a user-owned runtime can
+   become version-authoritative execution input.
+2. `later`: installer/update as separate capabilities, including
+   installed/latest status, transaction recovery, and immutable
+   `BinaryRevision` evidence; saved-profile publication, workspace trust/consent
+   mutation, authentication, credentials, routes, access status,
+   disconnect/logout, and live model/effort/Fast eligibility.
 3. Future explicit decision: OpenCode passive setup inspection as AR-3 and a
    production collector/qualification campaign for each supported platform.
 
@@ -353,10 +358,11 @@ broader native configuration and provider directory. Only the passive setup
 subset enters this slice. Provider connection, OAuth/API-key mutation, model
 execution proof, and local endpoint setup remain separate future capabilities.
 
-### Product capability 2 - runtime installation and update
+### Deferred product capability - runtime installation and update
 
-After setup inspection is useful for at least Codex and Claude Code, define a
-separate mutation capability for installation and update. It needs:
+When product evidence reprioritizes managed installation after the first usable
+execution journeys, define a separate mutation capability for installation and
+update. It needs:
 
 - provider-specific immutable package/release selection;
 - compatibility and integrity policy;
@@ -391,7 +397,7 @@ agnostic; SQLite and PostgreSQL are adapters under ADR-0001.
 | understand portable Claude file intent | implemented and unqualified for the frozen three-source provider-specific classifier | managed/session topology, plugins, MCP, skills, commands, hooks, and instructions |
 | understand why setup observation degraded | implemented typed local diagnostics and next actions; redaction is a cross-cutting invariant | provider health and repair workflows |
 | create reusable profiles | not implemented by inspection | reviewed profile publication, import/export, inheritance, and organization policy |
-| install or update a runtime | `next` and separate from inspection | channels, rollback, and fleet policy |
+| install or update a runtime | `later`, reviewed separately, and deferred from the MVP | channels, rollback, and fleet policy |
 | authorize, inspect, or disconnect a provider account | `later` and not implemented by inspection | Provider Access login/import/refresh/revoke/disconnect flows |
 | decide workspace trust or inspect live eligibility | `later`; passive preview supplies no consent or live proof | revisioned trust and binary/route/account-bound capability evidence |
 | launch agents | outside Runtime Setup | Agent Execution operations after their own decisions and gates |

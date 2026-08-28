@@ -682,7 +682,7 @@
       },
       "implementationStatus": "not_implemented",
       "qualificationStatus": "not_applicable",
-      "backlogDisposition": "next",
+      "backlogDisposition": "later",
       "priority": {
         "userLossSeverity": "high",
         "rationale": "Gives a clear install or update action without disturbing a working runtime.",
@@ -756,7 +756,7 @@
       },
       "implementationStatus": "not_implemented",
       "qualificationStatus": "not_applicable",
-      "backlogDisposition": "next",
+      "backlogDisposition": "later",
       "priority": {
         "userLossSeverity": "high",
         "rationale": "Prevents wrong-platform, corrupt, oversized, or path-traversing packages from being installed.",
@@ -830,7 +830,7 @@
       },
       "implementationStatus": "not_implemented",
       "qualificationStatus": "not_applicable",
-      "backlogDisposition": "next",
+      "backlogDisposition": "later",
       "priority": {
         "userLossSeverity": "high",
         "rationale": "Avoids losing a working runtime during a failed update.",
@@ -2587,7 +2587,7 @@
       },
       "implementationStatus": "not_implemented",
       "qualificationStatus": "not_applicable",
-      "backlogDisposition": "next",
+      "backlogDisposition": "later",
       "priority": {
         "userLossSeverity": "high",
         "rationale": "Install/update with integrity and progress. Install or update Claude Code preserves this distinct researched user value.",
