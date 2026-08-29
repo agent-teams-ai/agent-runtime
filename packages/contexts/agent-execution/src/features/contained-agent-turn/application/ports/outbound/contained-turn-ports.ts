@@ -35,6 +35,7 @@ export type ClaimContainedTurnDispatchOutcome =
 export interface ContainedTurnOperationStore {
   accept(input: AcceptContainedTurnCommandInput): Promise<AcceptContainedTurnCommandOutcome>;
   claimDispatch(input: {
+    readonly cutoffReceiptRef: string;
     readonly expectedRevision: number;
     readonly operationId: string;
   }): Promise<ClaimContainedTurnDispatchOutcome>;
@@ -74,7 +75,7 @@ export interface ContainedTurnSecurityPort {
     readonly operationId: string;
     readonly scope: ContainedTurnScope;
   }): Promise<
-    | { readonly kind: "allowed" }
+    | { readonly kind: "allowed"; readonly proofRef: string }
     | { readonly kind: "prevented"; readonly proofRef: string }
   >;
 }

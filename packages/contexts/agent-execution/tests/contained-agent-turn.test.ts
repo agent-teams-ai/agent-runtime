@@ -65,13 +65,14 @@ class MemoryOperationStore implements ContainedTurnOperationStore {
     return { kind: "accepted" as const, operation };
   }
 
-  async claimDispatch(input: { readonly expectedRevision: number; readonly operationId: string }) {
+  async claimDispatch(input: { readonly cutoffReceiptRef: string; readonly expectedRevision: number; readonly operationId: string }) {
     const current = this.#operations.get(input.operationId);
     if (current === undefined) {return { kind: "not_found" as const };}
     if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
     const operation = applyContainedTurnMutation(current, {
       attemptId: `attempt:${current.operationId}`,
       claimRef: `claim:${current.operationId}`,
+      cutoffReceiptRef: input.cutoffReceiptRef,
       kind: "dispatch_claimed",
     });
     this.#operations.set(operation.operationId, operation);
@@ -136,7 +137,7 @@ const createHarness = (options: HarnessOptions = {}) => {
     async authorize() {
       return { authorityRevision: "authority:1", decisionDigest: "decision:1", kind: "allowed" };
     },
-    revalidate: options.revalidate ?? (async () => ({ kind: "allowed" })),
+    revalidate: options.revalidate ?? (async () => ({ kind: "allowed", proofRef: "cutoff-clear:1" })),
   };
   const workspace: ContainedTurnWorkspacePort = {
     async close(workspaceRef) {
@@ -209,7 +210,7 @@ test("completes one contained turn with complete immutable receipt closure", asy
   assert.equal(outcome.turn.status, "succeeded");
   assert.equal(outcome.turn.output[0]?.text, "synthetic result");
   const operation = await harness.store.read(outcome.turn.operationId);
-  assert.equal(operation?.receipts.length, 11);
+  assert.equal(operation?.receipts.length, 12);
   assert.equal(operation?.terminal.kind, "terminal");
   assert.deepEqual(harness.counters, { contain: 1, execute: 1, open: 1, quarantine: 0 });
 });
@@ -245,7 +246,7 @@ test("durable cancellation wins a race before dispatch claim", async () => {
   const harness = createHarness({
     revalidate: async () => {
       await guard;
-      return { kind: "allowed" };
+      return { kind: "allowed", proofRef: "cutoff-clear:race" };
     },
   });
   const submission = harness.feature.submit.execute(input());
@@ -289,8 +290,8 @@ test("only one concurrent dispatch claim can win", async () => {
   assert.equal(bound.kind, "applied");
   if (bound.kind !== "applied") {return;}
   const outcomes = await Promise.all([
-    store.claimDispatch({ expectedRevision: bound.operation.revision, operationId: bound.operation.operationId }),
-    store.claimDispatch({ expectedRevision: bound.operation.revision, operationId: bound.operation.operationId }),
+    store.claimDispatch({ cutoffReceiptRef: "cutoff-clear:race", expectedRevision: bound.operation.revision, operationId: bound.operation.operationId }),
+    store.claimDispatch({ cutoffReceiptRef: "cutoff-clear:race", expectedRevision: bound.operation.revision, operationId: bound.operation.operationId }),
   ]);
   assert.deepEqual(outcomes.map(outcome => outcome.kind).toSorted(), ["claimed", "stale"]);
   assert.equal((await store.read(bound.operation.operationId))?.dispatch.kind, "claimed");

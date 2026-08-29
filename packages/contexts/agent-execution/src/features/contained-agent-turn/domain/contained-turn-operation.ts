@@ -33,6 +33,7 @@ export const CONTAINED_TURN_REQUIRED_RECEIPTS = Object.freeze([
   "coarse_effect_resolution_or_reconciliation_debt",
   "containment_execution",
   "canonical_result_publication",
+  "cutoff_enforcement_when_applicable",
 ] as const);
 
 export type ContainedTurnRequiredReceipt =
@@ -48,6 +49,9 @@ export interface ContainedTurnOperation {
   readonly cancellation: { readonly kind: "open" } | { readonly kind: "requested"; readonly requestRef: string };
   readonly commandFingerprint: string;
   readonly commandId: string;
+  readonly cutoff:
+    | { readonly kind: "pending" }
+    | { readonly disposition: "enforced" | "not_applicable"; readonly kind: "closed"; readonly receiptRef: string };
   readonly containment:
     | { readonly kind: "not_required" }
     | { readonly kind: "pending" }
@@ -114,7 +118,7 @@ export type ContainedTurnMutation =
   | { readonly kind: "workspace_closed"; readonly receiptRef: string }
   | { readonly evidenceRef: string; readonly kind: "workspace_quarantined" }
   | { readonly kind: "dispatch_prevented"; readonly receiptRef: string }
-  | { readonly attemptId: string; readonly claimRef: string; readonly kind: "dispatch_claimed" }
+  | { readonly attemptId: string; readonly claimRef: string; readonly cutoffReceiptRef: string; readonly kind: "dispatch_claimed" }
   | { readonly kind: "provider_accepted"; readonly receiptRef: string }
   | { readonly kind: "provider_not_accepted"; readonly receiptRef: string }
   | { readonly evidenceRef: string; readonly kind: "provider_acceptance_unknown" }
@@ -191,7 +195,8 @@ const terminalOutcome = (operation: ContainedTurnOperation): "cancelled" | "fail
     (operation.dispatch.kind === "prevented" && operation.containment.kind === "not_required");
   if (
     !containmentClosed || operation.output.kind !== "sealed" || operation.workspace.kind !== "closed" ||
-    operation.artifact.kind !== "sealed" || operation.effect.kind !== "resolved" || operation.result.kind !== "published"
+    operation.artifact.kind !== "sealed" || operation.cutoff.kind !== "closed" ||
+    operation.effect.kind !== "resolved" || operation.result.kind !== "published"
   ) {fail("terminalization requires containment, output, workspace, artifact, effect, and result closure");}
   for (const kind of CONTAINED_TURN_REQUIRED_RECEIPTS) {
     if (!operation.receipts.some(candidate => candidate.kind === kind)) {fail(`terminalization requires receipt ${kind}`);}
@@ -208,6 +213,7 @@ export const createAcceptedContainedTurnOperation = (
   cancellation: Object.freeze({ kind: "open" }),
   commandFingerprint: input.commandFingerprint,
   commandId: input.commandId,
+  cutoff: Object.freeze({ kind: "pending" }),
   containment: Object.freeze({ kind: "not_required" }),
   dispatch: Object.freeze({ kind: "unclaimed" }),
   effect: Object.freeze({ kind: "unresolved" }),
@@ -260,6 +266,7 @@ const applyDispatchMutation = (
       if (operation.dispatch.kind !== "unclaimed") {return fail("dispatch prevention must win before a claim");}
       return changed(operation, {
         containment: Object.freeze({ kind: "not_required" }),
+        cutoff: Object.freeze({ disposition: "enforced", kind: "closed", receiptRef: mutation.receiptRef }),
         dispatch: Object.freeze({ kind: "prevented", receiptRef: mutation.receiptRef }),
         effect: Object.freeze({ disposition: "not_committed", kind: "resolved", receiptRef: mutation.receiptRef }),
         execution: Object.freeze({ kind: "closed", outcome: operation.cancellation.kind === "requested" ? "cancelled" : "failed", receiptRef: mutation.receiptRef }),
@@ -271,15 +278,21 @@ const applyDispatchMutation = (
           ["host_custody", mutation.receiptRef],
           ["containment_execution", mutation.receiptRef],
           ["coarse_effect_resolution_or_reconciliation_debt", mutation.receiptRef],
+          ["cutoff_enforcement_when_applicable", mutation.receiptRef],
         ]),
       });
     case "dispatch_claimed":
       if (operation.dispatch.kind !== "unclaimed" || operation.workspace.kind !== "bound") {return fail("dispatch requires one unclaimed operation with a bound workspace");}
       if (operation.cancellation.kind === "requested") {return fail("dispatch cannot claim after durable cancellation");}
+      if (operation.cutoff.kind !== "pending") {return fail("dispatch claim must close cutoff exactly once");}
       return changed(operation, {
         containment: Object.freeze({ kind: "pending" }),
+        cutoff: Object.freeze({ disposition: "not_applicable", kind: "closed", receiptRef: mutation.cutoffReceiptRef }),
         dispatch: Object.freeze({ attemptId: mutation.attemptId, claimRef: mutation.claimRef, kind: "claimed" }),
-        receipts: addReceipt(operation.receipts, "dispatch_claim_or_proved_no_dispatch", mutation.claimRef),
+        receipts: addReceipts(operation.receipts, [
+          ["dispatch_claim_or_proved_no_dispatch", mutation.claimRef],
+          ["cutoff_enforcement_when_applicable", mutation.cutoffReceiptRef],
+        ]),
       });
     case "cancellation_requested":
       if (operation.cancellation.kind === "requested") {

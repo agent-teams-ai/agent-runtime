@@ -244,13 +244,18 @@ const completeClaimedOperation = async (
 
 const claimDispatch = async (
   operation: ContainedTurnOperation,
+  cutoffReceiptRef: string,
   dependencies: ContainedTurnEngineDependencies,
 ): Promise<ContainedTurnOperation> => {
   let current = operation;
   for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt += 1) {
     if (current.dispatch.kind !== "unclaimed") {return current;}
     if (current.cancellation.kind === "requested") {return preventBeforeDispatch(current, current.cancellation.requestRef, dependencies);}
-    const claim = await dependencies.operationStore.claimDispatch({ expectedRevision: current.revision, operationId: current.operationId });
+    const claim = await dependencies.operationStore.claimDispatch({
+      cutoffReceiptRef,
+      expectedRevision: current.revision,
+      operationId: current.operationId,
+    });
     if (claim.kind === "claimed") {return claim.operation;}
     if (claim.kind === "not_found") {return current;}
     current = claim.current;
@@ -338,7 +343,7 @@ export const createContainedTurnEngine = (
           });
           current = guard.kind === "prevented"
             ? await preventBeforeDispatch(current, guard.proofRef, snapshot)
-            : await claimDispatch(current, snapshot);
+            : await claimDispatch(current, guard.proofRef, snapshot);
           if (current.dispatch.kind === "claimed") {current = await completeClaimedOperation(current, snapshot);}
         }
         return { status: "observed", turn: containedTurnView(current) };

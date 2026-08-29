@@ -31,7 +31,9 @@ const dispatchMutationSatisfied = (operation: ContainedTurnOperation, mutation: 
     case "dispatch_prevented":
       return operation.dispatch.kind === "prevented" && operation.dispatch.receiptRef === mutation.receiptRef;
     case "dispatch_claimed":
-      return operation.dispatch.kind === "claimed" && operation.dispatch.attemptId === mutation.attemptId && operation.dispatch.claimRef === mutation.claimRef;
+      return operation.dispatch.kind === "claimed" && operation.dispatch.attemptId === mutation.attemptId &&
+        operation.dispatch.claimRef === mutation.claimRef && operation.cutoff.kind === "closed" &&
+        operation.cutoff.receiptRef === mutation.cutoffReceiptRef;
     case "cancellation_requested":
       return operation.cancellation.kind === "requested" && operation.cancellation.requestRef === mutation.requestRef;
   }
