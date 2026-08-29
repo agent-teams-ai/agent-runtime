@@ -1,541 +1,252 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
-import type { ContainedTurnOperationRef } from "../dist/index.js";
+import { createContainedTurnFeature } from "../dist/features/contained-agent-turn/composition/feature-module-factory.js";
+import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import { containedTurnIdentity } from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { containedTurnSatisfactionDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-satisfaction.js";
+import type { ContainedTurnKernelOperation } from "../dist/features/contained-agent-turn/domain/contained-turn-kernel-model.js";
+import type { ContainedTurnProof } from "../dist/features/contained-agent-turn/domain/contained-turn-proofs.js";
+import type { ContainedTurnKernelDependencies } from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
+import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 
-import {
-  createContainedTurnFeature,
-  type AcceptContainedTurnCommandInput,
-  type ContainedTurnArtifactPort,
-  type ContainedTurnOperationStore,
-  type ContainedTurnProviderExecutionOutcome,
-  type ContainedTurnProviderPort,
-  type ContainedTurnSecurityPort,
-  type ContainedTurnWorkspacePort,
-  type ProviderProcessCustodyPort,
-} from "../dist/composition.js";
-import {
-  applyContainedTurnMutation,
-  createAcceptedContainedTurnOperation,
-  type ContainedTurnOperation,
-} from "../dist/features/contained-agent-turn/domain/contained-turn-operation.js";
+const identity = <Namespace extends Parameters<typeof containedTurnIdentity>[0]>(namespace: Namespace, suffix: string) =>
+  containedTurnIdentity(namespace, `${String(namespace).replaceAll("_", "-")}:${suffix}`);
+const proofId = (suffix: string) => identity("proof", suffix);
+const operationId = identity("operation", "one");
+const effectId = identity("effect", "one");
+const attemptId = identity("attempt", "one");
+const custodyId = identity("custody", "one");
+const workspaceId = identity("workspace", "one");
+const hostBootId = identity("host_boot", "one");
+const hostInstanceId = identity("host_instance", "one");
 
-const noop = (): void => {
-  // Test gates replace this before it can be called.
-};
-
-const readTypeScriptTree = async (root: URL): Promise<readonly [string, string][]> => {
-  const files: [string, string][] = [];
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    const entryUrl = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, root);
-    if (entry.isDirectory()) {
-      files.push(...await readTypeScriptTree(entryUrl));
-    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
-      files.push([entryUrl.pathname, await readFile(entryUrl, "utf8")]);
-    }
-  }
-  return files;
-};
-
-const binding = Object.freeze({
-  adapterRevision: "codex-app-server-adapter:test",
-  binaryRevision: "codex:test",
-  capabilityManifestRevision: "manifest:test",
-  credentialBindingDigest: "credential:test",
+const adapterSnapshot = Object.freeze({
+  adapterRevision: "adapter:one",
+  binaryRevision: "binary:one",
+  capabilityManifestRevision: "manifest:one",
   provider: "codex" as const,
-  providerRouteRef: "route:test",
+});
+const providerAccessSnapshot = Object.freeze({
+  accessRef: "access:one",
+  credentialBindingDigest: digestContainedTurnCanonicalValue({ binding: "one" }),
+  credentialBindingRef: "credential-binding:one",
+  credentialGeneration: 1,
+  projectId: "project:one",
+  provider: "codex" as const,
+  providerAccountRef: "account:one",
+  providerRouteRef: "route:one",
+  revision: 1,
+  tenantId: "tenant:one",
+});
+const manifest = Object.freeze({
+  effectCardinality: "one_coarse_effect_per_operation" as const,
+  effectClass: "contained_unmediated_effect" as const,
+  manifestRevision: adapterSnapshot.capabilityManifestRevision,
+  manifestVersion: 1 as const,
+  provider: "codex" as const,
+  providerAttemptCardinality: "at_most_one" as const,
+  requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
+  resourceScopeRevision: "resource-scope:one",
+  supportedModes: Object.freeze(["analysis"] as const),
+  unknownCapabilityPolicy: "fail_closed" as const,
 });
 
-class MemoryOperationStore implements ContainedTurnOperationStore {
-  readonly #byCommand = new Map<string, string>();
-  readonly #operations = new Map<string, ContainedTurnOperation>();
-  #sequence = 0;
-
-  async accept(input: AcceptContainedTurnCommandInput) {
-    const fingerprint = createHash("sha256").update(JSON.stringify(input)).digest("hex");
-    const existingId = this.#byCommand.get(input.commandId);
-    if (existingId !== undefined) {
-      const operation = this.#operations.get(existingId);
-      assert.ok(operation);
-      return operation.commandFingerprint === fingerprint
-        ? { kind: "replayed" as const, operation }
-        : { kind: "conflict" as const };
-    }
-    const sequence = ++this.#sequence;
-    const operation = createAcceptedContainedTurnOperation({
-      acceptanceReceiptRef: `accept:${sequence}`,
-      commandFingerprint: fingerprint,
-      commandId: input.commandId,
-      effectId: `effect:${sequence}`,
-      intent: input.intent,
-      operationId: `operation:${sequence}`,
-      providerBinding: input.providerBinding,
-      scope: input.scope,
-      securityDecision: input.securityDecision,
-    });
-    this.#byCommand.set(input.commandId, operation.operationId);
-    this.#operations.set(operation.operationId, operation);
-    return { kind: "accepted" as const, operation };
-  }
-
-  async claimDispatch(input: { readonly cutoffReceiptRef: string; readonly expectedRevision: number; readonly operationId: string }) {
-    const current = this.#operations.get(input.operationId);
-    if (current === undefined) {return { kind: "not_found" as const };}
-    if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
-    const operation = applyContainedTurnMutation(current, {
-      attemptId: `attempt:${current.operationId}`,
-      claimRef: `claim:${current.operationId}`,
-      cutoffReceiptRef: input.cutoffReceiptRef,
-      kind: "dispatch_claimed",
-    });
-    this.#operations.set(operation.operationId, operation);
-    return { kind: "claimed" as const, operation };
-  }
-
-  async compareAndSet(input: {
-    readonly expectedRevision: number;
-    readonly mutation: Parameters<typeof applyContainedTurnMutation>[1];
-    readonly operationId: string;
-  }) {
-    const current = this.#operations.get(input.operationId);
-    if (current === undefined) {return { kind: "not_found" as const };}
-    if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
-    const operation = applyContainedTurnMutation(current, input.mutation);
-    this.#operations.set(operation.operationId, operation);
-    return { kind: "applied" as const, operation };
-  }
-
-  async preventDispatch(input: { readonly expectedRevision: number; readonly operationId: string; readonly proofRef: string }) {
-    return this.compareAndSet({
-      expectedRevision: input.expectedRevision,
-      mutation: { kind: "dispatch_prevented", receiptRef: input.proofRef },
-      operationId: input.operationId,
-    });
-  }
-
-  async read(operationId: string) {
-    return this.#operations.get(operationId);
-  }
-
-  async requestCancellation(input: { readonly expectedRevision: number; readonly operationId: string }) {
-    return this.compareAndSet({
-      expectedRevision: input.expectedRevision,
-      mutation: { kind: "cancellation_requested", requestRef: `cancel:${input.operationId}` },
-      operationId: input.operationId,
-    });
-  }
-
-  async terminalize(input: { readonly expectedRevision: number; readonly operationId: string }) {
-    return this.compareAndSet({
-      expectedRevision: input.expectedRevision,
-      mutation: { kind: "terminalize", receiptRef: `terminal:${input.operationId}` },
-      operationId: input.operationId,
-    });
-  }
-}
-
-interface HarnessOptions {
-  readonly custodyOpen?: ProviderProcessCustodyPort["open"];
-  readonly execution?: (
-    input: Parameters<ContainedTurnProviderPort["execute"]>[0],
-  ) => Promise<ContainedTurnProviderExecutionOutcome>;
-  readonly revalidate?: ContainedTurnSecurityPort["revalidate"];
-  readonly seal?: ContainedTurnArtifactPort["seal"];
-  readonly workspaceCreate?: ContainedTurnWorkspacePort["create"];
-}
-
-const createHarness = (options: HarnessOptions = {}) => {
-  const store = new MemoryOperationStore();
-  const counters = { contain: 0, execute: 0, open: 0, quarantine: 0 };
-  const security: ContainedTurnSecurityPort = {
-    async authorize() {
-      return { authorityRevision: "authority:1", decisionDigest: "decision:1", kind: "allowed" };
-    },
-    revalidate: options.revalidate ?? (async () => ({ kind: "allowed", proofRef: "cutoff-clear:1" })),
-  };
-  const workspace: ContainedTurnWorkspacePort = {
-    async close(workspaceRef) {
-      return { receiptRef: `workspace-closed:${workspaceRef}` };
-    },
-    create: options.workspaceCreate ?? (async input => {
-      return { workspaceRef: `workspace:${input.operationId}` };
-    }),
-    async quarantine() {
-      counters.quarantine += 1;
-    },
-  };
-  const artifacts: ContainedTurnArtifactPort = {
-    seal: options.seal ?? (async input => {
-      return {
-        manifestReceiptRef: `manifest-receipt:${input.operationId}`,
-        manifestRef: `manifest:${input.operationId}`,
-        resultReceiptRef: `result-receipt:${input.operationId}`,
-        resultRef: `result:${input.operationId}`,
-      };
-    }),
-  };
-  const custody: ProviderProcessCustodyPort = {
-    open: options.custodyOpen ?? (async input => {
-      counters.open += 1;
-      return { custodyRef: `custody:${input.attemptId}` };
-    }),
-    async requestContainment(input) {
-      counters.contain += 1;
-      return { kind: "contained", receiptRef: `contained:${input.attemptId}` };
-    },
-  };
-  const provider: ContainedTurnProviderPort = {
-    manifest: Object.freeze({
-      effectClass: "contained_unmediated_effect",
-      providerBinding: binding,
-      supportedModes: Object.freeze(["analysis", "workspace-write"]),
-    }),
-    async execute(input) {
-      counters.execute += 1;
-      if (options.execution !== undefined) {return options.execution(input);}
-      await input.emit({ cursor: 0, kind: "assistant", text: "synthetic result" });
-      return {
-        acceptanceReceiptRef: `accepted:${input.attemptId}`,
-        effectDisposition: "committed",
-        effectReceiptRef: `effect:${input.attemptId}`,
-        executionReceiptRef: `execution:${input.attemptId}`,
-        kind: "completed",
-        outcome: "succeeded",
-        outputDrainReceiptRef: `drain:${input.attemptId}`,
-      };
-    },
-  };
-  const dependencies = { artifacts, custody, operationStore: store, provider, security, workspace };
-  return { counters, dependencies, feature: createContainedTurnFeature(dependencies), store };
+const operationBinding = (operation: ContainedTurnKernelOperation) => ({
+  authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
+  operationId: operation.operationId,
+});
+const attemptBinding = (operation: ContainedTurnKernelOperation) => {
+  assert.equal(operation.dispatch.kind, "claimed");
+  return { ...operationBinding(operation), attemptId, effectId: operation.effectId };
 };
 
-const input = (commandId = "command:1", prompt = "inspect the disposable workspace") => ({
-  commandId,
-  expectedProvider: "codex" as const,
-  intent: { mode: "analysis" as const, prompt },
-  scope: { projectId: "project:test", tenantId: "tenant:test" },
-});
-
-test("completes one contained turn with complete immutable receipt closure", async () => {
-  const harness = createHarness();
-  const outcome = await harness.feature.submit.execute(input());
-  assert.equal(outcome.status, "observed");
-  if (outcome.status !== "observed") {return;}
-  assert.equal(outcome.turn.status, "succeeded");
-  assert.equal(outcome.turn.output[0]?.text, "synthetic result");
-  const operation = await harness.store.read(outcome.turn.operationId);
-  assert.equal(operation?.receipts.length, 12);
-  assert.equal(operation?.terminal.kind, "terminal");
-  assert.deepEqual(harness.counters, { contain: 1, execute: 1, open: 1, quarantine: 0 });
-});
-
-test("reports durable acceptance before provider completion and hides operations across scopes", async () => {
-  let releaseProvider = noop;
-  const providerGate = new Promise<void>(resolve => {releaseProvider = resolve;});
-  const harness = createHarness({
-    execution: async providerInput => {
-      await providerGate;
-      return {
-        acceptanceReceiptRef: `accepted:${providerInput.attemptId}`,
-        effectDisposition: "committed",
-        effectReceiptRef: `effect:${providerInput.attemptId}`,
-        executionReceiptRef: `execution:${providerInput.attemptId}`,
-        kind: "completed",
-        outcome: "succeeded",
-        outputDrainReceiptRef: `drain:${providerInput.attemptId}`,
-      };
+const createDependencies = (): { dependencies: ContainedTurnKernelDependencies; providerCalls: { value: number } } => {
+  let current: ContainedTurnKernelOperation | undefined;
+  const providerCalls = { value: 0 };
+  const operationStore: ContainedTurnKernelDependencies["operationStore"] = {
+    accept: async candidate => {
+      current = candidate;
+      return { kind: "accepted", operation: candidate };
     },
-  });
-  let resolveAccepted: ((operation: ContainedTurnOperationRef) => void) | undefined;
-  const acceptance = new Promise<ContainedTurnOperationRef>(resolve => {resolveAccepted = resolve;});
-  const submission = harness.feature.submit.execute(input(), {
-    onAccepted: operation => resolveAccepted?.(operation),
-  });
-  const accepted = await acceptance;
-  const wrongScope = { projectId: "project:other", tenantId: "tenant:test" };
-  assert.deepEqual(
-    await harness.feature.observe.execute({ operationId: accepted.operationId, scope: wrongScope }),
-    { status: "not_found" },
-  );
-  assert.deepEqual(
-    await harness.feature.cancel.execute({ operationId: accepted.operationId, scope: wrongScope }),
-    { status: "not_found" },
-  );
-  assert.equal((await harness.store.read(accepted.operationId))?.cancellation.kind, "open");
-  releaseProvider();
-  assert.equal((await submission).status, "observed");
-});
-
-test("replays an identical command without a second provider attempt and rejects changed intent", async () => {
-  const harness = createHarness();
-  const first = await harness.feature.submit.execute(input());
-  const replay = await harness.feature.submit.execute(input());
-  const conflict = await harness.feature.submit.execute(input("command:1", "different prompt"));
-  assert.equal(first.status, "observed");
-  assert.equal(replay.status, "observed");
-  assert.deepEqual(conflict, { code: "command_fingerprint_conflict", status: "conflict" });
-  assert.equal(harness.counters.execute, 1);
-});
-
-test("pre-dispatch guard produces a proved no-start terminal result", async () => {
-  const harness = createHarness({
-    revalidate: async () => ({ kind: "prevented", proofRef: "cutoff:1" }),
-  });
-  const outcome = await harness.feature.submit.execute(input());
-  assert.equal(outcome.status, "observed");
-  if (outcome.status !== "observed") {return;}
-  assert.equal(outcome.turn.status, "failed");
-  assert.equal(harness.counters.execute, 0);
-  assert.equal(harness.counters.open, 0);
-});
-
-test("durable cancellation wins a race before dispatch claim", async () => {
-  let releaseGuard = noop;
-  const guard = new Promise<void>(resolve => {
-    releaseGuard = resolve;
-  });
-  const harness = createHarness({
-    revalidate: async () => {
-      await guard;
-      return { kind: "allowed", proofRef: "cutoff-clear:race" };
+    commit: async input => {
+      if (current === undefined) {return { kind: "not_found" };}
+      if (current.revision !== input.expectedRevision) {return { current, kind: "stale" };}
+      current = input.candidate;
+      return { kind: "applied", operation: current };
     },
-  });
-  const submission = harness.feature.submit.execute(input());
-  let operation: ContainedTurnOperation | undefined;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const accepted = await harness.store.read("operation:1");
-    if (accepted?.workspace.kind === "bound") {
-      operation = accepted;
-      break;
-    }
-    await new Promise<void>(resolve => {
-      setTimeout(resolve, 1);
-    });
-  }
-  assert.ok(operation);
-  const cancelled = await harness.feature.cancel.execute({ operationId: operation.operationId, scope: operation.scope });
-  assert.equal(cancelled.status, "observed");
-  releaseGuard();
-  const outcome = await submission;
-  assert.equal(outcome.status, "observed");
-  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "cancelled");}
-  assert.equal(harness.counters.execute, 0);
-});
-
-test("only one concurrent dispatch claim can win", async () => {
-  const store = new MemoryOperationStore();
-  const accepted = await store.accept({
-    commandId: "command:claim-race",
-    intent: { mode: "analysis", prompt: "synthetic" },
-    providerBinding: binding,
-    scope: { projectId: "project:test", tenantId: "tenant:test" },
-    securityDecision: { authorityRevision: "authority:1", decisionDigest: "decision:1" },
-  });
-  assert.equal(accepted.kind, "accepted");
-  if (accepted.kind !== "accepted") {return;}
-  const bound = await store.compareAndSet({
-    expectedRevision: accepted.operation.revision,
-    mutation: { kind: "workspace_bound", workspaceRef: "workspace:claim-race" },
-    operationId: accepted.operation.operationId,
-  });
-  assert.equal(bound.kind, "applied");
-  if (bound.kind !== "applied") {return;}
-  const outcomes = await Promise.all([
-    store.claimDispatch({ cutoffReceiptRef: "cutoff-clear:race", expectedRevision: bound.operation.revision, operationId: bound.operation.operationId }),
-    store.claimDispatch({ cutoffReceiptRef: "cutoff-clear:race", expectedRevision: bound.operation.revision, operationId: bound.operation.operationId }),
-  ]);
-  assert.deepEqual(outcomes.map(outcome => outcome.kind).toSorted(), ["claimed", "stale"]);
-  assert.equal((await store.read(bound.operation.operationId))?.dispatch.kind, "claimed");
-});
-
-test("terminal compare-and-set rejects incomplete receipt closure", async () => {
-  const store = new MemoryOperationStore();
-  const accepted = await store.accept({
-    commandId: "command:incomplete",
-    intent: { mode: "analysis", prompt: "synthetic" },
-    providerBinding: binding,
-    scope: { projectId: "project:test", tenantId: "tenant:test" },
-    securityDecision: { authorityRevision: "authority:1", decisionDigest: "decision:1" },
-  });
-  assert.equal(accepted.kind, "accepted");
-  if (accepted.kind !== "accepted") {return;}
-  await assert.rejects(
-    store.terminalize({
-      expectedRevision: accepted.operation.revision,
-      operationId: accepted.operation.operationId,
+    identifyAcceptance: async () => ({
+      acceptanceProofId: proofId("acceptance"),
+      effectId,
+      kind: "available",
+      operationAuthorityRevision: "operation-authority:one",
+      operationId,
     }),
-    /terminalization requires exact dispatch closure/,
-  );
-});
-
-test("durable cancellation after claim requests containment without a second attempt", async () => {
-  let releaseProvider = noop;
-  const providerGate = new Promise<void>(resolve => {
-    releaseProvider = resolve;
-  });
-  const harness = createHarness({
-    execution: async providerInput => {
-      await providerGate;
-      assert.equal(await providerInput.isCancellationRequested(), true);
-      await providerInput.emit({ cursor: 0, kind: "assistant", text: "cancelled safely" });
+    prepareCancellation: async operation => {
+      const scopeDigest = operation.acceptedAuthorityVector.scopeDigest;
+      const cancellationCommandId = identity("cancellation_command", "one");
+      const command = {
+        cancellationCommandId,
+        fingerprint: digestContainedTurnCanonicalValue({ cancellationCommandId, operationId, scopeDigest, version: 1 }) as never,
+        operationId,
+        scopeDigest,
+      };
       return {
-        acceptanceReceiptRef: "accepted:cancelled",
-        effectDisposition: "committed",
-        effectReceiptRef: "effect:cancelled",
-        executionReceiptRef: "execution:cancelled",
-        kind: "completed",
-        outcome: "cancelled",
-        outputDrainReceiptRef: "drain:cancelled",
+        command,
+        cutoffProof: { binding: { ...operationBinding(operation), cancellationCommandId }, kind: "cutoff", proofId: proofId("cancel-cutoff") },
+        proof: { binding: { ...operationBinding(operation), cancellationCommandId, cancellationFingerprint: command.fingerprint }, kind: "cancellation", proofId: proofId("cancellation") },
       };
     },
-  });
-  const submission = harness.feature.submit.execute(input());
-  let running: ContainedTurnOperation | undefined;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const operation = await harness.store.read("operation:1");
-    if (operation?.execution.kind === "running") {
-      running = operation;
-      break;
-    }
-    await new Promise<void>(resolve => {
-      setTimeout(resolve, 1);
-    });
-  }
-  assert.ok(running);
-  const cancellation = await harness.feature.cancel.execute({ operationId: running.operationId, scope: running.scope });
-  assert.equal(cancellation.status, "observed");
-  assert.equal(harness.counters.contain, 0);
-  releaseProvider();
-  const outcome = await submission;
-  assert.equal(outcome.status, "observed");
-  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "cancelled");}
-  assert.equal(harness.counters.execute, 1);
-});
-
-test("cancellation while custody opens closes without invoking the provider", async () => {
-  let releaseCustody = noop;
-  const custodyGate = new Promise<void>(resolve => {
-    releaseCustody = resolve;
-  });
-  const harness = createHarness({
-    custodyOpen: async custodyInput => {
-      await custodyGate;
-      return { custodyRef: `custody:${custodyInput.attemptId}` };
+    prepareDispatch: async () => ({ attemptId, claimProofId: proofId("claim"), custodyId, cutoffProofId: proofId("cutoff") }),
+    proofsForPrevention: async () => {throw new Error("not used by success conformance");},
+    proofsForProcessNoStart: async () => {throw new Error("not used by success conformance");},
+    read: async requested => requested === operationId ? current : undefined,
+    requestCancellation: async input => {
+      if (current === undefined) {return { kind: "not_found" };}
+      if (current.revision !== input.expectedRevision) {return { current, kind: "stale" };}
+      current = input.candidate;
+      return { kind: "applied", operation: current };
     },
-  });
-  const submission = harness.feature.submit.execute(input());
-  let claimed: ContainedTurnOperation | undefined;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const operation = await harness.store.read("operation:1");
-    if (operation?.dispatch.kind === "claimed") {
-      claimed = operation;
-      break;
-    }
-    await new Promise<void>(resolve => {
-      setTimeout(resolve, 1);
-    });
-  }
-  assert.ok(claimed);
-  await harness.feature.cancel.execute({ operationId: claimed.operationId, scope: claimed.scope });
-  releaseCustody();
-  const outcome = await submission;
-  assert.equal(outcome.status, "observed");
-  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "cancelled");}
-  assert.equal(harness.counters.execute, 0);
-});
-
-test("an ambiguous provider result is quarantined and never retried or terminalized", async () => {
-  const harness = createHarness({
-    execution: async () => ({ evidenceRef: "provider:ambiguous", kind: "ambiguous" }),
-  });
-  const outcome = await harness.feature.submit.execute(input());
-  assert.equal(outcome.status, "observed");
-  if (outcome.status !== "observed") {return;}
-  assert.equal(outcome.turn.status, "reconcile_required");
-  const operation = await harness.store.read(outcome.turn.operationId);
-  assert.equal(operation?.terminal.kind, "nonterminal");
-  assert.equal(operation?.workspace.kind, "quarantined");
-  assert.equal(harness.counters.execute, 1);
-  assert.equal(harness.counters.quarantine, 1);
-});
-
-test("a post-provider closure failure records reconciliation debt before quarantine", async () => {
-  const harness = createHarness({
-    seal: async () => {
-      throw new Error("synthetic artifact failure");
+    terminalProof: async input => {
+      assert.equal(input.satisfactionDigest, containedTurnSatisfactionDigest(input.operation));
+      assert.equal(input.operation.providerExecution.kind, "closed");
+      return {
+        binding: { ...operationBinding(input.operation), satisfactionDigest: input.satisfactionDigest, terminalOutcome: input.operation.providerExecution.outcome },
+        kind: "terminal_truth",
+        proofId: proofId("terminal"),
+      };
     },
-  });
-  const outcome = await harness.feature.submit.execute(input());
-  assert.equal(outcome.status, "observed");
-  if (outcome.status !== "observed") {return;}
-  assert.equal(outcome.turn.status, "reconcile_required");
-  const operation = await harness.store.read(outcome.turn.operationId);
-  assert.equal(operation?.effect.kind, "resolved");
-  assert.equal(operation?.reconciliation.kind, "required");
-  assert.equal(operation?.terminal.kind, "nonterminal");
-  assert.equal(harness.counters.execute, 1);
-  assert.equal(harness.counters.quarantine, 1);
-});
-
-test("a workspace creation failure remains a durable reconciliation obligation", async () => {
-  const harness = createHarness({
-    workspaceCreate: async () => {
-      throw new Error("synthetic workspace failure");
+  };
+  const dependencies: ContainedTurnKernelDependencies = {
+    operationStore,
+    security: {
+      authorizeForAcceptance: async () => ({
+        acceptanceProofId: proofId("security-acceptance"),
+        authorityRevision: "security-authority:one",
+        containmentPolicyDigest: digestContainedTurnCanonicalValue({ containment: "one" }),
+        decisionDigest: digestContainedTurnCanonicalValue({ allowed: true }),
+        kind: "allowed",
+      }),
+      revalidateForDispatch: async () => ({ dispatchDecisionDigest: digestContainedTurnCanonicalValue({ current: true }), kind: "current", proofId: proofId("security-dispatch") }),
     },
-  });
-  const outcome = await harness.feature.submit.execute(input());
-  assert.equal(outcome.status, "observed");
-  if (outcome.status !== "observed") {return;}
-  assert.equal(outcome.turn.status, "reconcile_required");
-  const operation = await harness.store.read(outcome.turn.operationId);
-  assert.equal(operation?.workspace.kind, "unbound");
-  assert.equal(operation?.reconciliation.kind, "required");
-  assert.equal(harness.counters.execute, 0);
-});
-
-test("rejects stale or reordered provider output as ambiguity", async () => {
-  const harness = createHarness({
-    execution: async providerInput => {
-      await providerInput.emit({ cursor: 1, kind: "assistant", text: "out of order" });
-      throw new Error("unreachable");
+    providerAccess: {
+      resolveForAcceptance: async () => ({
+        acceptanceProofId: proofId("provider-access-acceptance"),
+        acceptanceResolutionDigest: digestContainedTurnCanonicalValue({ resolved: true }),
+        kind: "resolved",
+        snapshot: providerAccessSnapshot,
+      }),
+      revalidateForDispatch: async () => ({
+        dispatchProofId: proofId("provider-access-dispatch"),
+        dispatchResolutionDigest: digestContainedTurnCanonicalValue({ current: true }),
+        kind: "current",
+        snapshot: providerAccessSnapshot,
+      }),
     },
-  });
-  const outcome = await harness.feature.submit.execute(input());
-  assert.equal(outcome.status, "observed");
-  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
-  assert.equal(harness.counters.execute, 1);
-});
-
-test("caller AbortSignal is local and cannot manufacture durable cancellation", async () => {
-  const harness = createHarness();
-  const controller = new AbortController();
-  controller.abort();
-  await assert.rejects(harness.feature.submit.execute(input(), { signal: controller.signal }), { name: "AbortError" });
-  assert.equal(await harness.store.read("operation:1"), undefined);
-});
-
-test("factory snapshots exactly six dependencies and imports no module runtime", async () => {
-  const harness = createHarness();
-  const reads = new Map<string, number>();
-  const proxied = new Proxy(harness.dependencies, {
-    get(target, property, receiver) {
-      const key = String(property);
-      reads.set(key, (reads.get(key) ?? 0) + 1);
-      return Reflect.get(target, property, receiver);
+    workspace: {
+      close: async input => ({ binding: { ...operationBinding(current as ContainedTurnKernelOperation), workspaceId: input.workspaceId }, kind: "workspace_closure", proofId: proofId("workspace-closure") }),
+      create: async () => ({ workspaceId }),
+      quarantine: async () => {},
     },
-  });
-  createContainedTurnFeature(proxied);
-  assert.deepEqual([...reads.keys()].toSorted(), ["artifacts", "custody", "operationStore", "provider", "security", "workspace"]);
-  assert.ok([...reads.values()].every(count => count === 1));
-  const source = await readFile(new URL("../src/features/contained-agent-turn/composition/feature-module-factory.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /module-kit|container|registry|service.locator/i);
+    artifacts: {
+      seal: async input => ({
+        artifactProof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), artifactManifestRef: "artifact:one", workspaceId: input.workspaceId }, kind: "artifact_manifest_seal", proofId: proofId("artifact") },
+        resultProof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), resultRef: "result:one" }, kind: "result_publication", proofId: proofId("result") },
+      }),
+    },
+    custody: {
+      open: async () => ({
+        custodyId,
+        hostBootId,
+        hostCustodyProof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), attemptId, effectId, custodyId }, kind: "host_custody", proofId: proofId("host-custody") },
+        hostInstanceId,
+      }),
+      requestContainment: async () => {
+        const operation = current as ContainedTurnKernelOperation;
+        const proof = (kind: ContainedTurnProof["kind"]) => operation.proofs.find(candidate => candidate.kind === kind)?.proofId as ReturnType<typeof proofId>;
+        return {
+          kind: "contained",
+          proof: {
+            binding: {
+              ...attemptBinding(operation),
+              adapterRevision: operation.adapterSnapshot.adapterRevision,
+              artifactManifestSealProofId: proof("artifact_manifest_seal"),
+              binaryRevision: operation.adapterSnapshot.binaryRevision,
+              capabilityManifestRevision: operation.capabilityManifest.manifestRevision,
+              containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
+              credentialBindingDigest: operation.providerAccessSnapshot.credentialBindingDigest,
+              custodyId,
+              cutoffProofId: proof("cutoff"),
+              executionClosureProofId: proof("execution_closure"),
+              finalCursor: operation.output.chunks.length,
+              hostBootId,
+              hostInstanceId,
+              immutableScopeDigest: operation.acceptedAuthorityVector.scopeDigest,
+              outputDrainProofId: proof("output_drain"),
+              providerRouteRef: operation.providerAccessSnapshot.providerRouteRef,
+              terminalObservationProofId: proof("provider_terminal_observation"),
+              workspaceId,
+            },
+            kind: "containment",
+            proofId: proofId("containment"),
+          },
+        };
+      },
+      start: async () => ({
+        kind: "execution_started",
+        proof: { binding: { ...attemptBinding(current as ContainedTurnKernelOperation), custodyId, hostBootId, hostInstanceId }, kind: "provider_process_start", proofId: proofId("process-start") },
+      }),
+    },
+    provider: {
+      adapterSnapshot,
+      manifest,
+      execute: async input => {
+        providerCalls.value += 1;
+        await input.emit({ cursor: 0, kind: "assistant", text: "ok" });
+        const operation = current as ContainedTurnKernelOperation;
+        const binding = attemptBinding(operation);
+        return {
+          acceptanceProof: { binding: { ...binding, disposition: "accepted" }, kind: "provider_acceptance", proofId: proofId("provider-acceptance") },
+          effectProof: { binding: { ...binding, disposition: "committed" }, kind: "effect_resolution", proofId: proofId("effect") },
+          executionClosureProof: { binding: { ...binding, outcome: "succeeded" }, kind: "execution_closure", proofId: proofId("execution") },
+          kind: "completed",
+          outcome: "succeeded",
+          outputDrainProof: { binding: { ...binding, finalCursor: 1 }, kind: "output_drain", proofId: proofId("output-drain") },
+          terminalObservationProof: { binding: { ...binding, outcome: "succeeded" }, kind: "provider_terminal_observation", proofId: proofId("terminal-observation") },
+        };
+      },
+    },
+  };
+  return { dependencies, providerCalls };
+};
 
-  const featureRoot = new URL("../src/features/contained-agent-turn/", import.meta.url);
-  for (const directory of ["domain/", "application/", "contracts/", "adapters/"]) {
-    for (const [file, contents] of await readTypeScriptTree(new URL(directory, featureRoot))) {
-      assert.doesNotMatch(contents, /module-kit|module runtime|service.locator|from ["'][^"']*module[^"']*["']/i, file);
-    }
-  }
+test("seven-port conformance reaches terminal truth through only ordered kernel APIs", async () => {
+  const { dependencies, providerCalls } = createDependencies();
+  const feature = createContainedTurnFeature(dependencies);
+  const result = await feature.submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "inspect disposable state" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(result.status, "observed");
+  if (result.status !== "observed") {return;}
+  assert.equal(result.turn.status, "succeeded");
+  assert.deepEqual(result.turn.output, [{ cursor: 0, kind: "assistant", text: "ok" }]);
+  assert.equal(providerCalls.value, 1);
+  assert.deepEqual(await feature.observe.execute({ operationId, scope: { projectId: "project:one", tenantId: "tenant:one" } }), result);
+});
+
+test("composition rejects every non-exact seven-port dependency bag before effects", () => {
+  const { dependencies, providerCalls } = createDependencies();
+  const inherited = Object.create(dependencies) as ContainedTurnKernelDependencies;
+  assert.throws(() => createContainedTurnFeature(inherited), /ordinary object prototype/u);
+  const symbol = Object.assign({ ...dependencies }, { [Symbol("hidden")]: true }) as ContainedTurnKernelDependencies;
+  assert.throws(() => createContainedTurnFeature(symbol), /symbol keys/u);
+  const nonEnumerable = { ...dependencies };
+  Object.defineProperty(nonEnumerable, "hidden", { enumerable: false, value: true });
+  assert.throws(() => createContainedTurnFeature(nonEnumerable), /enumerable data properties/u);
+  const prototypeExtra = Object.assign(Object.create({ hidden: true }), dependencies) as ContainedTurnKernelDependencies;
+  assert.throws(() => createContainedTurnFeature(prototypeExtra), /ordinary object prototype/u);
+  assert.equal(providerCalls.value, 0);
 });

@@ -29,6 +29,7 @@ import {
   validateContainedTurnProofBinding,
 } from "./contained-turn-proof-validation.js";
 import { containedTurnSatisfactionDigest } from "./contained-turn-satisfaction.js";
+import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord } from "./contained-turn-record.js";
 
 // The count exhaustively validates every disjoint identity axis and evidence source.
 // oxlint-disable-next-line complexity
@@ -85,37 +86,37 @@ const validateCanonicalDigests = (operation: ContainedTurnKernelOperation): void
 const validateAuthorityReferences = (operation: ContainedTurnKernelOperation): void => {
   const references: Array<readonly [string, string]> = [
     ["accessRef", operation.providerAccessSnapshot.accessRef],
-    ["accessRevision", operation.providerAccessSnapshot.accessRevision],
-    ["accountRef", operation.providerAccessSnapshot.accountRef],
-    ["accountRevision", operation.providerAccessSnapshot.accountRevision],
     ["adapterRevision", operation.adapterSnapshot.adapterRevision],
     ["binaryRevision", operation.adapterSnapshot.binaryRevision],
     ["capabilityManifestRevision", operation.adapterSnapshot.capabilityManifestRevision],
-    ["credentialBindingGeneration", operation.providerAccessSnapshot.credentialBindingGeneration],
     ["credentialBindingRef", operation.providerAccessSnapshot.credentialBindingRef],
-    ["credentialBindingRevision", operation.providerAccessSnapshot.credentialBindingRevision],
     ["manifestRevision", operation.capabilityManifest.manifestRevision],
     ["operationAuthorityRevision", operation.acceptedAuthorityVector.operationAuthorityRevision],
+    ["projectId", operation.providerAccessSnapshot.projectId],
+    ["providerAccountRef", operation.providerAccessSnapshot.providerAccountRef],
     ["providerRouteRef", operation.providerAccessSnapshot.providerRouteRef],
-    ["providerRouteRevision", operation.providerAccessSnapshot.providerRouteRevision],
     ["resourceScopeRevision", operation.capabilityManifest.resourceScopeRevision],
     ["securityAuthorityRevision", operation.acceptedAuthorityVector.securityAuthorityRevision],
+    ["tenantId", operation.providerAccessSnapshot.tenantId],
   ];
   if (operation.artifactManifestRef !== undefined) {
     references.push(["artifactManifestRef", operation.artifactManifestRef]);
   }
   if (operation.resultRef !== undefined) {references.push(["resultRef", operation.resultRef]);}
   for (const [name, value] of references) {validateContainedTurnText(name, value, CONTAINED_TURN_LIMITS.text.identifier);}
+  invariant(
+    Number.isSafeInteger(operation.providerAccessSnapshot.credentialGeneration) &&
+      operation.providerAccessSnapshot.credentialGeneration >= 1 &&
+      Number.isSafeInteger(operation.providerAccessSnapshot.revision) && operation.providerAccessSnapshot.revision >= 1,
+    "Provider Access generation and revision must be positive safe integers",
+  );
 };
 
 const validateOutput = (operation: ContainedTurnKernelOperation): void => {
   invariant(operation.output.chunks.length <= CONTAINED_TURN_LIMITS.collections.outputChunks, "output chunk limit exceeded");
   let totalBytes = 0;
   operation.output.chunks.forEach((chunk, index) => {
-    invariant(
-      Object.keys(chunk).toSorted().join(",") === "cursor,kind,text",
-      "output chunk must be an exact closed record",
-    );
+    assertContainedTurnExactRecord("output chunk", chunk, ["cursor", "kind", "text"]);
     invariant(chunk.cursor === index, "output cursors must be contiguous from zero");
     invariant(
       chunk.kind === "assistant" || chunk.kind === "diagnostic" || chunk.kind === "progress",
@@ -131,7 +132,9 @@ const validateOutput = (operation: ContainedTurnKernelOperation): void => {
       requireContainedTurnProof(
         operation,
         operation.output.fence.proofId,
-        operation.dispatch.kind === "prevented" ? "output_no_start_drain" : "output_drain",
+        operation.dispatch.kind === "prevented" || operation.providerProcessStart.kind === "proved_no_start"
+          ? "output_no_start_drain"
+          : "output_drain",
       );
     }
   }
@@ -179,19 +182,23 @@ const validateAuthorityBindings = (candidate: ContainedTurnKernelOperation): voi
   );
   invariant(
     candidate.acceptedAuthorityVector.providerAccessSnapshot.accessRef === candidate.providerAccessSnapshot.accessRef &&
-      candidate.acceptedAuthorityVector.providerAccessSnapshot.accessRevision === candidate.providerAccessSnapshot.accessRevision &&
-      candidate.acceptedAuthorityVector.providerAccessSnapshot.accountRef === candidate.providerAccessSnapshot.accountRef &&
-      candidate.acceptedAuthorityVector.providerAccessSnapshot.accountRevision === candidate.providerAccessSnapshot.accountRevision &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingDigest === candidate.providerAccessSnapshot.credentialBindingDigest &&
-      candidate.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingGeneration === candidate.providerAccessSnapshot.credentialBindingGeneration &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingRef === candidate.providerAccessSnapshot.credentialBindingRef &&
-      candidate.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingRevision === candidate.providerAccessSnapshot.credentialBindingRevision &&
+      candidate.acceptedAuthorityVector.providerAccessSnapshot.credentialGeneration === candidate.providerAccessSnapshot.credentialGeneration &&
+      candidate.acceptedAuthorityVector.providerAccessSnapshot.projectId === candidate.providerAccessSnapshot.projectId &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.provider === candidate.providerAccessSnapshot.provider &&
+      candidate.acceptedAuthorityVector.providerAccessSnapshot.providerAccountRef === candidate.providerAccessSnapshot.providerAccountRef &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.providerRouteRef === candidate.providerAccessSnapshot.providerRouteRef &&
-      candidate.acceptedAuthorityVector.providerAccessSnapshot.providerRouteRevision === candidate.providerAccessSnapshot.providerRouteRevision,
+      candidate.acceptedAuthorityVector.providerAccessSnapshot.revision === candidate.providerAccessSnapshot.revision &&
+      candidate.acceptedAuthorityVector.providerAccessSnapshot.tenantId === candidate.providerAccessSnapshot.tenantId,
     "authority vector must bind the exact Provider Access snapshot",
   );
   invariant(candidate.acceptedAuthorityVector.scopeDigest === containedTurnScopeDigest(candidate.scope), "authority vector scope binding mismatch");
+  invariant(
+    candidate.providerAccessSnapshot.projectId === candidate.scope.projectId &&
+      candidate.providerAccessSnapshot.tenantId === candidate.scope.tenantId,
+    "Provider Access snapshot scope binding mismatch",
+  );
   invariant(candidate.acceptedAuthorityVector.capabilityManifestRevision === candidate.capabilityManifest.manifestRevision, "authority vector manifest binding mismatch");
   invariant(candidate.acceptedAuthorityVectorDigest === containedTurnAuthorityVectorDigest(candidate.acceptedAuthorityVector), "accepted authority-vector digest does not recompute");
   invariant(candidate.commandFingerprint === containedTurnCommandFingerprint({ intent: candidate.intent, provider: candidate.adapterSnapshot.provider, scope: candidate.scope }), "command fingerprint does not recompute");
@@ -221,7 +228,12 @@ const validateExecutionAxes = (candidate: ContainedTurnKernelOperation): void =>
     invariant(candidate.providerProcessStart.kind !== "unobserved" && (candidate.providerProcessStart.kind !== "pending" || candidate.providerProcessStart.attemptId === candidate.dispatch.attemptId), "dispatch claim must reserve exactly one pending provider start observation");
     invariant(candidate.workspaceId !== undefined && candidate.custodyId !== undefined && candidate.hostInstanceId !== undefined && candidate.hostBootId !== undefined, "dispatch requires allocated workspace and exact Host custody identities");
     invariant(candidate.admissionFence.kind === "fenced", "dispatch claim requires the exact persisted admission fence");
-    invariant(candidate.containment.kind === "pending" || candidate.containment.kind === "uncertain" || candidate.containment.kind === "contained", "claimed dispatch requires attempt-bound containment state");
+    invariant(
+      candidate.containment.kind === "pending" || candidate.containment.kind === "uncertain" ||
+        candidate.containment.kind === "contained" ||
+        (candidate.providerProcessStart.kind === "proved_no_start" && candidate.containment.kind === "qualified_not_required"),
+      "claimed dispatch requires attempt-bound containment state or proved process no-start",
+    );
   } else {
     invariant(candidate.providerProcessStart.kind === "unobserved", "provider process start cannot be observed without a dispatch claim");
     invariant(candidate.providerExecution.kind !== "active", "provider execution cannot activate without a dispatch claim");
@@ -253,11 +265,9 @@ const validateExecutionAxes = (candidate: ContainedTurnKernelOperation): void =>
 const validateCancellation = (candidate: ContainedTurnKernelOperation): void => {
   if (candidate.cancellation.kind !== "requested") {return;}
   const cancellation = candidate.cancellation;
-  invariant(
-    Object.keys(cancellation.command).toSorted().join(",") ===
-      "cancellationCommandId,fingerprint,operationId,scopeDigest",
-    "cancellation command must be an exact closed record",
-  );
+  assertContainedTurnExactRecord("cancellation command", cancellation.command, [
+    "cancellationCommandId", "fingerprint", "operationId", "scopeDigest",
+  ]);
   const expectedScopeDigest = containedTurnScopeDigest(candidate.scope);
   invariant(
     cancellation.command.operationId === candidate.operationId &&
@@ -285,11 +295,18 @@ const validateCancellation = (candidate: ContainedTurnKernelOperation): void => 
   }
 };
 
+// Complexity here is the explicit conjunction of orthogonal, fail-closed invariant families.
+// oxlint-disable-next-line complexity
 export const validateContainedTurnOperation = (
   candidate: ContainedTurnKernelOperation,
   options: Readonly<{ readonly previous?: ContainedTurnKernelOperation }> = {},
 ): void => {
   validateContainedTurnOperationShape(candidate);
+  assertContainedTurnCanonicalArray(candidate.proofs);
+  assertContainedTurnCanonicalArray(candidate.output.chunks);
+  if (candidate.reconciliation.kind === "required") {
+    assertContainedTurnCanonicalArray(candidate.reconciliation.evidenceIds);
+  }
   invariant(isContainedTurnSchemaVersion(candidate.schemaVersion), "unsupported contained-turn schema version");
   invariant(Number.isSafeInteger(candidate.revision) && candidate.revision >= 0, "revision must be a non-negative safe integer");
   if (candidate.revision === 0) {
@@ -297,7 +314,7 @@ export const validateContainedTurnOperation = (
       candidate.admissionFence.kind === "open" && candidate.cancellation.kind === "open" &&
         candidate.containment.kind === "not_requested" && candidate.dispatch.kind === "unclaimed" &&
         candidate.effect.kind === "unresolved" && candidate.output.chunks.length === 0 &&
-        candidate.output.fence.kind === "open" && candidate.proofs.length === 1 &&
+        candidate.output.fence.kind === "open" && candidate.proofs.length === 3 &&
         candidate.providerAcceptance.kind === "unobserved" && candidate.providerExecution.kind === "not_started" &&
         candidate.providerProcessStart.kind === "unobserved" && candidate.reconciliation.kind === "clear" &&
         candidate.terminal.kind === "open",

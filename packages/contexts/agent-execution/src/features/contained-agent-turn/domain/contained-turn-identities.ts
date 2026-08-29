@@ -42,6 +42,9 @@ export const validateContainedTurnIdentity = <Namespace extends ContainedTurnIde
   if (!value.startsWith(CONTAINED_TURN_IDENTITY_PREFIXES[namespace])) {
     throw new TypeError(`${namespace} identity must use its exact disjoint namespace prefix`);
   }
+  if (value.length === CONTAINED_TURN_IDENTITY_PREFIXES[namespace].length) {
+    throw new TypeError(`${namespace} identity must have a non-empty suffix`);
+  }
   return value as ContainedTurnIdentity<Namespace>;
 };
 

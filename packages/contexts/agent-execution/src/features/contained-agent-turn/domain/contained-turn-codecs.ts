@@ -1,4 +1,5 @@
 import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
+import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord, hasContainedTurnLoneSurrogate } from "./contained-turn-record.js";
 
 declare const canonicalDigestBrand: unique symbol;
 declare const commandFingerprintBrand: unique symbol;
@@ -84,14 +85,33 @@ const sha256Hex = (value: string): string => {
 };
 
 const canonicalize = (value: ContainedTurnCanonicalValue): string => {
-  if (value === null || typeof value === "boolean" || typeof value === "string") {return JSON.stringify(value);}
+  if (value === null || typeof value === "boolean") {return JSON.stringify(value);}
+  if (typeof value === "string") {
+    if (hasContainedTurnLoneSurrogate(value)) {throw new TypeError("canonical strings must not contain lone surrogates");}
+    return JSON.stringify(value);
+  }
   if (typeof value === "number") {
-    if (!Number.isSafeInteger(value)) {throw new TypeError("canonical numbers must be safe integers");}
+    if (!Number.isSafeInteger(value) || Object.is(value, -0)) {
+      throw new TypeError("canonical numbers must be collision-free safe integers");
+    }
     return String(value);
   }
-  if (Array.isArray(value)) {return `[${value.map(item => canonicalize(item)).join(",")}]`;}
+  if (Array.isArray(value)) {
+    assertContainedTurnCanonicalArray(value);
+    for (const item of value) {
+      if (item === undefined) {throw new TypeError("canonical arrays must not contain undefined");}
+    }
+    return `[${value.map(item => canonicalize(item)).join(",")}]`;
+  }
   const record = value as { readonly [key: string]: ContainedTurnCanonicalValue };
-  return `{${Object.keys(record).toSorted().map(key => `${JSON.stringify(key)}:${canonicalize(record[key] ?? null)}`).join(",")}}`;
+  assertContainedTurnExactRecord("canonical record", record, Object.keys(record));
+  const keys = Object.keys(record).toSorted();
+  for (const key of keys) {
+    if (hasContainedTurnLoneSurrogate(key) || record[key] === undefined) {
+      throw new TypeError("canonical records must not contain invalid keys or undefined");
+    }
+  }
+  return `{${keys.map(key => `${JSON.stringify(key)}:${canonicalize(record[key] as ContainedTurnCanonicalValue)}`).join(",")}}`;
 };
 
 export const encodeContainedTurnCanonicalValue = (value: ContainedTurnCanonicalValue): string => canonicalize(value);

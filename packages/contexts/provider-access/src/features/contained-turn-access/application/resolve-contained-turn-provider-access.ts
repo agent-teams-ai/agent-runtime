@@ -1,24 +1,46 @@
 import type {
-  ResolveContainedTurnProviderAccess,
-  ResolveContainedTurnProviderAccessOutcome,
-} from "../contracts/contained-turn-provider-access.js";
-import { providerAccessView } from "../domain/provider-access-binding.js";
+  ProviderAccessBindingRecord,
+  ProviderAccessProviderValue,
+  ProviderAccessScopeValue,
+} from "../domain/provider-access-binding.js";
 import type { ProviderAccessBindingRepository } from "./ports/outbound/provider-access-binding-repository.js";
+import { observeCanonicalProviderAccessBinding } from "./observe-provider-access-binding.js";
+
+export interface ResolveProviderAccessCommand {
+  readonly provider: ProviderAccessProviderValue;
+  readonly scope: ProviderAccessScopeValue;
+}
+
+export type ResolveProviderAccessResult =
+  | { readonly binding: ProviderAccessBindingRecord; readonly kind: "resolved" }
+  | { readonly kind: "unavailable"; readonly reason: "indeterminate" | "not_found" | "revoked" | "unavailable" };
+
+export interface ResolveProviderAccessUseCase {
+  execute(command: ResolveProviderAccessCommand): Promise<ResolveProviderAccessResult>;
+}
 
 export const createResolveContainedTurnProviderAccess = (
   repository: ProviderAccessBindingRepository,
-): ResolveContainedTurnProviderAccess => {
-  const useCase: ResolveContainedTurnProviderAccess = {
-    async execute(input): Promise<ResolveContainedTurnProviderAccessOutcome> {
-    const record = await repository.find({
-      projectId: input.scope.projectId,
-      provider: input.provider,
-      tenantId: input.scope.tenantId,
-    });
-    if (record === undefined) {return { kind: "unavailable", reason: "not_found" };}
-    if (record.status !== "active") {return { kind: "unavailable", reason: "revoked" };}
-    return { binding: providerAccessView(record), kind: "resolved" };
-    },
-  };
-  return Object.freeze(useCase);
-};
+): ResolveProviderAccessUseCase => Object.freeze({
+  async execute(command: ResolveProviderAccessCommand): Promise<ResolveProviderAccessResult> {
+    const observation = await observeCanonicalProviderAccessBinding(repository, command);
+    if (observation.kind !== "found") {
+      return Object.freeze({ kind: "unavailable", reason: observation.kind });
+    }
+    const binding = observation.record;
+    if (
+      binding.tenantId !== command.scope.tenantId
+      || binding.projectId !== command.scope.projectId
+      || binding.provider !== command.provider
+    ) {
+      return Object.freeze({ kind: "unavailable", reason: "indeterminate" });
+    }
+    if (binding.revocation !== "active") {
+      return Object.freeze({ kind: "unavailable", reason: "revoked" });
+    }
+    if (binding.availability !== "available") {
+      return Object.freeze({ kind: "unavailable", reason: "unavailable" });
+    }
+    return Object.freeze({ binding, kind: "resolved" });
+  },
+});

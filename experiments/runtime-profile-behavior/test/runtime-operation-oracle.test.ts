@@ -490,6 +490,18 @@ test("generated vocabulary unions exactly project the loaded catalog", async () 
   assert.deepEqual(members("ResultCode"), catalog.resultCodes);
 });
 
+test("generated authority exposes the exact ordered seven-port dependency tuple", async () => {
+  const source = await readFile(
+    join(repositoryRoot, "experiments/runtime-profile-behavior/fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts"),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /dependencies: \[\s*"operation_store",\s*"security",\s*"provider_access",\s*"workspace",\s*"artifacts",\s*"custody",\s*"provider",?\s*\];/,
+  );
+  assert.doesNotMatch(source, /dependencies: never\[\];/);
+});
+
 test("temporary catalog vocabulary changes generated projection and freshness", async () => {
   const baseline = await renderRuntimeOperationOracleGeneratedFiles(repositoryRoot);
   await withSpecificationCopy(async (root) => {

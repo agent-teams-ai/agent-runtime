@@ -1,5 +1,7 @@
 export type ContainedTurnSchemaVersion = 1 | 2;
 
+import { hasContainedTurnLoneSurrogate } from "./contained-turn-record.js";
+
 export const CONTAINED_TURN_LIMITS = Object.freeze({
   acceptedSchemaVersions: Object.freeze([1, 2] as const),
   collections: Object.freeze({
@@ -37,7 +39,10 @@ export const validateContainedTurnText = (
 ): void => {
   const byteLength = utf8ByteLength(value);
   const isAscii = limit.encoding === "utf8" || /^[\x20-\x7E]+$/u.test(value);
-  if (byteLength === 0 || byteLength > limit.maximumBytes || !isAscii || value.includes("\u0000")) {
+  if (
+    byteLength === 0 || byteLength > limit.maximumBytes || !isAscii ||
+    value.includes("\u0000") || hasContainedTurnLoneSurrogate(value)
+  ) {
     throw new ContainedTurnLimitError(
       `${name} must contain 1..${String(limit.maximumBytes)} ${limit.encoding} bytes`,
     );

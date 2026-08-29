@@ -15,14 +15,17 @@ import type {
 } from "../../../domain/contained-turn-authority.js";
 import type {
   ContainedTurnCanonicalDigest,
+  ContainedTurnCommandFingerprint,
 } from "../../../domain/contained-turn-codecs.js";
 import type {
   ContainedTurnKernelOperation,
   ContainedTurnKernelOutputChunk,
 } from "../../../domain/contained-turn-kernel.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
+import type { ContainedTurnKernelMutation } from "../../../domain/contained-turn-transitions.js";
 import type {
   ContainedTurnAttemptId,
+  ContainedTurnCommandId,
   ContainedTurnCustodyId,
   ContainedTurnEffectId,
   ContainedTurnEvidenceId,
@@ -32,10 +35,12 @@ import type {
   ContainedTurnProofId,
   ContainedTurnWorkspaceId,
 } from "../../../domain/contained-turn-identities.js";
+import { assertContainedTurnExactRecord } from "../../../domain/contained-turn-record.js";
 
 export type ResolveContainedTurnProviderAccessOutcome =
   | {
     readonly acceptanceResolutionDigest: ContainedTurnCanonicalDigest;
+    readonly acceptanceProofId: ContainedTurnProofId;
     readonly kind: "resolved";
     readonly snapshot: ContainedTurnProviderAccessSnapshot;
   }
@@ -53,6 +58,7 @@ export type ResolveContainedTurnProviderAccessOutcome =
 export type RevalidateContainedTurnProviderAccessOutcome =
   | {
     readonly dispatchResolutionDigest: ContainedTurnCanonicalDigest;
+    readonly dispatchProofId: ContainedTurnProofId;
     readonly kind: "current";
     readonly snapshot: ContainedTurnProviderAccessSnapshot;
   }
@@ -86,6 +92,42 @@ export type CommitContainedTurnKernelOperationOutcome =
   | { readonly current: ContainedTurnKernelOperation; readonly kind: "stale" };
 
 export interface ContainedTurnKernelOperationStore {
+  identifyAcceptance(input: Readonly<{
+    commandFingerprint: ContainedTurnCommandFingerprint;
+    commandId: ContainedTurnCommandId;
+  }>): Promise<
+    | {
+      readonly acceptanceProofId: ContainedTurnProofId;
+      readonly effectId: ContainedTurnEffectId;
+      readonly kind: "available";
+      readonly operationId: ContainedTurnOperationId;
+      readonly operationAuthorityRevision: string;
+    }
+    | { readonly kind: "fingerprint_conflict" }
+    | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }
+  >;
+  prepareDispatch(operation: ContainedTurnKernelOperation): Promise<Readonly<{
+    attemptId: ContainedTurnAttemptId;
+    claimProofId: ContainedTurnProofId;
+    custodyId: ContainedTurnCustodyId;
+    cutoffProofId: ContainedTurnProofId;
+  }>>;
+  proofsForPrevention(input: Readonly<{
+    operation: ContainedTurnKernelOperation;
+    preventionProofId: ContainedTurnProofId;
+  }>): Promise<Omit<Extract<ContainedTurnKernelMutation, { readonly kind: "prevent_dispatch" }>, "kind">>;
+  proofsForProcessNoStart(operation: ContainedTurnKernelOperation): Promise<
+    Omit<Extract<ContainedTurnKernelMutation, { readonly kind: "close_process_no_start" }>, "kind">
+  >;
+  terminalProof(input: Readonly<{
+    operation: ContainedTurnKernelOperation;
+    satisfactionDigest: ContainedTurnCanonicalDigest;
+  }>): Promise<Extract<ContainedTurnProof, { readonly kind: "terminal_truth" }>>;
+  prepareCancellation(operation: ContainedTurnKernelOperation): Promise<Readonly<{
+    command: ContainedTurnCancellationCommand;
+    cutoffProof: Extract<ContainedTurnProof, { readonly kind: "cutoff" }>;
+    proof: Extract<ContainedTurnProof, { readonly kind: "cancellation" }>;
+  }>>;
   accept(candidate: ContainedTurnKernelOperation): Promise<
     | { readonly kind: "accepted"; readonly operation: ContainedTurnKernelOperation }
     | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }
@@ -98,6 +140,7 @@ export interface ContainedTurnKernelOperationStore {
   }>): Promise<CommitContainedTurnKernelOperationOutcome>;
   read(operationId: ContainedTurnOperationId): Promise<ContainedTurnKernelOperation | undefined>;
   requestCancellation(input: Readonly<{
+    candidate: ContainedTurnKernelOperation;
     command: ContainedTurnCancellationCommand;
     expectedRevision: number;
   }>): Promise<CommitContainedTurnKernelOperationOutcome>;
@@ -109,7 +152,7 @@ export interface ContainedTurnKernelSecurityPort {
     provider: ContainedTurnProvider;
     scope: ContainedTurnScope;
   }>): Promise<
-    | { readonly authorityRevision: string; readonly decisionDigest: ContainedTurnCanonicalDigest; readonly kind: "allowed" }
+    | { readonly acceptanceProofId: ContainedTurnProofId; readonly authorityRevision: string; readonly containmentPolicyDigest: ContainedTurnCanonicalDigest; readonly decisionDigest: ContainedTurnCanonicalDigest; readonly kind: "allowed" }
     | { readonly kind: "denied" }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
@@ -119,7 +162,7 @@ export interface ContainedTurnKernelSecurityPort {
     securityAuthorityRevision: string;
     scope: ContainedTurnScope;
   }>): Promise<
-    | { readonly kind: "current"; readonly proofId: ContainedTurnProofId }
+    | { readonly dispatchDecisionDigest: ContainedTurnCanonicalDigest; readonly kind: "current"; readonly proofId: ContainedTurnProofId }
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
@@ -156,6 +199,7 @@ export interface ContainedTurnKernelCustodyPort {
     workspaceId: ContainedTurnWorkspaceId;
   }>): Promise<Readonly<{
     custodyId: ContainedTurnCustodyId;
+    hostCustodyProof: Extract<ContainedTurnProof, { readonly kind: "host_custody" }>;
     hostBootId: ContainedTurnHostBootId;
     hostInstanceId: ContainedTurnHostInstanceId;
   }>>;
@@ -189,6 +233,10 @@ export interface ContainedTurnKernelCustodyPort {
   >;
 }
 
+/**
+ * @deprecated Adapter-only compatibility surface. The contained-turn feature
+ * factory never consumes this legacy state-machine port.
+ */
 export interface AcceptContainedTurnCommandInput {
   readonly commandId: string;
   readonly intent: ContainedTurnOperation["intent"];
@@ -349,8 +397,9 @@ export interface ContainedTurnProviderPort {
   }): Promise<ContainedTurnProviderExecutionOutcome>;
 }
 
-/** Frozen provider-facing kernel port. Legacy engine wiring migrates to this surface separately. */
+/** Frozen provider-facing kernel port; provider-specific protocols remain outside the application. */
 export interface ContainedTurnKernelProviderPort {
+  readonly adapterSnapshot: ContainedTurnProviderAdapterSnapshot;
   readonly manifest: ContainedTurnCapabilityManifest;
   execute(input: Readonly<{
     adapterSnapshot: ContainedTurnProviderAdapterSnapshot;
@@ -367,22 +416,21 @@ export interface ContainedTurnKernelProviderPort {
     workspaceId: ContainedTurnWorkspaceId;
   }>): Promise<
     | {
-      readonly acceptanceEvidenceId: ContainedTurnEvidenceId;
-      readonly effectDisposition: "committed" | "not_committed";
-      readonly effectEvidenceId: ContainedTurnEvidenceId;
-      readonly executionClosureEvidenceId: ContainedTurnEvidenceId;
+      readonly acceptanceProof: Extract<ContainedTurnProof, { readonly kind: "provider_acceptance" }>;
+      readonly effectProof: Extract<ContainedTurnProof, { readonly kind: "effect_resolution" }>;
+      readonly executionClosureProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>;
       readonly kind: "completed";
       readonly outcome: "cancelled" | "failed" | "succeeded";
-      readonly outputDrainEvidenceId: ContainedTurnEvidenceId;
-      readonly terminalObservationEvidenceId: ContainedTurnEvidenceId;
+      readonly outputDrainProof: Extract<ContainedTurnProof, { readonly kind: "output_drain" }>;
+      readonly terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }>;
     }
     | {
-      readonly executionClosureEvidenceId: ContainedTurnEvidenceId;
+      readonly acceptanceProof: Extract<ContainedTurnProof, { readonly kind: "provider_acceptance" }>;
+      readonly effectProof: Extract<ContainedTurnProof, { readonly kind: "effect_resolution" }>;
+      readonly executionClosureProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>;
       readonly kind: "not_accepted";
-      readonly noEffectEvidenceId: ContainedTurnEvidenceId;
-      readonly outputDrainEvidenceId: ContainedTurnEvidenceId;
-      readonly providerNonAcceptanceEvidenceId: ContainedTurnEvidenceId;
-      readonly terminalObservationEvidenceId: ContainedTurnEvidenceId;
+      readonly outputDrainProof: Extract<ContainedTurnProof, { readonly kind: "output_drain" }>;
+      readonly terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }>;
     }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
@@ -408,13 +456,13 @@ export const CONTAINED_TURN_DEPENDENCY_NAMES = Object.freeze([
   "provider",
 ] as const satisfies readonly (keyof ContainedTurnKernelDependencies)[]);
 
-/** Runtime guard used by the future Pure DI factory to reject dependency bags and hidden authorities. */
+/** Runtime guard used by the Pure DI factory to reject dependency bags and hidden authorities. */
 export const validateContainedTurnKernelDependencies = (
   dependencies: ContainedTurnKernelDependencies,
 ): void => {
-  const actual = Object.keys(dependencies).toSorted();
-  const expected = [...CONTAINED_TURN_DEPENDENCY_NAMES].toSorted();
-  if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
-    throw new TypeError("contained-turn composition requires the exact closed seven dependencies");
-  }
+  assertContainedTurnExactRecord(
+    "contained-turn composition dependencies",
+    dependencies,
+    CONTAINED_TURN_DEPENDENCY_NAMES,
+  );
 };

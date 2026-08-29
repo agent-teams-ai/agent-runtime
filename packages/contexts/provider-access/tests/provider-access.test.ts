@@ -1,87 +1,484 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
+import type {
+  ContainedTurnProviderAccessBinding,
+  ProviderAccessProvider,
+  RevalidateContainedTurnProviderAccessRejection,
+} from "../dist/index.js";
 import {
-  createContainedTurnProviderAccessFeature,
-  createStaticProviderAccessBindingRepository,
-  type ProviderAccessBindingRecord,
+  createStaticContainedTurnProviderAccessFeature,
+  type StaticAvailableProviderAccessAuthority,
+  type StaticProviderAccessAuthority,
 } from "../dist/composition.js";
+import { createContainedTurnProviderAccessFeature } from "../dist/features/contained-turn-access/composition/feature-module-factory.js";
 
-const binding = (overrides: Partial<ProviderAccessBindingRecord> = {}): ProviderAccessBindingRecord => ({
+const binding = (
+  overrides: Partial<StaticAvailableProviderAccessAuthority> = {},
+): StaticAvailableProviderAccessAuthority => ({
   accessRef: "access:one",
-  adapterRevision: "adapter:one",
-  binaryRevision: "binary:one",
-  capabilityManifestRevision: "manifest:one",
-  credentialBindingDigest: "credential-digest:one",
+  credentialBindingDigest: "authority-digest:one",
   credentialBindingRef: "credential-binding:one",
   credentialGeneration: 1,
+  kind: "binding",
   projectId: "project:one",
   provider: "codex",
   providerAccountRef: "provider-account:one",
   providerRouteRef: "provider-route:one",
   revision: 1,
-  status: "active",
   tenantId: "tenant:one",
   ...overrides,
 });
 
-test("resolves one exact active tenant, project, and provider binding", async () => {
-  const source = binding();
-  const repository = createStaticProviderAccessBindingRepository([source]);
-  const feature = createContainedTurnProviderAccessFeature({ bindingRepository: repository });
-  const outcome = await feature.resolve.execute({
+const resolve = async (
+  authorities: readonly StaticProviderAccessAuthority[],
+  provider: ProviderAccessProvider = "codex",
+  projectId = "project:one",
+  tenantId = "tenant:one",
+) => createStaticContainedTurnProviderAccessFeature(authorities).resolve.execute({
+  provider,
+  scope: { projectId, tenantId },
+});
+
+const resolvedBinding = async (
+  authorities: readonly StaticProviderAccessAuthority[] = [binding()],
+): Promise<ContainedTurnProviderAccessBinding> => {
+  const outcome = await resolve(authorities);
+  assert.equal(outcome.kind, "resolved");
+  if (outcome.kind !== "resolved") { throw new Error("expected resolved authority"); }
+  return outcome.binding;
+};
+
+test("resolves and exactly replays one qualified owner-fact snapshot", async () => {
+  const feature = createStaticContainedTurnProviderAccessFeature([binding()]);
+  const input = { provider: "codex" as const, scope: { projectId: "project:one", tenantId: "tenant:one" } };
+  const first = await feature.resolve.execute(input);
+  const replay = await feature.resolve.execute(input);
+  assert.deepEqual(replay, first);
+  assert.equal(first.kind, "resolved");
+  assert.equal(replay.kind, "resolved");
+  if (first.kind !== "resolved" || replay.kind !== "resolved") { return; }
+  assert.notEqual(first.binding, replay.binding);
+  assert.ok(Object.isFrozen(first.binding));
+  assert.deepEqual(Object.keys(first.binding).toSorted(), [
+    "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration",
+    "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId",
+  ]);
+});
+
+test("exact lookup never falls back across tenant, project, or provider", async () => {
+  assert.deepEqual(await resolve([binding()], "claude"), { kind: "unavailable", reason: "not_found" });
+  assert.deepEqual(await resolve([binding()], "codex", "project:other"), { kind: "unavailable", reason: "not_found" });
+  assert.deepEqual(await resolve([binding()], "codex", "project:one", "tenant:other"), {
+    kind: "unavailable", reason: "not_found",
+  });
+});
+
+test("delimiter-like scope values coexist without key collisions", async () => {
+  const first = binding({
+    accessRef: "access:first",
+    projectId: `project\u0001codex`,
+    tenantId: "tenant",
+  });
+  const second = binding({
+    accessRef: "access:second",
+    projectId: "codex",
+    tenantId: `tenant\u0001project`,
+  });
+  const feature = createStaticContainedTurnProviderAccessFeature([first, second]);
+  const [firstResult, secondResult] = await Promise.all([
+    feature.resolve.execute({ provider: "codex", scope: { projectId: first.projectId, tenantId: first.tenantId } }),
+    feature.resolve.execute({ provider: "codex", scope: { projectId: second.projectId, tenantId: second.tenantId } }),
+  ]);
+  assert.equal(firstResult.kind, "resolved");
+  assert.equal(secondResult.kind, "resolved");
+  if (firstResult.kind !== "resolved" || secondResult.kind !== "resolved") { return; }
+  assert.equal(firstResult.binding.accessRef, "access:first");
+  assert.equal(secondResult.binding.accessRef, "access:second");
+});
+
+test("concurrent repository reads return detached immutable identities", async () => {
+  const feature = createStaticContainedTurnProviderAccessFeature([binding()]);
+  const input = { provider: "codex" as const, scope: { projectId: "project:one", tenantId: "tenant:one" } };
+  const [first, second] = await Promise.all([
+    feature.resolve.execute(input),
+    feature.resolve.execute(input),
+  ]);
+  assert.equal(first.kind, "resolved");
+  assert.equal(second.kind, "resolved");
+  if (first.kind !== "resolved" || second.kind !== "resolved") { return; }
+  assert.notEqual(first.binding, second.binding);
+  assert.ok(Object.isFrozen(first.binding));
+  assert.ok(Object.isFrozen(second.binding));
+});
+
+test("resolve reports revoked, unavailable, and indeterminate observations", async () => {
+  assert.deepEqual(await resolve([binding({ revocation: "revoked" })]), { kind: "unavailable", reason: "revoked" });
+  assert.deepEqual(await resolve([binding({ availability: "unavailable" })]), {
+    kind: "unavailable", reason: "unavailable",
+  });
+  assert.deepEqual(await resolve([{
+    kind: "indeterminate",
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }]), { kind: "unavailable", reason: "indeterminate" });
+});
+
+test("revalidation uses fresh canonical authority and never returns expected caller data", async () => {
+  const expected = await resolvedBinding();
+  const feature = createStaticContainedTurnProviderAccessFeature([binding()]);
+  const callerBinding = { ...expected };
+  const pending = feature.revalidate.execute({
+    binding: callerBinding,
     provider: "codex",
     scope: { projectId: "project:one", tenantId: "tenant:one" },
   });
+  callerBinding.providerRouteRef = "provider-route:caller-mutation";
+  const result = await pending;
+  const repeated = await feature.revalidate.execute({
+    binding: expected,
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(result.kind, "valid");
+  assert.equal(repeated.kind, "valid");
+  if (result.kind !== "valid" || repeated.kind !== "valid") { return; }
+  assert.deepEqual(result.binding, expected);
+  assert.notEqual(result.binding, expected);
+  assert.notEqual(result.binding, repeated.binding);
+  assert.ok(Object.isFrozen(result.binding));
+});
+
+test("one feature observes changed repository authority again during revalidation", async () => {
+  const expected = await resolvedBinding();
+  let revocation: "active" | "revoked" = "active";
+  let observations = 0;
+  const feature = createContainedTurnProviderAccessFeature({
+    bindingRepository: {
+      async observeExact() {
+        observations += 1;
+        return {
+          kind: "found" as const,
+          record: { ...expected, availability: "available" as const, revocation },
+        };
+      },
+    },
+  });
+  assert.equal((await feature.resolve.execute({
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  })).kind, "resolved");
+  revocation = "revoked";
+  assert.deepEqual(await feature.revalidate.execute({
+    binding: expected,
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }), { kind: "rejected", reason: "revoked" });
+  assert.equal(observations, 2);
+});
+
+test("untrusted repository scope and provider mismatches fail closed", async () => {
+  const expected = await resolvedBinding();
+  const records = [
+    [{ ...expected, availability: "available" as const, revocation: "active" as const, tenantId: "tenant:wrong" }, "scope_mismatch"],
+    [{ ...expected, availability: "available" as const, revocation: "active" as const, projectId: "project:wrong" }, "scope_mismatch"],
+    [{ ...expected, availability: "available" as const, revocation: "active" as const, provider: "claude" as const }, "provider_mismatch"],
+  ];
+  for (const [record, reason] of records) {
+    const feature = createContainedTurnProviderAccessFeature({
+      bindingRepository: { async observeExact() { return { kind: "found" as const, record }; } },
+    });
+    assert.deepEqual(await feature.resolve.execute({
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "unavailable", reason: "indeterminate" });
+    assert.deepEqual(await feature.revalidate.execute({
+      binding: expected,
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "rejected", reason });
+  }
+});
+
+test("malformed, oversized, and NUL-bearing repository observations are indeterminate", async () => {
+  const expected = await resolvedBinding();
+  const records: readonly unknown[] = [
+    { ...expected, availability: "unknown", revocation: "active" },
+    { ...expected, availability: "available", revocation: "unknown" },
+    { ...expected, accessRef: "x".repeat(4_097), availability: "available", revocation: "active" },
+    { ...expected, providerRouteRef: "route\u0000hidden", availability: "available", revocation: "active" },
+  ];
+  const observations: readonly unknown[] = [
+    { kind: "unexpected" },
+    ...records.map((record) => ({ kind: "found", record })),
+  ];
+  for (const observation of observations) {
+    const feature = createContainedTurnProviderAccessFeature({
+      bindingRepository: { async observeExact() { return observation; } },
+    } as never);
+    assert.deepEqual(await feature.resolve.execute({
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "unavailable", reason: "indeterminate" });
+    assert.deepEqual(await feature.revalidate.execute({
+      binding: expected,
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "rejected", reason: "indeterminate" });
+  }
+});
+
+test("revalidation rejects current repository digest-only drift", async () => {
+  const expected = await resolvedBinding();
+  const feature = createContainedTurnProviderAccessFeature({
+    bindingRepository: {
+      async observeExact() {
+        return {
+          kind: "found" as const,
+          record: {
+            ...expected,
+            availability: "available" as const,
+            credentialBindingDigest: "sha256:different-owner-facts-digest",
+            revocation: "active" as const,
+          },
+        };
+      },
+    },
+  });
+  assert.deepEqual(await feature.revalidate.execute({
+    binding: expected,
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }), { kind: "rejected", reason: "credential_changed" });
+});
+
+test("revalidation rejects caller scope, provider, and digest mismatches", async () => {
+  const expected = await resolvedBinding();
+  const feature = createStaticContainedTurnProviderAccessFeature([binding()]);
+  assert.deepEqual(await feature.revalidate.execute({
+    binding: expected,
+    provider: "codex",
+    scope: { projectId: "project:other", tenantId: "tenant:one" },
+  }), { kind: "rejected", reason: "scope_mismatch" });
+  assert.deepEqual(await feature.revalidate.execute({
+    binding: expected,
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:other" },
+  }), { kind: "rejected", reason: "scope_mismatch" });
+  assert.deepEqual(await feature.revalidate.execute({
+    binding: expected,
+    provider: "claude",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }), { kind: "rejected", reason: "provider_mismatch" });
+  assert.deepEqual(await feature.revalidate.execute({
+    binding: { ...expected, credentialBindingDigest: "sha256:caller-supplied-digest" },
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }), { kind: "rejected", reason: "credential_changed" });
+});
+
+test("revalidation has typed changed, rotated, revoked, unavailable, missing, and indeterminate outcomes", async () => {
+  const expected = await resolvedBinding();
+  const cases: readonly [StaticProviderAccessAuthority | undefined, RevalidateContainedTurnProviderAccessRejection][] = [
+    [binding({ accessRef: "access:two" }), "access_changed"],
+    [binding({ revision: 2 }), "revision_changed"],
+    [binding({ providerAccountRef: "provider-account:two" }), "account_changed"],
+    [binding({ providerRouteRef: "provider-route:two" }), "route_changed"],
+    [binding({ credentialGeneration: 2 }), "credential_rotated"],
+    [binding({ credentialBindingRef: "credential-binding:two" }), "credential_changed"],
+    [binding({ revocation: "revoked" }), "revoked"],
+    [binding({ availability: "unavailable" }), "unavailable"],
+    [undefined, "not_found"],
+    [{ kind: "indeterminate", provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" } }, "indeterminate"],
+  ];
+  for (const [authority, reason] of cases) {
+    const feature = createStaticContainedTurnProviderAccessFeature(authority === undefined ? [] : [authority]);
+    assert.deepEqual(await feature.revalidate.execute({
+      binding: expected,
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "rejected", reason });
+  }
+});
+
+test("credential digest is an opaque authority-issued non-secret owner fact", async () => {
+  const opaqueDigest = "authority-issued:opaque-owner-facts:v7";
+  const outcome = await resolvedBinding([binding({ credentialBindingDigest: opaqueDigest })]);
+  assert.equal(outcome.credentialBindingDigest, opaqueDigest);
+});
+
+test("primitive-string validation rejects boxed, aggregate, proxy, and accessor-like values", async () => {
+  let accidentalAccess = false;
+  const accessorLike = Object.defineProperties({}, {
+    includes: { get() { accidentalAccess = true; throw new Error("must not inspect includes"); } },
+    length: { get() { accidentalAccess = true; throw new Error("must not inspect length"); } },
+  });
+  const proxy = new Proxy({}, {
+    get() { accidentalAccess = true; throw new Error("must not inspect proxy"); },
+  });
+  const invalidValues: readonly unknown[] = [null, 7, true, [], {}, new String("boxed"), accessorLike, proxy];
+  for (const value of invalidValues) {
+    const feature = createContainedTurnProviderAccessFeature({
+      bindingRepository: {
+        async observeExact() {
+          return {
+            kind: "found" as const,
+            record: { ...binding(), availability: "available" as const, accessRef: value, revocation: "active" as const },
+          };
+        },
+      },
+    } as never);
+    assert.deepEqual(await feature.resolve.execute({
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "unavailable", reason: "indeterminate" });
+  }
+  assert.equal(accidentalAccess, false);
+});
+
+test("ill-formed Unicode is rejected while valid surrogate pairs remain lossless", async () => {
+  for (const accessRef of ["lone-high:\ud800", "lone-low:\udc00"]) {
+    assert.throws(() => createStaticContainedTurnProviderAccessFeature([binding({ accessRef })]), /well-formed Unicode/u);
+  }
+  const accessRef = "paired:\ud83d\ude80";
+  assert.equal((await resolvedBinding([binding({ accessRef })])).accessRef, accessRef);
+});
+
+test("public commands fail closed for null, primitive, boxed, proxy, and throwing scope values", async () => {
+  const feature = createStaticContainedTurnProviderAccessFeature([binding()]);
+  const expected = await resolvedBinding();
+  const throwing = Object.defineProperty({}, "projectId", { get() { throw new Error("boom"); } });
+  const values: readonly unknown[] = [null, undefined, 1, "scope", [], new String("scope"), new Proxy({}, { get() { throw new Error("boom"); } }), throwing];
+  for (const scope of values) {
+    assert.deepEqual(await feature.resolve.execute({ provider: "codex", scope } as never), {
+      kind: "unavailable", reason: "indeterminate",
+    });
+    assert.deepEqual(await feature.revalidate.execute({ binding: expected, provider: "codex", scope } as never), {
+      kind: "rejected", reason: "indeterminate",
+    });
+  }
+  assert.deepEqual(await feature.resolve.execute({ provider: new String("codex"), scope: {} } as never), {
+    kind: "unavailable", reason: "indeterminate",
+  });
+});
+
+test("null, primitive, missing, throwing, and rejected repository observations fail closed", async () => {
+  const expected = await resolvedBinding();
+  const throwingObservation = Object.defineProperty({}, "kind", { get() { throw new Error("boom"); } });
+  const throwingRecord = Object.defineProperty({}, "availability", { get() { throw new Error("boom"); } });
+  const observations: readonly unknown[] = [
+    null, undefined, false, 0, "found", { kind: "found" }, throwingObservation, { kind: "found", record: throwingRecord },
+  ];
+  for (const observation of observations) {
+    const feature = createContainedTurnProviderAccessFeature({
+      bindingRepository: { async observeExact() { return observation; } },
+    } as never);
+    assert.deepEqual(await feature.resolve.execute({
+      provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "unavailable", reason: "indeterminate" });
+    assert.deepEqual(await feature.revalidate.execute({
+      binding: expected,
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "rejected", reason: "indeterminate" });
+  }
+  const rejected = createContainedTurnProviderAccessFeature({
+    bindingRepository: { async observeExact() { throw new Error("repository unavailable"); } },
+  });
+  assert.deepEqual(await rejected.resolve.execute({
+    provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }), { kind: "unavailable", reason: "indeterminate" });
+  assert.deepEqual(await rejected.revalidate.execute({
+    binding: expected,
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }), { kind: "rejected", reason: "indeterminate" });
+});
+
+test("canonical snapshots read stateful repository facts exactly once", async () => {
+  let availabilityReads = 0;
+  let revocationReads = 0;
+  const record = {
+    ...binding(),
+    get availability() {
+      availabilityReads += 1;
+      return availabilityReads === 1 ? "available" as const : "unavailable" as const;
+    },
+    get revocation() {
+      revocationReads += 1;
+      return revocationReads === 1 ? "active" as const : "revoked" as const;
+    },
+  };
+  const feature = createContainedTurnProviderAccessFeature({
+    bindingRepository: { async observeExact() { return { kind: "found" as const, record }; } },
+  });
+  assert.equal((await feature.resolve.execute({
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  })).kind, "resolved");
+  assert.equal(availabilityReads, 1);
+  assert.equal(revocationReads, 1);
+});
+
+test("static composition snapshots inputs and isolates every returned mutation", async () => {
+  const source = binding();
+  const feature = createStaticContainedTurnProviderAccessFeature([source]);
+  source.providerRouteRef = "provider-route:mutated";
+  const outcome = await feature.resolve.execute({
+    provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
   assert.equal(outcome.kind, "resolved");
-  if (outcome.kind !== "resolved") {return;}
-  assert.equal(outcome.binding.credentialBindingRef, "credential-binding:one");
+  if (outcome.kind !== "resolved") { return; }
   assert.equal(outcome.binding.providerRouteRef, "provider-route:one");
-  assert.ok(Object.isFrozen(outcome.binding));
-  source.providerRouteRef = "mutated";
-  assert.equal(outcome.binding.providerRouteRef, "provider-route:one");
+  assert.throws(() => {
+    (outcome.binding as { providerRouteRef: string }).providerRouteRef = "provider-route:attempted";
+  }, TypeError);
 });
 
-test("does not fall back across tenant, project, provider, or revoked authority", async () => {
-  const repository = createStaticProviderAccessBindingRepository([
-    binding(),
-    binding({ accessRef: "access:revoked", projectId: "project:revoked", status: "revoked" }),
-  ]);
-  const feature = createContainedTurnProviderAccessFeature({ bindingRepository: repository });
-  assert.deepEqual(
-    await feature.resolve.execute({ provider: "claude", scope: { projectId: "project:one", tenantId: "tenant:one" } }),
-    { kind: "unavailable", reason: "not_found" },
-  );
-  assert.deepEqual(
-    await feature.resolve.execute({ provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:other" } }),
-    { kind: "unavailable", reason: "not_found" },
-  );
-  assert.deepEqual(
-    await feature.resolve.execute({ provider: "codex", scope: { projectId: "project:revoked", tenantId: "tenant:one" } }),
-    { kind: "unavailable", reason: "revoked" },
-  );
+test("rejects duplicate exact authority and invalid revisions or generations", () => {
+  assert.throws(() => createStaticContainedTurnProviderAccessFeature([binding(), binding()]), /duplicate exact-scope/u);
+  assert.throws(() => createStaticContainedTurnProviderAccessFeature([binding({ revision: 0 })]), /revision/u);
+  assert.throws(() => createStaticContainedTurnProviderAccessFeature([binding({ credentialGeneration: 0 })]), /credentialGeneration/u);
 });
 
-test("rejects duplicate authority and invalid monotonic generations", () => {
-  assert.throws(
-    () => createStaticProviderAccessBindingRepository([binding(), binding({ accessRef: "access:duplicate" })]),
-    /duplicate/u,
-  );
-  assert.throws(
-    () => createStaticProviderAccessBindingRepository([binding({ credentialGeneration: 0 })]),
-    /credentialGeneration/u,
-  );
+const sourceFiles = async (directory: URL): Promise<readonly URL[]> => {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(entries.map(async entry => {
+    const url = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, directory);
+    return entry.isDirectory() ? sourceFiles(url) : entry.name.endsWith(".ts") ? [url] : [];
+  }));
+  return nested.flat();
+};
+
+test("domain and application point inward and curated declarations leak no feature internals", async () => {
+  const featureRoot = new URL("../src/features/contained-turn-access/", import.meta.url);
+  for (const layer of ["domain/", "application/"]) {
+    for (const file of await sourceFiles(new URL(layer, featureRoot))) {
+      assert.doesNotMatch(await readFile(file, "utf8"), /\/contracts\//u);
+    }
+  }
+  const index = await readFile(new URL("../dist/index.d.ts", import.meta.url), "utf8");
+  const composition = await readFile(new URL("../dist/composition.d.ts", import.meta.url), "utf8");
+  for (const declaration of [index, composition]) {
+    assert.doesNotMatch(
+      declaration,
+      /ProviderAccessBindingRecord|ProviderAccessBindingRepository|createStaticProviderAccessBindingRepository|adapters\/|domain\//u,
+    );
+  }
 });
 
-test("production sources do not import Agent Execution, secrets, or module runtime", async () => {
-  const sources = await Promise.all([
-    "../src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
-    "../src/features/contained-turn-access/domain/provider-access-binding.ts",
-    "../src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
-    "../src/features/contained-turn-access/composition/feature-module-factory.ts",
-  ].map(path => readFile(new URL(path, import.meta.url), "utf8")));
-  for (const source of sources) {
-    assert.doesNotMatch(source, /@agent-teams\/agent-execution|module[-_/ ]runtime|ModuleKit|rawCredential|secretValue/u);
+test("package sources, contracts, diagnostics, and fixtures contain no credential or private-path material", async () => {
+  const allText = await Promise.all((await sourceFiles(new URL("../", import.meta.url))).map(file => readFile(file, "utf8")));
+  const forbidden = [
+    ["raw", "Credential"].join(""),
+    ["secret", "Value"].join(""),
+    ["credential", "Bytes"].join(""),
+    ["private", "Home", "Lease", "Ref"].join(""),
+    ["lease", "Path"].join(""),
+    ["home", "Path"].join(""),
+  ];
+  for (const text of allText) {
+    for (const token of forbidden) { assert.equal(text.includes(token), false); }
   }
 });

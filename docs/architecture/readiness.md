@@ -14,6 +14,7 @@ related:
   - ADR-0008
   - ADR-0009
   - ADR-0010
+  - ADR-0012
 blocked_by: []
 code_anchors: []
 ---
@@ -23,10 +24,10 @@ code_anchors: []
 Status: current qualification register, not a production-readiness claim
 
 The canonical domain, dependency, package-identity, private application
-entrypoint, and narrow contained-turn decisions are the accepted ADRs through
-ADR-0010, excluding proposed ADR-0006 and the unassigned ADR identities.
-ADR-0009 and ADR-0010 authorize only the Contained Agent Turn V1 contract; they
-do not authorize a production implementation or deployment.
+entrypoint, and narrow contained-turn decisions are the accepted ADRs listed
+above, including ADR-0012; ADR-0006 remains proposed and ADR-0011 is unassigned.
+ADR-0009, ADR-0010, and ADR-0012 authorize only the Contained Agent Turn V1
+contract; they do not authorize a production implementation or deployment.
 The committed ADR-0006 JSON oracle plus the ADR-0010 V1 disposition and contract fixtures,
 independent evaluators, property/mutation checks, and synthetic XState
 requirement-27 verifier are executable architecture evidence governed through
@@ -362,9 +363,10 @@ Contained Agent Turn V1 implementation present; qualification remains open:
   and explicit `reconcile_required` outcomes;
 - PostgreSQL persistence, disposable workspace/artifact custody, process-tree
   custody, Codex App Server, and Claude Agent SDK adapters are present behind
-  one seven-port Pure DI feature factory, including the Agent Execution-owned
-  Provider Access consumer port supplied by an outer-composition ACL. Provider
-  Access resolution at acceptance and exact revalidation before dispatch remain
+  the existing six-port Pure DI feature factory. The Provider Access contract is
+  ready, but the seventh Agent Execution consumer port and its outer-composition
+  ACL mapping remain pending kernel/integration work. Provider Access resolution
+  at acceptance and exact revalidation before dispatch therefore remain open
   qualification paths. No Module Kit or framework type enters domain,
   application, contracts, persistence, or provider adapters;
 - Embedded Runtime exposes only detached `submit`, `observe`, and `cancel`

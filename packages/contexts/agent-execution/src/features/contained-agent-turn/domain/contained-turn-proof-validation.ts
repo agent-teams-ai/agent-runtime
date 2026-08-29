@@ -1,7 +1,9 @@
-import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "./contained-turn-authority.js";
+import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "./contained-turn-authority.js";
 import type { ContainedTurnAttemptId, ContainedTurnProofId } from "./contained-turn-identities.js";
 import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
+import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
+import { parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import {
   containedTurnRequiredKindForProof,
   type ContainedTurnProof,
@@ -12,12 +14,7 @@ const OPERATION_BINDING_KEYS = ["authorityVectorDigest", "operationId"] as const
 const ATTEMPT_BINDING_KEYS = [...OPERATION_BINDING_KEYS, "attemptId", "effectId"] as const;
 
 const assertExactKeys = (name: string, value: object, expected: readonly string[]): void => {
-  const actual = Object.keys(value).toSorted();
-  const sortedExpected = [...expected].toSorted();
-  invariant(
-    actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]),
-    `${name} must be an exact closed record`,
-  );
+  assertContainedTurnExactRecord(name, value, expected);
 };
 
 // Exhaustive by proof kind so no proof can smuggle unbound authority fields.
@@ -49,7 +46,19 @@ const validateProofShape = (proof: ContainedTurnProof): void => {
         : [...OPERATION_BINDING_KEYS, "cancellationCommandId"]);
       break;
     case "dispatch_claim":
-      exactBinding(ATTEMPT_BINDING_KEYS);
+      exactBinding([...ATTEMPT_BINDING_KEYS, "providerAccessDispatchProofId", "runtimeSecurityDispatchProofId"]);
+      break;
+    case "provider_access_acceptance":
+      exactBinding([...OPERATION_BINDING_KEYS, "resolutionDigest", "snapshotDigest"]);
+      break;
+    case "provider_access_dispatch":
+      exactBinding([...OPERATION_BINDING_KEYS, "acceptedSnapshotDigest", "resolutionDigest"]);
+      break;
+    case "runtime_security_acceptance":
+      exactBinding([...OPERATION_BINDING_KEYS, "securityAuthorityRevision", "securityDecisionDigest"]);
+      break;
+    case "runtime_security_dispatch":
+      exactBinding([...OPERATION_BINDING_KEYS, "acceptedSecurityDecisionDigest", "currentSecurityDecisionDigest", "securityAuthorityRevision"]);
       break;
     case "effect_resolution":
     case "provider_acceptance":
@@ -93,8 +102,7 @@ const validateProofShape = (proof: ContainedTurnProof): void => {
       break;
     default: {
       const exhaustiveProofKind: never = proof;
-      invariant(false, "unknown proof kind fails closed");
-      return exhaustiveProofKind;
+      throw new TypeError(`unknown proof kind fails closed: ${String(exhaustiveProofKind)}`);
     }
   }
 };
@@ -118,7 +126,7 @@ const attemptId = (operation: ContainedTurnKernelOperation): ContainedTurnAttemp
   operation.dispatch.kind === "claimed" ? operation.dispatch.attemptId : undefined;
 
 // The count is the exhaustive closed proof union; every case validates distinct subject bindings.
-// oxlint-disable-next-line complexity
+// oxlint-disable-next-line complexity, max-lines-per-function
 export const validateContainedTurnProofBinding = (
   operation: ContainedTurnKernelOperation,
   proof: ContainedTurnProof,
@@ -204,6 +212,35 @@ export const validateContainedTurnProofBinding = (
         "provider-acceptance proof disposition mismatch",
       );
       break;
+    case "provider_access_acceptance":
+      invariant(
+        proof.binding.snapshotDigest === containedTurnProviderAccessSnapshotDigest(operation.providerAccessSnapshot),
+        "Provider Access acceptance proof snapshot binding mismatch",
+      );
+      parseContainedTurnCanonicalDigest(proof.binding.resolutionDigest);
+      break;
+    case "provider_access_dispatch":
+      invariant(
+        proof.binding.acceptedSnapshotDigest === containedTurnProviderAccessSnapshotDigest(operation.providerAccessSnapshot),
+        "Provider Access dispatch proof accepted-snapshot binding mismatch",
+      );
+      parseContainedTurnCanonicalDigest(proof.binding.resolutionDigest);
+      break;
+    case "runtime_security_acceptance":
+      invariant(
+        proof.binding.securityAuthorityRevision === operation.acceptedAuthorityVector.securityAuthorityRevision &&
+          proof.binding.securityDecisionDigest === operation.acceptedAuthorityVector.securityDecisionDigest,
+        "Runtime Security acceptance proof binding mismatch",
+      );
+      break;
+    case "runtime_security_dispatch":
+      invariant(
+        proof.binding.securityAuthorityRevision === operation.acceptedAuthorityVector.securityAuthorityRevision &&
+          proof.binding.acceptedSecurityDecisionDigest === operation.acceptedAuthorityVector.securityDecisionDigest,
+        "Runtime Security dispatch proof accepted-decision binding mismatch",
+      );
+      parseContainedTurnCanonicalDigest(proof.binding.currentSecurityDecisionDigest);
+      break;
     case "terminal_truth":
       invariant(operation.terminal.kind === "final", "terminal proof requires final terminal truth");
       if (operation.terminal.kind === "final") {
@@ -214,8 +251,20 @@ export const validateContainedTurnProofBinding = (
     case "workspace_closure":
       invariant(proof.binding.workspaceId === operation.workspaceId, "workspace proof binding mismatch");
       break;
-    case "containment_not_required":
     case "dispatch_claim":
+      invariant(operation.dispatch.kind === "claimed", "dispatch proof requires claimed dispatch");
+      if (operation.dispatch.kind === "claimed") {
+        invariant(
+          proof.binding.providerAccessDispatchProofId === operation.dispatch.providerAccessDispatchProofId &&
+            proof.binding.runtimeSecurityDispatchProofId === operation.dispatch.runtimeSecurityDispatchProofId,
+          "dispatch claim must bind the exact current authority evidence",
+        );
+        requireContainedTurnProof(operation, proof.binding.providerAccessDispatchProofId, "provider_access_dispatch");
+        requireContainedTurnProof(operation, proof.binding.runtimeSecurityDispatchProofId, "runtime_security_dispatch");
+      }
+      invariant(proof.binding.effectId === operation.effectId, `${proof.kind} proof effect binding mismatch`);
+      break;
+    case "containment_not_required":
     case "host_custody_no_start":
     case "no_dispatch":
     case "no_start":
@@ -237,10 +286,18 @@ export const containedTurnRequiredProofsSatisfied = (operation: ContainedTurnKer
   return CONTAINED_TURN_REQUIRED_PROOF_KINDS.every(kind => satisfied.has(kind));
 };
 
+// The branches are the closed set of independently evidenced execution axes.
+// oxlint-disable-next-line complexity
 export const validateContainedTurnAxisProofs = (operation: ContainedTurnKernelOperation): void => {
+  invariant(operation.proofs.some(proof => proof.kind === "provider_access_acceptance"), "Provider Access acceptance requires its own proof");
+  invariant(operation.proofs.some(proof => proof.kind === "runtime_security_acceptance"), "Runtime Security acceptance requires its own proof");
   if (operation.admissionFence.kind === "fenced") {requireContainedTurnProof(operation, operation.admissionFence.proofId, "cutoff");}
   if (operation.providerProcessStart.kind === "execution_started") {
     requireContainedTurnProof(operation, operation.providerProcessStart.proofId, "provider_process_start");
+  }
+  if (operation.dispatch.kind === "claimed") {
+    requireContainedTurnProof(operation, operation.dispatch.providerAccessDispatchProofId, "provider_access_dispatch");
+    requireContainedTurnProof(operation, operation.dispatch.runtimeSecurityDispatchProofId, "runtime_security_dispatch");
   }
   if (operation.providerProcessStart.kind === "proved_no_start") {
     requireContainedTurnProof(operation, operation.providerProcessStart.proofId, "provider_process_no_start");

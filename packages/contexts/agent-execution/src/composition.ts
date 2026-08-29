@@ -66,18 +66,3 @@ export {
   type HostCustodyLaunchPlan,
   type HostCustodyLaunchPlanResolver,
 } from "./features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
-export type {
-  AcceptContainedTurnCommandInput,
-  AcceptContainedTurnCommandOutcome,
-  ClaimContainedTurnDispatchOutcome,
-  CompareAndSetContainedTurnOutcome,
-  ContainedTurnAdapterCapabilityManifest,
-  ContainedTurnArtifactPort,
-  ContainedTurnCustodyHandle,
-  ContainedTurnOperationStore,
-  ContainedTurnProviderExecutionOutcome,
-  ContainedTurnProviderPort,
-  ContainedTurnSecurityPort,
-  ContainedTurnWorkspacePort,
-  ProviderProcessCustodyPort,
-} from "./features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";

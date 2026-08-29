@@ -1,200 +1,64 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { type ContainedTurnProviderAccessSnapshot } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
-  containedTurnAuthorityVectorDigest,
-  containedTurnCancellationFingerprint,
-  containedTurnCommandFingerprint,
-  containedTurnScopeDigest,
-  CONTAINED_TURN_REQUIRED_PROOF_KINDS,
-  type ContainedTurnAuthorityVector,
-  type ContainedTurnCancellationCommand,
-  type ContainedTurnCapabilityManifest,
-  type ContainedTurnProviderAccessSnapshot,
-  type ContainedTurnProviderAdapterSnapshot,
-} from "../src/features/contained-agent-turn/domain/contained-turn-authority.js";
-import {
-  digestContainedTurnCanonicalValue,
-  type ContainedTurnCanonicalDigest,
-} from "../src/features/contained-agent-turn/domain/contained-turn-codecs.js";
-import {
-  containedTurnSatisfactionDigest,
   createContainedTurnOperation,
   mutateContainedTurnOperation,
   validateContainedTurnOperation,
-  type ContainedTurnKernelOperation,
-} from "../src/features/contained-agent-turn/domain/contained-turn-kernel.js";
-import { CONTAINED_TURN_LIMITS } from "../src/features/contained-agent-turn/domain/contained-turn-limits.js";
+} from "../dist/features/contained-agent-turn/domain/contained-turn-kernel.js";
+import { CONTAINED_TURN_LIMITS } from "../dist/features/contained-agent-turn/domain/contained-turn-limits.js";
 import {
   containedTurnIdentity,
   CONTAINED_TURN_IDENTITY_PREFIXES,
-} from "../src/features/contained-agent-turn/domain/contained-turn-identities.js";
+} from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {
   CONTAINED_TURN_PROOF_KINDS,
   type ContainedTurnProof,
   type ContainedTurnProofKind,
-} from "../src/features/contained-agent-turn/domain/contained-turn-proofs.js";
+} from "../dist/features/contained-agent-turn/domain/contained-turn-proofs.js";
 import {
   CONTAINED_TURN_DEPENDENCY_NAMES,
   validateContainedTurnKernelDependencies,
-  type ContainedTurnKernelDependencies,
   type ContainedTurnKernelOperationStore,
-} from "../src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
+} from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
+import {
+  acceptanceProof,
+  adapterSnapshot,
+  attemptId,
+  attemptBinding,
+  authorityVector,
+  commandFingerprint,
+  commandId,
+  commonBinding,
+  createActiveOperation,
+  createOperation,
+  createReservedOperation,
+  custodyId,
+  dependencyNamesAreExhaustive,
+  effectId,
+  expectInvariant,
+  hostBootId,
+  hostInstanceId,
+  intent,
+  manifest,
+  operationId,
+  proofId,
+  providerAccessAcceptanceProof,
+  providerAccessSnapshot,
+  runtimeSecurityAcceptanceProof,
+  scope,
+  workspaceId,
+} from "./contained-turn-kernel-fixtures.ts";
 
 type SameUnion<Left, Right> =
   [Exclude<Left, Right>, Exclude<Right, Left>] extends [never, never] ? true : false;
 
-const dependencyNamesAreExhaustive: SameUnion<
-  keyof ContainedTurnKernelDependencies,
-  (typeof CONTAINED_TURN_DEPENDENCY_NAMES)[number]
-> = true;
 const proofKindsAreExhaustive: SameUnion<
   ContainedTurnProofKind,
   (typeof CONTAINED_TURN_PROOF_KINDS)[number]
 > = true;
-
-const scope = Object.freeze({ projectId: "project:kernel", tenantId: "tenant:kernel" });
-const intent = Object.freeze({ mode: "analysis" as const, prompt: "Inspect the disposable workspace." });
-const adapterSnapshot: ContainedTurnProviderAdapterSnapshot = Object.freeze({
-  adapterRevision: "adapter:codex:1",
-  binaryRevision: "binary:codex:1",
-  capabilityManifestRevision: "manifest:codex:1",
-  provider: "codex",
-});
-const providerAccessSnapshot: ContainedTurnProviderAccessSnapshot = Object.freeze({
-  accessRef: "access:1",
-  accessRevision: "access-revision:1",
-  accountRef: "account:1",
-  accountRevision: "account-revision:1",
-  credentialBindingDigest: digestContainedTurnCanonicalValue({ binding: "opaque:1" }),
-  credentialBindingGeneration: "credential-generation:1",
-  credentialBindingRef: "credential-binding:1",
-  credentialBindingRevision: "credential-revision:1",
-  provider: "codex",
-  providerRouteRef: "provider-route:1",
-  providerRouteRevision: "route-revision:1",
-});
-const manifest: ContainedTurnCapabilityManifest = Object.freeze({
-  effectCardinality: "one_coarse_effect_per_operation",
-  effectClass: "contained_unmediated_effect",
-  manifestRevision: adapterSnapshot.capabilityManifestRevision,
-  manifestVersion: 1,
-  provider: "codex",
-  providerAttemptCardinality: "at_most_one",
-  requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
-  resourceScopeRevision: "contained-workspace-network-credential:1",
-  supportedModes: Object.freeze(["analysis", "workspace-write"] as const),
-  unknownCapabilityPolicy: "fail_closed",
-});
-const authorityVector: ContainedTurnAuthorityVector = Object.freeze({
-  adapterSnapshot,
-  capabilityManifestRevision: manifest.manifestRevision,
-  containmentPolicyDigest: digestContainedTurnCanonicalValue({ policy: "contained-turn-v1" }),
-  operationAuthorityRevision: "operation-authority:1",
-  providerAccessSnapshot,
-  scopeDigest: containedTurnScopeDigest(scope),
-  securityAuthorityRevision: "security-authority:1",
-  securityDecisionDigest: digestContainedTurnCanonicalValue({ decision: "allowed" }),
-});
-
-const operationId = containedTurnIdentity("operation", "operation:1");
-const commandId = containedTurnIdentity("command", "command:1");
-const effectId = containedTurnIdentity("effect", "effect:1");
-const attemptId = containedTurnIdentity("attempt", "attempt:1");
-const custodyId = containedTurnIdentity("custody", "custody:1");
-const hostBootId = containedTurnIdentity("host_boot", "host-boot:1");
-const hostInstanceId = containedTurnIdentity("host_instance", "host-instance:1");
-const workspaceId = containedTurnIdentity("workspace", "workspace:1");
-const proofId = (value: string) => containedTurnIdentity("proof", value);
-const authorityDigest = containedTurnAuthorityVectorDigest(authorityVector);
-const commandFingerprint = containedTurnCommandFingerprint({ intent, provider: "codex", scope });
-
-const acceptanceProof = Object.freeze({
-  binding: Object.freeze({
-    authorityVectorDigest: authorityDigest,
-    commandFingerprint,
-    commandId,
-    operationId,
-  }),
-  kind: "acceptance" as const,
-  proofId: proofId("proof:acceptance"),
-});
-
-const createOperation = (overrides: Partial<Parameters<typeof createContainedTurnOperation>[0]> = {}): ContainedTurnKernelOperation => {
-  const selectedIntent = overrides.intent ?? intent;
-  const selectedCommandId = overrides.commandId ?? commandId;
-  const selectedOperationId = overrides.operationId ?? operationId;
-  const selectedScope = overrides.scope ?? scope;
-  const selectedAdapter = overrides.adapterSnapshot ?? adapterSnapshot;
-  const selectedVector = overrides.acceptedAuthorityVector ?? authorityVector;
-  const selectedFingerprint = containedTurnCommandFingerprint({
-    intent: selectedIntent,
-    provider: selectedAdapter.provider,
-    scope: selectedScope,
-  });
-  const selectedAcceptance = overrides.acceptanceProof ?? {
-    binding: {
-      authorityVectorDigest: containedTurnAuthorityVectorDigest(selectedVector),
-      commandFingerprint: selectedFingerprint,
-      commandId: selectedCommandId,
-      operationId: selectedOperationId,
-    },
-    kind: "acceptance" as const,
-    proofId: proofId("proof:acceptance"),
-  };
-  return createContainedTurnOperation({
-    acceptanceProof: selectedAcceptance,
-    acceptedAuthorityVector: authorityVector,
-    adapterSnapshot,
-    capabilityManifest: manifest,
-    commandId,
-    effectId,
-    intent,
-    operationId,
-    providerAccessSnapshot,
-    schemaVersion: 2,
-    scope,
-    ...overrides,
-  });
-};
-
-const commonBinding = Object.freeze({ authorityVectorDigest: authorityDigest, operationId });
-const attemptBinding = Object.freeze({ ...commonBinding, attemptId, effectId });
-
-const createReservedOperation = (): ContainedTurnKernelOperation => {
-  const operation = createOperation();
-  const claimProof: ContainedTurnProof = { binding: attemptBinding, kind: "dispatch_claim", proofId: proofId("proof:claim") };
-  const cutoffProof: ContainedTurnProof = { binding: commonBinding, kind: "cutoff", proofId: proofId("proof:cutoff") };
-  const reserved: ContainedTurnKernelOperation = {
-    ...operation,
-    admissionFence: { kind: "fenced", proofId: cutoffProof.proofId },
-    containment: { attemptId, kind: "pending" },
-    custodyId,
-    dispatch: { attemptId, claimProofId: claimProof.proofId, kind: "claimed" },
-    proofs: [...operation.proofs, claimProof, cutoffProof],
-    hostBootId,
-    hostInstanceId,
-    providerProcessStart: { attemptId, kind: "pending" },
-    revision: operation.revision + 1,
-    workspaceId,
-  };
-  validateContainedTurnOperation(reserved);
-  return reserved;
-};
-
-const createActiveOperation = (): ContainedTurnKernelOperation => {
-  const operation = createReservedOperation();
-  const startProof: ContainedTurnProof = {
-    binding: { ...attemptBinding, custodyId, hostBootId, hostInstanceId },
-    kind: "provider_process_start",
-    proofId: proofId("proof:process-start"),
-  };
-  const active = mutateContainedTurnOperation(operation, { kind: "record_process_start", proof: startProof });
-  validateContainedTurnOperation(active);
-  return active;
-};
-
-const expectInvariant = (action: () => unknown, pattern: RegExp): void => assert.throws(action, pattern);
 
 test("freezes the exact seven consumer-owned dependencies and separate provider authorities", () => {
   assert.equal(dependencyNamesAreExhaustive, true);
@@ -205,14 +69,13 @@ test("freezes the exact seven consumer-owned dependencies and separate provider 
     "adapterRevision", "binaryRevision", "capabilityManifestRevision", "provider",
   ]);
   assert.deepEqual(Object.keys(providerAccessSnapshot).toSorted(), [
-    "accessRef", "accessRevision", "accountRef", "accountRevision", "credentialBindingDigest",
-    "credentialBindingGeneration", "credentialBindingRef", "credentialBindingRevision", "provider",
-    "providerRouteRef", "providerRouteRevision",
+    "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "projectId",
+    "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId",
   ]);
   assert.equal(Object.keys(providerAccessSnapshot).some(key => /path|secret|token|password/iu.test(key)), false);
   expectInvariant(
     () => validateContainedTurnKernelDependencies({ extraAuthority: {} } as unknown as Parameters<typeof validateContainedTurnKernelDependencies>[0]),
-    /exact closed seven dependencies/u,
+    /exact closed record/u,
   );
   const leakedSnapshot = {
     ...providerAccessSnapshot,
@@ -226,7 +89,6 @@ test("freezes the exact seven consumer-owned dependencies and separate provider 
     /Provider Access snapshot must be an exact closed record/u,
   );
 });
-
 test("freezes the accepted PostgreSQL command replay and semantic-conflict invariant", async () => {
   const acceptedByCommand = new Map<string, ContainedTurnKernelOperation>();
   const accept: ContainedTurnKernelOperationStore["accept"] = async candidate => {
@@ -272,6 +134,42 @@ test("freezes canonical SHA-256 codecs and rejects impossible recomputed-digest 
   expectInvariant(() => validateContainedTurnOperation(corrupted), /authority-vector digest does not recompute/u);
   const wrongFingerprint = { ...operation, commandFingerprint: digestContainedTurnCanonicalValue({ wrong: true }) as unknown as typeof commandFingerprint };
   expectInvariant(() => validateContainedTurnOperation(wrongFingerprint), /command fingerprint does not recompute/u);
+});
+
+test("strict codecs reject collision-shaped values and accepted inputs are deeply detached", () => {
+  expectInvariant(
+    () => digestContainedTurnCanonicalValue({ value: undefined } as never),
+    /undefined/u,
+  );
+  expectInvariant(() => digestContainedTurnCanonicalValue(new Date() as never), /ordinary object prototype/u);
+  expectInvariant(() => digestContainedTurnCanonicalValue("\ud800"), /lone surrogates/u);
+  expectInvariant(() => digestContainedTurnCanonicalValue(-0), /collision-free/u);
+  const sparseValue: unknown[] = [];
+  sparseValue.length = 1;
+  expectInvariant(() => digestContainedTurnCanonicalValue(sparseValue as never), /dense/u);
+  expectInvariant(() => containedTurnIdentity("operation", "operation:"), /non-empty suffix/u);
+  const mutableIntent = { mode: "analysis" as const, prompt: "detached" };
+  const operation = createOperation({ intent: mutableIntent });
+  mutableIntent.prompt = "mutated outside";
+  assert.equal(operation.intent.prompt, "detached");
+  assert.equal(Object.isFrozen(operation), true);
+  assert.equal(Object.isFrozen(operation.intent), true);
+  const symbolInput = Object.assign({
+    acceptanceProof,
+    acceptedAuthorityVector: authorityVector,
+    adapterSnapshot,
+    capabilityManifest: manifest,
+    commandId,
+    effectId,
+    intent,
+    operationId,
+    providerAccessAcceptanceProof,
+    providerAccessSnapshot,
+    runtimeSecurityAcceptanceProof,
+    schemaVersion: 1 as const,
+    scope,
+  }, { [Symbol("hidden")]: true });
+  expectInvariant(() => createContainedTurnOperation(symbolInput), /symbol keys/u);
 });
 
 test("uses one V1/V2 byte authority with ASCII identifiers and exact one-byte-over rejection", () => {
@@ -342,14 +240,30 @@ test("enforces disjoint immutable identities and one-attempt claim coupling", ()
     /disjoint namespace prefix|identity namespaces/u,
   );
   const operation = createOperation();
-  const claimProof: ContainedTurnProof = { binding: attemptBinding, kind: "dispatch_claim", proofId: proofId("proof:claim") };
+  const missingProviderAccessProofId = proofId("proof:missing-provider-access-dispatch");
+  const missingRuntimeSecurityProofId = proofId("proof:missing-runtime-security-dispatch");
+  const claimProof: ContainedTurnProof = {
+    binding: {
+      ...attemptBinding,
+      providerAccessDispatchProofId: missingProviderAccessProofId,
+      runtimeSecurityDispatchProofId: missingRuntimeSecurityProofId,
+    },
+    kind: "dispatch_claim",
+    proofId: proofId("proof:claim"),
+  };
   const claimed = {
     ...operation,
-    dispatch: { attemptId, claimProofId: claimProof.proofId, kind: "claimed" as const },
+    dispatch: {
+      attemptId,
+      claimProofId: claimProof.proofId,
+      kind: "claimed" as const,
+      providerAccessDispatchProofId: missingProviderAccessProofId,
+      runtimeSecurityDispatchProofId: missingRuntimeSecurityProofId,
+    },
     proofs: [...operation.proofs, claimProof],
     revision: operation.revision + 1,
   };
-  expectInvariant(() => validateContainedTurnOperation(claimed), /dispatch requires allocated|pending provider start observation/u);
+  expectInvariant(() => validateContainedTurnOperation(claimed), /dispatch requires allocated|pending provider start observation|requires its own exact proof/u);
   const mutableIdentity = { ...operation, operationId: containedTurnIdentity("operation", "operation:changed"), revision: 1 };
   expectInvariant(() => validateContainedTurnOperation(mutableIdentity, { previous: operation }), /binding mismatch|immutable/u);
 });
@@ -373,6 +287,44 @@ test("separates custody reservation from confirmed start and fails closed on unk
     proof: noStartProof,
   });
   assert.doesNotThrow(() => validateContainedTurnOperation(provedNoStart));
+  const closedNoStart = mutateContainedTurnOperation(provedNoStart, {
+    containmentProof: {
+      binding: { ...commonBinding, effectId },
+      kind: "containment_not_required",
+      proofId: proofId("proof:process-no-containment"),
+    },
+    effectProof: {
+      binding: { ...commonBinding, disposition: "not_committed", effectId },
+      kind: "effect_no_start",
+      proofId: proofId("proof:process-no-effect"),
+    },
+    executionProof: {
+      binding: { ...commonBinding, effectId },
+      kind: "no_start",
+      proofId: proofId("proof:process-no-execution"),
+    },
+    kind: "close_process_no_start",
+    outputProof: {
+      binding: { ...commonBinding, finalCursor: 0 },
+      kind: "output_no_start_drain",
+      proofId: proofId("proof:process-no-output"),
+    },
+    providerProof: {
+      binding: { ...commonBinding, effectId },
+      kind: "provider_not_started",
+      proofId: proofId("proof:process-provider-not-started"),
+    },
+  });
+  assert.deepEqual(closedNoStart.providerExecution, {
+    kind: "closed",
+    outcome: "failed",
+    proofId: proofId("proof:process-no-execution"),
+  });
+  assert.deepEqual(closedNoStart.output.fence, {
+    finalCursor: 0,
+    kind: "fenced",
+    proofId: proofId("proof:process-no-output"),
+  });
   expectInvariant(
     () => validateContainedTurnOperation({ ...provedNoStart, providerExecution: { attemptId, kind: "active" } }),
     /proved no-start can never claim active execution|only after Host Custody/u,
@@ -396,14 +348,34 @@ test("separates custody reservation from confirmed start and fails closed on unk
   );
 });
 
+test("dispatch prevention atomically records distinct no-start authorities", () => {
+  const operation = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
+  const prevented = mutateContainedTurnOperation(operation, {
+    containmentProof: { binding: { ...commonBinding, effectId }, kind: "containment_not_required", proofId: proofId("proof:no-containment") },
+    cutoffProof: { binding: commonBinding, kind: "cutoff", proofId: proofId("proof:prevented-cutoff") },
+    effectProof: { binding: { ...commonBinding, disposition: "not_committed", effectId }, kind: "effect_no_start", proofId: proofId("proof:no-effect") },
+    executionProof: { binding: { ...commonBinding, effectId }, kind: "no_start", proofId: proofId("proof:no-start") },
+    hostCustodyProof: { binding: { ...commonBinding, effectId }, kind: "host_custody_no_start", proofId: proofId("proof:no-custody") },
+    kind: "prevent_dispatch",
+    noDispatchProof: { binding: { ...commonBinding, effectId }, kind: "no_dispatch", proofId: proofId("proof:no-dispatch") },
+    outputProof: { binding: { ...commonBinding, finalCursor: 0 }, kind: "output_no_start_drain", proofId: proofId("proof:no-output") },
+    providerProof: { binding: { ...commonBinding, effectId }, kind: "provider_not_started", proofId: proofId("proof:provider-not-started") },
+  });
+  assert.equal(prevented.dispatch.kind, "prevented");
+  assert.equal(prevented.providerAcceptance.kind, "not_accepted");
+  assert.equal(prevented.providerExecution.kind, "closed");
+  assert.equal(new Set(prevented.proofs.map(proof => proof.kind)).size, prevented.proofs.length);
+});
+
 test("enforces proof exhaustiveness, unique kinds and IDs, exact bindings, and substitution fences", () => {
   assert.equal(proofKindsAreExhaustive, true);
   assert.deepEqual(CONTAINED_TURN_PROOF_KINDS, [
     "acceptance", "artifact_manifest_seal", "cancellation", "containment", "containment_not_required", "cutoff",
     "dispatch_claim", "effect_no_start", "effect_resolution", "execution_closure", "host_custody", "host_custody_no_start",
     "no_dispatch", "no_start", "output_drain", "output_no_start_drain", "provider_acceptance", "provider_not_started",
-    "provider_process_no_start", "provider_process_start", "provider_terminal_observation",
-    "result_publication", "terminal_truth", "workspace_closure",
+    "provider_process_no_start", "provider_process_start", "provider_access_acceptance", "provider_access_dispatch",
+    "provider_terminal_observation", "result_publication", "runtime_security_acceptance", "runtime_security_dispatch",
+    "terminal_truth", "workspace_closure",
   ]);
   const operation = createOperation();
   const duplicateKind = { ...acceptanceProof, proofId: proofId("proof:acceptance:second") };
@@ -419,14 +391,28 @@ test("enforces proof exhaustiveness, unique kinds and IDs, exact bindings, and s
     ...acceptanceProof,
     binding: { ...acceptanceProof.binding, operationId: containedTurnIdentity("operation", "operation:other") },
   };
-  expectInvariant(() => validateContainedTurnOperation({ ...operation, proofs: [wrongSubject] }), /operation binding mismatch/u);
+  expectInvariant(() => validateContainedTurnOperation({ ...operation, proofs: [wrongSubject, ...operation.proofs.slice(1)] }), /operation binding mismatch/u);
   const leakedProof = {
     ...acceptanceProof,
     binding: { ...acceptanceProof.binding, rawSecret: "must-not-persist" },
   } as unknown as ContainedTurnProof;
   expectInvariant(
-    () => validateContainedTurnOperation({ ...operation, proofs: [leakedProof] }),
+    () => validateContainedTurnOperation({ ...operation, proofs: [leakedProof, ...operation.proofs.slice(1)] }),
     /proof binding must be an exact closed record/u,
+  );
+  const wrongProviderAccessAcceptance = {
+    ...providerAccessAcceptanceProof,
+    binding: {
+      ...providerAccessAcceptanceProof.binding,
+      snapshotDigest: digestContainedTurnCanonicalValue({ snapshot: "substituted" }),
+    },
+  };
+  expectInvariant(
+    () => validateContainedTurnOperation({
+      ...operation,
+      proofs: [operation.proofs[0] as ContainedTurnProof, wrongProviderAccessAcceptance, operation.proofs[2] as ContainedTurnProof],
+    }),
+    /acceptance proof snapshot binding mismatch/u,
   );
   const substituted = {
     ...operation,
@@ -461,199 +447,5 @@ test("enforces proof exhaustiveness, unique kinds and IDs, exact bindings, and s
       proofs: [...active.proofs, noStartDrainProof],
     }),
     /output_drain requires its own exact proof/u,
-  );
-});
-
-test("enforces contiguous output, exact final cursor, append-only history, and no reopen", () => {
-  const operation = createActiveOperation();
-  const withOutput = mutateContainedTurnOperation(operation, {
-    kind: "append_output",
-    output: { cursor: 0, kind: "assistant", text: "one" },
-  });
-  expectInvariant(
-    () => mutateContainedTurnOperation(withOutput, { kind: "append_output", output: { cursor: 2, kind: "assistant", text: "gap" } }),
-    /contiguous/u,
-  );
-  const fenced = { ...withOutput, output: { chunks: withOutput.output.chunks, fence: { finalCursor: 2, kind: "fenced" as const } } };
-  expectInvariant(() => validateContainedTurnOperation(fenced), /final cursor/u);
-  const rewritten = {
-    ...withOutput,
-    output: { chunks: [{ cursor: 0, kind: "assistant" as const, text: "rewritten" }], fence: withOutput.output.fence },
-    revision: withOutput.revision + 1,
-  };
-  expectInvariant(() => validateContainedTurnOperation(rewritten, { previous: withOutput }), /cannot be rewritten/u);
-});
-
-test("ambiguity atomically fences output, records debt, and rejects later canonical output", () => {
-  const operation = mutateContainedTurnOperation(createActiveOperation(), {
-    kind: "append_output",
-    output: { cursor: 0, kind: "progress", text: "before ambiguity" },
-  });
-  const ambiguityEvidenceId = containedTurnIdentity("evidence", "evidence:ambiguous");
-  const ambiguous = mutateContainedTurnOperation(operation, { evidenceId: ambiguityEvidenceId, kind: "record_ambiguity" });
-  assert.deepEqual(ambiguous.output.fence, { finalCursor: 1, kind: "fenced" });
-  assert.deepEqual(ambiguous.reconciliation, { evidenceIds: [ambiguityEvidenceId], kind: "required" });
-  expectInvariant(
-    () => mutateContainedTurnOperation(ambiguous, { kind: "append_output", output: { cursor: 1, kind: "assistant", text: "late" } }),
-    /cannot append after its fence|final cursor/u,
-  );
-  const clearedDebt = { ...ambiguous, reconciliation: { kind: "clear" as const }, revision: ambiguous.revision + 1 };
-  expectInvariant(() => validateContainedTurnOperation(clearedDebt, { previous: ambiguous }), /reconciliation debt|cannot be cleared/u);
-});
-
-test("cancellation replay is keyed by exact command identity and canonical fingerprint", () => {
-  const operation = createOperation();
-  const cancellationCommandId = containedTurnIdentity("cancellation_command", "cancellation-command:1");
-  const cancellationCommand: ContainedTurnCancellationCommand = {
-    cancellationCommandId,
-    fingerprint: containedTurnCancellationFingerprint({ cancellationCommandId, operationId, scopeDigest: containedTurnScopeDigest(scope) }),
-    operationId,
-    scopeDigest: containedTurnScopeDigest(scope),
-  };
-  const cancellationProof = {
-    binding: { ...commonBinding, cancellationCommandId, cancellationFingerprint: cancellationCommand.fingerprint },
-    kind: "cancellation" as const,
-    proofId: proofId("proof:cancellation"),
-  };
-  const cutoffProof = {
-    binding: { ...commonBinding, cancellationCommandId },
-    kind: "cutoff" as const,
-    proofId: proofId("proof:cutoff"),
-  };
-  const requested = mutateContainedTurnOperation(operation, {
-    command: cancellationCommand, cutoffProof, kind: "request_cancellation", proof: cancellationProof,
-  });
-  assert.equal(requested.cancellation.kind, "requested");
-  const replayed = mutateContainedTurnOperation(requested, {
-    command: cancellationCommand, cutoffProof, kind: "request_cancellation", proof: cancellationProof,
-  });
-  assert.strictEqual(replayed, requested);
-  const otherId = containedTurnIdentity("cancellation_command", "cancellation-command:2");
-  const other = {
-    ...cancellationCommand,
-    cancellationCommandId: otherId,
-    fingerprint: containedTurnCancellationFingerprint({ cancellationCommandId: otherId, operationId, scopeDigest: containedTurnScopeDigest(scope) }),
-  };
-  expectInvariant(
-    () => mutateContainedTurnOperation(requested, { command: other, cutoffProof, kind: "request_cancellation", proof: cancellationProof }),
-    /exact command/u,
-  );
-
-  const active = createActiveOperation();
-  const activeCutoff = active.proofs.find(
-    (proof): proof is Extract<ContainedTurnProof, { readonly kind: "cutoff" }> => proof.kind === "cutoff",
-  );
-  assert.notEqual(activeCutoff, undefined);
-  if (activeCutoff !== undefined) {
-    const activeCancellationProof: Extract<ContainedTurnProof, { readonly kind: "cancellation" }> = {
-      binding: { ...commonBinding, cancellationCommandId, cancellationFingerprint: cancellationCommand.fingerprint },
-      kind: "cancellation",
-      proofId: proofId("proof:active-cancellation"),
-    };
-    const activeCancellation = mutateContainedTurnOperation(active, {
-      command: cancellationCommand,
-      cutoffProof: activeCutoff,
-      kind: "request_cancellation",
-      proof: activeCancellationProof,
-    });
-    assert.deepEqual(activeCancellation.admissionFence, active.admissionFence);
-    assert.equal(activeCancellation.proofs.filter(proof => proof.kind === "cutoff").length, 1);
-  }
-});
-
-const buildTerminalCandidate = (): ContainedTurnKernelOperation => {
-  const operation = createOperation();
-  const proofs: readonly ContainedTurnProof[] = [
-    acceptanceProof,
-    { binding: attemptBinding, kind: "dispatch_claim", proofId: proofId("proof:claim") },
-    {
-      binding: { ...attemptBinding, custodyId, hostBootId, hostInstanceId },
-      kind: "provider_process_start",
-      proofId: proofId("proof:process-start"),
-    },
-    { binding: { ...attemptBinding, outcome: "succeeded" }, kind: "execution_closure", proofId: proofId("proof:execution") },
-    { binding: { ...attemptBinding, disposition: "accepted" }, kind: "provider_acceptance", proofId: proofId("proof:provider-acceptance") },
-    { binding: { ...attemptBinding, outcome: "succeeded" }, kind: "provider_terminal_observation", proofId: proofId("proof:provider-terminal") },
-    { binding: { ...attemptBinding, finalCursor: 1 }, kind: "output_drain", proofId: proofId("proof:output-drain") },
-    { binding: { ...attemptBinding, custodyId }, kind: "host_custody", proofId: proofId("proof:custody") },
-    { binding: { ...commonBinding, workspaceId }, kind: "workspace_closure", proofId: proofId("proof:workspace") },
-    { binding: { ...commonBinding, artifactManifestRef: "artifact-manifest:1", workspaceId }, kind: "artifact_manifest_seal", proofId: proofId("proof:artifact") },
-    { binding: { ...attemptBinding, disposition: "committed" }, kind: "effect_resolution", proofId: proofId("proof:effect") },
-    {
-      binding: {
-        ...attemptBinding,
-        adapterRevision: adapterSnapshot.adapterRevision,
-        artifactManifestSealProofId: proofId("proof:artifact"),
-        binaryRevision: adapterSnapshot.binaryRevision,
-        capabilityManifestRevision: manifest.manifestRevision,
-        containmentPolicyDigest: authorityVector.containmentPolicyDigest,
-        credentialBindingDigest: providerAccessSnapshot.credentialBindingDigest,
-        custodyId,
-        cutoffProofId: proofId("proof:cutoff"),
-        executionClosureProofId: proofId("proof:execution"),
-        finalCursor: 1,
-        hostBootId,
-        hostInstanceId,
-        immutableScopeDigest: authorityVector.scopeDigest,
-        outputDrainProofId: proofId("proof:output-drain"),
-        providerRouteRef: providerAccessSnapshot.providerRouteRef,
-        terminalObservationProofId: proofId("proof:provider-terminal"),
-        workspaceId,
-      },
-      kind: "containment",
-      proofId: proofId("proof:containment"),
-    },
-    { binding: { ...commonBinding, resultRef: "result:1" }, kind: "result_publication", proofId: proofId("proof:result") },
-    { binding: commonBinding, kind: "cutoff", proofId: proofId("proof:cutoff") },
-  ];
-  const preTerminal: ContainedTurnKernelOperation = {
-    ...operation,
-    admissionFence: { kind: "fenced", proofId: proofId("proof:cutoff") },
-    artifactManifestRef: "artifact-manifest:1",
-    containment: { kind: "contained", proofId: proofId("proof:containment") },
-    custodyId,
-    dispatch: { attemptId, claimProofId: proofId("proof:claim"), kind: "claimed" },
-    effect: { disposition: "committed", kind: "resolved", proofId: proofId("proof:effect") },
-    hostBootId,
-    hostInstanceId,
-    output: { chunks: [{ cursor: 0, kind: "assistant", text: "done" }], fence: { finalCursor: 1, kind: "fenced", proofId: proofId("proof:output-drain") } },
-    proofs,
-    providerAcceptance: { kind: "accepted", proofId: proofId("proof:provider-acceptance") },
-    providerExecution: { kind: "closed", outcome: "succeeded", proofId: proofId("proof:execution") },
-    providerProcessStart: { kind: "execution_started", proofId: proofId("proof:process-start") },
-    resultRef: "result:1",
-    revision: operation.revision + 1,
-    workspaceId,
-  };
-  const satisfactionDigest = containedTurnSatisfactionDigest(preTerminal);
-  const terminalProof: ContainedTurnProof = {
-    binding: { ...commonBinding, satisfactionDigest, terminalOutcome: "succeeded" },
-    kind: "terminal_truth",
-    proofId: proofId("proof:terminal"),
-  };
-  return {
-    ...preTerminal,
-    proofs: [...proofs, terminalProof],
-    terminal: { kind: "final", outcome: "succeeded", satisfactionDigest, terminalProofId: terminalProof.proofId },
-  };
-};
-
-test("accepts exact terminal proof closure and rejects false terminal truth or proof substitution", () => {
-  const terminal = buildTerminalCandidate();
-  assert.doesNotThrow(() => validateContainedTurnOperation(terminal));
-  const impossibleDigest = {
-    ...terminal,
-    terminal: { ...terminal.terminal, satisfactionDigest: digestContainedTurnCanonicalValue({ false: "closure" }) as ContainedTurnCanonicalDigest },
-  } as ContainedTurnKernelOperation;
-  expectInvariant(() => validateContainedTurnOperation(impossibleDigest), /satisfaction digest|satisfaction mismatch/u);
-  const containmentSubstitution = {
-    ...terminal,
-    containment: { kind: "contained" as const, proofId: proofId("proof:acceptance") },
-  };
-  expectInvariant(() => validateContainedTurnOperation(containmentSubstitution), /containment requires its own exact proof/u);
-  const falseClosure = { ...terminal, resultRef: undefined } as unknown as ContainedTurnKernelOperation;
-  expectInvariant(
-    () => validateContainedTurnOperation(falseClosure),
-    /exact closed record|result proof binding|artifact and result closure/u,
   );
 });

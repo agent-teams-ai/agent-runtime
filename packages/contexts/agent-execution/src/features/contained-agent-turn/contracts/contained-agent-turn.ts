@@ -33,6 +33,20 @@ export interface ContainedTurnProviderBindingMapping {
   }>;
 }
 
+/** Field-explicit ACL output for the consumer-owned Provider Access port. */
+export interface ContainedTurnProviderAccessSnapshotMapping {
+  readonly accessRef: string;
+  readonly credentialBindingDigest: string;
+  readonly credentialBindingRef: string;
+  readonly credentialGeneration: number;
+  readonly projectId: string;
+  readonly provider: ContainedTurnProvider;
+  readonly providerAccountRef: string;
+  readonly providerRouteRef: string;
+  readonly revision: number;
+  readonly tenantId: string;
+}
+
 export interface SubmitContainedTurnInput {
   readonly commandId: string;
   readonly expectedProvider: ContainedTurnProvider;

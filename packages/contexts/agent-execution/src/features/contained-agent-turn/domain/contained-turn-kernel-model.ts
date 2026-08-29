@@ -57,7 +57,13 @@ export interface ContainedTurnKernelOperation {
   readonly custodyId?: ContainedTurnCustodyId;
   readonly dispatch:
     | { readonly kind: "unclaimed" }
-    | { readonly attemptId: ContainedTurnAttemptId; readonly claimProofId: ContainedTurnProofId; readonly kind: "claimed" }
+    | {
+      readonly attemptId: ContainedTurnAttemptId;
+      readonly claimProofId: ContainedTurnProofId;
+      readonly kind: "claimed";
+      readonly providerAccessDispatchProofId: ContainedTurnProofId;
+      readonly runtimeSecurityDispatchProofId: ContainedTurnProofId;
+    }
     | { readonly noDispatchProofId: ContainedTurnProofId; readonly kind: "prevented" };
   readonly effect:
     | { readonly kind: "unresolved" }

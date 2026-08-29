@@ -1,10 +1,17 @@
-import type { ProviderAccessProvider } from "../../../contracts/contained-turn-provider-access.js";
-import type { ProviderAccessBindingRecord } from "../../../domain/provider-access-binding.js";
+import type {
+  ProviderAccessBindingRecord,
+  ProviderAccessProviderValue,
+  ProviderAccessScopeValue,
+} from "../../../domain/provider-access-binding.js";
+
+export type ProviderAccessBindingObservation =
+  | { readonly kind: "found"; readonly record: ProviderAccessBindingRecord }
+  | { readonly kind: "indeterminate" }
+  | { readonly kind: "not_found" };
 
 export interface ProviderAccessBindingRepository {
-  find(input: {
-    readonly projectId: string;
-    readonly provider: ProviderAccessProvider;
-    readonly tenantId: string;
-  }): Promise<ProviderAccessBindingRecord | undefined>;
+  observeExact(input: {
+    readonly provider: ProviderAccessProviderValue;
+    readonly scope: ProviderAccessScopeValue;
+  }): Promise<ProviderAccessBindingObservation>;
 }

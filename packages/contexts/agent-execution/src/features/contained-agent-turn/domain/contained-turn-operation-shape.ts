@@ -1,13 +1,9 @@
 import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
+import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
 
 const exactKeys = (name: string, value: object, expected: readonly string[]): void => {
-  const actual = Object.keys(value).toSorted();
-  const sortedExpected = [...expected].toSorted();
-  invariant(
-    actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]),
-    `${name} must be an exact closed record`,
-  );
+  assertContainedTurnExactRecord(name, value, expected);
 };
 
 /** Rejects object-spread leakage before semantic validation or persistence. */
@@ -51,7 +47,9 @@ export const validateContainedTurnOperationShape = (operation: ContainedTurnKern
   }
   switch (operation.dispatch.kind) {
     case "unclaimed": exactKeys("dispatch state", operation.dispatch, ["kind"]); break;
-    case "claimed": exactKeys("dispatch state", operation.dispatch, ["attemptId", "claimProofId", "kind"]); break;
+    case "claimed": exactKeys("dispatch state", operation.dispatch, [
+      "attemptId", "claimProofId", "kind", "providerAccessDispatchProofId", "runtimeSecurityDispatchProofId",
+    ]); break;
     case "prevented": exactKeys("dispatch state", operation.dispatch, ["kind", "noDispatchProofId"]); break;
     default: invariant(false, "unknown dispatch state fails closed");
   }

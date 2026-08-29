@@ -7,6 +7,7 @@ import {
   type ContainedTurnCommandFingerprint,
 } from "./contained-turn-codecs.js";
 import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
+import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord } from "./contained-turn-record.js";
 import type {
   ContainedTurnCancellationCommandId,
   ContainedTurnOperationId,
@@ -27,16 +28,15 @@ export interface ContainedTurnIntent {
 
 export interface ContainedTurnProviderAccessSnapshot {
   readonly accessRef: string;
-  readonly accessRevision: string;
-  readonly accountRef: string;
-  readonly accountRevision: string;
   readonly credentialBindingDigest: ContainedTurnCanonicalDigest;
-  readonly credentialBindingGeneration: string;
   readonly credentialBindingRef: string;
-  readonly credentialBindingRevision: string;
+  readonly credentialGeneration: number;
+  readonly projectId: string;
   readonly provider: ContainedTurnProvider;
+  readonly providerAccountRef: string;
   readonly providerRouteRef: string;
-  readonly providerRouteRevision: string;
+  readonly revision: number;
+  readonly tenantId: string;
 }
 
 export interface ContainedTurnProviderAdapterSnapshot {
@@ -87,14 +87,8 @@ export interface ContainedTurnAuthorityVector {
   readonly securityDecisionDigest: ContainedTurnCanonicalDigest;
 }
 
-const hasExactKeys = (value: object, expected: readonly string[]): boolean => {
-  const actual = Object.keys(value).toSorted();
-  const sortedExpected = [...expected].toSorted();
-  return actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]);
-};
-
 const assertExactKeys = (name: string, value: object, expected: readonly string[]): void => {
-  if (!hasExactKeys(value, expected)) {throw new TypeError(`${name} must be an exact closed record`);}
+  assertContainedTurnExactRecord(name, value, expected);
 };
 
 export const validateContainedTurnAuthorityShape = (input: {
@@ -113,9 +107,8 @@ export const validateContainedTurnAuthorityShape = (input: {
     "Provider Access snapshot",
     snapshot,
     [
-      "accessRef", "accessRevision", "accountRef", "accountRevision", "credentialBindingDigest",
-      "credentialBindingGeneration", "credentialBindingRef", "credentialBindingRevision", "provider",
-      "providerRouteRef", "providerRouteRevision",
+      "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration",
+      "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId",
     ],
   );
   assertExactKeys(
@@ -148,20 +141,35 @@ export const containedTurnAuthorityVectorDigest = (
   operationAuthorityRevision: vector.operationAuthorityRevision,
   providerAccess: {
     accessRef: vector.providerAccessSnapshot.accessRef,
-    accessRevision: vector.providerAccessSnapshot.accessRevision,
-    accountRef: vector.providerAccessSnapshot.accountRef,
-    accountRevision: vector.providerAccessSnapshot.accountRevision,
     credentialBindingDigest: vector.providerAccessSnapshot.credentialBindingDigest,
-    credentialBindingGeneration: vector.providerAccessSnapshot.credentialBindingGeneration,
     credentialBindingRef: vector.providerAccessSnapshot.credentialBindingRef,
-    credentialBindingRevision: vector.providerAccessSnapshot.credentialBindingRevision,
+    credentialGeneration: vector.providerAccessSnapshot.credentialGeneration,
+    projectId: vector.providerAccessSnapshot.projectId,
     provider: vector.providerAccessSnapshot.provider,
+    providerAccountRef: vector.providerAccessSnapshot.providerAccountRef,
     providerRouteRef: vector.providerAccessSnapshot.providerRouteRef,
-    providerRouteRevision: vector.providerAccessSnapshot.providerRouteRevision,
+    revision: vector.providerAccessSnapshot.revision,
+    tenantId: vector.providerAccessSnapshot.tenantId,
   },
   scopeDigest: vector.scopeDigest,
   securityAuthorityRevision: vector.securityAuthorityRevision,
   securityDecisionDigest: vector.securityDecisionDigest,
+});
+
+export const containedTurnProviderAccessSnapshotDigest = (
+  snapshot: ContainedTurnProviderAccessSnapshot,
+): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalValue({
+  accessRef: snapshot.accessRef,
+  credentialBindingDigest: snapshot.credentialBindingDigest,
+  credentialBindingRef: snapshot.credentialBindingRef,
+  credentialGeneration: snapshot.credentialGeneration,
+  projectId: snapshot.projectId,
+  provider: snapshot.provider,
+  providerAccountRef: snapshot.providerAccountRef,
+  providerRouteRef: snapshot.providerRouteRef,
+  revision: snapshot.revision,
+  tenantId: snapshot.tenantId,
+  version: 1,
 });
 
 export interface ContainedTurnCommandFingerprintInput {
@@ -213,6 +221,8 @@ export const validateContainedTurnManifest = (
       "unknownCapabilityPolicy",
     ],
   );
+  assertContainedTurnCanonicalArray(manifest.requiredProofKinds);
+  assertContainedTurnCanonicalArray(manifest.supportedModes);
   const supported = new Set<ContainedTurnMode>(manifest.supportedModes);
   const exactProofKinds = manifest.requiredProofKinds.length === CONTAINED_TURN_REQUIRED_PROOF_KINDS.length &&
     manifest.requiredProofKinds.every((kind, index) => kind === CONTAINED_TURN_REQUIRED_PROOF_KINDS[index]);
