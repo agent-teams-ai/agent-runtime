@@ -50,8 +50,8 @@ const assertions = (evidence: ScenarioEvidence) => {
     },
     {
       id: "opencode.acp-v2-request-returned-supported-version",
-      passed: negotiatedV2 === 1 || negotiatedV2 === 2,
-      expected: "1 or 2",
+      passed: negotiatedV2 === 1,
+      expected: 1,
       actual: negotiatedV2,
     },
     {
