@@ -114,9 +114,11 @@ test("publishes an early scope-bound operation handle and keeps completion under
 });
 
 test("maps complete observations to an Embedded Runtime-owned deeply detached DTO", async t => {
+  const ownerOnlyNestedSentinel = { secret: "owner-only-nested-sentinel" };
   const ownerOutput = [{
     cursor: 7,
     kind: "assistant" as const,
+    ownerOnly: ownerOnlyNestedSentinel,
     text: "owner output",
   }];
   const ownerTurn = {
@@ -155,7 +157,20 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
   callerScope.projectId = "project:mutated-after-bind";
 
   const observed = await access.containedTurn.observe(ownerTurn.operationId);
-  assert.deepEqual(observed, { status: "observed", turn: ownerTurn });
+  assert.deepEqual(observed, {
+    status: "observed",
+    turn: {
+      artifactManifestRef: "artifact:manifest",
+      commandId: "command:detached",
+      effectId: "effect:detached",
+      operationId: "operation:detached",
+      output: [{ cursor: 7, kind: "assistant", text: "owner output" }],
+      provider: "codex",
+      resultRef: "result:detached",
+      revision: 11,
+      status: "succeeded",
+    },
+  });
   assert.deepEqual(receivedScope, {
     projectId: "project:detached",
     tenantId: "tenant:detached",
@@ -181,6 +196,9 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
   assert.notEqual(observed.turn, ownerTurn);
   assert.notEqual(observed.turn.output, ownerOutput);
   assert.notEqual(observed.turn.output[0], ownerOutput[0]);
+  assert.deepEqual(Object.keys(observed.turn.output[0]!).toSorted(), ["cursor", "kind", "text"]);
+  assert.equal("ownerOnly" in observed.turn.output[0]!, false);
+  assert.equal(JSON.stringify(observed).includes(ownerOnlyNestedSentinel.secret), false);
   assert.equal(Object.isFrozen(observed.turn), true);
   assert.equal(Object.isFrozen(observed.turn.output), true);
   assert.equal(Object.isFrozen(observed.turn.output[0]), true);
@@ -199,9 +217,105 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
   const cancelled = await access.containedTurn.cancel(ownerTurn.operationId);
   assert.deepEqual(cancelled, {
     status: "observed",
-    turn: { ...ownerTurn, output: ownerOutput },
+    turn: {
+      artifactManifestRef: "artifact:manifest",
+      commandId: "command:detached",
+      effectId: "effect:detached",
+      operationId: "operation:detached",
+      output: [
+        { cursor: 7, kind: "assistant", text: "owner mutation" },
+        { cursor: 8, kind: "progress", text: "later owner output" },
+      ],
+      provider: "codex",
+      resultRef: "result:detached",
+      revision: 11,
+      status: "succeeded",
+    },
   });
   assert.notEqual(cancelled.status === "observed" && cancelled.turn, ownerTurn);
+});
+
+test("accepts a future stable provider identity and rejects malformed identities before submit", async t => {
+  const receivedProviders: string[] = [];
+  const feature: ContainedTurnFeatureApi = Object.freeze({
+    cancel: Object.freeze({
+      async execute() {return { status: "not_found" };},
+    }),
+    observe: Object.freeze({
+      async execute() {return { status: "not_found" };},
+    }),
+    submit: Object.freeze({
+      async execute(input) {
+        receivedProviders.push(input.expectedProvider);
+        return { code: "provider_unsupported", status: "unsupported" };
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  t.after(() => host.dispose());
+  const access = host.bindAccess({ containedTurn: trustedScope });
+  const submit = (expectedProvider: unknown) => access.containedTurn.submit({
+    commandId: "command:provider-validation",
+    expectedProvider,
+    intent: { mode: "analysis", prompt: "synthetic" },
+  } as never);
+
+  assert.deepEqual(await submit("opencode"), {
+    code: "provider_unsupported",
+    status: "unsupported",
+  });
+  for (const malformed of ["OpenCode", "open code", "", "x".repeat(129), 7, null]) {
+    assert.deepEqual(await submit(malformed), {
+      code: "provider_unsupported",
+      status: "unsupported",
+    });
+  }
+  assert.deepEqual(receivedProviders, ["opencode"]);
+});
+
+test("fails closed when an owner observation has a malformed or oversized provider", async t => {
+  let provider: unknown = "Bad Provider";
+  const ownerTurn = () => ({
+    commandId: "command:invalid-owner-provider",
+    effectId: "effect:invalid-owner-provider",
+    operationId: "operation:invalid-owner-provider",
+    output: [],
+    provider,
+    revision: 1,
+    status: "running" as const,
+  });
+  const feature = Object.freeze({
+    cancel: Object.freeze({
+      async execute() {return { status: "observed" as const, turn: ownerTurn() };},
+    }),
+    observe: Object.freeze({
+      async execute() {return { status: "observed" as const, turn: ownerTurn() };},
+    }),
+    submit: Object.freeze({
+      async execute() {return { status: "observed" as const, turn: ownerTurn() };},
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature as never });
+  t.after(() => host.dispose());
+  const access = host.bindAccess({ containedTurn: trustedScope });
+
+  assert.deepEqual(await access.containedTurn.observe("operation:invalid-owner-provider"), {
+    code: "capability_unavailable",
+    status: "unsupported",
+  });
+  provider = "x".repeat(129);
+  assert.deepEqual(await access.containedTurn.cancel("operation:invalid-owner-provider"), {
+    code: "capability_unavailable",
+    status: "unsupported",
+  });
+  assert.deepEqual(await access.containedTurn.submit({
+    commandId: "command:invalid-owner-provider",
+    expectedProvider: "opencode",
+    intent: { mode: "analysis", prompt: "synthetic" },
+  }), {
+    code: "capability_unavailable",
+    status: "unsupported",
+  });
 });
 
 test("Host disposal requests durable cancellation and never exports lifecycle authority", async () => {

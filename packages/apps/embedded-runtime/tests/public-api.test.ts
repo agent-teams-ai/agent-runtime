@@ -6,6 +6,30 @@ import { fileURLToPath } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+const readDeclarationClosure = async (entrypoint: string): Promise<string> => {
+  const pending = [entrypoint];
+  const visited = new Set<string>();
+  const declarations: string[] = [];
+  while (pending.length > 0) {
+    const declarationPath = pending.pop()!;
+    if (visited.has(declarationPath)) {
+      continue;
+    }
+    visited.add(declarationPath);
+    const declaration = await readFile(declarationPath, "utf8");
+    declarations.push(declaration);
+    for (const match of declaration.matchAll(/["'](\.[^"']+)["']/gu)) {
+      const specifier = match[1]!;
+      const referencedPath = resolve(
+        dirname(declarationPath),
+        specifier.endsWith(".js") ? `${specifier.slice(0, -3)}.d.ts` : specifier,
+      );
+      pending.push(referencedPath);
+    }
+  }
+  return declarations.join("\n");
+};
+
 test("root API exposes only product capabilities and keeps Host in composition", async () => {
   const rootDeclaration = await readFile(join(packageRoot, "dist", "index.d.ts"), "utf8");
   const capabilityDeclaration = await readFile(
@@ -32,7 +56,7 @@ test("root API exposes only product capabilities and keeps Host in composition",
   assert.deepEqual(Object.keys(manifest.exports).toSorted(), [".", "./composition"]);
 });
 
-test("contained-turn observations are declared in Embedded Runtime's contract", async () => {
+test("contained-turn declarations stay owned across root and composition closure", async () => {
   const runtimeAccessSource = await readFile(
     join(packageRoot, "src", "contracts", "runtime-access.ts"),
     "utf8",
@@ -60,6 +84,15 @@ test("contained-turn observations are declared in Embedded Runtime's contract", 
     runtimeAccessSource,
     /interface\s+RuntimeContainedTurnView\s+extends|type\s+RuntimeContainedTurnView\s*=\s*ContainedTurnView/u,
   );
+
+  const [rootClosure, compositionClosure] = await Promise.all([
+    readDeclarationClosure(join(packageRoot, "dist", "index.d.ts")),
+    readDeclarationClosure(join(packageRoot, "dist", "composition.d.ts")),
+  ]);
+  assert.doesNotMatch(rootClosure, /@agent-teams\/agent-execution|\bContainedTurnView\b|ContainedTurnFeatureApi/u);
+  assert.doesNotMatch(compositionClosure, /\bContainedTurnView\b|ContainedTurnFeatureApi/u);
+  assert.match(compositionClosure, /interface ContainedTurnCapabilityBundle/u);
+  assert.match(compositionClosure, /expectedProvider: string/u);
 });
 
 test("passive setup slice has no process, network, ambient env or write adapter", async () => {
