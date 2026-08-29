@@ -46,8 +46,29 @@ export const requestWithDeadline = async <Result>(input: {
   readonly timeoutMs: number;
   readonly evidence: ProbeEvidence;
 }): Promise<RequestResult<Result>> => {
+  let timedOut = false;
+  const request = input.invoke();
+  void request.then(
+    () => {
+      if (timedOut) {
+        input.evidence.anomaly("late_request_resolved_after_timeout", input.method);
+      }
+      return null;
+    },
+    (error: unknown) => {
+      if (timedOut) {
+        input.evidence.anomaly(
+          "late_request_rejected_after_timeout",
+          input.method,
+          error,
+        );
+      }
+      return null;
+    },
+  );
   const timeout = Promise.withResolvers<never>();
   const timer = setTimeout(() => {
+    timedOut = true;
     input.evidence.anomaly("request_timeout_ambiguity", input.method);
     timeout.reject(
       new ProbeRequestFailure(
@@ -56,7 +77,7 @@ export const requestWithDeadline = async <Result>(input: {
     );
   }, input.timeoutMs);
   try {
-    const value = await Promise.race([input.invoke(), timeout.promise]);
+    const value = await Promise.race([request, timeout.promise]);
     const retained = input.evidence.sdkResult(input.method, value);
     if (retained === undefined) {
       throw new ProbeRequestFailure(

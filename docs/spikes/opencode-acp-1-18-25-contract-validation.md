@@ -47,6 +47,16 @@ identifiers, correlation, and late-response handling; the probe neither
 observes nor shadows those internals. In-memory SDK tests exercise callback
 routing and normal connection closure without a second ACP wire.
 
+Because SDK `ndJsonStream` diagnostics can include a malformed input line, the
+experimental probe runs the SDK connection in a diagnostic-isolation worker.
+The already byte- and line-bounded Web streams are transferred directly to
+that worker; no owner-local parser, framing layer, request identifier, or
+correlator is inserted. Worker stdout and stderr are drained behind fixed byte
+caps and retained only as counts, truncation state, and SHA-256 digests. SDK
+diagnostic text is never forwarded to the probe's stdout or stderr. The
+synthetic malformed-input test demonstrates this containment boundary; it is
+not a provider transcript or provider qualification run.
+
 The repository intentionally has no custom JSON-RPC or NDJSON transport tests.
 Those are SDK responsibilities, not Agent Runtime policy.
 
@@ -69,11 +79,22 @@ stderr text, provider output, credentials, environment values, or arbitrary
 nested objects. Unsupported or oversized evidence is represented only by a
 typed anomaly and digest. These limits characterize a possible custody policy;
 they are not production Host Custody implementation or qualification evidence.
+Ordinary `Error` values are reduced to a digest over a bounded canonical error
+name and small message (or an oversized-message size marker); message, stack,
+cause, and attached fields are never retained.
 
 Ordinary SDK rejection and initialization/version failure fail the probe.
 Request timeout is a bounded ambiguity failure, not a successful observation.
+The deadline observer assigns no request identifiers and inspects no SDK
+diagnostics; a later settlement of the returned SDK promise is reduced to a
+typed safe anomaly so a late rejection is not silently discarded.
 Connection closure is also bounded; a closure timeout remains a typed retained
-anomaly before finite SIGTERM/SIGKILL process cleanup proceeds.
+anomaly before finite SIGTERM/SIGKILL process cleanup proceeds. If exit remains
+unconfirmed after SIGKILL, the probe retains that uncertainty, destroys its
+remaining child stdio handles, and unreferences the child so evidence emission
+and probe termination do not depend on a later close event. This is only
+bounded experimental cleanup, not proof that the provider process or all of
+its descendants exited.
 
 ## Agent Runtime-owned policy
 

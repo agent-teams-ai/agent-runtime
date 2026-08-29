@@ -2,25 +2,18 @@ import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 
 import {
-  ClientApp,
-  methods,
-  ndJsonStream,
-  type ClientConnection,
-} from "@agentclientprotocol/sdk";
-
-import {
+  mergeProbeAnomalies,
   ProbeEvidence,
+  type ProbeAnomaly,
   type SafeCallbackEvidence,
+  type SafeStderrEvidence,
 } from "./opencode-acp-probe-evidence.ts";
 import {
-  awaitBoundedConnectionClose,
   terminateBoundedProcess,
   type ProcessResult,
 } from "./opencode-acp-probe-lifecycle.ts";
-import {
-  executeProbeWorkflow,
-  type RetainedWorkflow,
-} from "./opencode-acp-probe-workflow.ts";
+import type { RetainedWorkflow } from "./opencode-acp-probe-workflow.ts";
+import { runIsolatedSdkWorkflow } from "./opencode-acp-probe-sdk-isolation.ts";
 
 const executable = process.argv[2];
 const workspace = process.argv[3];
@@ -33,17 +26,21 @@ if (executable === undefined || workspace === undefined) {
 const MAX_STDOUT_BYTES = 2 * 1024 * 1024;
 const MAX_STDOUT_LINE_BYTES = 256 * 1024;
 const MAX_STDERR_BYTES = 64 * 1024;
-const WORKFLOW_DEADLINE_MS = 120_000;
+const WORKFLOW_DEADLINE_MS = 90_000;
 
 interface HandshakeSummary extends RetainedWorkflow {
   readonly requestedProtocolVersion: 1 | 2;
   readonly negotiatedProtocolVersion?: number;
   readonly promptText?: "runtime-profile-acp-ok";
-  readonly protocolAnomalies: ProbeEvidence["anomalies"];
+  readonly protocolAnomalies: readonly ProbeAnomaly[];
   readonly process: ProcessResult & {
     readonly stderr: ReturnType<ProbeEvidence["stderr"]>;
   };
   readonly closureOutcome: "closed" | "closure_timeout";
+  readonly sdkDiagnostics: {
+    readonly stdout: SafeStderrEvidence;
+    readonly stderr: SafeStderrEvidence;
+  };
   readonly availableCommandsBySession: Readonly<Record<string, readonly string[]>>;
   readonly retainedCallbacks: readonly SafeCallbackEvidence[];
 }
@@ -75,32 +72,6 @@ const createBoundedAgentStream = (input: {
   return (Readable.toWeb(input.stdout) as ReadableStream<Uint8Array>).pipeThrough(
     bounded,
   );
-};
-
-const createClient = (input: {
-  readonly evidence: ProbeEvidence;
-}): ClientApp => {
-  return new ClientApp({ name: "agent-runtime-opencode-characterization" })
-    .onRequest(methods.client.session.requestPermission, ({ params }) => {
-      input.evidence.callback("permission", params);
-      return { outcome: { outcome: "cancelled" } };
-    })
-    .onNotification(methods.client.session.update, ({ params }) => {
-      const update =
-        typeof params.update === "object" && params.update !== null
-          ? (params.update as Record<string, unknown>)
-          : {};
-      if (update.sessionUpdate === "available_commands_update") {
-        input.evidence.callback("available_commands", params);
-      } else if (update.sessionUpdate === "agent_message_chunk") {
-        input.evidence.callback("prompt_marker", params);
-      } else if (
-        update.sessionUpdate === "tool_call" ||
-        update.sessionUpdate === "tool_call_update"
-      ) {
-        input.evidence.callback("tool_update", params);
-      }
-    });
 };
 
 const commandIndex = (
@@ -147,20 +118,18 @@ const runHandshake = async (input: {
 
   const fromAgent = createBoundedAgentStream({ stdout: child.stdout, evidence });
   const toAgent = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
-  const connection: ClientConnection = createClient({ evidence }).connect(
-    ndJsonStream(toAgent, fromAgent),
-  );
-  let workflow: RetainedWorkflow;
-  let closureOutcome: "closed" | "closure_timeout";
+  let sdkResult;
   try {
-    workflow = await executeProbeWorkflow({
-      connection,
+    sdkResult = await runIsolatedSdkWorkflow({
+      fromAgent,
+      toAgent,
       evidence,
       requestedProtocolVersion: input.requestedProtocolVersion,
       workspace,
       executePrompt: input.executePrompt ?? false,
       configDriftAction: input.configDriftAction ?? "mutate",
       deadlineAt: Date.now() + WORKFLOW_DEADLINE_MS,
+      timeoutMs: WORKFLOW_DEADLINE_MS + 2_000,
       ...(input.resumeSessionId === undefined
         ? {}
         : { resumeSessionId: input.resumeSessionId }),
@@ -168,13 +137,26 @@ const runHandshake = async (input: {
         ? {}
         : { configPathToMutate: input.configPathToMutate }),
     });
+  } catch (error) {
+    evidence.anomaly("evidence_value_rejected", "sdk_worker_failure", error);
+    const emptyDiagnostics = evidence.boundedBytes(
+      "sdk_diagnostics_unavailable",
+      new Uint8Array(),
+      0,
+      false,
+    );
+    sdkResult = {
+      workflow: {
+        workflowError: evidence.error("workflow_failed", "sdk_worker", error),
+      },
+      closureOutcome: "closure_timeout" as const,
+      anomalies: [],
+      callbacks: [],
+      diagnostics: { stdout: emptyDiagnostics, stderr: emptyDiagnostics },
+      diagnosticAnomalies: [],
+    };
   } finally {
     child.stdin.end();
-    closureOutcome = await awaitBoundedConnectionClose({
-      connection,
-      timeoutMs: 1_000,
-      evidence,
-    });
   }
   const processResult = await terminateBoundedProcess({
     child,
@@ -189,21 +171,29 @@ const runHandshake = async (input: {
     stderrObserved,
     stderrTruncated,
   );
-  const promptMarkerMatched = evidence.callbacks.some(
+  const promptMarkerMatched = sdkResult.callbacks.some(
     (callback) => callback.kind === "prompt_marker" && callback.promptMarkerMatched,
   );
   return {
     requestedProtocolVersion: input.requestedProtocolVersion,
-    ...workflow,
-    ...(workflow.initialize?.result.protocolVersion === undefined
+    ...sdkResult.workflow,
+    ...(sdkResult.workflow.initialize?.result.protocolVersion === undefined
       ? {}
-      : { negotiatedProtocolVersion: workflow.initialize.result.protocolVersion }),
+      : {
+          negotiatedProtocolVersion:
+            sdkResult.workflow.initialize.result.protocolVersion,
+        }),
     ...(promptMarkerMatched ? { promptText: "runtime-profile-acp-ok" as const } : {}),
-    protocolAnomalies: evidence.anomalies,
+    protocolAnomalies: mergeProbeAnomalies(
+      sdkResult.anomalies,
+      sdkResult.diagnosticAnomalies,
+      evidence.anomalies,
+    ),
     process: { ...processResult, stderr },
-    closureOutcome,
-    availableCommandsBySession: commandIndex(evidence.callbacks),
-    retainedCallbacks: evidence.callbacks,
+    closureOutcome: sdkResult.closureOutcome,
+    sdkDiagnostics: sdkResult.diagnostics,
+    availableCommandsBySession: commandIndex(sdkResult.callbacks),
+    retainedCallbacks: sdkResult.callbacks,
   };
 };
 
