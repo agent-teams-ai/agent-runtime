@@ -93,7 +93,7 @@
           "evidence": {
             "repository": "current",
             "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
-            "path": "packages/contexts/agent-execution/tests/runtime-installation-discovery.test.ts",
+            "path": "packages/contexts/agent-execution/tests/runtime-installation-discovery/codex-installation-discovery.test.ts",
             "locator": "test:discovers distinct binaries and groups symbolic aliases",
             "claim": "Discovery groups aliases without executing provider code."
           }
@@ -2139,7 +2139,7 @@
           "evidence": {
             "repository": "current",
             "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
-            "path": "packages/contexts/agent-execution/tests/claude-code-installation-discovery.test.ts",
+            "path": "packages/contexts/agent-execution/tests/runtime-installation-discovery/claude-code-installation-discovery.test.ts",
             "locator": "test:orders explicit, PATH, and frozen known-location aliases deterministically",
             "claim": "Claude installation candidates are ordered deterministically without execution."
           }

@@ -54,8 +54,8 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         1,
         `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
       );
-      const coordinates = /^(packages\/[^/]+\/[^/]+)\/(tests\/[^/]+\.test\.ts)$/u.exec(entry.testFile);
-      assert.ok(coordinates, `${entry.testFile} must be a package-owned top-level test file`);
+      const coordinates = /^(packages\/[^/]+\/[^/]+)\/(tests\/(?:[^/]+\/)?[^/]+\.test\.ts)$/u.exec(entry.testFile);
+      assert.ok(coordinates, `${entry.testFile} must be a package-owned test file`);
       const [, packageRoot, relativeTestFile] = coordinates;
       const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
       assert.equal(

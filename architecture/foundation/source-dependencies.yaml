@@ -122,6 +122,7 @@ boundaries:
     allow:
       boundaries: []
       packages:
+        - "@agentclientprotocol/sdk"
         - "@xstate/graph"
         - ajv
         - fast-check
@@ -135,14 +136,17 @@ boundaries:
         - node:crypto
         - node:fs
         - node:fs/promises
+        - node:module
         - node:os
         - node:path
         - node:perf_hooks
         - node:readline
+        - node:stream
         - node:test
         - node:timers/promises
         - node:url
         - node:util
+        - node:worker_threads
       runtimeReferences: []
   - id: tooling.foundation-scaffolding
     dependencyMode: development
