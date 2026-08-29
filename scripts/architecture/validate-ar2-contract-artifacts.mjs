@@ -90,8 +90,12 @@ const packageTestCoordinates = testFile => {
   return { packageRoot: match[1], relativeTestFile: match[2] };
 };
 
-const assertRegularContainedTestFile = async (testFile, packageRoot) => {
-  const repositoryPath = fileURLToPath(repositoryRoot);
+export const assertRegularContainedTestFile = async (
+  testFile,
+  packageRoot,
+  evidenceRoot = repositoryRoot,
+) => {
+  const repositoryPath = fileURLToPath(evidenceRoot);
   const segments = testFile.split("/");
   let currentPath = repositoryPath;
   for (const [index, segment] of segments.entries()) {

@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
 import {
   auditLegacyInventoryEvidence,
+  assertRegularContainedTestFile,
   validateAr2ContractArtifacts,
   validateContractCoverage,
   validateClaudeDiagnosticParity,
@@ -281,4 +283,31 @@ test("AR-2 validator rejects fixture or executed-test mapping drift", async () =
       /portable ASCII path segments|dot path segments|package-owned test file|package tests directory/u,
     );
   }
+});
+
+test("package test custody rejects symbolic links and accepts a regular nested test", async t => {
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "ar2-test-custody-"));
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }));
+  const testsRoot = join(fixtureRoot, "packages", "contexts", "example", "tests");
+  const nestedRoot = join(testsRoot, "nested");
+  await mkdir(nestedRoot, { recursive: true });
+  await writeFile(join(nestedRoot, "valid.test.ts"), "export {};\n");
+  const evidenceRoot = pathToFileURL(`${fixtureRoot}/`);
+  await assert.doesNotReject(assertRegularContainedTestFile(
+    "packages/contexts/example/tests/nested/valid.test.ts",
+    "packages/contexts/example",
+    evidenceRoot,
+  ));
+
+  const outsidePath = join(fixtureRoot, "outside.test.ts");
+  await writeFile(outsidePath, "export {};\n");
+  await symlink(outsidePath, join(nestedRoot, "linked.test.ts"));
+  await assert.rejects(
+    assertRegularContainedTestFile(
+      "packages/contexts/example/tests/nested/linked.test.ts",
+      "packages/contexts/example",
+      evidenceRoot,
+    ),
+    /must not traverse a symbolic link/u,
+  );
 });
