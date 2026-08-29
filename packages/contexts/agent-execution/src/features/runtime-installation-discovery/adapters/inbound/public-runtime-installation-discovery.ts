@@ -23,26 +23,55 @@ const mapCustodyRoot = (root: {
   canonicalPath: root.canonicalPath,
 });
 
-const mapCandidate = (candidate: InstallationCandidate) => ({
-  absolutePath: candidate.absolutePath,
-  ...(candidate.authorizedFileIdentity === undefined
-    ? {}
-    : { authorizedFileIdentity: candidate.authorizedFileIdentity }),
-  canonicalPath: candidate.canonicalPath,
-  custodyRoot:
-    candidate.custodyRoot === undefined
-      ? candidate.custodyRoot
-      : mapCustodyRoot(candidate.custodyRoot),
-  displayPath: candidate.displayPath,
-  required: candidate.required,
-  source: candidate.source,
-});
+const mapCandidate = (candidate: InstallationCandidate) =>
+  candidate.authorizedFileIdentity === undefined
+    ? {
+        absolutePath: candidate.absolutePath,
+        canonicalPath: candidate.canonicalPath,
+        custodyRoot:
+          candidate.custodyRoot === undefined
+            ? undefined
+            : mapCustodyRoot(candidate.custodyRoot),
+        displayPath: candidate.displayPath,
+        required: candidate.required,
+        source: candidate.source,
+      }
+    : {
+        absolutePath: candidate.absolutePath,
+        authorizedFileIdentity: candidate.authorizedFileIdentity,
+        canonicalPath: candidate.canonicalPath,
+        custodyRoot:
+          candidate.custodyRoot === undefined
+            ? undefined
+            : mapCustodyRoot(candidate.custodyRoot),
+        displayPath: candidate.displayPath,
+        required: candidate.required,
+        source: candidate.source,
+      };
 
-const mapClaudeCandidate = (candidate: ClaudeCodeInstallationCandidate) => ({
-  ...mapCandidate(candidate),
-  candidateIdentity: candidate.candidateIdentity,
-  priorityRank: candidate.priorityRank,
-});
+const mapClaudeCandidate = (candidate: ClaudeCodeInstallationCandidate) =>
+  candidate.authorizedFileIdentity === undefined
+    ? {
+        absolutePath: candidate.absolutePath,
+        candidateIdentity: candidate.candidateIdentity,
+        canonicalPath: candidate.canonicalPath,
+        custodyRoot: mapCustodyRoot(candidate.custodyRoot),
+        displayPath: candidate.displayPath,
+        priorityRank: candidate.priorityRank,
+        required: candidate.required,
+        source: candidate.source,
+      }
+    : {
+        absolutePath: candidate.absolutePath,
+        authorizedFileIdentity: candidate.authorizedFileIdentity,
+        candidateIdentity: candidate.candidateIdentity,
+        canonicalPath: candidate.canonicalPath,
+        custodyRoot: mapCustodyRoot(candidate.custodyRoot),
+        displayPath: candidate.displayPath,
+        priorityRank: candidate.priorityRank,
+        required: candidate.required,
+        source: candidate.source,
+      };
 
 const mapInstallations = (
   installations: readonly {
@@ -55,7 +84,10 @@ const mapInstallations = (
   }[],
 ) =>
   installations.map(installation => ({
-    aliases: installation.aliases.map(alias => ({ ...alias })),
+    aliases: installation.aliases.map(alias => ({
+      displayPath: alias.displayPath,
+      source: alias.source,
+    })),
     installationRef: installation.installationRef,
     status: installation.status,
   }));
@@ -74,10 +106,13 @@ export const mapDiscoverCodexInstallations = (
           candidates: input.candidates.map(mapCandidate),
           observationEpoch: input.observationEpoch,
         },
-        options,
+        options?.signal === undefined ? undefined : { signal: options.signal },
       );
       return {
-        diagnostics: result.diagnostics.map(diagnostic => ({ ...diagnostic })),
+        diagnostics: result.diagnostics.map(diagnostic => ({
+          candidate: diagnostic.candidate,
+          code: diagnostic.code,
+        })),
         installations: mapInstallations(result.installations),
         observationEpoch: result.observationEpoch,
       };
@@ -98,18 +133,31 @@ export const mapDiscoverClaudeCodeInstallations = (
           candidates: input.candidates.map(mapClaudeCandidate),
           observationEpoch: input.observationEpoch,
         },
-        options,
+        options?.signal === undefined ? undefined : { signal: options.signal },
       );
       return Object.freeze({
         diagnostics: Object.freeze(
-          result.diagnostics.map(diagnostic => Object.freeze({ ...diagnostic })),
+          result.diagnostics.map(diagnostic =>
+            Object.freeze(
+              diagnostic.candidateRef === undefined
+                ? { code: diagnostic.code }
+                : {
+                    candidateRef: diagnostic.candidateRef,
+                    code: diagnostic.code,
+                  },
+            ),
+          ),
         ),
         installations: Object.freeze(
           mapInstallations(result.installations).map(installation =>
             Object.freeze({
-              ...installation,
+              installationRef: installation.installationRef,
+              status: installation.status,
               aliases: Object.freeze(
-                installation.aliases.map(alias => Object.freeze(alias)),
+                installation.aliases.map(alias => Object.freeze({
+                  displayPath: alias.displayPath,
+                  source: alias.source,
+                })),
               ),
             }),
           ),

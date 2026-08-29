@@ -13,7 +13,7 @@ export type {
   InstallationCandidateSource,
   RuntimeInstallationDiagnostic,
   RuntimeInstallationObservation,
-} from "./features/runtime-installation-discovery/public.js";
+} from "./features/runtime-installation-discovery/index.js";
 export type {
   ContainedTurnFeatureApi,
   ContainedTurnMode,

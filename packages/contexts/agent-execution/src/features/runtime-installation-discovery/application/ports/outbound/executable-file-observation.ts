@@ -6,10 +6,12 @@ export type ExecutableFileObservation =
 export interface ExecutableFileObservationRequest {
   readonly absolutePath: string;
   readonly authorizedFileIdentity: string | undefined;
-  readonly custodyBoundary: {
-    readonly absolutePath: string;
-    readonly canonicalPath: string;
-  };
+  readonly custodyBoundary:
+    | {
+        readonly absolutePath: string;
+        readonly canonicalPath: string;
+      }
+    | undefined;
   readonly expectedCanonicalPath: string;
   readonly signal?: AbortSignal;
 }

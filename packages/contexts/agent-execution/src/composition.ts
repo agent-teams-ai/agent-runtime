@@ -3,8 +3,7 @@ export {
   createRuntimeInstallationDiscoveryFeature,
   type ExecutableFileObserver,
   type RuntimeInstallationDiscoveryDependencies,
-  type RuntimeInstallationDiscoveryFeature,
-} from "./features/runtime-installation-discovery/public.js";
+} from "./features/runtime-installation-discovery/internal.js";
 export {
   createContainedTurnFeature,
   type ContainedTurnFeatureDependencies,

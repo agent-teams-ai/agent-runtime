@@ -7,10 +7,12 @@ export interface InstallationCandidate {
   readonly absolutePath: string;
   readonly authorizedFileIdentity?: string;
   readonly canonicalPath: string;
-  readonly custodyRoot: {
-    readonly absolutePath: string;
-    readonly canonicalPath: string;
-  };
+  readonly custodyRoot:
+    | {
+        readonly absolutePath: string;
+        readonly canonicalPath: string;
+      }
+    | undefined;
   readonly displayPath: string;
   readonly required: boolean;
   readonly source: InstallationCandidateSource;
@@ -18,6 +20,10 @@ export interface InstallationCandidate {
 
 export interface ClaudeCodeInstallationCandidate extends InstallationCandidate {
   readonly candidateIdentity: string;
+  readonly custodyRoot: {
+    readonly absolutePath: string;
+    readonly canonicalPath: string;
+  };
   readonly priorityRank: 1 | 2 | 3 | 4 | 5;
 }
 

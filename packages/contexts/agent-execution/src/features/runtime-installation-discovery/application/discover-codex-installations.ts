@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import type {
   DiscoverCodexInstallations,
   DiscoverCodexInstallationsResult,
@@ -7,6 +5,7 @@ import type {
   RuntimeInstallationDiagnostic,
 } from "./runtime-installation-discovery.js";
 import type { ExecutableFileObserver } from "./ports/outbound/executable-file-observation.js";
+import type { ReferenceDigest } from "./ports/outbound/reference-digest.js";
 
 const diagnosticCode = {
   denied: "candidate_denied",
@@ -15,14 +14,12 @@ const diagnosticCode = {
   unreadable: "candidate_unreadable",
 } as const;
 
-const stableRef = (identity: string): string =>
-  `codex-installation:${createHash("sha256").update(identity).digest("hex")}`;
-
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
 export const createDiscoverCodexInstallations = (
   fileObserver: ExecutableFileObserver,
+  referenceDigest: ReferenceDigest,
 ): DiscoverCodexInstallations => ({
   async execute(input, options): Promise<DiscoverCodexInstallationsResult> {
     options?.signal?.throwIfAborted();
@@ -72,7 +69,7 @@ export const createDiscoverCodexInstallations = (
         aliases: aliases.toSorted((left, right) =>
           compareText(left.displayPath, right.displayPath),
         ),
-        installationRef: stableRef(identity),
+        installationRef: `codex-installation:${referenceDigest.sha256(identity)}`,
         status: "found_unverified" as const,
       }))
       .toSorted((left, right) =>
