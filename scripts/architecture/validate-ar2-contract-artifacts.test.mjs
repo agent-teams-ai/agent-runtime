@@ -266,4 +266,19 @@ test("AR-2 validator rejects fixture or executed-test mapping drift", async () =
     () => validateContractCoverage(testReferenceDrift),
     /must name exactly one declared Node test/u,
   );
+
+  for (const escapedPath of [
+    "packages/contexts/agent-execution/tests/../outside.test.ts",
+    "packages/contexts/agent-execution/tests/%2e%2e/outside.test.ts",
+    "packages/contexts/agent-execution/tests/..\\outside.test.ts",
+  ]) {
+    const pathEscape = structuredClone(inputs);
+    const originalPath = pathEscape.contractCoverage.cases[0].testFile;
+    pathEscape.contractCoverage.cases[0].testFile = escapedPath;
+    pathEscape.testSources.set(escapedPath, pathEscape.testSources.get(originalPath));
+    assert.throws(
+      () => validateContractCoverage(pathEscape),
+      /portable ASCII path segments|dot path segments|package-owned test file|package tests directory/u,
+    );
+  }
 });

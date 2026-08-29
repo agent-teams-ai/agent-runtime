@@ -72,8 +72,21 @@ export const EXPECTED_FIXTURE_MATRIX = Object.freeze([
 ]);
 
 const packageTestCoordinates = testFile => {
+  assert.match(testFile, /^[A-Za-z0-9_./-]+$/u, `${testFile} must use portable ASCII path segments`);
   const match = /^(packages\/[^/]+\/[^/]+)\/(tests\/(?:[^/]+\/)?[^/]+\.test\.ts)$/u.exec(testFile);
   assert.ok(match, `${testFile} must be a package-owned test file`);
+  assert.equal(
+    testFile.split("/").some(segment => segment === "." || segment === ".."),
+    false,
+    `${testFile} must not contain dot path segments`,
+  );
+  const testsRoot = new URL(`${match[1]}/tests/`, repositoryRoot);
+  const resolvedTestFile = new URL(testFile, repositoryRoot);
+  assert.equal(
+    resolvedTestFile.href.startsWith(testsRoot.href),
+    true,
+    `${testFile} must remain inside its package tests directory`,
+  );
   return { packageRoot: match[1], relativeTestFile: match[2] };
 };
 
@@ -189,7 +202,7 @@ const loadContractCoverageEvidence = async contractCoverage => {
 };
 
 const LEGACY_COMMIT = "f6afac73cced62d943a0e891ad08d7b8f88f802f";
-const CURRENT_COMMIT = "493c6c37e247f021fc110c5fc624b72f1502d743";
+const CURRENT_COMMIT = "52a34a04e5904910e480bd489ad3829bf6d56be7";
 const BOUNDED_CONTEXT_IDS = new Set([
   "runtime-configuration", "runtime-security", "provider-access", "agent-execution",
 ]);
