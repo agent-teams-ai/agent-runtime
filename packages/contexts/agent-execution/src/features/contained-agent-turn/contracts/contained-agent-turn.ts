@@ -16,6 +16,23 @@ export interface ContainedTurnProviderBinding {
   readonly providerRouteRef: string;
 }
 
+/**
+ * Outer adapter compatibility DTO. It is not an internal authority snapshot;
+ * mapping must split Provider Access facts from adapter-owned revisions.
+ */
+export interface ContainedTurnProviderBindingMapping {
+  readonly adapter: Readonly<{
+    adapterRevision: string;
+    binaryRevision: string;
+    capabilityManifestRevision: string;
+    provider: ContainedTurnProvider;
+  }>;
+  readonly providerAccess: Readonly<{
+    credentialBindingDigest: string;
+    providerRouteRef: string;
+  }>;
+}
+
 export interface SubmitContainedTurnInput {
   readonly commandId: string;
   readonly expectedProvider: ContainedTurnProvider;
@@ -29,6 +46,23 @@ export interface SubmitContainedTurnInput {
 export interface ContainedTurnOperationRef {
   readonly operationId: string;
   readonly scope: ContainedTurnScope;
+}
+
+/** Field-explicit inbound mapping shape; outer DTOs are never spread into domain state. */
+export interface ContainedTurnSubmitCommandMapping {
+  readonly commandId: string;
+  readonly mode: ContainedTurnMode;
+  readonly projectId: string;
+  readonly prompt: string;
+  readonly provider: ContainedTurnProvider;
+  readonly tenantId: string;
+}
+
+/** Field-explicit reference mapping used by both observe and cancellation commands. */
+export interface ContainedTurnOperationRefMapping {
+  readonly operationId: string;
+  readonly projectId: string;
+  readonly tenantId: string;
 }
 
 export interface ObserveContainedTurnInput extends ContainedTurnOperationRef {}
@@ -57,6 +91,19 @@ export type ContainedTurnStatus =
   | "succeeded";
 
 export interface ContainedTurnView {
+  readonly artifactManifestRef?: string;
+  readonly commandId: string;
+  readonly effectId: string;
+  readonly operationId: string;
+  readonly output: readonly ContainedTurnOutputView[];
+  readonly provider: ContainedTurnProvider;
+  readonly resultRef?: string;
+  readonly revision: number;
+  readonly status: ContainedTurnStatus;
+}
+
+/** Field-explicit outbound projection; internal records and proof ledgers never escape. */
+export interface ContainedTurnViewMapping {
   readonly artifactManifestRef?: string;
   readonly commandId: string;
   readonly effectId: string;

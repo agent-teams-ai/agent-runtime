@@ -1,10 +1,3 @@
-import type {
-  ContainedTurnOutputKind,
-  ContainedTurnProviderBinding,
-  ContainedTurnScope,
-  ContainedTurnStatus,
-  ContainedTurnView,
-} from "../contracts/contained-agent-turn.js";
 import {
   isContainmentMutation,
   isDispatchMutation,
@@ -20,6 +13,36 @@ import {
   type PublicationMutation,
   type WorkspaceMutation,
 } from "./contained-turn-mutation-groups.js";
+
+export type ContainedTurnOutputKind = "assistant" | "diagnostic" | "progress";
+export type ContainedTurnStatus = "accepted" | "cancelled" | "failed" | "reconcile_required" | "running" | "succeeded";
+
+export interface ContainedTurnScope {
+  readonly projectId: string;
+  readonly tenantId: string;
+}
+
+/** @deprecated Integration-only compatibility shape. New authority uses separate Provider Access and adapter snapshots. */
+export interface ContainedTurnProviderBinding {
+  readonly adapterRevision: string;
+  readonly binaryRevision: string;
+  readonly capabilityManifestRevision: string;
+  readonly credentialBindingDigest: string;
+  readonly provider: "claude" | "codex";
+  readonly providerRouteRef: string;
+}
+
+export interface ContainedTurnView {
+  readonly artifactManifestRef?: string;
+  readonly commandId: string;
+  readonly effectId: string;
+  readonly operationId: string;
+  readonly output: readonly { readonly cursor: number; readonly kind: ContainedTurnOutputKind; readonly text: string }[];
+  readonly provider: "claude" | "codex";
+  readonly resultRef?: string;
+  readonly revision: number;
+  readonly status: ContainedTurnStatus;
+}
 
 export const CONTAINED_TURN_REQUIRED_RECEIPTS = Object.freeze([
   "command_acceptance",
