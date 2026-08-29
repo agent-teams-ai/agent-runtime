@@ -169,6 +169,36 @@ test("keeps loadSession boolean mapping separate from official deferred and exte
   ]);
 });
 
+test("classifies unstable MCP-over-ACP only when explicitly true", () => {
+  for (const [acp, expected] of [
+    [true, ["mcpCapabilities/acp"]],
+    [false, []],
+    [undefined, []],
+  ] as const) {
+    const mcpCapabilities = acp === undefined ? {} : { acp };
+    const observation = observeOpenCodeCapabilities({
+      protocolVersion: 1,
+      agentCapabilities: { mcpCapabilities },
+    });
+    assert.deepEqual(observation.officialDeferred, expected, String(acp));
+  }
+
+  for (const acp of [null, "true"] as const) {
+    assert.throws(
+      () =>
+        observeOpenCodeCapabilities({
+          protocolVersion: 1,
+          agentCapabilities: { mcpCapabilities: { acp } },
+        }),
+      (error: unknown) =>
+        error instanceof OpenCodeValidationError &&
+        error.code === "malformed_observation" &&
+        error.details.kind === "initialize_response",
+      String(acp),
+    );
+  }
+});
+
 test("accepts only an explicit requested-v2/negotiated-v1 observation", async () => {
   const downgrade = await fixture("v2-to-v1-negotiation");
   assert.equal(

@@ -201,7 +201,7 @@ export const observeOpenCodeCapabilities = (value: unknown): OpenCodeCapabilityO
           OFFICIAL_DEFERRED_SESSION_CAPABILITIES.has(key) && advertised(sessions, key),
       )
       .map((key) => `sessionCapabilities/${key}`),
-    ...(advertised(mcp, "acp") ? ["mcpCapabilities/acp"] : []),
+    ...(mcp.acp === true ? ["mcpCapabilities/acp"] : []),
   ].toSorted();
   const unknown = [
     ...Object.keys(capabilities)
