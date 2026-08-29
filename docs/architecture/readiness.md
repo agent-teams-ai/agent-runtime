@@ -12,6 +12,8 @@ related:
   - ADR-0005
   - ADR-0006
   - ADR-0008
+  - ADR-0009
+  - ADR-0010
 blocked_by: []
 code_anchors: []
 ---
@@ -20,16 +22,16 @@ code_anchors: []
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain, dependency, package-identity, and private application
-entrypoint decisions are in ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005,
-and ADR-0008. Proposed ADR-0006 must be accepted before the first Agent
-Execution operation/effect-ledger slice.
-The committed ADR-0006 JSON oracle, independent evaluator, property/mutation
-checks, and synthetic XState requirement-27 verifier are executable architecture
-evidence governed through Foundation `quality.executable-specifications`. They do
-not bind or implement a production runtime, change ADR-0006 from `proposed`,
-authorize an Agent Execution slice, or establish implementation/deployment
-qualification.
+The canonical domain, dependency, package-identity, private application
+entrypoint, and narrow contained-turn decisions are the accepted ADRs through
+ADR-0010, excluding proposed ADR-0006 and the unassigned ADR identities.
+ADR-0009 and ADR-0010 authorize only the Contained Agent Turn V1 contract; they
+do not authorize a production implementation or deployment.
+The committed ADR-0006 JSON oracle plus the ADR-0010 V1 disposition and contract fixtures,
+independent evaluators, property/mutation checks, and synthetic XState
+requirement-27 verifier are executable architecture evidence governed through
+Foundation `quality.executable-specifications`. They do not bind or implement a
+production runtime or establish implementation/deployment qualification.
 Evidence promotion is in `architecture/evidence-traceability.md`. Exact scoped
 target matches and evidence hashes are in
 `architecture/qualification-registry.json`. This document owns the mutable list
@@ -331,6 +333,27 @@ Foundation accepted:
 - cross-revision transcript resume is exact-compatible or explicitly migrated,
   never best effort.
 
+Contained Agent Turn V1 accepted:
+
+- one accepted operation has exactly one coarse `EffectId`, at most one fresh
+  provider attempt, no fallback or provider-session reuse, and no blind retry;
+- command acceptance and dispatch claim are separate durable transitions;
+  ambiguous acceptance remains nonterminal with `reconcile_required`;
+- the exact versioned `AdapterCapabilityManifest` classifies the provider-turn
+  path as `contained_unmediated_effect` and declares the worst-case workspace,
+  process-tree, Provider Access, credential, output, artifact, and custody
+  scope;
+- command acceptance freezes the immutable `RequiredReceiptSet`, and
+  `ContainmentExecutionReceipt` binds exact operation, effect, attempt, scope,
+  binary, adapter-manifest, policy, workspace, route, credential, Host custody,
+  provider-observation, output-drain, artifact, cutoff, and execution evidence;
+- ordinary callers receive only the trusted scope-bound `RuntimeAccessHandle`;
+  caller abort and Host disposal cannot manufacture durable cancellation,
+  provider containment, effect resolution, or terminal truth;
+- module identity and lifecycle remain disjoint from operation, effect,
+  attempt, workspace, custody, receipt, Host, and authority identities. V1 has
+  no Module Kit dependency.
+
 Scoped qualified:
 
 - AR-owned operation/command identity, effect-ledger counterexamples, output
@@ -351,7 +374,14 @@ Remaining:
   provider/binary effect path; Codex shell, patch, and MCP plus OpenCode ACP
   and native tool paths are separate qualification rows;
 - contained-unmediated scope, containment-receipt, required-receipt-set, and
-  terminal-barrier tests;
+  terminal-barrier implementation tests for the exact V1 manifests and target
+  platforms;
+- target-platform qualification for the frozen Codex, Claude, and OpenCode
+  candidate revisions; the retained macOS Codex and Claude fixtures and
+  OpenCode contract-only pin do not qualify hosted Linux or a production
+  adapter;
+- production closed Pure DI composition, private handle scoping, Host shutdown,
+  durable cancellation, immutable identity, and receipt persistence ports;
 - spoofed/corrupted provider owner IDs proving adapters cannot replace trusted
   invocation scope;
 - duplicate/multi-hook admission tests proving one budget/capacity claim,

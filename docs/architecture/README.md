@@ -30,6 +30,9 @@ Documents:
   runtime commands, provider protocols, observations, and consumer transports.
 - [OpenCode integration](opencode-integration.md): ACP-first execution plus
   isolated native OpenCode management and reconciliation.
+- [Contained Agent Turn V1 delivery plan](contained-agent-turn-v1-delivery-plan.md):
+  staged implementation, provider, module, custody, qualification, and hosted
+  worker plan for the first contained execution turn.
 - [Provider setup delivery roadmap](provider-setup-delivery-roadmap.md): legacy
   capability disposition and delivery order for Codex, Claude Code, and
   OpenCode setup.

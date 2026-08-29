@@ -36,6 +36,16 @@
       "id": "ADR-0008",
       "path": "docs/decisions/0008-private-embedded-runtime-access-entrypoint.md",
       "immutableDigest": "sha256:cc01253865e4292e1160363f211b0ccb675fb50860fab7c23c3925fa6bb033c7"
+    },
+    {
+      "id": "ADR-0009",
+      "path": "docs/decisions/0009-contained-turn-private-access-and-host-shutdown-boundary.md",
+      "immutableDigest": "sha256:43e03f0db43ca6df7316089e28fec146536be0061e497e408dacdea798b870ca"
+    },
+    {
+      "id": "ADR-0010",
+      "path": "docs/decisions/0010-contained-agent-turn-v1-operation-authority.md",
+      "immutableDigest": "sha256:ae93100d235748090f441b12d98a7cfe7075ba886a126ab78df4037138c5f89e"
     }
   ]
 }

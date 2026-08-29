@@ -338,6 +338,18 @@ export type ResultCode =
   | "mixed_command_intent_forbidden";
 /**
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "v1Disposition".
+ */
+export type V1Disposition = "required" | "deferred" | "not_applicable";
+/**
+ * @minItems 1
+ *
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "nonEmptyUniqueStrings".
+ */
+export type NonEmptyUniqueStrings = [string, ...string[]];
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
  * via the `definition` "caseFragment".
  */
 export type CaseFragment = Case | ShardedCase;
@@ -426,6 +438,8 @@ export interface Manifest {
   adr: "ADR-0006";
   catalog: "catalog.json";
   crossAxis: "cross-axis.json";
+  containedTurnV1Disposition: "contained-turn-v1-disposition.json";
+  containedTurnV1Contract: "contained-turn-v1-contract.json";
   /**
    * @minItems 28
    * @maxItems 28
@@ -736,6 +750,259 @@ export interface CrossAxisTarget {
   axis: string;
   from: string;
   to: string;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "v1DispositionCount".
+ */
+export interface V1DispositionCount {
+  required: number;
+  deferred: number;
+  notApplicable: number;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "v1StateCount".
+ */
+export interface V1StateCount {
+  total: number;
+  valid: number;
+  invalid: number;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "containedTurnV1Disposition".
+ */
+export interface ContainedTurnV1Disposition {
+  $schema: "./schema.json#/$defs/containedTurnV1Disposition";
+  schemaVersion: 1;
+  adr: "ADR-0010";
+  companionAdr: "ADR-0009";
+  /**
+   * @minItems 1
+   */
+  requirements: [V1RequirementDisposition, ...V1RequirementDisposition[]];
+  /**
+   * @minItems 1
+   */
+  examples: [V1ExampleDisposition, ...V1ExampleDisposition[]];
+  /**
+   * @minItems 3
+   * @maxItems 3
+   */
+  stateCategories: [V1StateCategory, V1StateCategory, V1StateCategory];
+  expected: V1DispositionExpected;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "v1RequirementDisposition".
+ */
+export interface V1RequirementDisposition {
+  requirement: number;
+  caseId: CanonicalId;
+  disposition: V1Disposition;
+  reason: string;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "v1ExampleDisposition".
+ */
+export interface V1ExampleDisposition {
+  requirement: number;
+  exampleId: CanonicalId;
+  disposition: V1Disposition;
+  reason: string;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "v1StateCategory".
+ */
+export interface V1StateCategory {
+  id: CanonicalId;
+  precedence: number;
+  predicate:
+    | "effect_resolution_none"
+    | "effect_resolution_indeterminate_or_terminal_outcome_indeterminate"
+    | "remaining_state_product";
+  disposition: V1Disposition;
+  reason: string;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "v1DispositionExpected".
+ */
+export interface V1DispositionExpected {
+  requirementCount: 28;
+  exampleCount: 242;
+  stateCount: 48000;
+  requirements: V1DispositionCount;
+  examples: V1DispositionCount;
+  states: {
+    required: V1StateCount;
+    deferred: V1StateCount;
+    notApplicable: V1StateCount;
+  };
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "containedTurnV1Contract".
+ */
+export interface ContainedTurnV1Contract {
+  $schema: "./schema.json#/$defs/containedTurnV1Contract";
+  schemaVersion: 1;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  adrs: ["ADR-0009" | "ADR-0010", "ADR-0009" | "ADR-0010"];
+  repositoryBaseCommit: "3e1b977d9ab6147eb702b62497bd0be62acb8cf7";
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  foundationInputs: [FoundationInput, FoundationInput];
+  /**
+   * @minItems 3
+   * @maxItems 3
+   */
+  providers: [ProviderContract, ProviderContract, ProviderContract];
+  /**
+   * @minItems 3
+   * @maxItems 3
+   */
+  adapterCapabilityManifests: [AdapterCapabilityManifest, AdapterCapabilityManifest, AdapterCapabilityManifest];
+  worstCaseResourceScope: NonEmptyStringMap;
+  requiredReceiptSet: RequiredReceiptSet;
+  containmentExecutionReceiptVersion: 1;
+  containmentExecutionReceiptBindings: NonEmptyUniqueStrings;
+  compositionFixture: CompositionFixture;
+  /**
+   * @minItems 1
+   */
+  identityMatrix: [IdentityMatrixEntry, ...IdentityMatrixEntry[]];
+  /**
+   * @minItems 1
+   */
+  lifecycleMatrix: [LifecycleMatrixEntry, ...LifecycleMatrixEntry[]];
+  truthBoundary: NonEmptyStringMap;
+  /**
+   * @minItems 1
+   */
+  negativeGuard: [NegativeGuardExample, ...NegativeGuardExample[]];
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "foundationInput".
+ */
+export interface FoundationInput {
+  pullRequest: 22 | 27;
+  head: string;
+  authority: "non_authoritative_design_input";
+  mappedGuardrails: NonEmptyUniqueStrings;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "providerContract".
+ */
+export interface ProviderContract {
+  provider: "codex" | "claude" | "opencode";
+  packageRevision: string;
+  binaryRevision?: string;
+  schemaRevision?: string;
+  typescriptRevision?: string;
+  packageIntegrity?: string;
+  bundledProviderRevision?: string;
+  adapterRevision?: string;
+  evidenceFixture?: string;
+  evidenceFixtureDigest?: string;
+  evidencePlatform?: string;
+  qualification: "candidate_static_evidence_only" | "contract_only_no_production_adapter";
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "adapterCapabilityManifest".
+ */
+export interface AdapterCapabilityManifest {
+  provider: "codex" | "claude" | "opencode";
+  manifestVersion: 1;
+  manifestRevision: string;
+  providerRevision: string;
+  resourceScopeRevision: "contained-turn-v1-worst-case-scope@1";
+  effectClass: "contained_unmediated_effect";
+  effectCardinality: "one_coarse_effect_per_operation";
+  providerAttemptCardinality: "at_most_one";
+  unknownCapabilityPolicy: "fail_closed";
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "nonEmptyStringMap".
+ */
+export interface NonEmptyStringMap {
+  [k: string]: string;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "requiredReceiptSet".
+ */
+export interface RequiredReceiptSet {
+  setVersion: "contained-turn-v1-required-receipts@1";
+  membershipFrozenAt: "command_acceptance";
+  membershipMutation: "forbidden";
+  satisfaction: "typed_receipt_or_authority_defined_typed_non_applicability_proof";
+  receipts: NonEmptyUniqueStrings;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "compositionFixture".
+ */
+export interface CompositionFixture {
+  factory: "direct_pure_di";
+  construction: "synchronous_effect_free_resource_free";
+  providerSelection: "composition_root_before_factory";
+  providerSelectionFailurePolicy: "fail_before_factory_handle_or_effects_on_missing_unknown_duplicate_or_ambiguous_selection";
+  dependencySnapshot: "exact_dependencies_once";
+  resourcesCreatedAtConstruction: false;
+  dependencies: NonEmptyUniqueStrings;
+  dependencyObject: "closed_readonly_exact_membership";
+  ordinaryCallerSurface: "trusted_scope_bound_runtime_access_handle";
+  operations: NonEmptyUniqueStrings;
+  detachedFromCompositionMachinery: true;
+  hostBinding: "owning_agent_runtime_host_reject_after_disposal";
+  futureModuleAdapterRole: "alternative_outer_composition_calling_same_factory_only";
+  forbiddenExports: NonEmptyUniqueStrings;
+  moduleKitDependency: false;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "identityMatrixEntry".
+ */
+export interface IdentityMatrixEntry {
+  identity: string;
+  namespace: string;
+  mustNotAlias: NonEmptyUniqueStrings;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "lifecycleMatrixEntry".
+ */
+export interface LifecycleMatrixEntry {
+  lifecycle: string;
+  maximumMeaning: string;
+  mustNotMean: NonEmptyUniqueStrings;
+}
+/**
+ * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema
+ * via the `definition` "negativeGuardExample".
+ */
+export interface NegativeGuardExample {
+  id: CanonicalId;
+  facts: NonEmptyUniqueStrings;
+  expected:
+    | "reject_before_operation"
+    | "fence_before_dispatch"
+    | "post_dispatch_reconcile_required"
+    | "insufficient_negative_acceptance_evidence"
+    | "reject_guard_authority_mismatch";
 }
 /**
  * This interface was referenced by `ADR0006RuntimeOperationOracle`'s JSON-Schema

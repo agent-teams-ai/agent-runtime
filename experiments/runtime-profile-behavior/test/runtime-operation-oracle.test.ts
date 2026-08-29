@@ -20,8 +20,13 @@ import type { Example } from "../fixtures/proof-artifacts/runtime-operation-orac
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 const specificationRelative = "experiments/runtime-profile-behavior/spec/runtime-operation-oracle";
 const specificationRoot = join(repositoryRoot, specificationRelative);
-const FOUNDATION_ADOPTION_BOUNDARY = "| `quality.executable-specifications` | enabled for synthetic architecture evidence | Cataloged JSON authority, independent evaluator, property/mutation checks, and XState path evidence support review of proposed ADR-0006; they do not bind or implement a production runtime or establish implementation/deployment qualification |";
-const READINESS_BOUNDARY = "They do not bind or implement a production runtime, change ADR-0006 from `proposed`, authorize an Agent Execution slice, or establish implementation/deployment qualification.";
+const containedTurnEvidenceFixtures = [
+  "linux-codex-app-server-0.150.1-static-summary.json",
+  "linux-claude-agent-sdk-0.3.251-static-summary.json",
+  "opencode-hosting-e2e-summary.json",
+] as const;
+const FOUNDATION_ADOPTION_BOUNDARY = "| `quality.executable-specifications` | enabled for synthetic architecture evidence | The ADR-0006 JSON oracle, ADR-0010 disposition, independent evaluator, property/mutation checks, and XState path evidence support accepted ADR-0009 and ADR-0010 authority; they do not bind or implement a production runtime or establish implementation/deployment qualification |";
+const READINESS_BOUNDARY = "They do not bind or implement a production runtime or establish implementation/deployment qualification.";
 const FORBIDDEN_POSITIVE_EVIDENCE_CLAIMS = [
   { statement: "They bind a production runtime.", pattern: /\bthey bind (?:a |the )?production runtime(?=[\s.,;]|$)/iu },
   { statement: "They implement a production runtime.", pattern: /\bthey implement (?:a |the )?production runtime(?=[\s.,;]|$)/iu },
@@ -67,6 +72,15 @@ const withSpecificationCopy = async (
   try {
     await mkdir(join(temporarySpecificationRoot, ".."), { recursive: true });
     await cp(specificationRoot, temporarySpecificationRoot, { recursive: true });
+    const temporaryFixtureRoot = join(
+      temporaryRepositoryRoot,
+      "experiments/runtime-profile-behavior/fixtures",
+    );
+    await mkdir(temporaryFixtureRoot, { recursive: true });
+    await Promise.all(containedTurnEvidenceFixtures.map((name) => cp(
+      join(repositoryRoot, "experiments/runtime-profile-behavior/fixtures", name),
+      join(temporaryFixtureRoot, name),
+    )));
     await mutate(temporarySpecificationRoot);
     await verify(temporaryRepositoryRoot);
   } finally {
@@ -81,6 +95,16 @@ test("fragment authority preserves cutover parity and ten-axis validity counts",
     acceptedCount: 107,
     rejectedCount: 135,
     stateProduct: { total: 48_000, valid: 1_277, invalid: 46_723 },
+    containedTurnV1: {
+      requirementDispositions: { required: 22, deferred: 5, notApplicable: 1 },
+      exampleDispositions: { required: 87, deferred: 147, notApplicable: 8 },
+      stateDispositions: {
+        required: { total: 19_200, valid: 599, invalid: 18_601 },
+        deferred: { total: 16_800, valid: 321, invalid: 16_479 },
+        notApplicable: { total: 12_000, valid: 357, invalid: 11_643 },
+      },
+      negativeGuardExamples: 6,
+    },
   });
 });
 

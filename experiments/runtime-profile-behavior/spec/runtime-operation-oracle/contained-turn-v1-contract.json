@@ -1,0 +1,349 @@
+{
+  "$schema": "./schema.json#/$defs/containedTurnV1Contract",
+  "schemaVersion": 1,
+  "adrs": [
+    "ADR-0009",
+    "ADR-0010"
+  ],
+  "repositoryBaseCommit": "3e1b977d9ab6147eb702b62497bd0be62acb8cf7",
+  "foundationInputs": [
+    {
+      "pullRequest": 22,
+      "head": "a01ac2b02bcb8bf46efea8e78a13a255b3988ef2",
+      "authority": "non_authoritative_design_input",
+      "mappedGuardrails": [
+        "no_go_static_authoring",
+        "no_go_selection_graph",
+        "no_go_lifecycle_coordinator",
+        "no_go_process_host",
+        "no_go_shared_foundation_api",
+        "no_go_public_spi"
+      ]
+    },
+    {
+      "pullRequest": 27,
+      "head": "ee976675ed48c35e92f868ede95cc68e3fb71c6f",
+      "authority": "non_authoritative_design_input",
+      "mappedGuardrails": [
+        "future_dogfooding_boundary_only",
+        "no_production_authority"
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "provider": "codex",
+      "packageRevision": "@openai/codex@0.150.1",
+      "packageIntegrity": "sha512-knrbhpJH3mEULAVStcZW4F5WEt9MQhBj6KFOonBSIUGTLcHlu9CE7FRmr95E33y94+sWNZSeVBBV/kYvlfgxkQ==",
+      "binaryRevision": "sha256:abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
+      "schemaRevision": "sha256:8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3",
+      "typescriptRevision": "sha256:a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338",
+      "evidenceFixture": "experiments/runtime-profile-behavior/fixtures/linux-codex-app-server-0.150.1-static-summary.json",
+      "evidenceFixtureDigest": "sha256:930387719d7817bc0d8d99cb87aa0c3b0611ed2e5339346b92edec05dacaf923",
+      "evidencePlatform": "linux-x64",
+      "qualification": "candidate_static_evidence_only"
+    },
+    {
+      "provider": "claude",
+      "packageRevision": "@anthropic-ai/claude-agent-sdk@0.3.251",
+      "packageIntegrity": "sha512-DqSi8mH2tQYRlVV0G+lJnQ/WbjJZ/a+8cJ3vPuYoqh8esIIvXHm1ZOXV1UPGsFYRnbBytEoiSGitguEXd+sQ+Q==",
+      "bundledProviderRevision": "claude-code@2.1.251",
+      "binaryRevision": "sha256:fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "evidenceFixture": "experiments/runtime-profile-behavior/fixtures/linux-claude-agent-sdk-0.3.251-static-summary.json",
+      "evidenceFixtureDigest": "sha256:92b1479ee76dcb5c047f41b577087da6ad8e3bb9566cb0ded65c6958dcedd3c1",
+      "evidencePlatform": "linux-x64",
+      "qualification": "candidate_static_evidence_only"
+    },
+    {
+      "provider": "opencode",
+      "packageRevision": "opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
+      "adapterRevision": "opencode-acp-v1-adapter",
+      "evidenceFixture": "experiments/runtime-profile-behavior/fixtures/opencode-hosting-e2e-summary.json",
+      "evidenceFixtureDigest": "sha256:efdb9caf86efae6dcb29529a84eb65a26b33ec42d837635afba71ac85579bf89",
+      "evidencePlatform": "linux-container",
+      "qualification": "contract_only_no_production_adapter"
+    }
+  ],
+  "adapterCapabilityManifests": [
+    {
+      "provider": "codex",
+      "manifestVersion": 1,
+      "manifestRevision": "codex-contained-turn-v1@1",
+      "providerRevision": "codex-app-server@0.150.1#sha256:abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
+      "resourceScopeRevision": "contained-turn-v1-worst-case-scope@1",
+      "effectClass": "contained_unmediated_effect",
+      "effectCardinality": "one_coarse_effect_per_operation",
+      "providerAttemptCardinality": "at_most_one",
+      "unknownCapabilityPolicy": "fail_closed"
+    },
+    {
+      "provider": "claude",
+      "manifestVersion": 1,
+      "manifestRevision": "claude-contained-turn-v1@1",
+      "providerRevision": "claude-agent-sdk@0.3.251#sha256:fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "resourceScopeRevision": "contained-turn-v1-worst-case-scope@1",
+      "effectClass": "contained_unmediated_effect",
+      "effectCardinality": "one_coarse_effect_per_operation",
+      "providerAttemptCardinality": "at_most_one",
+      "unknownCapabilityPolicy": "fail_closed"
+    },
+    {
+      "provider": "opencode",
+      "manifestVersion": 1,
+      "manifestRevision": "opencode-acp-contained-turn-v1@1",
+      "providerRevision": "opencode@1.18.5#sha256:78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
+      "resourceScopeRevision": "contained-turn-v1-worst-case-scope@1",
+      "effectClass": "contained_unmediated_effect",
+      "effectCardinality": "one_coarse_effect_per_operation",
+      "providerAttemptCardinality": "at_most_one",
+      "unknownCapabilityPolicy": "fail_closed"
+    }
+  ],
+  "worstCaseResourceScope": {
+    "scopeRevision": "contained-turn-v1-worst-case-scope@1",
+    "filesystem": "disposable_operation_workspace_only_no_canonical_project",
+    "process": "fresh_provider_process_or_session_and_all_descendants",
+    "network": "exact_provider_access_route_through_enforced_boundary_no_ambient_route",
+    "credentials": "opaque_operation_scoped_binding_no_ambient_credential_directory",
+    "outputArtifactsCustody": "operation_scoped_only",
+    "providerSessionReuse": "forbidden"
+  },
+  "requiredReceiptSet": {
+    "setVersion": "contained-turn-v1-required-receipts@1",
+    "membershipFrozenAt": "command_acceptance",
+    "membershipMutation": "forbidden",
+    "satisfaction": "typed_receipt_or_authority_defined_typed_non_applicability_proof",
+    "receipts": [
+      "command_acceptance",
+      "dispatch_claim_or_proved_no_dispatch",
+      "provider_execution_closure_or_proved_no_start",
+      "provider_terminal_observation_or_proved_no_start",
+      "output_drain_and_fence_closure",
+      "host_custody",
+      "workspace_closure",
+      "artifact_manifest_seal",
+      "coarse_effect_resolution_or_reconciliation_debt",
+      "containment_execution",
+      "canonical_result_publication",
+      "cutoff_enforcement_when_applicable"
+    ]
+  },
+  "containmentExecutionReceiptVersion": 1,
+  "containmentExecutionReceiptBindings": [
+    "operation_id",
+    "effect_id",
+    "attempt_id_when_dispatched",
+    "immutable_scope_digest",
+    "provider_binary_revision",
+    "adapter_capability_manifest_revision",
+    "containment_policy_digest",
+    "workspace_identity",
+    "provider_access_route",
+    "credential_binding_digest",
+    "provider_host_instance_identity",
+    "provider_host_boot_identity",
+    "provider_terminal_observation",
+    "output_drain_cursor",
+    "artifact_manifest_seal",
+    "cutoff_observation",
+    "terminal_execution_observation"
+  ],
+  "compositionFixture": {
+    "factory": "direct_pure_di",
+    "construction": "synchronous_effect_free_resource_free",
+    "providerSelection": "composition_root_before_factory",
+    "providerSelectionFailurePolicy": "fail_before_factory_handle_or_effects_on_missing_unknown_duplicate_or_ambiguous_selection",
+    "dependencySnapshot": "exact_dependencies_once",
+    "resourcesCreatedAtConstruction": false,
+    "dependencies": [
+      "operation_store",
+      "security",
+      "workspace",
+      "artifacts",
+      "custody",
+      "provider"
+    ],
+    "dependencyObject": "closed_readonly_exact_membership",
+    "ordinaryCallerSurface": "trusted_scope_bound_runtime_access_handle",
+    "operations": [
+      "submit",
+      "observe",
+      "cancel"
+    ],
+    "detachedFromCompositionMachinery": true,
+    "hostBinding": "owning_agent_runtime_host_reject_after_disposal",
+    "futureModuleAdapterRole": "alternative_outer_composition_calling_same_factory_only",
+    "forbiddenExports": [
+      "product_capability",
+      "host",
+      "dependency_object",
+      "provider_adapter_or_session",
+      "container_or_service_locator",
+      "host_disposal",
+      "receipt_writer",
+      "state_transition_primitive",
+      "authority_owner",
+      "feature_registration_api",
+      "module_registry"
+    ],
+    "moduleKitDependency": false
+  },
+  "identityMatrix": [
+    {
+      "identity": "operation",
+      "namespace": "agent_runtime.operation",
+      "mustNotAlias": ["effect", "attempt", "module", "module_generation", "plan_digest", "loaded_head"]
+    },
+    {
+      "identity": "effect",
+      "namespace": "agent_runtime.effect",
+      "mustNotAlias": ["operation", "attempt", "module", "module_generation", "plan_digest", "loaded_head"]
+    },
+    {
+      "identity": "attempt",
+      "namespace": "agent_runtime.attempt",
+      "mustNotAlias": ["operation", "effect", "module", "module_generation", "plan_digest", "loaded_head"]
+    },
+    {
+      "identity": "command",
+      "namespace": "agent_runtime.command",
+      "mustNotAlias": ["operation", "effect", "attempt", "module", "module_generation", "plan_digest", "loaded_head"]
+    },
+    {
+      "identity": "workspace",
+      "namespace": "agent_runtime.workspace",
+      "mustNotAlias": ["custody", "host_instance", "host_boot", "module", "module_generation"]
+    },
+    {
+      "identity": "custody",
+      "namespace": "agent_runtime.custody",
+      "mustNotAlias": ["workspace", "host_instance", "host_boot", "module", "module_generation"]
+    },
+    {
+      "identity": "receipt",
+      "namespace": "agent_runtime.receipt",
+      "mustNotAlias": ["operation", "effect", "attempt", "module", "module_generation"]
+    },
+    {
+      "identity": "execution_generation",
+      "namespace": "agent_runtime.execution_generation",
+      "mustNotAlias": ["module", "module_generation", "plan_digest", "loaded_head", "authority_revision", "execution_fence"]
+    },
+    {
+      "identity": "provider_host_instance",
+      "namespace": "agent_runtime.provider_host_instance",
+      "mustNotAlias": ["module", "module_generation", "plan_digest", "loaded_head", "host_boot"]
+    },
+    {
+      "identity": "authority_revision",
+      "namespace": "agent_runtime.authority_revision",
+      "mustNotAlias": ["module", "module_generation", "plan_digest", "loaded_head", "execution_fence"]
+    },
+    {
+      "identity": "execution_fence",
+      "namespace": "agent_runtime.execution_fence",
+      "mustNotAlias": ["module", "module_generation", "plan_digest", "loaded_head", "authority_revision"]
+    },
+    {
+      "identity": "module",
+      "namespace": "module_kit.module",
+      "mustNotAlias": ["operation", "effect", "attempt", "workspace", "custody", "receipt"]
+    },
+    {
+      "identity": "module_generation",
+      "namespace": "module_kit.generation",
+      "mustNotAlias": ["operation", "effect", "attempt", "authority_revision", "host_boot"]
+    },
+    {
+      "identity": "plan_digest",
+      "namespace": "module_kit.plan_digest",
+      "mustNotAlias": ["operation", "command", "effect", "attempt", "execution_generation", "authority_revision", "execution_fence"]
+    },
+    {
+      "identity": "loaded_head",
+      "namespace": "module_kit.loaded_head",
+      "mustNotAlias": ["operation", "command", "effect", "attempt", "execution_generation", "authority_revision", "execution_fence"]
+    }
+  ],
+  "lifecycleMatrix": [
+    {
+      "lifecycle": "module_availability",
+      "maximumMeaning": "composition_availability_only",
+      "mustNotMean": ["operation_accepted", "operation_dispatched", "operation_cancelled", "provider_contained", "effect_resolved", "operation_reconciled", "operation_terminal"]
+    },
+    {
+      "lifecycle": "module_prepare_start_ready",
+      "maximumMeaning": "composition_dependencies_usable",
+      "mustNotMean": ["provider_accepted", "provider_process_ready", "dispatch_authority"]
+    },
+    {
+      "lifecycle": "module_published",
+      "maximumMeaning": "one_composition_binding_selected",
+      "mustNotMean": ["operation_dispatched", "operation_mutation_authorized", "operation_terminal"]
+    },
+    {
+      "lifecycle": "module_drain",
+      "maximumMeaning": "reject_new_adapter_calls_and_settle_local_invocation_leases",
+      "mustNotMean": ["provider_output_drained", "operation_complete", "operation_terminal"]
+    },
+    {
+      "lifecycle": "module_stop_dispose",
+      "maximumMeaning": "release_registered_composition_resources",
+      "mustNotMean": ["provider_process_dead", "provider_contained", "durable_cancellation", "operation_terminal"]
+    },
+    {
+      "lifecycle": "module_failed_aborted_retired",
+      "maximumMeaning": "module_candidate_outcome",
+      "mustNotMean": ["operation_failed", "durable_cancellation", "operation_reconciled", "operation_terminal"]
+    },
+    {
+      "lifecycle": "host_disposal",
+      "maximumMeaning": "resource_lifecycle_signal_and_cutoff_request",
+      "mustNotMean": ["durable_cancellation", "provider_contained", "dispatch_not_accepted", "effect_resolved", "output_drained", "operation_terminal"]
+    },
+    {
+      "lifecycle": "caller_abort",
+      "maximumMeaning": "caller_observation_ended",
+      "mustNotMean": ["durable_cancellation", "provider_contained", "dispatch_not_accepted", "effect_resolved", "output_drained", "operation_terminal"]
+    }
+  ],
+  "truthBoundary": {
+    "durableCancellation": "accepted_exact_command_and_persisted_fence_or_cutoff",
+    "callerAbort": "never_manufactures_durable_truth",
+    "hostDisposal": "never_manufactures_durable_truth",
+    "ambiguousDispatch": "nonterminal_reconcile_required",
+    "blindRetry": "forbidden"
+  },
+  "negativeGuard": [
+    {
+      "id": "guard-before-delayed-command",
+      "facts": ["matching_guard_persisted", "delayed_command_received"],
+      "expected": "reject_before_operation"
+    },
+    {
+      "id": "guard-after-acceptance-before-claim",
+      "facts": ["command_accepted", "matching_guard_persisted", "pre_dispatch_guard_checked"],
+      "expected": "fence_before_dispatch"
+    },
+    {
+      "id": "claim-before-guard",
+      "facts": ["command_accepted", "pre_dispatch_guard_checked_clear", "dispatch_claim_committed", "matching_guard_persisted"],
+      "expected": "post_dispatch_reconcile_required"
+    },
+    {
+      "id": "provider-not-found-is-not-prevention-proof",
+      "facts": ["command_accepted", "dispatch_claim_committed", "provider_not_found", "provider_history_absent"],
+      "expected": "insufficient_negative_acceptance_evidence"
+    },
+    {
+      "id": "guard-command-digest-mismatch",
+      "facts": ["command_accepted", "guard_command_digest_mismatch", "pre_dispatch_guard_checked"],
+      "expected": "reject_guard_authority_mismatch"
+    },
+    {
+      "id": "guard-scope-mismatch",
+      "facts": ["command_accepted", "guard_scope_mismatch", "pre_dispatch_guard_checked"],
+      "expected": "reject_guard_authority_mismatch"
+    }
+  ]
+}

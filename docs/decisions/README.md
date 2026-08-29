@@ -12,6 +12,8 @@ related:
   - ADR-0005
   - ADR-0006
   - ADR-0008
+  - ADR-0009
+  - ADR-0010
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -26,6 +28,8 @@ immutable evidence; a later change uses an explicit superseding decision.
 ## Proposed
 
 - [ADR-0006: Orthogonal runtime-operation state and effect continuity](0006-orthogonal-runtime-operation-state-and-effect-continuity.md)
+  remains the broader design proposal. ADR-0010 accepts only its narrow V1
+  subset without mutating this document.
 
 ## Accepted
 
@@ -44,6 +48,12 @@ immutable evidence; a later change uses an explicit superseding decision.
   query does not qualify a Claude executable, provider route, production
   collector, deployment, or any access, trust, installation, or execution
   capability; ADR-0008 remains immutable historical authority.
+- [ADR-0009: Contained turn private access and Host shutdown boundary](0009-contained-turn-private-access-and-host-shutdown-boundary.md)
+  adds the trusted contained-turn handle, durable-cancellation meaning, and
+  Host-shutdown truth boundary without changing ADR-0008.
+- [ADR-0010: Contained Agent Turn V1 operation authority](0010-contained-agent-turn-v1-operation-authority.md)
+  accepts the narrow one-attempt operation contract while preserving the
+  broader proposed ADR-0006 as design input.
 
 ## Superseded
 

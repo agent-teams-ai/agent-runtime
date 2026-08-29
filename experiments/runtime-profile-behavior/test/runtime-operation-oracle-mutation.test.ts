@@ -7,6 +7,7 @@ import {
   createOracleEvaluator,
   type OracleEvaluator,
 } from "../src/features/evidence/runtime-operation-oracle-evaluator.ts";
+import { evaluatePreMaterializationGuard } from "../src/features/evidence/runtime-operation-contained-turn-v1.ts";
 import type { Example } from "../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
@@ -75,6 +76,24 @@ test("all curated semantic mutants are killed by authoritative examples", () => 
     }),
   );
   assert.deepEqual(survivors.map(({ id }) => id), []);
+});
+
+test("ADR-0004 guard examples kill pre-dispatch and false-negative mutants", () => {
+  const examples = authority.containedTurnV1Contract.negativeGuard;
+  const mutants = [
+    { id: "delayed-command-materializes", example: "guard-before-delayed-command", result: "fence_before_dispatch" },
+    { id: "pre-claim-guard-allows-dispatch", example: "guard-after-acceptance-before-claim", result: "post_dispatch_reconcile_required" },
+    { id: "post-claim-guard-erases-claim", example: "claim-before-guard", result: "fence_before_dispatch" },
+    { id: "not-found-proves-no-acceptance", example: "provider-not-found-is-not-prevention-proof", result: "fence_before_dispatch" },
+    { id: "digest-mismatch-authorizes-guard", example: "guard-command-digest-mismatch", result: "fence_before_dispatch" },
+    { id: "scope-mismatch-authorizes-guard", example: "guard-scope-mismatch", result: "fence_before_dispatch" },
+  ] as const;
+  for (const mutant of mutants) {
+    const example = examples.find(({ id }) => id === mutant.example);
+    assert.ok(example, mutant.id);
+    assert.equal(evaluatePreMaterializationGuard(example.facts), example.expected, mutant.id);
+    assert.notEqual(mutant.result, example.expected, `${mutant.id} must be killed`);
+  }
 });
 
 test("forbidden-edge mutant is equivalent against an already weakened evaluator", () => {

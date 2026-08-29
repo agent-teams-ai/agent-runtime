@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "campaign": "linux-codex-app-server-static-characterization",
+  "date": "2026-08-29",
+  "scope": {
+    "platform": "Linux 6.8.0-138-generic x86_64 glibc 2.39",
+    "syntheticCodexHomeOnly": true,
+    "providerTurnRun": false,
+    "authenticatedSessionInitialized": false,
+    "realUserProjectsUsed": false,
+    "credentialValuesInspectedOrRetained": false,
+    "lifecycleScriptsEnabled": false
+  },
+  "runtimeClosure": {
+    "codexVersion": "0.150.1",
+    "codexNpmIntegrity": "sha512-knrbhpJH3mEULAVStcZW4F5WEt9MQhBj6KFOonBSIUGTLcHlu9CE7FRmr95E33y94+sWNZSeVBBV/kYvlfgxkQ==",
+    "nativePackageVersion": "0.150.1-linux-x64",
+    "nativePackageIntegrity": "sha512-B3Bu5MF/G9qFhbSMrdyZz9ocknXOo45DnOdWrREJaxWTjiuUO1ogoDR0/ttdc29JRFkbbXs3aC+Td8vIx3X0oA==",
+    "nativeTarget": "x86_64-unknown-linux-musl",
+    "nativeBinarySha256": "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
+    "generatedV2SchemaSha256": "8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3",
+    "generatedV2TypesSha256": "a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338"
+  },
+  "stableV2Surface": {
+    "initialize": true,
+    "threadStart": true,
+    "turnStart": true,
+    "turnInterrupt": true,
+    "turnCompleted": true,
+    "assistantOutputDelta": true,
+    "serverRequests": true,
+    "generatedWithoutExperimentalApis": true
+  },
+  "assertions": {
+    "exactWrapperRevision": true,
+    "exactNativeRevision": true,
+    "exactBinaryDigest": true,
+    "generatedSchemaCaptured": true,
+    "generatedTypesCaptured": true,
+    "behaviorQualified": false
+  }
+}

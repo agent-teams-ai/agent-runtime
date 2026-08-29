@@ -39,6 +39,8 @@
         "adr",
         "catalog",
         "crossAxis",
+        "containedTurnV1Disposition",
+        "containedTurnV1Contract",
         "cases",
         "expected"
       ],
@@ -57,6 +59,12 @@
         },
         "crossAxis": {
           "const": "cross-axis.json"
+        },
+        "containedTurnV1Disposition": {
+          "const": "contained-turn-v1-disposition.json"
+        },
+        "containedTurnV1Contract": {
+          "const": "contained-turn-v1-contract.json"
         },
         "cases": {
           "type": "array",
@@ -438,6 +446,564 @@
         },
         "to": {
           "type": "string"
+        }
+      }
+    },
+    "v1Disposition": {
+      "enum": [
+        "required",
+        "deferred",
+        "not_applicable"
+      ]
+    },
+    "v1DispositionCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "deferred",
+        "notApplicable"
+      ],
+      "properties": {
+        "required": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deferred": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notApplicable": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "v1StateCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "valid",
+        "invalid"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "valid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "containedTurnV1Disposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schemaVersion",
+        "adr",
+        "companionAdr",
+        "requirements",
+        "examples",
+        "stateCategories",
+        "expected"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "./schema.json#/$defs/containedTurnV1Disposition"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "adr": {
+          "const": "ADR-0010"
+        },
+        "companionAdr": {
+          "const": "ADR-0009"
+        },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/v1RequirementDisposition"
+          }
+        },
+        "examples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/v1ExampleDisposition"
+          }
+        },
+        "stateCategories": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/v1StateCategory"
+          }
+        },
+        "expected": {
+          "$ref": "#/$defs/v1DispositionExpected"
+        }
+      }
+    },
+    "v1RequirementDisposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement",
+        "caseId",
+        "disposition",
+        "reason"
+      ],
+      "properties": {
+        "requirement": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 28
+        },
+        "caseId": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "disposition": {
+          "$ref": "#/$defs/v1Disposition"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "v1ExampleDisposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement",
+        "exampleId",
+        "disposition",
+        "reason"
+      ],
+      "properties": {
+        "requirement": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 28
+        },
+        "exampleId": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "disposition": {
+          "$ref": "#/$defs/v1Disposition"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "v1StateCategory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "precedence",
+        "predicate",
+        "disposition",
+        "reason"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/canonicalId"
+        },
+        "precedence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "predicate": {
+          "enum": [
+            "effect_resolution_none",
+            "effect_resolution_indeterminate_or_terminal_outcome_indeterminate",
+            "remaining_state_product"
+          ]
+        },
+        "disposition": {
+          "$ref": "#/$defs/v1Disposition"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "v1DispositionExpected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirementCount",
+        "exampleCount",
+        "stateCount",
+        "requirements",
+        "examples",
+        "states"
+      ],
+      "properties": {
+        "requirementCount": {
+          "const": 28
+        },
+        "exampleCount": {
+          "const": 242
+        },
+        "stateCount": {
+          "const": 48000
+        },
+        "requirements": {
+          "$ref": "#/$defs/v1DispositionCount"
+        },
+        "examples": {
+          "$ref": "#/$defs/v1DispositionCount"
+        },
+        "states": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required",
+            "deferred",
+            "notApplicable"
+          ],
+          "properties": {
+            "required": {
+              "$ref": "#/$defs/v1StateCount"
+            },
+            "deferred": {
+              "$ref": "#/$defs/v1StateCount"
+            },
+            "notApplicable": {
+              "$ref": "#/$defs/v1StateCount"
+            }
+          }
+        }
+      }
+    },
+    "containedTurnV1Contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schemaVersion",
+        "adrs",
+        "repositoryBaseCommit",
+        "foundationInputs",
+        "providers",
+        "adapterCapabilityManifests",
+        "worstCaseResourceScope",
+        "requiredReceiptSet",
+        "containmentExecutionReceiptVersion",
+        "containmentExecutionReceiptBindings",
+        "compositionFixture",
+        "identityMatrix",
+        "lifecycleMatrix",
+        "truthBoundary",
+        "negativeGuard"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "./schema.json#/$defs/containedTurnV1Contract"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "adrs": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["ADR-0009", "ADR-0010"]
+          }
+        },
+        "repositoryBaseCommit": {
+          "const": "3e1b977d9ab6147eb702b62497bd0be62acb8cf7"
+        },
+        "foundationInputs": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/foundationInput"
+          }
+        },
+        "providers": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/providerContract"
+          }
+        },
+        "adapterCapabilityManifests": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/adapterCapabilityManifest"
+          }
+        },
+        "worstCaseResourceScope": {
+          "$ref": "#/$defs/nonEmptyStringMap"
+        },
+        "requiredReceiptSet": {
+          "$ref": "#/$defs/requiredReceiptSet"
+        },
+        "containmentExecutionReceiptVersion": {
+          "const": 1
+        },
+        "containmentExecutionReceiptBindings": {
+          "$ref": "#/$defs/nonEmptyUniqueStrings"
+        },
+        "compositionFixture": {
+          "$ref": "#/$defs/compositionFixture"
+        },
+        "identityMatrix": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/identityMatrixEntry"
+          }
+        },
+        "lifecycleMatrix": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/lifecycleMatrixEntry"
+          }
+        },
+        "truthBoundary": {
+          "$ref": "#/$defs/nonEmptyStringMap"
+        },
+        "negativeGuard": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/negativeGuardExample"
+          }
+        }
+      }
+    },
+    "nonEmptyUniqueStrings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "nonEmptyStringMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "foundationInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pullRequest", "head", "authority", "mappedGuardrails"],
+      "properties": {
+        "pullRequest": {
+          "enum": [22, 27]
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "authority": {
+          "const": "non_authoritative_design_input"
+        },
+        "mappedGuardrails": {
+          "$ref": "#/$defs/nonEmptyUniqueStrings"
+        }
+      }
+    },
+    "providerContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "packageRevision", "qualification"],
+      "properties": {
+        "provider": { "enum": ["codex", "claude", "opencode"] },
+        "packageRevision": { "type": "string", "minLength": 1 },
+        "binaryRevision": { "type": "string", "minLength": 1 },
+        "schemaRevision": { "type": "string", "minLength": 1 },
+        "typescriptRevision": { "type": "string", "minLength": 1 },
+        "packageIntegrity": { "type": "string", "minLength": 1 },
+        "bundledProviderRevision": { "type": "string", "minLength": 1 },
+        "adapterRevision": { "type": "string", "minLength": 1 },
+        "evidenceFixture": { "type": "string", "minLength": 1 },
+        "evidenceFixtureDigest": { "type": "string", "minLength": 1 },
+        "evidencePlatform": { "type": "string", "minLength": 1 },
+        "qualification": {
+          "enum": [
+            "candidate_static_evidence_only",
+            "contract_only_no_production_adapter"
+          ]
+        }
+      }
+    },
+    "adapterCapabilityManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "manifestVersion",
+        "manifestRevision",
+        "providerRevision",
+        "resourceScopeRevision",
+        "effectClass",
+        "effectCardinality",
+        "providerAttemptCardinality",
+        "unknownCapabilityPolicy"
+      ],
+      "properties": {
+        "provider": {
+          "enum": ["codex", "claude", "opencode"]
+        },
+        "manifestVersion": {
+          "const": 1
+        },
+        "manifestRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "providerRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resourceScopeRevision": {
+          "const": "contained-turn-v1-worst-case-scope@1"
+        },
+        "effectClass": {
+          "const": "contained_unmediated_effect"
+        },
+        "effectCardinality": {
+          "const": "one_coarse_effect_per_operation"
+        },
+        "providerAttemptCardinality": {
+          "const": "at_most_one"
+        },
+        "unknownCapabilityPolicy": {
+          "const": "fail_closed"
+        }
+      }
+    },
+    "requiredReceiptSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setVersion", "membershipFrozenAt", "membershipMutation", "satisfaction", "receipts"],
+      "properties": {
+        "setVersion": {
+          "const": "contained-turn-v1-required-receipts@1"
+        },
+        "membershipFrozenAt": {
+          "const": "command_acceptance"
+        },
+        "membershipMutation": {
+          "const": "forbidden"
+        },
+        "satisfaction": {
+          "const": "typed_receipt_or_authority_defined_typed_non_applicability_proof"
+        },
+        "receipts": {
+          "$ref": "#/$defs/nonEmptyUniqueStrings"
+        }
+      }
+    },
+    "compositionFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "factory",
+        "construction",
+        "providerSelection",
+        "providerSelectionFailurePolicy",
+        "dependencySnapshot",
+        "resourcesCreatedAtConstruction",
+        "dependencies",
+        "dependencyObject",
+        "ordinaryCallerSurface",
+        "operations",
+        "detachedFromCompositionMachinery",
+        "hostBinding",
+        "futureModuleAdapterRole",
+        "forbiddenExports",
+        "moduleKitDependency"
+      ],
+      "properties": {
+        "factory": { "const": "direct_pure_di" },
+        "construction": { "const": "synchronous_effect_free_resource_free" },
+        "providerSelection": { "const": "composition_root_before_factory" },
+        "providerSelectionFailurePolicy": { "const": "fail_before_factory_handle_or_effects_on_missing_unknown_duplicate_or_ambiguous_selection" },
+        "dependencySnapshot": { "const": "exact_dependencies_once" },
+        "resourcesCreatedAtConstruction": { "const": false },
+        "dependencies": { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+        "dependencyObject": { "const": "closed_readonly_exact_membership" },
+        "ordinaryCallerSurface": { "const": "trusted_scope_bound_runtime_access_handle" },
+        "operations": { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+        "detachedFromCompositionMachinery": { "const": true },
+        "hostBinding": { "const": "owning_agent_runtime_host_reject_after_disposal" },
+        "futureModuleAdapterRole": { "const": "alternative_outer_composition_calling_same_factory_only" },
+        "forbiddenExports": { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+        "moduleKitDependency": { "const": false }
+      }
+    },
+    "identityMatrixEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "namespace", "mustNotAlias"],
+      "properties": {
+        "identity": { "type": "string", "minLength": 1 },
+        "namespace": { "type": "string", "minLength": 1 },
+        "mustNotAlias": { "$ref": "#/$defs/nonEmptyUniqueStrings" }
+      }
+    },
+    "lifecycleMatrixEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lifecycle", "maximumMeaning", "mustNotMean"],
+      "properties": {
+        "lifecycle": { "type": "string", "minLength": 1 },
+        "maximumMeaning": { "type": "string", "minLength": 1 },
+        "mustNotMean": { "$ref": "#/$defs/nonEmptyUniqueStrings" }
+      }
+    },
+    "negativeGuardExample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "facts", "expected"],
+      "properties": {
+        "id": { "$ref": "#/$defs/canonicalId" },
+        "facts": { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+        "expected": {
+          "enum": [
+            "reject_before_operation",
+            "fence_before_dispatch",
+            "post_dispatch_reconcile_required",
+            "insufficient_negative_acceptance_evidence",
+            "reject_guard_authority_mismatch"
+          ]
         }
       }
     },
