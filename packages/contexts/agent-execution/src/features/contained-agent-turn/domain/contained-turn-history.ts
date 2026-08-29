@@ -40,6 +40,7 @@ const immutableProjection = (operation: ContainedTurnKernelOperation): string =>
     credentialBindingDigest: operation.providerAccessSnapshot.credentialBindingDigest,
     credentialBindingRef: operation.providerAccessSnapshot.credentialBindingRef,
     credentialGeneration: operation.providerAccessSnapshot.credentialGeneration,
+    ownerAuthorityDigest: operation.providerAccessSnapshot.ownerAuthorityDigest,
     projectId: operation.providerAccessSnapshot.projectId,
     provider: operation.providerAccessSnapshot.provider,
     providerAccountRef: operation.providerAccessSnapshot.providerAccountRef,

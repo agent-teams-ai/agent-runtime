@@ -7,7 +7,7 @@ import { afterEach, test } from "node:test";
 import {
   createNodeContainedTurnArtifacts,
   createNodeContainedTurnWorkspace,
-} from "../dist/composition.js";
+} from "../dist/legacy-compatibility.js";
 
 const disposableRoots: string[] = [];
 

@@ -29,7 +29,7 @@ export const createContainedTurnProviderAccessFeature = (
         try {
           return resolveResultToContract(await resolve.execute(resolveCommandFromContract(input)));
         } catch {
-          return Object.freeze({ kind: "unavailable" as const, reason: "indeterminate" as const });
+          return Object.freeze({ evidence: Object.freeze({ authorityDigest: "authority-observation:indeterminate", proofRef: "observation:indeterminate" }), kind: "unavailable" as const, reason: "indeterminate" as const });
         }
       },
     }),
@@ -38,7 +38,7 @@ export const createContainedTurnProviderAccessFeature = (
         try {
           return revalidateResultToContract(await revalidate.execute(revalidateCommandFromContract(input)));
         } catch {
-          return Object.freeze({ kind: "rejected" as const, reason: "indeterminate" as const });
+          return Object.freeze({ evidence: Object.freeze({ authorityDigest: "authority-observation:indeterminate", proofRef: "observation:indeterminate" }), kind: "rejected" as const, reason: "indeterminate" as const });
         }
       },
     }),

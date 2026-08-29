@@ -5,15 +5,9 @@ import { Pool } from "pg";
 
 import {
   applyContainedTurnPostgresSchema,
-  createContainedTurnFeature,
   PostgresContainedTurnOperationStore,
-  type ContainedTurnArtifactPort,
-  type ContainedTurnPostgresIdentitySource,
-  type ContainedTurnProviderPort,
-  type ContainedTurnSecurityPort,
-  type ContainedTurnWorkspacePort,
-  type ProviderProcessCustodyPort,
-} from "../dist/composition.js";
+} from "../dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
+import type { ContainedTurnPostgresIdentitySource } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 
 const connectionString = process.env.AGENT_RUNTIME_TEST_POSTGRES_URL;
 if (connectionString === undefined) {
@@ -119,92 +113,6 @@ test("a restart preserves one dispatch winner and exact cutoff evidence", async 
     kind: "closed",
     receiptRef: "cutoff:postgres",
   });
-});
-
-const createFeature = (executeCounter: { value: number }) => {
-  const store = createStore();
-  const security: ContainedTurnSecurityPort = {
-    async authorize() {
-      return { authorityRevision: "authority:postgres", decisionDigest: "decision:postgres", kind: "allowed" };
-    },
-    async revalidate() {
-      return { kind: "allowed", proofRef: "cutoff:postgres" };
-    },
-  };
-  const workspace: ContainedTurnWorkspacePort = {
-    async close(workspaceRef) {
-      return { receiptRef: `workspace-close:${workspaceRef}` };
-    },
-    async create(input) {
-      return { workspaceRef: `workspace:${input.operationId}` };
-    },
-    async quarantine() {},
-  };
-  const artifacts: ContainedTurnArtifactPort = {
-    async seal(input) {
-      return {
-        manifestReceiptRef: `manifest-receipt:${input.operationId}`,
-        manifestRef: `manifest:${input.operationId}`,
-        resultReceiptRef: `result-receipt:${input.operationId}`,
-        resultRef: `result:${input.operationId}`,
-      };
-    },
-  };
-  const custody: ProviderProcessCustodyPort = {
-    async open(input) {
-      return { custodyRef: `custody:${input.attemptId}` };
-    },
-    async requestContainment(input) {
-      return { kind: "contained", receiptRef: `containment:${input.attemptId}` };
-    },
-  };
-  const provider: ContainedTurnProviderPort = {
-    manifest: Object.freeze({
-      effectClass: "contained_unmediated_effect",
-      providerBinding: binding,
-      supportedModes: Object.freeze(["analysis", "workspace-write"]),
-    }),
-    async execute(input) {
-      executeCounter.value += 1;
-      await input.emit({ cursor: 0, kind: "assistant", text: "durable output" });
-      return {
-        acceptanceReceiptRef: `acceptance:${input.attemptId}`,
-        effectDisposition: "committed",
-        effectReceiptRef: `effect:${input.attemptId}`,
-        executionReceiptRef: `execution:${input.attemptId}`,
-        kind: "completed",
-        outcome: "succeeded",
-        outputDrainReceiptRef: `output-drain:${input.attemptId}`,
-      };
-    },
-  };
-  return { feature: createContainedTurnFeature({ artifacts, custody, operationStore: store, provider, security, workspace }), store };
-};
-
-test("a terminal turn survives store and feature restart without a second provider attempt", async () => {
-  const counter = { value: 0 };
-  const first = createFeature(counter);
-  const input = {
-    commandId: "command:postgres",
-    expectedProvider: "codex" as const,
-    intent: { mode: "analysis" as const, prompt: "durable execution" },
-    scope: { projectId: "project:postgres", tenantId: "tenant:one" },
-  };
-  const completed = await first.feature.submit.execute(input);
-  assert.equal(completed.status, "observed");
-  if (completed.status !== "observed") {return;}
-  assert.equal(completed.turn.status, "succeeded");
-  const restarted = createFeature(counter);
-  const observed = await restarted.feature.observe.execute({ operationId: completed.turn.operationId, scope: input.scope });
-  const replayed = await restarted.feature.submit.execute(input);
-  assert.equal(observed.status, "observed");
-  assert.equal(replayed.status, "observed");
-  assert.equal(counter.value, 1);
-  const receiptCount = await pool.query<{ count: string }>(
-    "SELECT count(*)::text AS count FROM agent_execution.contained_turn_receipt_v1 WHERE operation_id = $1",
-    [completed.turn.operationId],
-  );
-  assert.equal(receiptCount.rows[0]?.count, "12");
 });
 
 test("projection or state corruption fails closed", async () => {

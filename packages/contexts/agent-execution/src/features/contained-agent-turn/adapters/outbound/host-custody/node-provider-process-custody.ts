@@ -9,7 +9,7 @@ import { openStablePath } from "@agent-teams/filesystem-custody";
 import type {
   ContainedTurnCustodyHandle,
   ProviderProcessCustodyPort,
-} from "../../../application/ports/outbound/contained-turn-ports.js";
+} from "../legacy/legacy-contained-turn-ports.js";
 import {
   HostCustodyUnsupportedError,
   type CustodiedProviderProcess,

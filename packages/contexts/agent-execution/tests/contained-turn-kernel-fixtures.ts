@@ -46,6 +46,7 @@ export const providerAccessSnapshot: ContainedTurnProviderAccessSnapshot = Objec
   credentialBindingDigest: digestContainedTurnCanonicalValue({ binding: "opaque:1" }),
   credentialBindingRef: "credential-binding:1",
   credentialGeneration: 1,
+  ownerAuthorityDigest: "authority-digest:one",
   projectId: "project:kernel",
   provider: "codex",
   providerAccountRef: "account:1",

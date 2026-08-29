@@ -41,6 +41,18 @@ const resolve = async (
   scope: { projectId, tenantId },
 });
 
+const unavailable = (reason: string) => ({
+  evidence: { authorityDigest: `authority-observation:${reason}`, proofRef: `observation:${reason}` },
+  kind: "unavailable",
+  reason,
+});
+
+const rejectedOutcome = (reason: string) => ({
+  evidence: { authorityDigest: `authority-observation:${reason}`, proofRef: `observation:${reason}` },
+  kind: "rejected",
+  reason,
+});
+
 const resolvedBinding = async (
   authorities: readonly StaticProviderAccessAuthority[] = [binding()],
 ): Promise<ContainedTurnProviderAccessBinding> => {
@@ -68,11 +80,9 @@ test("resolves and exactly replays one qualified owner-fact snapshot", async () 
 });
 
 test("exact lookup never falls back across tenant, project, or provider", async () => {
-  assert.deepEqual(await resolve([binding()], "claude"), { kind: "unavailable", reason: "not_found" });
-  assert.deepEqual(await resolve([binding()], "codex", "project:other"), { kind: "unavailable", reason: "not_found" });
-  assert.deepEqual(await resolve([binding()], "codex", "project:one", "tenant:other"), {
-    kind: "unavailable", reason: "not_found",
-  });
+  assert.deepEqual(await resolve([binding()], "claude"), unavailable("not_found"));
+  assert.deepEqual(await resolve([binding()], "codex", "project:other"), unavailable("not_found"));
+  assert.deepEqual(await resolve([binding()], "codex", "project:one", "tenant:other"), unavailable("not_found"));
 });
 
 test("delimiter-like scope values coexist without key collisions", async () => {
@@ -114,15 +124,13 @@ test("concurrent repository reads return detached immutable identities", async (
 });
 
 test("resolve reports revoked, unavailable, and indeterminate observations", async () => {
-  assert.deepEqual(await resolve([binding({ revocation: "revoked" })]), { kind: "unavailable", reason: "revoked" });
-  assert.deepEqual(await resolve([binding({ availability: "unavailable" })]), {
-    kind: "unavailable", reason: "unavailable",
-  });
+  assert.deepEqual(await resolve([binding({ revocation: "revoked" })]), unavailable("revoked"));
+  assert.deepEqual(await resolve([binding({ availability: "unavailable" })]), unavailable("unavailable"));
   assert.deepEqual(await resolve([{
     kind: "indeterminate",
     provider: "codex",
     scope: { projectId: "project:one", tenantId: "tenant:one" },
-  }]), { kind: "unavailable", reason: "indeterminate" });
+  }]), unavailable("indeterminate"));
 });
 
 test("revalidation uses fresh canonical authority and never returns expected caller data", async () => {
@@ -174,7 +182,7 @@ test("one feature observes changed repository authority again during revalidatio
     binding: expected,
     provider: "codex",
     scope: { projectId: "project:one", tenantId: "tenant:one" },
-  }), { kind: "rejected", reason: "revoked" });
+  }), rejectedOutcome("revoked"));
   assert.equal(observations, 2);
 });
 
@@ -192,12 +200,12 @@ test("untrusted repository scope and provider mismatches fail closed", async () 
     assert.deepEqual(await feature.resolve.execute({
       provider: "codex",
       scope: { projectId: "project:one", tenantId: "tenant:one" },
-    }), { kind: "unavailable", reason: "indeterminate" });
+    }), unavailable("indeterminate"));
     assert.deepEqual(await feature.revalidate.execute({
       binding: expected,
       provider: "codex",
       scope: { projectId: "project:one", tenantId: "tenant:one" },
-    }), { kind: "rejected", reason });
+    }), rejectedOutcome(reason));
   }
 });
 
@@ -220,12 +228,12 @@ test("malformed, oversized, and NUL-bearing repository observations are indeterm
     assert.deepEqual(await feature.resolve.execute({
       provider: "codex",
       scope: { projectId: "project:one", tenantId: "tenant:one" },
-    }), { kind: "unavailable", reason: "indeterminate" });
+    }), unavailable("indeterminate"));
     assert.deepEqual(await feature.revalidate.execute({
       binding: expected,
       provider: "codex",
       scope: { projectId: "project:one", tenantId: "tenant:one" },
-    }), { kind: "rejected", reason: "indeterminate" });
+    }), rejectedOutcome("indeterminate"));
   }
 });
 
@@ -250,7 +258,7 @@ test("revalidation rejects current repository digest-only drift", async () => {
     binding: expected,
     provider: "codex",
     scope: { projectId: "project:one", tenantId: "tenant:one" },
-  }), { kind: "rejected", reason: "credential_changed" });
+  }), rejectedOutcome("credential_changed"));
 });
 
 test("revalidation rejects caller scope, provider, and digest mismatches", async () => {
@@ -260,22 +268,22 @@ test("revalidation rejects caller scope, provider, and digest mismatches", async
     binding: expected,
     provider: "codex",
     scope: { projectId: "project:other", tenantId: "tenant:one" },
-  }), { kind: "rejected", reason: "scope_mismatch" });
+  }), rejectedOutcome("scope_mismatch"));
   assert.deepEqual(await feature.revalidate.execute({
     binding: expected,
     provider: "codex",
     scope: { projectId: "project:one", tenantId: "tenant:other" },
-  }), { kind: "rejected", reason: "scope_mismatch" });
+  }), rejectedOutcome("scope_mismatch"));
   assert.deepEqual(await feature.revalidate.execute({
     binding: expected,
     provider: "claude",
     scope: { projectId: "project:one", tenantId: "tenant:one" },
-  }), { kind: "rejected", reason: "provider_mismatch" });
+  }), rejectedOutcome("provider_mismatch"));
   assert.deepEqual(await feature.revalidate.execute({
     binding: { ...expected, credentialBindingDigest: "sha256:caller-supplied-digest" },
     provider: "codex",
     scope: { projectId: "project:one", tenantId: "tenant:one" },
-  }), { kind: "rejected", reason: "credential_changed" });
+  }), rejectedOutcome("credential_changed"));
 });
 
 test("revalidation has typed changed, rotated, revoked, unavailable, missing, and indeterminate outcomes", async () => {
@@ -298,7 +306,7 @@ test("revalidation has typed changed, rotated, revoked, unavailable, missing, an
       binding: expected,
       provider: "codex",
       scope: { projectId: "project:one", tenantId: "tenant:one" },
-    }), { kind: "rejected", reason });
+    }), rejectedOutcome(reason));
   }
 });
 
@@ -332,7 +340,7 @@ test("primitive-string validation rejects boxed, aggregate, proxy, and accessor-
     assert.deepEqual(await feature.resolve.execute({
       provider: "codex",
       scope: { projectId: "project:one", tenantId: "tenant:one" },
-    }), { kind: "unavailable", reason: "indeterminate" });
+    }), unavailable("indeterminate"));
   }
   assert.equal(accidentalAccess, false);
 });
@@ -351,16 +359,10 @@ test("public commands fail closed for null, primitive, boxed, proxy, and throwin
   const throwing = Object.defineProperty({}, "projectId", { get() { throw new Error("boom"); } });
   const values: readonly unknown[] = [null, undefined, 1, "scope", [], new String("scope"), new Proxy({}, { get() { throw new Error("boom"); } }), throwing];
   for (const scope of values) {
-    assert.deepEqual(await feature.resolve.execute({ provider: "codex", scope } as never), {
-      kind: "unavailable", reason: "indeterminate",
-    });
-    assert.deepEqual(await feature.revalidate.execute({ binding: expected, provider: "codex", scope } as never), {
-      kind: "rejected", reason: "indeterminate",
-    });
+    assert.deepEqual(await feature.resolve.execute({ provider: "codex", scope } as never), unavailable("indeterminate"));
+    assert.deepEqual(await feature.revalidate.execute({ binding: expected, provider: "codex", scope } as never), rejectedOutcome("indeterminate"));
   }
-  assert.deepEqual(await feature.resolve.execute({ provider: new String("codex"), scope: {} } as never), {
-    kind: "unavailable", reason: "indeterminate",
-  });
+  assert.deepEqual(await feature.resolve.execute({ provider: new String("codex"), scope: {} } as never), unavailable("indeterminate"));
 });
 
 test("null, primitive, missing, throwing, and rejected repository observations fail closed", async () => {
@@ -376,24 +378,24 @@ test("null, primitive, missing, throwing, and rejected repository observations f
     } as never);
     assert.deepEqual(await feature.resolve.execute({
       provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
-    }), { kind: "unavailable", reason: "indeterminate" });
+    }), unavailable("indeterminate"));
     assert.deepEqual(await feature.revalidate.execute({
       binding: expected,
       provider: "codex",
       scope: { projectId: "project:one", tenantId: "tenant:one" },
-    }), { kind: "rejected", reason: "indeterminate" });
+    }), rejectedOutcome("indeterminate"));
   }
   const rejected = createContainedTurnProviderAccessFeature({
     bindingRepository: { async observeExact() { throw new Error("repository unavailable"); } },
   });
   assert.deepEqual(await rejected.resolve.execute({
     provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
-  }), { kind: "unavailable", reason: "indeterminate" });
+  }), unavailable("indeterminate"));
   assert.deepEqual(await rejected.revalidate.execute({
     binding: expected,
     provider: "codex",
     scope: { projectId: "project:one", tenantId: "tenant:one" },
-  }), { kind: "rejected", reason: "indeterminate" });
+  }), rejectedOutcome("indeterminate"));
 });
 
 test("canonical snapshots read stateful repository facts exactly once", async () => {

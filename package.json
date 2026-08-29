@@ -67,6 +67,7 @@
     "spike:rust-boundaries:client": "node --test --test-concurrency=1 experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
     "spike:rust-boundaries:evidence": "node --test experiments/runtime-profile-behavior/test/rust-system-boundary-evidence.test.ts",
     "test": "node --test --test-concurrency=1 experiments/runtime-profile-behavior/test/*.test.ts experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
+    "test:contained-turn:acceptance": "pnpm --filter @agent-teams/agent-execution run test:contained-turn:acceptance",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.synthetic-oracle.json --noEmit --pretty false"
   },
   "dependencies": {

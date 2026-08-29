@@ -8,7 +8,7 @@ import type {
   ClaimContainedTurnDispatchOutcome,
   CompareAndSetContainedTurnOutcome,
   ContainedTurnOperationStore,
-} from "../../../application/ports/outbound/contained-turn-ports.js";
+} from "../legacy/legacy-contained-turn-ports.js";
 import {
   applyContainedTurnMutation,
   createAcceptedContainedTurnOperation,

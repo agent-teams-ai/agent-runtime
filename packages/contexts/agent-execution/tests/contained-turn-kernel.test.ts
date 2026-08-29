@@ -69,7 +69,7 @@ test("freezes the exact seven consumer-owned dependencies and separate provider 
     "adapterRevision", "binaryRevision", "capabilityManifestRevision", "provider",
   ]);
   assert.deepEqual(Object.keys(providerAccessSnapshot).toSorted(), [
-    "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "projectId",
+    "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "ownerAuthorityDigest", "projectId",
     "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId",
   ]);
   assert.equal(Object.keys(providerAccessSnapshot).some(key => /path|secret|token|password/iu.test(key)), false);

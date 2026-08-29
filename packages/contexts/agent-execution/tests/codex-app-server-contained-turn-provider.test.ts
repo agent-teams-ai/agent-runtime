@@ -5,7 +5,7 @@ import {
   CodexAppServerContainedTurnProvider,
   createCodexAppServerLaunchPlan,
   type CustodiedProviderProcess,
-} from "../dist/composition.js";
+} from "../dist/legacy-compatibility.js";
 
 type Message = Record<string, unknown>;
 

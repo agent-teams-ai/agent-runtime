@@ -9,7 +9,7 @@ import {
   createStaticHostCustodyLaunchPlanResolver,
   HostCustodyUnsupportedError,
   NodeProviderProcessCustody,
-} from "../dist/composition.js";
+} from "../dist/legacy-compatibility.js";
 
 const disposableRoots: string[] = [];
 const binding = Object.freeze({

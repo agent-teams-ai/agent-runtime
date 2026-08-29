@@ -125,6 +125,7 @@ export type ContainedTurnKernelMutation =
   | { readonly kind: "record_containment"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "containment" }> }
   | { readonly kind: "finalize"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "terminal_truth" }> }
   | { readonly kind: "record_ambiguity"; readonly evidenceId: ContainedTurnEvidenceId }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "record_reconciliation_debt"; readonly source: "artifact" | "containment" | "store_commit" | "workspace" }
   | { readonly kind: "record_process_start"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }> }
   | { readonly kind: "record_process_no_start"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_no_start" }> }
   | {
@@ -156,6 +157,7 @@ const validateMutationShape = (mutation: ContainedTurnKernelMutation): void => {
     prevent_dispatch: ["containmentProof", "cutoffProof", "effectProof", "executionProof", "hostCustodyProof", "kind", "noDispatchProof", "outputProof", "providerProof"],
     publish_result: ["kind", "proof", "resultRef"],
     record_ambiguity: ["evidenceId", "kind"],
+    record_reconciliation_debt: ["evidenceId", "kind", "source"],
     record_containment: ["kind", "proof"],
     record_process_no_start: ["kind", "proof"],
     record_process_start: ["kind", "proof"],
@@ -213,7 +215,12 @@ export const mutateContainedTurnOperation = (
         dispatch: { kind: "prevented", noDispatchProofId: mutation.noDispatchProof.proofId },
         effect: { disposition: "not_committed", kind: "resolved", proofId: mutation.effectProof.proofId },
         output: { chunks: operation.output.chunks, fence: { finalCursor: 0, kind: "fenced", proofId: mutation.outputProof.proofId } },
-        proofs: [...operation.proofs, mutation.cutoffProof, mutation.noDispatchProof, mutation.hostCustodyProof, mutation.executionProof, mutation.providerProof, mutation.outputProof, mutation.containmentProof, mutation.effectProof],
+        proofs: [
+          ...operation.proofs,
+          ...(operation.proofs.some(proof => proof.proofId === mutation.cutoffProof.proofId) ? [] : [mutation.cutoffProof]),
+          mutation.noDispatchProof, mutation.hostCustodyProof, mutation.executionProof, mutation.providerProof,
+          mutation.outputProof, mutation.containmentProof, mutation.effectProof,
+        ],
         providerAcceptance: { kind: "not_accepted", proofId: mutation.providerProof.proofId },
         providerExecution: { kind: "closed", outcome: operation.cancellation.kind === "requested" ? "cancelled" : "failed", proofId: mutation.executionProof.proofId },
         revision: operation.revision + 1,
@@ -249,7 +256,7 @@ export const mutateContainedTurnOperation = (
       candidate = { ...operation, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
       break;
     case "record_containment":
-      invariant(operation.containment.kind === "pending" && operation.output.fence.kind === "fenced" && operation.artifactManifestRef !== undefined, "containment closure follows exact execution, drain, and artifact evidence");
+      invariant(operation.containment.kind === "pending", "containment closure records independently exactly once");
       candidate = { ...operation, containment: { kind: "contained", proofId: mutation.proof.proofId }, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
       break;
     case "finalize": {
@@ -263,12 +270,38 @@ export const mutateContainedTurnOperation = (
       invariant(operation.dispatch.kind === "claimed", "provider ambiguity requires an existing dispatch claim");
       candidate = {
         ...operation,
-        containment: { evidenceId: mutation.evidenceId, kind: "uncertain" },
+        containment: operation.containment.kind === "uncertain"
+          ? operation.containment
+          : { evidenceId: mutation.evidenceId, kind: "uncertain" },
         effect: { evidenceId: mutation.evidenceId, kind: "ambiguous" },
         output: { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced" } },
         providerExecution: { evidenceId: mutation.evidenceId, kind: "unknown" },
         providerAcceptance: { evidenceId: mutation.evidenceId, kind: "unknown" },
-        reconciliation: { evidenceIds: [mutation.evidenceId], kind: "required" },
+        reconciliation: {
+          evidenceIds: operation.reconciliation.kind === "required"
+            ? [...new Set([...operation.reconciliation.evidenceIds, mutation.evidenceId])]
+            : [mutation.evidenceId],
+          kind: "required",
+        },
+        revision: operation.revision + 1,
+      };
+      break;
+    case "record_reconciliation_debt":
+      invariant(operation.terminal.kind === "open", "reconciliation debt cannot rewrite terminal truth");
+      candidate = {
+        ...operation,
+        containment: mutation.source === "containment" && operation.containment.kind === "pending"
+          ? { evidenceId: mutation.evidenceId, kind: "uncertain" }
+          : operation.containment,
+        output: operation.output.fence.kind === "open"
+          ? { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced" } }
+          : operation.output,
+        reconciliation: {
+          evidenceIds: operation.reconciliation.kind === "required"
+            ? [...new Set([...operation.reconciliation.evidenceIds, mutation.evidenceId])]
+            : [mutation.evidenceId],
+          kind: "required",
+        },
         revision: operation.revision + 1,
       };
       break;

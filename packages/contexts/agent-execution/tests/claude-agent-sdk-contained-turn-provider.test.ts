@@ -8,7 +8,7 @@ import {
   createClaudeAgentSdkLaunchPlan,
   type CustodiedProviderProcess,
   type CustodiedSdkProcess,
-} from "../dist/composition.js";
+} from "../dist/legacy-compatibility.js";
 
 const workspaceRef = "/tmp/agent-runtime-claude-contained-turn";
 const executablePath = "/synthetic/claude";

@@ -37,6 +37,16 @@ const bindingToContract = (
   });
 };
 
+const bindingEvidence = (binding: ContainedTurnProviderAccessBinding) => Object.freeze({
+  authorityDigest: binding.credentialBindingDigest,
+  proofRef: `binding:${binding.accessRef}:revision:${binding.revision}`,
+});
+
+const rejectionEvidence = (reason: string) => Object.freeze({
+  authorityDigest: `authority-observation:${reason}`,
+  proofRef: `observation:${reason}`,
+});
+
 export const resolveCommandFromContract = (input: {
   readonly provider: ProviderAccessProvider;
   readonly scope: ProviderAccessScope;
@@ -47,9 +57,13 @@ export const resolveCommandFromContract = (input: {
 
 export const resolveResultToContract = (
   result: ResolveProviderAccessResult,
-): ResolveContainedTurnProviderAccessOutcome => result.kind === "resolved"
-  ? Object.freeze({ binding: bindingToContract(result.binding), kind: "resolved" })
-  : Object.freeze({ kind: "unavailable", reason: result.reason });
+): ResolveContainedTurnProviderAccessOutcome => {
+  if (result.kind !== "resolved") {
+    return Object.freeze({ evidence: rejectionEvidence(result.reason), kind: "unavailable", reason: result.reason });
+  }
+  const binding = bindingToContract(result.binding);
+  return Object.freeze({ binding, evidence: bindingEvidence(binding), kind: "resolved" });
+};
 
 export const revalidateCommandFromContract = (input: {
   readonly binding: ContainedTurnProviderAccessBinding;
@@ -67,6 +81,10 @@ export const revalidateCommandFromContract = (input: {
 
 export const revalidateResultToContract = (
   result: RevalidateProviderAccessResult,
-): RevalidateContainedTurnProviderAccessOutcome => result.kind === "valid"
-  ? Object.freeze({ binding: bindingToContract(result.binding), kind: "valid" })
-  : Object.freeze({ kind: "rejected", reason: result.reason });
+): RevalidateContainedTurnProviderAccessOutcome => {
+  if (result.kind !== "valid") {
+    return Object.freeze({ evidence: rejectionEvidence(result.reason), kind: "rejected", reason: result.reason });
+  }
+  const binding = bindingToContract(result.binding);
+  return Object.freeze({ binding, evidence: bindingEvidence(binding), kind: "valid" });
+};

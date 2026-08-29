@@ -5,7 +5,7 @@ import type {
   ContainedTurnAdapterCapabilityManifest,
   ContainedTurnProviderExecutionOutcome,
   ContainedTurnProviderPort,
-} from "../../../application/ports/outbound/contained-turn-ports.js";
+} from "../legacy/legacy-contained-turn-ports.js";
 import {
   claudeAgentSdkTools,
   createClaudeAgentSdkEnvironment,

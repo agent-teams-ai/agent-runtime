@@ -4,7 +4,7 @@ import { isAbsolute, join, resolve } from "node:path";
 
 import { openStablePath } from "@agent-teams/filesystem-custody";
 
-import type { ContainedTurnArtifactPort } from "../../../application/ports/outbound/contained-turn-ports.js";
+import type { ContainedTurnArtifactPort } from "../legacy/legacy-contained-turn-ports.js";
 import {
   ensurePrivateDirectory,
   fsyncDirectory,

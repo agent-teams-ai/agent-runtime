@@ -92,6 +92,7 @@ const validateAuthorityReferences = (operation: ContainedTurnKernelOperation): v
     ["credentialBindingRef", operation.providerAccessSnapshot.credentialBindingRef],
     ["manifestRevision", operation.capabilityManifest.manifestRevision],
     ["operationAuthorityRevision", operation.acceptedAuthorityVector.operationAuthorityRevision],
+    ["ownerAuthorityDigest", operation.providerAccessSnapshot.ownerAuthorityDigest],
     ["projectId", operation.providerAccessSnapshot.projectId],
     ["providerAccountRef", operation.providerAccessSnapshot.providerAccountRef],
     ["providerRouteRef", operation.providerAccessSnapshot.providerRouteRef],
@@ -185,6 +186,7 @@ const validateAuthorityBindings = (candidate: ContainedTurnKernelOperation): voi
       candidate.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingDigest === candidate.providerAccessSnapshot.credentialBindingDigest &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingRef === candidate.providerAccessSnapshot.credentialBindingRef &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.credentialGeneration === candidate.providerAccessSnapshot.credentialGeneration &&
+      candidate.acceptedAuthorityVector.providerAccessSnapshot.ownerAuthorityDigest === candidate.providerAccessSnapshot.ownerAuthorityDigest &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.projectId === candidate.providerAccessSnapshot.projectId &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.provider === candidate.providerAccessSnapshot.provider &&
       candidate.acceptedAuthorityVector.providerAccessSnapshot.providerAccountRef === candidate.providerAccessSnapshot.providerAccountRef &&

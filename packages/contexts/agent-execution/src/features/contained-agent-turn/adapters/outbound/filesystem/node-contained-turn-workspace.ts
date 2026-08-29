@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, readdir, rename } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
-import type { ContainedTurnWorkspacePort } from "../../../application/ports/outbound/contained-turn-ports.js";
+import type { ContainedTurnWorkspacePort } from "../legacy/legacy-contained-turn-ports.js";
 import {
   assertPrivateDirectory,
   ensurePrivateDirectory,

@@ -2,6 +2,7 @@ export type {
   ContainedTurnProviderAccessBinding,
   ContainedTurnProviderAccessFeatureApi,
   ProviderAccessProvider,
+  ProviderAccessAuthorityEvidence,
   ProviderAccessScope,
   ProviderAccessUnavailableReason,
   RevalidateContainedTurnProviderAccess,

@@ -31,6 +31,7 @@ export interface ContainedTurnProviderAccessSnapshot {
   readonly credentialBindingDigest: ContainedTurnCanonicalDigest;
   readonly credentialBindingRef: string;
   readonly credentialGeneration: number;
+  readonly ownerAuthorityDigest: string;
   readonly projectId: string;
   readonly provider: ContainedTurnProvider;
   readonly providerAccountRef: string;
@@ -108,7 +109,7 @@ export const validateContainedTurnAuthorityShape = (input: {
     snapshot,
     [
       "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration",
-      "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId",
+      "ownerAuthorityDigest", "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId",
     ],
   );
   assertExactKeys(
@@ -144,6 +145,7 @@ export const containedTurnAuthorityVectorDigest = (
     credentialBindingDigest: vector.providerAccessSnapshot.credentialBindingDigest,
     credentialBindingRef: vector.providerAccessSnapshot.credentialBindingRef,
     credentialGeneration: vector.providerAccessSnapshot.credentialGeneration,
+    ownerAuthorityDigest: vector.providerAccessSnapshot.ownerAuthorityDigest,
     projectId: vector.providerAccessSnapshot.projectId,
     provider: vector.providerAccessSnapshot.provider,
     providerAccountRef: vector.providerAccessSnapshot.providerAccountRef,
@@ -163,6 +165,7 @@ export const containedTurnProviderAccessSnapshotDigest = (
   credentialBindingDigest: snapshot.credentialBindingDigest,
   credentialBindingRef: snapshot.credentialBindingRef,
   credentialGeneration: snapshot.credentialGeneration,
+  ownerAuthorityDigest: snapshot.ownerAuthorityDigest,
   projectId: snapshot.projectId,
   provider: snapshot.provider,
   providerAccountRef: snapshot.providerAccountRef,

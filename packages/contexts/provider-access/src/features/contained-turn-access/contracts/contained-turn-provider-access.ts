@@ -19,6 +19,12 @@ export interface ContainedTurnProviderAccessBinding {
   readonly tenantId: string;
 }
 
+/** Opaque Provider Access-owned evidence; consumers preserve it through their ACL. */
+export interface ProviderAccessAuthorityEvidence {
+  readonly authorityDigest: string;
+  readonly proofRef: string;
+}
+
 export type ProviderAccessUnavailableReason =
   | "indeterminate"
   | "not_found"
@@ -26,8 +32,8 @@ export type ProviderAccessUnavailableReason =
   | "unavailable";
 
 export type ResolveContainedTurnProviderAccessOutcome =
-  | { readonly binding: ContainedTurnProviderAccessBinding; readonly kind: "resolved" }
-  | { readonly kind: "unavailable"; readonly reason: ProviderAccessUnavailableReason };
+  | { readonly binding: ContainedTurnProviderAccessBinding; readonly evidence: ProviderAccessAuthorityEvidence; readonly kind: "resolved" }
+  | { readonly evidence: ProviderAccessAuthorityEvidence; readonly kind: "unavailable"; readonly reason: ProviderAccessUnavailableReason };
 
 export interface ResolveContainedTurnProviderAccessInput {
   readonly provider: ProviderAccessProvider;
@@ -50,8 +56,8 @@ export type RevalidateContainedTurnProviderAccessRejection =
   | "scope_mismatch";
 
 export type RevalidateContainedTurnProviderAccessOutcome =
-  | { readonly binding: ContainedTurnProviderAccessBinding; readonly kind: "valid" }
-  | { readonly kind: "rejected"; readonly reason: RevalidateContainedTurnProviderAccessRejection };
+  | { readonly binding: ContainedTurnProviderAccessBinding; readonly evidence: ProviderAccessAuthorityEvidence; readonly kind: "valid" }
+  | { readonly evidence: ProviderAccessAuthorityEvidence; readonly kind: "rejected"; readonly reason: RevalidateContainedTurnProviderAccessRejection };
 
 export interface RevalidateContainedTurnProviderAccessInput {
   readonly binding: ContainedTurnProviderAccessBinding;
