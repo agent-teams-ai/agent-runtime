@@ -1,16 +1,11 @@
 {
   "name": "session-capabilities",
+  "provenance": "synthetic_normalized_acp_v1_shape",
   "response": {
     "protocolVersion": 1,
     "agentCapabilities": {
-      "session": { "new": true, "list": true, "resume": true, "close": true }
+      "loadSession": true,
+      "sessionCapabilities": { "list": {}, "resume": {}, "close": {}, "fork": {} }
     }
-  },
-  "expected": { "new": true, "list": true, "resume": true, "close": true },
-  "results": {
-    "new": { "sessionId": "fixture-session" },
-    "list": { "sessions": [{ "sessionId": "fixture-session", "cwd": "/fixture" }] },
-    "resume": {},
-    "close": {}
   }
 }

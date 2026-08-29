@@ -1,9 +1,10 @@
 {
   "name": "v2-to-v1-negotiation",
+  "provenance": "synthetic_normalized_acp_v1_shape",
   "requestedVersion": 2,
   "response": {
     "protocolVersion": 1,
-    "agentInfo": { "name": "OpenCode", "version": "1.18.25" },
-    "agentCapabilities": { "session": { "new": true } }
+    "agentInfo": { "name": "OpenCodeFixture", "version": "fixture-v1" },
+    "agentCapabilities": {}
   }
 }

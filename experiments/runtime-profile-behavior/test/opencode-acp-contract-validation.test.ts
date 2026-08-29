@@ -1,247 +1,313 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import test from "node:test";
 
+import { ClientApp } from "@agentclientprotocol/sdk";
+
 import {
-  AcpWireClient,
-  AcpWireProtocolError,
-  AcpWireTransportError,
-  parseInitializeResult,
-  type AcpWireScheduler,
-} from "../src/features/acp-compatibility/acp-wire.ts";
-import {
-  classifyOpenCodeCallback,
-  classifyOpenCodeCancellation,
-  classifyOpenCodeNotification,
-  mapOpenCodeCapabilities,
-  OPENCODE_ACP_REQUEST_TIMEOUT_DEFAULT_MS,
-  readOpenCodeAcpRequestTimeoutMs,
-  requireSupportedOpenCodeCapability,
+  attachOpenCodeClientToCustodiedStreams,
+  createOpenCodeClientApp,
+  observeOpenCodeCancellation,
+  observeOpenCodeCapabilities,
+  observeOpenCodeNegotiation,
+  observeOpenCodePermission,
+  observeOpenCodeToolUpdate,
+  OpenCodeValidationError,
+  requireOpenCodeCapability,
 } from "../src/features/acp-compatibility/opencode-acp-validation.ts";
 
-const fixtureRoot = join(
-  process.cwd(),
-  "experiments/runtime-profile-behavior/fixtures/acp-compatibility",
-);
+const fixtureRoot = new URL("../fixtures/acp-compatibility/", import.meta.url);
 
 const fixture = async (name: string): Promise<Record<string, unknown>> =>
-  JSON.parse(await readFile(join(fixtureRoot, `${name}.json`), "utf8")) as Record<string, unknown>;
+  JSON.parse(await readFile(new URL(`${name}.json`, fixtureRoot), "utf8")) as Record<
+    string,
+    unknown
+  >;
 
 const frozenFixtureDigests: Readonly<Record<string, string>> = {
-  "cancellation-ambiguity": "47dd29d894afab5731676b1ccdc77d1c662460f61a4982576d409b12125fe0c9",
-  "initialize-v1": "761a184d65fda5cdfc6a89bb3e53f07f4ee4eb9f7fe444425dbbde4f02d93e85",
-  "late-duplicate-messages": "07e13792a810b2db02f7fe92f4a798f9df09038f5cf576ecac88902d0c733783",
-  "malformed-message": "de5569654387603988d20dfeddea26ae8c5a0da093d516bf0d6b1fce240006ed",
-  "permission-tool-callbacks": "108297a9cf039413313ac1f859541d814d8793093dc9d36bf26e9a1903829b97",
-  "process-exit": "b63a4a1d9405d47ac290ec21fd378a4cf3a2e949cc28fcc06a559aa1e8c94f38",
-  "request-timeout": "2dbc4920e77612ed6b382dcf5b1c1a3d078fbd1e8c372aedf3d881c29576d18f",
-  "session-capabilities": "a346d4194e6c9fb081530c3921de43a9fe5c03c4c3be48182812c4efa5622e16",
-  "unknown-unsupported-capabilities": "2023230b896ee84b07d38a56063db88f02a8bb2c69b7e21f04e9e34a5a9139f8",
-  "v2-to-v1-negotiation": "e6427ceecd01542e0f61ceaf16a711f18aa2359cf53a694eab3d0bc2dbe01452",
+  "cancellation-ambiguity": "b526b6b371d0336da9a1cf4c692b628d9d132876293ff29bc0f9dfa9dc1e5bb1",
+  "initialize-v1": "8c495983bef2d5cf89c1e33b39172e5afe508d2c6aa35f3bcbace216f71f3791",
+  "opencode-1-18-25-normalized":
+    "ebe3160c4421bfc2ee56e3944442988306b163a09920fa51c83d13d297b994c3",
+  "permission-tool-callbacks":
+    "f8950fd3f68a728e3646f16041621e7eb4ea862372549e36a66554948e2742a1",
+  "session-capabilities": "e032cfa2cbc80abb0a9fafcfe14c7b7fb12b75291ba7c019ffe9a5574fa3671a",
+  "unknown-unsupported-capabilities":
+    "cf5a15e5aaa0b122c15d6aaac592fc82c05af1e03b07218a7372fad021274d43",
+  "v2-to-v1-negotiation":
+    "926111a1d200242506344547900d90a7a087fb546d4dc40be4fa08badc93f899",
 };
 
-class ManualScheduler implements AcpWireScheduler {
-  readonly #callbacks = new Map<number, () => void>();
-  #next = 1;
+const responseOf = (value: Record<string, unknown>): unknown => value.response;
 
-  public set(_delayMs: number, callback: () => void): number {
-    const handle = this.#next++;
-    this.#callbacks.set(handle, callback);
-    return handle;
-  }
-
-  public clear(handle: unknown): void {
-    this.#callbacks.delete(handle as number);
-  }
-
-  public fireAll(): void {
-    const callbacks = [...this.#callbacks.values()];
-    this.#callbacks.clear();
-    for (const callback of callbacks) callback();
-  }
-}
-
-const asArray = (value: unknown): unknown[] => {
-  assert.ok(Array.isArray(value));
-  return value;
-};
-
-test("locks deterministic ACP fixture bytes", async () => {
+test("locks relative, synthetic/normalized ACP fixture provenance", async () => {
   for (const [name, expected] of Object.entries(frozenFixtureDigests)) {
-    const bytes = await readFile(join(fixtureRoot, `${name}.json`));
+    const bytes = await readFile(new URL(`${name}.json`, fixtureRoot));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), expected, name);
+    const parsed = JSON.parse(bytes.toString()) as Record<string, unknown>;
+    assert.match(String(parsed.provenance), /synthetic|normalized/);
+    assert.doesNotMatch(bytes.toString(), /\/var\/|\/home\/|credential|token/i);
   }
 });
 
-test("keeps the generic ACP wire seam provider and domain neutral", async () => {
-  const source = await readFile(
-    join(
-      process.cwd(),
-      "experiments/runtime-profile-behavior/src/features/acp-compatibility/acp-wire.ts",
-    ),
-    "utf8",
-  );
-  assert.doesNotMatch(source, /opencode|contained-agent-turn|contained-turn|provider ports?/i);
-  assert.doesNotMatch(source, /packages\/contexts\//);
-});
-
-test("replays initialize and explicit ACP v2-to-v1 negotiation fixtures", async () => {
-  const v1 = await fixture("initialize-v1");
-  const downgrade = await fixture("v2-to-v1-negotiation");
-
-  assert.equal(parseInitializeResult(v1.response, [1]).protocolVersion, 1);
-  assert.equal(parseInitializeResult(downgrade.response, [2, 1]).protocolVersion, 1);
-  assert.throws(
-    () => parseInitializeResult({ protocolVersion: 3 }, [2, 1]),
-    (error: unknown) => error instanceof AcpWireProtocolError && error.code === "unsupported_protocol",
-  );
-});
-
-test("maps new/list/resume/close and preserves exact unsupported capability truth", async () => {
-  const all = await fixture("session-capabilities");
-  const drift = await fixture("unknown-unsupported-capabilities");
-  assert.deepEqual(mapOpenCodeCapabilities(all.response).session, all.expected);
-  assert.deepEqual(all.results, {
-    new: { sessionId: "fixture-session" },
-    list: { sessions: [{ sessionId: "fixture-session", cwd: "/fixture" }] },
-    resume: {},
-    close: {},
+test("maps official ACP v1 baseline and presence-advertised session capabilities", async () => {
+  const minimal = observeOpenCodeCapabilities(responseOf(await fixture("initialize-v1")));
+  assert.deepEqual(minimal.session, {
+    new: "baseline",
+    prompt: "baseline",
+    cancel: "baseline",
+    update: "baseline",
+    load: "unsupported",
+    list: "unsupported",
+    resume: "unsupported",
+    close: "unsupported",
+    fork: "unsupported",
   });
 
-  const mapped = mapOpenCodeCapabilities(drift.response);
-  assert.deepEqual(mapped.unknown, drift.expectedUnknown);
-  assert.deepEqual(
-    Object.entries(mapped.session).filter(([, supported]) => !supported).map(([name]) => name),
-    drift.expectedUnsupported,
+  const advertised = observeOpenCodeCapabilities(
+    responseOf(await fixture("session-capabilities")),
   );
+  assert.equal(advertised.session.load, "supported");
+  assert.equal(advertised.session.list, "supported");
+  assert.equal(advertised.session.resume, "supported");
+  assert.equal(advertised.session.close, "supported");
+  assert.equal(advertised.session.fork, "deferred");
+  requireOpenCodeCapability(advertised, "prompt");
+  requireOpenCodeCapability(advertised, "close");
   assert.throws(
-    () => requireSupportedOpenCodeCapability(mapped, "resume"),
-    (error: unknown) => error instanceof AcpWireProtocolError && error.code === "unsupported_protocol",
+    () => requireOpenCodeCapability(advertised, "fork"),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError &&
+      error.code === "unsupported_capability" &&
+      error.details.deferred === true,
   );
 });
 
-test("frames split stdio input and correlates responses by request id", async () => {
-  const writes: string[] = [];
-  const client = new AcpWireClient({ requestTimeoutMs: 15_000, write: (line) => writes.push(line) });
-  const first = client.request("session/new", { cwd: "/fixture" });
-  const second = client.request("session/list", { cwd: "/fixture" });
-  assert.match(writes[0] ?? "", /"id":1/);
-  assert.match(writes[1] ?? "", /"id":2/);
-
-  client.receive('{"jsonrpc":"2.0","id":2,"result":{"sessions":[]}}\n{"jsonrpc":"2.0",');
-  client.receive('"id":1,"result":{"sessionId":"fixture-session"}}\n');
-  assert.deepEqual(await first, { sessionId: "fixture-session" });
-  assert.deepEqual(await second, { sessions: [] });
-});
-
-test("reports malformed, duplicate, and late messages without corrupting correlation", async () => {
-  const malformed = await fixture("malformed-message");
-  const repeated = await fixture("late-duplicate-messages");
-  const errors: string[] = [];
-  const client = new AcpWireClient({
-    requestTimeoutMs: 15_000,
-    write: () => {},
-    onProtocolError: (error) => errors.push(error.code),
-  });
-  for (const chunk of asArray(malformed.chunks)) client.receive(String(chunk));
-  const pending = client.request("initialize", { protocolVersion: 1 });
-  for (const response of asArray(repeated.responses)) client.receive(`${JSON.stringify(response)}\n`);
-  await pending;
-  assert.deepEqual(errors, [
-    ...asArray(malformed.expectedErrors),
-    ...asArray(repeated.expectedErrors),
+test("keeps omitted, recognized-deferred, and unknown capabilities distinct", async () => {
+  const observation = observeOpenCodeCapabilities(
+    responseOf(await fixture("unknown-unsupported-capabilities")),
+  );
+  assert.equal(observation.session.close, "supported");
+  assert.equal(observation.session.load, "unsupported");
+  assert.equal(observation.session.list, "unsupported");
+  assert.equal(observation.session.resume, "unsupported");
+  assert.equal(observation.session.fork, "unsupported");
+  assert.deepEqual(observation.unknown, [
+    "agentCapabilities/futureTopLevel",
+    "sessionCapabilities/futureSessionOperation",
   ]);
 });
 
-test("routes permission/tool callbacks through OpenCode policy and rejects unknown callbacks", async () => {
-  const callbackFixture = await fixture("permission-tool-callbacks");
-  const writes: string[] = [];
-  const observed: string[] = [];
-  const client = new AcpWireClient({
-    requestTimeoutMs: 15_000,
-    write: (line) => writes.push(line),
-    onRequest: (request) => {
-      const disposition = classifyOpenCodeCallback(request.method);
-      observed.push(disposition.kind);
-      if (disposition.kind === "unsupported") throw new Error("Unsupported OpenCode callback");
-      return { outcome: "deferred_to_runtime_authority", autoApproved: disposition.autoApproved };
-    },
-    onNotification: (notification) => {
-      observed.push(classifyOpenCodeNotification(notification.method, notification.params).kind);
-    },
-  });
-  for (const message of asArray(callbackFixture.messages)) client.receive(`${JSON.stringify(message)}\n`);
-  await new Promise<void>((resolve) => setImmediate(resolve));
-
-  assert.deepEqual(observed, callbackFixture.expected);
-  assert.equal(writes.length, 2);
-  assert.ok(writes.some((line) => /deferred_to_runtime_authority/.test(line)));
-  assert.ok(writes.some((line) => /Unsupported OpenCode callback/.test(line)));
+test("accepts only an explicit requested-v2/negotiated-v1 observation", async () => {
+  const downgrade = await fixture("v2-to-v1-negotiation");
+  assert.equal(
+    observeOpenCodeNegotiation(Number(downgrade.requestedVersion), downgrade.response)
+      .protocolVersion,
+    1,
+  );
+  assert.throws(
+    () => observeOpenCodeNegotiation(2, { protocolVersion: 2 }),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError && error.code === "unsupported_protocol",
+  );
+  assert.throws(
+    () => observeOpenCodeNegotiation(3, { protocolVersion: 1 }),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError && error.code === "malformed_observation",
+  );
 });
 
-test("bounds OpenCode request timeout configuration deterministically", () => {
-  assert.equal(readOpenCodeAcpRequestTimeoutMs({}), OPENCODE_ACP_REQUEST_TIMEOUT_DEFAULT_MS);
-  assert.equal(
-    readOpenCodeAcpRequestTimeoutMs({ AR_OPENCODE_ACP_REQUEST_TIMEOUT_MS: "" }),
-    OPENCODE_ACP_REQUEST_TIMEOUT_DEFAULT_MS,
-  );
-  assert.equal(readOpenCodeAcpRequestTimeoutMs({ AR_OPENCODE_ACP_REQUEST_TIMEOUT_MS: "1000" }), 1_000);
-  assert.equal(readOpenCodeAcpRequestTimeoutMs({ AR_OPENCODE_ACP_REQUEST_TIMEOUT_MS: "120000" }), 120_000);
-  for (const invalid of ["999", "120001", "1.5", "abc", "-1000"]) {
+test("rejects malformed values against the official SDK ACP v1 schema", () => {
+  for (const malformed of [
+    { protocolVersion: "1" },
+    { protocolVersion: 1, agentCapabilities: { loadSession: "yes" } },
+    { protocolVersion: 1, agentCapabilities: { sessionCapabilities: { list: true } } },
+  ]) {
     assert.throws(
-      () => readOpenCodeAcpRequestTimeoutMs({ AR_OPENCODE_ACP_REQUEST_TIMEOUT_MS: invalid }),
-      RangeError,
+      () => observeOpenCodeCapabilities(malformed),
+      (error: unknown) =>
+        error instanceof OpenCodeValidationError && error.code === "malformed_observation",
+    );
+  }
+  assert.throws(
+    () =>
+      observeOpenCodePermission("session-1", {
+        sessionId: "session-1",
+        toolCall: { toolCallId: "tool-1" },
+      }),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError && error.code === "malformed_observation",
+  );
+  assert.throws(
+    () =>
+      observeOpenCodeToolUpdate("session-1", {
+        sessionId: "session-1",
+        update: { sessionUpdate: "tool_call", title: "missing-id" },
+      }),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError && error.code === "malformed_observation",
+  );
+});
+
+test("bounds provider, session, tool, and capability identifiers before retention", async () => {
+  const policy = await fixture("permission-tool-callbacks");
+  assert.throws(
+    () =>
+      observeOpenCodeCapabilities({
+        protocolVersion: 1,
+        agentInfo: { name: "x".repeat(129), version: "fixture-v1" },
+      }),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError && error.code === "malformed_observation",
+  );
+  assert.throws(
+    () =>
+      observeOpenCodeCapabilities({
+        protocolVersion: 1,
+        agentCapabilities: { [`x${"y".repeat(64)}`]: {} },
+      }),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError && error.code === "malformed_observation",
+  );
+  assert.throws(
+    () => observeOpenCodePermission("x".repeat(129), policy.permission),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError && error.code === "malformed_observation",
+  );
+});
+
+test("binds permission and tool observations to the active session and never auto-approves", async () => {
+  const policy = await fixture("permission-tool-callbacks");
+  const sessionId = String(policy.activeSessionId);
+  const permission = observeOpenCodePermission(sessionId, policy.permission);
+  const tool = observeOpenCodeToolUpdate(sessionId, policy.toolUpdate);
+  assert.deepEqual(permission, {
+    kind: "permission",
+    sessionId,
+    toolCallId: "tool-1",
+    autoApproved: false,
+    disposition: "deferred_to_runtime_authority",
+  });
+  assert.equal(tool?.autoApproved, false);
+
+  for (const value of [policy.permission, policy.toolUpdate]) {
+    const substituted = structuredClone(value) as Record<string, unknown>;
+    substituted.sessionId = "session-substitution";
+    assert.throws(
+      () =>
+        "options" in substituted
+          ? observeOpenCodePermission(sessionId, substituted)
+          : observeOpenCodeToolUpdate(sessionId, substituted),
+      (error: unknown) =>
+        error instanceof OpenCodeValidationError &&
+        error.code === "malformed_observation" &&
+        error.details.kind === "active_session_mismatch",
     );
   }
 });
 
-test("replays bounded timeout and classifies any late response", async () => {
-  const timeoutFixture = await fixture("request-timeout");
-  const scheduler = new ManualScheduler();
-  const errors: string[] = [];
-  const client = new AcpWireClient({
-    requestTimeoutMs: Number(timeoutFixture.timeoutMs),
-    scheduler,
-    write: () => {},
-    onProtocolError: (error) => errors.push(error.code),
-  });
-  const pending = client.request(String(timeoutFixture.method));
-  scheduler.fireAll();
-  await assert.rejects(
-    pending,
-    (error: unknown) => error instanceof AcpWireTransportError && error.code === timeoutFixture.expectedError,
-  );
-  client.receive('{"jsonrpc":"2.0","id":1,"result":{"sessionId":"late"}}\n');
-  assert.deepEqual(errors, ["late_response"]);
-});
-
-test("replays process exit as a typed transport failure", async () => {
-  const exitFixture = await fixture("process-exit");
-  const client = new AcpWireClient({ requestTimeoutMs: 15_000, write: () => {} });
-  const pending = client.request(String(exitFixture.method));
-  client.processExited(Number(exitFixture.exitCode), null);
-  await assert.rejects(
-    pending,
-    (error: unknown) =>
-      error instanceof AcpWireTransportError &&
-      error.code === exitFixture.expectedError &&
-      error.details.exitCode === exitFixture.exitCode,
-  );
-});
-
-test("keeps cancellation ambiguity in OpenCode validation policy", async () => {
+test("classifies cancellation only from session-bound, non-contradictory evidence", async () => {
   const cancellation = await fixture("cancellation-ambiguity");
-  assert.equal(
-    classifyOpenCodeCancellation({
-      cancelResponse: cancellation.cancelResponse,
-      providerAccepted: cancellation.providerAccepted as "unknown",
-      terminalUpdate:
-        typeof cancellation.terminalUpdate === "string"
-          ? cancellation.terminalUpdate
-          : undefined,
-    }),
-    cancellation.expected,
+  const activeSessionId = String(cancellation.activeSessionId);
+  const cancel = cancellation.cancel;
+  const acceptedValues = [false, true, "unknown"] as const;
+  const terminalValues = [null, "cancelled", "end_turn"] as const;
+
+  for (const explicitNoStartProof of [false, true]) {
+    for (const providerAccepted of acceptedValues) {
+      for (const terminalStopReason of terminalValues) {
+        const actual = observeOpenCodeCancellation(activeSessionId, {
+          cancel,
+          explicitNoStartProof,
+          providerAccepted,
+          terminalStopReason,
+        });
+        const expected =
+          explicitNoStartProof && providerAccepted === false && terminalStopReason === null
+            ? "cancelled_before_acceptance"
+            : !explicitNoStartProof &&
+                providerAccepted !== false &&
+                terminalStopReason === "end_turn"
+              ? "completed_before_cancel"
+              : !explicitNoStartProof &&
+                  providerAccepted === true &&
+                  terminalStopReason === "cancelled"
+                ? "cancelled_after_acceptance"
+                : "ambiguous_requires_reconciliation";
+        assert.equal(actual, expected);
+      }
+    }
+  }
+
+  assert.throws(
+    () =>
+      observeOpenCodeCancellation(activeSessionId, {
+        cancel: { sessionId: "other-session" },
+        explicitNoStartProof: true,
+        providerAccepted: false,
+        terminalStopReason: null,
+      }),
+    (error: unknown) =>
+      error instanceof OpenCodeValidationError && error.code === "malformed_observation",
   );
+});
+
+test("returns detached, deeply frozen policy observations", async () => {
+  const source = responseOf(await fixture("unknown-unsupported-capabilities")) as Record<
+    string,
+    unknown
+  >;
+  const observation = observeOpenCodeCapabilities(source);
+  const capabilities = source.agentCapabilities as Record<string, unknown>;
+  capabilities.futureMutation = {};
+  assert.ok(Object.isFrozen(observation));
+  assert.ok(Object.isFrozen(observation.session));
+  assert.ok(Object.isFrozen(observation.prompt));
+  assert.ok(Object.isFrozen(observation.mcp));
+  assert.ok(Object.isFrozen(observation.unknown));
+  assert.doesNotMatch(JSON.stringify(observation), /futureMutation/);
+});
+
+test("retains only the supplied normalized OpenCode 1.18.25 observation", async () => {
+  const retained = await fixture("opencode-1-18-25-normalized");
+  const observation = observeOpenCodeCapabilities(retained.response);
+  assert.equal(observation.providerVersion, "1.18.25");
+  assert.deepEqual(observation.prompt, {
+    audio: false,
+    embeddedContext: true,
+    image: true,
+  });
+  assert.deepEqual(observation.mcp, { http: true, sse: true });
+  assert.equal(observation.session.fork, "deferred");
+  assert.equal(
+    retained.fixedPromptOutputDigestSha256,
+    "dc5d87f627deedda40c795c8435536e04764761fee5dbe2fb29e7e4e90484e74",
+  );
+  assert.equal(retained.costUsd, 0);
+  assert.equal(retained.permissionOrToolRequestObserved, false);
+});
+
+test("exposes only the thin official-SDK seam for already bounded Host Custody streams", () => {
+  assert.ok(createOpenCodeClientApp({ activeSessionId: "session-1" }) instanceof ClientApp);
+  const fromAgent = new ReadableStream<Uint8Array>();
+  const toAgent = new WritableStream<Uint8Array>();
+  const connection = attachOpenCodeClientToCustodiedStreams(
+    { boundedByHostCustody: true, fromAgent, toAgent },
+    { activeSessionId: "session-1" },
+  );
+  connection.close();
+});
+
+test("keeps documentation at characterization and custody boundaries", async () => {
+  const document = await readFile(
+    new URL("../../../docs/spikes/opencode-acp-1-18-25-contract-validation.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(document, /synthetic\/normalized/i);
+  assert.match(document, /no raw ACP transcript/i);
+  assert.match(document, /Host Custody.*byte.*line.*bound/is);
+  assert.match(document, /official SDK/i);
+  assert.doesNotMatch(document, /closes only the plan-authorized/i);
+  assert.doesNotMatch(document, /product E2E (?:passed|complete|closed)/i);
 });

@@ -1,9 +1,0 @@
-{
-  "name": "late-duplicate-messages",
-  "responses": [
-    { "jsonrpc": "2.0", "id": 1, "result": { "ok": true } },
-    { "jsonrpc": "2.0", "id": 1, "result": { "ok": true } },
-    { "jsonrpc": "2.0", "id": 999, "result": { "late": true } }
-  ],
-  "expectedErrors": ["duplicate_response", "late_response"]
-}
