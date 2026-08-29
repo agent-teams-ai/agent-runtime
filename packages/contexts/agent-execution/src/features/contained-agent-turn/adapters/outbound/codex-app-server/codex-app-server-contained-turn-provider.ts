@@ -23,6 +23,7 @@ type ReadOutcome = JsonRecord | typeof TIMEOUT | undefined;
 interface ActiveTurnProgress {
   cursor: number;
   interruptAcknowledged: boolean;
+  interruptDeadline: number | undefined;
   interruptRequestId?: string;
 }
 
@@ -327,6 +328,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       }
       if (isRecord(message.error)) {throw new CodexAppServerProtocolError("Codex rejected turn interruption", true);}
       progress.interruptAcknowledged = true;
+      progress.interruptDeadline = undefined;
       return undefined;
     }
     const method = notificationMethod(message);
@@ -358,20 +360,30 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     threadId: string,
     turnId: string,
   ): Promise<ActiveTurnCompletion> {
-    const progress: ActiveTurnProgress = { cursor: 0, interruptAcknowledged: false };
+    const progress: ActiveTurnProgress = { cursor: 0, interruptAcknowledged: false, interruptDeadline: undefined };
     const deadline = Date.now() + this.#turnTimeoutMs;
+    let nextCancellationCheck = Date.now();
     while (true) {
-      const pollDeadline = Math.min(deadline, Date.now() + this.#cancellationPollMs);
-      const message = await reader.read(pollDeadline);
-      if (message === TIMEOUT) {
-        if (Date.now() >= deadline) {throw new CodexAppServerProtocolError("Codex turn timed out", true);}
-        if (progress.interruptRequestId === undefined && await input.isCancellationRequested()) {
+      if (progress.interruptRequestId === undefined && Date.now() >= nextCancellationCheck) {
+        if (await input.isCancellationRequested()) {
           progress.interruptRequestId = `${input.attemptId}:turn-interrupt`;
           await process.write(encode({
             id: progress.interruptRequestId,
             method: "turn/interrupt",
             params: { threadId, turnId },
           }));
+          progress.interruptDeadline = Date.now() + this.#requestTimeoutMs;
+        }
+        nextCancellationCheck = Date.now() + this.#cancellationPollMs;
+      }
+      const pollDeadline = progress.interruptRequestId === undefined
+        ? Math.min(deadline, nextCancellationCheck)
+        : Math.min(deadline, progress.interruptDeadline ?? deadline);
+      const message = await reader.read(pollDeadline);
+      if (message === TIMEOUT) {
+        if (Date.now() >= deadline) {throw new CodexAppServerProtocolError("Codex turn timed out", true);}
+        if (progress.interruptDeadline !== undefined && Date.now() >= progress.interruptDeadline) {
+          throw new CodexAppServerProtocolError("Codex turn interruption timed out", true);
         }
         continue;
       }
