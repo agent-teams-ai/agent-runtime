@@ -29,8 +29,11 @@ interface OwnerTurnObservation {
   }[];
   readonly provider: string;
   readonly resultRef?: string;
-  readonly revision: number;
   readonly status: "accepted" | "cancelled" | "failed" | "reconcile_required" | "running" | "succeeded";
+}
+
+interface OwnerSubmitObservation {
+  readonly operationId: string;
 }
 
 type OwnerObservationOutcome =
@@ -41,7 +44,7 @@ type OwnerSubmitOutcome =
   | { readonly code: "command_fingerprint_conflict"; readonly status: "conflict" }
   | { readonly code: "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
   | { readonly status: "denied" }
-  | { readonly status: "observed"; readonly turn: OwnerTurnObservation };
+  | { readonly status: "observed"; readonly turn: OwnerSubmitObservation };
 
 export interface ContainedTurnCapabilityBundle {
   readonly cancel: {
@@ -77,24 +80,8 @@ const unavailableOutcome = Object.freeze({
   status: "unsupported" as const,
 });
 
-const providerUnsupportedOutcome = Object.freeze({
-  code: "provider_unsupported" as const,
-  status: "unsupported" as const,
-});
-
-const PROVIDER_IDENTITY = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/u;
-
-const copyProviderIdentity = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length <= 128 && PROVIDER_IDENTITY.test(value)
-    ? value
-    : undefined;
-
 const mapContainedTurnView = (turn: OwnerTurnObservation): RuntimeContainedTurnView | undefined => {
   try {
-    const provider = copyProviderIdentity(turn.provider);
-    if (provider === undefined) {
-      return;
-    }
     return Object.freeze({
       ...(turn.artifactManifestRef === undefined ? {} : { artifactManifestRef: turn.artifactManifestRef }),
       commandId: turn.commandId,
@@ -105,9 +92,8 @@ const mapContainedTurnView = (turn: OwnerTurnObservation): RuntimeContainedTurnV
         kind: chunk.kind,
         text: chunk.text,
       }))),
-      provider,
+      provider: turn.provider,
       ...(turn.resultRef === undefined ? {} : { resultRef: turn.resultRef }),
-      revision: turn.revision,
       status: turn.status,
     });
   } catch {
@@ -127,31 +113,20 @@ const copyObservation = (
     : Object.freeze({ status: "observed" as const, turn });
 };
 
-const copyInput = (input: SubmitRuntimeContainedTurnInput): SubmitRuntimeContainedTurnInput | undefined => {
-  try {
-    const expectedProvider = copyProviderIdentity(input.expectedProvider);
-    if (expectedProvider === undefined) {
-      return;
-    }
-    const intent = input.intent;
-    return Object.freeze({
-      commandId: input.commandId,
-      expectedProvider,
-      intent: Object.freeze({ mode: intent.mode, prompt: intent.prompt }),
-    });
-  } catch {
-    return;
-  }
+const copyInput = (input: SubmitRuntimeContainedTurnInput): SubmitRuntimeContainedTurnInput => {
+  const intent = input.intent;
+  return Object.freeze({
+    commandId: input.commandId,
+    expectedProvider: input.expectedProvider,
+    intent: Object.freeze({ mode: intent.mode, prompt: intent.prompt }),
+  });
 };
 
 const mapBeforeAcceptance = (
   outcome: OwnerSubmitOutcome,
 ): SubmitRuntimeContainedTurnOutcome => {
   if (outcome.status === "observed") {
-    const turn = mapContainedTurnView(outcome.turn);
-    return turn === undefined
-      ? unavailableOutcome
-      : Object.freeze({ operationId: turn.operationId, status: "accepted" as const });
+    return Object.freeze({ operationId: outcome.turn.operationId, status: "accepted" as const });
   }
   if (outcome.status === "denied") {
     return Object.freeze({ status: "denied" as const });
@@ -211,9 +186,6 @@ export const createContainedTurnRuntimeAccess = (
   ) => {
     dependencies.assertActive();
     const input = copyInput(rawInput);
-    if (input === undefined) {
-      return providerUnsupportedOutcome;
-    }
     if (dependencies.capability === undefined || dependencies.scope === undefined) {
       return unavailableOutcome;
     }

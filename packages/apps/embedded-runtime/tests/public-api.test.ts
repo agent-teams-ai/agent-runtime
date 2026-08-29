@@ -77,7 +77,7 @@ test("contained-turn declarations stay owned across root and composition closure
     assert.match(contract, /readonly output: readonly RuntimeContainedTurnOutputView\[\]/u);
     assert.match(contract, /readonly provider: RuntimeContainedTurnProvider/u);
     assert.match(contract, /readonly resultRef\?: string/u);
-    assert.match(contract, /readonly revision: number/u);
+    assert.doesNotMatch(contract, /readonly revision:/u);
     assert.match(contract, /readonly status: RuntimeContainedTurnStatus/u);
   }
   assert.doesNotMatch(
@@ -91,6 +91,8 @@ test("contained-turn declarations stay owned across root and composition closure
   ]);
   assert.doesNotMatch(rootClosure, /@agent-teams\/agent-execution|\bContainedTurnView\b|ContainedTurnFeatureApi/u);
   assert.doesNotMatch(compositionClosure, /\bContainedTurnView\b|ContainedTurnFeatureApi/u);
+  assert.doesNotMatch(rootClosure, /readonly revision:/u);
+  assert.doesNotMatch(compositionClosure, /readonly revision:/u);
   assert.match(compositionClosure, /interface ContainedTurnCapabilityBundle/u);
   assert.match(compositionClosure, /expectedProvider: string/u);
 });

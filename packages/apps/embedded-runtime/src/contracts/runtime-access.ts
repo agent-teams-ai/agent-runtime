@@ -235,7 +235,6 @@ export interface RuntimeContainedTurnView {
   readonly output: readonly RuntimeContainedTurnOutputView[];
   readonly provider: RuntimeContainedTurnProvider;
   readonly resultRef?: string;
-  readonly revision: number;
   readonly status: RuntimeContainedTurnStatus;
 }
 
