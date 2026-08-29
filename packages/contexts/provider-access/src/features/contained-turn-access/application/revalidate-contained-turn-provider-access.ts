@@ -1,9 +1,11 @@
-import type {
-  ProviderAccessBindingRecord,
-  ProviderAccessProviderValue,
-  ProviderAccessScopeValue,
+import {
+  snapshotProviderAccessBinding,
+  type ProviderAccessBindingRecord,
+  type ProviderAccessProviderValue,
+  type ProviderAccessScopeValue,
 } from "../domain/provider-access-binding.js";
 import type { ProviderAccessBindingRepository } from "./ports/outbound/provider-access-binding-repository.js";
+import { observeCanonicalProviderAccessBinding } from "./observe-provider-access-binding.js";
 
 export interface RevalidateProviderAccessCommand {
   readonly binding: ProviderAccessBindingRecord;
@@ -31,7 +33,12 @@ export const createRevalidateContainedTurnProviderAccess = (
   repository: ProviderAccessBindingRepository,
 ): RevalidateProviderAccessUseCase => Object.freeze({
   async execute(command: RevalidateProviderAccessCommand): Promise<RevalidateProviderAccessResult> {
-    const expected = command.binding;
+    let expected: ProviderAccessBindingRecord;
+    try {
+      expected = snapshotProviderAccessBinding(command.binding);
+    } catch {
+      return rejected("indeterminate");
+    }
     if (expected.tenantId !== command.scope.tenantId || expected.projectId !== command.scope.projectId) {
       return rejected("scope_mismatch");
     }
@@ -39,7 +46,10 @@ export const createRevalidateContainedTurnProviderAccess = (
       return rejected("provider_mismatch");
     }
 
-    const observation = await repository.observeExact({ provider: command.provider, scope: command.scope });
+    const observation = await observeCanonicalProviderAccessBinding(repository, {
+      provider: command.provider,
+      scope: command.scope,
+    });
     if (observation.kind !== "found") {
       return rejected(observation.kind);
     }
@@ -50,7 +60,7 @@ export const createRevalidateContainedTurnProviderAccess = (
     if (current.provider !== command.provider) {
       return rejected("provider_mismatch");
     }
-    if (current.revocation === "revoked") { return rejected("revoked"); }
+    if (current.revocation !== "active") { return rejected("revoked"); }
     if (current.availability !== "available") { return rejected("unavailable"); }
     if (current.accessRef !== expected.accessRef) { return rejected("access_changed"); }
     if (current.revision !== expected.revision) { return rejected("revision_changed"); }

@@ -6,7 +6,6 @@ import type {
 } from "../../application/ports/outbound/provider-access-binding-repository.js";
 import {
   canonicalProviderAccessOwnerFacts,
-  providerAccessBindingKey,
   snapshotProviderAccessBinding,
   snapshotProviderAccessScope,
   type ProviderAccessOwnerFacts,
@@ -45,18 +44,24 @@ export const digestProviderAccessOwnerFacts = (facts: ProviderAccessOwnerFacts):
 export const createStaticProviderAccessBindingRepository = (
   authorities: readonly StaticProviderAccessAuthority[],
 ): ProviderAccessBindingRepository => {
-  const observations = new Map<string, ProviderAccessBindingObservation>();
+  const observations = new Map<
+    ProviderAccessProviderValue,
+    Map<string, Map<string, ProviderAccessBindingObservation>>
+  >();
   for (const authority of authorities) {
     const provider = authority.provider;
     const scope = authority.kind === "binding"
       ? { projectId: authority.projectId, tenantId: authority.tenantId }
       : snapshotProviderAccessScope(authority.scope);
-    const key = providerAccessBindingKey(scope, provider);
-    if (observations.has(key)) {
+    const providerObservations = observations.get(provider) ?? new Map();
+    const tenantObservations = providerObservations.get(scope.tenantId) ?? new Map();
+    if (tenantObservations.has(scope.projectId)) {
       throw new Error("duplicate exact-scope Provider Access authority");
     }
+    observations.set(provider, providerObservations);
+    providerObservations.set(scope.tenantId, tenantObservations);
     if (authority.kind === "indeterminate") {
-      observations.set(key, Object.freeze({ kind: "indeterminate" }));
+      tenantObservations.set(scope.projectId, Object.freeze({ kind: "indeterminate" }));
       continue;
     }
     const record = snapshotProviderAccessBinding({
@@ -65,7 +70,7 @@ export const createStaticProviderAccessBindingRepository = (
       credentialBindingDigest: digestProviderAccessOwnerFacts(authority),
       revocation: authority.revocation ?? "active",
     });
-    observations.set(key, Object.freeze({ kind: "found", record }));
+    tenantObservations.set(scope.projectId, Object.freeze({ kind: "found", record }));
   }
 
   return Object.freeze({
@@ -73,7 +78,11 @@ export const createStaticProviderAccessBindingRepository = (
       readonly provider: ProviderAccessProviderValue;
       readonly scope: ProviderAccessScopeValue;
     }): Promise<ProviderAccessBindingObservation> {
-      const observation = observations.get(providerAccessBindingKey(input.scope, input.provider));
+      const scope = snapshotProviderAccessScope(input.scope);
+      const observation = observations
+        .get(input.provider)
+        ?.get(scope.tenantId)
+        ?.get(scope.projectId);
       if (observation === undefined) {
         return Object.freeze({ kind: "not_found" });
       }

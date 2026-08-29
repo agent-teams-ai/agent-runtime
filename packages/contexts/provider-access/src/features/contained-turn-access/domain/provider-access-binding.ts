@@ -38,17 +38,6 @@ export const snapshotProviderAccessScope = (scope: ProviderAccessScopeValue): Pr
     tenantId: bounded("tenantId", scope.tenantId),
   });
 
-export const providerAccessBindingKey = (
-  scope: ProviderAccessScopeValue,
-  provider: ProviderAccessProviderValue,
-): string => {
-  if (provider !== "claude" && provider !== "codex") {
-    throw new TypeError("provider is not supported");
-  }
-  const safeScope = snapshotProviderAccessScope(scope);
-  return `${safeScope.tenantId}\u0001${safeScope.projectId}\u0001${provider}`;
-};
-
 export const snapshotProviderAccessBinding = (
   record: ProviderAccessBindingRecord,
 ): ProviderAccessBindingRecord => {

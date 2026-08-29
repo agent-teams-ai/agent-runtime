@@ -4,6 +4,7 @@ import type {
   ProviderAccessScopeValue,
 } from "../domain/provider-access-binding.js";
 import type { ProviderAccessBindingRepository } from "./ports/outbound/provider-access-binding-repository.js";
+import { observeCanonicalProviderAccessBinding } from "./observe-provider-access-binding.js";
 
 export interface ResolveProviderAccessCommand {
   readonly provider: ProviderAccessProviderValue;
@@ -22,7 +23,7 @@ export const createResolveContainedTurnProviderAccess = (
   repository: ProviderAccessBindingRepository,
 ): ResolveProviderAccessUseCase => Object.freeze({
   async execute(command: ResolveProviderAccessCommand): Promise<ResolveProviderAccessResult> {
-    const observation = await repository.observeExact(command);
+    const observation = await observeCanonicalProviderAccessBinding(repository, command);
     if (observation.kind !== "found") {
       return Object.freeze({ kind: "unavailable", reason: observation.kind });
     }
@@ -34,7 +35,7 @@ export const createResolveContainedTurnProviderAccess = (
     ) {
       return Object.freeze({ kind: "unavailable", reason: "indeterminate" });
     }
-    if (binding.revocation === "revoked") {
+    if (binding.revocation !== "active") {
       return Object.freeze({ kind: "unavailable", reason: "revoked" });
     }
     if (binding.availability !== "available") {

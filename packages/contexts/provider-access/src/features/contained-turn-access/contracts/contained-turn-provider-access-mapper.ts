@@ -17,18 +17,21 @@ import { snapshotProviderAccessBinding, snapshotProviderAccessScope } from "../d
 
 const bindingToContract = (
   binding: ReturnType<typeof snapshotProviderAccessBinding>,
-): ContainedTurnProviderAccessBinding => Object.freeze({
-  accessRef: binding.accessRef,
-  credentialBindingDigest: binding.credentialBindingDigest,
-  credentialBindingRef: binding.credentialBindingRef,
-  credentialGeneration: binding.credentialGeneration,
-  projectId: binding.projectId,
-  provider: binding.provider,
-  providerAccountRef: binding.providerAccountRef,
-  providerRouteRef: binding.providerRouteRef,
-  revision: binding.revision,
-  tenantId: binding.tenantId,
-});
+): ContainedTurnProviderAccessBinding => {
+  const snapshot = snapshotProviderAccessBinding(binding);
+  return Object.freeze({
+    accessRef: snapshot.accessRef,
+    credentialBindingDigest: snapshot.credentialBindingDigest,
+    credentialBindingRef: snapshot.credentialBindingRef,
+    credentialGeneration: snapshot.credentialGeneration,
+    projectId: snapshot.projectId,
+    provider: snapshot.provider,
+    providerAccountRef: snapshot.providerAccountRef,
+    providerRouteRef: snapshot.providerRouteRef,
+    revision: snapshot.revision,
+    tenantId: snapshot.tenantId,
+  });
+};
 
 export const resolveCommandFromContract = (input: {
   readonly provider: ProviderAccessProvider;
