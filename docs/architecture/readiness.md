@@ -354,6 +354,29 @@ Contained Agent Turn V1 accepted:
   attempt, workspace, custody, receipt, Host, and authority identities. V1 has
   no Module Kit dependency.
 
+Contained Agent Turn V1 implementation present; qualification remains open:
+
+- Agent Execution implements one provider-neutral operation kernel with
+  separate durable acceptance and dispatch claims, scope-bound observation and
+  cancellation, no automatic retry, one coarse effect, exact receipt closure,
+  and explicit `reconcile_required` outcomes;
+- PostgreSQL persistence, disposable workspace/artifact custody, process-tree
+  custody, Codex App Server, and Claude Agent SDK adapters are present behind
+  one six-port Pure DI feature factory. No Module Kit or framework type enters
+  domain, application, contracts, persistence, or provider adapters;
+- Embedded Runtime exposes only detached `submit`, `observe`, and `cancel`
+  methods through the trusted tenant/project-bound `RuntimeAccessHandle`.
+  Caller abort detaches a waiter; Host disposal issues a durable cancellation
+  command and waits within a bounded deadline without asserting containment or
+  terminal truth;
+- focused synthetic evidence includes 58 Agent Execution tests, 63 Embedded
+  Runtime tests, and five PostgreSQL restart/concurrency/corruption tests;
+- exact Codex `0.150.1` disposable canaries passed on hosted Linux x64 and
+  local macOS arm64 with identical canonical output and confirmed containment.
+  Claude SDK `0.3.251` adapter/custody conformance is green, while the hosted
+  live canary is blocked at authentication by an expired test OAuth session;
+- OpenCode remains contract-only and no production ACP adapter is claimed.
+
 Scoped qualified:
 
 - AR-owned operation/command identity, effect-ledger counterexamples, output
@@ -367,21 +390,23 @@ Scoped qualified:
 
 Remaining:
 
-- production implementation of authorization, admission and dispatch-claim
-  ports, command/effect ledger, effect receipts, child-operation state,
-  custody transfer, cancellation fan-out, and transcript envelopes;
+- complete implementation qualification for the existing V1 security,
+  operation-store, workspace, artifact, custody, provider, and private-handle
+  paths across their declared target tuples;
+- deferred generalized authorization/admission, child-operation state, custody
+  transfer, cancellation fan-out, transcript envelopes, resume, and multi-host
+  behavior remain outside Contained Agent Turn V1;
 - one authoritative-interceptor conformance suite for every enabled
   provider/binary effect path; Codex shell, patch, and MCP plus OpenCode ACP
   and native tool paths are separate qualification rows;
 - contained-unmediated scope, containment-receipt, required-receipt-set, and
   terminal-barrier implementation tests for the exact V1 manifests and target
   platforms;
-- target-platform qualification for the frozen Codex, Claude, and OpenCode
-  candidate revisions; the retained macOS Codex and Claude fixtures and
-  OpenCode contract-only pin do not qualify hosted Linux or a production
-  adapter;
-- production closed Pure DI composition, private handle scoping, Host shutdown,
-  durable cancellation, immutable identity, and receipt persistence ports;
+- Claude hosted and macOS disposable live canaries with a valid isolated test
+  credential binding, plus OpenCode ACP fixture qualification. Codex live
+  canaries are implementation evidence, not deployment qualification;
+- adversarial private-handle, Host-shutdown, durable cancellation, immutable
+  identity, and persistence fault campaigns beyond the focused V1 suite;
 - spoofed/corrupted provider owner IDs proving adapters cannot replace trusted
   invocation scope;
 - duplicate/multi-hook admission tests proving one budget/capacity claim,

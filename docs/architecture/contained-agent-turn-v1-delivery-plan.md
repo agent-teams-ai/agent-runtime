@@ -39,6 +39,33 @@ Host-shutdown semantics.
 Accepted ADR-0001 through ADR-0004 and the existing passive portion of ADR-0008
 remain authoritative.
 
+## Current delivery evidence
+
+The implementation through product revision `735f2422` now contains the
+provider-neutral operation kernel, PostgreSQL store, disposable workspace and
+artifact custody, process custody, Codex App Server adapter, Claude Agent SDK
+adapter, and private scope-bound `RuntimeAccessHandle.containedTurn` surface.
+The handle returns an operation reference only after durable acceptance;
+observe and cancellation remain bound to the trusted tenant/project scope.
+Caller abort only detaches its waiter. Host disposal submits durable
+cancellation and cannot manufacture containment or terminal truth.
+
+Focused evidence is green: 58 Agent Execution tests, 63 Embedded Runtime
+tests, and five PostgreSQL restart/concurrency/corruption tests. Exact Codex
+`0.150.1` canaries succeeded in new disposable sandboxes on hosted Linux x64
+and local macOS arm64, both with six output events, the same canonical output
+digest, and confirmed process containment. The hosted Claude `0.3.251` path
+passed adapter and custody conformance and reached the provider authentication
+boundary, but live success remains blocked by the test account's expired OAuth
+session. That external failure is retained as a qualification blocker rather
+than relabeled as provider success.
+
+The current direct composition remains the authority. Extension Foundation PR
+#22 and Draft PR #27 still do not authorize a production Module Kit runtime.
+Future admission remains limited to one outer composition adapter and parity
+tests; domain, use cases, provider adapters, persistence, the private handle,
+and consumer calls must remain unchanged.
+
 ## Ownership boundary
 
 ```mermaid
