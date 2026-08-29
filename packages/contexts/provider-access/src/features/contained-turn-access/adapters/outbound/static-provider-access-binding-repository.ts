@@ -1,14 +1,11 @@
-import { createHash } from "node:crypto";
-
 import type {
   ProviderAccessBindingObservation,
   ProviderAccessBindingRepository,
 } from "../../application/ports/outbound/provider-access-binding-repository.js";
 import {
-  canonicalProviderAccessOwnerFacts,
   snapshotProviderAccessBinding,
+  snapshotProviderAccessProvider,
   snapshotProviderAccessScope,
-  type ProviderAccessOwnerFacts,
   type ProviderAccessProviderValue,
   type ProviderAccessScopeValue,
 } from "../../domain/provider-access-binding.js";
@@ -16,6 +13,7 @@ import {
 interface StaticAvailableProviderAccessAuthority {
   readonly accessRef: string;
   readonly availability?: "available" | "unavailable";
+  readonly credentialBindingDigest: string;
   readonly credentialBindingRef: string;
   readonly credentialGeneration: number;
   readonly kind: "binding";
@@ -38,9 +36,6 @@ type StaticProviderAccessAuthority =
   | StaticAvailableProviderAccessAuthority
   | StaticIndeterminateProviderAccessAuthority;
 
-export const digestProviderAccessOwnerFacts = (facts: ProviderAccessOwnerFacts): string =>
-  `sha256:${createHash("sha256").update(canonicalProviderAccessOwnerFacts(facts), "utf8").digest("hex")}`;
-
 export const createStaticProviderAccessBindingRepository = (
   authorities: readonly StaticProviderAccessAuthority[],
 ): ProviderAccessBindingRepository => {
@@ -49,8 +44,12 @@ export const createStaticProviderAccessBindingRepository = (
     Map<string, Map<string, ProviderAccessBindingObservation>>
   >();
   for (const authority of authorities) {
-    const provider = authority.provider;
-    const scope = authority.kind === "binding"
+    const kind = authority.kind;
+    if (kind !== "binding" && kind !== "indeterminate") {
+      throw new TypeError("authority kind is invalid");
+    }
+    const provider = snapshotProviderAccessProvider(authority.provider);
+    const scope = kind === "binding"
       ? { projectId: authority.projectId, tenantId: authority.tenantId }
       : snapshotProviderAccessScope(authority.scope);
     const providerObservations = observations.get(provider) ?? new Map();
@@ -60,15 +59,23 @@ export const createStaticProviderAccessBindingRepository = (
     }
     observations.set(provider, providerObservations);
     providerObservations.set(scope.tenantId, tenantObservations);
-    if (authority.kind === "indeterminate") {
+    if (kind === "indeterminate") {
       tenantObservations.set(scope.projectId, Object.freeze({ kind: "indeterminate" }));
       continue;
     }
     const record = snapshotProviderAccessBinding({
-      ...authority,
       availability: authority.availability ?? "available",
-      credentialBindingDigest: digestProviderAccessOwnerFacts(authority),
+      accessRef: authority.accessRef,
+      credentialBindingDigest: authority.credentialBindingDigest,
+      credentialBindingRef: authority.credentialBindingRef,
+      credentialGeneration: authority.credentialGeneration,
+      projectId: authority.projectId,
+      provider,
+      providerAccountRef: authority.providerAccountRef,
+      providerRouteRef: authority.providerRouteRef,
+      revision: authority.revision,
       revocation: authority.revocation ?? "active",
+      tenantId: authority.tenantId,
     });
     tenantObservations.set(scope.projectId, Object.freeze({ kind: "found", record }));
   }

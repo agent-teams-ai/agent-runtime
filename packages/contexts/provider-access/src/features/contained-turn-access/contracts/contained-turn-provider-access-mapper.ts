@@ -13,7 +13,11 @@ import type {
   ResolveProviderAccessCommand,
   ResolveProviderAccessResult,
 } from "../application/resolve-contained-turn-provider-access.js";
-import { snapshotProviderAccessBinding, snapshotProviderAccessScope } from "../domain/provider-access-binding.js";
+import {
+  snapshotProviderAccessBinding,
+  snapshotProviderAccessProvider,
+  snapshotProviderAccessScope,
+} from "../domain/provider-access-binding.js";
 
 const bindingToContract = (
   binding: ReturnType<typeof snapshotProviderAccessBinding>,
@@ -37,7 +41,7 @@ export const resolveCommandFromContract = (input: {
   readonly provider: ProviderAccessProvider;
   readonly scope: ProviderAccessScope;
 }): ResolveProviderAccessCommand => Object.freeze({
-  provider: input.provider,
+  provider: snapshotProviderAccessProvider(input.provider),
   scope: snapshotProviderAccessScope(input.scope),
 });
 
@@ -57,7 +61,7 @@ export const revalidateCommandFromContract = (input: {
     availability: "available",
     revocation: "active",
   }),
-  provider: input.provider,
+  provider: snapshotProviderAccessProvider(input.provider),
   scope: snapshotProviderAccessScope(input.scope),
 });
 

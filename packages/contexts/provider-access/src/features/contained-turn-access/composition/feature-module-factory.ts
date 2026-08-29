@@ -26,12 +26,20 @@ export const createContainedTurnProviderAccessFeature = (
   return Object.freeze({
     resolve: Object.freeze({
       async execute(input: ResolveContainedTurnProviderAccessInput) {
-        return resolveResultToContract(await resolve.execute(resolveCommandFromContract(input)));
+        try {
+          return resolveResultToContract(await resolve.execute(resolveCommandFromContract(input)));
+        } catch {
+          return Object.freeze({ kind: "unavailable" as const, reason: "indeterminate" as const });
+        }
       },
     }),
     revalidate: Object.freeze({
       async execute(input: RevalidateContainedTurnProviderAccessInput) {
-        return revalidateResultToContract(await revalidate.execute(revalidateCommandFromContract(input)));
+        try {
+          return revalidateResultToContract(await revalidate.execute(revalidateCommandFromContract(input)));
+        } catch {
+          return Object.freeze({ kind: "rejected" as const, reason: "indeterminate" as const });
+        }
       },
     }),
   });

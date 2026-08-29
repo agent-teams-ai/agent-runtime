@@ -18,6 +18,7 @@ const binding = (
   overrides: Partial<StaticAvailableProviderAccessAuthority> = {},
 ): StaticAvailableProviderAccessAuthority => ({
   accessRef: "access:one",
+  credentialBindingDigest: "authority-digest:one",
   credentialBindingRef: "credential-binding:one",
   credentialGeneration: 1,
   kind: "binding",
@@ -301,26 +302,123 @@ test("revalidation has typed changed, rotated, revoked, unavailable, missing, an
   }
 });
 
-test("credential digest covers every canonical non-secret owner fact", async () => {
-  const original = binding();
-  const originalDigest = (await resolvedBinding([original])).credentialBindingDigest;
-  const variants: readonly StaticAvailableProviderAccessAuthority[] = [
-    binding({ accessRef: "access:two" }),
-    binding({ credentialBindingRef: "credential-binding:two" }),
-    binding({ credentialGeneration: 2 }),
-    binding({ projectId: "project:two" }),
-    binding({ provider: "claude" }),
-    binding({ providerAccountRef: "provider-account:two" }),
-    binding({ providerRouteRef: "provider-route:two" }),
-    binding({ revision: 2 }),
-    binding({ tenantId: "tenant:two" }),
-  ];
-  for (const variant of variants) {
-    const outcome = await resolve([variant], variant.provider, variant.projectId, variant.tenantId);
-    assert.equal(outcome.kind, "resolved");
-    if (outcome.kind === "resolved") { assert.notEqual(outcome.binding.credentialBindingDigest, originalDigest); }
+test("credential digest is an opaque authority-issued non-secret owner fact", async () => {
+  const opaqueDigest = "authority-issued:opaque-owner-facts:v7";
+  const outcome = await resolvedBinding([binding({ credentialBindingDigest: opaqueDigest })]);
+  assert.equal(outcome.credentialBindingDigest, opaqueDigest);
+});
+
+test("primitive-string validation rejects boxed, aggregate, proxy, and accessor-like values", async () => {
+  let accidentalAccess = false;
+  const accessorLike = Object.defineProperties({}, {
+    includes: { get() { accidentalAccess = true; throw new Error("must not inspect includes"); } },
+    length: { get() { accidentalAccess = true; throw new Error("must not inspect length"); } },
+  });
+  const proxy = new Proxy({}, {
+    get() { accidentalAccess = true; throw new Error("must not inspect proxy"); },
+  });
+  const invalidValues: readonly unknown[] = [null, 7, true, [], {}, new String("boxed"), accessorLike, proxy];
+  for (const value of invalidValues) {
+    const feature = createContainedTurnProviderAccessFeature({
+      bindingRepository: {
+        async observeExact() {
+          return {
+            kind: "found" as const,
+            record: { ...binding(), availability: "available" as const, accessRef: value, revocation: "active" as const },
+          };
+        },
+      },
+    } as never);
+    assert.deepEqual(await feature.resolve.execute({
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "unavailable", reason: "indeterminate" });
   }
-  assert.match(originalDigest, /^sha256:[a-f0-9]{64}$/u);
+  assert.equal(accidentalAccess, false);
+});
+
+test("ill-formed Unicode is rejected while valid surrogate pairs remain lossless", async () => {
+  for (const accessRef of ["lone-high:\ud800", "lone-low:\udc00"]) {
+    assert.throws(() => createStaticContainedTurnProviderAccessFeature([binding({ accessRef })]), /well-formed Unicode/u);
+  }
+  const accessRef = "paired:\ud83d\ude80";
+  assert.equal((await resolvedBinding([binding({ accessRef })])).accessRef, accessRef);
+});
+
+test("public commands fail closed for null, primitive, boxed, proxy, and throwing scope values", async () => {
+  const feature = createStaticContainedTurnProviderAccessFeature([binding()]);
+  const expected = await resolvedBinding();
+  const throwing = Object.defineProperty({}, "projectId", { get() { throw new Error("boom"); } });
+  const values: readonly unknown[] = [null, undefined, 1, "scope", [], new String("scope"), new Proxy({}, { get() { throw new Error("boom"); } }), throwing];
+  for (const scope of values) {
+    assert.deepEqual(await feature.resolve.execute({ provider: "codex", scope } as never), {
+      kind: "unavailable", reason: "indeterminate",
+    });
+    assert.deepEqual(await feature.revalidate.execute({ binding: expected, provider: "codex", scope } as never), {
+      kind: "rejected", reason: "indeterminate",
+    });
+  }
+  assert.deepEqual(await feature.resolve.execute({ provider: new String("codex"), scope: {} } as never), {
+    kind: "unavailable", reason: "indeterminate",
+  });
+});
+
+test("null, primitive, missing, throwing, and rejected repository observations fail closed", async () => {
+  const expected = await resolvedBinding();
+  const throwingObservation = Object.defineProperty({}, "kind", { get() { throw new Error("boom"); } });
+  const throwingRecord = Object.defineProperty({}, "availability", { get() { throw new Error("boom"); } });
+  const observations: readonly unknown[] = [
+    null, undefined, false, 0, "found", { kind: "found" }, throwingObservation, { kind: "found", record: throwingRecord },
+  ];
+  for (const observation of observations) {
+    const feature = createContainedTurnProviderAccessFeature({
+      bindingRepository: { async observeExact() { return observation; } },
+    } as never);
+    assert.deepEqual(await feature.resolve.execute({
+      provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "unavailable", reason: "indeterminate" });
+    assert.deepEqual(await feature.revalidate.execute({
+      binding: expected,
+      provider: "codex",
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), { kind: "rejected", reason: "indeterminate" });
+  }
+  const rejected = createContainedTurnProviderAccessFeature({
+    bindingRepository: { async observeExact() { throw new Error("repository unavailable"); } },
+  });
+  assert.deepEqual(await rejected.resolve.execute({
+    provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }), { kind: "unavailable", reason: "indeterminate" });
+  assert.deepEqual(await rejected.revalidate.execute({
+    binding: expected,
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }), { kind: "rejected", reason: "indeterminate" });
+});
+
+test("canonical snapshots read stateful repository facts exactly once", async () => {
+  let availabilityReads = 0;
+  let revocationReads = 0;
+  const record = {
+    ...binding(),
+    get availability() {
+      availabilityReads += 1;
+      return availabilityReads === 1 ? "available" as const : "unavailable" as const;
+    },
+    get revocation() {
+      revocationReads += 1;
+      return revocationReads === 1 ? "active" as const : "revoked" as const;
+    },
+  };
+  const feature = createContainedTurnProviderAccessFeature({
+    bindingRepository: { async observeExact() { return { kind: "found" as const, record }; } },
+  });
+  assert.equal((await feature.resolve.execute({
+    provider: "codex",
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  })).kind, "resolved");
+  assert.equal(availabilityReads, 1);
+  assert.equal(revocationReads, 1);
 });
 
 test("static composition snapshots inputs and isolates every returned mutation", async () => {

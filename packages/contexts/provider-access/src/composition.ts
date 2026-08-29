@@ -10,6 +10,8 @@ import type {
 export interface StaticAvailableProviderAccessAuthority {
   readonly accessRef: string;
   readonly availability?: "available" | "unavailable";
+  /** Authority-issued opaque digest over non-secret owner facts. */
+  readonly credentialBindingDigest: string;
   readonly credentialBindingRef: string;
   readonly credentialGeneration: number;
   readonly kind: "binding";

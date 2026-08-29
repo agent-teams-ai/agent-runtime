@@ -18,81 +18,86 @@ export interface ProviderAccessBindingRecord extends ProviderAccessScopeValue {
   readonly revocation: "active" | "revoked";
 }
 
-const bounded = (name: string, value: string): string => {
+const isRecord = (value: unknown): value is object => value !== null && typeof value === "object";
+
+const hasWellFormedUnicode = (value: string): boolean => {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      if (index + 1 >= value.length) { return false; }
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) { return false; }
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const bounded = (name: string, value: unknown): string => {
+  if (typeof value !== "string") {
+    throw new TypeError(`${name} must be a primitive string`);
+  }
   if (value.length === 0 || value.length > 4_096 || value.includes("\u0000")) {
     throw new TypeError(`${name} must contain 1..4096 safe characters`);
+  }
+  if (!hasWellFormedUnicode(value)) {
+    throw new TypeError(`${name} must contain well-formed Unicode`);
   }
   return value;
 };
 
-const positiveInteger = (name: string, value: number): number => {
+const positiveInteger = (name: string, value: unknown): number => {
+  if (typeof value !== "number") {
+    throw new TypeError(`${name} must be a primitive number`);
+  }
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new TypeError(`${name} must be a positive safe integer`);
   }
   return value;
 };
 
-export const snapshotProviderAccessScope = (scope: ProviderAccessScopeValue): ProviderAccessScopeValue =>
-  Object.freeze({
+export const snapshotProviderAccessProvider = (provider: unknown): ProviderAccessProviderValue => {
+  if (provider !== "claude" && provider !== "codex") {
+    throw new TypeError("provider is not supported");
+  }
+  return provider;
+};
+
+export const snapshotProviderAccessScope = (scope: ProviderAccessScopeValue): ProviderAccessScopeValue => {
+  if (!isRecord(scope)) { throw new TypeError("scope must be a record"); }
+  return Object.freeze({
     projectId: bounded("projectId", scope.projectId),
     tenantId: bounded("tenantId", scope.tenantId),
   });
+};
 
 export const snapshotProviderAccessBinding = (
   record: ProviderAccessBindingRecord,
 ): ProviderAccessBindingRecord => {
-  if (record.availability !== "available" && record.availability !== "unavailable") {
+  if (!isRecord(record)) { throw new TypeError("binding must be a record"); }
+  const availability = record.availability;
+  if (availability !== "available" && availability !== "unavailable") {
     throw new TypeError("availability is invalid");
   }
-  if (record.revocation !== "active" && record.revocation !== "revoked") {
+  const revocation = record.revocation;
+  if (revocation !== "active" && revocation !== "revoked") {
     throw new TypeError("revocation is invalid");
   }
-  if (record.provider !== "claude" && record.provider !== "codex") {
-    throw new TypeError("provider is not supported");
-  }
+  const provider = snapshotProviderAccessProvider(record.provider);
   return Object.freeze({
     accessRef: bounded("accessRef", record.accessRef),
-    availability: record.availability,
+    availability,
     credentialBindingDigest: bounded("credentialBindingDigest", record.credentialBindingDigest),
     credentialBindingRef: bounded("credentialBindingRef", record.credentialBindingRef),
     credentialGeneration: positiveInteger("credentialGeneration", record.credentialGeneration),
     projectId: bounded("projectId", record.projectId),
-    provider: record.provider,
+    provider,
     providerAccountRef: bounded("providerAccountRef", record.providerAccountRef),
     providerRouteRef: bounded("providerRouteRef", record.providerRouteRef),
     revision: positiveInteger("revision", record.revision),
-    revocation: record.revocation,
+    revocation,
     tenantId: bounded("tenantId", record.tenantId),
   });
-};
-
-export interface ProviderAccessOwnerFacts {
-  readonly accessRef: string;
-  readonly credentialBindingRef: string;
-  readonly credentialGeneration: number;
-  readonly projectId: string;
-  readonly provider: ProviderAccessProviderValue;
-  readonly providerAccountRef: string;
-  readonly providerRouteRef: string;
-  readonly revision: number;
-  readonly tenantId: string;
-}
-
-/** Stable, length-delimited canonical bytes; all fields are non-secret owner facts. */
-export const canonicalProviderAccessOwnerFacts = (facts: ProviderAccessOwnerFacts): string => {
-  const values: readonly (readonly [string, string])[] = [
-    ["accessRef", bounded("accessRef", facts.accessRef)],
-    ["credentialBindingRef", bounded("credentialBindingRef", facts.credentialBindingRef)],
-    ["credentialGeneration", String(positiveInteger("credentialGeneration", facts.credentialGeneration))],
-    ["projectId", bounded("projectId", facts.projectId)],
-    ["provider", facts.provider],
-    ["providerAccountRef", bounded("providerAccountRef", facts.providerAccountRef)],
-    ["providerRouteRef", bounded("providerRouteRef", facts.providerRouteRef)],
-    ["revision", String(positiveInteger("revision", facts.revision))],
-    ["tenantId", bounded("tenantId", facts.tenantId)],
-  ];
-  if (facts.provider !== "claude" && facts.provider !== "codex") {
-    throw new TypeError("provider is not supported");
-  }
-  return `provider-access-owner-facts-v1\n${values.map(([name, value]) => `${name}:${value.length}:${value}`).join("\n")}`;
 };
