@@ -25,6 +25,12 @@ const codexSetup = Object.freeze({
   planCodexSetupInspection: createCodexSetupInspectionPlanner("linux"),
 });
 
+const containedTurn = Object.freeze({
+  cancel: { execute: unavailable },
+  observe: { execute: unavailable },
+  submit: { execute: unavailable },
+});
+
 test("rejects missing, partial, malformed, and unknown capability bindings synchronously", () => {
   const invalidDependencies: readonly unknown[] = [
     {},
@@ -50,11 +56,58 @@ test("rejects missing, partial, malformed, and unknown capability bindings synch
         authorizeSetupInspection: { execute: "not a function" },
       },
     },
+    {
+      claudeCodeSetup,
+      codexSetup,
+      containedTurn: { ...containedTurn, unknownCapabilityBinding: { execute: unavailable } },
+    },
+    {
+      claudeCodeSetup,
+      codexSetup,
+      containedTurn: { ...containedTurn, submit: { execute: "not a function" } },
+    },
   ];
 
   for (const dependencies of invalidDependencies) {
     assert.throws(() => createAgentRuntimeHost(dependencies as never), TypeError);
   }
+});
+
+test("snapshots the optional contained-turn capability and its methods exactly once", async t => {
+  let bundleReads = 0;
+  let submitMethodReads = 0;
+  const accessorBackedContainedTurn = Object.defineProperty(
+    { ...containedTurn },
+    "submit",
+    {
+      enumerable: true,
+      get() {
+        return Object.defineProperty({}, "execute", {
+          enumerable: true,
+          get() {
+            submitMethodReads += 1;
+            return submitMethodReads === 1 ? unavailable : "malformed second read";
+          },
+        });
+      },
+    },
+  );
+  const dependencies = Object.defineProperties({}, {
+    claudeCodeSetup: { enumerable: true, value: claudeCodeSetup },
+    codexSetup: { enumerable: true, value: codexSetup },
+    containedTurn: {
+      enumerable: true,
+      get() {
+        bundleReads += 1;
+        return bundleReads === 1 ? accessorBackedContainedTurn : {};
+      },
+    },
+  });
+
+  const host = createAgentRuntimeHost(dependencies as never);
+  t.after(() => host.dispose());
+  assert.equal(bundleReads, 1);
+  assert.equal(submitMethodReads, 1);
 });
 
 test("snapshots accessor-backed capability bundles and binding methods exactly once", async t => {

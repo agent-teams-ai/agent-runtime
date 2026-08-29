@@ -19,6 +19,7 @@ export type {
 export type {
   ContainedTurnFeatureApi,
   ContainedTurnMode,
+  ContainedTurnOperationRef,
   ContainedTurnOutputKind,
   ContainedTurnOutputView,
   ContainedTurnProvider,
@@ -27,10 +28,13 @@ export type {
   ContainedTurnStatus,
   ContainedTurnView,
   ObserveContainedTurn,
+  ObserveContainedTurnInput,
   ObserveContainedTurnOutcome,
   RequestContainedTurnCancellation,
+  RequestContainedTurnCancellationInput,
   RequestContainedTurnCancellationOutcome,
   SubmitContainedTurn,
   SubmitContainedTurnInput,
+  SubmitContainedTurnOptions,
   SubmitContainedTurnOutcome,
 } from "./features/contained-agent-turn/contracts/contained-agent-turn.js";

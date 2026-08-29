@@ -26,6 +26,20 @@ export interface SubmitContainedTurnInput {
   readonly scope: ContainedTurnScope;
 }
 
+export interface ContainedTurnOperationRef {
+  readonly operationId: string;
+  readonly scope: ContainedTurnScope;
+}
+
+export interface ObserveContainedTurnInput extends ContainedTurnOperationRef {}
+
+export interface RequestContainedTurnCancellationInput extends ContainedTurnOperationRef {}
+
+export interface SubmitContainedTurnOptions {
+  readonly onAccepted?: (operation: ContainedTurnOperationRef) => void;
+  readonly signal?: AbortSignal;
+}
+
 export type ContainedTurnOutputKind = "assistant" | "diagnostic" | "progress";
 
 export interface ContainedTurnOutputView {
@@ -83,17 +97,17 @@ export type RequestContainedTurnCancellationOutcome =
 export interface SubmitContainedTurn {
   execute(
     input: SubmitContainedTurnInput,
-    options?: { readonly signal?: AbortSignal },
+    options?: SubmitContainedTurnOptions,
   ): Promise<SubmitContainedTurnOutcome>;
 }
 
 export interface ObserveContainedTurn {
-  execute(operationId: string): Promise<ObserveContainedTurnOutcome>;
+  execute(input: ObserveContainedTurnInput): Promise<ObserveContainedTurnOutcome>;
 }
 
 export interface RequestContainedTurnCancellation {
   execute(
-    operationId: string,
+    input: RequestContainedTurnCancellationInput,
     options?: { readonly signal?: AbortSignal },
   ): Promise<RequestContainedTurnCancellationOutcome>;
 }

@@ -1,11 +1,14 @@
-export type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
+import type { ContainedTurnScope } from "@agent-teams/agent-execution";
 
-import type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
 import type { TrustedClaudeCodeSetupScope } from "../application/trusted-claude-code-setup-scope.js";
+import type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
+
+export type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
 
 export interface TrustedRuntimeAccessScope {
   readonly claudeCodeSetup?: TrustedClaudeCodeSetupScope;
   readonly codexSetup?: TrustedCodexSetupScope;
+  readonly containedTurn?: ContainedTurnScope;
 }
 
 export const TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS = Object.freeze({
@@ -31,6 +34,12 @@ export const TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS = Object.freeze({
       scopeId: 256,
     }),
   }),
+  containedTurn: Object.freeze({
+    text: Object.freeze({
+      projectId: 512,
+      tenantId: 512,
+    }),
+  }),
 });
 
 const copyBoundedText = (value: string, limit: number): string | undefined =>
@@ -41,6 +50,26 @@ const copyBoundedIdentifier = (value: string, limit: number): string | undefined
     /^[A-Za-z0-9]/u.test(value) && !/[^A-Za-z0-9._/-]/u.test(value)
     ? value
     : undefined;
+
+const copyContainedTurnReference = (value: string, limit: number): string | undefined =>
+  typeof value === "string" && value.length > 0 && value.length <= limit && !value.includes("\u0000")
+    ? value
+    : undefined;
+
+export const copyTrustedContainedTurnScope = (
+  scope: ContainedTurnScope,
+): ContainedTurnScope | undefined => {
+  try {
+    const limits = TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.containedTurn.text;
+    const projectId = copyContainedTurnReference(scope.projectId, limits.projectId);
+    const tenantId = copyContainedTurnReference(scope.tenantId, limits.tenantId);
+    return projectId === undefined || tenantId === undefined
+      ? undefined
+      : Object.freeze({ projectId, tenantId });
+  } catch {
+    return undefined;
+  }
+};
 
 const copyBounded = <Input, Output>(
   values: readonly Input[],

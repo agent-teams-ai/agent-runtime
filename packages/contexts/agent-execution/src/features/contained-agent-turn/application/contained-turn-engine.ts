@@ -1,8 +1,12 @@
 import type {
   ContainedTurnFeatureApi,
+  ContainedTurnOperationRef,
+  ObserveContainedTurnInput,
   ObserveContainedTurnOutcome,
+  RequestContainedTurnCancellationInput,
   RequestContainedTurnCancellationOutcome,
   SubmitContainedTurnInput,
+  SubmitContainedTurnOptions,
   SubmitContainedTurnOutcome,
 } from "../contracts/contained-agent-turn.js";
 import {
@@ -55,6 +59,31 @@ const copyInput = (input: SubmitContainedTurnInput): SubmitContainedTurnInput =>
     tenantId: boundedText("tenantId", input.scope.tenantId, MAX_IDENTIFIER_LENGTH),
   }),
 });
+
+const copyOperationRef = <Input extends ContainedTurnOperationRef>(input: Input): ContainedTurnOperationRef => Object.freeze({
+  operationId: boundedText("operationId", input.operationId, MAX_IDENTIFIER_LENGTH),
+  scope: Object.freeze({
+    projectId: boundedText("projectId", input.scope.projectId, MAX_IDENTIFIER_LENGTH),
+    tenantId: boundedText("tenantId", input.scope.tenantId, MAX_IDENTIFIER_LENGTH),
+  }),
+});
+
+const hasScope = (operation: ContainedTurnOperation, scope: ContainedTurnOperationRef["scope"]): boolean =>
+  operation.scope.projectId === scope.projectId && operation.scope.tenantId === scope.tenantId;
+
+const notifyAccepted = (
+  options: SubmitContainedTurnOptions | undefined,
+  operation: ContainedTurnOperation,
+): void => {
+  try {
+    options?.onAccepted?.(Object.freeze({
+      operationId: operation.operationId,
+      scope: Object.freeze({ ...operation.scope }),
+    }));
+  } catch {
+    // Acceptance observation is not operation authority and cannot unwind a durable accept.
+  }
+};
 
 const createCas = (store: ContainedTurnOperationStore) => async (
   initial: ContainedTurnOperation,
@@ -308,25 +337,28 @@ export const createContainedTurnEngine = (
   dependencies: ContainedTurnEngineDependencies,
 ): ContainedTurnFeatureApi => {
   const snapshot = Object.freeze({ ...dependencies });
-  const observe = async (operationId: string): Promise<ObserveContainedTurnOutcome> => {
-    const operation = await snapshot.operationStore.read(boundedText("operationId", operationId, MAX_IDENTIFIER_LENGTH));
-    return operation === undefined ? { status: "not_found" } : { status: "observed", turn: containedTurnView(operation) };
+  const observe = async (rawInput: ObserveContainedTurnInput): Promise<ObserveContainedTurnOutcome> => {
+    const input = copyOperationRef(rawInput);
+    const operation = await snapshot.operationStore.read(input.operationId);
+    return operation === undefined || !hasScope(operation, input.scope)
+      ? { status: "not_found" }
+      : { status: "observed", turn: containedTurnView(operation) };
   };
 
   return Object.freeze({
     cancel: Object.freeze({
       async execute(
-        operationId: string,
+        rawInput: RequestContainedTurnCancellationInput,
         options?: { readonly signal?: AbortSignal },
       ): Promise<RequestContainedTurnCancellationOutcome> {
         options?.signal?.throwIfAborted();
-        const id = boundedText("operationId", operationId, MAX_IDENTIFIER_LENGTH);
-        let current = await snapshot.operationStore.read(id);
-        if (current === undefined) {return { status: "not_found" };}
+        const input = copyOperationRef(rawInput);
+        let current = await snapshot.operationStore.read(input.operationId);
+        if (current === undefined || !hasScope(current, input.scope)) {return { status: "not_found" };}
         for (let attempt = 0; attempt < MAX_CAS_RETRIES && current.cancellation.kind === "open" && current.terminal.kind !== "terminal"; attempt += 1) {
-          const cancelled = await snapshot.operationStore.requestCancellation({ expectedRevision: current.revision, operationId: id });
+          const cancelled = await snapshot.operationStore.requestCancellation({ expectedRevision: current.revision, operationId: input.operationId });
           if (cancelled.kind === "applied") {current = cancelled.operation;}
-          else if (cancelled.kind === "stale") {current = cancelled.current;}
+          else if (cancelled.kind === "stale" && hasScope(cancelled.current, input.scope)) {current = cancelled.current;}
           else {return { status: "not_found" };}
         }
         if (current.dispatch.kind === "unclaimed" && current.workspace.kind === "bound" && current.cancellation.kind === "requested") {
@@ -339,7 +371,7 @@ export const createContainedTurnEngine = (
     submit: Object.freeze({
       async execute(
         rawInput: SubmitContainedTurnInput,
-        options?: { readonly signal?: AbortSignal },
+        options?: SubmitContainedTurnOptions,
       ): Promise<SubmitContainedTurnOutcome> {
         options?.signal?.throwIfAborted();
         const input = copyInput(rawInput);
@@ -357,6 +389,7 @@ export const createContainedTurnEngine = (
           securityDecision: { authorityRevision: authorization.authorityRevision, decisionDigest: authorization.decisionDigest },
         });
         if (accepted.kind === "conflict") {return { code: "command_fingerprint_conflict", status: "conflict" };}
+        notifyAccepted(options, accepted.operation);
         if (accepted.kind === "replayed") {return { status: "observed", turn: containedTurnView(accepted.operation) };}
         let current = accepted.operation;
         try {

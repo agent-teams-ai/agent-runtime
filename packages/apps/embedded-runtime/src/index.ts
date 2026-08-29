@@ -1,4 +1,5 @@
 export type {
+  CancelRuntimeContainedTurnOutcome,
   ClaudeCodePortableIntentView,
   ClaudeCodeRuntimeAccessHandle,
   ClaudeCodeRuntimeSetupQueries,
@@ -16,5 +17,9 @@ export type {
   InspectCodexRuntimeSetup,
   InspectCodexRuntimeSetupOutcome,
   InspectClaudeCodeRuntimeSetupOutcome,
+  ObserveRuntimeContainedTurnOutcome,
   RuntimeAccessHandle,
+  RuntimeContainedTurnAccess,
+  SubmitRuntimeContainedTurnInput,
+  SubmitRuntimeContainedTurnOutcome,
 } from "./contracts/runtime-access.js";

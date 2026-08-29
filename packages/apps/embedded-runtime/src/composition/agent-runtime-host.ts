@@ -5,6 +5,11 @@ import {
   createNodeExecutableFileObserver,
   createRuntimeInstallationDiscoveryFeature,
 } from "@agent-teams/agent-execution/composition";
+import type {
+  ContainedTurnFeatureApi,
+  ContainedTurnOperationRef,
+  ContainedTurnScope,
+} from "@agent-teams/agent-execution";
 import {
   createClaudeCodeConfigurationInspectionFeature,
   createClaudeCodeConfigurationSemanticClassifierV2,
@@ -37,18 +42,24 @@ import type {
 import {
   copyTrustedCodexSetupScope,
   copyTrustedClaudeCodeSetupScope,
+  copyTrustedContainedTurnScope,
   type TrustedRuntimeAccessScope,
 } from "./trusted-runtime-access-scope.js";
 import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
 import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
+import { createContainedTurnRuntimeAccess } from "./contained-turn-runtime-access.js";
+import { raceWithAbort } from "./runtime-access-lifecycle.js";
 
 export type CodexSetupCapabilityBundle = BuildCodexSetupViewDependencies;
 
 export type ClaudeCodeSetupCapabilityBundle = BuildClaudeCodeSetupViewDependencies;
 
+export type ContainedTurnCapabilityBundle = ContainedTurnFeatureApi;
+
 export interface AgentRuntimeHostDependencies {
   readonly claudeCodeSetup: ClaudeCodeSetupCapabilityBundle;
   readonly codexSetup: CodexSetupCapabilityBundle;
+  readonly containedTurn?: ContainedTurnCapabilityBundle;
 }
 
 export interface AgentRuntimeHost extends AsyncDisposable {
@@ -67,7 +78,9 @@ export class AgentRuntimeHostDisposalIncompleteError extends Error {
 }
 
 const settleActiveCalls = async (activeCalls: ReadonlySet<Promise<unknown>>): Promise<void> => {
-  await Promise.allSettled(activeCalls);
+  while (activeCalls.size > 0) {
+    await Promise.allSettled(activeCalls);
+  }
 };
 
 const rejectAtDisposalDeadline = async (
@@ -76,34 +89,6 @@ const rejectAtDisposalDeadline = async (
   await delay(1_000, null, { ref: false });
   throw new AgentRuntimeHostDisposalIncompleteError(activeCalls.size);
 };
-
-const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T> =>
-  new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const settle = (callback: () => void): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      signal.removeEventListener("abort", abort);
-      callback();
-    };
-    const abort = (): void => {
-      settle(() => reject(
-        signal.reason ?? new DOMException("Agent Runtime inspection was cancelled", "AbortError"),
-      ));
-    };
-
-    if (signal.aborted) {
-      abort();
-      return;
-    }
-    signal.addEventListener("abort", abort, { once: true });
-    operation.then(
-      value => settle(() => resolve(value)),
-      error => settle(() => reject(error)),
-    );
-  });
 
 const expectedClaudeCodeLimitations = Object.freeze({
   executableCompatibility: "unqualified" as const,
@@ -208,12 +193,18 @@ const snapshotCapabilityMethod = <Method>(
 const snapshotAgentRuntimeHostDependencies = (
   value: unknown,
 ): AgentRuntimeHostDependencies => {
-  assertClosedPlainBundle(value, "Agent Runtime capability dependencies", [
-    "claudeCodeSetup",
-    "codexSetup",
-  ]);
+  const hasContainedTurn = typeof value === "object" && value !== null &&
+    Reflect.ownKeys(value).includes("containedTurn");
+  assertClosedPlainBundle(
+    value,
+    "Agent Runtime capability dependencies",
+    hasContainedTurn
+      ? ["claudeCodeSetup", "codexSetup", "containedTurn"]
+      : ["claudeCodeSetup", "codexSetup"],
+  );
   const claudeCodeSetup = value.claudeCodeSetup;
   const codexSetup = value.codexSetup;
+  const containedTurn = value.containedTurn;
   assertClosedPlainBundle(
     claudeCodeSetup,
     "Claude Code setup capability bundle",
@@ -224,6 +215,13 @@ const snapshotAgentRuntimeHostDependencies = (
       "planClaudeCodeSetupInspection",
     ],
   );
+  if (containedTurn !== undefined) {
+    assertClosedPlainBundle(
+      containedTurn,
+      "Contained turn capability bundle",
+      ["cancel", "observe", "submit"],
+    );
+  }
   assertClosedPlainBundle(
     codexSetup,
     "Codex setup capability bundle",
@@ -264,6 +262,19 @@ const snapshotAgentRuntimeHostDependencies = (
         plan: snapshotCapabilityMethod<CodexSetupCapabilityBundle["planCodexSetupInspection"]["plan"]>(codexSetup, "Codex setup capability bundle", "planCodexSetupInspection", "plan"),
       }),
     }),
+    ...(containedTurn === undefined ? {} : {
+      containedTurn: Object.freeze({
+        cancel: Object.freeze({
+          execute: snapshotCapabilityMethod<ContainedTurnCapabilityBundle["cancel"]["execute"]>(containedTurn, "Contained turn capability bundle", "cancel", "execute"),
+        }),
+        observe: Object.freeze({
+          execute: snapshotCapabilityMethod<ContainedTurnCapabilityBundle["observe"]["execute"]>(containedTurn, "Contained turn capability bundle", "observe", "execute"),
+        }),
+        submit: Object.freeze({
+          execute: snapshotCapabilityMethod<ContainedTurnCapabilityBundle["submit"]["execute"]>(containedTurn, "Contained turn capability bundle", "submit", "execute"),
+        }),
+      }),
+    }),
   });
 };
 
@@ -281,8 +292,21 @@ export const createAgentRuntimeHost = (
   );
   const hostAbort = new AbortController();
   const activeCalls = new Set<Promise<unknown>>();
+  const activeContainedTurns = new Map<string, ContainedTurnOperationRef>();
   let disposed = false;
   let disposal: Promise<void> | undefined;
+
+  const trackCall = <T>(operation: Promise<T>): Promise<T> => {
+    activeCalls.add(operation);
+    void operation.finally(() => activeCalls.delete(operation)).catch(() => {});
+    return operation;
+  };
+
+  const requestContainedTurnCancellation = (
+    operation: ContainedTurnOperationRef,
+  ): Promise<unknown> => capabilityDependencies.containedTurn === undefined
+    ? Promise.resolve()
+    : trackCall(capabilityDependencies.containedTurn.cancel.execute(operation));
 
   const assertActive = (): void => {
     if (disposed) {
@@ -296,6 +320,9 @@ export const createAgentRuntimeHost = (
     }
     disposed = true;
     hostAbort.abort(new DOMException("Agent Runtime Host is disposed", "AbortError"));
+    for (const operation of activeContainedTurns.values()) {
+      void requestContainedTurnCancellation(operation);
+    }
     disposal = Promise.race([
       settleActiveCalls(activeCalls),
       rejectAtDisposalDeadline(activeCalls),
@@ -314,6 +341,10 @@ export const createAgentRuntimeHost = (
         () => scope.codexSetup,
         copyTrustedCodexSetupScope,
       );
+      const boundContainedTurnScope = snapshotProviderScope<ContainedTurnScope>(
+        () => scope.containedTurn,
+        copyTrustedContainedTurnScope,
+      );
       return Object.freeze({
         claudeCodeSetup: Object.freeze({
           inspect: async (options?: { readonly signal?: AbortSignal }) => {
@@ -329,12 +360,7 @@ export const createAgentRuntimeHost = (
                 : boundClaudeCodeScope.status === "invalid"
                   ? Promise.resolve(claudeCodeScopeLimitOutcome)
                   : buildClaudeCodeSetupView(boundClaudeCodeScope.scope, { signal });
-            activeCalls.add(operation);
-            operation.then(
-              () => activeCalls.delete(operation),
-              () => activeCalls.delete(operation),
-            );
-            return raceWithAbort(operation, signal);
+            return raceWithAbort(trackCall(operation), signal);
           },
         }),
         codexSetup: Object.freeze({
@@ -354,13 +380,21 @@ export const createAgentRuntimeHost = (
                 : boundCodexScope.status === "invalid"
                   ? Promise.resolve(codexScopeLimitOutcome)
                   : buildCodexSetupView(boundCodexScope.scope, input, { signal });
-            activeCalls.add(operation);
-            operation.then(
-              () => activeCalls.delete(operation),
-              () => activeCalls.delete(operation),
-            );
-            return raceWithAbort(operation, signal);
+            return raceWithAbort(trackCall(operation), signal);
           },
+        }),
+        containedTurn: createContainedTurnRuntimeAccess({
+          assertActive,
+          capability: capabilityDependencies.containedTurn,
+          hostSignal: hostAbort.signal,
+          isDisposed: () => disposed,
+          onAccepted: operation => {activeContainedTurns.set(operation.operationId, operation);},
+          onSettled: operationId => {activeContainedTurns.delete(operationId);},
+          requestCancellation: requestContainedTurnCancellation,
+          scope: boundContainedTurnScope.status === "available"
+            ? boundContainedTurnScope.scope
+            : undefined,
+          trackCall,
         }),
       });
     },

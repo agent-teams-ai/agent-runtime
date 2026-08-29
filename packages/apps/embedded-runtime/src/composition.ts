@@ -5,6 +5,7 @@ export {
   type AgentRuntimeHost,
   type AgentRuntimeHostDependencies,
   type ClaudeCodeSetupCapabilityBundle,
+  type ContainedTurnCapabilityBundle,
   type CodexSetupCapabilityBundle,
 } from "./composition/agent-runtime-host.js";
 export type { BuildCodexSetupViewDependencies } from "./application/build-codex-setup-view.js";

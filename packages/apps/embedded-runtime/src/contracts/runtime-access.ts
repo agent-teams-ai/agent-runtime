@@ -1,3 +1,9 @@
+import type {
+  ContainedTurnMode,
+  ContainedTurnProvider,
+  ContainedTurnView,
+} from "@agent-teams/agent-execution";
+
 export interface InspectCodexRuntimeSetup {
   readonly nativeProfile?: string;
 }
@@ -206,6 +212,42 @@ export interface ClaudeCodeRuntimeAccessHandle {
   readonly claudeCodeSetup: ClaudeCodeRuntimeSetupQueries;
 }
 
+export interface SubmitRuntimeContainedTurnInput {
+  readonly commandId: string;
+  readonly expectedProvider: ContainedTurnProvider;
+  readonly intent: {
+    readonly mode: ContainedTurnMode;
+    readonly prompt: string;
+  };
+}
+
+export type SubmitRuntimeContainedTurnOutcome =
+  | { readonly code: "capability_unavailable"; readonly status: "unsupported" }
+  | { readonly code: "command_fingerprint_conflict"; readonly status: "conflict" }
+  | { readonly code: "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
+  | { readonly status: "denied" }
+  | { readonly operationId: string; readonly status: "accepted" };
+
+export type ObserveRuntimeContainedTurnOutcome =
+  | { readonly code: "capability_unavailable"; readonly status: "unsupported" }
+  | { readonly status: "not_found" }
+  | { readonly status: "observed"; readonly turn: ContainedTurnView };
+
+export type CancelRuntimeContainedTurnOutcome = ObserveRuntimeContainedTurnOutcome;
+
+export interface RuntimeContainedTurnAccess {
+  cancel(
+    operationId: string,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<CancelRuntimeContainedTurnOutcome>;
+  observe(operationId: string): Promise<ObserveRuntimeContainedTurnOutcome>;
+  submit(
+    input: SubmitRuntimeContainedTurnInput,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<SubmitRuntimeContainedTurnOutcome>;
+}
+
 export interface RuntimeAccessHandle extends ClaudeCodeRuntimeAccessHandle {
+  readonly containedTurn: RuntimeContainedTurnAccess;
   readonly codexSetup: CodexRuntimeSetupQueries;
 }

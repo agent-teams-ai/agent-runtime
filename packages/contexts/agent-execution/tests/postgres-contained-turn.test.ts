@@ -195,7 +195,7 @@ test("a terminal turn survives store and feature restart without a second provid
   if (completed.status !== "observed") {return;}
   assert.equal(completed.turn.status, "succeeded");
   const restarted = createFeature(counter);
-  const observed = await restarted.feature.observe.execute(completed.turn.operationId);
+  const observed = await restarted.feature.observe.execute({ operationId: completed.turn.operationId, scope: input.scope });
   const replayed = await restarted.feature.submit.execute(input);
   assert.equal(observed.status, "observed");
   assert.equal(replayed.status, "observed");

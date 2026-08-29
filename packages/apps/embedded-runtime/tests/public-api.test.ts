@@ -16,6 +16,10 @@ test("root API exposes only product capabilities and keeps Host in composition",
   assert.match(publicSurface, /RuntimeAccessHandle/u);
   assert.match(publicSurface, /codexSetup/u);
   assert.match(publicSurface, /claudeCodeSetup/u);
+  assert.match(publicSurface, /containedTurn/u);
+  assert.match(publicSurface, /submit/u);
+  assert.match(publicSurface, /observe/u);
+  assert.match(publicSurface, /cancel/u);
   assert.match(publicSurface, /inspect/u);
   assert.doesNotMatch(
     publicSurface,
@@ -28,11 +32,11 @@ test("root API exposes only product capabilities and keeps Host in composition",
   assert.deepEqual(Object.keys(manifest.exports).toSorted(), [".", "./composition"]);
 });
 
-test("production slice has no process, network, ambient env or write adapter", async () => {
+test("passive setup slice has no process, network, ambient env or write adapter", async () => {
   const repositoryRoot = resolve(packageRoot, "../../..");
   const roots = [
     join(repositoryRoot, "packages", "apps", "embedded-runtime", "src"),
-    join(repositoryRoot, "packages", "contexts", "agent-execution", "src"),
+    join(repositoryRoot, "packages", "contexts", "agent-execution", "src", "features", "runtime-installation-discovery"),
     join(repositoryRoot, "packages", "contexts", "runtime-configuration", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-security", "src"),
     join(repositoryRoot, "packages", "platform", "filesystem-custody", "src"),

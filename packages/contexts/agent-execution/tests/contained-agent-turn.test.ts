@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
+import type { ContainedTurnOperationRef } from "../dist/index.js";
+
 import {
   createContainedTurnFeature,
   type AcceptContainedTurnCommandInput,
@@ -229,6 +231,43 @@ test("completes one contained turn with complete immutable receipt closure", asy
   assert.deepEqual(harness.counters, { contain: 1, execute: 1, open: 1, quarantine: 0 });
 });
 
+test("reports durable acceptance before provider completion and hides operations across scopes", async () => {
+  let releaseProvider = noop;
+  const providerGate = new Promise<void>(resolve => {releaseProvider = resolve;});
+  const harness = createHarness({
+    execution: async providerInput => {
+      await providerGate;
+      return {
+        acceptanceReceiptRef: `accepted:${providerInput.attemptId}`,
+        effectDisposition: "committed",
+        effectReceiptRef: `effect:${providerInput.attemptId}`,
+        executionReceiptRef: `execution:${providerInput.attemptId}`,
+        kind: "completed",
+        outcome: "succeeded",
+        outputDrainReceiptRef: `drain:${providerInput.attemptId}`,
+      };
+    },
+  });
+  let resolveAccepted: ((operation: ContainedTurnOperationRef) => void) | undefined;
+  const acceptance = new Promise<ContainedTurnOperationRef>(resolve => {resolveAccepted = resolve;});
+  const submission = harness.feature.submit.execute(input(), {
+    onAccepted: operation => resolveAccepted?.(operation),
+  });
+  const accepted = await acceptance;
+  const wrongScope = { projectId: "project:other", tenantId: "tenant:test" };
+  assert.deepEqual(
+    await harness.feature.observe.execute({ operationId: accepted.operationId, scope: wrongScope }),
+    { status: "not_found" },
+  );
+  assert.deepEqual(
+    await harness.feature.cancel.execute({ operationId: accepted.operationId, scope: wrongScope }),
+    { status: "not_found" },
+  );
+  assert.equal((await harness.store.read(accepted.operationId))?.cancellation.kind, "open");
+  releaseProvider();
+  assert.equal((await submission).status, "observed");
+});
+
 test("replays an identical command without a second provider attempt and rejects changed intent", async () => {
   const harness = createHarness();
   const first = await harness.feature.submit.execute(input());
@@ -276,7 +315,7 @@ test("durable cancellation wins a race before dispatch claim", async () => {
     });
   }
   assert.ok(operation);
-  const cancelled = await harness.feature.cancel.execute(operation.operationId);
+  const cancelled = await harness.feature.cancel.execute({ operationId: operation.operationId, scope: operation.scope });
   assert.equal(cancelled.status, "observed");
   releaseGuard();
   const outcome = await submission;
@@ -365,7 +404,7 @@ test("durable cancellation after claim requests containment without a second att
     });
   }
   assert.ok(running);
-  const cancellation = await harness.feature.cancel.execute(running.operationId);
+  const cancellation = await harness.feature.cancel.execute({ operationId: running.operationId, scope: running.scope });
   assert.equal(cancellation.status, "observed");
   assert.equal(harness.counters.contain, 0);
   releaseProvider();
@@ -399,7 +438,7 @@ test("cancellation while custody opens closes without invoking the provider", as
     });
   }
   assert.ok(claimed);
-  await harness.feature.cancel.execute(claimed.operationId);
+  await harness.feature.cancel.execute({ operationId: claimed.operationId, scope: claimed.scope });
   releaseCustody();
   const outcome = await submission;
   assert.equal(outcome.status, "observed");
