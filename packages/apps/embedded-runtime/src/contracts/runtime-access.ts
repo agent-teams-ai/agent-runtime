@@ -206,7 +206,8 @@ export interface ClaudeCodeRuntimeAccessHandle {
   readonly claudeCodeSetup: ClaudeCodeRuntimeSetupQueries;
 }
 
-export type RuntimeContainedTurnProvider = "claude" | "codex";
+/** Stable provider identity. Exact provider support is decided by composition. */
+export type RuntimeContainedTurnProvider = string;
 
 export type RuntimeContainedTurnMode = "analysis" | "workspace-write";
 

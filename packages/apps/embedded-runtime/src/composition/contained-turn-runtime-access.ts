@@ -1,12 +1,4 @@
 import type {
-  ContainedTurnFeatureApi,
-  ContainedTurnOperationRef,
-  ContainedTurnScope,
-  ContainedTurnView,
-  SubmitContainedTurnOutcome,
-} from "@agent-teams/agent-execution";
-
-import type {
   ObserveRuntimeContainedTurnOutcome,
   RuntimeContainedTurnView,
   RuntimeContainedTurnAccess,
@@ -15,53 +7,169 @@ import type {
 } from "../contracts/runtime-access.js";
 import { raceWithAbort } from "./runtime-access-lifecycle.js";
 
+export interface ContainedTurnCompositionScope {
+  readonly projectId: string;
+  readonly tenantId: string;
+}
+
+interface ContainedTurnCompositionOperationRef {
+  readonly operationId: string;
+  readonly scope: ContainedTurnCompositionScope;
+}
+
+interface OwnerTurnObservation {
+  readonly artifactManifestRef?: string;
+  readonly commandId: string;
+  readonly effectId: string;
+  readonly operationId: string;
+  readonly output: readonly {
+    readonly cursor: number;
+    readonly kind: "assistant" | "diagnostic" | "progress";
+    readonly text: string;
+  }[];
+  readonly provider: string;
+  readonly resultRef?: string;
+  readonly revision: number;
+  readonly status: "accepted" | "cancelled" | "failed" | "reconcile_required" | "running" | "succeeded";
+}
+
+type OwnerObservationOutcome =
+  | { readonly status: "not_found" }
+  | { readonly status: "observed"; readonly turn: OwnerTurnObservation };
+
+type OwnerSubmitOutcome =
+  | { readonly code: "command_fingerprint_conflict"; readonly status: "conflict" }
+  | { readonly code: "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
+  | { readonly status: "denied" }
+  | { readonly status: "observed"; readonly turn: OwnerTurnObservation };
+
+export interface ContainedTurnCapabilityBundle {
+  readonly cancel: {
+    execute(
+      input: ContainedTurnCompositionOperationRef,
+      options?: { readonly signal?: AbortSignal },
+    ): Promise<OwnerObservationOutcome>;
+  };
+  readonly observe: {
+    execute(input: ContainedTurnCompositionOperationRef): Promise<OwnerObservationOutcome>;
+  };
+  readonly submit: {
+    execute(
+      input: {
+        readonly commandId: string;
+        readonly expectedProvider: string;
+        readonly intent: {
+          readonly mode: "analysis" | "workspace-write";
+          readonly prompt: string;
+        };
+        readonly scope: ContainedTurnCompositionScope;
+      },
+      options?: {
+        readonly onAccepted?: (operation: ContainedTurnCompositionOperationRef) => void;
+        readonly signal?: AbortSignal;
+      },
+    ): Promise<OwnerSubmitOutcome>;
+  };
+}
+
 const unavailableOutcome = Object.freeze({
   code: "capability_unavailable" as const,
   status: "unsupported" as const,
 });
 
-const mapContainedTurnView = (turn: ContainedTurnView): RuntimeContainedTurnView => Object.freeze({
-  ...(turn.artifactManifestRef === undefined ? {} : { artifactManifestRef: turn.artifactManifestRef }),
-  commandId: turn.commandId,
-  effectId: turn.effectId,
-  operationId: turn.operationId,
-  output: Object.freeze(turn.output.map(chunk => Object.freeze({ ...chunk }))),
-  provider: turn.provider,
-  ...(turn.resultRef === undefined ? {} : { resultRef: turn.resultRef }),
-  revision: turn.revision,
-  status: turn.status,
+const providerUnsupportedOutcome = Object.freeze({
+  code: "provider_unsupported" as const,
+  status: "unsupported" as const,
 });
 
-const copyObservation = (
-  outcome: Exclude<ObserveRuntimeContainedTurnOutcome, { readonly code: "capability_unavailable" }>,
-): ObserveRuntimeContainedTurnOutcome => outcome.status === "not_found"
-  ? Object.freeze({ status: "not_found" as const })
-  : Object.freeze({ status: "observed" as const, turn: mapContainedTurnView(outcome.turn) });
+const PROVIDER_IDENTITY = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/u;
 
-const copyInput = (input: SubmitRuntimeContainedTurnInput): SubmitRuntimeContainedTurnInput => {
-  const intent = input.intent;
-  return Object.freeze({
-    commandId: input.commandId,
-    expectedProvider: input.expectedProvider,
-    intent: Object.freeze({ mode: intent.mode, prompt: intent.prompt }),
-  });
+const copyProviderIdentity = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length <= 128 && PROVIDER_IDENTITY.test(value)
+    ? value
+    : undefined;
+
+const mapContainedTurnView = (turn: OwnerTurnObservation): RuntimeContainedTurnView | undefined => {
+  try {
+    const provider = copyProviderIdentity(turn.provider);
+    if (provider === undefined) {
+      return;
+    }
+    return Object.freeze({
+      ...(turn.artifactManifestRef === undefined ? {} : { artifactManifestRef: turn.artifactManifestRef }),
+      commandId: turn.commandId,
+      effectId: turn.effectId,
+      operationId: turn.operationId,
+      output: Object.freeze(turn.output.map(chunk => Object.freeze({
+        cursor: chunk.cursor,
+        kind: chunk.kind,
+        text: chunk.text,
+      }))),
+      provider,
+      ...(turn.resultRef === undefined ? {} : { resultRef: turn.resultRef }),
+      revision: turn.revision,
+      status: turn.status,
+    });
+  } catch {
+    return;
+  }
+};
+
+const copyObservation = (
+  outcome: OwnerObservationOutcome,
+): ObserveRuntimeContainedTurnOutcome => {
+  if (outcome.status === "not_found") {
+    return Object.freeze({ status: "not_found" as const });
+  }
+  const turn = mapContainedTurnView(outcome.turn);
+  return turn === undefined
+    ? unavailableOutcome
+    : Object.freeze({ status: "observed" as const, turn });
+};
+
+const copyInput = (input: SubmitRuntimeContainedTurnInput): SubmitRuntimeContainedTurnInput | undefined => {
+  try {
+    const expectedProvider = copyProviderIdentity(input.expectedProvider);
+    if (expectedProvider === undefined) {
+      return;
+    }
+    const intent = input.intent;
+    return Object.freeze({
+      commandId: input.commandId,
+      expectedProvider,
+      intent: Object.freeze({ mode: intent.mode, prompt: intent.prompt }),
+    });
+  } catch {
+    return;
+  }
 };
 
 const mapBeforeAcceptance = (
-  outcome: SubmitContainedTurnOutcome,
-): SubmitRuntimeContainedTurnOutcome => outcome.status === "observed"
-  ? Object.freeze({ operationId: outcome.turn.operationId, status: "accepted" as const })
-  : Object.freeze({ ...outcome });
+  outcome: OwnerSubmitOutcome,
+): SubmitRuntimeContainedTurnOutcome => {
+  if (outcome.status === "observed") {
+    const turn = mapContainedTurnView(outcome.turn);
+    return turn === undefined
+      ? unavailableOutcome
+      : Object.freeze({ operationId: turn.operationId, status: "accepted" as const });
+  }
+  if (outcome.status === "denied") {
+    return Object.freeze({ status: "denied" as const });
+  }
+  return outcome.status === "conflict"
+    ? Object.freeze({ code: outcome.code, status: "conflict" as const })
+    : Object.freeze({ code: outcome.code, status: "unsupported" as const });
+};
 
 export interface ContainedTurnRuntimeAccessDependencies {
   readonly assertActive: () => void;
-  readonly capability: ContainedTurnFeatureApi | undefined;
+  readonly capability: ContainedTurnCapabilityBundle | undefined;
   readonly hostSignal: AbortSignal;
   readonly isDisposed: () => boolean;
-  readonly onAccepted: (operation: ContainedTurnOperationRef) => void;
+  readonly onAccepted: (operation: ContainedTurnCompositionOperationRef) => void;
   readonly onSettled: (operationId: string) => void;
-  readonly requestCancellation: (operation: ContainedTurnOperationRef) => Promise<unknown>;
-  readonly scope: ContainedTurnScope | undefined;
+  readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef) => Promise<unknown>;
+  readonly scope: ContainedTurnCompositionScope | undefined;
   readonly trackCall: <T>(operation: Promise<T>) => Promise<T>;
 }
 
@@ -102,17 +210,20 @@ export const createContainedTurnRuntimeAccess = (
     options?: { readonly signal?: AbortSignal },
   ) => {
     dependencies.assertActive();
+    const input = copyInput(rawInput);
+    if (input === undefined) {
+      return providerUnsupportedOutcome;
+    }
     if (dependencies.capability === undefined || dependencies.scope === undefined) {
       return unavailableOutcome;
     }
-    const input = copyInput(rawInput);
     const signal = options?.signal === undefined
       ? dependencies.hostSignal
       : AbortSignal.any([dependencies.hostSignal, options.signal]);
     signal.throwIfAborted();
     const response = new Promise<SubmitRuntimeContainedTurnOutcome>((resolve, reject) => {
       let responded = false;
-      const accepted = (operation: ContainedTurnOperationRef): void => {
+      const accepted = (operation: ContainedTurnCompositionOperationRef): void => {
         dependencies.onAccepted(operation);
         if (!responded) {
           responded = true;

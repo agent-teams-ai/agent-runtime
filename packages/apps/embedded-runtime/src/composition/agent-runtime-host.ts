@@ -5,11 +5,6 @@ import {
   createNodeExecutableFileObserver,
   createRuntimeInstallationDiscoveryFeature,
 } from "@agent-teams/agent-execution/composition";
-import type {
-  ContainedTurnFeatureApi,
-  ContainedTurnOperationRef,
-  ContainedTurnScope,
-} from "@agent-teams/agent-execution";
 import {
   createClaudeCodeConfigurationInspectionFeature,
   createClaudeCodeConfigurationSemanticClassifierV2,
@@ -47,14 +42,16 @@ import {
 } from "./trusted-runtime-access-scope.js";
 import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
 import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
-import { createContainedTurnRuntimeAccess } from "./contained-turn-runtime-access.js";
+import {
+  createContainedTurnRuntimeAccess,
+  type ContainedTurnCapabilityBundle,
+  type ContainedTurnCompositionScope,
+} from "./contained-turn-runtime-access.js";
 import { raceWithAbort } from "./runtime-access-lifecycle.js";
 
 export type CodexSetupCapabilityBundle = BuildCodexSetupViewDependencies;
 
 export type ClaudeCodeSetupCapabilityBundle = BuildClaudeCodeSetupViewDependencies;
-
-export type ContainedTurnCapabilityBundle = ContainedTurnFeatureApi;
 
 export interface AgentRuntimeHostDependencies {
   readonly claudeCodeSetup: ClaudeCodeSetupCapabilityBundle;
@@ -292,7 +289,10 @@ export const createAgentRuntimeHost = (
   );
   const hostAbort = new AbortController();
   const activeCalls = new Set<Promise<unknown>>();
-  const activeContainedTurns = new Map<string, ContainedTurnOperationRef>();
+  const activeContainedTurns = new Map<string, Readonly<{
+    operationId: string;
+    scope: ContainedTurnCompositionScope;
+  }>>();
   let disposed = false;
   let disposal: Promise<void> | undefined;
 
@@ -303,7 +303,7 @@ export const createAgentRuntimeHost = (
   };
 
   const requestContainedTurnCancellation = (
-    operation: ContainedTurnOperationRef,
+    operation: Readonly<{ operationId: string; scope: ContainedTurnCompositionScope }>,
   ): Promise<unknown> => capabilityDependencies.containedTurn === undefined
     ? Promise.resolve()
     : trackCall(capabilityDependencies.containedTurn.cancel.execute(operation));
@@ -341,7 +341,7 @@ export const createAgentRuntimeHost = (
         () => scope.codexSetup,
         copyTrustedCodexSetupScope,
       );
-      const boundContainedTurnScope = snapshotProviderScope<ContainedTurnScope>(
+      const boundContainedTurnScope = snapshotProviderScope<ContainedTurnCompositionScope>(
         () => scope.containedTurn,
         copyTrustedContainedTurnScope,
       );
