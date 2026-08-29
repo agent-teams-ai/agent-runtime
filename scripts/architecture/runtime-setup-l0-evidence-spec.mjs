@@ -31,6 +31,10 @@ export const changes = Object.freeze([
     id: "contained-turn-private-access",
     revision: "82800ba50e1060d9c93176a2a6ddb2bc0928fb00",
   }),
+  Object.freeze({
+    id: "contained-turn-platform-canaries",
+    revision: "735f2422d2095a6a9eefbb9491d5dc369bc7e49f",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -46,7 +50,7 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   tests: Object.freeze({
     fileCount: 36,
-    sha256: "42ee3700bb514263eff4fe8afab865a502cfefab42e5253afe2f630fcbe655cd",
+    sha256: "a9866043e8f35a2c51983592e18cc118da529f38c595f4d21e90a3d20ac30a9d",
   }),
 });
 

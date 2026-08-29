@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "82800ba50e1060d9c93176a2a6ddb2bc0928fb00",
+  "sourceRevision": "735f2422d2095a6a9eefbb9491d5dc369bc7e49f",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "3a1c0d51f6f6e4d300c1ed0c6a9a4a3a6283d37619483ff9d094e19e0cf2bc96",
+    "outputSha256": "6e4e16c9f9722681927134aeefeb622cbd22e03b31f915affb9527b98247bc65",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -63,7 +63,7 @@
     },
     "tests": {
       "fileCount": 36,
-      "sha256": "42ee3700bb514263eff4fe8afab865a502cfefab42e5253afe2f630fcbe655cd"
+      "sha256": "a9866043e8f35a2c51983592e18cc118da529f38c595f4d21e90a3d20ac30a9d"
     }
   },
   "historicalChanges": [
@@ -297,6 +297,35 @@
         "after": 55,
         "retained": 48,
         "reusePercent": 97.96
+      }
+    },
+    {
+      "id": "contained-turn-platform-canaries",
+      "revision": "735f2422d2095a6a9eefbb9491d5dc369bc7e49f",
+      "files": 2,
+      "additions": 10,
+      "deletions": 4,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 2,
+        "additions": 10,
+        "deletions": 4
+      },
+      "behaviorFixtures": {
+        "before": 55,
+        "after": 55,
+        "retained": 55,
+        "reusePercent": 100
       }
     }
   ],
