@@ -174,6 +174,31 @@ const markAmbiguous = async (
   return current;
 };
 
+const closeClaimedWithoutProvider = async (
+  operation: ContainedTurnOperation,
+  receiptRef: string,
+  dependencies: ContainedTurnEngineDependencies,
+): Promise<ContainedTurnOperation> => {
+  if (operation.workspace.kind !== "bound") {throw new Error("contained turn lost workspace before no-provider closure");}
+  const cas = createCas(dependencies.operationStore);
+  let current = operation;
+  current = await cas(current, { kind: "provider_not_accepted", receiptRef });
+  current = await cas(current, { kind: "execution_closed", outcome: "cancelled", receiptRef });
+  current = await cas(current, { kind: "output_sealed", receiptRef });
+  current = await cas(current, { disposition: "not_committed", kind: "effect_resolved", receiptRef });
+  current = await cas(current, { kind: "containment_recorded", receiptRef });
+  const sealed = await dependencies.artifacts.seal({
+    operationId: current.operationId,
+    output: current.output.chunks,
+    workspaceRef: operation.workspace.workspaceRef,
+  });
+  current = await cas(current, { kind: "artifacts_sealed", manifestRef: sealed.manifestRef, receiptRef: sealed.manifestReceiptRef });
+  current = await cas(current, { kind: "result_published", receiptRef: sealed.resultReceiptRef, resultRef: sealed.resultRef });
+  const workspaceClosure = await dependencies.workspace.close(operation.workspace.workspaceRef);
+  current = await cas(current, { kind: "workspace_closed", receiptRef: workspaceClosure.receiptRef });
+  return terminalizeOperation(current, dependencies.operationStore);
+};
+
 const completeClaimedOperation = async (
   operation: ContainedTurnOperation,
   dependencies: ContainedTurnEngineDependencies,
@@ -193,6 +218,18 @@ const completeClaimedOperation = async (
       workspaceRef,
     });
     current = await cas(current, { kind: "execution_started" });
+    if (current.cancellation.kind === "requested") {
+      const containment = await dependencies.custody.requestContainment({
+        attemptId,
+        custodyRef: custody.custodyRef,
+        operationId: current.operationId,
+      });
+      if (containment.kind === "contained") {
+        return closeClaimedWithoutProvider(current, containment.receiptRef, dependencies);
+      }
+      current = await cas(current, { evidenceRef: containment.evidenceRef, kind: "containment_unproven" });
+      return markAmbiguous(current, containment.evidenceRef, dependencies);
+    }
     let outputTextLength = current.output.chunks.reduce((total, chunk) => total + chunk.text.length, 0);
     const providerOutcome = await dependencies.provider.execute({
       attemptId,

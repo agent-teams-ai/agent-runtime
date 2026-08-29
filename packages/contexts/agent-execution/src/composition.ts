@@ -26,6 +26,22 @@ export {
   createNodeContainedTurnWorkspace,
   type NodeContainedTurnWorkspaceOptions,
 } from "./features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.js";
+export {
+  NodeProviderProcessCustody,
+  type NodeProviderProcessCustodyOptions,
+} from "./features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.js";
+export {
+  createStaticHostCustodyLaunchPlanResolver,
+  type StaticHostCustodyLaunchPlan,
+} from "./features/contained-agent-turn/adapters/outbound/host-custody/static-host-custody-launch-plan-resolver.js";
+export {
+  HostCustodyUnsupportedError,
+  type CustodiedProviderProcess,
+  type CustodiedProviderProcessExit,
+  type CustodiedProviderProcessRegistry,
+  type HostCustodyLaunchPlan,
+  type HostCustodyLaunchPlanResolver,
+} from "./features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 export type {
   AcceptContainedTurnCommandInput,
   AcceptContainedTurnCommandOutcome,

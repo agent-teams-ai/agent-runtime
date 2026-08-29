@@ -122,6 +122,7 @@ class MemoryOperationStore implements ContainedTurnOperationStore {
 }
 
 interface HarnessOptions {
+  readonly custodyOpen?: ProviderProcessCustodyPort["open"];
   readonly execution?: (
     emit: Parameters<ContainedTurnProviderPort["execute"]>[0]["emit"],
   ) => Promise<ContainedTurnProviderExecutionOutcome>;
@@ -161,10 +162,10 @@ const createHarness = (options: HarnessOptions = {}) => {
     }),
   };
   const custody: ProviderProcessCustodyPort = {
-    async open(input) {
+    open: options.custodyOpen ?? (async input => {
       counters.open += 1;
       return { custodyRef: `custody:${input.attemptId}` };
-    },
+    }),
     async requestContainment(input) {
       counters.contain += 1;
       return { kind: "contained", receiptRef: `contained:${input.attemptId}` };
@@ -357,6 +358,38 @@ test("durable cancellation after claim requests containment without a second att
   assert.equal(outcome.status, "observed");
   if (outcome.status === "observed") {assert.equal(outcome.turn.status, "cancelled");}
   assert.equal(harness.counters.execute, 1);
+});
+
+test("cancellation while custody opens closes without invoking the provider", async () => {
+  let releaseCustody = noop;
+  const custodyGate = new Promise<void>(resolve => {
+    releaseCustody = resolve;
+  });
+  const harness = createHarness({
+    custodyOpen: async custodyInput => {
+      await custodyGate;
+      return { custodyRef: `custody:${custodyInput.attemptId}` };
+    },
+  });
+  const submission = harness.feature.submit.execute(input());
+  let claimed: ContainedTurnOperation | undefined;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const operation = await harness.store.read("operation:1");
+    if (operation?.dispatch.kind === "claimed") {
+      claimed = operation;
+      break;
+    }
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 1);
+    });
+  }
+  assert.ok(claimed);
+  await harness.feature.cancel.execute(claimed.operationId);
+  releaseCustody();
+  const outcome = await submission;
+  assert.equal(outcome.status, "observed");
+  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "cancelled");}
+  assert.equal(harness.counters.execute, 0);
 });
 
 test("an ambiguous provider result is quarantined and never retried or terminalized", async () => {
