@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type {
-  ContainedTurnFeatureApi,
-  ContainedTurnScope,
-  ContainedTurnView,
-} from "@agent-teams/agent-execution";
-
 import {
   createAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
 } from "../dist/composition.js";
+import type { ContainedTurnCapabilityBundle } from "../dist/composition.js";
+
+type ContainedTurnScope = Readonly<{ projectId: string; tenantId: string }>;
+type ContainedTurnStatus = "accepted" | "cancelled" | "failed" | "reconcile_required" | "running" | "succeeded";
 
 const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
 
@@ -30,13 +28,12 @@ const setupDependencies = Object.freeze({
   }),
 });
 
-const turnView = (status: ContainedTurnView["status"]): ContainedTurnView => Object.freeze({
+const turnView = (status: ContainedTurnStatus) => Object.freeze({
   commandId: "command:embedded",
   effectId: "effect:embedded",
   operationId: "operation:embedded",
   output: Object.freeze([]),
   provider: "codex",
-  revision: status === "running" ? 3 : 8,
   status,
 });
 
@@ -49,7 +46,7 @@ const createContainedTurnDouble = () => {
     observe: [] as ContainedTurnScope[],
     submit: [] as ContainedTurnScope[],
   };
-  const feature: ContainedTurnFeatureApi = Object.freeze({
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
       async execute(input) {
         calls.cancel.push(input.scope);
@@ -127,13 +124,12 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
     effectId: "effect:detached",
     operationId: "operation:detached",
     output: ownerOutput,
-    provider: "codex" as const,
+    provider: "Vendor / Model β",
     resultRef: "result:detached",
-    revision: 11,
     status: "succeeded" as const,
-  } satisfies ContainedTurnView;
+  };
   let receivedScope: ContainedTurnScope | undefined;
-  const feature: ContainedTurnFeatureApi = Object.freeze({
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
       async execute(input) {
         receivedScope = input.scope;
@@ -165,9 +161,8 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
       effectId: "effect:detached",
       operationId: "operation:detached",
       output: [{ cursor: 7, kind: "assistant", text: "owner output" }],
-      provider: "codex",
+      provider: "Vendor / Model β",
       resultRef: "result:detached",
-      revision: 11,
       status: "succeeded",
     },
   });
@@ -190,7 +185,6 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
     "output",
     "provider",
     "resultRef",
-    "revision",
     "status",
   ]);
   assert.notEqual(observed.turn, ownerTurn);
@@ -226,18 +220,17 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
         { cursor: 7, kind: "assistant", text: "owner mutation" },
         { cursor: 8, kind: "progress", text: "later owner output" },
       ],
-      provider: "codex",
+      provider: "Vendor / Model β",
       resultRef: "result:detached",
-      revision: 11,
       status: "succeeded",
     },
   });
   assert.notEqual(cancelled.status === "observed" && cancelled.turn, ownerTurn);
 });
 
-test("accepts a future stable provider identity and rejects malformed identities before submit", async t => {
+test("passes opaque provider identities unchanged and preserves exact owner rejections", async t => {
   const receivedProviders: string[] = [];
-  const feature: ContainedTurnFeatureApi = Object.freeze({
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
       async execute() {return { status: "not_found" };},
     }),
@@ -247,74 +240,69 @@ test("accepts a future stable provider identity and rejects malformed identities
     submit: Object.freeze({
       async execute(input) {
         receivedProviders.push(input.expectedProvider);
-        return { code: "provider_unsupported", status: "unsupported" };
+        switch (input.expectedProvider) {
+          case "OpenCode": return { code: "provider_unsupported", status: "unsupported" };
+          case "open code": return { code: "provider_mismatch", status: "unsupported" };
+          case "vendor/model β": return { code: "mode_unsupported", status: "unsupported" };
+          case "Conflict Provider": return { code: "command_fingerprint_conflict", status: "conflict" };
+          default: return { status: "denied" };
+        }
       },
     }),
   });
   const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
   t.after(() => host.dispose());
   const access = host.bindAccess({ containedTurn: trustedScope });
-  const submit = (expectedProvider: unknown) => access.containedTurn.submit({
+  const submit = (expectedProvider: string) => access.containedTurn.submit({
     commandId: "command:provider-validation",
     expectedProvider,
     intent: { mode: "analysis", prompt: "synthetic" },
-  } as never);
-
-  assert.deepEqual(await submit("opencode"), {
-    code: "provider_unsupported",
-    status: "unsupported",
   });
-  for (const malformed of ["OpenCode", "open code", "", "x".repeat(129), 7, null]) {
-    assert.deepEqual(await submit(malformed), {
-      code: "provider_unsupported",
-      status: "unsupported",
-    });
-  }
-  assert.deepEqual(receivedProviders, ["opencode"]);
+
+  const opaqueProviders = ["OpenCode", "open code", "vendor/model β", "Conflict Provider", "Denied Provider"];
+  assert.deepEqual(await submit(opaqueProviders[0]!), { code: "provider_unsupported", status: "unsupported" });
+  assert.deepEqual(await submit(opaqueProviders[1]!), { code: "provider_mismatch", status: "unsupported" });
+  assert.deepEqual(await submit(opaqueProviders[2]!), { code: "mode_unsupported", status: "unsupported" });
+  assert.deepEqual(await submit(opaqueProviders[3]!), {
+    code: "command_fingerprint_conflict",
+    status: "conflict",
+  });
+  assert.deepEqual(await submit(opaqueProviders[4]!), { status: "denied" });
+  assert.deepEqual(receivedProviders, opaqueProviders);
 });
 
-test("fails closed when an owner observation has a malformed or oversized provider", async t => {
-  let provider: unknown = "Bad Provider";
-  const ownerTurn = () => ({
-    commandId: "command:invalid-owner-provider",
-    effectId: "effect:invalid-owner-provider",
-    operationId: "operation:invalid-owner-provider",
-    output: [],
-    provider,
-    revision: 1,
-    status: "running" as const,
-  });
-  const feature = Object.freeze({
+test("accepts an explicit owner operation id without projecting optional observation fields", async t => {
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
-      async execute() {return { status: "observed" as const, turn: ownerTurn() };},
+      async execute() {return { status: "not_found" };},
     }),
     observe: Object.freeze({
-      async execute() {return { status: "observed" as const, turn: ownerTurn() };},
+      async execute() {return { status: "not_found" };},
     }),
     submit: Object.freeze({
-      async execute() {return { status: "observed" as const, turn: ownerTurn() };},
+      async execute() {
+        return {
+          status: "observed",
+          turn: {
+            operationId: "operation:accepted-without-projection",
+            get artifactManifestRef(): never {throw new Error("optional observation field must not be read");},
+            get output(): never {throw new Error("observation output must not be projected during submit");},
+          },
+        };
+      },
     }),
   });
-  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature as never });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
   t.after(() => host.dispose());
   const access = host.bindAccess({ containedTurn: trustedScope });
 
-  assert.deepEqual(await access.containedTurn.observe("operation:invalid-owner-provider"), {
-    code: "capability_unavailable",
-    status: "unsupported",
-  });
-  provider = "x".repeat(129);
-  assert.deepEqual(await access.containedTurn.cancel("operation:invalid-owner-provider"), {
-    code: "capability_unavailable",
-    status: "unsupported",
-  });
   assert.deepEqual(await access.containedTurn.submit({
-    commandId: "command:invalid-owner-provider",
-    expectedProvider: "opencode",
+    commandId: "command:accepted-without-projection",
+    expectedProvider: "Vendor / Model β",
     intent: { mode: "analysis", prompt: "synthetic" },
   }), {
-    code: "capability_unavailable",
-    status: "unsupported",
+    operationId: "operation:accepted-without-projection",
+    status: "accepted",
   });
 });
 
@@ -340,7 +328,7 @@ test("caller abort detaches only its waiter and never manufactures durable cance
   const acceptanceGate = new Promise<void>(resolve => {publishAcceptance = resolve;});
   const completionGate = new Promise<void>(resolve => {releaseCompletion = resolve;});
   const calls = { cancel: 0 };
-  const feature: ContainedTurnFeatureApi = Object.freeze({
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
       async execute() {
         calls.cancel += 1;
