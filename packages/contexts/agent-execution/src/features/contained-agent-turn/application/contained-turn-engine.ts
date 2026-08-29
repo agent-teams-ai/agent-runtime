@@ -238,6 +238,10 @@ const completeClaimedOperation = async (
       intent: current.intent,
       operationId: current.operationId,
       workspaceRef,
+      isCancellationRequested: async () => {
+        const observed = await dependencies.operationStore.read(current.operationId);
+        return observed?.cancellation.kind === "requested";
+      },
       emit: async chunk => {
         if (chunk.cursor >= MAX_OUTPUT_CHUNKS || outputTextLength + chunk.text.length > MAX_OUTPUT_TEXT_LENGTH) {
           throw new Error("provider output exceeded contained turn bounds");
@@ -327,11 +331,6 @@ export const createContainedTurnEngine = (
         }
         if (current.dispatch.kind === "unclaimed" && current.workspace.kind === "bound" && current.cancellation.kind === "requested") {
           current = await preventBeforeDispatch(current, current.cancellation.requestRef, snapshot);
-        } else if (current.dispatch.kind === "claimed" && current.containment.kind === "pending") {
-          const containment = await snapshot.custody.requestContainment({ attemptId: current.dispatch.attemptId, operationId: current.operationId });
-          current = containment.kind === "contained"
-            ? await createCas(snapshot.operationStore)(current, { kind: "containment_recorded", receiptRef: containment.receiptRef })
-            : await createCas(snapshot.operationStore)(current, { evidenceRef: containment.evidenceRef, kind: "containment_unproven" });
         }
         return { status: "observed", turn: containedTurnView(current) };
       },

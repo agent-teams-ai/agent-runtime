@@ -160,6 +160,7 @@ export interface ContainedTurnProviderPort {
     readonly intent: ContainedTurnOperation["intent"];
     readonly operationId: string;
     readonly workspaceRef: string;
+    readonly isCancellationRequested: () => Promise<boolean>;
     readonly emit: (chunk: {
       readonly cursor: number;
       readonly kind: ContainedTurnOutputKind;

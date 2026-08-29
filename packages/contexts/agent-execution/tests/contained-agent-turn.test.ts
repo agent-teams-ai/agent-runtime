@@ -124,7 +124,7 @@ class MemoryOperationStore implements ContainedTurnOperationStore {
 interface HarnessOptions {
   readonly custodyOpen?: ProviderProcessCustodyPort["open"];
   readonly execution?: (
-    emit: Parameters<ContainedTurnProviderPort["execute"]>[0]["emit"],
+    input: Parameters<ContainedTurnProviderPort["execute"]>[0],
   ) => Promise<ContainedTurnProviderExecutionOutcome>;
   readonly revalidate?: ContainedTurnSecurityPort["revalidate"];
   readonly seal?: ContainedTurnArtifactPort["seal"];
@@ -179,7 +179,7 @@ const createHarness = (options: HarnessOptions = {}) => {
     }),
     async execute(input) {
       counters.execute += 1;
-      if (options.execution !== undefined) {return options.execution(input.emit);}
+      if (options.execution !== undefined) {return options.execution(input);}
       await input.emit({ cursor: 0, kind: "assistant", text: "synthetic result" });
       return {
         acceptanceReceiptRef: `accepted:${input.attemptId}`,
@@ -324,9 +324,10 @@ test("durable cancellation after claim requests containment without a second att
     releaseProvider = resolve;
   });
   const harness = createHarness({
-    execution: async emit => {
+    execution: async providerInput => {
       await providerGate;
-      await emit({ cursor: 0, kind: "assistant", text: "cancelled safely" });
+      assert.equal(await providerInput.isCancellationRequested(), true);
+      await providerInput.emit({ cursor: 0, kind: "assistant", text: "cancelled safely" });
       return {
         acceptanceReceiptRef: "accepted:cancelled",
         effectDisposition: "committed",
@@ -353,6 +354,7 @@ test("durable cancellation after claim requests containment without a second att
   assert.ok(running);
   const cancellation = await harness.feature.cancel.execute(running.operationId);
   assert.equal(cancellation.status, "observed");
+  assert.equal(harness.counters.contain, 0);
   releaseProvider();
   const outcome = await submission;
   assert.equal(outcome.status, "observed");
@@ -443,8 +445,8 @@ test("a workspace creation failure remains a durable reconciliation obligation",
 
 test("rejects stale or reordered provider output as ambiguity", async () => {
   const harness = createHarness({
-    execution: async emit => {
-      await emit({ cursor: 1, kind: "assistant", text: "out of order" });
+    execution: async providerInput => {
+      await providerInput.emit({ cursor: 1, kind: "assistant", text: "out of order" });
       throw new Error("unreachable");
     },
   });

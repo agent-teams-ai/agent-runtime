@@ -27,6 +27,14 @@ export {
   type NodeContainedTurnWorkspaceOptions,
 } from "./features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.js";
 export {
+  CodexAppServerContainedTurnProvider,
+  type CodexAppServerContainedTurnProviderOptions,
+} from "./features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
+export {
+  createCodexAppServerLaunchPlan,
+  type CodexAppServerLaunchPlanOptions,
+} from "./features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
+export {
   NodeProviderProcessCustody,
   type NodeProviderProcessCustodyOptions,
 } from "./features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.js";
