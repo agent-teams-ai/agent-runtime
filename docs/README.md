@@ -160,8 +160,8 @@ Read documents in this order:
 41. `spikes/runtime-setup-l0-dogfooding-evidence.md` - executable evidence for
    the product-owned Runtime Setup Pure DI baseline and fail-closed gates for
    any later module layer.
-42. `spikes/opencode-acp-1-18-25-contract-validation.md` - official-SDK-backed
-   synthetic ACP v1 policy characterization, retained normalized OpenCode
+42. `spikes/opencode-acp-1-18-25-contract-validation.md` - synthetic official
+   SDK and Host/OpenCode policy characterization, retained normalized OpenCode
    observation boundaries, and explicit production deferrals.
 
 Document status vocabulary:

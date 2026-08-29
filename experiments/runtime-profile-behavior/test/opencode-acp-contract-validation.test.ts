@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { ClientApp } from "@agentclientprotocol/sdk";
+import { AgentApp, ClientApp, methods } from "@agentclientprotocol/sdk";
 
 import {
   attachOpenCodeClientToCustodiedStreams,
@@ -62,6 +62,8 @@ test("maps official ACP v1 baseline and presence-advertised session capabilities
     list: "unsupported",
     resume: "unsupported",
     close: "unsupported",
+    delete: "unsupported",
+    additionalDirectories: "unsupported",
     fork: "unsupported",
   });
 
@@ -93,9 +95,77 @@ test("keeps omitted, recognized-deferred, and unknown capabilities distinct", as
   assert.equal(observation.session.list, "unsupported");
   assert.equal(observation.session.resume, "unsupported");
   assert.equal(observation.session.fork, "unsupported");
+  assert.deepEqual(observation.officialDeferred, []);
   assert.deepEqual(observation.unknown, [
     "agentCapabilities/futureTopLevel",
     "sessionCapabilities/futureSessionOperation",
+  ]);
+});
+
+test("applies non-null presence semantics to every modeled session capability", () => {
+  const modeled = {
+    additionalDirectories: "deferred",
+    close: "supported",
+    delete: "deferred",
+    fork: "deferred",
+    list: "supported",
+    resume: "supported",
+  } as const;
+
+  for (const [capability, advertisedStatus] of Object.entries(modeled)) {
+    for (const [value, expectedStatus] of [
+      [{}, advertisedStatus],
+      [null, "unsupported"],
+      [undefined, "unsupported"],
+    ] as const) {
+      const sessionCapabilities =
+        value === undefined ? {} : { [capability]: value };
+      const observation = observeOpenCodeCapabilities({
+        protocolVersion: 1,
+        agentCapabilities: { sessionCapabilities },
+      });
+      assert.equal(
+        observation.session[capability as keyof typeof modeled],
+        expectedStatus,
+        `${capability}:${String(value)}`,
+      );
+    }
+  }
+});
+
+test("keeps loadSession boolean mapping separate from official deferred and extensions", () => {
+  for (const [loadSession, expected] of [
+    [true, "supported"],
+    [false, "unsupported"],
+    [undefined, "unsupported"],
+  ] as const) {
+    const agentCapabilities =
+      loadSession === undefined ? {} : { loadSession };
+    assert.equal(
+      observeOpenCodeCapabilities({ protocolVersion: 1, agentCapabilities }).session.load,
+      expected,
+    );
+  }
+
+  const observation = observeOpenCodeCapabilities({
+    protocolVersion: 1,
+    agentCapabilities: {
+      auth: {},
+      providers: {},
+      sessionCapabilities: { delete: {} },
+      promptCapabilities: { futurePrompt: {} },
+      mcpCapabilities: { acp: true, futureMcp: {} },
+    },
+  });
+  assert.deepEqual(observation.officialDeferred, [
+    "agentCapabilities/auth",
+    "agentCapabilities/providers",
+    "mcpCapabilities/acp",
+    "sessionCapabilities/delete",
+  ]);
+  assert.deepEqual(observation.unknown, [
+    "mcpCapabilities/futureMcp",
+    "promptCapabilities/futurePrompt",
   ]);
 });
 
@@ -265,6 +335,7 @@ test("returns detached, deeply frozen policy observations", async () => {
   assert.ok(Object.isFrozen(observation.session));
   assert.ok(Object.isFrozen(observation.prompt));
   assert.ok(Object.isFrozen(observation.mcp));
+  assert.ok(Object.isFrozen(observation.officialDeferred));
   assert.ok(Object.isFrozen(observation.unknown));
   assert.doesNotMatch(JSON.stringify(observation), /futureMutation/);
 });
@@ -288,7 +359,7 @@ test("retains only the supplied normalized OpenCode 1.18.25 observation", async 
   assert.equal(retained.permissionOrToolRequestObserved, false);
 });
 
-test("exposes only the thin official-SDK seam for already bounded Host Custody streams", () => {
+test("exposes only the thin official-SDK seam for already bounded Host Custody streams", async () => {
   assert.ok(createOpenCodeClientApp({ activeSessionId: "session-1" }) instanceof ClientApp);
   const fromAgent = new ReadableStream<Uint8Array>();
   const toAgent = new WritableStream<Uint8Array>();
@@ -297,6 +368,57 @@ test("exposes only the thin official-SDK seam for already bounded Host Custody s
     { activeSessionId: "session-1" },
   );
   connection.close();
+  await connection.closed;
+});
+
+test("routes official SDK callbacks in memory and closes the connection", async () => {
+  const events: string[] = [];
+  const agent = new AgentApp({ name: "characterization-agent" }).onRequest(
+    methods.agent.session.prompt,
+    async ({ client, params }) => {
+      const permission = await client.request(methods.client.session.requestPermission, {
+        sessionId: params.sessionId,
+        toolCall: {
+          toolCallId: "tool-1",
+          title: "Characterization tool",
+          kind: "execute",
+          status: "pending",
+          content: [],
+        },
+        options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+      });
+      events.push(`permission:${permission.outcome.outcome}`);
+      await client.notify(methods.client.session.update, {
+        sessionId: params.sessionId,
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-1",
+          status: "completed",
+        },
+      });
+      return { stopReason: "end_turn" };
+    },
+  );
+  const connection = createOpenCodeClientApp({
+    activeSessionId: "session-1",
+    onPermission: (observation) => events.push(`request:${observation.toolCallId}`),
+    onTool: (observation) => events.push(`update:${observation.toolCallId}`),
+  }).connect(agent);
+
+  assert.deepEqual(
+    await connection.agent.request(methods.agent.session.prompt, {
+      sessionId: "session-1",
+      prompt: [{ type: "text", text: "route callbacks" }],
+    }),
+    { stopReason: "end_turn" },
+  );
+  assert.deepEqual(events, [
+    "request:tool-1",
+    "permission:cancelled",
+    "update:tool-1",
+  ]);
+  connection.close();
+  await connection.closed;
 });
 
 test("keeps documentation at characterization and custody boundaries", async () => {
