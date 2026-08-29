@@ -15,6 +15,8 @@ import {
   type CustodiedProviderProcess,
   type CustodiedProviderProcessExit,
   type CustodiedProviderProcessRegistry,
+  type CustodiedSdkProcess,
+  type CustodiedSdkProcessLauncher,
   type HostCustodyLaunchPlan,
   type HostCustodyLaunchPlanResolver,
 } from "./custodied-provider-process.js";
@@ -28,13 +30,15 @@ export interface NodeProviderProcessCustodyOptions {
 interface LiveCustody {
   readonly attemptId: string;
   readonly binaryDigest: string;
-  readonly child: ChildProcessWithoutNullStreams;
   readonly custodyRef: string;
-  readonly exit: Promise<CustodiedProviderProcessExit>;
   readonly operationId: string;
   readonly plan: HostCustodyLaunchPlan;
-  readonly process: CustodiedProviderProcess;
   readonly workspaceRef: string;
+  child?: ChildProcessWithoutNullStreams;
+  exit?: Promise<CustodiedProviderProcessExit>;
+  process?: CustodiedProviderProcess;
+  sealed?: boolean;
+  sdkProcess?: CustodiedSdkProcess;
 }
 
 const processExit = (child: ChildProcessWithoutNullStreams): Promise<CustodiedProviderProcessExit> =>
@@ -104,7 +108,61 @@ const boundedExit = async (
   delay(milliseconds),
 ]);
 
-export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, CustodiedProviderProcessRegistry {
+const abortError = (): Error => {
+  const error = new Error("Host Custody delegated process start was aborted");
+  error.name = "AbortError";
+  return error;
+};
+
+const compareRecordKeys = ([left]: [string, unknown], [right]: [string, unknown]): number =>
+  left < right ? -1 : left > right ? 1 : 0;
+
+const exactStringRecord = (
+  actual: Readonly<Record<string, string | undefined>>,
+  expected: Readonly<Record<string, string>>,
+): actual is Readonly<Record<string, string>> => {
+  const actualEntries = Object.entries(actual).toSorted(compareRecordKeys);
+  const expectedEntries = Object.entries(expected).toSorted(compareRecordKeys);
+  return actualEntries.length === expectedEntries.length && actualEntries.every(([key, value], index) => {
+    const expectedEntry = expectedEntries[index];
+    return value !== undefined && expectedEntry !== undefined && key === expectedEntry[0] && value === expectedEntry[1];
+  });
+};
+
+class NodeCustodiedSdkProcess implements CustodiedSdkProcess {
+  public constructor(private readonly child: ChildProcessWithoutNullStreams) {}
+
+  public get exitCode(): number | null {return this.child.exitCode;}
+  public get killed(): boolean {return this.child.killed;}
+  public get signalCode(): NodeJS.Signals | null {return this.child.signalCode;}
+  public get stdin() {return this.child.stdin;}
+  public get stdout() {return this.child.stdout;}
+
+  public kill(signal: NodeJS.Signals): boolean {
+    const pid = this.child.pid;
+    return pid === undefined ? false : signalProcessGroup(pid, signal);
+  }
+
+  public off(event: "error", listener: (error: Error) => void): void;
+  public off(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+  public off(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
+    this.child.off(event, listener as never);
+  }
+
+  public on(event: "error", listener: (error: Error) => void): void;
+  public on(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+  public on(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
+    this.child.on(event, listener as never);
+  }
+
+  public once(event: "error", listener: (error: Error) => void): void;
+  public once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+  public once(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
+    this.child.once(event, listener as never);
+  }
+}
+
+export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, CustodiedProviderProcessRegistry, CustodiedSdkProcessLauncher {
   readonly #byAttempt = new Map<string, LiveCustody>();
   readonly #byRef = new Map<string, LiveCustody>();
   readonly #forceKillAfterMs: number;
@@ -122,6 +180,71 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
 
   public get(custodyRef: string): CustodiedProviderProcess | undefined {
     return this.#byRef.get(custodyRef)?.process;
+  }
+
+  #spawn(live: LiveCustody, input: {
+    readonly arguments: readonly string[];
+    readonly environment: Readonly<Record<string, string>>;
+    readonly signal?: AbortSignal;
+  }): CustodiedSdkProcess {
+    if (live.child !== undefined) {throw new Error("Host Custody process was already started");}
+    if (input.signal?.aborted === true) {throw abortError();}
+    const child = spawn(live.plan.executablePath, [...input.arguments], {
+      cwd: live.workspaceRef,
+      detached: true,
+      env: { ...input.environment },
+      shell: false,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    if (child.pid === undefined) {throw new Error("Host Custody did not obtain a process identity");}
+    const exit = processExit(child);
+    const processAdapter: CustodiedProviderProcess = Object.freeze({
+      closeInput: () => closeInput(child),
+      custodyRef: live.custodyRef,
+      stderr: child.stderr,
+      stdout: child.stdout,
+      waitForExit: () => exit,
+      write: (bytes: Uint8Array) => writeBytes(child, bytes),
+    });
+    const sdkProcess = new NodeCustodiedSdkProcess(child);
+    if (input.signal !== undefined) {
+      const pid = child.pid;
+      const terminate = (): void => {signalProcessGroup(pid, "SIGTERM");};
+      input.signal.addEventListener("abort", terminate, { once: true });
+      void exit.finally(() => input.signal?.removeEventListener("abort", terminate)).catch(() => {});
+    }
+    live.child = child;
+    live.exit = exit;
+    live.process = processAdapter;
+    live.sdkProcess = sdkProcess;
+    return sdkProcess;
+  }
+
+  public start(custodyRef: string, input: {
+    readonly arguments: readonly string[];
+    readonly command: string;
+    readonly cwd: string | undefined;
+    readonly environment: Readonly<Record<string, string | undefined>>;
+    readonly signal: AbortSignal;
+  }): CustodiedSdkProcess {
+    const live = this.#byRef.get(custodyRef);
+    if (live === undefined) {throw new Error("Host Custody reservation does not exist");}
+    if (live.sealed === true) {throw new Error("Host Custody reservation is sealed");}
+    if ((live.plan.spawnMode ?? "eager") !== "sdk-delegated") {
+      throw new Error("Host Custody reservation does not permit delegated SDK start");
+    }
+    if (input.command !== live.plan.executablePath || input.cwd !== live.workspaceRef) {
+      throw new Error("Host Custody delegated command or workspace mismatch");
+    }
+    const argumentVariants = live.plan.delegatedArgumentVariants ?? [live.plan.arguments];
+    if (!argumentVariants.some(variant => JSON.stringify(input.arguments) === JSON.stringify(variant))) {
+      throw new Error("Host Custody delegated arguments mismatch");
+    }
+    if (!exactStringRecord(input.environment, live.plan.environment)) {
+      throw new Error("Host Custody delegated environment mismatch");
+    }
+    return this.#spawn(live, { arguments: input.arguments, environment: input.environment, signal: input.signal });
   }
 
   public async open(input: {
@@ -146,36 +269,17 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
     const canonicalWorkspace = await realpath(input.workspaceRef);
     if (canonicalWorkspace !== input.workspaceRef) {throw new Error("Host Custody workspace is not canonical");}
     const custodyRef = `urn:agent-runtime:host-custody:${randomUUID()}`;
-    const child = spawn(plan.executablePath, [...plan.arguments], {
-      cwd: canonicalWorkspace,
-      detached: true,
-      env: { ...plan.environment },
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    if (child.pid === undefined) {throw new Error("Host Custody did not obtain a process identity");}
-    const exit = processExit(child);
-    const processAdapter: CustodiedProviderProcess = {
-      closeInput: () => closeInput(child),
-      custodyRef,
-      stderr: child.stderr,
-      stdout: child.stdout,
-      waitForExit: () => exit,
-      write: bytes => writeBytes(child, bytes),
-    };
-    const custodiedProcess = Object.freeze(processAdapter);
-    const live = Object.freeze({
+    const live: LiveCustody = {
       attemptId: input.attemptId,
       binaryDigest,
-      child,
       custodyRef,
-      exit,
       operationId: input.operationId,
       plan,
-      process: custodiedProcess,
       workspaceRef: canonicalWorkspace,
-    });
+    };
+    if ((plan.spawnMode ?? "eager") === "eager") {
+      this.#spawn(live, { arguments: plan.arguments, environment: plan.environment });
+    }
     this.#byAttempt.set(input.attemptId, live);
     this.#byRef.set(custodyRef, live);
     return Object.freeze({ custodyRef });
@@ -192,6 +296,24 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
     const live = input.custodyRef === undefined ? this.#byAttempt.get(input.attemptId) : this.#byRef.get(input.custodyRef);
     if (live === undefined || live.attemptId !== input.attemptId || live.operationId !== input.operationId) {
       return { evidenceRef: `host-custody-missing:${input.attemptId}`, kind: "unproven" };
+    }
+    live.sealed = true;
+    if (live.child === undefined || live.exit === undefined) {
+      const receiptIdentity = JSON.stringify([
+        input.operationId,
+        input.attemptId,
+        live.custodyRef,
+        live.binaryDigest,
+        live.plan.binaryRevision,
+        live.plan.containmentProfile,
+        live.plan.spawnMode,
+        live.workspaceRef,
+        "never-started",
+      ]);
+      return {
+        kind: "contained",
+        receiptRef: `urn:agent-runtime:host-never-started:${createHash("sha256").update(receiptIdentity).digest("hex")}`,
+      };
     }
     const pid = live.child.pid;
     if (pid === undefined) {return { evidenceRef: `host-custody-pid-missing:${input.attemptId}`, kind: "unproven" };}

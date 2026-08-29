@@ -7,7 +7,7 @@
     "build": "tsc --project tsconfig.json --pretty false",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
-    "test": "node --test --test-concurrency=1 tests/runtime-installation-discovery.test.ts tests/claude-code-installation-discovery.test.ts tests/contained-agent-turn.test.ts tests/filesystem-contained-turn.test.ts tests/host-custody.test.ts tests/codex-app-server-contained-turn-provider.test.ts",
+    "test": "node --test --test-concurrency=1 tests/runtime-installation-discovery.test.ts tests/claude-code-installation-discovery.test.ts tests/contained-agent-turn.test.ts tests/filesystem-contained-turn.test.ts tests/host-custody.test.ts tests/codex-app-server-contained-turn-provider.test.ts tests/claude-agent-sdk-contained-turn-provider.test.ts",
     "test:postgres": "node --test --test-concurrency=1 tests/postgres-contained-turn.test.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
   },
@@ -16,6 +16,7 @@
     "ownerDocument": "ADR-0005"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "catalog:",
     "@agent-teams/filesystem-custody": "workspace:*",
     "pg": "catalog:",
     "zod": "catalog:"

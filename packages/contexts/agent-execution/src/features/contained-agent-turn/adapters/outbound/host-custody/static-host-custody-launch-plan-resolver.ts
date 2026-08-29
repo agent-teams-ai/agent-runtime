@@ -22,10 +22,14 @@ const snapshotPlan = (plan: HostCustodyLaunchPlan): HostCustodyLaunchPlan => Obj
   arguments: Object.freeze([...plan.arguments]),
   binaryRevision: plan.binaryRevision,
   containmentProfile: plan.containmentProfile,
+  ...(plan.delegatedArgumentVariants === undefined ? {} : {
+    delegatedArgumentVariants: Object.freeze(plan.delegatedArgumentVariants.map(variant => Object.freeze([...variant]))),
+  }),
   environment: Object.freeze({ ...plan.environment }),
   executablePath: plan.executablePath,
   executableSha256: plan.executableSha256,
   provider: plan.provider,
+  spawnMode: plan.spawnMode ?? "eager",
 });
 
 export const createStaticHostCustodyLaunchPlanResolver = (

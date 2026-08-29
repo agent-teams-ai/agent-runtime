@@ -23,6 +23,7 @@ boundaries:
       boundaries: []
       packages:
         - "@agent-teams/filesystem-custody"
+        - "@anthropic-ai/claude-agent-sdk"
         - pg
         - zod
       builtins:
