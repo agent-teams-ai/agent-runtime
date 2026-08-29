@@ -536,10 +536,10 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
 export const formatIssues = (issues) => issues.map((entry) => `${entry.path}:${entry.line} ${entry.code} ${entry.message}`).join("\n");
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const profileIndex = process.argv.indexOf("--profile");
-  const profilePath = profileIndex >= 0 ? process.argv[profileIndex + 1] : DEFAULT_PROFILE;
+  const profileIndex = process.argv.indexOf("--profile"), rootIndex = process.argv.indexOf("--root");
+  const profilePath = profileIndex >= 0 ? process.argv[profileIndex + 1] : DEFAULT_PROFILE, root = rootIndex >= 0 ? process.argv[rootIndex + 1] : REPOSITORY_ROOT;
   const requiredStatus = process.argv.includes("--require-active") ? "active" : undefined;
-  const issues = await checkFeatureModules({ profilePath, requiredStatus });
+  const issues = await checkFeatureModules({ profilePath, requiredStatus, root });
   if (issues.length) {
     process.stdout.write(`${formatIssues(issues)}\n\nFeature Module Standard ${requiredStatus ?? "candidate"}: ${issues.length} diagnostic(s). No conformance claim.\n`);
     process.exitCode = process.argv.includes("--allow-diagnostics") ? 0 : 1;

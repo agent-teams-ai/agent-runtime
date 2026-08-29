@@ -185,6 +185,7 @@
     {
       "name": "require-active-rejects-candidate-profile",
       "requiredStatus": "active",
+      "cliRequireActive": true,
       "expected": [{ "code": "FM_PROFILE_STATUS", "path": "profile.json", "line": 1 }]
     },
     {

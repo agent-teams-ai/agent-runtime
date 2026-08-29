@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { checkFeatureModules } from "./check-feature-modules.mjs";
 
 const fixtureManifest = JSON.parse(await readFile(new URL("./fixtures/feature-module-cases.json", import.meta.url), "utf8"));
+const execFileAsync = promisify(execFile);
 const authority = {
   id: "agent-teams.feature-module-standard",
   version: "v1",
@@ -78,6 +82,12 @@ for (const fixture of fixtureManifest.cases) {
       }
       const actual = (await checkFeatureModules({ root, profilePath: "profile.json", requiredStatus: fixture.requiredStatus })).map(({ code, path, line }) => ({ code, path, line }));
       assert.deepEqual(actual, fixture.expected);
+      if (fixture.cliRequireActive) {
+        const failure = await execFileAsync(process.execPath, [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--require-active"]).catch((error) => error);
+        assert.equal(failure.code, 1);
+        assert.match(failure.stdout, /^profile\.json:1 FM_PROFILE_STATUS profile status must be active$/mu);
+        assert.match(failure.stdout, /Feature Module Standard active: 1 diagnostic\(s\)\. No conformance claim\./u);
+      }
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 }
