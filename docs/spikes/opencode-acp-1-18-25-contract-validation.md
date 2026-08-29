@@ -42,10 +42,10 @@ wire implementation:
   framing, callback routing, and connection lifecycle.
 
 The executable handshake probe also uses `ClientApp`, `ndJsonStream`, and the
-typed SDK agent context methods directly. It retains the probe's established
-summary shape, but it does not retain or recreate a competing JSON-RPC wire.
-An in-memory SDK test exercises permission-request and session-update callback
-routing, closes the connection, and awaits `connection.closed`.
+typed SDK agent context methods directly. The SDK is the sole owner of request
+identifiers, correlation, and late-response handling; the probe neither
+observes nor shadows those internals. In-memory SDK tests exercise callback
+routing and normal connection closure without a second ACP wire.
 
 The repository intentionally has no custom JSON-RPC or NDJSON transport tests.
 Those are SDK responsibilities, not Agent Runtime policy.
@@ -58,11 +58,22 @@ the thin attachment seam neither forks the SDK transport nor supplies those
 production bounds.
 
 The experimental probe applies local Host/OpenCode policy limits to stdout
-bytes and lines, stderr, retained callback messages, request and workflow time,
-and post-signal process waits. It redacts retained diagnostics and classifies
-late replies and duplicate-or-unknown response identifiers without extending
-the SDK wire. These limits characterize a possible custody policy only; they
-are not the production Host Custody implementation or qualification evidence.
+bytes and lines, stderr, retained callback summaries, request and workflow
+time, SDK closure, and post-signal process waits. Every retained SDK result,
+callback, error, anomaly, stderr observation, and workflow field goes through
+one owner-local bounded projection. That projection retains only protocol
+version, bounded identifiers/statuses, fixed prompt-marker matches, bounded
+command names, typed outcomes, counts, and SHA-256 digests. It never retains
+session-list contents, workspace paths, permission options, tool arguments,
+stderr text, provider output, credentials, environment values, or arbitrary
+nested objects. Unsupported or oversized evidence is represented only by a
+typed anomaly and digest. These limits characterize a possible custody policy;
+they are not production Host Custody implementation or qualification evidence.
+
+Ordinary SDK rejection and initialization/version failure fail the probe.
+Request timeout is a bounded ambiguity failure, not a successful observation.
+Connection closure is also bounded; a closure timeout remains a typed retained
+anomaly before finite SIGTERM/SIGKILL process cleanup proceeds.
 
 ## Agent Runtime-owned policy
 
@@ -117,8 +128,8 @@ or tool enforcement.
 ## Deferred production work
 
 - production OpenCode adapter and composition;
-- production semantic deduplication and late-response policy;
-- production request deadlines and diagnostic redaction;
+- production semantic deduplication and reconciliation of ambiguous outcomes;
+- production request deadlines and evidence projection;
 - bounded Host Custody streams, process custody, stdout/stderr/message and
   output closure, output drain, and residue evidence around the SDK connection;
 - provider acceptance, durable cancellation, and effect reconciliation;
