@@ -5,11 +5,9 @@ export interface ProviderAccessScope {
   readonly tenantId: string;
 }
 
+/** Non-secret facts owned by Provider Access for one exact contained-turn route. */
 export interface ContainedTurnProviderAccessBinding {
   readonly accessRef: string;
-  readonly adapterRevision: string;
-  readonly binaryRevision: string;
-  readonly capabilityManifestRevision: string;
   readonly credentialBindingDigest: string;
   readonly credentialBindingRef: string;
   readonly credentialGeneration: number;
@@ -21,17 +19,51 @@ export interface ContainedTurnProviderAccessBinding {
   readonly tenantId: string;
 }
 
+export type ProviderAccessUnavailableReason =
+  | "indeterminate"
+  | "not_found"
+  | "revoked"
+  | "unavailable";
+
 export type ResolveContainedTurnProviderAccessOutcome =
-  | { readonly kind: "resolved"; readonly binding: ContainedTurnProviderAccessBinding }
-  | { readonly kind: "unavailable"; readonly reason: "not_found" | "revoked" };
+  | { readonly binding: ContainedTurnProviderAccessBinding; readonly kind: "resolved" }
+  | { readonly kind: "unavailable"; readonly reason: ProviderAccessUnavailableReason };
+
+export interface ResolveContainedTurnProviderAccessInput {
+  readonly provider: ProviderAccessProvider;
+  readonly scope: ProviderAccessScope;
+}
 
 export interface ResolveContainedTurnProviderAccess {
-  execute(input: {
-    readonly provider: ProviderAccessProvider;
-    readonly scope: ProviderAccessScope;
-  }): Promise<ResolveContainedTurnProviderAccessOutcome>;
+  execute(input: ResolveContainedTurnProviderAccessInput): Promise<ResolveContainedTurnProviderAccessOutcome>;
+}
+
+export type RevalidateContainedTurnProviderAccessRejection =
+  | ProviderAccessUnavailableReason
+  | "access_changed"
+  | "account_changed"
+  | "credential_changed"
+  | "credential_rotated"
+  | "provider_mismatch"
+  | "revision_changed"
+  | "route_changed"
+  | "scope_mismatch";
+
+export type RevalidateContainedTurnProviderAccessOutcome =
+  | { readonly binding: ContainedTurnProviderAccessBinding; readonly kind: "valid" }
+  | { readonly kind: "rejected"; readonly reason: RevalidateContainedTurnProviderAccessRejection };
+
+export interface RevalidateContainedTurnProviderAccessInput {
+  readonly binding: ContainedTurnProviderAccessBinding;
+  readonly provider: ProviderAccessProvider;
+  readonly scope: ProviderAccessScope;
+}
+
+export interface RevalidateContainedTurnProviderAccess {
+  execute(input: RevalidateContainedTurnProviderAccessInput): Promise<RevalidateContainedTurnProviderAccessOutcome>;
 }
 
 export interface ContainedTurnProviderAccessFeatureApi {
   readonly resolve: ResolveContainedTurnProviderAccess;
+  readonly revalidate: RevalidateContainedTurnProviderAccess;
 }
