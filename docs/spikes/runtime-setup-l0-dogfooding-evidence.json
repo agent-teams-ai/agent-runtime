@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "d490a2308be1b777931d2de0df7196d6b5f128a4",
+  "sourceRevision": "82800ba50e1060d9c93176a2a6ddb2bc0928fb00",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,13 +40,13 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "9c233c48e217245a6206d6d830a68a076e8a70334ff2842854a4b6f48d0ad04c",
+    "outputSha256": "3a1c0d51f6f6e4d300c1ed0c6a9a4a3a6283d37619483ff9d094e19e0cf2bc96",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
     "testSummary": {
-      "tests": 57,
-      "pass": 57,
+      "tests": 63,
+      "pass": 63,
       "fail": 0,
       "cancelled": 0,
       "skipped": 0
@@ -58,12 +58,12 @@
       "sha256": "0f1f9f916883c35abae1761f19271062c3825382b943434361eb8160ee145c19"
     },
     "sources": {
-      "fileCount": 59,
-      "sha256": "4a2ff3522d563b36125c55505c9c4cfaad25de30e99a9b36152c654be9ce211a"
+      "fileCount": 83,
+      "sha256": "45af4dd5be5849a96cf826c98d8fd9790043925d913a38e20a38f16e2a69369f"
     },
     "tests": {
-      "fileCount": 27,
-      "sha256": "775eac71209c9904a6fcd15a6ec761e8c7ba824db9044b6b79420572fe57c1c6"
+      "fileCount": 36,
+      "sha256": "42ee3700bb514263eff4fe8afab865a502cfefab42e5253afe2f630fcbe655cd"
     }
   },
   "historicalChanges": [
@@ -268,6 +268,35 @@
         "after": 49,
         "retained": 49,
         "reusePercent": 100
+      }
+    },
+    {
+      "id": "contained-turn-private-access",
+      "revision": "82800ba50e1060d9c93176a2a6ddb2bc0928fb00",
+      "files": 18,
+      "additions": 746,
+      "deletions": 71,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 5,
+        "additions": 286,
+        "deletions": 47
+      },
+      "production": {
+        "files": 10,
+        "additions": 397,
+        "deletions": 60
+      },
+      "tests": {
+        "files": 7,
+        "additions": 348,
+        "deletions": 10
+      },
+      "behaviorFixtures": {
+        "before": 49,
+        "after": 55,
+        "retained": 48,
+        "reusePercent": 97.96
       }
     }
   ],
@@ -570,7 +599,7 @@
     "codex-and-claude-code-are-sibling-capabilities-not-one-provider-slot",
     "no-runtime-provider-selection-without-rebuild-is-proved",
     "host-disposal-does-not-prove-generic-module-lifecycle",
-    "prospective-benchmarks-are-exploratory-and-do-not-satisfy-the-promotion-rule",
+    "prospective-benchmarks-are-exploratory-historical-evidence-and-do-not-satisfy-the-promotion-rule",
     "no-shared-foundation-runtime-is-authorized"
   ]
 }

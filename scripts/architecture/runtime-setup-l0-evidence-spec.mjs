@@ -27,7 +27,13 @@ export const changes = Object.freeze([
     id: "provider-symmetric-scope-contract-evidence",
     revision: "d490a2308be1b777931d2de0df7196d6b5f128a4",
   }),
+  Object.freeze({
+    id: "contained-turn-private-access",
+    revision: "82800ba50e1060d9c93176a2a6ddb2bc0928fb00",
+  }),
 ]);
+
+export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
 
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
@@ -35,12 +41,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "0f1f9f916883c35abae1761f19271062c3825382b943434361eb8160ee145c19",
   }),
   sources: Object.freeze({
-    fileCount: 59,
-    sha256: "4a2ff3522d563b36125c55505c9c4cfaad25de30e99a9b36152c654be9ce211a",
+    fileCount: 83,
+    sha256: "45af4dd5be5849a96cf826c98d8fd9790043925d913a38e20a38f16e2a69369f",
   }),
   tests: Object.freeze({
-    fileCount: 27,
-    sha256: "775eac71209c9904a6fcd15a6ec761e8c7ba824db9044b6b79420572fe57c1c6",
+    fileCount: 36,
+    sha256: "42ee3700bb514263eff4fe8afab865a502cfefab42e5253afe2f630fcbe655cd",
   }),
 });
 

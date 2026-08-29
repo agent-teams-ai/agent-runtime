@@ -90,6 +90,12 @@ corresponding historical recomputation. Exact report shape, canonical
 non-historical content, pinned current product digests, ownership, traces, and
 retained benchmark envelopes remain mandatory.
 
+The three prospective Module Kit benchmarks remain historical evidence bound
+to their exact `d490a230` source revision. An unrelated sibling feature does
+not relabel or ceremonially rerun them. Current L0 safety is recaptured through
+the exact product-root digests and package check; new hosted benchmarks are
+required only when a later decision re-evaluates module promotion.
+
 The general Engineering Foundation source-dependency gate remains authoritative
 for package boundaries. This evidence adds only the narrower product claim and
 does not create a competing architecture policy.
