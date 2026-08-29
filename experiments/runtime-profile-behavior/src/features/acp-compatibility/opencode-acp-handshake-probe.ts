@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
 import { unlink, writeFile } from "node:fs/promises";
-import { createInterface } from "node:readline";
+import { Readable, Writable } from "node:stream";
+
+import {
+  ClientApp,
+  methods,
+  ndJsonStream,
+  type ClientConnection,
+} from "@agentclientprotocol/sdk";
 
 const executable = process.argv[2];
 const workspace = process.argv[3];
@@ -10,8 +17,19 @@ if (executable === undefined || workspace === undefined) {
   throw new Error("Expected OpenCode executable and workspace");
 }
 
+const MAX_STDOUT_BYTES = 2 * 1024 * 1024;
+const MAX_STDOUT_LINE_BYTES = 256 * 1024;
+const MAX_STDERR_BYTES = 64 * 1024;
+const MAX_MESSAGES = 512;
+const MAX_MESSAGE_BYTES = 512 * 1024;
+const MAX_ANOMALIES = 32;
+const WORKFLOW_DEADLINE_MS = 120_000;
+const GRACEFUL_EXIT_MS = 2_000;
+const SIGTERM_EXIT_MS = 1_000;
+const SIGKILL_EXIT_MS = 1_000;
+
 type JsonRpcMessage = {
-  readonly jsonrpc?: string;
+  readonly jsonrpc?: "2.0";
   readonly id?: number | string | null;
   readonly method?: string;
   readonly params?: unknown;
@@ -19,16 +37,195 @@ type JsonRpcMessage = {
   readonly error?: unknown;
 };
 
-type PendingRequest = {
-  readonly resolve: (message: JsonRpcMessage) => void;
-  readonly reject: (error: Error) => void;
-  readonly timeout: NodeJS.Timeout;
+type ProcessResult = {
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly termination: "exited" | "sigterm" | "sigkill" | "unconfirmed_after_sigkill";
+};
+
+type TypedRequest = <Result>(
+  method: string,
+  invoke: () => Promise<Result>,
+  timeoutMs?: number,
+) => Promise<JsonRpcMessage>;
+
+type WorkflowResult = {
+  readonly initialize: JsonRpcMessage | undefined;
+  readonly sessionNew: JsonRpcMessage | undefined;
+  readonly sessionList: JsonRpcMessage | undefined;
+  readonly sessionClose: JsonRpcMessage | undefined;
+  readonly sessionResume: JsonRpcMessage | undefined;
+  readonly resumedSessionClose: JsonRpcMessage | undefined;
+  readonly promptResponse: JsonRpcMessage | undefined;
+  readonly sessionNewAfterDrift: JsonRpcMessage | undefined;
+  readonly sessionCloseAfterDrift: JsonRpcMessage | undefined;
+  readonly workflowError: string | undefined;
 };
 
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
     : {};
+
+const redacted = (value: string): string => {
+  let result = value;
+  for (const path of [workspace, executable, driftConfigPath]) {
+    if (path !== undefined && path.length > 0) {
+      result = result.split(path).join("<REDACTED_PATH>");
+    }
+  }
+  return result
+    .replace(/([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)\S+/gi, "$1<REDACTED>")
+    .slice(0, MAX_STDERR_BYTES);
+};
+
+const errorEvidence = (error: unknown): Readonly<Record<string, unknown>> => ({
+  name: error instanceof Error ? error.name.slice(0, 128) : "Error",
+  message: redacted(error instanceof Error ? error.message : "Unknown ACP error").slice(0, 1_024),
+});
+
+const delay = async (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+
+const executeSdkWorkflow = async (input: {
+  readonly connection: ClientConnection;
+  readonly typedRequest: TypedRequest;
+  readonly requestedProtocolVersion: 1 | 2;
+  readonly resumeSessionId: string | undefined;
+  readonly executePrompt: boolean;
+  readonly configPathToMutate: string | undefined;
+  readonly configDriftAction: string;
+}): Promise<WorkflowResult> => {
+  const { connection, typedRequest } = input;
+  let initialize: JsonRpcMessage | undefined;
+  let sessionNew: JsonRpcMessage | undefined;
+  let sessionList: JsonRpcMessage | undefined;
+  let sessionClose: JsonRpcMessage | undefined;
+  let sessionResume: JsonRpcMessage | undefined;
+  let resumedSessionClose: JsonRpcMessage | undefined;
+  let promptResponse: JsonRpcMessage | undefined;
+  let sessionNewAfterDrift: JsonRpcMessage | undefined;
+  let sessionCloseAfterDrift: JsonRpcMessage | undefined;
+  let workflowError: string | undefined;
+  try {
+    initialize = await typedRequest("initialize", () =>
+      connection.agent.request(methods.agent.initialize, {
+        protocolVersion: input.requestedProtocolVersion,
+        clientCapabilities: {},
+        clientInfo: {
+          name: "agent-runtime-profile-spike",
+          title: "Agent Runtime Profile Spike",
+          version: "0.0.0",
+        },
+      }),
+    );
+    const negotiatedProtocolVersion = record(initialize.result).protocolVersion;
+    if (negotiatedProtocolVersion === 1 || negotiatedProtocolVersion === 2) {
+      if (input.resumeSessionId !== undefined) {
+        sessionResume = await typedRequest("session/resume", () =>
+          connection.agent.request(methods.agent.session.resume, {
+            sessionId: input.resumeSessionId,
+            cwd: workspace,
+            mcpServers: [],
+          }),
+        );
+        resumedSessionClose = await typedRequest("session/close", () =>
+          connection.agent.request(methods.agent.session.close, {
+            sessionId: input.resumeSessionId,
+          }),
+        );
+      }
+      sessionNew = await typedRequest("session/new", () =>
+        connection.agent.request(methods.agent.session.new, {
+          cwd: workspace,
+          mcpServers: [],
+        }),
+      );
+      const sessionId = record(sessionNew.result).sessionId;
+      if (input.executePrompt && typeof sessionId === "string") {
+        promptResponse = await typedRequest(
+          "session/prompt",
+          () =>
+            connection.agent.request(methods.agent.session.prompt, {
+              sessionId,
+              prompt: [
+                {
+                  type: "text",
+                  text: "Reply with exactly runtime-profile-acp-ok. Do not use tools.",
+                },
+              ],
+            }),
+          60_000,
+        );
+      }
+      if (input.configPathToMutate !== undefined) {
+        await delay(150);
+        if (input.configDriftAction === "delete") {
+          await unlink(input.configPathToMutate);
+        } else {
+          await writeFile(
+            input.configPathToMutate,
+            `${JSON.stringify(
+              {
+                username: "after-drift",
+                command: {
+                  "after-drift": {
+                    template: "After drift",
+                    description: "After drift",
+                  },
+                },
+              },
+              null,
+              2,
+            )}\n`,
+            { mode: 0o600 },
+          );
+        }
+        sessionNewAfterDrift = await typedRequest("session/new", () =>
+          connection.agent.request(methods.agent.session.new, {
+            cwd: workspace,
+            mcpServers: [],
+          }),
+        );
+        await delay(150);
+        const driftSessionId = record(sessionNewAfterDrift.result).sessionId;
+        if (typeof driftSessionId === "string") {
+          sessionCloseAfterDrift = await typedRequest("session/close", () =>
+            connection.agent.request(methods.agent.session.close, {
+              sessionId: driftSessionId,
+            }),
+          );
+        }
+      }
+      sessionList = await typedRequest("session/list", () =>
+        connection.agent.request(methods.agent.session.list, { cwd: workspace }),
+      );
+      if (typeof sessionId === "string") {
+        sessionClose = await typedRequest("session/close", () =>
+          connection.agent.request(methods.agent.session.close, { sessionId }),
+        );
+      }
+    }
+  } catch (error) {
+    workflowError = redacted(
+      error instanceof Error ? error.message : "Unknown ACP workflow error",
+    ).slice(0, 1_024);
+  }
+  return {
+    initialize,
+    sessionNew,
+    sessionList,
+    sessionClose,
+    sessionResume,
+    resumedSessionClose,
+    promptResponse,
+    sessionNewAfterDrift,
+    sessionCloseAfterDrift,
+    workflowError,
+  };
+};
 
 const summarizeHandshake = (input: {
   requestedProtocolVersion: 1 | 2;
@@ -42,11 +239,9 @@ const summarizeHandshake = (input: {
   sessionNewAfterDrift: JsonRpcMessage | undefined;
   sessionCloseAfterDrift: JsonRpcMessage | undefined;
   messages: readonly JsonRpcMessage[];
+  protocolAnomalies: readonly string[];
   workflowError: string | undefined;
-  processResult: {
-    readonly exitCode: number | null;
-    readonly signal: NodeJS.Signals | null;
-  };
+  processResult: ProcessResult;
   stderr: string;
 }) => ({
   requestedProtocolVersion: input.requestedProtocolVersion,
@@ -69,26 +264,22 @@ const summarizeHandshake = (input: {
     )
     .map((update) => record(update.content).text)
     .filter((text): text is string => typeof text === "string")
-    .join(""),
+    .join("")
+    .slice(0, MAX_MESSAGE_BYTES),
   workflowError: input.workflowError,
+  protocolAnomalies: input.protocolAnomalies,
   process: {
     ...input.processResult,
     stderr: input.stderr,
   },
   unsolicitedMethods: input.messages
-    .filter(
-      (message) => message.method !== undefined && message.id === undefined,
-    )
+    .filter((message) => message.method !== undefined && message.id === undefined)
     .map((message) => message.method),
   unsolicitedNotifications: input.messages
-    .filter(
-      (message) => message.method !== undefined && message.id === undefined,
-    )
+    .filter((message) => message.method !== undefined && message.id === undefined)
     .map(({ method, params }) => ({ method, params })),
   clientRequests: input.messages
-    .filter(
-      (message) => message.method !== undefined && message.id !== undefined,
-    )
+    .filter((message) => message.method !== undefined && message.id !== undefined)
     .map(({ method, params }) => ({ method, params })),
   availableCommandsBySession: Object.fromEntries(
     input.messages
@@ -117,262 +308,239 @@ const runHandshake = async (
   configPathToMutate?: string,
   configDriftAction = "mutate",
 ) => {
-  const child = spawn(
-    executable,
-    ["acp", "--pure", "--cwd", workspace],
-    {
-      cwd: workspace,
-      env: process.env,
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
+  const child = spawn(executable, ["acp", "--pure", "--cwd", workspace], {
+    cwd: workspace,
+    env: process.env,
+    shell: false,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
   const messages: JsonRpcMessage[] = [];
-  const pending = new Map<number | string, PendingRequest>();
+  const protocolAnomalies: string[] = [];
+  const timedOutRequestIds = new Set<number>();
+  let retainedMessageBytes = 0;
   let nextId = 1;
-  let stderr = "";
-  let exited = false;
+  let stdoutBytes = 0;
+  let stdoutLineBytes = 0;
+  let stderrBytes = 0;
+  let stderrTruncated = false;
+  const stderrChunks: Uint8Array[] = [];
+  const deadlineAt = Date.now() + WORKFLOW_DEADLINE_MS;
 
-  child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (chunk: string) => {
-    stderr += chunk;
-  });
-
-  const exitPromise = new Promise<{
-    readonly exitCode: number | null;
-    readonly signal: NodeJS.Signals | null;
-  }>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (exitCode, signal) => {
-      exited = true;
-      resolve({ exitCode, signal });
-    });
-  });
-
-  const lines = createInterface({ input: child.stdout });
-  lines.on("line", (line) => {
-    let message: JsonRpcMessage;
-    try {
-      message = JSON.parse(line) as JsonRpcMessage;
-    } catch {
-      messages.push({ method: "<invalid-json>", params: line });
-      return;
+  const retainAnomaly = (classification: string): void => {
+    if (protocolAnomalies.length < MAX_ANOMALIES) {
+      protocolAnomalies.push(classification);
     }
-    messages.push(message);
+  };
+  const retainMessage = (message: JsonRpcMessage): void => {
+    const bytes = Buffer.byteLength(JSON.stringify(message));
     if (
-      message.id !== undefined &&
-      message.id !== null &&
-      (message.result !== undefined || message.error !== undefined)
+      messages.length >= MAX_MESSAGES ||
+      retainedMessageBytes + bytes > MAX_MESSAGE_BYTES
     ) {
-      const request = pending.get(message.id);
-      if (request !== undefined) {
-        clearTimeout(request.timeout);
-        pending.delete(message.id);
-        request.resolve(message);
-      }
+      retainAnomaly("message_evidence_limit_exceeded");
       return;
     }
-    if (message.method !== undefined && message.id !== undefined) {
-      const response =
-        message.method === "session/request_permission"
-          ? {
-              jsonrpc: "2.0",
-              id: message.id,
-              result: { outcome: { outcome: "cancelled" } },
-            }
-          : {
-              jsonrpc: "2.0",
-              id: message.id,
-              error: {
-                code: -32601,
-                message: `Unsupported spike client method: ${message.method}`,
-              },
-            };
-      child.stdin.write(
-        `${JSON.stringify(response)}\n`,
-      );
+    retainedMessageBytes += bytes;
+    messages.push(message);
+  };
+
+  child.stderr.on("data", (chunk: Buffer) => {
+    if (stderrBytes >= MAX_STDERR_BYTES) {
+      stderrTruncated = true;
+      return;
     }
+    const retained = chunk.subarray(0, MAX_STDERR_BYTES - stderrBytes);
+    stderrChunks.push(retained);
+    stderrBytes += retained.byteLength;
+    stderrTruncated ||= retained.byteLength < chunk.byteLength;
   });
 
-  const request = (
+  const exit = Promise.withResolvers<Omit<ProcessResult, "termination">>();
+  child.once("error", () => exit.resolve({ exitCode: null, signal: null }));
+  child.once("close", (exitCode, signal) => exit.resolve({ exitCode, signal }));
+
+  const boundedStdout = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      stdoutBytes += chunk.byteLength;
+      if (stdoutBytes > MAX_STDOUT_BYTES) {
+        retainAnomaly("stdout_byte_limit_exceeded");
+        throw new Error("OpenCode ACP stdout byte limit exceeded");
+      }
+      for (const byte of chunk) {
+        if (byte === 0x0a) {
+          stdoutLineBytes = 0;
+        } else {
+          stdoutLineBytes += 1;
+          if (stdoutLineBytes > MAX_STDOUT_LINE_BYTES) {
+            retainAnomaly("stdout_line_limit_exceeded");
+            throw new Error("OpenCode ACP stdout line limit exceeded");
+          }
+        }
+      }
+      controller.enqueue(chunk);
+    },
+  });
+  const fromAgent = (
+    Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>
+  ).pipeThrough(boundedStdout);
+  const toAgent = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
+
+  const app = new ClientApp({ name: "agent-runtime-opencode-characterization" })
+    .onRequest(methods.client.session.requestPermission, ({ params }) => {
+      retainMessage({
+        jsonrpc: "2.0",
+        id: "sdk-client-request",
+        method: methods.client.session.requestPermission,
+        params,
+      });
+      return { outcome: { outcome: "cancelled" } };
+    })
+    .onNotification(methods.client.session.update, ({ params }) => {
+      retainMessage({
+        jsonrpc: "2.0",
+        method: methods.client.session.update,
+        params,
+      });
+    });
+  const connection: ClientConnection = app.connect(ndJsonStream(toAgent, fromAgent));
+
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (args[0] === "Got response to unknown request") {
+      const id = typeof args[1] === "number" ? args[1] : -1;
+      retainAnomaly(
+        timedOutRequestIds.has(id)
+          ? "late_response_after_request_deadline"
+          : "duplicate_response_or_unknown_request_id",
+      );
+      return;
+    }
+    originalConsoleError(...args);
+  };
+
+  const typedRequest = async <Result>(
     method: string,
-    params: Record<string, unknown>,
+    invoke: () => Promise<Result>,
     timeoutMs = 15_000,
   ): Promise<JsonRpcMessage> => {
     const id = nextId;
     nextId += 1;
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`ACP request timed out: ${method}`));
-      }, timeoutMs);
-      pending.set(id, { resolve, reject, timeout });
-      child.stdin.write(
-        `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`,
-      );
-    });
+    const remainingMs = Math.max(0, deadlineAt - Date.now());
+    const effectiveTimeoutMs = Math.min(timeoutMs, remainingMs);
+    let timedOut = false;
+    const operation = invoke();
+    void operation
+      .then(() => {
+        if (timedOut) {
+          retainAnomaly("late_response_after_request_deadline");
+        }
+        return null;
+      })
+      .catch(() => null);
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const result = await Promise.race([
+        operation,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            timedOutRequestIds.add(id);
+            reject(new Error(`ACP request deadline exceeded: ${method}`));
+          }, effectiveTimeoutMs);
+        }),
+      ]);
+      const message = { jsonrpc: "2.0" as const, id, result };
+      retainMessage(message);
+      return message;
+    } catch (error) {
+      if (timedOut) {
+        throw error;
+      }
+      const message = { jsonrpc: "2.0" as const, id, error: errorEvidence(error) };
+      retainMessage(message);
+      return message;
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
   };
 
-  const initializeParams =
-    requestedProtocolVersion === 1
-      ? {
-          protocolVersion: 1,
-          clientCapabilities: {},
-          clientInfo: {
-            name: "agent-runtime-profile-spike",
-            version: "0.0.0",
-          },
-        }
-      : {
-          protocolVersion: 2,
-          info: {
-            name: "agent-runtime-profile-spike",
-            title: "Agent Runtime Profile Spike",
-            version: "0.0.0",
-          },
-          capabilities: {},
-        };
-
-  let initialize: JsonRpcMessage | undefined;
-  let sessionNew: JsonRpcMessage | undefined;
-  let sessionList: JsonRpcMessage | undefined;
-  let sessionClose: JsonRpcMessage | undefined;
-  let sessionResume: JsonRpcMessage | undefined;
-  let resumedSessionClose: JsonRpcMessage | undefined;
-  let promptResponse: JsonRpcMessage | undefined;
-  let sessionNewAfterDrift: JsonRpcMessage | undefined;
-  let sessionCloseAfterDrift: JsonRpcMessage | undefined;
-  let workflowError: string | undefined;
+  let workflow: WorkflowResult;
   try {
-    initialize = await request("initialize", initializeParams);
-    const initializeResult = record(initialize.result);
-    const negotiatedProtocolVersion = initializeResult.protocolVersion;
-    if (negotiatedProtocolVersion === 1 || negotiatedProtocolVersion === 2) {
-      if (resumeSessionId !== undefined) {
-        sessionResume = await request("session/resume", {
-          sessionId: resumeSessionId,
-          cwd: workspace,
-          mcpServers: [],
-        });
-        resumedSessionClose = await request("session/close", {
-          sessionId: resumeSessionId,
-        });
-      }
-      sessionNew = await request("session/new", {
-        cwd: workspace,
-        mcpServers: [],
-      });
-      const sessionId = record(sessionNew.result).sessionId;
-      if (executePrompt && typeof sessionId === "string") {
-        promptResponse = await request(
-          "session/prompt",
-          {
-            sessionId,
-            prompt: [
-              {
-                type: "text",
-                text: "Reply with exactly runtime-profile-acp-ok. Do not use tools.",
-              },
-            ],
-          },
-          60_000,
-        );
-      }
-      if (configPathToMutate !== undefined) {
-        await new Promise((resolve) => {
-          setTimeout(resolve, 150);
-        });
-        if (configDriftAction === "delete") {
-          await unlink(configPathToMutate);
-        } else {
-          await writeFile(
-            configPathToMutate,
-            `${JSON.stringify(
-              {
-                username: "after-drift",
-                command: {
-                  "after-drift": {
-                    template: "After drift",
-                    description: "After drift",
-                  },
-                },
-              },
-              null,
-              2,
-            )}\n`,
-            { mode: 0o600 },
-          );
-        }
-        sessionNewAfterDrift = await request("session/new", {
-          cwd: workspace,
-          mcpServers: [],
-        });
-        await new Promise((resolve) => {
-          setTimeout(resolve, 150);
-        });
-        const driftSessionId = record(
-          sessionNewAfterDrift.result,
-        ).sessionId;
-        if (typeof driftSessionId === "string") {
-          sessionCloseAfterDrift = await request("session/close", {
-            sessionId: driftSessionId,
-          });
-        }
-      }
-      sessionList = await request("session/list", { cwd: workspace });
-      if (typeof sessionId === "string") {
-        sessionClose = await request("session/close", { sessionId });
-      }
-    }
-  } catch (error) {
-    workflowError = error instanceof Error ? error.message : "Unknown ACP error";
+    workflow = await executeSdkWorkflow({
+      connection,
+      typedRequest,
+      requestedProtocolVersion,
+      resumeSessionId,
+      executePrompt,
+      configPathToMutate,
+      configDriftAction,
+    });
   } finally {
-    for (const pendingRequest of pending.values()) {
-      clearTimeout(pendingRequest.timeout);
-      pendingRequest.reject(new Error("ACP connection closed"));
-    }
-    pending.clear();
+    connection.close();
     child.stdin.end();
+    await Promise.race([
+      connection.closed,
+      delay(1_000),
+    ]);
+    console.error = originalConsoleError;
   }
 
-  await Promise.race([
-    exitPromise,
-    new Promise((resolve) => {
-      setTimeout(resolve, 2_000);
-    }),
-  ]);
-  if (!exited) {
+  const exited = async (timeoutMs: number) =>
+    Promise.race([
+      exit.promise.then((result) => ({ result, timedOut: false as const })),
+      new Promise<{ readonly timedOut: true }>((resolve) => {
+        setTimeout(() => resolve({ timedOut: true }), timeoutMs);
+      }),
+    ]);
+  let processResult: ProcessResult;
+  const graceful = await exited(GRACEFUL_EXIT_MS);
+  if (!graceful.timedOut) {
+    processResult = { ...graceful.result, termination: "exited" };
+  } else {
     child.kill("SIGTERM");
+    const afterTerm = await exited(SIGTERM_EXIT_MS);
+    if (!afterTerm.timedOut) {
+      processResult = { ...afterTerm.result, termination: "sigterm" };
+    } else {
+      child.kill("SIGKILL");
+      const afterKill = await exited(SIGKILL_EXIT_MS);
+      processResult = afterKill.timedOut
+        ? {
+            exitCode: null,
+            signal: "SIGKILL",
+            termination: "unconfirmed_after_sigkill",
+          }
+        : { ...afterKill.result, termination: "sigkill" };
+    }
   }
-  const processResult = await exitPromise;
-  lines.close();
 
+  const stderr = redacted(
+    `${Buffer.concat(stderrChunks).toString("utf8")}${
+      stderrTruncated ? "\n<STDERR_TRUNCATED>" : ""
+    }`,
+  );
+  const failClosedWorkflow: WorkflowResult = {
+    ...workflow,
+    workflowError:
+      workflow.workflowError ??
+      (processResult.termination === "unconfirmed_after_sigkill"
+        ? "OpenCode process termination remained unconfirmed after SIGKILL"
+        : undefined),
+  };
   return summarizeHandshake({
     requestedProtocolVersion,
-    initialize,
-    sessionNew,
-    sessionList,
-    sessionClose,
-    sessionResume,
-    resumedSessionClose,
-    promptResponse,
-    sessionNewAfterDrift,
-    sessionCloseAfterDrift,
+    ...failClosedWorkflow,
     messages,
-    workflowError,
+    protocolAnomalies,
     processResult,
     stderr,
   });
 };
 
 if (driftConfigPath !== undefined) {
-  const v1 = await runHandshake(
-    1,
-    undefined,
-    false,
-    driftConfigPath,
-    driftAction,
-  );
+  const v1 = await runHandshake(1, undefined, false, driftConfigPath, driftAction);
   process.stdout.write(`${JSON.stringify({ v1 }, null, 2)}\n`);
   if (
     v1.workflowError !== undefined ||

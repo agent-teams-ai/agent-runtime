@@ -122,6 +122,18 @@ const KNOWN_SESSION_CAPABILITIES = new Set([
   "list",
   "resume",
 ]);
+const KNOWN_PROMPT_CAPABILITIES = new Set(["_meta", "audio", "embeddedContext", "image"]);
+const KNOWN_MCP_CAPABILITIES = new Set(["_meta", "acp", "http", "sse"]);
+const OFFICIAL_DEFERRED_AGENT_CAPABILITIES = new Set([
+  "auth",
+  "nes",
+  "positionEncoding",
+  "providers",
+]);
+const OFFICIAL_DEFERRED_SESSION_CAPABILITIES = new Set([
+  "additionalDirectories",
+  "delete",
+]);
 
 export type OpenCodeCapabilityStatus = "baseline" | "deferred" | "supported" | "unsupported";
 
@@ -139,6 +151,8 @@ export interface OpenCodeCapabilityObservation {
     list: "supported" | "unsupported";
     resume: "supported" | "unsupported";
     close: "supported" | "unsupported";
+    delete: "deferred" | "unsupported";
+    additionalDirectories: "deferred" | "unsupported";
     fork: "deferred" | "unsupported";
   }>;
   readonly prompt: Readonly<{
@@ -147,6 +161,7 @@ export interface OpenCodeCapabilityObservation {
     image: boolean;
   }>;
   readonly mcp: Readonly<{ http: boolean; sse: boolean }>;
+  readonly officialDeferred: readonly string[];
   readonly unknown: readonly string[];
 }
 
@@ -173,6 +188,21 @@ export const observeOpenCodeCapabilities = (value: unknown): OpenCodeCapabilityO
     : {};
   const prompt = isRecord(capabilities.promptCapabilities) ? capabilities.promptCapabilities : {};
   const mcp = isRecord(capabilities.mcpCapabilities) ? capabilities.mcpCapabilities : {};
+  const officialDeferred = [
+    ...Object.keys(capabilities)
+      .filter(
+        (key) =>
+          OFFICIAL_DEFERRED_AGENT_CAPABILITIES.has(key) && advertised(capabilities, key),
+      )
+      .map((key) => `agentCapabilities/${key}`),
+    ...Object.keys(sessions)
+      .filter(
+        (key) =>
+          OFFICIAL_DEFERRED_SESSION_CAPABILITIES.has(key) && advertised(sessions, key),
+      )
+      .map((key) => `sessionCapabilities/${key}`),
+    ...(advertised(mcp, "acp") ? ["mcpCapabilities/acp"] : []),
+  ].toSorted();
   const unknown = [
     ...Object.keys(capabilities)
       .filter((key) => !KNOWN_AGENT_CAPABILITIES.has(key))
@@ -180,6 +210,12 @@ export const observeOpenCodeCapabilities = (value: unknown): OpenCodeCapabilityO
     ...Object.keys(sessions)
       .filter((key) => !KNOWN_SESSION_CAPABILITIES.has(key))
       .map((key) => `sessionCapabilities/${boundedCapabilityKey(key)}`),
+    ...Object.keys(prompt)
+      .filter((key) => !KNOWN_PROMPT_CAPABILITIES.has(key))
+      .map((key) => `promptCapabilities/${boundedCapabilityKey(key)}`),
+    ...Object.keys(mcp)
+      .filter((key) => !KNOWN_MCP_CAPABILITIES.has(key))
+      .map((key) => `mcpCapabilities/${boundedCapabilityKey(key)}`),
   ].toSorted();
   if (unknown.length > OPENCODE_ACP_MAX_UNKNOWN_CAPABILITIES) {
     return malformed("capability_count");
@@ -203,6 +239,10 @@ export const observeOpenCodeCapabilities = (value: unknown): OpenCodeCapabilityO
       list: advertised(sessions, "list") ? "supported" : "unsupported",
       resume: advertised(sessions, "resume") ? "supported" : "unsupported",
       close: advertised(sessions, "close") ? "supported" : "unsupported",
+      delete: advertised(sessions, "delete") ? "deferred" : "unsupported",
+      additionalDirectories: advertised(sessions, "additionalDirectories")
+        ? "deferred"
+        : "unsupported",
       fork: advertised(sessions, "fork") ? "deferred" : "unsupported",
     }),
     prompt: Object.freeze({
@@ -211,6 +251,7 @@ export const observeOpenCodeCapabilities = (value: unknown): OpenCodeCapabilityO
       image: prompt.image === true,
     }),
     mcp: Object.freeze({ http: mcp.http === true, sse: mcp.sse === true }),
+    officialDeferred: Object.freeze(officialDeferred),
     unknown: Object.freeze(unknown),
   };
   return Object.freeze(observation);
