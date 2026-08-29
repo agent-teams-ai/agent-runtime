@@ -1,0 +1,17 @@
+{
+  "name": "opencode-1-18-25-normalized",
+  "provenance": "normalized_from_separately_retained_provider_characterization_no_raw_acp_transcript",
+  "response": {
+    "protocolVersion": 1,
+    "agentInfo": { "name": "OpenCode", "version": "1.18.25" },
+    "agentCapabilities": {
+      "loadSession": true,
+      "promptCapabilities": { "embeddedContext": true, "image": true },
+      "mcpCapabilities": { "http": true, "sse": true },
+      "sessionCapabilities": { "close": {}, "fork": {}, "list": {}, "resume": {} }
+    }
+  },
+  "fixedPromptOutputDigestSha256": "dc5d87f627deedda40c795c8435536e04764761fee5dbe2fb29e7e4e90484e74",
+  "costUsd": 0,
+  "permissionOrToolRequestObserved": false
+}

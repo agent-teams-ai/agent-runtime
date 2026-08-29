@@ -1,7 +1,6 @@
 {
   "name": "cancellation-ambiguity",
-  "cancelResponse": { "ok": true },
-  "providerAccepted": "unknown",
-  "terminalUpdate": null,
-  "expected": "ambiguous_requires_reconciliation"
+  "provenance": "synthetic_policy_case_no_live_cancellation_retained",
+  "activeSessionId": "session-1",
+  "cancel": { "sessionId": "session-1" }
 }

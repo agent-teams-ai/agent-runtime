@@ -1,11 +1,11 @@
 {
   "name": "unknown-unsupported-capabilities",
+  "provenance": "synthetic_adversarial_acp_v1_shape",
   "response": {
     "protocolVersion": 1,
     "agentCapabilities": {
-      "session": { "new": true, "list": false, "resume": false, "close": true, "fork": true }
+      "futureTopLevel": {},
+      "sessionCapabilities": { "close": {}, "futureSessionOperation": {} }
     }
-  },
-  "expectedUnknown": ["fork"],
-  "expectedUnsupported": ["list", "resume"]
+  }
 }

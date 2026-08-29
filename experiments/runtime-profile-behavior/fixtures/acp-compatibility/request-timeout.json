@@ -1,6 +1,0 @@
-{
-  "name": "request-timeout",
-  "method": "session/new",
-  "timeoutMs": 15000,
-  "expectedError": "request_timeout"
-}
