@@ -1,13 +1,4 @@
 export type {
-  DiscoverCodexInstallations,
-  DiscoverCodexInstallationsInput,
-  DiscoverCodexInstallationsResult,
-  InstallationCandidate,
-  InstallationCandidateSource,
-  RuntimeInstallationDiagnostic,
-  RuntimeInstallationObservation,
-} from "./features/runtime-installation-discovery/contracts/runtime-installation-observation.js";
-export type {
   ClaudeCodeInstallationCandidate,
   ClaudeCodeInstallationCandidateSource,
   ClaudeCodeInstallationDiagnostic,
@@ -15,7 +6,14 @@ export type {
   DiscoverClaudeCodeInstallations,
   DiscoverClaudeCodeInstallationsInput,
   DiscoverClaudeCodeInstallationsResult,
-} from "./features/runtime-installation-discovery/contracts/claude-code-installation-observation.js";
+  DiscoverCodexInstallations,
+  DiscoverCodexInstallationsInput,
+  DiscoverCodexInstallationsResult,
+  InstallationCandidate,
+  InstallationCandidateSource,
+  RuntimeInstallationDiagnostic,
+  RuntimeInstallationObservation,
+} from "./features/runtime-installation-discovery/public.js";
 export type {
   ContainedTurnFeatureApi,
   ContainedTurnMode,

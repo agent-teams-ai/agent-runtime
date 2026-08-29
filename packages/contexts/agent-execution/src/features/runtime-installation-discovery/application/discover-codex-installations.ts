@@ -5,7 +5,7 @@ import type {
   DiscoverCodexInstallationsResult,
   InstallationAliasObservation,
   RuntimeInstallationDiagnostic,
-} from "../contracts/runtime-installation-observation.js";
+} from "./runtime-installation-discovery.js";
 import type { ExecutableFileObserver } from "./ports/outbound/executable-file-observation.js";
 
 const diagnosticCode = {

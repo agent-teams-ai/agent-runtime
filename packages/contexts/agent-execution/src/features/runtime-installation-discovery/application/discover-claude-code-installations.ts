@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import type {
   ClaudeCodeInstallationCandidate,
   ClaudeCodeInstallationDiagnostic,
-  ClaudeCodeInstallationObservation,
   DiscoverClaudeCodeInstallations,
   DiscoverClaudeCodeInstallationsResult,
-} from "../contracts/claude-code-installation-observation.js";
+  RuntimeInstallationObservation,
+} from "./runtime-installation-discovery.js";
 import type { ExecutableFileObserver } from "./ports/outbound/executable-file-observation.js";
 
 const MAXIMUM_CANDIDATES = 256;
@@ -95,7 +95,7 @@ const freezeDiagnostic = (
 
 const freezeResult = (
   diagnostics: ClaudeCodeInstallationDiagnostic[],
-  installations: ClaudeCodeInstallationObservation[],
+  installations: RuntimeInstallationObservation[],
 ): DiscoverClaudeCodeInstallationsResult =>
   Object.freeze({
     diagnostics: Object.freeze(diagnostics.map(freezeDiagnostic)),

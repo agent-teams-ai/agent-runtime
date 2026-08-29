@@ -20,6 +20,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { parseSync } from "oxc-parser";
+
 import {
   createNodeExecutableFileObserver,
   createRuntimeInstallationDiscoveryFeature,
@@ -55,6 +57,19 @@ const collectTypeScriptSources = async (directory: string): Promise<string[]> =>
     }),
   );
   return nested.flat();
+};
+
+const moduleSpecifiers = (path: string, source: string): string[] => {
+  const parsed = parseSync(path, source);
+  assert.deepEqual(parsed.errors, [], `Oxc could not parse ${path}`);
+  return [
+    ...parsed.module.staticImports.map(entry => entry.moduleRequest.value),
+    ...parsed.module.staticExports.flatMap(entry =>
+      entry.entries.flatMap(item =>
+        item.moduleRequest === null ? [] : [item.moduleRequest.value],
+      ),
+    ),
+  ];
 };
 
 const candidate = (
@@ -723,6 +738,71 @@ test("Claude production discovery graph has no process, network, ambient-state, 
     productionSource,
     /from\s+["']node:(?:child_process|cluster|dgram|dns|http|https|net|readline|repl|tls|worker_threads)["']|process\.(?:cwd|env)|\b(?:fetch|spawn|exec|execFile|fork)\s*\(|interactive[- ]?shell/iu,
   );
+});
+
+test("application imports stay inward and public declarations expose only curated contracts", async () => {
+  const featureRoot = join(
+    packageRoot,
+    "src/features/runtime-installation-discovery",
+  );
+  const applicationRoot = join(featureRoot, "application");
+  for (const path of await collectTypeScriptSources(applicationRoot)) {
+    const imports = moduleSpecifiers(path, await readFile(path, "utf8"));
+    assert.equal(
+      imports.some(specifier =>
+        /(?:^|\/)(?:adapters|composition|contracts|domain)(?:\/|$)/u.test(
+          specifier,
+        ) ||
+        /(?:module-kit|awilix|cordis|container|registry|framework)/iu.test(
+          specifier,
+        ),
+      ),
+      false,
+      `forbidden inward import in ${path}`,
+    );
+  }
+
+  const declarationRoot = join(
+    packageRoot,
+    "dist/features/runtime-installation-discovery",
+  );
+  const pending = [join(declarationRoot, "public.d.ts")];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const path = pending.pop();
+    assert.ok(path !== undefined);
+    if (visited.has(path)) {
+      continue;
+    }
+    visited.add(path);
+    const source = await readFile(path, "utf8");
+    for (const specifier of moduleSpecifiers(path, source)) {
+      if (!specifier.startsWith(".")) {
+        continue;
+      }
+      const target = resolvePath(dirname(path), specifier.replace(/\.js$/u, ".d.ts"));
+      assert.doesNotMatch(
+        target,
+        /\/(?:application|adapters|domain|composition)\//u,
+        `public declaration leaks a feature internal: ${path} -> ${target}`,
+      );
+      pending.push(target);
+    }
+  }
+  assert.ok([...visited].some(path =>
+    path.endsWith("contracts/executable-file-observation.d.ts")));
+
+  for (const entrypoint of ["composition.d.ts", "index.d.ts"]) {
+    const path = join(packageRoot, "dist", entrypoint);
+    const runtimeDiscoveryExports = new Set(
+      moduleSpecifiers(path, await readFile(path, "utf8")).filter(specifier =>
+        specifier.includes("runtime-installation-discovery"),
+      ),
+    );
+    assert.deepEqual([...runtimeDiscoveryExports], [
+      "./features/runtime-installation-discovery/public.js",
+    ]);
+  }
 });
 
 test("reports frozen candidate overflow without observing or truncating", async () => {

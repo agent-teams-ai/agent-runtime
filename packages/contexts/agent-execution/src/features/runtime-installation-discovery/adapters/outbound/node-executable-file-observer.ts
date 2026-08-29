@@ -8,7 +8,7 @@ import { lstat, realpath } from "node:fs/promises";
 import type {
   ExecutableFileObservation,
   ExecutableFileObserver,
-} from "../../application/ports/outbound/executable-file-observation.js";
+} from "../../contracts/executable-file-observation.js";
 
 const classifyError = (error: unknown): ExecutableFileObservation => {
   if (error instanceof PathCustodyError) {
