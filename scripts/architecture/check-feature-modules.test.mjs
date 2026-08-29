@@ -24,6 +24,7 @@ const feature = (id, roles = ["domain"]) => ({
 });
 
 const baseFiles = {
+  "package.json": "{\"name\":\"@fixture/runtime\"}\n",
   "src/features/alpha/index.ts": "export {};\n",
   "src/features/alpha/internal.ts": "export { value } from './domain/value.js';\n",
   "src/features/alpha/domain/value.ts": "export const value = true;\n",
@@ -40,7 +41,7 @@ const secondFiles = {
 const makeFixtureRoot = async () => {
   try { return await mkdtemp(join(tmpdir(), "feature-module-check-")); }
   catch (error) {
-    if (error?.code !== "EROFS") throw error;
+    if (error?.code !== "EROFS") {throw error;}
     return mkdtemp(join(process.cwd(), ".feature-module-check-"));
   }
 };
@@ -50,11 +51,12 @@ for (const fixture of fixtureManifest.cases) {
     const root = await makeFixtureRoot();
     try {
       const features = [feature("alpha", fixture.alphaRoles)];
-      if (fixture.secondFeature) features.push(feature("beta", fixture.secondRoles));
+      if (fixture.secondFeature) {features.push(feature("beta", fixture.secondRoles));}
+      const status = fixture.status ?? "candidate";
       const profile = {
         schemaVersion: 1,
-        status: "candidate",
-        authority: { ...authority, id: fixture.authorityId ?? authority.id },
+        status,
+        authority: { ...authority, id: fixture.authorityId ?? authority.id, ...fixture.authorityExtra },
         scope: { productionRoots: ["src"], outOfScope: ["everything else"] },
         moduleRoles: ["contracts", "domain", "application", "adapters", "composition"],
         features,
@@ -62,15 +64,19 @@ for (const fixture of fixtureManifest.cases) {
         featureEdges: fixture.edges ?? [],
         extensions: [], deviations: [], exceptions: fixture.exceptions ?? [],
         enforcement: { candidate: "pnpm architecture:feature-modules:candidate", active: "pnpm architecture:feature-modules:active", fixtures: "pnpm test:feature-modules" },
-        activation: { todo: ["fix diagnostics"], acceptance: ["zero diagnostics"] },
+        activation: status === "active"
+          ? { blockers: [], acceptance: ["zero diagnostics"], authority: { acceptedAdr: "ADR-0007", owner: "architecture" }, evidence: { fixtureCommand: "pnpm test:feature-modules", candidateCommand: "pnpm architecture:feature-modules:candidate", productionDiagnostics: 0 } }
+          : { blockers: ["fix diagnostics"], acceptance: ["zero diagnostics"], authority: null, evidence: null },
         ...fixture.profileExtra,
       };
+      if (fixture.activation) {profile.activation = fixture.activation;}
       const files = { ...baseFiles, ...(fixture.secondFeature ? secondFiles : {}), ...fixture.files, "profile.json": `${JSON.stringify(profile, null, 2)}\n` };
       for (const [path, content] of Object.entries(files)) {
+        if (content === null) {continue;}
         await mkdir(dirname(join(root, path)), { recursive: true });
         await writeFile(join(root, path), content);
       }
-      const actual = (await checkFeatureModules({ root, profilePath: "profile.json" })).map(({ code, path, line }) => ({ code, path, line }));
+      const actual = (await checkFeatureModules({ root, profilePath: "profile.json", requiredStatus: fixture.requiredStatus })).map(({ code, path, line }) => ({ code, path, line }));
       assert.deepEqual(actual, fixture.expected);
     } finally { await rm(root, { recursive: true, force: true }); }
   });

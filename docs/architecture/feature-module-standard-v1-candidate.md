@@ -52,8 +52,9 @@ The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
 `pnpm test:feature-modules` for disposable conformance fixtures and
 `pnpm architecture:feature-modules:candidate` for the stable current-tree
-report. The candidate report is intentionally not part of `check` or
-`check:fast`.
+report. The fixture suite is blocking in `check` and `check:fast`; the
+production candidate report is intentionally informational and is not in
+either gate.
 
 ## Invariants
 
@@ -73,19 +74,29 @@ expose only their own contracts. Declared feature edges must connect declared
 features and must correspond to observed imports; unused edge declarations are
 rejected as future-state permissions.
 
+All local feature dependencies are denied unless they follow an allowed
+same-feature layer direction or use a declared cross-feature edge through the
+target feature's public entrypoint. Package assembly and feature entrypoint
+files accept only import/re-export grammar, and path aliases cannot bypass
+these checks. Empty, comments-only, and `export {}`-only layer files do not make
+a declared layer substantive.
+
 Layer direction is default-deny. Domain code is inward-only and cannot import
 public transport contracts. Application code may depend on domain code and
 application-owned ports or models, but it also cannot import public transport
-contracts.
+contracts. Contracts, domain, and application layers cannot import external
+packages or Node builtins; adapters and composition own those integrations.
 
 ## Activation TODO and acceptance
 
-The current blockers are six missing declared feature entrypoints, 24 assembly
-deep-import diagnostics, and eight domain/application imports of public
-transport contracts. The estimated production cleanup is six new feature
-entrypoint files, consolidation of 24 assembly import/re-export statements,
-and replacement of the eight forbidden dependencies with domain models or
-application-owned ports. That work belongs to a production cleanup lane.
+The current report contains 40 diagnostics: six missing declared feature
+entrypoints, 24 assembly deep imports, eight domain/application imports of
+public transport contracts, and two application imports of Node builtins. The
+estimated production cleanup is six new feature entrypoint files,
+consolidation of 24 assembly import/re-export statements, replacement of the
+eight forbidden contract dependencies with domain models or application-owned
+ports, and two builtin integrations moved behind application-owned ports. That
+work belongs to a production cleanup lane.
 
 Activation requires all of the following:
 
@@ -93,8 +104,11 @@ Activation requires all of the following:
 2. `pnpm architecture:feature-modules:candidate` reports zero production
    diagnostics without exceptions, wildcarding, automatic widening, or scope
    changes.
-3. A final integration change flips the profile from `candidate` to `active`
+3. An accepted ADR authorizes activation, candidate blockers become empty, and
+   the profile records the exact passing fixture command plus zero-diagnostic
+   candidate evidence.
+4. A final integration change flips the profile from `candidate` to `active`
    and adds the active command to both `check` and `check:fast`.
 
-Until all three conditions are reviewed and satisfied, diagnostics are a
+Until all four conditions are reviewed and satisfied, diagnostics are a
 candidate adoption report and must not be described as active conformance.

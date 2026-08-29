@@ -65,16 +65,20 @@
     "fixtures": "pnpm test:feature-modules"
   },
   "activation": {
-    "todo": [
+    "blockers": [
       "Add the six declared public/internal feature entrypoint files in the production cleanup lane.",
       "Replace package assembly deep re-exports with imports or re-exports through declared feature entrypoints.",
       "Move the eight domain/application dependencies on public transport contracts behind domain models or application-owned ports.",
+      "Move the two application-layer Node builtin dependencies behind application-owned ports.",
       "Run the candidate command until it reports zero diagnostics, then change status to active and wire the production command into check and check:fast."
     ],
     "acceptance": [
       "The fixture command passes with all positive and negative conformance cases.",
       "The candidate command reports zero production diagnostics without exceptions or scope widening.",
-      "The final integration change sets status active and adds the active checker to check and check:fast."
-    ]
+      "An accepted ADR authorizes activation and the profile records the exact passing fixture command and zero-diagnostic candidate evidence.",
+      "The final integration change sets status active and adds the active checker alongside the fixture suite in check and check:fast."
+    ],
+    "authority": null,
+    "evidence": null
   }
 }

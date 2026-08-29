@@ -3,12 +3,13 @@
   "cases": [
     {
       "name": "minimal-valid-feature-and-supported-syntax",
-      "alphaRoles": ["contracts", "domain"],
+      "alphaRoles": ["contracts", "domain", "adapters"],
       "files": {
         "src/features/alpha/index.ts": "export type { PublicValue } from \"./contracts/public-value.js\";\n",
-        "src/features/alpha/internal.ts": "export { value } from \"./domain/value.js\";\n",
+        "src/features/alpha/internal.ts": "export { value } from \"./domain/value.js\";\nexport { adapterValue } from \"./adapters/value.js\";\n",
         "src/features/alpha/contracts/public-value.ts": "export interface PublicValue { readonly value: string }\n",
-        "src/features/alpha/domain/value.ts": "import fs = require('node:fs');\n// import('../beta/domain/nope.js')\nconst text = \"require('../beta/domain/nope.js')\";\nexport interface Value { readonly value: string }\nexport const value = text + fs.constants.F_OK;\ntype External = import('node:fs').Stats;\nvoid import('node:path');\nvoid (null as unknown as External);\n",
+        "src/features/alpha/domain/value.ts": "// import('../beta/domain/nope.js')\nconst text = \"require('../beta/domain/nope.js')\";\nexport interface Value { readonly value: string }\nexport const value = text;\n",
+        "src/features/alpha/adapters/value.ts": "import fs = require('node:fs');\ntype External = import('node:fs').Stats;\nvoid import('node:path');\nexport const adapterValue = fs.constants.F_OK;\nvoid (null as unknown as External);\n",
         "src/index.ts": "export type { Value } from \"./features/alpha/index.js\";\n",
         "src/composition.ts": "export { value } from \"./features/alpha/internal.js\";\n"
       },
@@ -31,14 +32,14 @@
       "secondFeature": true,
       "secondRoles": ["domain", "adapters"],
       "edges": [{ "from": "beta", "to": "alpha", "kinds": ["runtime"] }],
-      "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/domain/value.js\";\nexport { value };\n" },
+      "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/domain/value.js\";\nexport const adapterValue = value;\n" },
       "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
     },
     {
       "name": "undeclared-edge",
       "secondFeature": true,
       "secondRoles": ["domain", "adapters"],
-      "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/index.js\";\nexport { value };\n" },
+      "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/index.js\";\nexport const adapterValue = value;\n" },
       "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
     },
     {
@@ -91,6 +92,7 @@
     {
       "name": "empty-ceremonial-layer",
       "alphaRoles": ["domain", "application"],
+      "files": { "src/features/alpha/application/placeholder.ts": "// later\nexport { value } from '../domain/value.js';\n" },
       "expected": [{ "code": "FM_EMPTY_LAYER", "path": "src/features/alpha/application", "line": 1 }]
     },
     {
@@ -147,14 +149,114 @@
       "expected": [{ "code": "FM_INVALID_AUTHORITY", "path": "profile.json", "line": 1 }]
     },
     {
+      "name": "authority-rejects-undeclared-fields",
+      "authorityExtra": { "mutableRef": "main" },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
       "name": "future-state-metadata",
       "profileExtra": { "futureState": { "automaticallyWiden": true } },
       "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
     },
     {
       "name": "wildcard-exception",
-      "exceptions": [{ "id": "all", "acceptedAdr": "ADR-0013", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "packages/**" }],
+      "exceptions": [{ "id": "all", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "packages/**" }],
       "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "ownership-exception-requires-accepted-adr",
+      "exceptions": [{ "id": "shared-owner", "acceptedAdr": "ADR-0013", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "src/shared/value.ts" }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "candidate-requires-explicit-blockers",
+      "activation": { "blockers": [], "acceptance": ["zero diagnostics"], "authority": null, "evidence": null },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-requires-zero-blockers-and-accepted-authority-evidence",
+      "status": "active",
+      "activation": { "blockers": ["not clean"], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "owner": "architecture" }, "evidence": null },
+      "expected": [
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }
+      ]
+    },
+    {
+      "name": "require-active-rejects-candidate-profile",
+      "requiredStatus": "active",
+      "expected": [{ "code": "FM_PROFILE_STATUS", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-with-accepted-authority-and-evidence",
+      "status": "active",
+      "requiredStatus": "active",
+      "expected": []
+    },
+    {
+      "name": "active-profile-rejects-proposed-authority",
+      "status": "active",
+      "activation": { "blockers": [], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "owner": "architecture" }, "evidence": { "fixtureCommand": "pnpm test:feature-modules", "candidateCommand": "pnpm architecture:feature-modules:candidate", "productionDiagnostics": 0 } },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "package-index-must-use-public-entrypoint",
+      "files": { "src/index.ts": "export { value } from './features/alpha/internal.js';\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/index.ts", "line": 1 }]
+    },
+    {
+      "name": "package-composition-must-use-internal-entrypoint",
+      "files": { "src/composition.ts": "export { value } from './features/alpha/index.js';\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/composition.ts", "line": 1 }]
+    },
+    {
+      "name": "package-assembly-rejects-non-feature-target",
+      "files": { "src/index.ts": "export { legacy } from './legacy.js';\n" },
+      "expected": [{ "code": "FM_ASSEMBLY_IMPORT_TARGET", "path": "src/index.ts", "line": 1 }]
+    },
+    {
+      "name": "package-assembly-rejects-inline-behavior",
+      "files": { "src/composition.ts": "export const compose = () => true;\n" },
+      "expected": [{ "code": "FM_INLINE_BEHAVIOR", "path": "src/composition.ts", "line": 1 }]
+    },
+    {
+      "name": "feature-entrypoint-rejects-inline-behavior",
+      "files": { "src/features/alpha/internal.ts": "export const value = true;\n" },
+      "expected": [{ "code": "FM_INLINE_BEHAVIOR", "path": "src/features/alpha/internal.ts", "line": 1 }]
+    },
+    {
+      "name": "feature-rejects-undeclared-local-dependency",
+      "files": { "src/features/alpha/domain/value.ts": "import type { Legacy } from '../../../legacy.js';\nexport type Value = Legacy;\n" },
+      "expected": [{ "code": "FM_UNDECLARED_LOCAL_DEPENDENCY", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "domain-rejects-node-builtins",
+      "files": { "src/features/alpha/domain/value.ts": "import type { Stats } from 'node:fs';\nexport type Value = Stats;\n" },
+      "expected": [{ "code": "FM_NODE_BUILTIN_IMPORT", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "contracts-reject-external-packages",
+      "alphaRoles": ["contracts", "domain"],
+      "files": { "src/features/alpha/contracts/public.ts": "import type { Schema } from 'external-schema';\nexport type Public = Schema;\n" },
+      "expected": [{ "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/contracts/public.ts", "line": 1 }]
+    },
+    {
+      "name": "application-rejects-external-packages",
+      "alphaRoles": ["domain", "application"],
+      "files": { "src/features/alpha/application/use.ts": "import type { Schema } from 'external-schema';\nexport type Use = Schema;\n" },
+      "expected": [{ "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/application/use.ts", "line": 1 }]
+    },
+    {
+      "name": "path-alias-cannot-bypass-feature-boundary",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { value } from '@/features/alpha/domain/value.js';\nexport const adapterValue = value;\n" },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "package-self-import-cannot-bypass-feature-boundary",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { value } from '@fixture/runtime';\nexport const adapterValue = value;\n" },
+      "expected": [{ "code": "FM_UNDECLARED_LOCAL_DEPENDENCY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
     },
     {
       "name": "comments-and-strings-versus-real-syntax",

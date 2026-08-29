@@ -52,10 +52,11 @@ feature entrypoints expose only their own contracts, and unused declared edges
 are rejected rather than retained as future-state permissions.
 
 The production checker stays outside `check` and `check:fast` while diagnostics
-remain. A later reviewed decision may accept activation only after the fixture
-suite passes, the exact candidate scope reaches zero diagnostics without
-exceptions or widening, the profile changes to `active`, and the active command
-is wired into both gates.
+remain. The deterministic fixture suite is blocking in both gates. A later
+reviewed decision may accept activation only after the fixture suite passes,
+the exact candidate scope reaches zero diagnostics without exceptions or
+widening, the profile changes to `active`, and the active command is wired into
+both gates.
 
 ## Consequences
 
