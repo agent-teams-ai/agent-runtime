@@ -13,6 +13,9 @@
         "src/index.ts": "export type { Value } from \"./features/alpha/index.js\";\n",
         "src/composition.ts": "export { value } from \"./features/alpha/internal.js\";\n"
       },
+      "cliRuns": [
+        { "arguments": [], "exit": 0, "output": "Feature Module Standard candidate: 0 diagnostics" }
+      ],
       "expected": []
     },
     {
@@ -33,6 +36,10 @@
       "secondRoles": ["domain", "adapters"],
       "edges": [{ "from": "beta", "to": "alpha", "kinds": ["runtime"] }],
       "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/domain/value.js\";\nexport const adapterValue = value;\n" },
+      "cliRuns": [
+        { "arguments": [], "exit": 1, "output": "No conformance claim" },
+        { "arguments": ["--allow-diagnostics"], "exit": 0, "output": "FM_FEATURE_DEEP_IMPORT" }
+      ],
       "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
     },
     {
@@ -195,7 +202,19 @@
       "status": "active",
       "requiredStatus": "active",
       "acceptActivationAdr": true,
+      "cliRuns": [
+        { "arguments": ["--require-active"], "exit": 0, "output": "Feature Module Standard active: 0 diagnostics" }
+      ],
       "expected": []
+    },
+    {
+      "name": "active-profile-rejects-missing-decision-registry",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "useDecisionRegistry": true,
+      "files": { "architecture/decisions/accepted-decisions.json": null },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
     },
     {
       "name": "active-profile-rejects-proposed-authority",
@@ -351,6 +370,51 @@
       "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
     },
     {
+      "name": "bare-module-create-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'module';\nconst load = createRequire(import.meta.url);\nexport const value = load('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "inline-namespace-create-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import * as Module from 'node:module';\nexport const value = Module.createRequire(import.meta.url)('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 2 }]
+    },
+    {
+      "name": "typescript-base-url-is-fatal-unsupported-config",
+      "files": { "tsconfig.json": "{\"compilerOptions\":{\"baseUrl\":\".\"}}\n" },
+      "expected": [{ "code": "FM_UNSUPPORTED_CONFIG", "path": "tsconfig.json", "line": 1 }]
+    },
+    {
+      "name": "relative-tsconfig-extends-alias-is-enforced",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "tsconfig.json": "{\"extends\":\"./config/base\"}\n",
+        "config/base.json": "{\"compilerOptions\":{\"paths\":{\"@inherited/*\":[\"src/*\"]}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '@inherited/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "array-tsconfig-extends-alias-is-enforced",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "tsconfig.json": "{\"extends\":[\"./config/one.json\",\"./config/two.json\"]}\n",
+        "config/one.json": "{}\n",
+        "config/two.json": "{\"compilerOptions\":{\"paths\":{\"@array/*\":[\"src/*\"]}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '@array/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "unresolvable-package-tsconfig-extends-is-fatal",
+      "files": { "tsconfig.json": "{\"extends\":\"@missing/tsconfig\"}\n" },
+      "expected": [{ "code": "FM_UNSUPPORTED_CONFIG", "path": "tsconfig.json", "line": 1 }]
+    },
+    {
       "name": "configured-typescript-alias-fails-closed",
       "alphaRoles": ["domain", "adapters"],
       "files": {
@@ -363,7 +427,7 @@
       "name": "configured-package-alias-fails-closed",
       "alphaRoles": ["domain", "adapters"],
       "files": {
-        "package.json": "{\"name\":\"@fixture/runtime\",\"imports\":{\"#runtime/*\":\"./dist/*\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
+        "package.json": "{\"name\":\"@fixture/runtime\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"imports\":{\"#runtime/*\":\"./dist/*\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
         "src/features/alpha/adapters/value.ts": "import { value } from '#runtime/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
       },
       "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
@@ -371,6 +435,26 @@
     {
       "name": "feature-readme-must-declare-ownership",
       "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-requires-feature-type",
+      "files": { "src/features/alpha/README.md": "type: module\nstatus: accepted\nowner: @fixture/runtime\nowner_document: ADR-0005\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-requires-accepted-status",
+      "files": { "src/features/alpha/README.md": "type: feature\nstatus: proposed\nowner: @fixture/runtime\nowner_document: ADR-0005\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-requires-package-owner",
+      "files": { "src/features/alpha/README.md": "type: feature\nstatus: accepted\nowner: another-package\nowner_document: ADR-0005\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-requires-package-owner-document",
+      "files": { "src/features/alpha/README.md": "type: feature\nstatus: accepted\nowner: @fixture/runtime\nowner_document: ADR-9999\n" },
       "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
     },
     {
@@ -385,8 +469,23 @@
       "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/alpha.test.ts", "line": 1 }]
     },
     {
+      "name": "colocated-feature-tests-are-allowed",
+      "files": { "src/features/alpha/domain/value.test.ts": "import { value } from './value.js';\nvoid value;\n" },
+      "expected": []
+    },
+    {
+      "name": "package-feature-test-directory-is-allowed",
+      "files": { "tests/features/alpha/value.test.ts": "import { value } from '../../../dist/composition.js';\nvoid value;\n" },
+      "expected": []
+    },
+    {
+      "name": "package-level-composition-test-is-inventoried",
+      "files": { "tests/composed.test.ts": "import { value } from '../dist/composition.js';\nvoid value;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/composed.test.ts", "line": 1 }]
+    },
+    {
       "name": "package-export-map-is-curated",
-      "files": { "package.json": "{\"name\":\"@fixture/runtime\",\"exports\":{\".\":\"./dist/index.js\",\"./deep\":\"./dist/features/alpha/domain/value.js\"}}\n" },
+      "files": { "package.json": "{\"name\":\"@fixture/runtime\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"exports\":{\".\":\"./dist/index.js\",\"./deep\":\"./dist/features/alpha/domain/value.js\"}}\n" },
       "cliAllowDiagnosticsFails": true,
       "expected": [{ "code": "FM_PACKAGE_EXPORT_MAP", "path": "package.json", "line": 1 }]
     },

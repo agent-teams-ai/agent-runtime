@@ -70,7 +70,7 @@
       "Replace package assembly deep re-exports with imports or re-exports through declared feature entrypoints.",
       "Move the eight domain/application dependencies on public transport contracts behind domain models or application-owned ports.",
       "Move the two application-layer Node builtin dependencies behind application-owned ports.",
-      "Declare owners in the three scoped feature READMEs and colocate the four detected feature test files with their owning features.",
+      "Declare owners in the three scoped feature READMEs and colocate the nine detected feature test files with their owning features.",
       "Run the candidate command until it reports zero diagnostics, then change status to active and wire the production command into check and check:fast."
     ],
     "acceptance": [

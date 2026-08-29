@@ -21,7 +21,17 @@ export const STRUCTURAL_CODES = new Set([
   "FM_PROFILE_STATUS",
   "FM_README_OWNERSHIP",
   "FM_TEST_PLACEMENT",
+  "FM_UNSUPPORTED_CONFIG",
   "FM_WILDCARD_REEXPORT",
+]);
+
+// Candidate allowance is deliberately a closed list of the production
+// migrations approved for this adoption lane. Ownership, authenticity,
+// parsing, configuration, and structural failures are never informational.
+export const CANDIDATE_MIGRATION_CODES = new Set([
+  "FM_FEATURE_DEEP_IMPORT",
+  "FM_INVALID_LAYER_DIRECTION",
+  "FM_NODE_BUILTIN_IMPORT",
 ]);
 
 const AUTHORITY = Object.freeze({

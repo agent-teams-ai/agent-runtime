@@ -1,11 +1,11 @@
 import { readFile, readdir, stat } from "node:fs/promises";
-import { builtinModules } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import { dirname, extname, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseSync } from "oxc-parser";
 
-import { ACCEPTED_DECISIONS, STRUCTURAL_CODES, applyGovernedRecords, validateProfile } from "./feature-module-profile.mjs";
+import { ACCEPTED_DECISIONS, CANDIDATE_MIGRATION_CODES, applyGovernedRecords, validateProfile } from "./feature-module-profile.mjs";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_PROFILE = "architecture/feature-module-standard/candidate-profile.json";
@@ -79,6 +79,7 @@ const loadingSyntax = (callee, loadingAliases) => {
   if (isMemberCall(callee, "module", "require")) {return "module-require";}
   if (callee?.type === "Identifier" && loadingAliases.loaders.has(callee.name)) {return "create-require";}
   if (callee?.type === "CallExpression" && callee.callee?.type === "Identifier" && loadingAliases.factories.has(callee.callee.name)) {return "create-require";}
+  if (callee?.type === "CallExpression" && callee.callee?.type === "MemberExpression" && loadingAliases.namespaces.has(callee.callee.object?.name) && memberName(callee.callee) === "createRequire") {return "create-require";}
   return;
 };
 
@@ -112,7 +113,7 @@ const walkAst = (node, visitor) => {
 const createRequireAliases = (program) => {
   const factories = new Set(), namespaces = new Set(), loaders = new Set();
   walkAst(program, (node) => {
-    if (node.type !== "ImportDeclaration" || literalValue(node.source) !== "node:module") {return;}
+    if (node.type !== "ImportDeclaration" || !["module", "node:module"].includes(literalValue(node.source))) {return;}
     for (const specifier of node.specifiers ?? []) {
       if (specifier.type === "ImportNamespaceSpecifier") {namespaces.add(specifier.local?.name);}
       if (specifier.type === "ImportSpecifier" && (specifier.imported?.name ?? specifier.imported?.value) === "createRequire") {factories.add(specifier.local?.name);}
@@ -124,7 +125,7 @@ const createRequireAliases = (program) => {
     const namespaceFactory = node.init.callee?.type === "MemberExpression" && namespaces.has(node.init.callee.object?.name) && memberName(node.init.callee) === "createRequire";
     if (directFactory || namespaceFactory) {loaders.add(node.id.name);}
   });
-  return { factories, loaders };
+  return { factories, loaders, namespaces };
 };
 
 const importRecords = (program, source) => {
@@ -204,12 +205,14 @@ const collectProductionFiles = async (absoluteRoot, productionRoots) => {
 };
 
 const readLocalPackageImports = async (absoluteRoot, productionRoots) => {
-  const names = new Set(), targets = new Map(), aliases = new Set(), issues = [];
+  const names = new Set(), targets = new Map(), aliases = new Set(), issues = [], packageMetadata = new Map();
   for (const productionRoot of productionRoots) {
     const packageRoot = resolve(absoluteRoot, productionRoot, "..");
     try {
-      const { name, imports = {} } = JSON.parse(await readFile(resolve(packageRoot, "package.json"), "utf8"));
+      const packagePath = resolve(packageRoot, "package.json");
+      const { name, imports = {}, agentTeamsArchitecture = {} } = JSON.parse(await readFile(packagePath, "utf8"));
       if (name) {names.add(name); targets.set(name, `${productionRoot}/index.ts`); targets.set(`${name}/composition`, `${productionRoot}/composition.ts`);}
+      packageMetadata.set(productionRoot, { name, ownerDocument: agentTeamsArchitecture.ownerDocument });
       Object.keys(imports).forEach((alias) => aliases.add(alias));
     } catch (error) {
       if (error?.code !== "ENOENT") {issues.push(issue("FM_PROFILE_INVALID", repoPath(absoluteRoot, resolve(packageRoot, "package.json")), 1, `cannot parse package aliases: ${error.message}`));}
@@ -219,19 +222,44 @@ const readLocalPackageImports = async (absoluteRoot, productionRoots) => {
       const readAliases = async (configPath) => {
         if (visited.has(configPath)) {return;}
         visited.add(configPath);
-        const tsconfig = JSON.parse(await readFile(configPath, "utf8"));
+        let tsconfig;
+        try { tsconfig = JSON.parse(await readFile(configPath, "utf8")); }
+        catch (error) {
+          if (error?.code === "ENOENT") {throw error;}
+          issues.push(issue("FM_UNSUPPORTED_CONFIG", repoPath(absoluteRoot, configPath), 1, `cannot deterministically read TypeScript configuration: ${error.message}`));
+          return;
+        }
         Object.keys(tsconfig.compilerOptions?.paths ?? {}).forEach((alias) => aliases.add(alias));
-        if (typeof tsconfig.extends === "string" && tsconfig.extends.startsWith(".")) {
-          const extended = resolve(dirname(configPath), tsconfig.extends);
-          await readAliases(extname(extended) ? extended : `${extended}.json`);
+        if (tsconfig.compilerOptions?.baseUrl !== undefined) {
+          issues.push(issue("FM_UNSUPPORTED_CONFIG", repoPath(absoluteRoot, configPath), 1, "compilerOptions.baseUrl can change bare import resolution and is unsupported by the feature boundary checker"));
+        }
+        const extendedConfigs = Array.isArray(tsconfig.extends) ? tsconfig.extends : tsconfig.extends === undefined ? [] : [tsconfig.extends];
+        for (const extendedConfig of extendedConfigs) {
+          if (typeof extendedConfig !== "string" || !extendedConfig) {
+            issues.push(issue("FM_UNSUPPORTED_CONFIG", repoPath(absoluteRoot, configPath), 1, "TypeScript extends entries must be non-empty strings"));
+            continue;
+          }
+          let extended;
+          try {
+            if (extendedConfig.startsWith(".")) {
+              const relativeConfig = resolve(dirname(configPath), extendedConfig);
+              extended = extname(relativeConfig) ? relativeConfig : `${relativeConfig}.json`;
+            } else {
+              extended = createRequire(configPath).resolve(extendedConfig);
+            }
+          } catch (error) {
+            issues.push(issue("FM_UNSUPPORTED_CONFIG", repoPath(absoluteRoot, configPath), 1, `cannot deterministically resolve TypeScript extends ${extendedConfig}: ${error.message}`));
+            continue;
+          }
+          await readAliases(extended);
         }
       };
       await readAliases(resolve(packageRoot, "tsconfig.json"));
     } catch (error) {
-      if (error?.code !== "ENOENT") {issues.push(issue("FM_PROFILE_INVALID", repoPath(absoluteRoot, resolve(packageRoot, "tsconfig.json")), 1, `cannot parse alias configuration: ${error.message}`));}
+      if (error?.code !== "ENOENT") {issues.push(issue("FM_UNSUPPORTED_CONFIG", repoPath(absoluteRoot, resolve(packageRoot, "tsconfig.json")), 1, `cannot inspect alias configuration: ${error.message}`));}
     }
   }
-  return { names, targets, aliases, issues };
+  return { names, targets, aliases, issues, packageMetadata };
 };
 
 const aliasMatches = (specifier, alias) => alias.includes("*")
@@ -247,10 +275,42 @@ const curatedPackageExports = (exports) => {
   return matches(exports["."], "index") && matches(exports["./composition"], "composition");
 };
 
+const importBindingNames = (program, sourceSpecifier) => (program.body ?? [])
+  .filter((node) => node.type === "ImportDeclaration" && literalValue(node.source) === sourceSpecifier)
+  .flatMap((node) => (node.specifiers ?? []).map((specifier) => specifier.type === "ImportNamespaceSpecifier"
+    ? "*"
+    : specifier.imported?.name ?? specifier.imported?.value ?? "default"));
+
+const assemblyFeatureBindings = async (absoluteRoot, assemblyPath, features) => {
+  const bindings = new Map();
+  let program;
+  try {
+    const source = await readFile(resolve(absoluteRoot, assemblyPath), "utf8");
+    const parsed = parseSync(assemblyPath, source);
+    if (parsed.errors?.length) {return bindings;}
+    program = parsed.program;
+  } catch {return bindings;}
+  for (const node of program.body ?? []) {
+    if (node.type !== "ExportNamedDeclaration" || !node.source) {continue;}
+    const target = resolveLocalImport(resolve(absoluteRoot, assemblyPath), literalValue(node.source));
+    const targetFeature = target && featureForPath(features, repoPath(absoluteRoot, target));
+    if (!targetFeature) {continue;}
+    for (const specifier of node.specifiers ?? []) {
+      const exported = specifier.exported?.name ?? specifier.exported?.value ?? specifier.local?.name ?? specifier.local?.value;
+      if (exported) {bindings.set(exported, targetFeature.id);}
+    }
+  }
+  return bindings;
+};
+
+const allowedFeatureTestPath = (testPath, packageRootPath, feature) => testPath.startsWith(`${feature.root}/`)
+  || testPath.startsWith(`${packageRootPath ? `${packageRootPath}/` : ""}tests/features/${feature.id}/`);
+
 const packagePolicyIssues = async (absoluteRoot, productionRoots, features) => {
   const issues = [];
   for (const productionRoot of productionRoots) {
     const packageRoot = resolve(absoluteRoot, productionRoot, "..");
+    const packageRootPath = repoPath(absoluteRoot, packageRoot);
     const packagePath = repoPath(absoluteRoot, resolve(packageRoot, "package.json"));
     try {
       const packageJson = JSON.parse(await readFile(resolve(packageRoot, "package.json"), "utf8"));
@@ -263,21 +323,37 @@ const packagePolicyIssues = async (absoluteRoot, productionRoots, features) => {
 
     const packageFiles = await filesBelow(packageRoot);
     const packageFeatures = features.filter((feature) => feature.root.startsWith(`${productionRoot}/features/`));
+    const assemblyBindings = new Map();
+    for (const assemblyPath of [`${productionRoot}/index.ts`, `${productionRoot}/composition.ts`]) {
+      assemblyBindings.set(assemblyPath, await assemblyFeatureBindings(absoluteRoot, assemblyPath, packageFeatures));
+    }
+    const packagePrefix = packageRootPath ? `${packageRootPath}/` : "";
     for (const absoluteTest of packageFiles.filter((path) => /\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u.test(path) && !/[\\/](?:dist|node_modules|\.cache)[\\/]/u.test(path))) {
       const testPath = repoPath(absoluteRoot, absoluteTest);
       const source = await readFile(absoluteTest, "utf8");
-      let imports = [];
-      try { imports = importRecords(parseSync(testPath, source).program, source); } catch { imports = []; }
-      const importedPaths = imports.flatMap(({ specifier }) => {
-        const target = resolveLocalImport(slash(absoluteTest), specifier);
-        return target ? [repoPath(absoluteRoot, target)] : [];
-      }).map((path) => path.replace(`${repoPath(absoluteRoot, packageRoot)}/dist/features/`, `${productionRoot}/features/`));
-      const misplacedFeature = packageFeatures.find((feature) => !testPath.startsWith(`${feature.root}/`) && (
-        packageFeatures.length === 1
-        || posix.basename(testPath).includes(feature.id)
-        || importedPaths.some((path) => path.startsWith(`${feature.root}/`))
-      ));
-      if (misplacedFeature) {issues.push(issue("FM_TEST_PLACEMENT", testPath, 1, `${misplacedFeature.id} tests must be colocated with their feature`));}
+      let imports = [], program;
+      try { program = parseSync(testPath, source).program; imports = importRecords(program, source); } catch { imports = []; }
+      const detected = new Set();
+      for (const imported of imports) {
+        const target = resolveLocalImport(slash(absoluteTest), imported.specifier);
+        if (!target) {continue;}
+        const targetPath = repoPath(absoluteRoot, target)
+          .replace(`${packagePrefix}dist/features/`, `${productionRoot}/features/`)
+          .replace(`${packagePrefix}dist/index.ts`, `${productionRoot}/index.ts`)
+          .replace(`${packagePrefix}dist/composition.ts`, `${productionRoot}/composition.ts`);
+        const directFeature = featureForPath(packageFeatures, targetPath);
+        if (directFeature) {detected.add(directFeature.id); continue;}
+        const bindings = assemblyBindings.get(targetPath);
+        if (!bindings || !program) {continue;}
+        const names = importBindingNames(program, imported.specifier);
+        const matched = names.flatMap((name) => name === "*" ? [...new Set(bindings.values())] : bindings.has(name) ? [bindings.get(name)] : []);
+        for (const featureId of matched.length ? matched : new Set(bindings.values())) {detected.add(featureId);}
+      }
+      for (const detectedFeature of packageFeatures.filter((feature) => detected.has(feature.id))) {
+        if (!allowedFeatureTestPath(testPath, packageRootPath, detectedFeature)) {
+          issues.push(issue("FM_TEST_PLACEMENT", testPath, 1, `${detectedFeature.id} tests must be colocated or placed under tests/features/${detectedFeature.id}`));
+        }
+      }
     }
   }
   return issues;
@@ -287,7 +363,7 @@ const assemblyStructureIssues = (assemblyFiles, allPaths) => assemblyFiles
   .filter((path) => !allPaths.includes(path))
   .map((path) => issue("FM_ASSEMBLY_MISSING", path, 1, "declared package assembly file is missing"));
 
-const featureStructureIssues = async (feature, allPaths, absoluteRoot) => {
+const featureStructureIssues = async (feature, allPaths, absoluteRoot, packageMetadata) => {
   const issues = [];
   for (const [visibility, entrypoint] of Object.entries(feature.entrypoints ?? {})) {
     try { if (!(await stat(resolve(absoluteRoot, entrypoint))).isFile()) {throw new Error("not a file");} }
@@ -315,8 +391,13 @@ const featureStructureIssues = async (feature, allPaths, absoluteRoot) => {
   const readmePath = `${feature.root}/README.md`;
   try {
     const readme = await readFile(resolve(absoluteRoot, readmePath), "utf8");
-    if (!/^Owner:\s+\S.+$/mu.test(readme)) {issues.push(issue("FM_README_OWNERSHIP", readmePath, 1, `${feature.id} README must declare a non-empty Owner`));}
-  } catch { issues.push(issue("FM_README_OWNERSHIP", readmePath, 1, `${feature.id} must declare README ownership`)); }
+    const metadata = Object.fromEntries([...readme.matchAll(/^([a-z_]+):\s*(\S.*)$/gmu)].map((match) => [match[1], match[2].trim()]));
+    const packageRoot = [...packageMetadata.keys()].find((root) => feature.root.startsWith(`${root}/features/`));
+    const expected = packageMetadata.get(packageRoot);
+    if (metadata.type !== "feature" || metadata.status !== "accepted" || metadata.owner !== expected?.name || metadata.owner_document !== expected?.ownerDocument) {
+      issues.push(issue("FM_README_OWNERSHIP", readmePath, 1, `${feature.id} README metadata must declare type: feature, status: accepted, owner: ${expected?.name}, and owner_document: ${expected?.ownerDocument}`));
+    }
+  } catch { issues.push(issue("FM_README_OWNERSHIP", readmePath, 1, `${feature.id} must declare accepted feature metadata and its package owner document`)); }
   return issues;
 };
 
@@ -464,13 +545,22 @@ const inspectImport = (context) => {
   return [...entrypointIssues, ...crossFeatureImportIssues(importContext)];
 };
 
-export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath = DEFAULT_PROFILE, requiredStatus, acceptedDecisions = ACCEPTED_DECISIONS } = {}) => {
+const acceptedDecisionsForRoot = async (absoluteRoot) => {
+  if (absoluteRoot === REPOSITORY_ROOT) {return ACCEPTED_DECISIONS;}
+  try {
+    const registry = JSON.parse(await readFile(resolve(absoluteRoot, "architecture/decisions/accepted-decisions.json"), "utf8"));
+    return new Map(registry.decisions.map(({ id, path }) => [id, path]));
+  } catch {return new Map();}
+};
+
+export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath = DEFAULT_PROFILE, requiredStatus, acceptedDecisions } = {}) => {
   const absoluteRoot = resolve(root);
   const absoluteProfile = resolve(absoluteRoot, profilePath);
   const loaded = await readProfile(absoluteProfile, profilePath);
   if (!loaded.profile) {return loaded.issues;}
   const { profile } = loaded;
-  const issues = validateProfile(profile, profilePath, absoluteRoot === REPOSITORY_ROOT, acceptedDecisions);
+  const governedDecisions = acceptedDecisions ?? await acceptedDecisionsForRoot(absoluteRoot);
+  const issues = validateProfile(profile, profilePath, absoluteRoot === REPOSITORY_ROOT, governedDecisions);
   if (issues.some((candidate) => candidate.code === "FM_PROFILE_INVALID")) {return issues.toSorted(compareIssues);}
   if (requiredStatus && profile.status !== requiredStatus) {issues.push(issue("FM_PROFILE_STATUS", profilePath, 1, `profile status must be ${requiredStatus}`));}
 
@@ -486,7 +576,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   issues.push(...assemblyStructureIssues(profile.assemblyFiles ?? [], allPaths));
 
   for (const feature of features) {
-    issues.push(...await featureStructureIssues(feature, allPaths, absoluteRoot));
+    issues.push(...await featureStructureIssues(feature, allPaths, absoluteRoot, localPackageImports.packageMetadata));
   }
   issues.push(...await packagePolicyIssues(absoluteRoot, profile.scope.productionRoots ?? [], features));
 
@@ -520,7 +610,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const candidateOnlyAllowance = process.argv.includes("--allow-diagnostics")
       && !requiredStatus
       && profileStatus === "candidate"
-      && !issues.some(({ code }) => STRUCTURAL_CODES.has(code));
+      && issues.every(({ code }) => CANDIDATE_MIGRATION_CODES.has(code));
     process.exitCode = candidateOnlyAllowance ? 0 : 1;
   } else if (requiredStatus) {process.stdout.write("Feature Module Standard active: 0 diagnostics.\n");}
   else {process.stdout.write("Feature Module Standard candidate: 0 diagnostics. Activation remains a separate reviewed change.\n");}

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { checkFeatureModules } from "./check-feature-modules.mjs";
+import { STRUCTURAL_CODES } from "./feature-module-profile.mjs";
 
 const fixtureManifest = JSON.parse(await readFile(new URL("./fixtures/feature-module-cases.json", import.meta.url), "utf8"));
 const execFileAsync = promisify(execFile);
@@ -28,14 +29,18 @@ const feature = (id, roles = ["domain"]) => ({
 });
 
 const baseFiles = {
+  "architecture/decisions/accepted-decisions.json": `${JSON.stringify({ decisions: [
+    { id: "ADR-0007", path: "docs/decisions/0007-deterministic-documentation-governance.md" },
+  ] })}\n`,
   "package.json": `${JSON.stringify({
     name: "@fixture/runtime",
+    agentTeamsArchitecture: { role: "bounded-context", ownerDocument: "ADR-0005" },
     exports: {
       ".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
       "./composition": { types: "./dist/composition.d.ts", import: "./dist/composition.js" },
     },
   })}\n`,
-  "src/features/alpha/README.md": "# Alpha\n\nOwner: runtime architecture\n",
+  "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: @fixture/runtime\nowner_document: ADR-0005\n---\n\n# Alpha\n",
   "src/features/alpha/index.ts": "export {};\n",
   "src/features/alpha/internal.ts": "export { value } from './domain/value.js';\n",
   "src/features/alpha/domain/value.ts": "export const value = true;\n",
@@ -44,7 +49,7 @@ const baseFiles = {
 };
 
 const secondFiles = {
-  "src/features/beta/README.md": "# Beta\n\nOwner: runtime architecture\n",
+  "src/features/beta/README.md": "---\ntype: feature\nstatus: accepted\nowner: @fixture/runtime\nowner_document: ADR-0005\n---\n\n# Beta\n",
   "src/features/beta/index.ts": "export {};\n",
   "src/features/beta/internal.ts": "export { beta } from './domain/value.js';\n",
   "src/features/beta/domain/value.ts": "export const beta = true;\n",
@@ -57,6 +62,8 @@ const makeFixtureRoot = async () => {
     return mkdtemp(join(process.cwd(), ".feature-module-check-"));
   }
 };
+
+const structuralFixtureCoverage = new Set();
 
 for (const fixture of fixtureManifest.cases) {
   test(fixture.name, async () => {
@@ -82,7 +89,13 @@ for (const fixture of fixtureManifest.cases) {
         ...fixture.profileExtra,
       };
       if (fixture.activation) {profile.activation = fixture.activation;}
-      const files = { ...baseFiles, ...(fixture.secondFeature ? secondFiles : {}), ...fixture.files, "profile.json": `${JSON.stringify(profile, null, 2)}\n` };
+      const decisionFiles = fixture.acceptActivationAdr ? {
+        "architecture/decisions/accepted-decisions.json": `${JSON.stringify({ decisions: [
+          { id: "ADR-0007", path: "docs/decisions/0007-deterministic-documentation-governance.md" },
+          { id: "ADR-0013", path: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md" },
+        ] })}\n`,
+      } : {};
+      const files = { ...baseFiles, ...decisionFiles, ...(fixture.secondFeature ? secondFiles : {}), ...fixture.files, "profile.json": `${JSON.stringify(profile, null, 2)}\n` };
       for (const [path, content] of Object.entries(files)) {
         if (content === null) {continue;}
         await mkdir(dirname(join(root, path)), { recursive: true });
@@ -90,8 +103,15 @@ for (const fixture of fixtureManifest.cases) {
       }
       const acceptedDecisions = new Map([["ADR-0007", "docs/decisions/0007-deterministic-documentation-governance.md"]]);
       if (fixture.acceptActivationAdr) {acceptedDecisions.set("ADR-0013", "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md");}
-      const actual = (await checkFeatureModules({ root, profilePath: "profile.json", requiredStatus: fixture.requiredStatus, acceptedDecisions })).map(({ code, path, line }) => ({ code, path, line }));
+      const decisionOptions = fixture.useDecisionRegistry ? {} : { acceptedDecisions };
+      const actual = (await checkFeatureModules({ root, profilePath: "profile.json", requiredStatus: fixture.requiredStatus, ...decisionOptions })).map(({ code, path, line }) => ({ code, path, line }));
       assert.deepEqual(actual, fixture.expected);
+      const structuralCodes = new Set(fixture.expected.map(({ code }) => code).filter((code) => STRUCTURAL_CODES.has(code)));
+      for (const code of structuralCodes) {structuralFixtureCoverage.add(code);}
+      if (structuralCodes.size && !structuralCodes.has("FM_PROFILE_STATUS")) {
+        const failure = await execFileAsync(process.execPath, [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--allow-diagnostics"]).catch((error) => error);
+        assert.equal(failure.code, 1, `${fixture.name}: structural diagnostics must remain fatal under --allow-diagnostics`);
+      }
       if (fixture.cliRequireActive) {
         const args = [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--require-active"];
         if (fixture.cliAllowDiagnostics) {args.push("--allow-diagnostics");}
@@ -105,6 +125,15 @@ for (const fixture of fixtureManifest.cases) {
         assert.equal(failure.code, 1);
         assert.match(failure.stdout, /No conformance claim\./u);
       }
+      for (const cli of fixture.cliRuns ?? []) {
+        const result = await execFileAsync(process.execPath, [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", ...(cli.arguments ?? [])]).catch((error) => error);
+        assert.equal(result.code ?? 0, cli.exit, `${fixture.name}: ${cli.arguments?.join(" ") ?? "default"}`);
+        assert.match(result.stdout, new RegExp(cli.output, "u"));
+      }
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 }
+
+test("CLI structural allowance matrix covers every fatal code", () => {
+  assert.deepEqual([...structuralFixtureCoverage].toSorted(), [...STRUCTURAL_CODES].toSorted());
+});

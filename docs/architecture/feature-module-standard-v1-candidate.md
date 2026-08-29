@@ -97,15 +97,15 @@ packages or Node builtins; adapters and composition own those integrations.
 
 ## Activation TODO and acceptance
 
-The current report contains 47 diagnostics: six missing declared feature
+The current report contains 52 diagnostics: six missing declared feature
 entrypoints, 24 assembly deep imports, eight domain/application imports of
 public transport contracts, two application imports of Node builtins, three
-feature READMEs without declared owners, and four package-level tests that must
+feature READMEs without declared owners, and nine package-level tests that must
 move beside their scoped features. The estimated production cleanup is six new
 feature entrypoint files, consolidation of 24 assembly import/re-export
 statements, replacement of the eight forbidden contract dependencies with
 domain models or application-owned ports, two builtin integrations moved
-behind application-owned ports, three README ownership declarations, and four
+behind application-owned ports, three README ownership declarations, and nine
 test relocations. The existing package export maps already satisfy the
 candidate rule. That work belongs to a production cleanup lane.
 
