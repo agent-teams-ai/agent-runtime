@@ -310,7 +310,7 @@ static authoring, selection graph, lifecycle coordinator, process host, shared
 Foundation API, and public SPI at `NO_GO`. Draft PR #27 defines only a future
 dogfooding boundary and grants no production authority. Therefore this delivery:
 
-- does not depend on either draft PR;
+- does not depend on either PR becoming a production Module Kit;
 - does not wait for a module runtime;
 - keeps one stable composition seam: a feature-local factory accepting plain
   product-owned ports;
@@ -321,14 +321,20 @@ dogfooding boundary and grants no production authority. Therefore this delivery:
 - stops if more than 30 percent of production changes become generic framework
   glue or ordinary feature work repeatedly requires Foundation changes.
 
-The accepted decision preserves its historical Draft snapshot. Before the
-first implementation slice, the non-authoritative evidence was refreshed to
+The accepted decision preserves its historical Draft snapshot. During the
+implementation slice, the non-authoritative evidence was refreshed again to
 Extension Foundation PR #22
-`2be16a4574490aaa527daa78ec3b9a23987e73e8` and PR #27
-`83090ff230c53913961c3770605d2f7d533f57df`. Both remain Draft and retain the
-same relevant `NO_GO` boundary. Refresh these heads again before admitting a
-Module Kit adapter because Draft evidence can change. Only merged accepted
-product decisions are authority.
+`97662d634b5eebd9865099830c0d7f124c7dc133` and Draft PR #27
+`83090ff230c53913961c3770605d2f7d533f57df`. PR #22 is now ready for review but
+still admits only exact source custody; PR #27 remains Draft. Their exact-head
+documents confirm the baseline as product-owned ports, literal imports, pure
+factories, closed dependency objects, and explicit composition roots. A future
+treatment is a private outer adapter implementing the same product-owned port;
+it must be removable without changing the use case, port, or domain model.
+Both PRs retain the relevant `NO_GO` boundary for production module runtime,
+lifecycle coordinator, shared Foundation API, and public SPI. Refresh these
+heads again before admitting a Module Kit adapter because open evidence can
+change. Only merged accepted ADRs and owning-product decisions are authority.
 
 V1 does not create a `ModuleId`, inert module declaration, generated module
 index, loader table, module adapter, or Module Kit dependency merely to reserve
