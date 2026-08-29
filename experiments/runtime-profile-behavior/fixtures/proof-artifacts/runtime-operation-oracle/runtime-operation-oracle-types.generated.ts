@@ -971,7 +971,7 @@ export interface CompositionFixture {
    * @minItems 7
    * @maxItems 7
    */
-  dependencies: never[];
+  dependencies: ["operation_store", "security", "provider_access", "workspace", "artifacts", "custody", "provider"];
   dependencyObject: "closed_readonly_exact_membership";
   ordinaryCallerSurface: "trusted_scope_bound_runtime_access_handle";
   operations: NonEmptyUniqueStrings;

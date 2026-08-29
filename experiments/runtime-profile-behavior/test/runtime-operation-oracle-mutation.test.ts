@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
 
-import Ajv2020 from "ajv/dist/2020.js";
+import { Ajv2020 } from "ajv/dist/2020.js";
 
 import { loadRuntimeOperationOracleAuthority } from "../src/features/evidence/runtime-operation-oracle-authority.ts";
 import {
@@ -89,7 +89,7 @@ test("composition schema kills missing, renamed, nested, and provider-hidden Pro
   ];
 
   for (const [id, mutatedDependencies] of mutants) {
-    const contract = structuredClone(authority.containedTurnV1Contract) as Record<string, unknown>;
+    const contract = structuredClone(authority.containedTurnV1Contract) as unknown as Record<string, unknown>;
     const fixture = contract.compositionFixture as Record<string, unknown>;
     fixture.dependencies = mutatedDependencies;
     assert.equal(validateContainedTurnContract(contract), false, id);
