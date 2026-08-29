@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "name": "minimal-valid-feature-and-supported-syntax",
+      "alphaRoles": ["contracts", "domain"],
+      "files": {
+        "src/features/alpha/index.ts": "export type { PublicValue } from \"./contracts/public-value.js\";\n",
+        "src/features/alpha/internal.ts": "export { value } from \"./domain/value.js\";\n",
+        "src/features/alpha/contracts/public-value.ts": "export interface PublicValue { readonly value: string }\n",
+        "src/features/alpha/domain/value.ts": "import fs = require('node:fs');\n// import('../beta/domain/nope.js')\nconst text = \"require('../beta/domain/nope.js')\";\nexport interface Value { readonly value: string }\nexport const value = text + fs.constants.F_OK;\ntype External = import('node:fs').Stats;\nvoid import('node:path');\nvoid (null as unknown as External);\n",
+        "src/index.ts": "export type { Value } from \"./features/alpha/index.js\";\n",
+        "src/composition.ts": "export { value } from \"./features/alpha/internal.js\";\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "public-entrypoint-exposes-only-own-contracts",
+      "files": {
+        "src/features/alpha/index.ts": "export { value } from \"./domain/value.js\";\n"
+      },
+      "expected": [{ "code": "FM_PUBLIC_ENTRYPOINT_EXPORT", "path": "src/features/alpha/index.ts", "line": 1 }]
+    },
+    {
+      "name": "behavior-outside-feature",
+      "files": { "src/legacy.ts": "export const legacy = true;\n" },
+      "expected": [{ "code": "FM_BEHAVIOR_OUTSIDE_FEATURE", "path": "src/legacy.ts", "line": 1 }]
+    },
+    {
+      "name": "cross-feature-deep-import",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "edges": [{ "from": "beta", "to": "alpha", "kinds": ["runtime"] }],
+      "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/domain/value.js\";\nexport { value };\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "undeclared-edge",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/index.js\";\nexport { value };\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "unused-declared-edge-is-future-state-metadata",
+      "secondFeature": true,
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "expected": [{ "code": "FM_UNUSED_EDGE", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "edge-must-reference-declared-features",
+      "edges": [{ "from": "alpha", "to": "unknown", "kinds": ["runtime"] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "runtime-cycle",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "secondRoles": ["domain", "adapters"],
+      "edges": [
+        { "from": "alpha", "to": "beta", "kinds": ["runtime"] },
+        { "from": "beta", "to": "alpha", "kinds": ["runtime"] }
+      ],
+      "files": {
+        "src/features/alpha/adapters/value.ts": "import { beta } from \"../../beta/index.js\";\nexport const adapterValue = beta;\n",
+        "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/index.js\";\nexport const adapterBeta = value;\n"
+      },
+      "expected": [
+        { "code": "FM_RUNTIME_CYCLE", "path": "src/features/alpha/adapters/value.ts", "line": 1 },
+        { "code": "FM_RUNTIME_CYCLE", "path": "src/features/beta/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "type-only-cycle",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "secondRoles": ["domain", "adapters"],
+      "edges": [
+        { "from": "alpha", "to": "beta", "kinds": ["type"] },
+        { "from": "beta", "to": "alpha", "kinds": ["type"] }
+      ],
+      "files": {
+        "src/features/alpha/adapters/value.ts": "import type { Beta } from \"../../beta/index.js\";\nexport interface AlphaAdapter { beta: Beta }\n",
+        "src/features/beta/adapters/value.ts": "import type { Value } from \"../../alpha/index.js\";\nexport interface BetaAdapter { value: Value }\n"
+      },
+      "expected": [
+        { "code": "FM_TYPE_CYCLE", "path": "src/features/alpha/adapters/value.ts", "line": 1 },
+        { "code": "FM_TYPE_CYCLE", "path": "src/features/beta/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "empty-ceremonial-layer",
+      "alphaRoles": ["domain", "application"],
+      "expected": [{ "code": "FM_EMPTY_LAYER", "path": "src/features/alpha/application", "line": 1 }]
+    },
+    {
+      "name": "undeclared-module-and-ownership",
+      "files": {
+        "src/features/alpha/helpers/tool.ts": "export const tool = true;\n",
+        "src/shared/value.ts": "export const shared = true;\n"
+      },
+      "expected": [
+        { "code": "FM_UNDECLARED_MODULE", "path": "src/features/alpha/helpers/tool.ts", "line": 1 },
+        { "code": "FM_UNDECLARED_OWNERSHIP", "path": "src/shared/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "invalid-layer-direction",
+      "alphaRoles": ["domain", "application"],
+      "files": {
+        "src/features/alpha/application/use.ts": "export const use = true;\n",
+        "src/features/alpha/domain/value.ts": "import { use } from \"../application/use.js\";\nexport const value = use;\n"
+      },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "domain-cannot-import-public-contracts",
+      "alphaRoles": ["contracts", "domain"],
+      "files": {
+        "src/features/alpha/contracts/public.ts": "export interface PublicContract { readonly value: string }\n",
+        "src/features/alpha/domain/value.ts": "import type { PublicContract } from \"../contracts/public.js\";\nexport const value: PublicContract = { value: 'domain' };\n"
+      },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "application-cannot-import-public-contracts",
+      "alphaRoles": ["contracts", "domain", "application"],
+      "files": {
+        "src/features/alpha/contracts/public.ts": "export interface PublicContract { readonly value: string }\n",
+        "src/features/alpha/application/use.ts": "import type { PublicContract } from \"../contracts/public.js\";\nexport const use = (value: PublicContract): string => value.value;\n"
+      },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/application/use.ts", "line": 1 }]
+    },
+    {
+      "name": "application-cannot-import-another-feature-public-contract",
+      "alphaRoles": ["domain", "application"],
+      "secondFeature": true,
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["type"] }],
+      "files": {
+        "src/features/alpha/application/use.ts": "import type { Beta } from \"../../beta/index.js\";\nexport interface Use { readonly beta: Beta }\n"
+      },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/application/use.ts", "line": 1 }]
+    },
+    {
+      "name": "invalid-authority",
+      "authorityId": "mutable.local-standard",
+      "expected": [{ "code": "FM_INVALID_AUTHORITY", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "future-state-metadata",
+      "profileExtra": { "futureState": { "automaticallyWiden": true } },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "wildcard-exception",
+      "exceptions": [{ "id": "all", "acceptedAdr": "ADR-0013", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "packages/**" }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "comments-and-strings-versus-real-syntax",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/beta/adapters/value.ts": "// import { value } from '../../alpha/index.js';\nconst sample = \"require('../../alpha/index.js')\";\nexport { value } from \"../../alpha/index.js\";\nexport { sample };\n"
+      },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "all-import-and-reexport-syntax-is-enforced",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/index.js\";\nexport { value as exportedValue } from \"../../alpha/index.js\";\nexport const load = () => import(\"../../alpha/index.js\");\nexport type Imported = import(\"../../alpha/index.js\").Value;\nimport Alpha = require(\"../../alpha/index.js\");\nexport const required = require(\"../../alpha/index.js\");\nvoid value; void Alpha;\n"
+      },
+      "expected": [
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 1 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 2 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 3 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 4 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 5 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 6 }
+      ]
+    },
+    {
+      "name": "nonliteral-loading",
+      "files": { "src/features/alpha/domain/value.ts": "const target = './other.js';\nexport const value = import(target);\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.ts", "line": 2 }]
+    },
+    {
+      "name": "parse-failure",
+      "files": { "src/features/alpha/domain/value.ts": "export const value = ;\n" },
+      "expected": [{ "code": "FM_PARSE_FAILURE", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    }
+  ]
+}

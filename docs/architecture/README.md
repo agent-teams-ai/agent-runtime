@@ -21,6 +21,10 @@ independent competing source of truth.
 
 Documents:
 
+- [Feature Module Standard v1 candidate adoption](feature-module-standard-v1-candidate.md):
+  exact immutable authority binding, narrow Agent Execution and Provider Access
+  candidate scope, deterministic checks, production blockers, and activation
+  criteria. This is not repository-wide or active conformance.
 - [Architecture foundation](architecture-foundation.md): ownership, DDD
   boundaries, dependency rules, persistence, public API, and quality gates.
 - [Execution generation model](execution-generation-model.md): execution

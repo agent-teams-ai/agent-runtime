@@ -1,0 +1,80 @@
+{
+  "$schema": "./profile.schema.json",
+  "schemaVersion": 1,
+  "status": "candidate",
+  "authority": {
+    "id": "agent-teams.feature-module-standard",
+    "version": "v1",
+    "repository": "agent-teams-ai/.github",
+    "path": "docs/architecture/feature-module-standard/v1.md",
+    "gitBlob": "d0bfff2033faf544fe65268c1dcdfd524d093015",
+    "sha256": "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa"
+  },
+  "scope": {
+    "productionRoots": [
+      "packages/contexts/agent-execution/src",
+      "packages/contexts/provider-access/src"
+    ],
+    "outOfScope": [
+      "Embedded Runtime", "Runtime Configuration", "Runtime Security", "Filesystem Custody", "Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"
+    ]
+  },
+  "moduleRoles": ["contracts", "domain", "application", "adapters", "composition"],
+  "features": [
+    {
+      "id": "runtime-installation-discovery",
+      "root": "packages/contexts/agent-execution/src/features/runtime-installation-discovery",
+      "roles": ["contracts", "application", "adapters", "composition"],
+      "entrypoints": {
+        "public": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
+        "internal": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts"
+      }
+    },
+    {
+      "id": "contained-agent-turn",
+      "root": "packages/contexts/agent-execution/src/features/contained-agent-turn",
+      "roles": ["contracts", "domain", "application", "adapters", "composition"],
+      "entrypoints": {
+        "public": "packages/contexts/agent-execution/src/features/contained-agent-turn/index.ts",
+        "internal": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-access",
+      "root": "packages/contexts/provider-access/src/features/contained-turn-access",
+      "roles": ["contracts", "domain", "application", "adapters", "composition"],
+      "entrypoints": {
+        "public": "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
+        "internal": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts"
+      }
+    }
+  ],
+  "assemblyFiles": [
+    "packages/contexts/agent-execution/src/index.ts",
+    "packages/contexts/agent-execution/src/composition.ts",
+    "packages/contexts/provider-access/src/index.ts",
+    "packages/contexts/provider-access/src/composition.ts"
+  ],
+  "featureEdges": [],
+  "extensions": [],
+  "deviations": [],
+  "exceptions": [],
+  "enforcement": {
+    "candidate": "pnpm architecture:feature-modules:candidate",
+    "active": "pnpm architecture:feature-modules:active",
+    "fixtures": "pnpm test:feature-modules"
+  },
+  "activation": {
+    "todo": [
+      "Add the six declared public/internal feature entrypoint files in the production cleanup lane.",
+      "Replace package assembly deep re-exports with imports or re-exports through declared feature entrypoints.",
+      "Move the eight domain/application dependencies on public transport contracts behind domain models or application-owned ports.",
+      "Run the candidate command until it reports zero diagnostics, then change status to active and wire the production command into check and check:fast."
+    ],
+    "acceptance": [
+      "The fixture command passes with all positive and negative conformance cases.",
+      "The candidate command reports zero production diagnostics without exceptions or scope widening.",
+      "The final integration change sets status active and adds the active checker to check and check:fast."
+    ]
+  }
+}

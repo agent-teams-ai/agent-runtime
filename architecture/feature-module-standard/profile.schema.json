@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-runtime.feature-module-profile/v1",
+  "title": "Agent Runtime Feature Module Standard profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "authority", "scope", "moduleRoles", "features", "assemblyFiles", "featureEdges", "extensions", "deviations", "exceptions", "enforcement", "activation"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "status": { "enum": ["candidate", "active"] },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "repository", "path", "gitBlob", "sha256"],
+      "properties": {
+        "id": { "const": "agent-teams.feature-module-standard" },
+        "version": { "const": "v1" },
+        "repository": { "const": "agent-teams-ai/.github" },
+        "path": { "const": "docs/architecture/feature-module-standard/v1.md" },
+        "gitBlob": { "const": "d0bfff2033faf544fe65268c1dcdfd524d093015" },
+        "sha256": { "const": "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["productionRoots", "outOfScope"],
+      "properties": {
+        "productionRoots": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "outOfScope": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "moduleRoles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["contracts", "domain", "application", "adapters", "composition"] } },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "root", "roles", "entrypoints"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "root": { "type": "string" },
+          "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["contracts", "domain", "application", "adapters", "composition"] } },
+          "entrypoints": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["public", "internal"],
+            "properties": { "public": { "type": "string" }, "internal": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "assemblyFiles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+    "featureEdges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "kinds"],
+        "properties": {
+          "from": { "type": "string" }, "to": { "type": "string" },
+          "kinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["runtime", "type"] } }
+        }
+      }
+    },
+    "extensions": { "type": "array", "items": { "$ref": "#/$defs/governedRecord" } },
+    "deviations": { "type": "array", "items": { "$ref": "#/$defs/governedRecord" } },
+    "exceptions": { "type": "array", "items": { "$ref": "#/$defs/governedRecord" } },
+    "enforcement": {
+      "type": "object", "additionalProperties": false, "required": ["candidate", "active", "fixtures"],
+      "properties": {
+        "candidate": { "const": "pnpm architecture:feature-modules:candidate" },
+        "active": { "const": "pnpm architecture:feature-modules:active" },
+        "fixtures": { "const": "pnpm test:feature-modules" }
+      }
+    },
+    "activation": {
+      "type": "object", "additionalProperties": false, "required": ["todo", "acceptance"],
+      "properties": { "todo": { "type": "array", "minItems": 1, "items": { "type": "string" } }, "acceptance": { "type": "array", "minItems": 1, "items": { "type": "string" } } }
+    }
+  },
+  "$defs": {
+    "governedRecord": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "acceptedAdr", "owner", "rationale", "reviewTrigger"],
+      "properties": {
+        "id": { "type": "string" }, "acceptedAdr": { "type": "string", "pattern": "^ADR-[0-9]{4}$" },
+        "owner": { "type": "string" }, "rationale": { "type": "string", "minLength": 1 },
+        "reviewTrigger": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
