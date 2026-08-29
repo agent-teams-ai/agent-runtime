@@ -90,7 +90,11 @@ try {
   containment = await custody.requestContainment({ attemptId, custodyRef: opened.custodyRef, operationId });
 }
 
-assert.equal(outcome?.kind, "completed");
+assert.equal(
+  outcome?.kind,
+  "completed",
+  `Claude canary did not complete: ${JSON.stringify({ outcome, output: output.join("").slice(0, 2_000) })}`,
+);
 assert.equal(outcome?.outcome, "succeeded", `Claude canary failed: ${output.join(" | ").slice(0, 2_000)}`);
 assert.match(output.join(""), /AR_CLAUDE_CANARY_OK/u);
 assert.equal(containment.kind, "contained");
