@@ -254,6 +254,58 @@ const threadConfig = (): JsonRecord => ({
   },
 });
 
+const emitCodexError = async (
+  params: JsonRecord,
+  input: Parameters<ContainedTurnProviderPort["execute"]>[0],
+  threadId: string,
+  turnId: string,
+  progress: ActiveTurnProgress,
+): Promise<void> => {
+  if (params.threadId !== threadId || params.turnId !== turnId || !isRecord(params.error)) {
+    throw new CodexAppServerProtocolError("Codex error notification identity is invalid", true);
+  }
+  const errorMessage = stringField(params.error, "message");
+  if (errorMessage === undefined) {return;}
+  await input.emit({ cursor: progress.cursor, kind: "diagnostic", text: errorMessage });
+  progress.cursor += 1;
+};
+
+const emitCodexAssistantDelta = async (
+  params: JsonRecord,
+  input: Parameters<ContainedTurnProviderPort["execute"]>[0],
+  threadId: string,
+  turnId: string,
+  progress: ActiveTurnProgress,
+): Promise<void> => {
+  if (params.threadId !== threadId || params.turnId !== turnId || typeof params.delta !== "string") {
+    throw new CodexAppServerProtocolError("Codex assistant delta identity is invalid", true);
+  }
+  await input.emit({ cursor: progress.cursor, kind: "assistant", text: params.delta });
+  progress.cursor += 1;
+};
+
+const completeCodexTurn = async (
+  params: JsonRecord,
+  input: Parameters<ContainedTurnProviderPort["execute"]>[0],
+  threadId: string,
+  turnId: string,
+  progress: ActiveTurnProgress,
+): Promise<ActiveTurnCompletion> => {
+  if (params.threadId !== threadId) {throw new CodexAppServerProtocolError("Codex terminal thread identity changed", true);}
+  const completed = parseTurn(params);
+  if (completed.id !== turnId || !["completed", "failed", "interrupted"].includes(completed.status)) {
+    throw new CodexAppServerProtocolError("Codex terminal turn identity or status is invalid", true);
+  }
+  if (completed.status === "failed" && isRecord(params.turn) && isRecord(params.turn.error)) {
+    const terminalMessage = stringField(params.turn.error, "message");
+    if (terminalMessage !== undefined) {
+      await input.emit({ cursor: progress.cursor, kind: "diagnostic", text: terminalMessage });
+      progress.cursor += 1;
+    }
+  }
+  return { ...progress, status: completed.status as ActiveTurnCompletion["status"] };
+};
+
 export class CodexAppServerContainedTurnProvider implements ContainedTurnProviderPort {
   public readonly manifest: ContainedTurnAdapterCapabilityManifest;
   readonly #cancellationPollMs: number;
@@ -333,24 +385,16 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     }
     const method = notificationMethod(message);
     if (!isRecord(message.params)) {return undefined;}
+    if (method === "error") {
+      await emitCodexError(message.params, input, threadId, turnId, progress);
+      return undefined;
+    }
     if (method === "item/agentMessage/delta") {
-      if (message.params.threadId !== threadId || message.params.turnId !== turnId || typeof message.params.delta !== "string") {
-        throw new CodexAppServerProtocolError("Codex assistant delta identity is invalid", true);
-      }
-      await input.emit({ cursor: progress.cursor, kind: "assistant", text: message.params.delta });
-      progress.cursor += 1;
+      await emitCodexAssistantDelta(message.params, input, threadId, turnId, progress);
       return undefined;
     }
     if (method !== "turn/completed") {return undefined;}
-    if (message.params.threadId !== threadId) {throw new CodexAppServerProtocolError("Codex terminal thread identity changed", true);}
-    const completed = parseTurn(message.params);
-    if (completed.id !== turnId || !["completed", "failed", "interrupted"].includes(completed.status)) {
-      throw new CodexAppServerProtocolError("Codex terminal turn identity or status is invalid", true);
-    }
-    return {
-      ...progress,
-      status: completed.status as ActiveTurnCompletion["status"],
-    };
+    return completeCodexTurn(message.params, input, threadId, turnId, progress);
   }
 
   async #awaitTurnCompletion(

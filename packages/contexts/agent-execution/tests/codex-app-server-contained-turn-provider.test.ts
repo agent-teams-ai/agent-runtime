@@ -193,6 +193,30 @@ test("maps an explicit turn rejection to known not accepted", async () => {
   assert.equal(outcome.kind, "not_accepted");
 });
 
+test("preserves a bounded Codex terminal diagnostic", async () => {
+  const output: { readonly kind: string; readonly text: string }[] = [];
+  const process = new FakeCodexProcess((message, target) => {
+    if (standardHandshake(message, target)) {return;}
+    if (message.method === "turn/start") {
+      target.emit({ id: message.id, result: { turn: { id: "turn:failed", status: "inProgress" } } });
+      target.emit({
+        method: "turn/completed",
+        params: {
+          threadId: "thread:test",
+          turn: { error: { message: "synthetic provider failure" }, id: "turn:failed", status: "failed" },
+        },
+      });
+    }
+  });
+  const outcome = await createProvider(process).execute({
+    ...executeInput(process),
+    emit: async chunk => {output.push(chunk);},
+  });
+  assert.equal(outcome.kind, "completed");
+  if (outcome.kind === "completed") {assert.equal(outcome.outcome, "failed");}
+  assert.deepEqual(output, [{ kind: "diagnostic", text: "synthetic provider failure", cursor: 0 }]);
+});
+
 test("fails ambiguous after dispatch for approval requests, malformed output, and missing custody", async () => {
   const approvalProcess = new FakeCodexProcess((message, target) => {
     if (standardHandshake(message, target)) {return;}

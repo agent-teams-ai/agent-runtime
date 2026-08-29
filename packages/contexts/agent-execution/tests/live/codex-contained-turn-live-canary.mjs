@@ -90,7 +90,7 @@ try {
 }
 
 assert.equal(outcome?.kind, "completed");
-assert.equal(outcome?.outcome, "succeeded");
+assert.equal(outcome?.outcome, "succeeded", `Codex canary failed: ${output.join(" | ").slice(0, 2_000)}`);
 assert.match(output.join(""), /AR_CODEX_CANARY_OK/u);
 assert.equal(containment.kind, "contained");
 process.stdout.write(`${JSON.stringify({
