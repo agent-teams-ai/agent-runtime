@@ -62,16 +62,6 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         Object.keys(entry).toSorted(),
         ["id", entry.diagnostic === undefined ? "expected" : "diagnostic", "testFile", "testName"].toSorted(),
       );
-      const source = await readFile(new URL(entry.testFile, repositoryRoot), "utf8");
-      const declaration = new RegExp(
-        `\\btest\\(\\s*${escapeRegExp(JSON.stringify(entry.testName))}\\s*,`,
-        "gu",
-      );
-      assert.equal(
-        [...source.matchAll(declaration)].length,
-        1,
-        `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
-      );
       const { packageRoot, relativeTestFile } = packageTestCoordinates(entry.testFile);
       const testFilePath = fileURLToPath(new URL(entry.testFile, repositoryRoot));
       const pathSegments = entry.testFile.split("/");
@@ -95,6 +85,16 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         containedPath === ".." || containedPath.startsWith(`..${sep}`) || isAbsolute(containedPath),
         false,
         `${entry.testFile} must remain inside its real package tests directory`,
+      );
+      const source = await readFile(testFilePath, "utf8");
+      const declaration = new RegExp(
+        `\\btest\\(\\s*${escapeRegExp(JSON.stringify(entry.testName))}\\s*,`,
+        "gu",
+      );
+      assert.equal(
+        [...source.matchAll(declaration)].length,
+        1,
+        `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
       );
       const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
       assert.equal(
