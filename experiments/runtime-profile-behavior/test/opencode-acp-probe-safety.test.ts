@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Readable, Writable } from "node:stream";
 import test from "node:test";
 
 import {
@@ -12,7 +13,11 @@ import {
   MAX_RETAINED_CALLBACKS,
   ProbeEvidence,
 } from "../src/features/acp-compatibility/opencode-acp-probe-evidence.ts";
-import { awaitBoundedConnectionClose } from "../src/features/acp-compatibility/opencode-acp-probe-lifecycle.ts";
+import {
+  awaitBoundedConnectionClose,
+  terminateBoundedProcess,
+} from "../src/features/acp-compatibility/opencode-acp-probe-lifecycle.ts";
+import { runIsolatedSdkWorkflow } from "../src/features/acp-compatibility/opencode-acp-probe-sdk-isolation.ts";
 import {
   executeProbeWorkflow,
   requestWithDeadline,
@@ -64,6 +69,22 @@ test("caps retained anomalies without preserving rejected values elsewhere", () 
   });
   assert.ok(JSON.stringify(evidence.anomalies).length < 10_000);
   assert.doesNotMatch(JSON.stringify(evidence.anomalies), /z{100}/);
+});
+
+test("ordinary Error digests distinguish failures without retaining messages", () => {
+  const evidence = new ProbeEvidence();
+  const first = evidence.error(
+    "request_rejected",
+    "session/new",
+    new Error("TOKEN=first-secret"),
+  );
+  const second = evidence.error(
+    "request_rejected",
+    "session/new",
+    new Error("TOKEN=second-secret"),
+  );
+  assert.notEqual(first.digestSha256, second.digestSha256);
+  assert.doesNotMatch(JSON.stringify({ first, second }), /first-secret|second-secret|TOKEN/);
 });
 
 test("caps callback evidence before retention", () => {
@@ -151,6 +172,29 @@ test("classifies request timeout as bounded ambiguity, never success", async () 
   ]);
 });
 
+test("retains a safe anomaly for a rejection after request timeout", async () => {
+  const evidence = new ProbeEvidence();
+  const late = Promise.withResolvers<never>();
+  await assert.rejects(
+    requestWithDeadline({
+      method: "session/prompt",
+      invoke: () => late.promise,
+      timeoutMs: 5,
+      evidence,
+    }),
+    /request_timeout_ambiguity/,
+  );
+  late.reject(new Error("TOKEN=late-provider-secret"));
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+  assert.equal(
+    evidence.anomalies.at(-1)?.code,
+    "late_request_rejected_after_timeout",
+  );
+  assert.doesNotMatch(JSON.stringify(evidence.anomalies), /late-provider-secret|TOKEN/);
+});
+
 test("retains a typed anomaly when SDK connection closure times out", async () => {
   const evidence = new ProbeEvidence();
   let closeCalled = false;
@@ -181,4 +225,77 @@ test("observes normal official SDK in-memory connection close", async () => {
     "closed",
   );
   assert.deepEqual(evidence.anomalies, []);
+});
+
+test("contains official SDK diagnostics for synthetic malformed stdout", async () => {
+  const evidence = new ProbeEvidence();
+  const secret = `TOKEN=malformed-provider-secret /synthetic/private ${"x".repeat(70_000)}`;
+  const encoder = new TextEncoder();
+  const fromAgent = Readable.toWeb(
+    Readable.from([encoder.encode(`{"unterminated":"${secret}"\n`)]),
+  ) as ReadableStream<Uint8Array>;
+  const toAgent = Writable.toWeb(
+    new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    }),
+  ) as WritableStream<Uint8Array>;
+  const result = await runIsolatedSdkWorkflow({
+    fromAgent,
+    toAgent,
+    requestedProtocolVersion: 1,
+    workspace: "/synthetic/private",
+    executePrompt: false,
+    configDriftAction: "mutate",
+    deadlineAt: Date.now() + 5_000,
+    timeoutMs: 8_000,
+    evidence,
+  });
+  const retained = JSON.stringify(result);
+  assert.notEqual(result.workflow.workflowError, undefined);
+  assert.ok(
+    result.diagnostics.stderr.bytesObserved +
+      result.diagnostics.stdout.bytesObserved >
+      0,
+    JSON.stringify(result.diagnostics),
+  );
+  assert.match(result.diagnostics.stderr.digestSha256, /^[a-f0-9]{64}$/u);
+  assert.equal(result.diagnostics.stderr.truncated, true);
+  assert.ok(retained.length < 10_000);
+  assert.doesNotMatch(retained, /malformed-provider-secret|synthetic\/private|TOKEN/);
+});
+
+test("releases stubborn child handles after bounded SIGKILL uncertainty", async () => {
+  const evidence = new ProbeEvidence();
+  const calls: string[] = [];
+  const handle = (name: string) => ({
+    destroy: () => {
+      calls.push(name);
+    },
+  });
+  const startedAt = Date.now();
+  const result = await terminateBoundedProcess({
+    child: {
+      kill: (signal?: NodeJS.Signals | number) => {
+        calls.push(String(signal));
+        return true;
+      },
+      stdin: handle("stdin"),
+      stdout: handle("stdout"),
+      stderr: handle("stderr"),
+      unref: () => {
+        calls.push("unref");
+      },
+    } as never,
+    exit: new Promise(() => {}),
+    gracefulMs: 5,
+    sigtermMs: 5,
+    sigkillMs: 5,
+    evidence,
+  });
+  assert.equal(result.termination, "unconfirmed_after_sigkill");
+  assert.ok(Date.now() - startedAt < 500);
+  assert.deepEqual(calls, ["SIGTERM", "SIGKILL", "stdin", "stdout", "stderr", "unref"]);
+  assert.equal(evidence.anomalies.at(-1)?.code, "termination_unconfirmed");
 });

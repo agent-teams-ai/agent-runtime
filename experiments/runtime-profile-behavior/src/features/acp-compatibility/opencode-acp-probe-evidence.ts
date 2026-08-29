@@ -4,13 +4,18 @@ export const MAX_EVIDENCE_ANOMALIES = 32;
 export const MAX_RETAINED_CALLBACKS = 512;
 const MAX_IDENTIFIER_BYTES = 128;
 const MAX_COMMANDS_PER_SESSION = 64;
+const MAX_SMALL_ERROR_BYTES = 4 * 1024;
 
 export type ProbeAnomalyCode =
   | "closure_timeout"
+  | "diagnostic_truncated"
   | "evidence_anomaly_limit_exceeded"
   | "evidence_value_rejected"
+  | "late_request_rejected_after_timeout"
+  | "late_request_resolved_after_timeout"
   | "request_rejected"
   | "request_timeout_ambiguity"
+  | "sdk_isolation_timeout"
   | "stderr_truncated"
   | "stdout_byte_limit_exceeded"
   | "stdout_line_limit_exceeded"
@@ -57,13 +62,40 @@ export interface SafeStderrEvidence {
 }
 
 const digest = (value: unknown): string => {
-  let bytes: string;
-  try {
-    bytes = typeof value === "string" ? value : JSON.stringify(value);
-  } catch {
-    bytes = Object.prototype.toString.call(value);
+  const hash = createHash("sha256");
+  if (value instanceof Error) {
+    const name = Buffer.byteLength(value.name) <= MAX_IDENTIFIER_BYTES
+      ? value.name
+      : "oversized_error_name";
+    const messageBytes = Buffer.byteLength(value.message);
+    hash.update("error\0").update(name).update("\0");
+    if (messageBytes <= MAX_SMALL_ERROR_BYTES) {
+      hash.update("message\0").update(value.message);
+    } else {
+      hash.update(`oversized_message\0${messageBytes}`);
+    }
+    return hash.digest("hex");
   }
-  return createHash("sha256").update(bytes ?? "undefined").digest("hex");
+  if (typeof value === "string") {
+    return hash.update("string\0").update(value).digest("hex");
+  }
+  if (value instanceof Uint8Array) {
+    return hash.update("bytes\0").update(value).digest("hex");
+  }
+  const type = value === null ? "null" : typeof value;
+  return hash.update(`unsupported\0${type}`).digest("hex");
+};
+
+export const mergeProbeAnomalies = (
+  ...groups: readonly (readonly ProbeAnomaly[])[]
+): readonly ProbeAnomaly[] => {
+  const merged = groups.flat().slice(0, MAX_EVIDENCE_ANOMALIES);
+  if (groups.reduce((total, group) => total + group.length, 0) > merged.length) {
+    merged[MAX_EVIDENCE_ANOMALIES - 1] = {
+      code: "evidence_anomaly_limit_exceeded",
+    };
+  }
+  return merged;
 };
 
 const boundedIdentifier = (value: unknown): string | undefined => {
@@ -191,8 +223,18 @@ export class ProbeEvidence {
   }
 
   stderr(bytes: Uint8Array, observedBytes: number, truncated: boolean): SafeStderrEvidence {
+    return this.boundedBytes("stderr", bytes, observedBytes, truncated);
+  }
+
+  boundedBytes(
+    field: string,
+    bytes: Uint8Array,
+    observedBytes: number,
+    truncated: boolean,
+    truncationCode: "stderr_truncated" | "diagnostic_truncated" = "stderr_truncated",
+  ): SafeStderrEvidence {
     if (truncated) {
-      this.anomaly("stderr_truncated", "stderr");
+      this.anomaly(truncationCode, field);
     }
     return {
       bytesObserved: Math.max(0, Math.min(observedBytes, Number.MAX_SAFE_INTEGER)),

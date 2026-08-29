@@ -47,7 +47,10 @@ const exited = async (
 };
 
 export const terminateBoundedProcess = async (input: {
-  readonly child: Pick<ChildProcessWithoutNullStreams, "kill">;
+  readonly child: Pick<
+    ChildProcessWithoutNullStreams,
+    "kill" | "stdin" | "stdout" | "stderr" | "unref"
+  >;
   readonly exit: Promise<Omit<ProcessResult, "termination">>;
   readonly gracefulMs: number;
   readonly sigtermMs: number;
@@ -69,6 +72,10 @@ export const terminateBoundedProcess = async (input: {
     return { ...afterKill.result, termination: "sigkill" };
   }
   input.evidence.anomaly("termination_unconfirmed", "process");
+  input.child.stdin.destroy();
+  input.child.stdout.destroy();
+  input.child.stderr.destroy();
+  input.child.unref();
   return {
     exitCode: null,
     signal: "SIGKILL",
