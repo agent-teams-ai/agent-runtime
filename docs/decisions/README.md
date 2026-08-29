@@ -14,6 +14,7 @@ related:
   - ADR-0008
   - ADR-0009
   - ADR-0010
+  - ADR-0012
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -54,6 +55,10 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0010: Contained Agent Turn V1 operation authority](0010-contained-agent-turn-v1-operation-authority.md)
   accepts the narrow one-attempt operation contract while preserving the
   broader proposed ADR-0006 as design input.
+- [ADR-0012: Provider Access authority in contained-turn composition](0012-provider-access-authority-in-contained-turn-composition.md)
+  replaces only ADR-0009's six-member composition enumeration with the exact
+  seven-member dependency object; every other ADR-0009 invariant remains in
+  force.
 
 ## Superseded
 

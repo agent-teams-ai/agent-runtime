@@ -92,18 +92,20 @@ their existing profile and runtime facts. Host Custody owns process identity,
 bounded stop, output drain, and platform containment evidence. Provider
 adapters translate protocols and never persist domain state directly.
 
-Provider Access owns account, credential-generation, provider-route, and
-provider-capability facts whenever the first live adapter needs them. Those
-facts enter Agent Execution through one narrow collaboration port and opaque
-references; they are never hidden inside a provider adapter, dependency bag,
-environment scan, or module declaration. If the live slice requires this
-behavior, Phase 2 materializes the first minimal Provider Access feature rather
-than assigning its policy to Agent Execution.
+Provider Access owns account, access, provider-route, credential-binding, and
+credential-generation facts. Agent Execution owns adapter, binary, and adapter
+capability-manifest revisions. Provider Access facts enter Agent Execution
+through one Agent Execution-owned narrow consumer port and an outer-composition
+anti-corruption layer; they are never hidden inside a provider adapter,
+dependency bag, environment scan, or module declaration. Phase 2 materializes
+the first minimal Provider Access feature rather than assigning its policy to
+Agent Execution.
 
 | Symbol or responsibility | Owner |
 | --- | --- |
 | operation, coarse effect, output closure, terminal barrier | Agent Execution |
-| credential generation, account, provider route, capability facts | Provider Access |
+| account, access, provider route, credential binding and generation | Provider Access |
+| adapter, binary, and adapter capability-manifest revisions | Agent Execution |
 | resource and invocation authorization | Runtime Security |
 | process/session custody and containment evidence | Agent Execution Host Custody |
 | App Server or SDK translation | outer provider adapter |
@@ -252,6 +254,7 @@ The migration-safe private composition contract is fixed before implementation:
 type ContainedTurnFeatureDependencies = Readonly<{
   operationStore: ContainedTurnOperationStore;
   security: ContainedTurnSecurityPort;
+  providerAccess: ContainedTurnProviderAccessPort;
   workspace: ContainedTurnWorkspacePort;
   artifacts: ContainedTurnArtifactPort;
   custody: ProviderProcessCustodyPort;
@@ -419,8 +422,9 @@ appear below composition.
    from operation, effect, attempt, provider-host, authority, and fence
    identities.
 8. Freeze the composition compatibility fixture: direct Pure DI must construct
-   the feature from one closed dependency object, expose only detached product
-   capabilities, and pass without any module-framework package installed.
+   the feature from the exact closed seven-member dependency object, including
+   Provider Access, expose only detached product capabilities, and pass without
+   any module-framework package installed.
 9. Record the exact reviewed heads of Extension Foundation PR #22 and #27 as
    non-authoritative inputs and map every applicable guardrail to the
    compatibility fixture. Refresh the map if either Draft head changes.
@@ -472,12 +476,13 @@ Add the hosted production adapters:
 Exit: restart and fault-injection tests prove durable recovery boundaries. The
 in-memory store remains test-only and is not presented as hosted durability.
 
-If provider credentials, accounts, routes, or capability facts are needed,
 Phase 2 also materializes the smallest Provider Access feature and package
-allowed by ADR-0005. Agent Execution receives only opaque access references and
-immutable facts through a narrow port. Raw credentials, provider account
-selection, refresh policy, and route policy remain outside Agent Execution,
-Host Custody, Embedded Runtime, and module composition.
+allowed by ADR-0005. Agent Execution receives only opaque account, access,
+route, credential-binding, and credential-generation facts through its narrow
+consumer port; adapter, binary, and capability-manifest revisions remain Agent
+Execution-owned. Raw credentials, provider account selection, refresh policy,
+and route policy remain outside Agent Execution, Host Custody, Embedded
+Runtime, and module composition.
 
 ### Phase 3: production Host Custody
 
@@ -640,8 +645,9 @@ test pass rate, tests added, review defects, and iterations to stable head.
 - OpenCode ACP fixture validates the neutral contract without production launch.
 - direct composition rejects missing, unknown, duplicate, or ambiguous provider
   selection before factory invocation, handle publication, or effects;
-- the composition fixture proves exact dependency keys, snapshot-once behavior,
-  one selected provider call, zero unselected provider calls, Host-bound API
+- the composition fixture proves the exact seven dependency keys including
+  Provider Access, snapshot-once behavior, one selected provider call, zero
+  unselected provider calls, Host-bound API
   lifetime, partial-construction cleanup, and no module imports below composition;
 - future direct/module differential tests use synthetic providers and never run
   two composition paths against the same real effectful operation.

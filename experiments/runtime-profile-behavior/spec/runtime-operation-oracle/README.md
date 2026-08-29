@@ -1,7 +1,7 @@
 # ADR-0006 executable oracle
 
 Status: executable ADR-0006 design oracle and architecture evidence for
-accepted ADR-0009 and ADR-0010, not production runtime code or
+accepted ADR-0009, ADR-0010, and ADR-0012, not production runtime code or
 implementation/deployment qualification.
 
 The JSON files in this directory are the sole scenario and vocabulary
@@ -10,7 +10,8 @@ vocabulary, `schema.json` owns Draft 2020-12 shapes, and `cross-axis.json` owns
 the requirement-27 transition topology. `contained-turn-v1-disposition.json`
 maps every existing requirement, example, and static-product state category to
 `required`, `deferred`, or `not_applicable`.
-`contained-turn-v1-contract.json` freezes the exact candidate revisions,
+`contained-turn-v1-contract.json` revision 2 records the ADR-0012 correction
+base and freezes the exact candidate revisions,
 versioned capability manifests, worst-case scope, immutable receipt set,
 containment bindings, closed composition, identity/lifecycle separation,
 durable-truth boundary, and ADR-0004 negative guard examples. These two files

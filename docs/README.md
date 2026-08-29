@@ -40,7 +40,10 @@ Read documents in this order:
    boundary. Read companion
    `decisions/0009-contained-turn-private-access-and-host-shutdown-boundary.md`
    for the ordinary caller handle, durable cancellation, identity separation,
-   and Host-shutdown truth boundary.
+   and Host-shutdown truth boundary. Then read
+   `decisions/0012-provider-access-authority-in-contained-turn-composition.md`,
+   which corrects only ADR-0009's closed dependency enumeration to include the
+   Provider Access consumer port.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
@@ -173,8 +176,8 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. Accepted ADR-0001 through ADR-0010, excluding proposed ADR-0006 and
-the unassigned ADR identities, plus the promoted-rule column of the
+of truth. Accepted ADR-0001 through ADR-0010 and ADR-0012, excluding proposed
+ADR-0006 and the unassigned ADR identities, plus the promoted-rule column of the
 traceability matrix are normative for production architecture. ADR-0007
 governs deterministic documentation changes.
 Supporting architecture documents are accepted only as amended by the ADRs.

@@ -27,6 +27,7 @@ const inlineMetadataPaths = [
   "docs/decisions/0008-private-embedded-runtime-access-entrypoint.md",
   "docs/decisions/0009-contained-turn-private-access-and-host-shutdown-boundary.md",
   "docs/decisions/0010-contained-agent-turn-v1-operation-authority.md",
+  "docs/decisions/0012-provider-access-authority-in-contained-turn-composition.md",
   "docs/spikes/rust-system-boundaries-production-gates.md"
 ];
 
@@ -58,8 +59,8 @@ test("catalog authority has the reviewed type and lifecycle census", async () =>
     metadata.push(scalarMetadata(await readFile(join(repositoryRoot, path), "utf8"), 0));
   }
 
-  assert.equal(metadata.length, 53);
-  assert.equal(new Set(metadata.map((entry) => entry.id)).size, 53);
+  assert.equal(metadata.length, 54);
+  assert.equal(new Set(metadata.map((entry) => entry.id)).size, 54);
   const types = new Map();
   const statuses = new Map();
   for (const entry of metadata) {
@@ -67,14 +68,14 @@ test("catalog authority has the reviewed type and lifecycle census", async () =>
     increment(statuses, entry.status);
   }
   assert.deepEqual(Object.fromEntries(types), {
-    adr: 10,
+    adr: 11,
     evidence: 32,
     index: 3,
     architecture: 7,
     "qualification-plan": 1
   });
   assert.deepEqual(Object.fromEntries(statuses), {
-    accepted: 14,
+    accepted: 15,
     "evidence-reference": 31,
     superseded: 1,
     active: 5,
