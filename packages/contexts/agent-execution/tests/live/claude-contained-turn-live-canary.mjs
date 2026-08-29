@@ -72,6 +72,7 @@ const opened = await custody.open({ attemptId, operationId, providerBinding, wor
 const output = [];
 let outcome;
 let containment;
+let providerStderr = "";
 try {
   outcome = await provider.execute({
     attemptId,
@@ -88,12 +89,22 @@ try {
   });
 } finally {
   containment = await custody.requestContainment({ attemptId, custodyRef: opened.custodyRef, operationId });
+  const liveProcess = custody.get(opened.custodyRef);
+  if (liveProcess !== undefined) {
+    for await (const bytes of liveProcess.stderr) {
+      providerStderr = `${providerStderr}${Buffer.from(bytes).toString("utf8")}`.slice(-2_000);
+    }
+  }
 }
 
 assert.equal(
   outcome?.kind,
   "completed",
-  `Claude canary did not complete: ${JSON.stringify({ outcome, output: output.join("").slice(0, 2_000) })}`,
+  `Claude canary did not complete: ${JSON.stringify({
+    outcome,
+    output: output.join("").slice(0, 2_000),
+    providerStderr,
+  })}`,
 );
 assert.equal(outcome?.outcome, "succeeded", `Claude canary failed: ${output.join(" | ").slice(0, 2_000)}`);
 assert.match(output.join(""), /AR_CLAUDE_CANARY_OK/u);
