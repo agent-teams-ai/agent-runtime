@@ -849,13 +849,18 @@ export interface V1DispositionExpected {
  */
 export interface ContainedTurnV1Contract {
   $schema: "./schema.json#/$defs/containedTurnV1Contract";
-  schemaVersion: 1;
+  schemaVersion: 2;
   /**
-   * @minItems 2
-   * @maxItems 2
+   * @minItems 3
+   * @maxItems 3
    */
-  adrs: ["ADR-0009" | "ADR-0010", "ADR-0009" | "ADR-0010"];
+  adrs: [
+    "ADR-0009" | "ADR-0010" | "ADR-0012",
+    "ADR-0009" | "ADR-0010" | "ADR-0012",
+    "ADR-0009" | "ADR-0010" | "ADR-0012"
+  ];
   repositoryBaseCommit: "3e1b977d9ab6147eb702b62497bd0be62acb8cf7";
+  correctionBaseCommit: "40ddaedd0da009a6611988e3a8e9eb00857b05be";
   /**
    * @minItems 2
    * @maxItems 2
@@ -962,7 +967,11 @@ export interface CompositionFixture {
   providerSelectionFailurePolicy: "fail_before_factory_handle_or_effects_on_missing_unknown_duplicate_or_ambiguous_selection";
   dependencySnapshot: "exact_dependencies_once";
   resourcesCreatedAtConstruction: false;
-  dependencies: NonEmptyUniqueStrings;
+  /**
+   * @minItems 7
+   * @maxItems 7
+   */
+  dependencies: never[];
   dependencyObject: "closed_readonly_exact_membership";
   ordinaryCallerSurface: "trusted_scope_bound_runtime_access_handle";
   operations: NonEmptyUniqueStrings;

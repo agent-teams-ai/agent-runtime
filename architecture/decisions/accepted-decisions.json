@@ -46,6 +46,11 @@
       "id": "ADR-0010",
       "path": "docs/decisions/0010-contained-agent-turn-v1-operation-authority.md",
       "immutableDigest": "sha256:ae93100d235748090f441b12d98a7cfe7075ba886a126ab78df4037138c5f89e"
+    },
+    {
+      "id": "ADR-0012",
+      "path": "docs/decisions/0012-provider-access-authority-in-contained-turn-composition.md",
+      "immutableDigest": "sha256:65084ea45ec06419bbbd859c0835e51125014a184f2e5b746289fc092593c297"
     }
   ]
 }

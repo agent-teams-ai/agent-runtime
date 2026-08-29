@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
 
+import Ajv2020 from "ajv/dist/2020.js";
+
 import { loadRuntimeOperationOracleAuthority } from "../src/features/evidence/runtime-operation-oracle-authority.ts";
 import {
   createOracleEvaluator,
@@ -13,6 +15,13 @@ import type { Example } from "../fixtures/proof-artifacts/runtime-operation-orac
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 const authority = await loadRuntimeOperationOracleAuthority(repositoryRoot);
 const evaluateOracleExample = createOracleEvaluator(authority);
+
+const schemaId = "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json";
+const schemaValidator = new Ajv2020({ allErrors: true, strict: true, strictRequired: true });
+schemaValidator.addSchema(authority.schema);
+const validateContainedTurnContract = schemaValidator.getSchema(
+  `${schemaId}#/$defs/containedTurnV1Contract`,
+) ?? assert.fail("contained-turn V1 contract schema is unavailable");
 
 type SemanticMutant = {
   id: string;
@@ -66,6 +75,26 @@ const semanticMutants: SemanticMutant[] = [
   acceptWhen("terminalize-active-execution", (example) =>
     has(example, "transition_terminal_open_final_active_execution")),
 ];
+
+test("composition schema kills missing, renamed, nested, and provider-hidden Provider Access mutants", () => {
+  const dependencies = authority.containedTurnV1Contract.compositionFixture.dependencies;
+  const mutants: ReadonlyArray<readonly [string, unknown[]]> = [
+    ["missing-provider-access", dependencies.filter((value) => value !== "provider_access")],
+    ["renamed-provider-access", dependencies.map((value) =>
+      value === "provider_access" ? "provider_access_binding" : value)],
+    ["nested-provider-access", dependencies.map((value) =>
+      value === "provider_access" ? { provider_access: value } : value)],
+    ["provider-hidden-access", dependencies.map((value) =>
+      value === "provider_access" ? "provider" : value)],
+  ];
+
+  for (const [id, mutatedDependencies] of mutants) {
+    const contract = structuredClone(authority.containedTurnV1Contract) as Record<string, unknown>;
+    const fixture = contract.compositionFixture as Record<string, unknown>;
+    fixture.dependencies = mutatedDependencies;
+    assert.equal(validateContainedTurnContract(contract), false, id);
+  }
+});
 
 test("all curated semantic mutants are killed by authoritative examples", () => {
   const examples = authority.oracle.cases.flatMap(({ examples: caseExamples }) => caseExamples);

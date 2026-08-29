@@ -701,6 +701,7 @@
         "schemaVersion",
         "adrs",
         "repositoryBaseCommit",
+        "correctionBaseCommit",
         "foundationInputs",
         "providers",
         "adapterCapabilityManifests",
@@ -719,19 +720,22 @@
           "const": "./schema.json#/$defs/containedTurnV1Contract"
         },
         "schemaVersion": {
-          "const": 1
+          "const": 2
         },
         "adrs": {
           "type": "array",
-          "minItems": 2,
-          "maxItems": 2,
+          "minItems": 3,
+          "maxItems": 3,
           "uniqueItems": true,
           "items": {
-            "enum": ["ADR-0009", "ADR-0010"]
+            "enum": ["ADR-0009", "ADR-0010", "ADR-0012"]
           }
         },
         "repositoryBaseCommit": {
           "const": "3e1b977d9ab6147eb702b62497bd0be62acb8cf7"
+        },
+        "correctionBaseCommit": {
+          "const": "40ddaedd0da009a6611988e3a8e9eb00857b05be"
         },
         "foundationInputs": {
           "type": "array",
@@ -958,7 +962,22 @@
         "providerSelectionFailurePolicy": { "const": "fail_before_factory_handle_or_effects_on_missing_unknown_duplicate_or_ambiguous_selection" },
         "dependencySnapshot": { "const": "exact_dependencies_once" },
         "resourcesCreatedAtConstruction": { "const": false },
-        "dependencies": { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+        "dependencies": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "prefixItems": [
+            { "const": "operation_store" },
+            { "const": "security" },
+            { "const": "provider_access" },
+            { "const": "workspace" },
+            { "const": "artifacts" },
+            { "const": "custody" },
+            { "const": "provider" }
+          ],
+          "items": false
+        },
         "dependencyObject": { "const": "closed_readonly_exact_membership" },
         "ordinaryCallerSurface": { "const": "trusted_scope_bound_runtime_access_handle" },
         "operations": { "$ref": "#/$defs/nonEmptyUniqueStrings" },

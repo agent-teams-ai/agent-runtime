@@ -212,6 +212,7 @@ const expectedContainmentBindings = [
 const expectedCompositionDependencies = [
   "operation_store",
   "security",
+  "provider_access",
   "workspace",
   "artifacts",
   "custody",
@@ -219,7 +220,10 @@ const expectedCompositionDependencies = [
 ] as const;
 
 const validateContract = (contract: ContainedTurnV1Contract): void => {
-  exact(contract.adrs, ["ADR-0009", "ADR-0010"], "contained-turn V1 authority decisions");
+  exact(contract.adrs, ["ADR-0009", "ADR-0010", "ADR-0012"],
+    "contained-turn V1 authority decisions");
+  exact(contract.correctionBaseCommit, "40ddaedd0da009a6611988e3a8e9eb00857b05be",
+    "contained-turn V1 authority correction base");
   exact(contract.foundationInputs, [
     {
       pullRequest: 22,

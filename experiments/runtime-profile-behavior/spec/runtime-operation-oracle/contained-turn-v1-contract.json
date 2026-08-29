@@ -1,11 +1,13 @@
 {
   "$schema": "./schema.json#/$defs/containedTurnV1Contract",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "adrs": [
     "ADR-0009",
-    "ADR-0010"
+    "ADR-0010",
+    "ADR-0012"
   ],
   "repositoryBaseCommit": "3e1b977d9ab6147eb702b62497bd0be62acb8cf7",
+  "correctionBaseCommit": "40ddaedd0da009a6611988e3a8e9eb00857b05be",
   "foundationInputs": [
     {
       "pullRequest": 22,
@@ -158,6 +160,7 @@
     "dependencies": [
       "operation_store",
       "security",
+      "provider_access",
       "workspace",
       "artifacts",
       "custody",
