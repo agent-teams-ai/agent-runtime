@@ -1,5 +1,5 @@
 {
-  "name": "@agent-teams/agent-execution",
+  "name": "@agent-teams/provider-access",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,21 +7,12 @@
     "build": "tsc --project tsconfig.json --pretty false",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
-    "test": "node --test --test-concurrency=1 tests/runtime-installation-discovery.test.ts tests/claude-code-installation-discovery.test.ts tests/contained-agent-turn.test.ts tests/filesystem-contained-turn.test.ts",
-    "test:postgres": "node --test --test-concurrency=1 tests/postgres-contained-turn.test.ts",
+    "test": "node --test --test-concurrency=1 tests/provider-access.test.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
   },
   "agentTeamsArchitecture": {
     "role": "bounded-context",
     "ownerDocument": "ADR-0005"
-  },
-  "dependencies": {
-    "@agent-teams/filesystem-custody": "workspace:*",
-    "pg": "catalog:",
-    "zod": "catalog:"
-  },
-  "devDependencies": {
-    "@types/pg": "catalog:"
   },
   "files": ["dist"],
   "exports": {

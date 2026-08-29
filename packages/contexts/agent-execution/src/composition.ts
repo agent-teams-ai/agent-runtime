@@ -8,6 +8,24 @@ export {
   createContainedTurnFeature,
   type ContainedTurnFeatureDependencies,
 } from "./features/contained-agent-turn/composition/feature-module-factory.js";
+export {
+  PostgresContainedTurnOperationStore,
+  type ContainedTurnPostgresIdentitySource,
+  type PostgresContainedTurnOperationStoreOptions,
+} from "./features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
+export {
+  applyContainedTurnPostgresSchema,
+  CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST,
+  CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
+} from "./features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
+export {
+  createNodeContainedTurnArtifacts,
+  type NodeContainedTurnArtifactOptions,
+} from "./features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-artifacts.js";
+export {
+  createNodeContainedTurnWorkspace,
+  type NodeContainedTurnWorkspaceOptions,
+} from "./features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.js";
 export type {
   AcceptContainedTurnCommandInput,
   AcceptContainedTurnCommandOutcome,

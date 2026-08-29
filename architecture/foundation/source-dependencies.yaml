@@ -6,6 +6,7 @@ governedRoots:
   - experiments
   - packages/apps/embedded-runtime/src
   - packages/contexts/agent-execution/src
+  - packages/contexts/provider-access/src
   - packages/contexts/runtime-configuration/src
   - packages/contexts/runtime-security/src
   - packages/platform/filesystem-custody/src
@@ -22,10 +23,25 @@ boundaries:
       boundaries: []
       packages:
         - "@agent-teams/filesystem-custody"
+        - pg
+        - zod
       builtins:
         - node:crypto
         - node:fs
         - node:fs/promises
+        - node:path
+      runtimeReferences: []
+  - id: production.provider-access
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/provider-access/src
+    entrypoints:
+      - packages/contexts/provider-access/src/index.ts
+      - packages/contexts/provider-access/src/composition.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins: []
       runtimeReferences: []
   - id: production.runtime-configuration
     dependencyMode: runtime
