@@ -321,10 +321,13 @@ dogfooding boundary and grants no production authority. Therefore this delivery:
 - stops if more than 30 percent of production changes become generic framework
   glue or ordinary feature work repeatedly requires Foundation changes.
 
-The reviewed Draft evidence is pinned to Extension Foundation PR #22
-`a01ac2b02bcb8bf46efea8e78a13a255b3988ef2` and PR #27
-`ee976675ed48c35e92f868ede95cc68e3fb71c6f`. The SHAs must be refreshed before
-implementation begins because Draft evidence can change. Only merged accepted
+The accepted decision preserves its historical Draft snapshot. Before the
+first implementation slice, the non-authoritative evidence was refreshed to
+Extension Foundation PR #22
+`2be16a4574490aaa527daa78ec3b9a23987e73e8` and PR #27
+`83090ff230c53913961c3770605d2f7d533f57df`. Both remain Draft and retain the
+same relevant `NO_GO` boundary. Refresh these heads again before admitting a
+Module Kit adapter because Draft evidence can change. Only merged accepted
 product decisions are authority.
 
 V1 does not create a `ModuleId`, inert module declaration, generated module

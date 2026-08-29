@@ -16,3 +16,21 @@ export type {
   DiscoverClaudeCodeInstallationsInput,
   DiscoverClaudeCodeInstallationsResult,
 } from "./features/runtime-installation-discovery/contracts/claude-code-installation-observation.js";
+export type {
+  ContainedTurnFeatureApi,
+  ContainedTurnMode,
+  ContainedTurnOutputKind,
+  ContainedTurnOutputView,
+  ContainedTurnProvider,
+  ContainedTurnProviderBinding,
+  ContainedTurnScope,
+  ContainedTurnStatus,
+  ContainedTurnView,
+  ObserveContainedTurn,
+  ObserveContainedTurnOutcome,
+  RequestContainedTurnCancellation,
+  RequestContainedTurnCancellationOutcome,
+  SubmitContainedTurn,
+  SubmitContainedTurnInput,
+  SubmitContainedTurnOutcome,
+} from "./features/contained-agent-turn/contracts/contained-agent-turn.js";
