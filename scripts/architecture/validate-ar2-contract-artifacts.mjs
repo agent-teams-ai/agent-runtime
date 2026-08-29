@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 
 export { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
@@ -88,6 +88,32 @@ const packageTestCoordinates = testFile => {
     `${testFile} must remain inside its package tests directory`,
   );
   return { packageRoot: match[1], relativeTestFile: match[2] };
+};
+
+const assertRegularContainedTestFile = async (testFile, packageRoot) => {
+  const repositoryPath = fileURLToPath(repositoryRoot);
+  const segments = testFile.split("/");
+  let currentPath = repositoryPath;
+  for (const [index, segment] of segments.entries()) {
+    currentPath = join(currentPath, segment);
+    const metadata = await lstat(currentPath);
+    assert.equal(metadata.isSymbolicLink(), false, `${testFile} must not traverse a symbolic link`);
+    assert.equal(
+      index === segments.length - 1 ? metadata.isFile() : metadata.isDirectory(),
+      true,
+      `${testFile} must resolve through directories to a regular file`,
+    );
+  }
+  const [resolvedTestsRoot, resolvedTestFile] = await Promise.all([
+    realpath(join(repositoryPath, packageRoot, "tests")),
+    realpath(currentPath),
+  ]);
+  const containedPath = relative(resolvedTestsRoot, resolvedTestFile);
+  assert.equal(
+    containedPath === ".." || containedPath.startsWith(`..${sep}`) || isAbsolute(containedPath),
+    false,
+    `${testFile} must remain inside its real package tests directory`,
+  );
 };
 
 const testScriptExecutes = (script, relativeTestFile) => script
@@ -191,7 +217,11 @@ const loadContractCoverageEvidence = async contractCoverage => {
   const testFiles = [...new Set(contractCoverage.cases.map(entry => entry.testFile))];
   const testSources = new Map(await Promise.all(testFiles.map(async testFile => [
     testFile,
-    await readFile(new URL(testFile, repositoryRoot), "utf8"),
+    await (async () => {
+      const { packageRoot } = packageTestCoordinates(testFile);
+      await assertRegularContainedTestFile(testFile, packageRoot);
+      return readFile(new URL(testFile, repositoryRoot), "utf8");
+    })(),
   ])));
   const packageRoots = [...new Set(testFiles.map(testFile => packageTestCoordinates(testFile).packageRoot))];
   const packageTestScripts = new Map(await Promise.all(packageRoots.map(async packageRoot => {

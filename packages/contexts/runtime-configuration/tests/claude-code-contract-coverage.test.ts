@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const fixtureRoot = new URL("./fixtures/claude-code-settings/", import.meta.url);
@@ -71,6 +73,29 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
       );
       const { packageRoot, relativeTestFile } = packageTestCoordinates(entry.testFile);
+      const testFilePath = fileURLToPath(new URL(entry.testFile, repositoryRoot));
+      const pathSegments = entry.testFile.split("/");
+      let observedPath = fileURLToPath(repositoryRoot);
+      for (const [index, segment] of pathSegments.entries()) {
+        observedPath = join(observedPath, segment);
+        const metadata = await lstat(observedPath);
+        assert.equal(metadata.isSymbolicLink(), false, `${entry.testFile} must not traverse a symbolic link`);
+        assert.equal(
+          index === pathSegments.length - 1 ? metadata.isFile() : metadata.isDirectory(),
+          true,
+          `${entry.testFile} must resolve through directories to a regular file`,
+        );
+      }
+      assert.equal(observedPath, testFilePath, `${entry.testFile} must resolve from the repository root`);
+      const containedPath = relative(
+        await realpath(fileURLToPath(new URL(`${packageRoot}/tests/`, repositoryRoot))),
+        await realpath(testFilePath),
+      );
+      assert.equal(
+        containedPath === ".." || containedPath.startsWith(`..${sep}`) || isAbsolute(containedPath),
+        false,
+        `${entry.testFile} must remain inside its real package tests directory`,
+      );
       const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
       assert.equal(
         testScriptExecutes(packageManifest.scripts?.test ?? "", relativeTestFile),
