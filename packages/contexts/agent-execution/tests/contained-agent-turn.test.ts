@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -22,6 +22,19 @@ import {
 
 const noop = (): void => {
   // Test gates replace this before it can be called.
+};
+
+const readTypeScriptTree = async (root: URL): Promise<readonly [string, string][]> => {
+  const files: [string, string][] = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const entryUrl = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, root);
+    if (entry.isDirectory()) {
+      files.push(...await readTypeScriptTree(entryUrl));
+    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      files.push([entryUrl.pathname, await readFile(entryUrl, "utf8")]);
+    }
+  }
+  return files;
 };
 
 const binding = Object.freeze({
@@ -479,4 +492,11 @@ test("factory snapshots exactly six dependencies and imports no module runtime",
   assert.ok([...reads.values()].every(count => count === 1));
   const source = await readFile(new URL("../src/features/contained-agent-turn/composition/feature-module-factory.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /module-kit|container|registry|service.locator/i);
+
+  const featureRoot = new URL("../src/features/contained-agent-turn/", import.meta.url);
+  for (const directory of ["domain/", "application/", "contracts/", "adapters/"]) {
+    for (const [file, contents] of await readTypeScriptTree(new URL(directory, featureRoot))) {
+      assert.doesNotMatch(contents, /module-kit|module runtime|service.locator|from ["'][^"']*module[^"']*["']/i, file);
+    }
+  }
 });
