@@ -20,6 +20,12 @@ export type {
   ObserveRuntimeContainedTurnOutcome,
   RuntimeAccessHandle,
   RuntimeContainedTurnAccess,
+  RuntimeContainedTurnMode,
+  RuntimeContainedTurnOutputKind,
+  RuntimeContainedTurnOutputView,
+  RuntimeContainedTurnProvider,
+  RuntimeContainedTurnStatus,
+  RuntimeContainedTurnView,
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
 } from "./contracts/runtime-access.js";

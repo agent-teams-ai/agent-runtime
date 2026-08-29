@@ -32,6 +32,36 @@ test("root API exposes only product capabilities and keeps Host in composition",
   assert.deepEqual(Object.keys(manifest.exports).toSorted(), [".", "./composition"]);
 });
 
+test("contained-turn observations are declared in Embedded Runtime's contract", async () => {
+  const runtimeAccessSource = await readFile(
+    join(packageRoot, "src", "contracts", "runtime-access.ts"),
+    "utf8",
+  );
+  const runtimeAccessDeclaration = await readFile(
+    join(packageRoot, "dist", "contracts", "runtime-access.d.ts"),
+    "utf8",
+  );
+
+  for (const contract of [runtimeAccessSource, runtimeAccessDeclaration]) {
+    assert.doesNotMatch(contract, /@agent-teams\/agent-execution/u);
+    assert.doesNotMatch(contract, /\bContainedTurnView\b/u);
+    assert.match(contract, /interface RuntimeContainedTurnView/u);
+    assert.match(contract, /readonly artifactManifestRef\?: string/u);
+    assert.match(contract, /readonly commandId: string/u);
+    assert.match(contract, /readonly effectId: string/u);
+    assert.match(contract, /readonly operationId: string/u);
+    assert.match(contract, /readonly output: readonly RuntimeContainedTurnOutputView\[\]/u);
+    assert.match(contract, /readonly provider: RuntimeContainedTurnProvider/u);
+    assert.match(contract, /readonly resultRef\?: string/u);
+    assert.match(contract, /readonly revision: number/u);
+    assert.match(contract, /readonly status: RuntimeContainedTurnStatus/u);
+  }
+  assert.doesNotMatch(
+    runtimeAccessSource,
+    /interface\s+RuntimeContainedTurnView\s+extends|type\s+RuntimeContainedTurnView\s*=\s*ContainedTurnView/u,
+  );
+});
+
 test("passive setup slice has no process, network, ambient env or write adapter", async () => {
   const repositoryRoot = resolve(packageRoot, "../../..");
   const roots = [
