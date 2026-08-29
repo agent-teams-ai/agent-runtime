@@ -1,9 +1,3 @@
-import type {
-  ContainedTurnMode,
-  ContainedTurnProvider,
-  ContainedTurnView,
-} from "@agent-teams/agent-execution";
-
 export interface InspectCodexRuntimeSetup {
   readonly nativeProfile?: string;
 }
@@ -212,11 +206,43 @@ export interface ClaudeCodeRuntimeAccessHandle {
   readonly claudeCodeSetup: ClaudeCodeRuntimeSetupQueries;
 }
 
+export type RuntimeContainedTurnProvider = "claude" | "codex";
+
+export type RuntimeContainedTurnMode = "analysis" | "workspace-write";
+
+export type RuntimeContainedTurnOutputKind = "assistant" | "diagnostic" | "progress";
+
+export interface RuntimeContainedTurnOutputView {
+  readonly cursor: number;
+  readonly kind: RuntimeContainedTurnOutputKind;
+  readonly text: string;
+}
+
+export type RuntimeContainedTurnStatus =
+  | "accepted"
+  | "cancelled"
+  | "failed"
+  | "reconcile_required"
+  | "running"
+  | "succeeded";
+
+export interface RuntimeContainedTurnView {
+  readonly artifactManifestRef?: string;
+  readonly commandId: string;
+  readonly effectId: string;
+  readonly operationId: string;
+  readonly output: readonly RuntimeContainedTurnOutputView[];
+  readonly provider: RuntimeContainedTurnProvider;
+  readonly resultRef?: string;
+  readonly revision: number;
+  readonly status: RuntimeContainedTurnStatus;
+}
+
 export interface SubmitRuntimeContainedTurnInput {
   readonly commandId: string;
-  readonly expectedProvider: ContainedTurnProvider;
+  readonly expectedProvider: RuntimeContainedTurnProvider;
   readonly intent: {
-    readonly mode: ContainedTurnMode;
+    readonly mode: RuntimeContainedTurnMode;
     readonly prompt: string;
   };
 }
@@ -231,7 +257,7 @@ export type SubmitRuntimeContainedTurnOutcome =
 export type ObserveRuntimeContainedTurnOutcome =
   | { readonly code: "capability_unavailable"; readonly status: "unsupported" }
   | { readonly status: "not_found" }
-  | { readonly status: "observed"; readonly turn: ContainedTurnView };
+  | { readonly status: "observed"; readonly turn: RuntimeContainedTurnView };
 
 export type CancelRuntimeContainedTurnOutcome = ObserveRuntimeContainedTurnOutcome;
 

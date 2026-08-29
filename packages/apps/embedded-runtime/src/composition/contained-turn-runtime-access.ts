@@ -8,6 +8,7 @@ import type {
 
 import type {
   ObserveRuntimeContainedTurnOutcome,
+  RuntimeContainedTurnView,
   RuntimeContainedTurnAccess,
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
@@ -19,7 +20,7 @@ const unavailableOutcome = Object.freeze({
   status: "unsupported" as const,
 });
 
-const copyView = (turn: ContainedTurnView): ContainedTurnView => Object.freeze({
+const mapContainedTurnView = (turn: ContainedTurnView): RuntimeContainedTurnView => Object.freeze({
   ...(turn.artifactManifestRef === undefined ? {} : { artifactManifestRef: turn.artifactManifestRef }),
   commandId: turn.commandId,
   effectId: turn.effectId,
@@ -35,7 +36,7 @@ const copyObservation = (
   outcome: Exclude<ObserveRuntimeContainedTurnOutcome, { readonly code: "capability_unavailable" }>,
 ): ObserveRuntimeContainedTurnOutcome => outcome.status === "not_found"
   ? Object.freeze({ status: "not_found" as const })
-  : Object.freeze({ status: "observed" as const, turn: copyView(outcome.turn) });
+  : Object.freeze({ status: "observed" as const, turn: mapContainedTurnView(outcome.turn) });
 
 const copyInput = (input: SubmitRuntimeContainedTurnInput): SubmitRuntimeContainedTurnInput => {
   const intent = input.intent;

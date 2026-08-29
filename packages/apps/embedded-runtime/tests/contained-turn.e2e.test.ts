@@ -96,6 +96,8 @@ test("publishes an early scope-bound operation handle and keeps completion under
   });
   assert.deepEqual(accepted, { operationId: "operation:embedded", status: "accepted" });
   assert.deepEqual(contained.calls.submit, [trustedScope]);
+  assert.notEqual(contained.calls.submit[0], trustedScope);
+  assert.equal(Object.isFrozen(contained.calls.submit[0]), true);
 
   const observed = await access.containedTurn.observe("operation:embedded");
   assert.equal(observed.status, "observed");
@@ -109,6 +111,97 @@ test("publishes an early scope-bound operation handle and keeps completion under
   const cancelled = await access.containedTurn.cancel("operation:embedded");
   assert.equal(cancelled.status, "observed");
   assert.deepEqual(contained.calls.cancel, [trustedScope]);
+});
+
+test("maps complete observations to an Embedded Runtime-owned deeply detached DTO", async t => {
+  const ownerOutput = [{
+    cursor: 7,
+    kind: "assistant" as const,
+    text: "owner output",
+  }];
+  const ownerTurn = {
+    artifactManifestRef: "artifact:manifest",
+    commandId: "command:detached",
+    effectId: "effect:detached",
+    operationId: "operation:detached",
+    output: ownerOutput,
+    provider: "codex" as const,
+    resultRef: "result:detached",
+    revision: 11,
+    status: "succeeded" as const,
+  } satisfies ContainedTurnView;
+  let receivedScope: ContainedTurnScope | undefined;
+  const feature: ContainedTurnFeatureApi = Object.freeze({
+    cancel: Object.freeze({
+      async execute(input) {
+        receivedScope = input.scope;
+        return { status: "observed", turn: ownerTurn };
+      },
+    }),
+    observe: Object.freeze({
+      async execute(input) {
+        receivedScope = input.scope;
+        return { status: "observed", turn: ownerTurn };
+      },
+    }),
+    submit: Object.freeze({
+      async execute() {return { status: "observed", turn: ownerTurn };},
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  t.after(() => host.dispose());
+  const callerScope = { projectId: "project:detached", tenantId: "tenant:detached" };
+  const access = host.bindAccess({ containedTurn: callerScope });
+  callerScope.projectId = "project:mutated-after-bind";
+
+  const observed = await access.containedTurn.observe(ownerTurn.operationId);
+  assert.deepEqual(observed, { status: "observed", turn: ownerTurn });
+  assert.deepEqual(receivedScope, {
+    projectId: "project:detached",
+    tenantId: "tenant:detached",
+  });
+  assert.notEqual(receivedScope, callerScope);
+  assert.equal(Object.isFrozen(receivedScope), true);
+  assert.equal(Object.isFrozen(observed), true);
+  assert.equal(observed.status, "observed");
+  if (observed.status !== "observed") {
+    return;
+  }
+  assert.deepEqual(Object.keys(observed.turn).toSorted(), [
+    "artifactManifestRef",
+    "commandId",
+    "effectId",
+    "operationId",
+    "output",
+    "provider",
+    "resultRef",
+    "revision",
+    "status",
+  ]);
+  assert.notEqual(observed.turn, ownerTurn);
+  assert.notEqual(observed.turn.output, ownerOutput);
+  assert.notEqual(observed.turn.output[0], ownerOutput[0]);
+  assert.equal(Object.isFrozen(observed.turn), true);
+  assert.equal(Object.isFrozen(observed.turn.output), true);
+  assert.equal(Object.isFrozen(observed.turn.output[0]), true);
+  assert.throws(() => {
+    (observed.turn.output as { text: string }[])[0]!.text = "caller mutation";
+  }, TypeError);
+
+  ownerOutput[0]!.text = "owner mutation";
+  ownerOutput.push({ cursor: 8, kind: "progress", text: "later owner output" });
+  assert.deepEqual(observed.turn.output, [{
+    cursor: 7,
+    kind: "assistant",
+    text: "owner output",
+  }]);
+
+  const cancelled = await access.containedTurn.cancel(ownerTurn.operationId);
+  assert.deepEqual(cancelled, {
+    status: "observed",
+    turn: { ...ownerTurn, output: ownerOutput },
+  });
+  assert.notEqual(cancelled.status === "observed" && cancelled.turn, ownerTurn);
 });
 
 test("Host disposal requests durable cancellation and never exports lifecycle authority", async () => {
