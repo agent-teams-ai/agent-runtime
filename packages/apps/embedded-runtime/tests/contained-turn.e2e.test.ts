@@ -271,6 +271,79 @@ test("passes opaque provider identities unchanged and preserves exact owner reje
   assert.deepEqual(receivedProviders, opaqueProviders);
 });
 
+test("rejects malformed, non-string, and oversized provider input before composition", async t => {
+  let submitCalls = 0;
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute() {return { status: "not_found" };},
+    }),
+    observe: Object.freeze({
+      async execute() {return { status: "not_found" };},
+    }),
+    submit: Object.freeze({
+      async execute() {
+        submitCalls += 1;
+        return { status: "denied" };
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  t.after(() => host.dispose());
+  const access = host.bindAccess({ containedTurn: trustedScope });
+  const submit = (expectedProvider: unknown) => access.containedTurn.submit({
+    commandId: "command:invalid-provider",
+    expectedProvider: expectedProvider as string,
+    intent: { mode: "analysis", prompt: "synthetic" },
+  });
+  const rejected = { code: "provider_unsupported", status: "unsupported" };
+
+  assert.deepEqual(await submit(""), rejected);
+  assert.deepEqual(await submit(42), rejected);
+  assert.deepEqual(await submit("p".repeat(129)), rejected);
+  assert.deepEqual(await access.containedTurn.submit({
+    commandId: "command:malformed-provider",
+    get expectedProvider(): never {throw new Error("malformed provider getter");},
+    intent: { mode: "analysis", prompt: "synthetic" },
+  }), rejected);
+  assert.equal(submitCalls, 0);
+});
+
+test("fails closed on malformed, non-string, and oversized provider observations", async t => {
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute() {return { status: "not_found" };},
+    }),
+    observe: Object.freeze({
+      async execute(input) {
+        if (input.operationId === "operation:malformed-provider") {
+          return {
+            status: "observed",
+            turn: {
+              ...turnView("running"),
+              get provider(): never {throw new Error("malformed provider getter");},
+            },
+          };
+        }
+        const provider = input.operationId === "operation:non-string-provider"
+          ? 42 as unknown as string
+          : "p".repeat(129);
+        return { status: "observed", turn: { ...turnView("running"), provider } };
+      },
+    }),
+    submit: Object.freeze({
+      async execute() {return { status: "denied" };},
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  t.after(() => host.dispose());
+  const access = host.bindAccess({ containedTurn: trustedScope });
+  const unavailableObservation = { code: "capability_unavailable", status: "unsupported" };
+
+  assert.deepEqual(await access.containedTurn.observe("operation:malformed-provider"), unavailableObservation);
+  assert.deepEqual(await access.containedTurn.observe("operation:non-string-provider"), unavailableObservation);
+  assert.deepEqual(await access.containedTurn.observe("operation:oversized-provider"), unavailableObservation);
+});
+
 test("accepts an explicit owner operation id without projecting optional observation fields", async t => {
   const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({

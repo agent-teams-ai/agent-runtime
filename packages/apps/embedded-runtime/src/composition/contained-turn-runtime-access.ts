@@ -80,8 +80,24 @@ const unavailableOutcome = Object.freeze({
   status: "unsupported" as const,
 });
 
+const providerUnsupportedOutcome = Object.freeze({
+  code: "provider_unsupported" as const,
+  status: "unsupported" as const,
+});
+
+const MAX_PROVIDER_IDENTITY_LENGTH = 128;
+
+const copyProviderIdentity = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH
+    ? value
+    : undefined;
+
 const mapContainedTurnView = (turn: OwnerTurnObservation): RuntimeContainedTurnView | undefined => {
   try {
+    const provider = copyProviderIdentity(turn.provider);
+    if (provider === undefined) {
+      return;
+    }
     return Object.freeze({
       ...(turn.artifactManifestRef === undefined ? {} : { artifactManifestRef: turn.artifactManifestRef }),
       commandId: turn.commandId,
@@ -92,7 +108,7 @@ const mapContainedTurnView = (turn: OwnerTurnObservation): RuntimeContainedTurnV
         kind: chunk.kind,
         text: chunk.text,
       }))),
-      provider: turn.provider,
+      provider,
       ...(turn.resultRef === undefined ? {} : { resultRef: turn.resultRef }),
       status: turn.status,
     });
@@ -113,13 +129,21 @@ const copyObservation = (
     : Object.freeze({ status: "observed" as const, turn });
 };
 
-const copyInput = (input: SubmitRuntimeContainedTurnInput): SubmitRuntimeContainedTurnInput => {
-  const intent = input.intent;
-  return Object.freeze({
-    commandId: input.commandId,
-    expectedProvider: input.expectedProvider,
-    intent: Object.freeze({ mode: intent.mode, prompt: intent.prompt }),
-  });
+const copyInput = (input: SubmitRuntimeContainedTurnInput): SubmitRuntimeContainedTurnInput | undefined => {
+  try {
+    const expectedProvider = copyProviderIdentity(input.expectedProvider);
+    if (expectedProvider === undefined) {
+      return;
+    }
+    const intent = input.intent;
+    return Object.freeze({
+      commandId: input.commandId,
+      expectedProvider,
+      intent: Object.freeze({ mode: intent.mode, prompt: intent.prompt }),
+    });
+  } catch {
+    return;
+  }
 };
 
 const mapBeforeAcceptance = (
@@ -186,6 +210,9 @@ export const createContainedTurnRuntimeAccess = (
   ) => {
     dependencies.assertActive();
     const input = copyInput(rawInput);
+    if (input === undefined) {
+      return providerUnsupportedOutcome;
+    }
     if (dependencies.capability === undefined || dependencies.scope === undefined) {
       return unavailableOutcome;
     }
