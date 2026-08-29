@@ -25,6 +25,9 @@ const executablePath = await realpath(requiredEnvironment("AR_CLAUDE_BINARY"));
 const executableSha256 = requiredEnvironment("AR_CLAUDE_BINARY_SHA256");
 const expectedRootMarker = join(canaryRoot, ".agent-runtime-test-sandbox");
 const configDirectory = join(workspaceRef, ".claude-agent-runtime");
+const platformRevision = `${process.platform}-${process.arch}`;
+
+assert.ok(["darwin-arm64", "linux-x64"].includes(platformRevision));
 
 assert.equal((await lstat(expectedRootMarker)).isFile(), true);
 assert.equal(workspaceRef.startsWith(`${canaryRoot}/`), true);
@@ -37,11 +40,11 @@ const credentialDigest = createHash("sha256")
   .digest("hex");
 const providerBinding = Object.freeze({
   adapterRevision: "claude-agent-sdk-contained-turn:0.3.251",
-  binaryRevision: "@anthropic-ai/claude-agent-sdk:0.3.251+linux-x64",
+  binaryRevision: `@anthropic-ai/claude-agent-sdk:0.3.251+${platformRevision}`,
   capabilityManifestRevision: "contained-turn:v1:claude-agent-sdk:0.3.251",
   credentialBindingDigest: `sha256:${credentialDigest}`,
   provider: "claude",
-  providerRouteRef: "test-route:hosted-linux:claude-subscription",
+  providerRouteRef: `test-route:${platformRevision}:claude-subscription`,
 });
 const environment = createClaudeAgentSdkEnvironment(workspaceRef);
 const plan = createClaudeAgentSdkLaunchPlan({

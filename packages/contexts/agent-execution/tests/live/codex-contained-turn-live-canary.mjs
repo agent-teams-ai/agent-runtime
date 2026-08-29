@@ -22,6 +22,9 @@ const codexHome = await realpath(requiredEnvironment("AR_CODEX_CANARY_CODEX_HOME
 const executablePath = await realpath(requiredEnvironment("AR_CODEX_BINARY"));
 const executableSha256 = requiredEnvironment("AR_CODEX_BINARY_SHA256");
 const expectedRootMarker = join(canaryRoot, ".agent-runtime-test-sandbox");
+const platformRevision = `${process.platform}-${process.arch}`;
+
+assert.ok(["darwin-arm64", "linux-x64"].includes(platformRevision));
 
 assert.equal((await lstat(expectedRootMarker)).isFile(), true);
 assert.equal(workspaceRef.startsWith(`${canaryRoot}/`), true);
@@ -31,11 +34,11 @@ assert.equal(createHash("sha256").update(await readFile(executablePath)).digest(
 const authDigest = createHash("sha256").update(await readFile(join(codexHome, "auth.json"))).digest("hex");
 const providerBinding = Object.freeze({
   adapterRevision: "codex-app-server-contained-turn:0.150.1",
-  binaryRevision: "@openai/codex:0.150.1+linux-x64",
+  binaryRevision: `@openai/codex:0.150.1+${platformRevision}`,
   capabilityManifestRevision: "contained-turn:v1:codex-app-server:0.150.1",
   credentialBindingDigest: `sha256:${authDigest}`,
   provider: "codex",
-  providerRouteRef: "test-route:hosted-linux:codex-subscription",
+  providerRouteRef: `test-route:${platformRevision}:codex-subscription`,
 });
 const plan = createCodexAppServerLaunchPlan({
   binaryRevision: providerBinding.binaryRevision,
