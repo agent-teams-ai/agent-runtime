@@ -160,12 +160,12 @@
     },
     {
       "name": "wildcard-exception",
-      "exceptions": [{ "id": "all", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "packages/**" }],
+      "exceptions": [{ "id": "all", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "packages/**", "diagnostics": [{ "code": "FM_UNDECLARED_OWNERSHIP", "path": "src/shared/value.ts", "line": 1 }] }],
       "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
     },
     {
       "name": "ownership-exception-requires-accepted-adr",
-      "exceptions": [{ "id": "shared-owner", "acceptedAdr": "ADR-0013", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "src/shared/value.ts" }],
+      "exceptions": [{ "id": "shared-owner", "acceptedAdr": "ADR-0013", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "src/shared/value.ts", "diagnostics": [{ "code": "FM_UNDECLARED_OWNERSHIP", "path": "src/shared/value.ts", "line": 1 }] }],
       "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
     },
     {
@@ -176,7 +176,8 @@
     {
       "name": "active-requires-zero-blockers-and-accepted-authority-evidence",
       "status": "active",
-      "activation": { "blockers": ["not clean"], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "owner": "architecture" }, "evidence": null },
+      "acceptActivationAdr": true,
+      "activation": { "blockers": ["not clean"], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "decisionPath": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture", "governedRecords": [] }, "evidence": null },
       "expected": [
         { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
         { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }
@@ -186,19 +187,32 @@
       "name": "require-active-rejects-candidate-profile",
       "requiredStatus": "active",
       "cliRequireActive": true,
+      "cliAllowDiagnostics": true,
       "expected": [{ "code": "FM_PROFILE_STATUS", "path": "profile.json", "line": 1 }]
     },
     {
       "name": "active-profile-with-accepted-authority-and-evidence",
       "status": "active",
       "requiredStatus": "active",
+      "acceptActivationAdr": true,
       "expected": []
     },
     {
       "name": "active-profile-rejects-proposed-authority",
       "status": "active",
-      "activation": { "blockers": [], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "owner": "architecture" }, "evidence": { "fixtureCommand": "pnpm test:feature-modules", "candidateCommand": "pnpm architecture:feature-modules:candidate", "productionDiagnostics": 0 } },
+      "cliAllowDiagnosticsFails": true,
+      "activation": { "blockers": [], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "decisionPath": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture", "governedRecords": [] }, "evidence": { "fixtureCommand": "pnpm test:feature-modules", "candidateCommand": "pnpm architecture:feature-modules:candidate", "productionDiagnostics": 0 } },
       "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-authority-names-exact-governed-records",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "alpha-readme-owner", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "activation": { "blockers": [], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "decisionPath": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture", "governedRecords": ["deviations:alpha-readme-owner:ADR-0007"] }, "evidence": { "fixtureCommand": "pnpm test:feature-modules", "candidateCommand": "pnpm architecture:feature-modules:candidate", "productionDiagnostics": 0 } },
+      "expected": []
     },
     {
       "name": "package-index-must-use-public-entrypoint",
@@ -288,6 +302,93 @@
       "name": "nonliteral-loading",
       "files": { "src/features/alpha/domain/value.ts": "const target = './other.js';\nexport const value = import(target);\n" },
       "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.ts", "line": 2 }]
+    },
+    {
+      "name": "declared-assembly-file-must-exist",
+      "files": { "src/composition.ts": null },
+      "expected": [{ "code": "FM_ASSEMBLY_MISSING", "path": "src/composition.ts", "line": 1 }]
+    },
+    {
+      "name": "declared-entrypoints-must-exist",
+      "files": { "src/features/alpha/internal.ts": null },
+      "expected": [{ "code": "FM_ENTRYPOINT_MISSING", "path": "src/features/alpha/internal.ts", "line": 1 }]
+    },
+    {
+      "name": "internal-entrypoint-cannot-export-another-feature",
+      "secondFeature": true,
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/internal.ts": "export { beta } from '../beta/index.js';\n" },
+      "expected": [{ "code": "FM_INTERNAL_ENTRYPOINT_EXPORT", "path": "src/features/alpha/internal.ts", "line": 1 }]
+    },
+    {
+      "name": "assembly-and-entrypoints-forbid-wildcard-reexports",
+      "files": {
+        "src/features/alpha/index.ts": "export * from './domain/value.js';\n",
+        "src/features/alpha/internal.ts": "export * from './domain/value.js';\n",
+        "src/composition.ts": "export * from './features/alpha/internal.js';\n"
+      },
+      "expected": [
+        { "code": "FM_WILDCARD_REEXPORT", "path": "src/composition.ts", "line": 1 },
+        { "code": "FM_PUBLIC_ENTRYPOINT_EXPORT", "path": "src/features/alpha/index.ts", "line": 1 },
+        { "code": "FM_WILDCARD_REEXPORT", "path": "src/features/alpha/index.ts", "line": 1 },
+        { "code": "FM_WILDCARD_REEXPORT", "path": "src/features/alpha/internal.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "module-require-is-enforced",
+      "secondFeature": true,
+      "files": { "src/features/alpha/domain/value.ts": "export const value = module.require('../../beta/index.js');\n" },
+      "expected": [
+        { "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 1 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/domain/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "create-require-alias-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire as makeRequire } from 'node:module';\nconst load = makeRequire(import.meta.url);\nexport const value = load('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "configured-typescript-alias-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "tsconfig.json": "{\"compilerOptions\":{\"paths\":{\"@runtime/*\":[\"src/*\"]}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '@runtime/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "configured-package-alias-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "package.json": "{\"name\":\"@fixture/runtime\",\"imports\":{\"#runtime/*\":\"./dist/*\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '#runtime/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-must-declare-ownership",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "exact-accepted-deviation-governs-readme-diagnostic",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "alpha-readme-owner", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": []
+    },
+    {
+      "name": "feature-tests-must-be-colocated",
+      "files": { "tests/alpha.test.ts": "import { value } from '../src/features/alpha/domain/value.js';\nvoid value;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/alpha.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-export-map-is-curated",
+      "files": { "package.json": "{\"name\":\"@fixture/runtime\",\"exports\":{\".\":\"./dist/index.js\",\"./deep\":\"./dist/features/alpha/domain/value.js\"}}\n" },
+      "cliAllowDiagnosticsFails": true,
+      "expected": [{ "code": "FM_PACKAGE_EXPORT_MAP", "path": "package.json", "line": 1 }]
     },
     {
       "name": "parse-failure",

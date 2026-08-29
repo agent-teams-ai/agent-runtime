@@ -3,22 +3,12 @@ import { builtinModules } from "node:module";
 import { dirname, extname, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import Ajv2020 from "ajv/dist/2020.js";
 import { parseSync } from "oxc-parser";
+
+import { ACCEPTED_DECISIONS, STRUCTURAL_CODES, applyGovernedRecords, validateProfile } from "./feature-module-profile.mjs";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_PROFILE = "architecture/feature-module-standard/candidate-profile.json";
-const PROFILE_SCHEMA = JSON.parse(await readFile(resolve(REPOSITORY_ROOT, "architecture/feature-module-standard/profile.schema.json"), "utf8"));
-const validateProfileShape = new Ajv2020({ allErrors: true, strict: true }).compile(PROFILE_SCHEMA);
-const ACCEPTED_DECISIONS = new Set(JSON.parse(await readFile(resolve(REPOSITORY_ROOT, "architecture/decisions/accepted-decisions.json"), "utf8")).decisions.map(({ id }) => id));
-const AUTHORITY = Object.freeze({
-  id: "agent-teams.feature-module-standard",
-  version: "v1",
-  repository: "agent-teams-ai/.github",
-  path: "docs/architecture/feature-module-standard/v1.md",
-  gitBlob: "d0bfff2033faf544fe65268c1dcdfd524d093015",
-  sha256: "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa",
-});
 const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"]);
 const LAYER_ALLOWED = Object.freeze({
   contracts: new Set(["contracts"]),
@@ -30,9 +20,6 @@ const LAYER_ALLOWED = Object.freeze({
 const SHARED_NAMES = new Set(["shared", "common", "utils", "util", "modules", "module"]);
 const NODE_BUILTINS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 const EXTERNAL_IMPORT_ALLOWED = Object.freeze({ contracts: false, domain: false, application: false });
-const CANDIDATE_PRODUCTION_ROOTS = Object.freeze(["packages/contexts/agent-execution/src", "packages/contexts/provider-access/src"]);
-const CANDIDATE_OUT_OF_SCOPE = Object.freeze(["Embedded Runtime", "Runtime Configuration", "Runtime Security", "Filesystem Custody", "Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"]);
-const CANDIDATE_FEATURES = Object.freeze({ "runtime-installation-discovery": { root: "packages/contexts/agent-execution/src/features/runtime-installation-discovery", roles: ["contracts", "application", "adapters", "composition"] }, "contained-agent-turn": { root: "packages/contexts/agent-execution/src/features/contained-agent-turn", roles: ["contracts", "domain", "application", "adapters", "composition"] }, "contained-turn-access": { root: "packages/contexts/provider-access/src/features/contained-turn-access", roles: ["contracts", "domain", "application", "adapters", "composition"] } });
 
 const slash = (value) => value.split(sep).join("/");
 const repoPath = (root, value) => slash(relative(root, value));
@@ -82,12 +69,24 @@ const makeImportRecord = (node, specifierNode, kind, syntax, { source, nonlitera
 const isTypeOnlyDeclaration = (node, property) =>
   node[property] === "type" || Boolean(node.specifiers?.length) && node.specifiers.every((specifier) => specifier[property] === "type");
 
-const callExpressionRecord = (node, source) => {
-  const directRequire = node.callee?.type === "Identifier" && node.callee.name === "require";
-  const requireResolve = node.callee?.type === "MemberExpression" && node.callee.object?.name === "require" && node.callee.property?.name === "resolve";
-  if (!directRequire && !requireResolve) {return;}
+const memberName = (node) => node?.property?.name ?? literalValue(node?.property);
+const isNamedIdentifier = (node, name) => node?.type === "Identifier" && node.name === name;
+const isMemberCall = (node, object, property) => node?.type === "MemberExpression" && isNamedIdentifier(node.object, object) && memberName(node) === property;
+
+const loadingSyntax = (callee, loadingAliases) => {
+  if (isNamedIdentifier(callee, "require")) {return "require";}
+  if (isMemberCall(callee, "require", "resolve")) {return "require-resolve";}
+  if (isMemberCall(callee, "module", "require")) {return "module-require";}
+  if (callee?.type === "Identifier" && loadingAliases.loaders.has(callee.name)) {return "create-require";}
+  if (callee?.type === "CallExpression" && callee.callee?.type === "Identifier" && loadingAliases.factories.has(callee.callee.name)) {return "create-require";}
+  return;
+};
+
+const callExpressionRecord = (node, source, loadingAliases = { factories: new Set(), loaders: new Set() }) => {
+  const syntax = loadingSyntax(node.callee, loadingAliases);
+  if (!syntax) {return;}
   const argument = node.arguments?.[0];
-  return makeImportRecord(node, argument, "runtime", directRequire ? "require" : "require-resolve", { source, nonliteral: literalValue(argument) === undefined });
+  return makeImportRecord(node, argument, "runtime", syntax, { source, nonliteral: literalValue(argument) === undefined });
 };
 
 const IMPORT_RECORD_READERS = Object.freeze({
@@ -100,11 +99,41 @@ const IMPORT_RECORD_READERS = Object.freeze({
   CallExpression: callExpressionRecord,
 });
 
+const walkAst = (node, visitor) => {
+  if (!node || typeof node !== "object") {return;}
+  visitor(node);
+  for (const [key, value] of Object.entries(node)) {
+    if (["parent", "comments", "tokens", "errors"].includes(key)) {continue;}
+    if (Array.isArray(value)) {value.forEach((item) => walkAst(item, visitor));}
+    else if (value && typeof value === "object" && typeof value.type === "string") {walkAst(value, visitor);}
+  }
+};
+
+const createRequireAliases = (program) => {
+  const factories = new Set(), namespaces = new Set(), loaders = new Set();
+  walkAst(program, (node) => {
+    if (node.type !== "ImportDeclaration" || literalValue(node.source) !== "node:module") {return;}
+    for (const specifier of node.specifiers ?? []) {
+      if (specifier.type === "ImportNamespaceSpecifier") {namespaces.add(specifier.local?.name);}
+      if (specifier.type === "ImportSpecifier" && (specifier.imported?.name ?? specifier.imported?.value) === "createRequire") {factories.add(specifier.local?.name);}
+    }
+  });
+  walkAst(program, (node) => {
+    if (node.type !== "VariableDeclarator" || node.id?.type !== "Identifier" || node.init?.type !== "CallExpression") {return;}
+    const directFactory = node.init.callee?.type === "Identifier" && factories.has(node.init.callee.name);
+    const namespaceFactory = node.init.callee?.type === "MemberExpression" && namespaces.has(node.init.callee.object?.name) && memberName(node.init.callee) === "createRequire";
+    if (directFactory || namespaceFactory) {loaders.add(node.id.name);}
+  });
+  return { factories, loaders };
+};
+
 const importRecords = (program, source) => {
   const records = [];
+  const loadingAliases = createRequireAliases(program);
   const visit = (node) => {
     if (!node || typeof node !== "object") {return;}
-    const record = IMPORT_RECORD_READERS[node.type]?.(node, source);
+    const reader = IMPORT_RECORD_READERS[node.type];
+    const record = node.type === "CallExpression" ? reader?.(node, source, loadingAliases) : reader?.(node, source);
     if (record) {records.push(record);}
     for (const [key, value] of Object.entries(node)) {
       if (["parent", "comments", "tokens", "errors"].includes(key)) {continue;}
@@ -133,142 +162,6 @@ const isPathAlias = (specifier) => Boolean(
     || specifier.includes("/features/")
   ),
 );
-
-const profileShapeIssues = (profile, profilePath) => {
-  const issues = [];
-  if (!validateProfileShape(profile)) {
-    for (const error of validateProfileShape.errors ?? []) {
-      if (error.instancePath.startsWith("/authority") && ["const", "required"].includes(error.keyword)) {continue;}
-      if (error.keyword === "if") {continue;}
-      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `${error.instancePath || "/"} ${error.message}`));
-    }
-  }
-  return issues;
-};
-
-const governedRecordIsValid = (record) => Boolean(
-  record.id
-  && ACCEPTED_DECISIONS.has(record.acceptedAdr)
-  && record.owner
-  && record.rationale
-  && record.reviewTrigger
-  && !record.reviewTrigger.includes("*"),
-);
-
-const governedRecordIssues = (profile, profilePath) => ["extensions", "deviations", "exceptions"].flatMap((collection) =>
-  (profile[collection] ?? [])
-    .filter((record) => !governedRecordIsValid(record))
-    .map(() => issue("FM_PROFILE_INVALID", profilePath, 1, `${collection} records require id, accepted ADR, owner, rationale, and a deterministic non-wildcard review trigger`)),
-);
-
-const duplicateValues = (values) => {
-  const seen = new Set();
-  return values.filter((value) => {
-    if (seen.has(value)) {return true;}
-    seen.add(value);
-    return false;
-  });
-};
-
-const sameValues = (actual, expected) => {
-  const sortedExpected = expected.toSorted(compareText);
-  return actual.length === expected.length && actual.toSorted(compareText).every((value, index) => value === sortedExpected[index]);
-};
-
-const featureIdentityIssues = (features, productionRoots, profilePath) => {
-  const issues = [];
-  for (const field of [features.map(({ id }) => id), features.map(({ root }) => root), features.flatMap(({ entrypoints }) => Object.values(entrypoints ?? {}))]) {
-    if (duplicateValues(field).length) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "feature ids, roots, and entrypoints must be unique"));}
-  }
-  for (const feature of features) {
-    const expectedRoots = productionRoots.map((root) => `${root}/features/${feature.id}`);
-    if (!expectedRoots.includes(feature.root)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `feature ${feature.id} root must be an exact production-root features path`));}
-    if (feature.entrypoints?.public !== `${feature.root}/index.ts` || feature.entrypoints?.internal !== `${feature.root}/internal.ts`) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `feature ${feature.id} entrypoints must be root index.ts and internal.ts`));}
-  }
-  return issues;
-};
-
-const featureEdgeDeclarationIssues = (edges, featureIds, profilePath) => {
-  const issues = [];
-  const edgeKeys = edges.map(({ from, to }) => `${from}->${to}`);
-  if (duplicateValues(edgeKeys).length) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "feature edge pairs must be unique"));}
-  for (const edge of edges) {
-    if (!featureIds.has(edge.from) || !featureIds.has(edge.to) || edge.from === edge.to) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `feature edge ${edge.from}->${edge.to} must connect two distinct declared features`));}
-  }
-  return issues;
-};
-
-const profileTopologyIssues = (profile, profilePath) => {
-  const issues = [];
-  const productionRoots = profile.scope?.productionRoots ?? [];
-  const features = profile.features ?? [];
-  const featureIds = new Set(features.map(({ id }) => id));
-  const expectedAssembly = productionRoots.flatMap((root) => [`${root}/index.ts`, `${root}/composition.ts`]);
-  if (!sameValues(profile.moduleRoles ?? [], Object.keys(LAYER_ALLOWED))) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "moduleRoles must declare the five standard roles exactly"));}
-  if (!sameValues(profile.assemblyFiles ?? [], expectedAssembly)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "assemblyFiles must contain only index.ts and composition.ts for each production root"));}
-  issues.push(...featureIdentityIssues(features, productionRoots, profilePath));
-  issues.push(...featureEdgeDeclarationIssues(profile.featureEdges ?? [], featureIds, profilePath));
-  return issues;
-};
-
-const candidateScopeIssues = (profile, profilePath) => {
-  const issues = [];
-  if (!sameValues(profile.scope.productionRoots, CANDIDATE_PRODUCTION_ROOTS)) {
-    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "candidate production roots must match the reviewed Agent Execution and Provider Access scope exactly"));
-  }
-  if (!sameValues(profile.scope.outOfScope, CANDIDATE_OUT_OF_SCOPE)) {
-    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "candidate out-of-scope modules must match the reviewed exclusions exactly"));
-  }
-  if (!sameValues(profile.features.map(({ id }) => id), Object.keys(CANDIDATE_FEATURES))) {
-    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "candidate features must match the three reviewed feature identities exactly"));
-  }
-  for (const feature of profile.features) {
-    const expected = CANDIDATE_FEATURES[feature.id];
-    if (expected && feature.root !== expected.root) {
-      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `candidate feature ${feature.id} root must match the reviewed package ownership exactly`));
-    }
-    if (expected && !sameValues(feature.roles, expected.roles)) {
-      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `candidate feature ${feature.id} roles must match the reviewed scope exactly`));
-    }
-  }
-  return issues;
-};
-
-const profileArrayIssues = (profile, profilePath) => {
-  const issues = [];
-  for (const field of ["productionRoots", "outOfScope"]) {
-    if (!Array.isArray(profile.scope?.[field])) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `scope.${field} must be an array`));}
-  }
-  for (const field of ["moduleRoles", "features", "assemblyFiles", "featureEdges", "extensions", "deviations", "exceptions"]) {
-    if (!Array.isArray(profile[field])) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `${field} must be an array`));}
-  }
-  return issues;
-};
-
-const validateProfile = (profile, profilePath, enforceCandidateScope) => {
-  const issues = profileShapeIssues(profile, profilePath);
-  if (issues.length) {return issues;}
-  for (const [key, value] of Object.entries(AUTHORITY)) {
-    if (profile.authority?.[key] !== value) {issues.push(issue("FM_INVALID_AUTHORITY", profilePath, 1, `authority.${key} must equal ${value}`));}
-  }
-  if (profile.schemaVersion !== 1 || !["candidate", "active"].includes(profile.status)) {
-    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "schemaVersion must be 1 and status must be candidate or active"));
-  }
-  issues.push(...profileArrayIssues(profile, profilePath));
-  issues.push(...governedRecordIssues(profile, profilePath));
-  if (profile.status === "active" && !ACCEPTED_DECISIONS.has(profile.activation?.authority?.acceptedAdr)) {
-    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "active status requires activation authority from an accepted ADR"));
-  }
-  issues.push(...profileTopologyIssues(profile, profilePath));
-  if (enforceCandidateScope) {issues.push(...candidateScopeIssues(profile, profilePath));}
-  const governedPaths = [
-    ...(profile.scope?.productionRoots ?? []),
-    ...(profile.assemblyFiles ?? []),
-    ...(profile.features ?? []).flatMap((feature) => [feature.root, feature.entrypoints?.public, feature.entrypoints?.internal]),
-  ];
-  if (governedPaths.some((path) => typeof path === "string" && path.includes("*"))) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "scope, feature, assembly, and entrypoint paths must be exact and cannot contain wildcards"));}
-  return issues;
-};
 
 const featureForPath = (features, path) => features.find((feature) => path === feature.root || path.startsWith(`${feature.root}/`));
 const layerForPath = (feature, path) => path.slice(feature.root.length + 1).split("/")[0];
@@ -311,14 +204,83 @@ const collectProductionFiles = async (absoluteRoot, productionRoots) => {
 };
 
 const readLocalPackageImports = async (absoluteRoot, productionRoots) => {
-  const names = new Set(), targets = new Map();
+  const names = new Set(), targets = new Map(), aliases = new Set(), issues = [];
   for (const productionRoot of productionRoots) {
+    const packageRoot = resolve(absoluteRoot, productionRoot, "..");
     try {
-      const { name } = JSON.parse(await readFile(resolve(absoluteRoot, productionRoot, "../package.json"), "utf8"));
+      const { name, imports = {} } = JSON.parse(await readFile(resolve(packageRoot, "package.json"), "utf8"));
       if (name) {names.add(name); targets.set(name, `${productionRoot}/index.ts`); targets.set(`${name}/composition`, `${productionRoot}/composition.ts`);}
-    } catch (error) { if (error?.code !== "ENOENT") {throw error;} }
+      Object.keys(imports).forEach((alias) => aliases.add(alias));
+    } catch (error) {
+      if (error?.code !== "ENOENT") {issues.push(issue("FM_PROFILE_INVALID", repoPath(absoluteRoot, resolve(packageRoot, "package.json")), 1, `cannot parse package aliases: ${error.message}`));}
+    }
+    try {
+      const visited = new Set();
+      const readAliases = async (configPath) => {
+        if (visited.has(configPath)) {return;}
+        visited.add(configPath);
+        const tsconfig = JSON.parse(await readFile(configPath, "utf8"));
+        Object.keys(tsconfig.compilerOptions?.paths ?? {}).forEach((alias) => aliases.add(alias));
+        if (typeof tsconfig.extends === "string" && tsconfig.extends.startsWith(".")) {
+          const extended = resolve(dirname(configPath), tsconfig.extends);
+          await readAliases(extname(extended) ? extended : `${extended}.json`);
+        }
+      };
+      await readAliases(resolve(packageRoot, "tsconfig.json"));
+    } catch (error) {
+      if (error?.code !== "ENOENT") {issues.push(issue("FM_PROFILE_INVALID", repoPath(absoluteRoot, resolve(packageRoot, "tsconfig.json")), 1, `cannot parse alias configuration: ${error.message}`));}
+    }
   }
-  return { names, targets };
+  return { names, targets, aliases, issues };
+};
+
+const aliasMatches = (specifier, alias) => alias.includes("*")
+  ? specifier.startsWith(alias.slice(0, alias.indexOf("*"))) && specifier.endsWith(alias.slice(alias.indexOf("*") + 1))
+  : specifier === alias;
+
+const curatedPackageExports = (exports) => {
+  if (!exports || Object.keys(exports).toSorted(compareText).join(",") !== ".,./composition") {return false;}
+  const matches = (entry, stem) => entry
+    && Object.keys(entry).toSorted(compareText).join(",") === "import,types"
+    && entry.types === `./dist/${stem}.d.ts`
+    && entry.import === `./dist/${stem}.js`;
+  return matches(exports["."], "index") && matches(exports["./composition"], "composition");
+};
+
+const packagePolicyIssues = async (absoluteRoot, productionRoots, features) => {
+  const issues = [];
+  for (const productionRoot of productionRoots) {
+    const packageRoot = resolve(absoluteRoot, productionRoot, "..");
+    const packagePath = repoPath(absoluteRoot, resolve(packageRoot, "package.json"));
+    try {
+      const packageJson = JSON.parse(await readFile(resolve(packageRoot, "package.json"), "utf8"));
+      if (!curatedPackageExports(packageJson.exports)) {
+        issues.push(issue("FM_PACKAGE_EXPORT_MAP", packagePath, 1, "package exports must expose only the public and composition assembly files"));
+      }
+    } catch (error) {
+      issues.push(issue("FM_PACKAGE_EXPORT_MAP", packagePath, 1, `package export map cannot be verified: ${error.message}`));
+    }
+
+    const packageFiles = await filesBelow(packageRoot);
+    const packageFeatures = features.filter((feature) => feature.root.startsWith(`${productionRoot}/features/`));
+    for (const absoluteTest of packageFiles.filter((path) => /\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u.test(path) && !/[\\/](?:dist|node_modules|\.cache)[\\/]/u.test(path))) {
+      const testPath = repoPath(absoluteRoot, absoluteTest);
+      const source = await readFile(absoluteTest, "utf8");
+      let imports = [];
+      try { imports = importRecords(parseSync(testPath, source).program, source); } catch { imports = []; }
+      const importedPaths = imports.flatMap(({ specifier }) => {
+        const target = resolveLocalImport(slash(absoluteTest), specifier);
+        return target ? [repoPath(absoluteRoot, target)] : [];
+      }).map((path) => path.replace(`${repoPath(absoluteRoot, packageRoot)}/dist/features/`, `${productionRoot}/features/`));
+      const misplacedFeature = packageFeatures.find((feature) => !testPath.startsWith(`${feature.root}/`) && (
+        packageFeatures.length === 1
+        || posix.basename(testPath).includes(feature.id)
+        || importedPaths.some((path) => path.startsWith(`${feature.root}/`))
+      ));
+      if (misplacedFeature) {issues.push(issue("FM_TEST_PLACEMENT", testPath, 1, `${misplacedFeature.id} tests must be colocated with their feature`));}
+    }
+  }
+  return issues;
 };
 
 const assemblyStructureIssues = (assemblyFiles, allPaths) => assemblyFiles
@@ -350,6 +312,11 @@ const featureStructureIssues = async (feature, allPaths, absoluteRoot) => {
     }
     if (!hasSubstance) {issues.push(issue("FM_EMPTY_LAYER", `${feature.root}/${role}`, 1, `${feature.id} declares empty or placeholder-only ${role} layer`));}
   }
+  const readmePath = `${feature.root}/README.md`;
+  try {
+    const readme = await readFile(resolve(absoluteRoot, readmePath), "utf8");
+    if (!/^Owner:\s+\S.+$/mu.test(readme)) {issues.push(issue("FM_README_OWNERSHIP", readmePath, 1, `${feature.id} README must declare a non-empty Owner`));}
+  } catch { issues.push(issue("FM_README_OWNERSHIP", readmePath, 1, `${feature.id} must declare README ownership`)); }
   return issues;
 };
 
@@ -387,12 +354,16 @@ const assemblyGrammarIssues = ({ isAssembly, path, sourceFeature, program, sourc
     || node.type === "EmptyStatement"
     || node.type === "ExportNamedDeclaration" && !node.declaration
   ));
-  return invalid.map((node) => issue(
+  const issues = invalid.map((node) => issue(
     "FM_INLINE_BEHAVIOR",
     path,
     lineAt(source, node.start),
     `${isAssembly ? "package assembly" : "feature entrypoint"} files may contain only imports and re-exports`,
   ));
+  for (const node of (program.body ?? []).filter((candidate) => candidate.type === "ExportAllDeclaration")) {
+    issues.push(issue("FM_WILDCARD_REEXPORT", path, lineAt(source, node.start), "assembly and feature entrypoints require curated named re-exports"));
+  }
+  return issues;
 };
 
 const assemblyImportIssues = ({ path, imported, targetPath, targetFeature }) => {
@@ -477,7 +448,7 @@ const outsideFeatureImportIssues = ({ imported, isAssembly, path, sourceFeature,
 const inspectImport = (context) => {
   const { absoluteFile, absoluteRoot, features, isAssembly, sourceFeature, path, imported, localPackageImports, productionRoots } = context;
   if (imported.nonliteral) {return [issue("FM_NONLITERAL_LOADING", path, imported.line, `${imported.syntax} requires a string literal`)];}
-  if (isPathAlias(imported.specifier)) {return [issue("FM_PATH_ALIAS_IMPORT", path, imported.line, `path alias imports cannot bypass feature boundaries: ${imported.specifier}`)];}
+  if (isPathAlias(imported.specifier) || [...localPackageImports.aliases].some((alias) => aliasMatches(imported.specifier, alias))) {return [issue("FM_PATH_ALIAS_IMPORT", path, imported.line, `path alias imports cannot bypass feature boundaries: ${imported.specifier}`)];}
   const localPackageName = [...localPackageImports.names].find((name) => imported.specifier === name || imported.specifier.startsWith(`${name}/`));
   if (localPackageName && !localPackageImports.targets.has(imported.specifier)) {return [issue("FM_PATH_ALIAS_IMPORT", path, imported.line, `undeclared local package subpath cannot bypass feature boundaries: ${imported.specifier}`)];}
   const packageTargetPath = localPackageImports.targets.get(imported.specifier); const target = resolveLocalImport(slash(absoluteFile), imported.specifier);
@@ -493,13 +464,13 @@ const inspectImport = (context) => {
   return [...entrypointIssues, ...crossFeatureImportIssues(importContext)];
 };
 
-export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath = DEFAULT_PROFILE, requiredStatus } = {}) => {
+export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath = DEFAULT_PROFILE, requiredStatus, acceptedDecisions = ACCEPTED_DECISIONS } = {}) => {
   const absoluteRoot = resolve(root);
   const absoluteProfile = resolve(absoluteRoot, profilePath);
   const loaded = await readProfile(absoluteProfile, profilePath);
   if (!loaded.profile) {return loaded.issues;}
   const { profile } = loaded;
-  const issues = validateProfile(profile, profilePath, absoluteRoot === REPOSITORY_ROOT);
+  const issues = validateProfile(profile, profilePath, absoluteRoot === REPOSITORY_ROOT, acceptedDecisions);
   if (issues.some((candidate) => candidate.code === "FM_PROFILE_INVALID")) {return issues.toSorted(compareIssues);}
   if (requiredStatus && profile.status !== requiredStatus) {issues.push(issue("FM_PROFILE_STATUS", profilePath, 1, `profile status must be ${requiredStatus}`));}
 
@@ -510,12 +481,14 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   const edgeLocations = new Map();
   const allFiles = await collectProductionFiles(absoluteRoot, profile.scope.productionRoots ?? []);
   const localPackageImports = await readLocalPackageImports(absoluteRoot, profile.scope.productionRoots ?? []);
+  issues.push(...localPackageImports.issues);
   const allPaths = allFiles.map((path) => repoPath(absoluteRoot, path));
   issues.push(...assemblyStructureIssues(profile.assemblyFiles ?? [], allPaths));
 
   for (const feature of features) {
     issues.push(...await featureStructureIssues(feature, allPaths, absoluteRoot));
   }
+  issues.push(...await packagePolicyIssues(absoluteRoot, profile.scope.productionRoots ?? [], features));
 
   for (const absoluteFile of allFiles) {
     const path = repoPath(absoluteRoot, absoluteFile);
@@ -530,7 +503,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   const observed = [...observedEdges].map(([key, kinds]) => { const [from, to] = key.split("->"); return { from, to, kinds: [...kinds] }; });
   issues.push(...unusedEdgeIssues(declaredEdges, observedEdges, profilePath));
   issues.push(...detectCycles(observed, edgeLocations, "runtime"), ...detectCycles(observed, edgeLocations, "type"));
-  return issues.toSorted(compareIssues);
+  return applyGovernedRecords(profile, issues, profilePath).toSorted(compareIssues);
 };
 
 export const formatIssues = (issues) => issues.map((entry) => `${entry.path}:${entry.line} ${entry.code} ${entry.message}`).join("\n");
@@ -542,7 +515,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const issues = await checkFeatureModules({ profilePath, requiredStatus, root });
   if (issues.length) {
     process.stdout.write(`${formatIssues(issues)}\n\nFeature Module Standard ${requiredStatus ?? "candidate"}: ${issues.length} diagnostic(s). No conformance claim.\n`);
-    process.exitCode = process.argv.includes("--allow-diagnostics") ? 0 : 1;
+    let profileStatus;
+    try { profileStatus = JSON.parse(await readFile(resolve(root, profilePath), "utf8")).status; } catch { profileStatus = undefined; }
+    const candidateOnlyAllowance = process.argv.includes("--allow-diagnostics")
+      && !requiredStatus
+      && profileStatus === "candidate"
+      && !issues.some(({ code }) => STRUCTURAL_CODES.has(code));
+    process.exitCode = candidateOnlyAllowance ? 0 : 1;
   } else if (requiredStatus) {process.stdout.write("Feature Module Standard active: 0 diagnostics.\n");}
   else {process.stdout.write("Feature Module Standard candidate: 0 diagnostics. Activation remains a separate reviewed change.\n");}
 }

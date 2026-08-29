@@ -42,14 +42,19 @@ records diagnostics but does not establish active conformance.
 
 The profile cannot use baselines, history, grandfather lists, regex parsing,
 wildcards, future-state declarations, or automatic scope widening. Extensions,
-deviations, and exceptions are closed by default and require an accepted ADR
-with an owner, rationale, and deterministic review trigger.
+deviations, and exceptions are closed by default and require exact governed
+diagnostics, an accepted ADR, an owner, a rationale, and a deterministic review
+trigger. Active authority must bind this exact ADR path and enumerate every
+governed record; proposed ADR-0013 cannot satisfy that acceptance check.
 
 Layer direction is default-deny: domain is inward-only, and neither domain nor
 application may import public transport contracts. Application dependencies
 remain limited to domain code and application-owned ports or models. Public
-feature entrypoints expose only their own contracts, and unused declared edges
-are rejected rather than retained as future-state permissions.
+feature entrypoints expose only their own contracts, wildcard entrypoint and
+assembly re-exports are rejected, and unused declared edges are rejected rather
+than retained as future-state permissions. README ownership, scoped feature
+test placement, package export maps, configured aliases, `module.require`, and
+`createRequire` aliases are included in the zero-diagnostic boundary.
 
 The production checker stays outside `check` and `check:fast` while diagnostics
 remain. The deterministic fixture suite is blocking in both gates. A later

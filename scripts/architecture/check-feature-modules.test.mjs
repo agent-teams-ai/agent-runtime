@@ -28,7 +28,14 @@ const feature = (id, roles = ["domain"]) => ({
 });
 
 const baseFiles = {
-  "package.json": "{\"name\":\"@fixture/runtime\"}\n",
+  "package.json": `${JSON.stringify({
+    name: "@fixture/runtime",
+    exports: {
+      ".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
+      "./composition": { types: "./dist/composition.d.ts", import: "./dist/composition.js" },
+    },
+  })}\n`,
+  "src/features/alpha/README.md": "# Alpha\n\nOwner: runtime architecture\n",
   "src/features/alpha/index.ts": "export {};\n",
   "src/features/alpha/internal.ts": "export { value } from './domain/value.js';\n",
   "src/features/alpha/domain/value.ts": "export const value = true;\n",
@@ -37,6 +44,7 @@ const baseFiles = {
 };
 
 const secondFiles = {
+  "src/features/beta/README.md": "# Beta\n\nOwner: runtime architecture\n",
   "src/features/beta/index.ts": "export {};\n",
   "src/features/beta/internal.ts": "export { beta } from './domain/value.js';\n",
   "src/features/beta/domain/value.ts": "export const beta = true;\n",
@@ -66,10 +74,10 @@ for (const fixture of fixtureManifest.cases) {
         features,
         assemblyFiles: ["src/index.ts", "src/composition.ts"],
         featureEdges: fixture.edges ?? [],
-        extensions: [], deviations: [], exceptions: fixture.exceptions ?? [],
+        extensions: fixture.extensions ?? [], deviations: fixture.deviations ?? [], exceptions: fixture.exceptions ?? [],
         enforcement: { candidate: "pnpm architecture:feature-modules:candidate", active: "pnpm architecture:feature-modules:active", fixtures: "pnpm test:feature-modules" },
         activation: status === "active"
-          ? { blockers: [], acceptance: ["zero diagnostics"], authority: { acceptedAdr: "ADR-0007", owner: "architecture" }, evidence: { fixtureCommand: "pnpm test:feature-modules", candidateCommand: "pnpm architecture:feature-modules:candidate", productionDiagnostics: 0 } }
+          ? { blockers: [], acceptance: ["zero diagnostics"], authority: { acceptedAdr: "ADR-0013", decisionPath: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", owner: "architecture", governedRecords: [] }, evidence: { fixtureCommand: "pnpm test:feature-modules", candidateCommand: "pnpm architecture:feature-modules:candidate", productionDiagnostics: 0 } }
           : { blockers: ["fix diagnostics"], acceptance: ["zero diagnostics"], authority: null, evidence: null },
         ...fixture.profileExtra,
       };
@@ -80,13 +88,22 @@ for (const fixture of fixtureManifest.cases) {
         await mkdir(dirname(join(root, path)), { recursive: true });
         await writeFile(join(root, path), content);
       }
-      const actual = (await checkFeatureModules({ root, profilePath: "profile.json", requiredStatus: fixture.requiredStatus })).map(({ code, path, line }) => ({ code, path, line }));
+      const acceptedDecisions = new Map([["ADR-0007", "docs/decisions/0007-deterministic-documentation-governance.md"]]);
+      if (fixture.acceptActivationAdr) {acceptedDecisions.set("ADR-0013", "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md");}
+      const actual = (await checkFeatureModules({ root, profilePath: "profile.json", requiredStatus: fixture.requiredStatus, acceptedDecisions })).map(({ code, path, line }) => ({ code, path, line }));
       assert.deepEqual(actual, fixture.expected);
       if (fixture.cliRequireActive) {
-        const failure = await execFileAsync(process.execPath, [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--require-active"]).catch((error) => error);
+        const args = [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--require-active"];
+        if (fixture.cliAllowDiagnostics) {args.push("--allow-diagnostics");}
+        const failure = await execFileAsync(process.execPath, args).catch((error) => error);
         assert.equal(failure.code, 1);
         assert.match(failure.stdout, /^profile\.json:1 FM_PROFILE_STATUS profile status must be active$/mu);
         assert.match(failure.stdout, /Feature Module Standard active: 1 diagnostic\(s\)\. No conformance claim\./u);
+      }
+      if (fixture.cliAllowDiagnosticsFails) {
+        const failure = await execFileAsync(process.execPath, [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--allow-diagnostics"]).catch((error) => error);
+        assert.equal(failure.code, 1);
+        assert.match(failure.stdout, /No conformance claim\./u);
       }
     } finally { await rm(root, { recursive: true, force: true }); }
   });
