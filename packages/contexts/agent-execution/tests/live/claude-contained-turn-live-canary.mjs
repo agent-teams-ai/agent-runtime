@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 
+import { query as claudeQuery } from "@anthropic-ai/claude-agent-sdk";
+
 import {
   ClaudeAgentSdkContainedTurnProvider,
   createClaudeAgentSdkEnvironment,
@@ -54,6 +56,7 @@ const custody = new NodeProviderProcessCustody({
   launchPlans: createStaticHostCustodyLaunchPlanResolver([{ plan, providerBinding }]),
   terminateAfterMs: 5_000,
 });
+let sdkFailure = "";
 const provider = new ClaudeAgentSdkContainedTurnProvider({
   cancellationPollMs: 50,
   executablePath,
@@ -64,6 +67,21 @@ const provider = new ClaudeAgentSdkContainedTurnProvider({
     supportedModes: ["analysis", "workspace-write"],
   },
   processes: custody,
+  queryFactory(input) {
+    const query = claudeQuery(input);
+    return {
+      close: () => query.close(),
+      interrupt: () => query.interrupt(),
+      async *[Symbol.asyncIterator]() {
+        try {
+          yield* query;
+        } catch (error) {
+          sdkFailure = error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000);
+          throw error;
+        }
+      },
+    };
+  },
   turnTimeoutMs: 180_000,
 });
 const attemptId = "attempt:claude-live-canary";
@@ -104,6 +122,7 @@ assert.equal(
     outcome,
     output: output.join("").slice(0, 2_000),
     providerStderr,
+    sdkFailure,
   })}`,
 );
 assert.equal(outcome?.outcome, "succeeded", `Claude canary failed: ${output.join(" | ").slice(0, 2_000)}`);
