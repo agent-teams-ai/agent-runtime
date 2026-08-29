@@ -163,6 +163,9 @@ Read documents in this order:
 41. `spikes/runtime-setup-l0-dogfooding-evidence.md` - executable evidence for
    the product-owned Runtime Setup Pure DI baseline and fail-closed gates for
    any later module layer.
+42. `spikes/opencode-acp-1-18-25-contract-validation.md` - deterministic ACP
+   wire replay, neutral Contained Agent Turn gap mapping, and explicit OpenCode
+   production-adapter and native-reconciliation deferrals.
 
 Document status vocabulary:
 

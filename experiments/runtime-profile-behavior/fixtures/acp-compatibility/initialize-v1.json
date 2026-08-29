@@ -1,0 +1,9 @@
+{
+  "name": "initialize-v1",
+  "requestedVersion": 1,
+  "response": {
+    "protocolVersion": 1,
+    "agentInfo": { "name": "OpenCode", "version": "1.18.25" },
+    "agentCapabilities": { "session": { "new": true } }
+  }
+}

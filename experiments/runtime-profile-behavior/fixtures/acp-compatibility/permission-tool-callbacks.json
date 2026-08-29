@@ -1,0 +1,9 @@
+{
+  "name": "permission-tool-callbacks",
+  "messages": [
+    { "jsonrpc": "2.0", "id": "permission-1", "method": "session/request_permission", "params": { "sessionId": "session-1" } },
+    { "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": "session-1", "update": { "sessionUpdate": "tool_call", "toolCallId": "tool-1", "title": "shell" } } },
+    { "jsonrpc": "2.0", "id": "unknown-1", "method": "session/unknown_callback", "params": {} }
+  ],
+  "expected": ["permission", "tool", "unsupported"]
+}

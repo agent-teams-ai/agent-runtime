@@ -1,0 +1,7 @@
+{
+  "name": "process-exit",
+  "method": "session/list",
+  "exitCode": 17,
+  "signal": null,
+  "expectedError": "process_exit"
+}

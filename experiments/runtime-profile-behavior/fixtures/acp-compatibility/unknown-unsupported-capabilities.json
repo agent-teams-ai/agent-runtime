@@ -1,0 +1,11 @@
+{
+  "name": "unknown-unsupported-capabilities",
+  "response": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "session": { "new": true, "list": false, "resume": false, "close": true, "fork": true }
+    }
+  },
+  "expectedUnknown": ["fork"],
+  "expectedUnsupported": ["list", "resume"]
+}
