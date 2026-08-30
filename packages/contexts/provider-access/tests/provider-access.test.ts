@@ -363,16 +363,8 @@ test("ill-formed Unicode is rejected while valid surrogate pairs remain lossless
 test("public commands fail closed for null, primitive, boxed, proxy, and throwing scope values", async () => {
   const feature = createStaticContainedTurnProviderAccessFeature([binding()]);
   const expected = await resolvedBinding();
-  const invalidResolve = {
-    evidence: { authorityDigest: "authority-observation:indeterminate", proofRef: "observation:indeterminate" },
-    kind: "unavailable",
-    reason: "indeterminate",
-  };
-  const invalidRevalidation = {
-    evidence: { authorityDigest: "authority-observation:indeterminate", proofRef: "observation:indeterminate" },
-    kind: "rejected",
-    reason: "indeterminate",
-  };
+  const invalidResolve = unavailable("indeterminate");
+  const invalidRevalidation = rejectedOutcome("indeterminate");
   const throwing = Object.defineProperty({}, "projectId", { get() { throw new Error("boom"); } });
   const values: readonly unknown[] = [null, undefined, 1, "scope", [], new String("scope"), new Proxy({}, { get() { throw new Error("boom"); } }), throwing];
   for (const scope of values) {

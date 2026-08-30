@@ -13,3 +13,20 @@ export type {
   ResolveContainedTurnProviderAccessInput,
   ResolveContainedTurnProviderAccessOutcome,
 } from "./features/contained-turn-access/contracts/contained-turn-provider-access.js";
+export {
+  CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE,
+  type ContainedTurnDispatchConsumptionV1,
+  type ConsumeForDispatchInput,
+  type ConsumeForDispatchOutcome,
+  type DispatchConsumptionBindingExpectation,
+  type DispatchConsumptionDisposition,
+  type DispatchConsumptionPrevention,
+  type DispatchConsumptionPreventedReason,
+  type DispatchConsumptionReceipt,
+  type DispatchConsumptionScope,
+  type DispatchConsumptionSettlementReceipt,
+  type ObserveDispatchConsumptionInput,
+  type ObserveDispatchConsumptionOutcome,
+  type SettleDispatchConsumptionInput,
+  type SettleDispatchConsumptionOutcome,
+} from "./features/contained-turn-access/contracts/dispatch-consumption-v1.js";
