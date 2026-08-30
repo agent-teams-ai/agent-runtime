@@ -131,6 +131,52 @@ const rejectAtDisposalDeadline = async (
   );
 };
 
+type CancellationProof =
+  | Readonly<{ kind: "contract_violation" }>
+  | Readonly<{ kind: "not_found" }>
+  | Readonly<{ kind: "nonterminal"; status: "accepted" | "reconcile_required" | "running" }>
+  | Readonly<{ kind: "operation_mismatch" }>
+  | Readonly<{ kind: "terminal"; status: "cancelled" | "failed" | "succeeded" }>;
+
+const snapshotCancellationProof = (
+  rawOutcome: unknown,
+  expectedOperationId: string,
+): CancellationProof => {
+  try {
+    if (typeof rawOutcome !== "object" || rawOutcome === null) {
+      return Object.freeze({ kind: "contract_violation" });
+    }
+    const outcome = rawOutcome as Readonly<Record<string, unknown>>;
+    const outcomeStatus = outcome.status;
+    const rawTurn = outcome.turn;
+    if (outcomeStatus === "not_found") {
+      return Object.freeze({ kind: "not_found" });
+    }
+    if (outcomeStatus !== "observed" || typeof rawTurn !== "object" || rawTurn === null) {
+      return Object.freeze({ kind: "contract_violation" });
+    }
+    const turn = rawTurn as Readonly<Record<string, unknown>>;
+    const operationId = turn.operationId;
+    const turnStatus = turn.status;
+    if (typeof operationId !== "string") {
+      return Object.freeze({ kind: "contract_violation" });
+    }
+    if (operationId !== expectedOperationId) {
+      return Object.freeze({ kind: "operation_mismatch" });
+    }
+    if (turnStatus === "cancelled" || turnStatus === "failed" || turnStatus === "succeeded") {
+      return Object.freeze({ kind: "terminal", status: turnStatus });
+    }
+    if (turnStatus === "accepted" || turnStatus === "reconcile_required" || turnStatus === "running") {
+      return Object.freeze({ kind: "nonterminal", status: turnStatus });
+    }
+    return Object.freeze({ kind: "contract_violation" });
+  } catch {
+    return Object.freeze({ kind: "contract_violation" });
+  }
+};
+
+// oxlint-disable-next-line max-lines-per-function -- this factory intentionally closes over one Host ownership ledger.
 export const createAgentRuntimeHostDisposalLifecycle = (
   containedTurn: ContainedTurnCapabilityBundle | undefined,
 ): AgentRuntimeHostDisposalLifecycle => {
@@ -231,7 +277,7 @@ export const createAgentRuntimeHostDisposalLifecycle = (
 
   const recordCancellationFailure = (
     operationId: string,
-    status: "cancellation_failed" | "not_found" | "operation_mismatch",
+    status: "cancellation_failed" | "contract_violation" | "not_found" | "operation_mismatch",
   ): void => {
     const active = activeContainedTurns.get(operationId);
     if (active !== undefined && active.status !== "contract_violation") {
@@ -263,20 +309,25 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     shutdownCancellations.set(operation.operationId, cancellation);
     void cancellation.catch(() => {});
     const execution = executeCall(async () => {
+      let outcome: unknown;
       try {
-        const outcome = await containedTurn.cancel.execute(operation);
-        if (outcome.status === "not_found") {
-          recordCancellationFailure(operation.operationId, "not_found");
-        } else if (outcome.turn.operationId !== operation.operationId) {
-          recordCancellationFailure(operation.operationId, "operation_mismatch");
-        } else {
-          recordContainedTurnStatus(operation.operationId, outcome.turn.status);
-        }
-        return outcome;
+        outcome = await containedTurn.cancel.execute(operation);
       } catch (error) {
         recordCancellationFailure(operation.operationId, "cancellation_failed");
         throw error;
       }
+      const proof = snapshotCancellationProof(outcome, operation.operationId);
+      if (proof.kind === "terminal") {
+        recordContainedTurnStatus(operation.operationId, proof.status);
+      } else if (proof.kind === "nonterminal") {
+        recordContainedTurnStatus(operation.operationId, proof.status);
+      } else if (proof.kind === "contract_violation") {
+        recordCancellationFailure(operation.operationId, "contract_violation");
+        throw new ContainedTurnOwnerContractError("malformed_owner_outcome");
+      } else {
+        recordCancellationFailure(operation.operationId, proof.kind);
+      }
+      return proof;
     });
     void execution.then(resolveCancellation, rejectCancellation);
     return cancellation;

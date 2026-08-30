@@ -94,6 +94,7 @@ const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
 
 const isBoundedIdentity = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
+  // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
   value.isWellFormed() && !/\s/u.test(value) && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
 
 const isTurnStatus = (value: unknown): value is OwnerTurnObservation["status"] =>
@@ -106,59 +107,122 @@ const contractViolation = (
 
 const copyProviderIdentity = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
+    // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
     value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
     ? value
     : undefined;
 
+interface OwnerOutputChunkSnapshot {
+  readonly cursor: unknown;
+  readonly kind: unknown;
+  readonly text: unknown;
+}
+
+interface OwnerTurnSnapshot {
+  readonly artifactManifestRef: unknown;
+  readonly commandId: unknown;
+  readonly effectId: unknown;
+  readonly operationId: unknown;
+  readonly output: readonly (OwnerOutputChunkSnapshot | undefined)[] | undefined;
+  readonly provider: unknown;
+  readonly resultRef: unknown;
+  readonly status: unknown;
+}
+
+const snapshotOwnerOutput = (
+  value: unknown,
+): readonly (OwnerOutputChunkSnapshot | undefined)[] | undefined => {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  const length: unknown = value.length;
+  if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0 ||
+    length > MAX_OUTPUT_CHUNKS) {
+    return;
+  }
+  const output: (OwnerOutputChunkSnapshot | undefined)[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const rawChunk: unknown = value[index];
+    if (typeof rawChunk !== "object" || rawChunk === null) {
+      output.push(undefined);
+      continue;
+    }
+    const chunk = rawChunk as Readonly<Record<string, unknown>>;
+    const cursor = chunk.cursor;
+    const kind = chunk.kind;
+    const text = chunk.text;
+    output.push(Object.freeze({ cursor, kind, text }));
+  }
+  return Object.freeze(output);
+};
+
+const snapshotOwnerTurn = (value: unknown): OwnerTurnSnapshot | undefined => {
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+  const turn = value as Readonly<Record<string, unknown>>;
+  return Object.freeze({
+    artifactManifestRef: turn.artifactManifestRef,
+    commandId: turn.commandId,
+    effectId: turn.effectId,
+    operationId: turn.operationId,
+    output: snapshotOwnerOutput(turn.output),
+    provider: turn.provider,
+    resultRef: turn.resultRef,
+    status: turn.status,
+  });
+};
+
+// oxlint-disable-next-line complexity -- this anti-corruption boundary validates every detached DTO field.
 const mapContainedTurnView = (
-  turn: OwnerTurnObservation,
+  turn: OwnerTurnSnapshot,
   expectedOperationId?: string,
 ): RuntimeContainedTurnView | undefined => {
   try {
-    if (!isBoundedIdentity(turn.operationId)) {
+    const {
+      artifactManifestRef, commandId, effectId, operationId, output: ownerOutput,
+      provider: ownerProvider, resultRef, status,
+    } = turn;
+    if (!isBoundedIdentity(operationId)) {
       return contractViolation("invalid_operation_id");
     }
-    if (!isBoundedIdentity(turn.commandId) || !isBoundedIdentity(turn.effectId)) {
+    if (!isBoundedIdentity(commandId) || !isBoundedIdentity(effectId)) {
       return;
     }
-    if (expectedOperationId !== undefined && turn.operationId !== expectedOperationId) {
+    if (expectedOperationId !== undefined && operationId !== expectedOperationId) {
       return contractViolation("operation_id_mismatch");
     }
-    const provider = copyProviderIdentity(turn.provider);
-    if (provider === undefined || !isTurnStatus(turn.status) || !Array.isArray(turn.output) ||
-      turn.output.length > MAX_OUTPUT_CHUNKS) {
+    const provider = copyProviderIdentity(ownerProvider);
+    if (provider === undefined || !isTurnStatus(status) || ownerOutput === undefined) {
       return;
     }
-    const artifactManifestRef = turn.artifactManifestRef;
-    const resultRef = turn.resultRef;
     if ((artifactManifestRef !== undefined && !isBoundedIdentity(artifactManifestRef)) ||
       (resultRef !== undefined && !isBoundedIdentity(resultRef))) {
       return;
     }
+    const output: RuntimeContainedTurnView["output"][number][] = [];
     let previousCursor = -1;
-    for (const chunk of turn.output) {
-      if (typeof chunk !== "object" || chunk === null || !Number.isSafeInteger(chunk.cursor) ||
-        chunk.cursor <= previousCursor || (chunk.kind !== "assistant" && chunk.kind !== "diagnostic" &&
-          chunk.kind !== "progress") || typeof chunk.text !== "string" ||
-        chunk.text.length > MAX_OUTPUT_TEXT_LENGTH || !chunk.text.isWellFormed()) {
+    for (const chunk of ownerOutput) {
+      const cursor = chunk?.cursor;
+      const kind = chunk?.kind;
+      const text = chunk?.text;
+      if (typeof cursor !== "number" || !Number.isSafeInteger(cursor) || cursor <= previousCursor ||
+        (kind !== "assistant" && kind !== "diagnostic" && kind !== "progress") ||
+        typeof text !== "string" || text.length > MAX_OUTPUT_TEXT_LENGTH || !text.isWellFormed()) {
         return;
       }
-      previousCursor = chunk.cursor;
+      previousCursor = cursor;
+      output.push(Object.freeze({ cursor, kind, text }));
     }
-    const output = turn.output.map(chunk => Object.freeze({
-      cursor: chunk.cursor,
-      kind: chunk.kind,
-      text: chunk.text,
-    }));
     return Object.freeze({
       ...(artifactManifestRef === undefined ? {} : { artifactManifestRef }),
-      commandId: turn.commandId,
-      effectId: turn.effectId,
-      operationId: turn.operationId,
+      commandId,
+      effectId,
+      operationId,
       output: Object.freeze(output),
       provider,
       ...(resultRef === undefined ? {} : { resultRef }),
-      status: turn.status,
+      status,
     });
   } catch (error) {
     if (error instanceof ContainedTurnOwnerContractError) {
@@ -176,10 +240,20 @@ const copyObservation = (
     if (typeof outcome !== "object" || outcome === null) {
       return contractViolation("malformed_owner_outcome");
     }
-    if (outcome.status === "not_found") {
+    const record = outcome as Readonly<Record<string, unknown>>;
+    const status = record.status;
+    const rawTurn = record.turn;
+    if (status === "not_found") {
       return Object.freeze({ status: "not_found" as const });
     }
-    const turn = mapContainedTurnView(outcome.turn, expectedOperationId);
+    if (status !== "observed") {
+      return contractViolation("malformed_owner_outcome");
+    }
+    const snapshot = snapshotOwnerTurn(rawTurn);
+    if (snapshot === undefined) {
+      return contractViolation("malformed_owner_outcome");
+    }
+    const turn = mapContainedTurnView(snapshot, expectedOperationId);
     return turn === undefined
       ? unavailableOutcome
       : Object.freeze({ status: "observed" as const, turn });
@@ -246,8 +320,10 @@ const copySubmitOutcome = (
     }
     const record = outcome as Readonly<Record<string, unknown>>;
     const status = record.status;
+    const code = record.code;
+    const rawTurn = record.turn;
     if (status === "observed") {
-      const turn = record.turn;
+      const turn = rawTurn;
       if (typeof turn !== "object" || turn === null) {
         return contractViolation("malformed_owner_outcome");
       }
@@ -268,7 +344,6 @@ const copySubmitOutcome = (
     if (status === "denied") {
       return Object.freeze({ outcome: Object.freeze({ status: "denied" as const }) });
     }
-    const code = record.code;
     if (status === "conflict" && code === "command_fingerprint_conflict") {
       return Object.freeze({ outcome: Object.freeze({ code, status: "conflict" as const }) });
     }
@@ -306,10 +381,7 @@ export interface ContainedTurnRuntimeAccessDependencies {
 export const createContainedTurnRuntimeAccess = (
   dependencies: ContainedTurnRuntimeAccessDependencies,
 ): RuntimeContainedTurnAccess => Object.freeze({
-  cancel: async (
-    operationId: string,
-    options?: { readonly signal?: AbortSignal },
-  ) => {
+  cancel: async (operationId: string, options?: { readonly signal?: AbortSignal }) => {
     dependencies.assertActive();
     if (!isBoundedIdentity(operationId)) {
       return contractViolation("invalid_operation_id");
@@ -317,8 +389,7 @@ export const createContainedTurnRuntimeAccess = (
     if (dependencies.capability === undefined || dependencies.scope === undefined) {
       return unavailableOutcome;
     }
-    const signal = options?.signal === undefined
-      ? dependencies.hostSignal
+    const signal = options?.signal === undefined ? dependencies.hostSignal
       : AbortSignal.any([dependencies.hostSignal, options.signal]);
     signal.throwIfAborted();
     const outcome = copyObservation(
@@ -353,10 +424,7 @@ export const createContainedTurnRuntimeAccess = (
     }
     return outcome;
   },
-  submit: async (
-    rawInput: SubmitRuntimeContainedTurnInput,
-    options?: { readonly signal?: AbortSignal },
-  ) => {
+  submit: async (rawInput: SubmitRuntimeContainedTurnInput, options?: { readonly signal?: AbortSignal }) => {
     dependencies.assertActive();
     const input = copyInput(rawInput);
     if (input === undefined) {

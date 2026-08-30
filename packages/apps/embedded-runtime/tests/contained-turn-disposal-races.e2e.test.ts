@@ -367,6 +367,117 @@ test("Disposal issues use deterministic Unicode code-point ordering", async () =
   ]);
 });
 
+test("Host disposal rejects malformed and snapshot-unstable cancellation proof", async t => {
+  const cases = [
+    {
+      expectedStatus: "contract_violation",
+      name: "the review malformed-discriminant counterexample",
+      outcome: {
+        status: "malformed-owner-status",
+        turn: { operationId: "operation:embedded", status: "succeeded" },
+      },
+    },
+    {
+      expectedStatus: "operation_mismatch",
+      name: "an operation identity that crosses to the requested identity on reread",
+      outcome: {
+        status: "observed",
+        turn: {
+          operationIdReads: 0,
+          get operationId(): string {
+            this.operationIdReads += 1;
+            return this.operationIdReads === 1 ? "operation:crossed" : "operation:embedded";
+          },
+          status: "succeeded",
+        },
+      },
+    },
+    {
+      expectedStatus: "running",
+      name: "a nonterminal status that crosses to terminal on reread",
+      outcome: {
+        status: "observed",
+        turn: {
+          operationId: "operation:embedded",
+          statusReads: 0,
+          get status(): string {
+            this.statusReads += 1;
+            return this.statusReads === 1 ? "running" : "succeeded";
+          },
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a cancellation turn getter that throws owner-only detail",
+      outcome: {
+        status: "observed",
+        get turn(): never {throw new Error("owner-only throwing cancellation getter");},
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a proxy cancellation result with a malformed terminal discriminant",
+      outcome: new Proxy({
+        turn: new Proxy({}, {
+          get(_target, property) {
+            return property === "operationId" ? "operation:embedded" : "complete";
+          },
+        }),
+      }, {
+        get(target, property, receiver) {
+          return property === "status" ? "observed" : Reflect.get(target, property, receiver);
+        },
+      }),
+    },
+  ] as const;
+
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      const feature: ContainedTurnCapabilityBundle = Object.freeze({
+        cancel: Object.freeze({ async execute() {return scenario.outcome as never;} }),
+        observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+        submit: Object.freeze({
+          async execute(input, options) {
+            options?.onAccepted?.({ operationId: "operation:embedded", scope: input.scope });
+            return { status: "observed", turn: turnView("running") } as const;
+          },
+        }),
+      });
+      const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+      assert.deepEqual(await host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+        commandId: "command:admitted",
+        expectedProvider: "codex",
+        intent: { mode: "analysis", prompt: "synthetic cancellation proof" },
+      }), { operationId: "operation:embedded", status: "accepted" });
+
+      const error = await host.dispose().catch(failure => failure);
+
+      assert.equal(error instanceof AgentRuntimeHostDisposalIncompleteError, true);
+      assert.deepEqual(error.containedTurns, [{
+        operationId: "operation:embedded",
+        status: scenario.expectedStatus,
+      }]);
+      const turn = Object.getOwnPropertyDescriptor(scenario.outcome, "turn")?.value as
+        | { operationIdReads?: number; statusReads?: number }
+        | undefined;
+      const operationIdReads = turn === undefined
+        ? undefined
+        : Object.getOwnPropertyDescriptor(turn, "operationIdReads")?.value;
+      const statusReads = turn === undefined
+        ? undefined
+        : Object.getOwnPropertyDescriptor(turn, "statusReads")?.value;
+      if (operationIdReads !== undefined) {
+        assert.equal(operationIdReads, 1);
+      }
+      if (statusReads !== undefined) {
+        assert.equal(statusReads, 1);
+      }
+      assert.equal(JSON.stringify(error).includes("owner-only throwing cancellation getter"), false);
+    });
+  }
+});
+
 test("Embedded observation mapping rejects malformed owner DTO fields", async t => {
   const malformedTurns = [
     { ...turnView("running"), status: "complete" },

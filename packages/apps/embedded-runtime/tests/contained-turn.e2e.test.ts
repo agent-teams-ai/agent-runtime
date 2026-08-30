@@ -294,6 +294,97 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
   assert.notEqual(cancelled.status === "observed" && cancelled.turn, ownerTurn);
 });
 
+test("snapshots accessor-backed owner observations exactly once before validation", async t => {
+  const reads = {
+    artifactManifestRef: 0, commandId: 0, cursor: 0, effectId: 0, kind: 0,
+    operationId: 0, outcomeStatus: 0, output: 0, outputIndex: 0, outputLength: 0,
+    provider: 0, resultRef: 0, text: 0, turn: 0, turnStatus: 0,
+  };
+  const ownerOnlySentinel = { secret: "mutable-owner-sentinel" };
+  const chunk = {
+    get cursor(): unknown {reads.cursor += 1; return reads.cursor === 1 ? 4 : ownerOnlySentinel;},
+    get kind(): unknown {reads.kind += 1; return reads.kind === 1 ? "assistant" : ownerOnlySentinel;},
+    get text(): unknown {reads.text += 1; return reads.text === 1 ? "first output" : ownerOnlySentinel;},
+  };
+  const ownerOutput = new Proxy([chunk], {
+    get(target, property, receiver) {
+      if (property === "length") {
+        reads.outputLength += 1;
+      } else if (property === "0") {
+        reads.outputIndex += 1;
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const ownerTurn = {
+    get artifactManifestRef(): unknown {reads.artifactManifestRef += 1;
+      return reads.artifactManifestRef === 1 ? "artifact:first" : ownerOnlySentinel;},
+    get commandId(): unknown {
+      reads.commandId += 1;
+      return reads.commandId === 1 ? "command:first" : ownerOnlySentinel;
+    },
+    get effectId(): unknown {reads.effectId += 1;
+      return reads.effectId === 1 ? "effect:first" : ownerOnlySentinel;},
+    get operationId(): unknown {
+      reads.operationId += 1;
+      return reads.operationId === 1 ? "operation:first" : "operation:crossed";
+    },
+    get output(): unknown {
+      reads.output += 1;
+      return reads.output === 1 ? ownerOutput : [ownerOnlySentinel];
+    },
+    get provider(): unknown {reads.provider += 1;
+      return reads.provider === 1 ? "codex" : ownerOnlySentinel;},
+    get resultRef(): unknown {reads.resultRef += 1;
+      return reads.resultRef === 1 ? "result:first" : ownerOnlySentinel;},
+    get status(): unknown {
+      reads.turnStatus += 1;
+      return reads.turnStatus === 1 ? "succeeded" : "running";
+    },
+  };
+  const ownerOutcome = {
+    get status(): unknown {
+      reads.outcomeStatus += 1;
+      return reads.outcomeStatus === 1 ? "observed" : "malformed-owner-status";
+    },
+    get turn(): unknown {
+      reads.turn += 1;
+      return reads.turn === 1 ? ownerTurn : ownerOnlySentinel;
+    },
+  };
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    observe: Object.freeze({ async execute() {return ownerOutcome as never;} }),
+    submit: Object.freeze({ async execute() {return { status: "denied" } as const;} }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  t.after(() => host.dispose());
+
+  const observation = await host.bindAccess({ containedTurn: trustedScope }).containedTurn
+    .observe("operation:first");
+
+  assert.deepEqual(observation, {
+    status: "observed",
+    turn: {
+      artifactManifestRef: "artifact:first",
+      commandId: "command:first",
+      effectId: "effect:first",
+      operationId: "operation:first",
+      output: [{ cursor: 4, kind: "assistant", text: "first output" }],
+      provider: "codex",
+      resultRef: "result:first",
+      status: "succeeded",
+    },
+  });
+  assert.deepEqual(reads, {
+    artifactManifestRef: 1, commandId: 1, cursor: 1, effectId: 1, kind: 1,
+    operationId: 1, outcomeStatus: 1, output: 1, outputIndex: 1, outputLength: 1,
+    provider: 1, resultRef: 1, text: 1, turn: 1, turnStatus: 1,
+  });
+  assert.equal(JSON.stringify(observation).includes(ownerOnlySentinel.secret), false);
+  assert.equal(observation.status === "observed" && Object.isFrozen(observation.turn.output[0]), true);
+});
+
 test("passes opaque provider identities unchanged and preserves exact owner rejections", async t => {
   const receivedProviders: string[] = [];
   const feature: ContainedTurnCapabilityBundle = Object.freeze({
@@ -409,7 +500,9 @@ test("fails closed on malformed, non-string, and oversized provider observations
   const access = host.bindAccess({ containedTurn: trustedScope });
   const unavailableObservation = { code: "capability_unavailable", status: "unsupported" };
 
-  assert.deepEqual(await access.containedTurn.observe("operation:malformed-provider"), unavailableObservation);
+  await assert.rejects(access.containedTurn.observe("operation:malformed-provider"), error =>
+    error instanceof ContainedTurnOwnerContractError && error.code === "malformed_owner_outcome" &&
+    !error.message.includes("malformed provider getter"));
   assert.deepEqual(await access.containedTurn.observe("operation:non-string-provider"), unavailableObservation);
   assert.deepEqual(await access.containedTurn.observe("operation:oversized-provider"), unavailableObservation);
 });
