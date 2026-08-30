@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
-
-import { containerName, encodeCreateRequest } from "./docker-engine-codec.js";
+import { containerName, encodeCreateRequest } from "./docker-create-request.js";
+import { canonicalJsonSha256 } from "./docker-canonical-json.js";
 import type { DockerContainerCreate, DockerEnginePolicy } from "./docker-engine-port.js";
 
 export const createSpecificationSha256 = (
@@ -8,16 +7,5 @@ export const createSpecificationSha256 = (
   policy: DockerEnginePolicy,
 ): string => {
   const request = encodeCreateRequest(input, policy);
-  const host = request.HostConfig as Readonly<Record<string, unknown>>;
-  const specification = [
-    containerName(input.operationNonceSha256),
-    request.Cmd,
-    request.Entrypoint,
-    request.Env,
-    request.WorkingDir,
-    request.Image,
-    request.Labels,
-    host.Mounts,
-  ];
-  return createHash("sha256").update(JSON.stringify(specification)).digest("hex");
+  return canonicalJsonSha256({ Name: containerName(input.operationNonceSha256), Request: request });
 };

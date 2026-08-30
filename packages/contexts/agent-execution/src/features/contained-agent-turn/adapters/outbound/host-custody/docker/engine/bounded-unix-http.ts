@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readlink, readdir, realpath } from "node:fs/promises";
-import { request } from "node:http";
+import { Agent, request } from "node:http";
 import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
 import { isAbsolute, resolve as resolvePath } from "node:path";
 
 import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerEngineCall, DockerEnginePolicy } from "./docker-engine-port.js";
+import { snapshotDockerEngineCall, snapshotOwnDataObject } from "./docker-boundary-snapshot.js";
+import { connectAuthenticatedUnixPeer } from "./docker-unix-peer.js";
+import type { DockerPeerConnector } from "./docker-unix-peer.js";
 
 const HOST_BOOT_ID = "/proc/sys/kernel/random/boot_id";
 const MAX_CALL_MS = 120_000;
@@ -35,8 +38,12 @@ interface RequestInput {
   readonly stream: boolean;
 }
 
-interface SocketCustody {
+export interface SocketCustody {
+  readonly daemonPid: number;
+  readonly daemonStartTicks: string;
+  readonly device: bigint;
   readonly identity: DockerEndpointIdentity;
+  readonly inode: bigint;
   readonly token: string;
 }
 
@@ -45,6 +52,8 @@ export interface DockerEndpointObservation {
   readonly ctimeNs: bigint;
   readonly daemonBootGeneration: string;
   readonly daemonCustodyToken: string;
+  readonly daemonPid: number;
+  readonly daemonStartTicks: string;
   readonly device: bigint;
   readonly gid: bigint;
   readonly hostBootId: string;
@@ -55,7 +64,7 @@ export interface DockerEndpointObservation {
   readonly uid: bigint;
 }
 
-type EndpointPolicy = Pick<DockerEnginePolicy,
+export type EndpointPolicy = Pick<DockerEnginePolicy,
   | "daemonPidFileMode"
   | "daemonPidFileOwnerGid"
   | "daemonPidFileOwnerUid"
@@ -79,7 +88,10 @@ const processStartTicks = async (pid: number): Promise<string> => {
 const socketKernelInode = async (socketPath: string): Promise<string> => {
   const matches = (await readFile("/proc/net/unix", "utf8")).split("\n").slice(1).flatMap(line => {
     const fields = line.trim().split(/\s+/u);
-    return fields[7] === socketPath && /^(?:0|[1-9][0-9]*)$/u.test(fields[6] ?? "") ? [fields[6] ?? ""] : [];
+    const flags = fields[3] ?? "";
+    const accepting = /^[0-9A-Fa-f]{8}$/u.test(flags) && (Number.parseInt(flags, 16) & 0x1_0000) !== 0;
+    return fields[5] === "01" && accepting && fields[7] === socketPath &&
+      /^(?:0|[1-9][0-9]*)$/u.test(fields[6] ?? "") ? [fields[6] ?? ""] : [];
   });
   if (matches.length !== 1) {throw new DockerEngineError("endpoint-custody-lost");}
   return matches[0] ?? "";
@@ -96,6 +108,8 @@ const daemonOwnsSocket = async (pid: number, inode: string): Promise<boolean> =>
 
 const observeDaemon = async (policy: EndpointPolicy): Promise<{
   readonly generation: string;
+  readonly pid: number;
+  readonly startTicks: string;
   readonly token: string;
 }> => {
   const [canonicalPath, facts, rawPid] = await Promise.all([
@@ -106,9 +120,10 @@ const observeDaemon = async (policy: EndpointPolicy): Promise<{
   const pidValue = rawPid.trim();
   if (!/^[1-9][0-9]{0,8}$/u.test(pidValue)) {throw new DockerEngineError("endpoint-custody-lost");}
   const pid = Number(pidValue);
+  const processFacts = await lstat(`/proc/${pid}`, { bigint: true });
   if (canonicalPath !== policy.daemonPidFilePath || facts.isSymbolicLink() || !facts.isFile() ||
       Number(facts.uid) !== policy.daemonPidFileOwnerUid || Number(facts.gid) !== policy.daemonPidFileOwnerGid ||
-      Number(facts.mode & 0o777n) !== policy.daemonPidFileMode) {
+      Number(facts.mode & 0o777n) !== policy.daemonPidFileMode || Number(processFacts.uid) !== policy.socketOwnerUid) {
     throw new DockerEngineError("endpoint-custody-lost");
   }
   const [before, inode] = await Promise.all([processStartTicks(pid), socketKernelInode(policy.socketPath)]);
@@ -117,6 +132,8 @@ const observeDaemon = async (policy: EndpointPolicy): Promise<{
   }
   return {
     generation: JSON.stringify([pidValue, before, inode]),
+    pid,
+    startTicks: before,
     token: JSON.stringify([
       canonicalPath, facts.dev.toString(), facts.ino.toString(), facts.ctimeNs.toString(),
       facts.uid.toString(), facts.gid.toString(), Number(facts.mode & 0o777n), pidValue, before, inode,
@@ -136,6 +153,8 @@ const observeEndpoint = async (policy: EndpointPolicy): Promise<DockerEndpointOb
     ctimeNs: facts.ctimeNs,
     daemonBootGeneration: daemon.generation,
     daemonCustodyToken: daemon.token,
+    daemonPid: daemon.pid,
+    daemonStartTicks: daemon.startTicks,
     device: facts.dev,
     gid: facts.gid,
     hostBootId: rawBootId.trim().toLowerCase(),
@@ -184,12 +203,27 @@ const headerBytes = (response: IncomingMessage): number => response.rawHeaders.r
   0,
 );
 
-const validateResponseHeaders = (response: IncomingMessage): string => {
+interface ResponseFraming {
+  readonly contentLength: number | undefined;
+  readonly contentType: string;
+}
+
+interface BoundBodyInput {
+  readonly abort: () => void;
+  readonly call: DockerEngineCall;
+  readonly custodyToken: string;
+  readonly expectedContentLength: number | undefined;
+  readonly release: () => Promise<void>;
+  readonly response: IncomingMessage;
+  readonly timer: NodeJS.Timeout;
+}
+
+const validateResponseHeaders = (response: IncomingMessage): ResponseFraming => {
   if (response.rawHeaders.length % 2 !== 0) {throw new DockerEngineError("protocol-violation");}
   const seen = new Set<string>();
   let contentType = "";
-  let hasContentLength = false;
-  let hasTransferEncoding = false;
+  let contentLength: number | undefined;
+  let chunked = false;
   for (let index = 0; index < response.rawHeaders.length; index += 2) {
     const rawName = response.rawHeaders[index];
     const rawValue = response.rawHeaders[index + 1];
@@ -202,35 +236,60 @@ const validateResponseHeaders = (response: IncomingMessage): string => {
     if (name === "content-type") {contentType = rawValue;}
     if (name === "content-length") {
       if (!/^(?:0|[1-9][0-9]*)$/u.test(rawValue)) {throw new DockerEngineError("protocol-violation");}
-      hasContentLength = true;
+      const parsed = Number(rawValue);
+      if (!Number.isSafeInteger(parsed)) {throw new DockerEngineError("protocol-violation");}
+      contentLength = parsed;
     }
-    if (name === "transfer-encoding") {hasTransferEncoding = true;}
+    if (name === "transfer-encoding") {
+      if (rawValue.trim().toLowerCase() !== "chunked") {throw new DockerEngineError("protocol-violation");}
+      chunked = true;
+    }
   }
-  if (hasContentLength && hasTransferEncoding) {throw new DockerEngineError("protocol-violation");}
-  return contentType;
+  const bodyForbidden = response.statusCode === 204 || response.statusCode === 304;
+  if (bodyForbidden) {
+    if (chunked || (contentLength !== undefined && contentLength !== 0)) {
+      throw new DockerEngineError("protocol-violation");
+    }
+  } else if ((contentLength === undefined) === !chunked) {
+    throw new DockerEngineError("protocol-violation");
+  }
+  return { contentLength, contentType };
 };
 
 export class BoundedUnixHttpClient {
   readonly #policy: EndpointPolicy;
   readonly #request: (options: RequestOptions) => ClientRequest;
   readonly #observeEndpoint: (policy: EndpointPolicy) => Promise<DockerEndpointObservation>;
+  readonly #connectPeer: DockerPeerConnector;
   #baselineToken: string | undefined;
 
   public constructor(
     policy: EndpointPolicy,
     requestFactory: (options: RequestOptions) => ClientRequest = request,
     endpointObserver: (policy: EndpointPolicy) => Promise<DockerEndpointObservation> = observeEndpoint,
+    peerConnector: DockerPeerConnector = connectAuthenticatedUnixPeer,
   ) {
-    if (invalidEndpointPaths(policy) || invalidEndpointOwnership(policy)) {
+    const snapshot = snapshotOwnDataObject(policy, [
+      "daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode",
+      "socketOwnerGid", "socketOwnerUid", "socketPath",
+    ], [
+      "daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode",
+      "socketOwnerGid", "socketOwnerUid", "socketPath",
+    ], "invalid-create-request") as EndpointPolicy;
+    if (typeof snapshot.daemonPidFilePath !== "string" || typeof snapshot.socketPath !== "string" || [
+      snapshot.daemonPidFileMode, snapshot.daemonPidFileOwnerGid, snapshot.daemonPidFileOwnerUid,
+      snapshot.socketMode, snapshot.socketOwnerGid, snapshot.socketOwnerUid,
+    ].some(value => typeof value !== "number") || invalidEndpointPaths(snapshot) || invalidEndpointOwnership(snapshot)) {
       throw new DockerEngineError("invalid-create-request");
     }
-    this.#policy = Object.freeze({ ...policy });
+    this.#policy = snapshot;
     this.#request = requestFactory;
     this.#observeEndpoint = endpointObserver;
+    this.#connectPeer = peerConnector;
   }
 
   public async endpointIdentity(call: DockerEngineCall): Promise<DockerEndpointIdentity> {
-    this.#checkCall(call);
+    this.#checkCall(snapshotDockerEngineCall(call));
     return (await this.#observeCustody()).identity;
   }
 
@@ -274,11 +333,15 @@ export class BoundedUnixHttpClient {
       }
       this.#baselineToken ??= token;
       return {
+        daemonPid: observation.daemonPid,
+        daemonStartTicks: observation.daemonStartTicks,
+        device: observation.device,
         identity: {
           canonicalSocketPath: observation.canonicalSocketPath,
           daemonBootGenerationSha256: hash(observation.daemonBootGeneration),
           hostBootGenerationSha256: hash(observation.hostBootId),
         },
+        inode: observation.inode,
         token,
       };
     } catch (error) {
@@ -295,7 +358,8 @@ export class BoundedUnixHttpClient {
   }
 
   async #open(input: RequestInput): Promise<UnixHttpResponse<AsyncIterable<Uint8Array>>> {
-    this.#checkCall(input.call);
+    const call = snapshotDockerEngineCall(input.call);
+    this.#checkCall(call);
     if ((input.body?.byteLength ?? 0) > MAX_REQUEST_BYTES) {
       throw new DockerEngineError("invalid-create-request");
     }
@@ -304,56 +368,89 @@ export class BoundedUnixHttpClient {
       throw new DockerEngineError("protocol-violation");
     }
     const custody = await this.#observeCustody();
-    const effectiveMs = Math.min(input.call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
-    if (effectiveMs <= 0) {throw new DockerEngineError("deadline-exceeded");}
+    const connection = await this.#connectPeer(this.#policy, custody, call, async () => this.#observeCustody());
+    const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
+    if (effectiveMs <= 0) {
+      connection.socket.destroy();
+      await connection.release();
+      throw new DockerEngineError("deadline-exceeded");
+    }
+    const agent = new Agent({ keepAlive: false, maxSockets: 1 });
+    agent.createConnection = () => connection.socket;
+    const release = async (): Promise<void> => {
+      agent.destroy();
+      await connection.release();
+    };
     return new Promise((resolve, reject) => {
       let settled = false;
       let deadlineExpired = false;
-      const operation = this.#request({
-        headers: input.body === undefined ? undefined : {
-          "content-length": String(input.body.byteLength),
-          "content-type": "application/json",
-        },
-        maxHeaderSize: MAX_HEADER_BYTES,
-        method: input.method,
-        path: input.path,
-        setHost: false,
-        socketPath: custody.identity.canonicalSocketPath,
-      });
+      let operation: ClientRequest;
+      try {
+        operation = this.#request({
+          agent,
+          headers: {
+            host: "docker",
+            ...(input.body === undefined ? {} : {
+              "content-length": String(input.body.byteLength),
+              "content-type": "application/json",
+            }),
+          },
+          maxHeaderSize: MAX_HEADER_BYTES,
+          method: input.method,
+          path: input.path,
+          setHost: false,
+        });
+      } catch (error) {
+        void release();
+        reject(requestFailureFor(error, call, deadlineExpired));
+        return;
+      }
       const cleanup = (): void => {
         clearTimeout(timer);
-        input.call.signal.removeEventListener("abort", abort);
+        call.signal.removeEventListener("abort", abort);
       };
       const finishFailure = (error: unknown): void => {
         if (settled) {return;}
         settled = true;
         cleanup();
-        reject(requestFailureFor(error, input.call, deadlineExpired));
+        void release();
+        reject(requestFailureFor(error, call, deadlineExpired));
       };
       const abort = (): void => {operation.destroy();};
       const timer = setTimeout(() => {
         deadlineExpired = true;
         operation.destroy();
       }, effectiveMs);
-      input.call.signal.addEventListener("abort", abort, { once: true });
+      call.signal.addEventListener("abort", abort, { once: true });
       operation.once("error", finishFailure);
       operation.once("response", response => {
         const settle = async (): Promise<void> => {
           try {
             if (headerBytes(response) > MAX_HEADER_BYTES) {throw new DockerEngineError("response-too-large");}
-            const contentType = validateResponseHeaders(response);
+            const framing = validateResponseHeaders(response);
             if (!Number.isSafeInteger(response.statusCode) || (response.statusCode ?? 0) < 100 ||
                 (response.statusCode ?? 0) > 599) {throw new DockerEngineError("protocol-violation");}
             const current = await this.#observeCustody();
             if (current.token !== custody.token) {throw new DockerEngineError("endpoint-custody-lost");}
             settled = true;
             resolve({
-              body: this.#deadlineBoundBody(response, input.call, timer, abort, custody.token),
-              contentType,
+              body: this.#deadlineBoundBody(
+                {
+                  abort,
+                  call,
+                  custodyToken: custody.token,
+                  expectedContentLength: framing.contentLength,
+                  release,
+                  response,
+                  timer,
+                },
+              ),
+              contentType: framing.contentType,
               statusCode: response.statusCode ?? 0,
             });
           } catch (error) {
             response.destroy();
+            await release();
             if (!settled) {settled = true; cleanup(); reject(error);}
           }
         };
@@ -363,24 +460,28 @@ export class BoundedUnixHttpClient {
     });
   }
 
-  async *#deadlineBoundBody(
-    response: IncomingMessage,
-    call: DockerEngineCall,
-    timer: NodeJS.Timeout,
-    abort: () => void,
-    custodyToken: string,
-  ): AsyncIterable<Uint8Array> {
+  async *#deadlineBoundBody(input: BoundBodyInput): AsyncIterable<Uint8Array> {
+    let bodyBytes = 0;
     try {
-      for await (const chunk of response) {yield chunk as Uint8Array;}
+      for await (const chunk of input.response) {
+        bodyBytes += (chunk as Uint8Array).byteLength;
+        yield chunk as Uint8Array;
+      }
       const custody = await this.#observeCustody();
-      if (!response.complete || custody.token !== custodyToken) {throw new DockerEngineError("endpoint-custody-lost");}
+      if (!input.response.complete || custody.token !== input.custodyToken) {
+        throw new DockerEngineError("endpoint-custody-lost");
+      }
+      if (input.expectedContentLength !== undefined && bodyBytes !== input.expectedContentLength) {
+        throw new DockerEngineError("protocol-violation");
+      }
     } catch (error) {
       if (error instanceof DockerEngineError) {throw error;}
-      throw failureFor(call, Date.now() >= call.deadlineEpochMs);
+      throw failureFor(input.call, Date.now() >= input.call.deadlineEpochMs);
     } finally {
-      clearTimeout(timer);
-      call.signal.removeEventListener("abort", abort);
-      if (!response.complete) {response.destroy();}
+      clearTimeout(input.timer);
+      input.call.signal.removeEventListener("abort", input.abort);
+      await input.release();
+      if (!input.response.complete) {input.response.destroy();}
     }
   }
 }

@@ -1,5 +1,6 @@
 import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerLogFrame } from "./docker-engine-port.js";
+import { DOCKER_LOG_MAX_FRAMES } from "./docker-engine-port.js";
 
 const HEADER_BYTES = 8;
 
@@ -14,6 +15,7 @@ export async function* parseDockerMultiplexedStream(
   source: AsyncIterable<Uint8Array>,
   maxFrameBytes: number,
   maxStreamBytes: number,
+  maxFrames = DOCKER_LOG_MAX_FRAMES,
 ): AsyncIterable<DockerLogFrame> {
   const header = new Uint8Array(HEADER_BYTES);
   let headerBytes = 0;
@@ -21,6 +23,7 @@ export async function* parseDockerMultiplexedStream(
   let payloadBytes = 0;
   let stream: "stderr" | "stdout" | undefined;
   let streamBytes = 0;
+  let frames = 0;
   for await (const chunk of source) {
     let offset = 0;
     while (offset < chunk.byteLength) {
@@ -36,7 +39,9 @@ export async function* parseDockerMultiplexedStream(
         }
         const frameBytes = lengthFromHeader(header);
         if (frameBytes > maxFrameBytes) {throw new DockerEngineError("stream-frame-too-large");}
-        streamBytes += frameBytes;
+        frames += 1;
+        if (frames > maxFrames) {throw new DockerEngineError("stream-too-large");}
+        streamBytes += HEADER_BYTES + frameBytes;
         if (streamBytes > maxStreamBytes) {throw new DockerEngineError("stream-too-large");}
         stream = header[0] === 1 ? "stdout" : "stderr";
         payload = new Uint8Array(frameBytes);

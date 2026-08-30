@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
 
 import {
-  canonicalizeCreateMounts,
-  containerName,
-  encodeCreateRequest,
   validateAuthorityShape,
 } from "./docker-engine-codec.js";
+import { canonicalizeCreateMounts, containerName, encodeCreateRequest } from "./docker-create-request.js";
 import { createSpecificationSha256 } from "./docker-create-specification.js";
+import {
+  snapshotDockerContainerCreate,
+  snapshotDockerEngineCall,
+  snapshotDockerEnginePolicy,
+} from "./docker-boundary-snapshot.js";
 import { DockerEngineError } from "./docker-engine-error.js";
+import { isTerminalObservation, mutationPostconditionSatisfied } from "./docker-engine-semantics.js";
 import type {
   DockerContainerAuthority,
   DockerContainerCreate,
@@ -20,7 +24,11 @@ import type {
   DockerEnginePort,
   DockerLogFrame,
 } from "./docker-engine-port.js";
-import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_STREAM_BYTES } from "./docker-engine-port.js";
+import {
+  DOCKER_LOG_MAX_FRAME_BYTES,
+  DOCKER_LOG_MAX_FRAMES,
+  DOCKER_LOG_MAX_STREAM_BYTES,
+} from "./docker-engine-port.js";
 
 export type FakeCreateOutcome = "acknowledged" | "daemon-disconnect" | "lost-acknowledgement" | "malformed-response";
 export type FakeDockerOperation = "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop" | "wait";
@@ -47,6 +55,8 @@ const initialState = (): DockerContainerStateFacts => ({
   finishedAt: "0001-01-01T00:00:00Z",
   hostPid: 0,
   oomKilled: false,
+  paused: false,
+  restarting: false,
   running: false,
   startedAt: "0001-01-01T00:00:00Z",
   status: "created",
@@ -70,12 +80,12 @@ export class FakeDockerEngine implements DockerEnginePort {
   #releaseStreams: (() => void) | undefined;
   #streamsReleased = false;
   #streamGate = new Promise<void>(resolve => {this.#releaseStreams = resolve;});
+  #stateRevision = 0;
+  #releaseStateTransition: (() => void) | undefined;
+  #stateTransition = new Promise<void>(resolve => {this.#releaseStateTransition = resolve;});
 
   public constructor(policy: DockerEnginePolicy) {
-    this.#policy = Object.freeze({
-      ...policy,
-      allowedEnvironmentKeys: Object.freeze([...policy.allowedEnvironmentKeys]),
-    });
+    this.#policy = snapshotDockerEnginePolicy(policy);
     encodeCreateRequest({
       arguments: [],
       entrypoint: "/bin/false",
@@ -83,8 +93,8 @@ export class FakeDockerEngine implements DockerEnginePort {
       imageDigest: `validation@sha256:${"0".repeat(64)}`,
       launchFingerprintSha256: "0".repeat(64),
       operationNonceSha256: "0".repeat(64),
-      privateRootSource: `${policy.privateRootSourceRoot}/validation`,
-      workspaceSource: `${policy.workspaceSourceRoot}/validation`,
+      privateRootSource: `${this.#policy.privateRootSourceRoot}/validation`,
+      workspaceSource: `${this.#policy.workspaceSourceRoot}/validation`,
       workspaceWritable: false,
     }, this.#policy);
   }
@@ -163,8 +173,10 @@ export class FakeDockerEngine implements DockerEnginePort {
   }
 
   public async create(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority> {
-    this.#check("create", call);
-    const canonicalInput = await canonicalizeCreateMounts(input, this.#policy);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const inputSnapshot = snapshotDockerContainerCreate(input);
+    this.#check("create", callSnapshot);
+    const canonicalInput = await canonicalizeCreateMounts(inputSnapshot, this.#policy);
     encodeCreateRequest(canonicalInput, this.#policy);
     const engine = this.#identity();
     const name = containerName(canonicalInput.operationNonceSha256);
@@ -174,8 +186,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     }
     const outcome = this.#createOutcomes.shift() ?? "acknowledged";
     if (outcome === "daemon-disconnect") {
-      this.#disconnected = true;
-      throw new DockerEngineError("daemon-disconnected");
+      throw new DockerEngineError("create-acknowledgement-unknown");
     }
     const authority = this.#newAuthority(canonicalInput, engine);
     const record = { authority, input: canonicalInput, removed: false, state: initialState() };
@@ -201,20 +212,21 @@ export class FakeDockerEngine implements DockerEnginePort {
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
   ): Promise<DockerContainerObservation> {
-    this.#check("inspect", call);
-    validateAuthorityShape(authority);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const authoritySnapshot = validateAuthorityShape(authority);
+    this.#check("inspect", callSnapshot);
     const engine = this.#identity();
-    this.#assertEngine(authority, engine);
-    const record = this.#containers.get(authority.containerId);
+    this.#assertEngine(authoritySnapshot, engine);
+    const record = this.#containers.get(authoritySnapshot.containerId);
     if (record === undefined || record.removed) {
-      return { authority, cgroupTree: "unobserved", engine, existence: "absent" };
+      return { authority: authoritySnapshot, cgroupTree: "unobserved", engine, existence: "absent" };
     }
-    if (!this.#sameAuthority(record.authority, authority) ||
-        createSpecificationSha256(record.input, this.#policy) !== authority.createSpecificationSha256) {
+    if (!this.#sameAuthority(record.authority, authoritySnapshot) ||
+        createSpecificationSha256(record.input, this.#policy) !== authoritySnapshot.createSpecificationSha256) {
       throw new DockerEngineError("authority-conflict");
     }
     return {
-      authority,
+      authority: authoritySnapshot,
       cgroupTree: "unobserved",
       engine,
       existence: "present",
@@ -232,7 +244,7 @@ export class FakeDockerEngine implements DockerEnginePort {
   }
 
   public logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame> {
-    return this.#logs(authority, call);
+    return this.#logs(validateAuthorityShape(authority), snapshotDockerEngineCall(call));
   }
 
   public async stop(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
@@ -255,7 +267,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     const record = await this.#record("remove", authority, call);
     if (record.state.running) {throw new DockerEngineError("request-rejected", 409);}
     const outcome = this.#mutationOutcome("remove");
-    if (outcome?.effect !== false) {record.removed = true;}
+    if (outcome?.effect !== false) {record.removed = true; this.#signalStateTransition();}
     this.#events.push("remove:id");
     this.#assertMutationPostcondition("remove", record, outcome);
   }
@@ -264,11 +276,16 @@ export class FakeDockerEngine implements DockerEnginePort {
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
   ): Promise<DockerContainerObservation> {
-    this.#check("wait", call);
-    const observation = await this.inspect(authority, call);
-    if (observation.existence !== "present") {throw new DockerEngineError("resource-not-found", 404);}
-    if (!this.#terminal(observation.state)) {throw new DockerEngineError("terminal-observation-unknown");}
-    return observation;
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    for (;;) {
+      this.#check("wait", callSnapshot);
+      const revision = this.#stateRevision;
+      const observation = await this.inspect(authoritySnapshot, callSnapshot);
+      if (observation.existence !== "present") {throw new DockerEngineError("resource-not-found", 404);}
+      if (isTerminalObservation(observation)) {return observation;}
+      await this.#waitForStateTransition(revision, callSnapshot);
+    }
   }
 
   async *#logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame> {
@@ -276,17 +293,20 @@ export class FakeDockerEngine implements DockerEnginePort {
     const plan = this.#logPlans.get(authority.containerId) ?? { delayed: false, frames: [] };
     if (plan.delayed) {await this.#waitForStream(call);}
     let bytes = 0;
+    let frames = 0;
     for (const frame of plan.frames) {
       this.#checkContinuation(authority, call);
       if (frame.bytes.byteLength > DOCKER_LOG_MAX_FRAME_BYTES) {
         throw new DockerEngineError("stream-frame-too-large");
       }
-      bytes += frame.bytes.byteLength;
+      frames += 1;
+      bytes += 8 + frame.bytes.byteLength;
+      if (frames > DOCKER_LOG_MAX_FRAMES) {throw new DockerEngineError("stream-too-large");}
       if (bytes > DOCKER_LOG_MAX_STREAM_BYTES) {throw new DockerEngineError("stream-too-large");}
       yield { bytes: frame.bytes.slice(), stream: frame.stream };
     }
     const after = await this.inspect(authority, call);
-    if (after.existence !== "present" || !this.#terminal(after.state)) {
+    if (!isTerminalObservation(after)) {
       throw new DockerEngineError("terminal-observation-unknown");
     }
   }
@@ -296,10 +316,12 @@ export class FakeDockerEngine implements DockerEnginePort {
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
   ): Promise<FakeContainer> {
-    this.#check(operation, call);
-    const observation = await this.inspect(authority, call);
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    this.#check(operation, callSnapshot);
+    const observation = await this.inspect(authoritySnapshot, callSnapshot);
     if (observation.existence !== "present") {throw new DockerEngineError("resource-not-found");}
-    const record = this.#containers.get(authority.containerId);
+    const record = this.#containers.get(authoritySnapshot.containerId);
     if (record === undefined) {throw new DockerEngineError("resource-not-found");}
     return record;
   }
@@ -343,7 +365,7 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   #newAuthority(input: DockerContainerCreate, engine: DockerEngineIdentity): DockerContainerAuthority {
     this.#counter += 1;
-    return {
+    return validateAuthorityShape({
       containerId: hash(`${engine.daemonIdentitySha256}:${this.#counter}:${input.operationNonceSha256}`),
       createSpecificationSha256: createSpecificationSha256(input, this.#policy),
       daemonBootGenerationSha256: engine.daemonBootGenerationSha256,
@@ -353,7 +375,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       imageDigest: input.imageDigest,
       launchFingerprintSha256: input.launchFingerprintSha256,
       operationNonceSha256: input.operationNonceSha256,
-    };
+    });
   }
 
   #resources(record: FakeContainer): DockerContainerResourceFacts {
@@ -362,7 +384,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       autoRemove: false,
       capabilitiesDropped: "all",
       cgroupNamespaceMode: "private",
-      cgroupParent: "",
+      cgroupParent: this.#policy.cgroupParent,
       containerId: record.authority.containerId,
       cpuNanoCpus: this.#policy.cpuNanoCpus,
       init: true,
@@ -416,9 +438,19 @@ export class FakeDockerEngine implements DockerEnginePort {
   ): void {
     if (outcome === undefined) {return;}
     this.#events.push(`${operation}:${outcome.acknowledgement}`);
-    const satisfied = operation === "remove" ? record.removed : operation === "start"
-      ? record.state.running && record.state.status === "running"
-      : this.#terminal(record.state);
+    const satisfied = mutationPostconditionSatisfied(operation, record.removed ? {
+      authority: record.authority,
+      cgroupTree: "unobserved",
+      engine: this.#identity(),
+      existence: "absent",
+    } : {
+      authority: record.authority,
+      cgroupTree: "unobserved",
+      engine: this.#identity(),
+      existence: "present",
+      resources: this.#resources(record),
+      state: record.state,
+    });
     if (!satisfied) {throw new DockerEngineError("mutation-acknowledgement-unknown");}
   }
 
@@ -426,15 +458,13 @@ export class FakeDockerEngine implements DockerEnginePort {
     record.state = {
       ...record.state,
       hostPid: 10_000 + this.#counter,
+      paused: false,
+      restarting: false,
       running: true,
       startedAt: "2026-01-01T00:00:00Z",
       status: "running",
     };
-  }
-
-  #terminal(state: DockerContainerStateFacts): boolean {
-    return !state.running && (state.status === "dead" || state.status === "exited") &&
-      state.finishedAt !== "0001-01-01T00:00:00Z";
+    this.#signalStateTransition();
   }
 
   #exit(record: FakeContainer, exitCode: number): void {
@@ -443,9 +473,33 @@ export class FakeDockerEngine implements DockerEnginePort {
       exitCode,
       finishedAt: "2026-01-01T00:00:01Z",
       hostPid: 0,
+      paused: false,
+      restarting: false,
       running: false,
       status: "exited",
     };
+    this.#signalStateTransition();
+  }
+
+  #signalStateTransition(): void {
+    this.#stateRevision += 1;
+    const release = this.#releaseStateTransition;
+    this.#stateTransition = new Promise<void>(resolve => {this.#releaseStateTransition = resolve;});
+    release?.();
+  }
+
+  async #waitForStateTransition(revision: number, call: DockerEngineCall): Promise<void> {
+    if (revision !== this.#stateRevision) {return;}
+    const gate = this.#stateTransition;
+    const remaining = Math.min(call.deadlineEpochMs - Date.now(), 120_000);
+    if (remaining <= 0) {throw new DockerEngineError("deadline-exceeded");}
+    await new Promise<void>((resolve, reject) => {
+      const abort = (): void => {cleanup(); reject(new DockerEngineError("aborted"));};
+      const timer = setTimeout(() => {cleanup(); reject(new DockerEngineError("deadline-exceeded"));}, remaining);
+      const cleanup = (): void => {clearTimeout(timer); call.signal.removeEventListener("abort", abort);};
+      call.signal.addEventListener("abort", abort, { once: true });
+      void gate.then(() => {cleanup(); resolve(); return null;});
+    });
   }
 
   async #waitForStream(call: DockerEngineCall): Promise<void> {

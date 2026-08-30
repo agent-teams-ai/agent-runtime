@@ -22,9 +22,12 @@ boundaries:
       packages: []
       builtins:
         - node:crypto
+        - node:fs
         - node:fs/promises
         - node:http
+        - node:net
         - node:path
+        - node:util
       runtimeReferences: []
   - id: production.agent-execution
     dependencyMode: runtime

@@ -1,13 +1,18 @@
 import { DockerEngineError } from "./docker-engine-error.js";
 import {
-  canonicalizeCreateMounts,
-  containerName,
   decodeEngineIdentity,
   decodeInspection,
-  encodeCreateRequest,
   validateAuthorityShape,
 } from "./docker-engine-codec.js";
+import { canonicalizeCreateMounts, containerName, encodeCreateRequest } from "./docker-create-request.js";
 import { createSpecificationSha256 } from "./docker-create-specification.js";
+import {
+  snapshotDockerContainerCreate,
+  snapshotDockerEngineCall,
+  snapshotDockerEnginePolicy,
+  snapshotOwnDataObject,
+} from "./docker-boundary-snapshot.js";
+import { isTerminalObservation, mutationPostconditionSatisfied } from "./docker-engine-semantics.js";
 import { decodeCreateId, decodeErrorResponse, decodeWaitExitCode } from "./docker-response-codec.js";
 import type {
   DockerContainerAuthority,
@@ -76,10 +81,6 @@ const statusFailure = (operation: string, statusCode: number): DockerEngineError
   return new DockerEngineError("request-rejected", statusCode);
 };
 
-const terminal = (observation: DockerContainerObservation): boolean => observation.existence === "present" &&
-  !observation.state.running && ["dead", "exited"].includes(observation.state.status) &&
-  observation.state.finishedAt !== "0001-01-01T00:00:00Z";
-
 export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   readonly #client: EngineClient;
   readonly #policy: DockerEnginePolicy;
@@ -89,11 +90,33 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     readonly client?: EngineClient;
     readonly policy: DockerEnginePolicy;
   }) {
-    this.#client = input.client ?? new BoundedUnixHttpClient(input.policy);
-    this.#policy = Object.freeze({
-      ...input.policy,
-      allowedEnvironmentKeys: Object.freeze([...input.policy.allowedEnvironmentKeys]),
-    });
+    const construction = snapshotOwnDataObject(input, ["client", "policy"], ["policy"], "invalid-create-request");
+    const policy = snapshotDockerEnginePolicy(construction.policy);
+    if (construction.client === undefined) {
+      this.#client = new BoundedUnixHttpClient({
+        daemonPidFileMode: policy.daemonPidFileMode,
+        daemonPidFileOwnerGid: policy.daemonPidFileOwnerGid,
+        daemonPidFileOwnerUid: policy.daemonPidFileOwnerUid,
+        daemonPidFilePath: policy.daemonPidFilePath,
+        socketMode: policy.socketMode,
+        socketOwnerGid: policy.socketOwnerGid,
+        socketOwnerUid: policy.socketOwnerUid,
+        socketPath: policy.socketPath,
+      });
+    } else {
+      const client = snapshotOwnDataObject(
+        construction.client,
+        ["buffered", "endpointIdentity", "stream"],
+        ["buffered", "endpointIdentity", "stream"],
+        "invalid-create-request",
+      );
+      if (typeof client.buffered !== "function" || typeof client.endpointIdentity !== "function" ||
+          typeof client.stream !== "function") {
+        throw new DockerEngineError("invalid-create-request");
+      }
+      this.#client = client as unknown as EngineClient;
+    }
+    this.#policy = policy;
     encodeCreateRequest({
       arguments: [],
       entrypoint: "/bin/false",
@@ -101,20 +124,22 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       imageDigest: `validation@sha256:${"0".repeat(64)}`,
       launchFingerprintSha256: "0".repeat(64),
       operationNonceSha256: "0".repeat(64),
-      privateRootSource: `${input.policy.privateRootSourceRoot}/validation`,
-      workspaceSource: `${input.policy.workspaceSourceRoot}/validation`,
+      privateRootSource: `${policy.privateRootSourceRoot}/validation`,
+      workspaceSource: `${policy.workspaceSourceRoot}/validation`,
       workspaceWritable: false,
     }, this.#policy);
   }
 
   public async create(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority> {
-    const canonicalInput = await boundedPreflight(canonicalizeCreateMounts(input, this.#policy), call);
+    const inputSnapshot = snapshotDockerContainerCreate(input);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const canonicalInput = await boundedPreflight(canonicalizeCreateMounts(inputSnapshot, this.#policy), callSnapshot);
     const requestBody = encodeCreateRequest(canonicalInput, this.#policy);
-    const engine = await this.#identity(call);
+    const engine = await this.#identity(callSnapshot);
     const name = containerName(canonicalInput.operationNonceSha256);
     let id: string;
     try {
-      const response = await this.#json("POST", `${API}/containers/create?name=${name}`, call, requestBody);
+      const response = await this.#json("POST", `${API}/containers/create?name=${name}`, callSnapshot, requestBody);
       if (response.statusCode !== 201) {throw statusFailure("create", response.statusCode);}
       id = decodeCreateId(response.value);
     } catch (error) {
@@ -124,10 +149,10 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       if (!(error instanceof DockerEngineError) || ![
         "daemon-disconnected", "deadline-exceeded", "malformed-response", "protocol-violation",
       ].includes(error.code)) {throw error;}
-      return this.#resolveLostAcknowledgement(canonicalInput, engine, name, call);
+      return this.#resolveLostAcknowledgement(canonicalInput, engine, name, callSnapshot);
     }
     const authority = this.#authority(id, canonicalInput, engine);
-    const observation = await this.inspect(authority, call);
+    const observation = await this.inspect(authority, callSnapshot);
     if (observation.existence !== "present") {throw new DockerEngineError("authority-conflict");}
     return authority;
   }
@@ -136,54 +161,57 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
   ): Promise<DockerContainerObservation> {
-    validateAuthorityShape(authority);
-    const engine = await this.#identity(call);
-    this.#assertEngine(authority, engine);
-    const response = await this.#json("GET", `${API}/containers/${authority.containerId}/json`, call);
-    const confirmedEngine = await this.#identity(call);
-    this.#assertEngine(authority, confirmedEngine);
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const engine = await this.#identity(callSnapshot);
+    this.#assertEngine(authoritySnapshot, engine);
+    const response = await this.#json("GET", `${API}/containers/${authoritySnapshot.containerId}/json`, callSnapshot);
+    const confirmedEngine = await this.#identity(callSnapshot);
+    this.#assertEngine(authoritySnapshot, confirmedEngine);
     if (response.statusCode === 404) {
-      return { authority, cgroupTree: "unobserved", engine: confirmedEngine, existence: "absent" };
+      return { authority: authoritySnapshot, cgroupTree: "unobserved", engine: confirmedEngine, existence: "absent" };
     }
     if (response.statusCode !== 200) {throw statusFailure("inspect", response.statusCode);}
-    return decodeInspection(response.value, authority, confirmedEngine, this.#policy);
+    return decodeInspection(response.value, authoritySnapshot, confirmedEngine, this.#policy);
   }
 
   public async start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
-    await this.#mutate("start", "POST", `${API}/containers/${authority.containerId}/start`, authority, call);
+    await this.#mutate("start", "POST", authority, call);
   }
 
   public logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame> {
-    return this.#logs(authority, call);
+    return this.#logs(validateAuthorityShape(authority), snapshotDockerEngineCall(call));
   }
 
   public async stop(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
-    await this.#mutate("stop", "POST", `${API}/containers/${authority.containerId}/stop?t=10`, authority, call);
+    await this.#mutate("stop", "POST", authority, call);
   }
 
   public async kill(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
-    await this.#mutate("kill", "POST", `${API}/containers/${authority.containerId}/kill?signal=SIGKILL`, authority, call);
+    await this.#mutate("kill", "POST", authority, call);
   }
 
   public async remove(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
-    await this.#mutate("remove", "DELETE", `${API}/containers/${authority.containerId}?force=0&v=0&link=0`, authority, call);
+    await this.#mutate("remove", "DELETE", authority, call);
   }
 
   public async wait(
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
   ): Promise<DockerContainerObservation> {
-    const before = await this.inspect(authority, call);
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const before = await this.inspect(authoritySnapshot, callSnapshot);
     if (before.existence !== "present") {throw new DockerEngineError("resource-not-found", 404);}
     const response = await this.#json(
       "POST",
-      `${API}/containers/${authority.containerId}/wait?condition=not-running`,
-      call,
+      `${API}/containers/${authoritySnapshot.containerId}/wait?condition=not-running`,
+      callSnapshot,
     );
     if (response.statusCode !== 200) {throw statusFailure("wait", response.statusCode);}
     const exitCode = decodeWaitExitCode(response.value);
-    const after = await this.inspect(authority, call);
-    if (!terminal(after) || after.existence !== "present" || after.state.exitCode !== exitCode) {
+    const after = await this.inspect(authoritySnapshot, callSnapshot);
+    if (!isTerminalObservation(after) || after.existence !== "present" || after.state.exitCode !== exitCode) {
       throw new DockerEngineError("terminal-observation-unknown");
     }
     return after;
@@ -203,25 +231,30 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     }
     yield* parseDockerMultiplexedStream(response.body, DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_STREAM_BYTES);
     const after = await this.inspect(authority, call);
-    if (!terminal(after)) {throw new DockerEngineError("terminal-observation-unknown");}
+    if (!isTerminalObservation(after)) {throw new DockerEngineError("terminal-observation-unknown");}
   }
 
   async #mutate(
     operation: "kill" | "remove" | "start" | "stop",
     method: "DELETE" | "POST",
-    path: string,
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
   ): Promise<void> {
-    const observation = await this.inspect(authority, call);
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const observation = await this.inspect(authoritySnapshot, callSnapshot);
     if (observation.existence !== "present") {throw new DockerEngineError("resource-not-found", 404);}
+    const path = operation === "start" ? `${API}/containers/${authoritySnapshot.containerId}/start`
+      : operation === "stop" ? `${API}/containers/${authoritySnapshot.containerId}/stop?t=10`
+        : operation === "kill" ? `${API}/containers/${authoritySnapshot.containerId}/kill?signal=SIGKILL`
+          : `${API}/containers/${authoritySnapshot.containerId}?force=0&v=0&link=0`;
     let response: UnixHttpResponse<Uint8Array>;
-    try {response = await this.#client.buffered({ call, method, path });}
+    try {response = await this.#client.buffered({ call: callSnapshot, method, path });}
     catch (error) {
       if (error instanceof DockerEngineError && ![
         "daemon-disconnected", "deadline-exceeded", "aborted", "protocol-violation", "response-too-large",
       ].includes(error.code)) {throw error;}
-      await this.#reconcileMutation(operation, authority, call);
+      await this.#reconcileMutation(operation, authoritySnapshot, callSnapshot);
       return;
     }
     const accepted = operation === "start" || operation === "stop" ? [204, 304] : [204];
@@ -229,7 +262,10 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       this.#decodeErrorResponse(response);
       throw statusFailure(operation, response.statusCode);
     }
-    await this.#reconcileMutation(operation, authority, call);
+    if (response.body.byteLength !== 0 || response.contentType !== "") {
+      throw new DockerEngineError("protocol-violation");
+    }
+    await this.#reconcileMutation(operation, authoritySnapshot, callSnapshot);
   }
 
   async #reconcileMutation(
@@ -239,11 +275,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   ): Promise<void> {
     try {
       const observed = await this.inspect(authority, call);
-      const satisfied = operation === "remove"
-        ? observed.existence === "absent"
-        : observed.existence === "present" && (operation === "start"
-          ? observed.state.running && observed.state.status === "running"
-          : terminal(observed));
+      const satisfied = mutationPostconditionSatisfied(operation, observed);
       if (!satisfied) {throw new DockerEngineError("mutation-acknowledgement-unknown");}
     } catch (error) {
       if (error instanceof DockerEngineError && error.code === "mutation-acknowledgement-unknown") {throw error;}
@@ -286,8 +318,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       launchFingerprintSha256: input.launchFingerprintSha256,
       operationNonceSha256: input.operationNonceSha256,
     };
-    validateAuthorityShape(authority);
-    return authority;
+    return validateAuthorityShape(authority);
   }
 
   #assertEngine(authority: DockerContainerAuthority, engine: DockerEngineIdentity): void {
@@ -343,6 +374,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       throw new DockerEngineError("protocol-violation");
     }
     if (!hasBody && response.contentType !== "") {throw new DockerEngineError("protocol-violation");}
+    if (!hasBody) {throw new DockerEngineError("protocol-violation");}
     const value = hasBody ? parseStrictJson(response.body) : undefined;
     if (response.statusCode >= 400) {decodeErrorResponse(value);}
     return { statusCode: response.statusCode, value };

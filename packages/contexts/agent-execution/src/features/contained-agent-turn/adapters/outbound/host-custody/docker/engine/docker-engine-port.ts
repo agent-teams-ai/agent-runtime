@@ -1,4 +1,5 @@
 export const DOCKER_LOG_MAX_FRAME_BYTES = 65_536;
+export const DOCKER_LOG_MAX_FRAMES = 65_536;
 export const DOCKER_LOG_MAX_STREAM_BYTES = 16_777_216;
 
 export interface DockerEngineCall {
@@ -48,6 +49,8 @@ export interface DockerContainerStateFacts {
   readonly finishedAt: string;
   readonly hostPid: number;
   readonly oomKilled: boolean;
+  readonly paused: boolean;
+  readonly restarting: boolean;
   readonly running: boolean;
   readonly startedAt: string;
   readonly status: "created" | "dead" | "exited" | "paused" | "removing" | "restarting" | "running";
@@ -117,6 +120,8 @@ export interface DockerEnginePolicy {
   readonly allowedEnvironmentKeys: readonly string[];
   readonly allowedNetworkName: string;
   readonly appArmorProfile: string;
+  /** Policy-owned cgroup subtree used for every contained turn. */
+  readonly cgroupParent: string;
   readonly cpuNanoCpus: number;
   readonly hostIdentitySha256: string;
   readonly memoryBytes: number;

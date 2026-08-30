@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Socket } from "node:net";
 import { Readable } from "node:stream";
 import { test } from "node:test";
 
@@ -23,6 +24,8 @@ import type {
   DockerEnginePolicy,
   DockerLogFrame,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import { createSpecificationMutations } from "./fixtures/docker-create-specification-mutations.ts";
+import { verifyProductionUnixPeerBinding } from "./fixtures/docker-unix-peer-binding.ts";
 
 const HOST = "a".repeat(64);
 const NONCE = "b".repeat(64);
@@ -43,6 +46,7 @@ const policy = (root: string): DockerEnginePolicy => ({
   allowedEnvironmentKeys: ["AR_OPERATION"],
   allowedNetworkName: "ar-operation-gateway",
   appArmorProfile: "agent-runtime-contained-turn-v1",
+  cgroupParent: "system.slice/agent-runtime.slice",
   cpuNanoCpus: 500_000_000,
   daemonPidFileMode: 0o600,
   daemonPidFileOwnerGid: process.getgid?.() ?? 0,
@@ -101,7 +105,9 @@ const drain = async (source: AsyncIterable<unknown>): Promise<void> => {
 
 const incoming = (
   body: Uint8Array,
-  rawHeaders: readonly string[] = ["content-type", "application/json"],
+  rawHeaders: readonly string[] = [
+    "content-type", "application/json", "content-length", String(body.byteLength),
+  ],
 ): IncomingMessage => Object.assign(Readable.from([body]), {
   complete: true,
   headers: { "content-type": "application/json" },
@@ -115,6 +121,11 @@ const responseFactory = (response: IncomingMessage): ((options: RequestOptions) 
     destroy() {events.emit("error", new Error("synthetic close"));},
     end() {queueMicrotask(() => {events.emit("response", response);});},
   }) as unknown as ClientRequest;
+};
+
+const syntheticPeerConnector = async () => {
+  const socket = new Socket();
+  return { release: async () => {socket.destroy();}, socket };
 };
 
 interface MutationPlan {
@@ -166,18 +177,26 @@ const syntheticDaemon = (): SyntheticDaemon => {
     const value: Record<string, unknown> = {
       AppArmorProfile: "agent-runtime-contained-turn-v1",
       Config: {
+        AttachStderr: body.AttachStderr,
+        AttachStdin: body.AttachStdin,
+        AttachStdout: body.AttachStdout,
         Cmd: body.Cmd,
         Entrypoint: body.Entrypoint,
         Env: body.Env,
         Image: IMAGE,
         Labels: body.Labels,
+        NetworkDisabled: body.NetworkDisabled,
+        OpenStdin: body.OpenStdin,
+        StdinOnce: body.StdinOnce,
+        StopSignal: body.StopSignal,
+        Tty: body.Tty,
         User: "65532:65532",
         WorkingDir: "/workspace",
       },
       HostConfig: {
         AutoRemove: false,
         CapDrop: ["ALL"],
-        CgroupParent: "system.slice/agent-runtime.slice",
+        CgroupParent: host?.CgroupParent,
         CgroupnsMode: "private",
         CpuPeriod: 100_000,
         Init: true,
@@ -216,7 +235,9 @@ const syntheticDaemon = (): SyntheticDaemon => {
         ExitCode: state.terminal ? 0 : 0,
         FinishedAt: state.terminal ? "2026-01-01T00:00:01Z" : "0001-01-01T00:00:00Z",
         OOMKilled: false,
+        Paused: false,
         Pid: state.running ? 4242 : 0,
+        Restarting: false,
         Running: state.running,
         StartedAt: state.running || state.terminal ? "2026-01-01T00:00:00Z" : "0001-01-01T00:00:00Z",
         Status: state.running ? "running" : state.terminal ? "exited" : "created",
@@ -348,6 +369,56 @@ test("Node adapter emits the closed schema and completes lifecycle only by exact
     .every(route => route.includes(CONTAINER)));
 });
 
+test("API v1.47 decoders accept the retained redacted Docker Engine 29.6.1 fixture", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const fixtureUrl = new URL("./fixtures/docker-engine-api-v1.47-engine-29.6.1-redacted.json", import.meta.url);
+  const fixtureSource = (await readFile(fixtureUrl, "utf8"))
+    .replaceAll("__WORKSPACE_SOURCE__", join(root, "workspaces", "operation"))
+    .replaceAll("__PRIVATE_SOURCE__", join(root, "private", "operation"));
+  const fixture = JSON.parse(fixtureSource) as { readonly info: unknown; readonly inspect: unknown };
+  let present = false;
+  const client = {
+    async buffered(request: { readonly method: string; readonly path: string }) {
+      if (request.path === "/v1.47/info") {return jsonResponse(200, fixture.info);}
+      if (request.method === "POST" && request.path.startsWith("/v1.47/containers/create?name=")) {
+        present = true;
+        return jsonResponse(201, { Id: CONTAINER, Warnings: [] });
+      }
+      if (request.method === "GET" && request.path.endsWith("/json") && present) {
+        return jsonResponse(200, fixture.inspect);
+      }
+      return jsonResponse(404, { message: "not found" });
+    },
+    async endpointIdentity() {
+      return {
+        canonicalSocketPath: "/policy/docker.sock",
+        daemonBootGenerationSha256: DAEMON_BOOT,
+        hostBootGenerationSha256: HOST_BOOT,
+      };
+    },
+    async stream() {throw new DockerEngineError("protocol-violation");},
+  };
+  const engine = new NodeUnixSocketDockerEngine({ client, policy: policy(root) });
+  const authority = await engine.create(createInput(root), call());
+  assert.equal(authority.containerId, CONTAINER);
+  assert.equal((await engine.inspect(authority, call())).existence, "present");
+});
+
+test("create environment keys use locale-independent byte ordering", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  const orderedPolicy = { ...policy(root), allowedEnvironmentKeys: ["Z_KEY", "_A_KEY"] };
+  const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: orderedPolicy });
+  await engine.create({
+    ...createInput(root),
+    environment: { _A_KEY: "second", Z_KEY: "first" },
+  }, call());
+  const request = daemon.bodies[0] as { readonly Env: readonly string[] };
+  assert.deepEqual(request.Env.slice(-2), ["Z_KEY=first", "_A_KEY=second"]);
+});
+
 test("strict JSON and closed decoders reject duplicate keys, unknown fields, and primitive coercion", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
@@ -384,20 +455,44 @@ test("strict JSON and closed decoders reject duplicate keys, unknown fields, and
   await assert.rejects(engine.inspect(authority, call()), { code: "malformed-response" });
 });
 
+test("public boundaries reject proxies, inherited fields, and accessors before deriving a request path", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
+  const authority = await engine.create(createInput(root), call());
+  const routeCount = daemon.routes.length;
+  await assert.rejects(engine.start(new Proxy(authority, {}), call()), { code: "invalid-authority" });
+  assert.equal(daemon.routes.length, routeCount);
+
+  const accessor = { ...authority } as Record<string, unknown>;
+  Object.defineProperty(accessor, "containerId", {
+    enumerable: true,
+    get() {throw new Error("secret accessor diagnostic");},
+  });
+  await assert.rejects(engine.kill(accessor as unknown as typeof authority, call()), error =>
+    error instanceof DockerEngineError && error.code === "invalid-authority" &&
+    !error.message.includes("secret accessor diagnostic"));
+  assert.equal(daemon.routes.length, routeCount);
+
+  const inherited = Object.create(authority) as typeof authority;
+  await assert.rejects(engine.remove(inherited, call()), { code: "invalid-authority" });
+  assert.equal(daemon.routes.length, routeCount);
+
+  const hostilePolicy = { ...policy(root) };
+  Object.defineProperty(hostilePolicy, "socketPath", {
+    enumerable: true,
+    get() {throw new Error("secret policy accessor diagnostic");},
+  });
+  assert.throws(() => new NodeUnixSocketDockerEngine({ client: daemon.client, policy: hostilePolicy }), error =>
+    error instanceof DockerEngineError && error.code === "invalid-create-request" &&
+    !error.message.includes("secret policy accessor diagnostic"));
+});
+
 test("lost create reconciliation refuses every policy-adjacent foreign specification", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
-  const transforms: Array<(value: Record<string, unknown>) => void> = [
-    value => {value.Name = `/ar-turn-${"9".repeat(64)}`;},
-    value => {const config = value.Config as Record<string, unknown>; config.Cmd = ["serve", "--foreign"];},
-    value => {const config = value.Config as Record<string, unknown>; config.Entrypoint = ["/foreign/provider"];},
-    value => {const config = value.Config as Record<string, unknown>; config.Env = ["HOME=/agent-private/home", "PATH=/usr/local/bin:/usr/bin:/bin", "TMPDIR=/tmp", "AR_OPERATION=foreign"];},
-    value => {const config = value.Config as Record<string, unknown>; config.WorkingDir = "/agent-private";},
-    value => {const config = value.Config as Record<string, unknown>; config.Image = `registry.invalid/foreign@sha256:${"f".repeat(64)}`;},
-    value => {const config = value.Config as Record<string, unknown>; const labels = config.Labels as Record<string, unknown>; labels["com.agent-runtime.launch-fingerprint-sha256"] = "f".repeat(64);},
-    value => {const host = value.HostConfig as Record<string, unknown>; const mounts = host.Mounts as Array<Record<string, unknown>>; mounts[0] = { ...mounts[0], Source: join(root, "workspaces", "foreign") };},
-    value => {const mounts = value.Mounts as Array<Record<string, unknown>>; mounts[1] = { ...mounts[1], Source: join(root, "private", "foreign") };},
-  ];
+  const transforms = createSpecificationMutations(root);
   await mkdir(join(root, "workspaces", "foreign"));
   await mkdir(join(root, "private", "foreign"));
   for (const [index, transform] of transforms.entries()) {
@@ -436,6 +531,8 @@ test("ambiguous and 304 mutation acknowledgements require exact postconditions a
   const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
   const authority = await engine.create(createInput(root), call());
   daemon.mutationPlan = { body: { Unexpected: true }, effect: true, statusCode: 204 };
+  await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
+  daemon.mutationPlan = { effect: true, statusCode: 304 };
   await engine.start(authority, call());
   daemon.mutationPlan = { effect: false, statusCode: 304 };
   await assert.rejects(engine.stop(authority, call()), { code: "mutation-acknowledgement-unknown" });
@@ -467,6 +564,32 @@ test("log EOF is incomplete while running and wait requires an exact terminal ob
   assert.equal((await engine.wait(authority, call())).existence, "present");
 });
 
+test("inspection state decoding enforces bounded values, Docker timestamps, and the status truth table", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const transforms: Array<(state: Record<string, unknown>) => void> = [
+    state => {state.Pid = -1;},
+    state => {state.ExitCode = 256;},
+    state => {state.StartedAt = "not-a-docker-timestamp";},
+    state => {state.FinishedAt = "2026-02-30T00:00:00Z";},
+    state => {state.Status = "running"; state.Running = false;},
+    state => {state.Status = "running"; state.Running = true; state.Pid = 0; state.StartedAt = "2026-01-01T00:00:00Z";},
+    state => {state.Status = "paused"; state.Running = true; state.Paused = false; state.Pid = 42; state.StartedAt = "2026-01-01T00:00:00Z";},
+    state => {state.Status = "exited"; state.Dead = false; state.Pid = 42; state.StartedAt = "2026-01-01T00:00:00Z"; state.FinishedAt = "2026-01-01T00:00:01Z";},
+    state => {state.Status = "dead"; state.Dead = false; state.StartedAt = "2026-01-01T00:00:00Z"; state.FinishedAt = "2026-01-01T00:00:01Z";},
+    state => {state.Status = "exited"; state.StartedAt = "2026-01-01T00:00:02Z"; state.FinishedAt = "2026-01-01T00:00:01Z";},
+  ];
+  for (const [index, transform] of transforms.entries()) {
+    const daemon = syntheticDaemon();
+    daemon.inspectTransform = value => {transform(value.State as Record<string, unknown>);};
+    const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
+    await assert.rejects(engine.create(
+      createInput(root, createHash("sha256").update(`state-${index}`).digest("hex")),
+      call(),
+    ), { code: "malformed-response" });
+  }
+});
+
 test("Unix transport fails closed on non-socket, symlink, owner/mode drift, inode replacement, and duplicate headers", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
@@ -486,6 +609,8 @@ test("Unix transport fails closed on non-socket, symlink, owner/mode drift, inod
     ctimeNs: 3n,
     daemonBootGeneration: "pid=17;start=300;socket=400",
     daemonCustodyToken: "pid-file-custody-v1",
+    daemonPid: 17,
+    daemonStartTicks: "300",
     device: 1n,
     gid: 42n,
     hostBootId: "12345678-1234-4123-8123-123456789abc",
@@ -534,13 +659,86 @@ test("Unix transport fails closed on non-socket, symlink, owner/mode drift, inod
   const duplicateHeaders = new BoundedUnixHttpClient(
     endpointPolicy,
     responseFactory(incoming(Buffer.from("{}"), [
-      "Content-Type", "application/json", "content-type", "application/json",
+      "Content-Type", "application/json", "content-type", "application/json", "Content-Length", "2",
     ])),
     async () => observed,
+    syntheticPeerConnector,
   );
   await assert.rejects(duplicateHeaders.buffered({ call: call(), method: "GET", path: "/fixed" }), {
     code: "protocol-violation",
   });
+  const framedClient = (body: Uint8Array, headers: readonly string[]) => new BoundedUnixHttpClient(
+    endpointPolicy,
+    responseFactory(incoming(body, headers)),
+    async () => observed,
+    syntheticPeerConnector,
+  );
+  await assert.rejects(framedClient(Buffer.from("{}"), [
+    "Content-Type", "application/json",
+  ]).buffered({ call: call(), method: "GET", path: "/fixed" }), { code: "protocol-violation" });
+  await assert.rejects(framedClient(Buffer.from("{}"), [
+    "Content-Type", "application/json", "Transfer-Encoding", "gzip",
+  ]).buffered({ call: call(), method: "GET", path: "/fixed" }), { code: "protocol-violation" });
+  await assert.rejects(framedClient(Buffer.from("{}"), [
+    "Content-Type", "application/json", "Content-Length", "2", "Transfer-Encoding", "chunked",
+  ]).buffered({ call: call(), method: "GET", path: "/fixed" }), { code: "protocol-violation" });
+  await assert.rejects(framedClient(Buffer.from("{}"), [
+    "Content-Type", "application/json", "Content-Length", "3",
+  ]).buffered({ call: call(), method: "GET", path: "/fixed" }), { code: "protocol-violation" });
+  assert.equal((await framedClient(Buffer.from("{}"), [
+    "Content-Type", "application/json", "Transfer-Encoding", "chunked",
+  ]).buffered({ call: call(), method: "GET", path: "/fixed" })).body.byteLength, 2);
+});
+
+test("Unix transport holds a pinned endpoint and authenticates the daemon generation before request bytes", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const socketPath = join(root, "authenticated.sock");
+  const events: string[] = [];
+  const observation: DockerEndpointObservation = {
+    canonicalSocketPath: socketPath,
+    ctimeNs: 3n,
+    daemonBootGeneration: "pid=17;start=300;socket=400",
+    daemonCustodyToken: "pid-file-custody-v1",
+    daemonPid: 17,
+    daemonStartTicks: "300",
+    device: 1n,
+    gid: 42n,
+    hostBootId: "12345678-1234-4123-8123-123456789abc",
+    inode: 2n,
+    mode: 0o600,
+    socket: true,
+    symbolicLink: false,
+    uid: 41n,
+  };
+  const response = incoming(Buffer.from("{}"));
+  const requestFactory = (options: RequestOptions): ClientRequest => {
+    events.push("request-created");
+    return responseFactory(response)(options);
+  };
+  const peerConnector = async (_policy: unknown, custody: { readonly token: string }, _call: unknown, observe: () => Promise<{ readonly token: string }>) => {
+    assert.equal((await observe()).token, custody.token);
+    events.push("peer-authenticated");
+    const socket = new Socket();
+    return { release: async () => {socket.destroy();}, socket };
+  };
+  const client = new BoundedUnixHttpClient({
+    daemonPidFileMode: 0o600,
+    daemonPidFileOwnerGid: 42,
+    daemonPidFileOwnerUid: 41,
+    daemonPidFilePath: join(root, "docker.pid"),
+    socketMode: 0o600,
+    socketOwnerGid: 42,
+    socketOwnerUid: 41,
+    socketPath,
+  }, requestFactory, async () => observation, peerConnector);
+  const result = await client.buffered({ call: call(), method: "GET", path: "/v1.47/info" });
+  assert.equal(result.statusCode, 200);
+  assert.deepEqual(events, ["peer-authenticated", "request-created"]);
+});
+
+test("production Unix peer binding reaches only the descriptor-held daemon socket", async t => {
+  await verifyProductionUnixPeerBinding(t, disposable, policy, call);
 });
 
 test("Fake parity covers canonical mounts, exact adoption, ambiguous effects, endpoint custody, and terminal logs", async t => {
@@ -552,12 +750,17 @@ test("Fake parity covers canonical mounts, exact adoption, ambiguous effects, en
   fake.enqueueCreateOutcome("malformed-response");
   await fake.create(createInput(root, "7".repeat(64)), call());
   await fake.start(authority, call());
+  let waitSettled = false;
+  const waiting = fake.wait(authority, call()).then(observation => {waitSettled = true; return observation;});
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal(waitSettled, false);
   fake.setLogs(authority, [{ bytes: Buffer.from("running-eof"), stream: "stdout" }]);
   await assert.rejects(drain(fake.logs(authority, call())), { code: "terminal-observation-unknown" });
   fake.enqueueMutationOutcome("stop", { acknowledgement: "304", effect: "not-applied" });
   await assert.rejects(fake.stop(authority, call()), { code: "mutation-acknowledgement-unknown" });
   fake.enqueueMutationOutcome("stop", { acknowledgement: "lost", effect: "applied" });
   await fake.stop(authority, call());
+  assert.equal((await waiting).existence, "present");
   fake.setLogs(authority, [{ bytes: Buffer.from("complete"), stream: "stdout" }]);
   await drain(fake.logs(authority, call()));
   await fake.wait(authority, call());
@@ -574,13 +777,18 @@ test("Fake parity covers canonical mounts, exact adoption, ambiguous effects, en
   await assert.rejects(endpointFake.create(createInput(root, "6".repeat(64)), call()), {
     code: "endpoint-custody-lost",
   });
+  const disconnectedCreate = new FakeDockerEngine(policy(root));
+  disconnectedCreate.enqueueCreateOutcome("daemon-disconnect");
+  await assert.rejects(disconnectedCreate.create(createInput(root, "3".repeat(64)), call()), {
+    code: "create-acknowledgement-unknown",
+  });
   assert.ok(DockerEngineError.prototype instanceof Error);
 });
 
 test("multiplex parser preserves frames and refuses malformed, oversized, and truncated bytes", async () => {
   const valid = Buffer.concat([multiplex(1, Buffer.from("a")), multiplex(2, Buffer.from("bc"))]);
   const observed: DockerLogFrame[] = [];
-  for await (const frame of parseDockerMultiplexedStream(chunks(valid), 8, 16)) {observed.push(frame);}
+  for await (const frame of parseDockerMultiplexedStream(chunks(valid), 8, 32)) {observed.push(frame);}
   assert.deepEqual(observed.map(frame => [frame.stream, Buffer.from(frame.bytes).toString()]), [
     ["stdout", "a"], ["stderr", "bc"],
   ]);
@@ -589,6 +797,13 @@ test("multiplex parser preserves frames and refuses malformed, oversized, and tr
   });
   await assert.rejects(drain(parseDockerMultiplexedStream(chunks(multiplex(1, Buffer.alloc(9))), 8, 16)), {
     code: "stream-frame-too-large",
+  });
+  await assert.rejects(drain(parseDockerMultiplexedStream(chunks(multiplex(1, Buffer.from("x"))), 8, 8)), {
+    code: "stream-too-large",
+  });
+  const emptyFrames = Buffer.concat([multiplex(1, Buffer.alloc(0)), multiplex(1, Buffer.alloc(0)), multiplex(2, Buffer.alloc(0))]);
+  await assert.rejects(drain(parseDockerMultiplexedStream(chunks(emptyFrames), 8, 64, 2)), {
+    code: "stream-too-large",
   });
   const malformed = valid.slice();
   malformed[1] = 1;
