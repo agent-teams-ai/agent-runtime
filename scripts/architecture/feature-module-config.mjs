@@ -109,27 +109,45 @@ const containedPath = (root, path) => {
   return candidate === "" || candidate !== ".." && !candidate.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(candidate);
 };
 
-const externalPresetConfig = async (path, packageRoot, active = new Set(), budget = { bytes: 0, files: 0 }) => {
+const externalPresetPath = async (path, packageRoot, active) => {
   const canonicalPath = await realpath(path);
   if (!containedPath(packageRoot, canonicalPath) || active.has(canonicalPath)) {throw new Error("unsupported preset path");}
+  return canonicalPath;
+};
+
+const consumeExternalPresetBudget = async (canonicalPath, active, budget) => {
   const metadata = await stat(canonicalPath);
   if (active.size >= CHECKER_LIMITS.traversalDepth || budget.files >= CHECKER_LIMITS.configFiles
     || metadata.size > CHECKER_LIMITS.sourceFileBytes || budget.bytes + metadata.size > CHECKER_LIMITS.configBytes) {
     throw new Error("preset configuration limit exceeded");
   }
   budget.files += 1; budget.bytes += metadata.size;
-  active.add(canonicalPath);
+};
+
+const externalPresetParents = async (canonicalPath) => {
   const config = JSON.parse(await readFile(canonicalPath, "utf8"));
   if (!config || typeof config !== "object" || Array.isArray(config)
     || config.compilerOptions?.baseUrl !== undefined || config.compilerOptions?.paths !== undefined) {
     throw new Error("unsupported preset configuration");
   }
-  const parents = Array.isArray(config.extends) ? config.extends : config.extends === undefined ? [] : [config.extends];
+  return Array.isArray(config.extends) ? config.extends : config.extends === undefined ? [] : [config.extends];
+};
+
+const inspectExternalPresetParents = async (parents, canonicalPath, packageRoot, active, budget) => {
   for (const parent of parents) {
     if (typeof parent !== "string" || !(parent.startsWith("./") || parent.startsWith("../"))) {throw new Error("unsupported preset extends");}
     await externalPresetConfig(resolve(dirname(canonicalPath), parent), packageRoot, active, budget);
   }
-  active.delete(canonicalPath);
+};
+
+const externalPresetConfig = async (path, packageRoot, active = new Set(), budget = { bytes: 0, files: 0 }) => {
+  const canonicalPath = await externalPresetPath(path, packageRoot, active);
+  await consumeExternalPresetBudget(canonicalPath, active, budget);
+  active.add(canonicalPath);
+  try {
+    const parents = await externalPresetParents(canonicalPath);
+    await inspectExternalPresetParents(parents, canonicalPath, packageRoot, active, budget);
+  } finally {active.delete(canonicalPath);}
 };
 
 const inspectFoundationPreset = async (context, configPath) => {
