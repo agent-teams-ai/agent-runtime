@@ -8,7 +8,10 @@
         "docs/architecture/readiness.md"
       ],
       "adrRefs": [
-        "docs/decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md"
+        "docs/decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md",
+        "docs/decisions/0009-contained-turn-private-access-and-host-shutdown-boundary.md",
+        "docs/decisions/0010-contained-agent-turn-v1-operation-authority.md",
+        "docs/decisions/0012-provider-access-authority-in-contained-turn-composition.md"
       ],
       "schemaPaths": [
         "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/schema.json",
@@ -18,6 +21,8 @@
         { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/manifest.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
         { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/catalog.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
         { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cross-axis.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-disposition.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
+        { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
         { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/01-output-terminal-order.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
         { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/02-dispatch-cutoff-race.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },
         { "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/cases/03-requirement-closure-race.json", "schemaId": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle-authority.schema.json" },

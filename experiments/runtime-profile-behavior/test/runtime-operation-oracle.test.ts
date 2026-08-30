@@ -63,6 +63,19 @@ const assertExecutableEvidenceBoundary = (adoption: string, readiness: string): 
   }
 };
 
+const collectReferences = (value: unknown, pattern: RegExp): string[] => {
+  if (typeof value === "string") {
+    return pattern.test(value) ? [value] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => collectReferences(entry, pattern));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).flatMap((entry) => collectReferences(entry, pattern));
+  }
+  return [];
+};
+
 const withSpecificationCopy = async (
   mutate: (temporarySpecificationRoot: string) => Promise<void>,
   verify: (temporaryRepositoryRoot: string) => Promise<void>,
@@ -378,27 +391,70 @@ test("manifest is the sole ordered case membership authority", async () => {
   );
 });
 
-test("Foundation catalog closes over the manifest and every referenced case part", async () => {
+test("Foundation catalog follows every manifest document reference, case fragment, and ADR", async () => {
   const { manifest } = await loadRuntimeOperationOracleAuthority(repositoryRoot);
-  const shardedCase = JSON.parse(await readFile(
-    join(specificationRoot, "cases/28-binary-revision-semantic-retention.json"),
-    "utf8",
-  )) as { exampleFragments: string[] };
+  const directReferences = collectReferences(manifest, /\.json$/u);
+  const directDocuments = await Promise.all(directReferences.map(async (path) => JSON.parse(
+    await readFile(join(specificationRoot, path), "utf8"),
+  ) as Record<string, unknown>));
+  const caseFragmentReferences = directDocuments.flatMap((document) => {
+    if (document.exampleFragments === undefined) {
+      return [];
+    }
+    assert.ok(
+      Array.isArray(document.exampleFragments) &&
+        document.exampleFragments.every((path) => typeof path === "string" && path.endsWith(".json")),
+      "exampleFragments must contain only JSON document references",
+    );
+    return document.exampleFragments as string[];
+  });
   const foundationCatalog = JSON.parse(await readFile(
     join(repositoryRoot, "architecture/specifications/catalog.json"),
     "utf8",
-  )) as { specifications: { documents: { path: string }[] }[] };
-  const declared = foundationCatalog.specifications[0]!.documents
+  )) as {
+    specifications: {
+      id: string;
+      adrRefs: string[];
+      documents: { path: string }[];
+    }[];
+  };
+  const specification = foundationCatalog.specifications.find(({ id }) => id === "runtime-operation-oracle");
+  assert.ok(specification);
+  const declared = specification.documents
     .map(({ path }) => path.replace(`${specificationRelative}/`, ""))
     .toSorted();
   const expected = [
     "manifest.json",
-    manifest.catalog,
-    manifest.crossAxis,
-    ...manifest.cases.map(({ path }) => path),
-    ...shardedCase.exampleFragments,
+    ...directReferences,
+    ...caseFragmentReferences,
   ].toSorted();
   assert.deepEqual(declared, expected);
+
+  const discoveredAdrs = new Set(collectReferences(
+    [manifest, ...directDocuments],
+    /^ADR-\d{4}$/u,
+  ));
+  const assertExactAdrClosure = (adrRefs: string[]): void => {
+    const declaredAdrs = new Set(adrRefs.map((path) => {
+      const match = /^docs\/decisions\/(\d{4})-/u.exec(path);
+      assert.ok(match, `ADR reference does not use a decision path: ${path}`);
+      return `ADR-${match[1]}`;
+    }));
+    assert.deepEqual(
+      [...declaredAdrs].toSorted(),
+      [...discoveredAdrs].toSorted(),
+      "Foundation catalog ADR references must exactly match manifest and direct-document authority",
+    );
+  };
+
+  assertExactAdrClosure(specification.adrRefs);
+  assert.throws(
+    () => assertExactAdrClosure([
+      ...specification.adrRefs,
+      "docs/decisions/9999-invented-authority.md",
+    ]),
+    /must exactly match manifest and direct-document authority/u,
+  );
 });
 
 test("Foundation documentation denies production runtime binding and qualification", async () => {
