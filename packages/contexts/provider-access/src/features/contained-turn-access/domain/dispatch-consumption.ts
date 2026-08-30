@@ -1,3 +1,5 @@
+import { types } from "node:util";
+
 export type DispatchProvider = "claude" | "codex";
 export type DispatchDisposition = "abandoned_without_claim" | "claim_committed";
 export interface DispatchScopeValue { readonly projectId: string; readonly scopeDigest: string; readonly tenantId: string }
@@ -41,6 +43,7 @@ export interface DispatchPrevention {
 export type DispatchConsumeOutcome =
   | { readonly kind: "conflict"; readonly reason: "grant_request_digest_conflict" }
   | { readonly kind: "consumed"; readonly receipt: DispatchConsumedReceipt }
+  | { readonly kind: "invalid"; readonly reason: "invalid_request" }
   | { readonly kind: "indeterminate" } | { readonly kind: "not_found" }
   | { readonly kind: "prevented"; readonly prevention: DispatchPrevention };
 export interface DispatchSettlementReceipt {
@@ -49,50 +52,92 @@ export interface DispatchSettlementReceipt {
 }
 export type DispatchSettlementOutcome =
   | { readonly kind: "conflict"; readonly reason: "settlement_request_conflict" }
+  | { readonly kind: "invalid"; readonly reason: "invalid_request" }
   | { readonly kind: "indeterminate" } | { readonly kind: "not_found" }
   | { readonly kind: "settled"; readonly receipt: DispatchSettlementReceipt };
 
-const primitive = (name: string, value: unknown): string => {
-  if (typeof value !== "string" || value.length === 0 || value.length > 4_096 || value.includes("\u0000")) {
-    throw new TypeError(`${name} must be a bounded primitive string`);
+const TOKEN = /^[\p{L}\p{N}._:@+-]+$/u;
+const DIGEST = /^[\p{L}\p{N}._:+-]+$/u;
+const primitive = (name: string, value: unknown, digest = false): string => {
+  if (typeof value !== "string" || value.length === 0 || value.length > 512 || !(digest ? DIGEST : TOKEN).test(value)) {
+    throw new TypeError(`${name} must be a bounded primitive token`);
   }
   return value;
 };
 const positive = (name: string, value: unknown): number => {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new TypeError(`${name} must be a positive safe integer`);
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {throw new TypeError(`${name} must be a positive safe integer`);}
   return value;
 };
-export const snapshotDispatchScope = (value: DispatchScopeValue): DispatchScopeValue => Object.freeze({
-  projectId: primitive("projectId", value.projectId), scopeDigest: primitive("scopeDigest", value.scopeDigest),
-  tenantId: primitive("tenantId", value.tenantId),
-});
-export const snapshotDispatchBindingHead = (value: DispatchBindingHead): DispatchBindingHead => {
-  if (value.provider !== "claude" && value.provider !== "codex") throw new TypeError("provider is invalid");
-  if (value.availability !== "available" && value.availability !== "unavailable") throw new TypeError("availability is invalid");
-  if (value.revocation !== "active" && value.revocation !== "revoked") throw new TypeError("revocation is invalid");
-  if (value.claimBeforeControlTime > value.expiresAtControlTime) throw new TypeError("claim deadline cannot exceed expiry");
+const record = (name: string, value: unknown, keys: readonly string[]): Record<string, unknown> => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || types.isProxy(value)) {throw new TypeError(`${name} must be a data record`);}
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  if (prototype !== Object.prototype && prototype !== null) {throw new TypeError(`${name} must be a data record`);}
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Reflect.ownKeys(value).some(key => typeof key !== "string") || Object.keys(descriptors).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {
+    throw new TypeError(`${name} has an invalid shape`);
+  }
+  for (const descriptor of Object.values(descriptors)) {
+    if (!("value" in descriptor)) {throw new TypeError(`${name} cannot contain accessors`);}
+  }
+  return Object.fromEntries(keys.map(key => [key, descriptors[key]?.value]));
+};
+export const snapshotDispatchScope = (value: DispatchScopeValue): DispatchScopeValue => {
+  const data = record("scope", value, ["projectId", "scopeDigest", "tenantId"]);
   return Object.freeze({
-    acceptedAuthorityDigest: primitive("acceptedAuthorityDigest", value.acceptedAuthorityDigest),
-    accessRef: primitive("accessRef", value.accessRef), authorityHeadDigest: primitive("authorityHeadDigest", value.authorityHeadDigest),
-    availability: value.availability, bindingDigest: primitive("bindingDigest", value.bindingDigest),
-    bindingRevision: positive("bindingRevision", value.bindingRevision),
-    claimBeforeControlTime: positive("claimBeforeControlTime", value.claimBeforeControlTime),
-    credentialBindingDigest: primitive("credentialBindingDigest", value.credentialBindingDigest),
-    credentialBindingRef: primitive("credentialBindingRef", value.credentialBindingRef),
-    credentialGeneration: positive("credentialGeneration", value.credentialGeneration),
-    opaqueOwnerEvidenceRef: primitive("opaqueOwnerEvidenceRef", value.opaqueOwnerEvidenceRef), provider: value.provider,
-    providerAccountRef: primitive("providerAccountRef", value.providerAccountRef),
-    providerRouteRef: primitive("providerRouteRef", value.providerRouteRef), revocation: value.revocation,
-    expiresAtControlTime: positive("expiresAtControlTime", value.expiresAtControlTime),
-    ...snapshotDispatchScope(value),
+    projectId: primitive("projectId", data.projectId), scopeDigest: primitive("scopeDigest", data.scopeDigest, true),
+    tenantId: primitive("tenantId", data.tenantId),
   });
 };
+export const snapshotDispatchBindingHead = (value: DispatchBindingHead): DispatchBindingHead => {
+  const data = record("binding head", value, [
+    "acceptedAuthorityDigest", "accessRef", "authorityHeadDigest", "availability", "bindingDigest", "bindingRevision",
+    "claimBeforeControlTime", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "expiresAtControlTime",
+    "opaqueOwnerEvidenceRef", "projectId", "provider", "providerAccountRef", "providerRouteRef", "revocation", "scopeDigest", "tenantId",
+  ]);
+  if (data.provider !== "claude" && data.provider !== "codex") {throw new TypeError("provider is invalid");}
+  if (data.availability !== "available" && data.availability !== "unavailable") {throw new TypeError("availability is invalid");}
+  if (data.revocation !== "active" && data.revocation !== "revoked") {throw new TypeError("revocation is invalid");}
+  const claimBeforeControlTime = positive("claimBeforeControlTime", data.claimBeforeControlTime);
+  const expiresAtControlTime = positive("expiresAtControlTime", data.expiresAtControlTime);
+  if (claimBeforeControlTime > expiresAtControlTime) {throw new TypeError("claim deadline cannot exceed expiry");}
+  return Object.freeze({
+    acceptedAuthorityDigest: primitive("acceptedAuthorityDigest", data.acceptedAuthorityDigest, true),
+    accessRef: primitive("accessRef", data.accessRef), authorityHeadDigest: primitive("authorityHeadDigest", data.authorityHeadDigest, true),
+    availability: data.availability, bindingDigest: primitive("bindingDigest", data.bindingDigest, true),
+    bindingRevision: positive("bindingRevision", data.bindingRevision), claimBeforeControlTime,
+    credentialBindingDigest: primitive("credentialBindingDigest", data.credentialBindingDigest, true),
+    credentialBindingRef: primitive("credentialBindingRef", data.credentialBindingRef),
+    credentialGeneration: positive("credentialGeneration", data.credentialGeneration),
+    opaqueOwnerEvidenceRef: primitive("opaqueOwnerEvidenceRef", data.opaqueOwnerEvidenceRef), provider: data.provider,
+    providerAccountRef: primitive("providerAccountRef", data.providerAccountRef),
+    providerRouteRef: primitive("providerRouteRef", data.providerRouteRef), revocation: data.revocation, expiresAtControlTime,
+    ...snapshotDispatchScope({ projectId: data.projectId, scopeDigest: data.scopeDigest, tenantId: data.tenantId } as DispatchScopeValue),
+  });
+};
+export const snapshotDispatchExpectation = (value: DispatchExpectationValue): DispatchExpectationValue => {
+  const data = record("binding expectation", value, [
+    "acceptedAuthorityDigest", "accessRef", "authorityHeadDigest", "bindingDigest", "bindingRevision",
+    "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "providerAccountRef", "providerRouteRef",
+  ]);
+  return Object.freeze({
+    acceptedAuthorityDigest: primitive("acceptedAuthorityDigest", data.acceptedAuthorityDigest, true),
+    accessRef: primitive("accessRef", data.accessRef), authorityHeadDigest: primitive("authorityHeadDigest", data.authorityHeadDigest, true),
+    bindingDigest: primitive("bindingDigest", data.bindingDigest, true), bindingRevision: positive("bindingRevision", data.bindingRevision),
+    credentialBindingDigest: primitive("credentialBindingDigest", data.credentialBindingDigest, true),
+    credentialBindingRef: primitive("credentialBindingRef", data.credentialBindingRef),
+    credentialGeneration: positive("credentialGeneration", data.credentialGeneration),
+    providerAccountRef: primitive("providerAccountRef", data.providerAccountRef), providerRouteRef: primitive("providerRouteRef", data.providerRouteRef),
+  });
+};
+export const snapshotDispatchDigest = (name: string, value: unknown): string => primitive(name, value, true);
+export const snapshotDispatchId = (name: string, value: unknown): string => primitive(name, value);
+export const snapshotDispatchControlTime = (value: unknown): number => positive("controlTime", value);
 export const canonicalJson = (value: unknown): string => {
-  if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (typeof value !== "object") throw new TypeError("canonical value is invalid");
-  const record = value as Readonly<Record<string, unknown>>;
-  return `{${Object.keys(record).toSorted().map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+  if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") {return JSON.stringify(value);}
+  if (Array.isArray(value)) {return `[${value.map(canonicalJson).join(",")}]`;}
+  if (typeof value !== "object") {throw new TypeError("canonical value is invalid");}
+  const object = value as Readonly<Record<string, unknown>>;
+  return `{${Object.keys(object).toSorted().map(key => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
 };
 export const requestDigestPayload = (command: Omit<DispatchConsumeCommand, "requestDigest">): string => canonicalJson(command);
 export const claimBindingDigestPayload = (command: DispatchConsumeCommand): string => canonicalJson({

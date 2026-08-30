@@ -35,6 +35,7 @@ export interface DispatchConsumptionPrevention {
 export type ConsumeForDispatchOutcome =
   | { readonly kind: "conflict"; readonly reason: "grant_request_digest_conflict" }
   | { readonly kind: "consumed"; readonly receipt: DispatchConsumptionReceipt }
+  | { readonly kind: "invalid"; readonly reason: "invalid_request" }
   | { readonly kind: "indeterminate" } | { readonly kind: "not_found" }
   | { readonly kind: "prevented"; readonly prevention: DispatchConsumptionPrevention };
 export interface ObserveDispatchConsumptionInput { readonly grantRequestId: string; readonly requestDigest: string; readonly scope: DispatchConsumptionScope }
@@ -49,6 +50,7 @@ export interface DispatchConsumptionSettlementReceipt {
 }
 export type SettleDispatchConsumptionOutcome =
   | { readonly kind: "conflict"; readonly reason: "settlement_request_conflict" }
+  | { readonly kind: "invalid"; readonly reason: "invalid_request" }
   | { readonly kind: "indeterminate" } | { readonly kind: "not_found" }
   | { readonly kind: "settled"; readonly receipt: DispatchConsumptionSettlementReceipt };
 /** Provider Access-owned V1 contract. No member issues, renews, releases, or reopens access. */

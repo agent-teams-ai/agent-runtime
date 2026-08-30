@@ -9,6 +9,11 @@ import {
 } from "../dist/composition.js";
 import { createContainedTurnDispatchConsumptionV1 } from "../dist/features/contained-turn-access/composition/dispatch-consumption-v1-factory.js";
 import { createSha256DispatchConsumptionDigest } from "../dist/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.js";
+import { createInMemoryDispatchConsumptionRepository } from "../dist/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
+import type {
+  DispatchConsumptionRepository, DispatchConsumptionTransaction, DispatchConsumptionTransactionSelector,
+} from "../dist/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.js";
+import { requestDigestPayload } from "../dist/features/contained-turn-access/domain/dispatch-consumption.js";
 
 const seed = (overrides: Partial<InMemoryDispatchBindingSeed> = {}): InMemoryDispatchBindingSeed => ({
   acceptedAuthorityDigest: "authority:accepted:1", accessRef: "access:1", authorityHeadDigest: "authority:head:1",
@@ -39,6 +44,24 @@ const inputFor = async (head = seed(), overrides: Parameters<typeof unsignedInpu
   return { ...unsigned, ...await createDispatchConsumptionRequestDigests(unsigned) };
 };
 
+const repositoryHarness = () => createInMemoryDispatchConsumptionRepository([{
+  ...seed(), availability: "available", revocation: "active",
+}], 100);
+
+const transactionBarrier = (base: DispatchConsumptionRepository) => {
+  let entered!: () => void;
+  let release!: () => void;
+  const enteredPromise = new Promise<void>(resolve => { entered = resolve; });
+  const releasePromise = new Promise<void>(resolve => { release = resolve; });
+  const repository: DispatchConsumptionRepository = {
+    observeGrantRequest: input => base.observeGrantRequest(input),
+    transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+      return base.transact(selector, async transaction => { entered(); await releasePromise; return work(transaction); });
+    },
+  };
+  return { entered: enteredPromise, release, repository };
+};
+
 test("atomically consumes the exact binding head and returns the closed V1 receipt", async () => {
   const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
   assert.deepEqual(Object.keys(harness.access).toSorted(), [
@@ -46,7 +69,7 @@ test("atomically consumes the exact binding head and returns the closed V1 recei
   ]);
   const outcome = await harness.access.consumeForDispatch(await inputFor());
   assert.equal(outcome.kind, "consumed");
-  if (outcome.kind !== "consumed") return;
+  if (outcome.kind !== "consumed") {return;}
   assert.equal(outcome.receipt.claimBeforeControlTime, 200);
   assert.equal(outcome.receipt.consumedAtControlTime, 100);
   assert.equal(outcome.receipt.authorityHeadDigestAtConsumption, "authority:head:1");
@@ -60,19 +83,81 @@ test("exact replay is byte-for-byte stable after owner revocation and expiry", a
   const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
   const input = await inputFor();
   const first = await harness.access.consumeForDispatch(input);
-  harness.control.replaceBindingHead(seed({ authorityHeadDigest: "authority:head:2", revocation: "revoked" }));
-  harness.control.advanceControlTime(500);
+  await harness.control.replaceBindingHead(seed({ authorityHeadDigest: "authority:head:2", revocation: "revoked" }));
+  await harness.control.advanceControlTime(500);
   const replay = await harness.access.consumeForDispatch(input);
   assert.equal(JSON.stringify(replay), JSON.stringify(first));
 });
 
-test("grant request ID reuse with another digest is a typed conflict", async () => {
+test("grant request ID reuse with another claimed digest is typed invalid", async () => {
   const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
   const input = await inputFor();
   assert.equal((await harness.access.consumeForDispatch(input)).kind, "consumed");
   assert.deepEqual(await harness.access.consumeForDispatch({ ...input, requestDigest: "sha256:different" }), {
-    kind: "conflict", reason: "grant_request_digest_conflict",
+    kind: "invalid", reason: "invalid_request",
   });
+});
+
+test("server-derived replay identity rejects changed semantics with a reused claimed digest", async () => {
+  const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
+  const input = await inputFor();
+  assert.equal((await harness.access.consumeForDispatch(input)).kind, "consumed");
+  for (const changed of [
+    { ...input, operationId: "operation:changed" }, { ...input, provider: "claude" as const },
+    { ...input, binding: { ...input.binding, providerRouteRef: "route:changed" } },
+  ]) {
+    assert.deepEqual(await harness.access.consumeForDispatch(changed), {
+      kind: "conflict", reason: "grant_request_digest_conflict",
+    });
+  }
+});
+
+test("public dispatch inputs reject aggregate tricks and snapshot mutable callers", async () => {
+  const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
+  const mutable = structuredClone(await inputFor()) as ConsumeForDispatchInput & {
+    binding: { providerRouteRef: string }; scope: { projectId: string };
+  };
+  const pending = harness.access.consumeForDispatch(mutable);
+  mutable.binding.providerRouteRef = "route:mutated";
+  mutable.scope.projectId = "project:mutated";
+  const outcome = await pending;
+  assert.equal(outcome.kind, "consumed");
+  if (outcome.kind === "consumed") {
+    assert.equal(outcome.receipt.providerRouteRef, "route:1");
+    assert.equal(outcome.receipt.scope.projectId, "project:1");
+    assert.ok(Object.isFrozen(outcome.receipt.scope));
+  }
+
+  const valid = await inputFor(seed(), { grantRequestId: "grant-request:invalid" });
+  const accessor = { ...valid } as Record<string, unknown>;
+  Object.defineProperty(accessor, "operationId", { enumerable: true, get: () => "operation:trap" });
+  for (const malformed of [
+    new Proxy(valid, {}), accessor, { ...valid, scope: [valid.scope] },
+    { ...valid, operationId: "../operation" }, { ...valid, operationId: "bad\u0001control" },
+    { ...valid, secret: "forbidden-extra-field" },
+  ]) {
+    assert.deepEqual(await harness.access.consumeForDispatch(malformed as ConsumeForDispatchInput), {
+      kind: "invalid", reason: "invalid_request",
+    });
+  }
+});
+
+test("observation, settlement, deadline, and numeric fields validate as bounded primitives", async () => {
+  const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
+  assert.deepEqual(await harness.access.observeDispatchConsumption({
+    grantRequestId: "grant-request:missing", requestDigest: "sha256:missing",
+    scope: { projectId: new String("project:1") as unknown as string, scopeDigest: "scope:digest:1", tenantId: "tenant:1" },
+  }), { kind: "invalid", reason: "invalid_request" });
+  assert.deepEqual(await harness.access.settleDispatchConsumption({
+    consumptionDigest: "sha256:missing", disposition: new String("claim_committed") as unknown as "claim_committed",
+    settlementRequestId: "settlement:invalid",
+  }), { kind: "invalid", reason: "invalid_request" });
+  assert.throws(() => createInMemoryContainedTurnDispatchConsumptionV1({
+    bindings: [seed({ bindingRevision: new Number(1) as unknown as number })], initialControlTime: 100,
+  }), TypeError);
+  assert.throws(() => createInMemoryContainedTurnDispatchConsumptionV1({
+    bindings: [seed({ claimBeforeControlTime: 301, expiresAtControlTime: 300 })], initialControlTime: 100,
+  }), TypeError);
 });
 
 test("scope drift and provider drift never fall back to another binding", async () => {
@@ -82,7 +167,7 @@ test("scope drift and provider drift never fall back to another binding", async 
   });
   const outcome = await harness.access.consumeForDispatch(wrongScope);
   assert.equal(outcome.kind, "prevented");
-  if (outcome.kind === "prevented") assert.equal(outcome.prevention.reason, "scope_mismatch");
+  if (outcome.kind === "prevented") {assert.equal(outcome.prevention.reason, "scope_mismatch");}
   const missing = await inputFor(seed(), {
     grantRequestId: "grant-request:2", scope: { projectId: "project:1", scopeDigest: "scope:other", tenantId: "tenant:1" },
   });
@@ -102,7 +187,7 @@ test("provider, account, route, revision, binding, generation, and authority dri
     const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed(drift)], initialControlTime: 100 });
     const outcome = await harness.access.consumeForDispatch(await inputFor());
     assert.equal(outcome.kind, "prevented");
-    if (outcome.kind === "prevented") assert.equal(outcome.prevention.reason, reason);
+    if (outcome.kind === "prevented") {assert.equal(outcome.prevention.reason, reason);}
   }
   const providerDrift = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed({ provider: "claude" })], initialControlTime: 100 });
   assert.equal((await providerDrift.access.consumeForDispatch(await inputFor())).kind, "not_found");
@@ -111,19 +196,27 @@ test("provider, account, route, revision, binding, generation, and authority dri
 test("revocation, availability, expiry, request digest, and claim binding prevent dispatch", async () => {
   const cases: readonly [InMemoryDispatchBindingSeed, number, Partial<ConsumeForDispatchInput>, string][] = [
     [seed({ revocation: "revoked" }), 100, {}, "revoked"], [seed({ availability: "unavailable" }), 100, {}, "unavailable"],
-    [seed(), 200, {}, "expired"], [seed(), 100, { requestDigest: "sha256:bad" }, "request_digest_mismatch"],
-    [seed(), 100, { claimBindingDigest: "sha256:bad" }, "claim_binding_mismatch"],
+    [seed(), 200, {}, "expired"],
   ];
   for (const [head, now, override, reason] of cases) {
     const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [head], initialControlTime: now });
     const outcome = await harness.access.consumeForDispatch({ ...await inputFor(), ...override });
     assert.equal(outcome.kind, "prevented");
-    if (outcome.kind === "prevented") assert.equal(outcome.prevention.reason, reason);
+    if (outcome.kind === "prevented") {assert.equal(outcome.prevention.reason, reason);}
   }
+  assert.deepEqual(await createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 })
+    .access.consumeForDispatch({ ...await inputFor(), requestDigest: "sha256:bad" }), { kind: "invalid", reason: "invalid_request" });
+  const badClaim = { ...await inputFor(), claimBindingDigest: "sha256:bad" };
+  const { requestDigest: _requestDigest, ...semantic } = badClaim;
+  const matchingRequestDigest = await createSha256DispatchConsumptionDigest().digest(requestDigestPayload(semantic));
+  const claimOutcome = await createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 })
+    .access.consumeForDispatch({ ...badClaim, requestDigest: matchingRequestDigest });
+  assert.equal(claimOutcome.kind, "prevented");
+  if (claimOutcome.kind === "prevented") {assert.equal(claimOutcome.prevention.reason, "claim_binding_mismatch");}
   const replayHarness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed({ revocation: "revoked" })], initialControlTime: 100 });
   const replayInput = await inputFor();
   const prevention = await replayHarness.access.consumeForDispatch(replayInput);
-  replayHarness.control.replaceBindingHead(seed({ revocation: "active" }));
+  await replayHarness.control.replaceBindingHead(seed({ revocation: "active" }));
   assert.equal(JSON.stringify(await replayHarness.access.consumeForDispatch(replayInput)), JSON.stringify(prevention));
 });
 
@@ -138,6 +231,63 @@ test("two concurrent consumers produce exactly one immutable consumption", async
   assert.deepEqual(outcomes.map(outcome => outcome.kind).toSorted(), ["consumed", "prevented"]);
   const prevention = outcomes.find(outcome => outcome.kind === "prevented");
   assert.equal(prevention?.kind === "prevented" ? prevention.prevention.reason : undefined, "already_consumed");
+});
+
+test("consume and revocation serialize in both barrier-controlled orders", async () => {
+  const consumeFirst = repositoryHarness();
+  const barrier = transactionBarrier(consumeFirst.repository);
+  const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: barrier.repository });
+  const consumption = access.consumeForDispatch(await inputFor());
+  await barrier.entered;
+  const revocation = consumeFirst.control.replaceBindingHead({ ...seed(), availability: "available", revocation: "revoked" });
+  barrier.release();
+  assert.equal((await consumption).kind, "consumed");
+  await revocation;
+
+  const revokeFirst = repositoryHarness();
+  await revokeFirst.control.replaceBindingHead({ ...seed(), availability: "available", revocation: "revoked" });
+  const revokedAccess = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: revokeFirst.repository });
+  const outcome = await revokedAccess.consumeForDispatch(await inputFor());
+  assert.equal(outcome.kind, "prevented");
+  if (outcome.kind === "prevented") {assert.equal(outcome.prevention.reason, "revoked");}
+});
+
+test("consume and head replacement serialize in both barrier-controlled orders", async () => {
+  const consumeFirst = repositoryHarness();
+  const barrier = transactionBarrier(consumeFirst.repository);
+  const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: barrier.repository });
+  const consumption = access.consumeForDispatch(await inputFor());
+  await barrier.entered;
+  const replacement = consumeFirst.control.replaceBindingHead({ ...seed({ authorityHeadDigest: "authority:head:2" }), availability: "available", revocation: "active" });
+  barrier.release();
+  assert.equal((await consumption).kind, "consumed");
+  await replacement;
+
+  const replaceFirst = repositoryHarness();
+  await replaceFirst.control.replaceBindingHead({ ...seed({ authorityHeadDigest: "authority:head:2" }), availability: "available", revocation: "active" });
+  const changedAccess = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: replaceFirst.repository });
+  const outcome = await changedAccess.consumeForDispatch(await inputFor());
+  assert.equal(outcome.kind, "prevented");
+  if (outcome.kind === "prevented") {assert.equal(outcome.prevention.reason, "authority_head_changed");}
+});
+
+test("consume and exact expiry boundary serialize in both barrier-controlled orders", async () => {
+  const consumeFirst = repositoryHarness();
+  const barrier = transactionBarrier(consumeFirst.repository);
+  const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: barrier.repository });
+  const consumption = access.consumeForDispatch(await inputFor());
+  await barrier.entered;
+  const expiry = consumeFirst.control.advanceControlTime(200);
+  barrier.release();
+  assert.equal((await consumption).kind, "consumed");
+  await expiry;
+
+  const expiryFirst = repositoryHarness();
+  await expiryFirst.control.advanceControlTime(200);
+  const expiredAccess = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: expiryFirst.repository });
+  const outcome = await expiredAccess.consumeForDispatch(await inputFor());
+  assert.equal(outcome.kind, "prevented");
+  if (outcome.kind === "prevented") {assert.equal(outcome.prevention.reason, "expired");}
 });
 
 test("observation recovers a consumption after acknowledgement loss", async () => {
@@ -157,9 +307,31 @@ test("observation recovers a consumption after acknowledgement loss", async () =
   }), { kind: "not_found" });
 });
 
+test("lost acknowledgement remains observable as the one immutable journal result", async () => {
+  const base = repositoryHarness();
+  const repository: DispatchConsumptionRepository = {
+    observeGrantRequest: input => base.repository.observeGrantRequest(input),
+    async transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+      await base.repository.transact(selector, work);
+      throw new Error("acknowledgement lost after commit");
+    },
+  };
+  const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository });
+  const input = await inputFor();
+  assert.deepEqual(await access.consumeForDispatch(input), { kind: "indeterminate" });
+  const observed = await access.observeDispatchConsumption({
+    grantRequestId: input.grantRequestId, requestDigest: input.requestDigest, scope: input.scope,
+  });
+  assert.equal(observed.kind, "consumed");
+  if (observed.kind === "consumed") {
+    assert.ok(Object.isFrozen(observed.receipt));
+    assert.equal(base.control.observeOwnerState({ provider: "codex", scopeDigest: "scope:digest:1" }), "consumed_pending");
+  }
+});
+
 test("owner unavailability is indeterminate and never grants dispatch", async () => {
   const access = createContainedTurnDispatchConsumptionV1({
-    clock: { now: () => 100 }, digest: createSha256DispatchConsumptionDigest(),
+    digest: createSha256DispatchConsumptionDigest(),
     repository: {
       async observeGrantRequest() { throw new Error("owner unavailable"); },
       async transact() { throw new Error("owner unavailable"); },
@@ -176,7 +348,7 @@ test("settlement replays exactly, conflicts on reuse, and cannot reopen consumed
   const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
   const consumed = await harness.access.consumeForDispatch(await inputFor());
   assert.equal(consumed.kind, "consumed");
-  if (consumed.kind !== "consumed") return;
+  if (consumed.kind !== "consumed") {return;}
   const settlement = { consumptionDigest: consumed.receipt.consumptionDigest, disposition: "abandoned_without_claim" as const, settlementRequestId: "settlement:1" };
   const first = await harness.access.settleDispatchConsumption(settlement);
   const replay = await harness.access.settleDispatchConsumption(settlement);
@@ -188,19 +360,19 @@ test("settlement replays exactly, conflicts on reuse, and cannot reopen consumed
   assert.deepEqual(await harness.access.settleDispatchConsumption({ ...settlement, settlementRequestId: "settlement:2" }), {
     kind: "conflict", reason: "settlement_request_conflict",
   });
-  harness.control.replaceBindingHead(seed({ bindingRevision: 2, bindingDigest: "binding:digest:2" }));
+  await harness.control.replaceBindingHead(seed({ bindingRevision: 2, bindingDigest: "binding:digest:2" }));
   const again = await harness.access.consumeForDispatch(await inputFor(seed({ bindingRevision: 2, bindingDigest: "binding:digest:2" }), {
     grantRequestId: "grant-request:2", operationId: "operation:2",
   }));
   assert.equal(again.kind, "prevented");
-  if (again.kind === "prevented") assert.equal(again.prevention.reason, "already_consumed");
+  if (again.kind === "prevented") {assert.equal(again.prevention.reason, "already_consumed");}
 });
 
 test("claim-committed settlement is terminal audit evidence", async () => {
   const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
   const consumed = await harness.access.consumeForDispatch(await inputFor());
   assert.equal(consumed.kind, "consumed");
-  if (consumed.kind !== "consumed") return;
+  if (consumed.kind !== "consumed") {return;}
   assert.equal((await harness.access.settleDispatchConsumption({
     consumptionDigest: consumed.receipt.consumptionDigest, disposition: "claim_committed", settlementRequestId: "settlement:claim",
   })).kind, "settled");

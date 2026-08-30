@@ -1,3 +1,5 @@
+import { types } from "node:util";
+
 import { createStaticProviderAccessBindingRepository } from "./features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.js";
 import { createContainedTurnProviderAccessFeature } from "./features/contained-turn-access/composition/feature-module-factory.js";
 import type {
@@ -11,8 +13,9 @@ import { createContainedTurnDispatchConsumptionV1 } from "./features/contained-t
 import { createInMemoryDispatchConsumptionRepository } from "./features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
 import { createSha256DispatchConsumptionDigest } from "./features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.js";
 import {
-  claimBindingDigestPayload, requestDigestPayload, type DispatchBindingHead, type DispatchConsumeCommand,
+  claimBindingDigestPayload, requestDigestPayload, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumeCommand,
 } from "./features/contained-turn-access/domain/dispatch-consumption.js";
+import { unsignedConsumeCommandFromContract } from "./features/contained-turn-access/contracts/dispatch-consumption-input.js";
 
 /** Non-secret authority seed for deterministic same-application composition and tests. */
 export interface StaticAvailableProviderAccessAuthority {
@@ -64,36 +67,62 @@ export interface InMemoryDispatchBindingSeed {
 export interface InMemoryDispatchConsumptionHarness {
   readonly access: ContainedTurnDispatchConsumptionV1;
   readonly control: Readonly<{
-    advanceControlTime(value: number): void;
+    advanceControlTime(value: number): Promise<void>;
     observeOwnerState(input: { readonly provider: ProviderAccessProvider; readonly scopeDigest: string }):
       "absent" | "consumed_pending" | "claim_committed" | "abandoned_without_claim" | undefined;
-    replaceBindingHead(seed: InMemoryDispatchBindingSeed): void;
+    replaceBindingHead(seed: InMemoryDispatchBindingSeed): Promise<void>;
   }>;
 }
 
-const seedToHead = (seed: InMemoryDispatchBindingSeed): DispatchBindingHead => ({
-  ...seed, availability: seed.availability ?? "available", revocation: seed.revocation ?? "active",
-});
+const SEED_KEYS = [
+  "acceptedAuthorityDigest", "accessRef", "authorityHeadDigest", "availability", "bindingDigest", "bindingRevision",
+  "claimBeforeControlTime", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "expiresAtControlTime",
+  "opaqueOwnerEvidenceRef", "projectId", "provider", "providerAccountRef", "providerRouteRef", "revocation", "scopeDigest", "tenantId",
+] as const;
+const seedToHead = (seed: InMemoryDispatchBindingSeed): DispatchBindingHead => {
+  if (seed === null || typeof seed !== "object" || Array.isArray(seed) || types.isProxy(seed)) {throw new TypeError("binding seed must be a data record");}
+  const descriptors = Object.getOwnPropertyDescriptors(seed);
+  const actual = Reflect.ownKeys(seed);
+  if (actual.some(key => typeof key !== "string") || actual.some(key => !SEED_KEYS.includes(key as typeof SEED_KEYS[number]))) {
+    throw new TypeError("binding seed has an invalid shape");
+  }
+  for (const key of SEED_KEYS) {
+    const descriptor = descriptors[key];
+    if (descriptor === undefined && key !== "availability" && key !== "revocation") {throw new TypeError("binding seed is incomplete");}
+    if (descriptor !== undefined && !("value" in descriptor)) {throw new TypeError("binding seed cannot contain accessors");}
+  }
+  const values = Object.fromEntries(SEED_KEYS.map(key => [key, descriptors[key]?.value])) as Record<typeof SEED_KEYS[number], unknown>;
+  values.availability ??= "available"; values.revocation ??= "active";
+  return snapshotDispatchBindingHead(values as unknown as DispatchBindingHead);
+};
 
 export const createInMemoryContainedTurnDispatchConsumptionV1 = (input: {
   readonly bindings: readonly InMemoryDispatchBindingSeed[];
   readonly initialControlTime: number;
 }): InMemoryDispatchConsumptionHarness => {
-  if (!Number.isSafeInteger(input.initialControlTime) || input.initialControlTime < 1) {
+  if (input === null || typeof input !== "object" || Array.isArray(input) || types.isProxy(input)) {throw new TypeError("harness input must be a data record");}
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  if (Reflect.ownKeys(input).some(key => typeof key !== "string") || Object.keys(descriptors).toSorted().join("\0") !== "bindings\0initialControlTime") {
+    throw new TypeError("harness input has an invalid shape");
+  }
+  if (!("value" in descriptors.bindings) || !("value" in descriptors.initialControlTime)) {throw new TypeError("harness input cannot contain accessors");}
+  const bindings = descriptors.bindings.value as unknown;
+  const initialControlTime = descriptors.initialControlTime.value as unknown;
+  if (!Array.isArray(bindings) || types.isProxy(bindings)) {throw new TypeError("bindings must be a primitive array");}
+  if (!Number.isSafeInteger(initialControlTime) || (initialControlTime as number) < 1) {
     throw new TypeError("initial control time must be a positive safe integer");
   }
-  let controlTime = input.initialControlTime;
-  const { control, repository } = createInMemoryDispatchConsumptionRepository(input.bindings.map(seedToHead));
+  const { control, repository } = createInMemoryDispatchConsumptionRepository(bindings.map(seedToHead), initialControlTime as number);
   const digest = createSha256DispatchConsumptionDigest();
   return Object.freeze({
-    access: createContainedTurnDispatchConsumptionV1({ clock: { now: () => controlTime }, digest, repository }),
+    access: createContainedTurnDispatchConsumptionV1({ digest, repository }),
     control: Object.freeze({
-      advanceControlTime(value: number) {
-        if (!Number.isSafeInteger(value) || value < controlTime) throw new TypeError("control time must advance monotonically");
-        controlTime = value;
+      async advanceControlTime(value: number) {
+        if (!Number.isSafeInteger(value) || value < 1) {throw new TypeError("control time must be a positive safe integer");}
+        await control.advanceControlTime(value);
       },
       observeOwnerState: control.observeOwnerState,
-      replaceBindingHead(seed: InMemoryDispatchBindingSeed) { control.replaceBindingHead(seedToHead(seed)); },
+      replaceBindingHead(seed: InMemoryDispatchBindingSeed) { return control.replaceBindingHead(seedToHead(seed)); },
     }),
   });
 };
@@ -103,7 +132,8 @@ export const createDispatchConsumptionRequestDigests = async (
   input: Omit<ConsumeForDispatchInput, "claimBindingDigest" | "requestDigest">,
 ): Promise<Readonly<{ claimBindingDigest: string; requestDigest: string }>> => {
   const digest = createSha256DispatchConsumptionDigest();
-  const command = { ...input, claimBindingDigest: "pending", requestDigest: "pending" } as DispatchConsumeCommand;
+  const unsignedInput = unsignedConsumeCommandFromContract(input);
+  const command = { ...unsignedInput, claimBindingDigest: "pending", requestDigest: "pending" } as DispatchConsumeCommand;
   const claimBindingDigest = await digest.digest(claimBindingDigestPayload(command));
   const { requestDigest: _requestDigest, ...unsigned } = { ...command, claimBindingDigest };
   return Object.freeze({ claimBindingDigest, requestDigest: await digest.digest(requestDigestPayload(unsigned)) });
