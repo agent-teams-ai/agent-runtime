@@ -133,9 +133,17 @@ export const recordContainedTurnPreparationCleanup = (
   if (candidate.cleanupEvidenceIds.length === 0 && candidate.custodyReleased &&
       candidate.providerAccessSettled && candidate.runtimeSecuritySettled) {
     return Object.freeze({
-      ...preparation,
+      attemptId: preparation.attemptId,
       cleanupPermitId: preparation.cleanupPermit.permitId,
+      custodyId: preparation.custodyId,
       kind: "cleanup_closed",
+      operationCutoffRevision: preparation.operationCutoffRevision,
+      operationId: preparation.operationId,
+      preparationToken: preparation.preparationToken,
+      preparedOperationRevision: preparation.preparedOperationRevision,
+      providerAccessGrantRequestId: preparation.providerAccessGrantRequestId,
+      runtimeSecurityGrantRequestId: preparation.runtimeSecurityGrantRequestId,
+      workspaceId: preparation.workspaceId,
     });
   }
   return Object.freeze(candidate);

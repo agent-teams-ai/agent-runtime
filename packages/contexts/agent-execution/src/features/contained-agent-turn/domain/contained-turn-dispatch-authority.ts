@@ -1,5 +1,5 @@
 import type { ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
-import { digestContainedTurnCanonicalValue } from "./contained-turn-codecs.js";
+import { digestContainedTurnCanonicalValue, parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import type {
   ContainedTurnAttemptId,
   ContainedTurnCustodyId,
@@ -11,7 +11,7 @@ import type {
   ContainedTurnPreparationToken,
   ContainedTurnWorkspaceId,
 } from "./contained-turn-identities.js";
-import type { ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
+import { containedTurnOperationCutoffRevision, type ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
 
 export const CONTAINED_TURN_DISPATCH_GRANT_OWNERS = Object.freeze([
@@ -95,13 +95,38 @@ export const validateContainedTurnConsumedGrantReceipts = (
     throw new TypeError("dispatch claim receipts must be ordered one per exact owner");
   }
   const expectedBinding = containedTurnDispatchClaimBindingDigest(subject);
-  for (const receipt of receipts) {
-    if (receipt.claimBindingDigest !== expectedBinding) {
+  const sanitize = <Owner extends ContainedTurnDispatchGrantOwner>(
+    receipt: ContainedTurnConsumedGrantReceipt<Owner>,
+  ): ContainedTurnConsumedGrantReceipt<Owner> => {
+    const claimBindingDigest = parseContainedTurnCanonicalDigest(receipt.claimBindingDigest);
+    const grantRequestDigest = parseContainedTurnCanonicalDigest(receipt.grantRequestDigest);
+    const ownerAuthorityDigest = parseContainedTurnCanonicalDigest(receipt.ownerAuthorityDigest);
+    const ownerReceiptDigest = parseContainedTurnCanonicalDigest(receipt.ownerReceiptDigest);
+    const validThroughOperationCutoffRevision = containedTurnOperationCutoffRevision(
+      receipt.validThroughOperationCutoffRevision,
+    );
+    const grantRequestId = `grant-request:${grantRequestDigest}`;
+    if (receipt.grantRequestId !== grantRequestId) {
+      throw new TypeError(`${receipt.owner} grant request ID must be the canonical digest-bound ID`);
+    }
+    if (claimBindingDigest !== expectedBinding) {
       throw new TypeError(`${receipt.owner} consumed receipt has the wrong claim binding`);
     }
-    if (receipt.validThroughOperationCutoffRevision < subject.operationCutoffRevision) {
+    if (validThroughOperationCutoffRevision < subject.operationCutoffRevision) {
       throw new TypeError(`${receipt.owner} consumed receipt is expired for the current cutoff`);
     }
-  }
-  return receipts as ContainedTurnConsumedGrantReceipts;
+    return Object.freeze({
+      claimBindingDigest,
+      grantRequestDigest,
+      grantRequestId,
+      owner: receipt.owner,
+      ownerAuthorityDigest,
+      ownerReceiptDigest,
+      validThroughOperationCutoffRevision,
+    });
+  };
+  return Object.freeze([
+    sanitize(providerAccess),
+    sanitize(runtimeSecurity),
+  ]) as ContainedTurnConsumedGrantReceipts;
 };

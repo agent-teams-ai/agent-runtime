@@ -106,6 +106,7 @@ const createDependencies = (options: Readonly<{
   artifactIndeterminate?: boolean;
   custodyOpenThrows?: boolean;
   claimCommitThenThrow?: boolean;
+  claimIndeterminate?: boolean;
   dispatchPrevented?: boolean;
   emitBeforeGate?: boolean;
   forgeReceipt?: boolean;
@@ -207,6 +208,9 @@ const createDependencies = (options: Readonly<{
         runtimeSecurityDispatchProofId: runtimeSecurityDispatchProof.proofId,
         securityAuthorityRevision: current.acceptedAuthorityVector.securityAuthorityRevision,
       });
+      if (options.claimIndeterminate === true) {
+        return { evidenceId: identity("evidence", "dispatch-claim-indeterminate"), kind: "indeterminate" };
+      }
       current = mutateContainedTurnOperation(current, {
         attemptId: subject.attemptId,
         claimProof: {
@@ -360,7 +364,7 @@ const createDependencies = (options: Readonly<{
         receipt: {
           claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
           grantRequestDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", request: "one" }),
-          grantRequestId: "runtime-security-grant:one",
+          grantRequestId: `grant-request:${digestContainedTurnCanonicalValue({ owner: "runtime_security", request: "one" })}`,
           owner: "runtime_security",
           ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", authority: "one" }),
           ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", receipt: "one" }),
@@ -387,7 +391,7 @@ const createDependencies = (options: Readonly<{
             receipt: {
               claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
               grantRequestDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", request: "one" }),
-              grantRequestId: "provider-access-grant:one",
+              grantRequestId: `grant-request:${digestContainedTurnCanonicalValue({ owner: "provider_access", request: "one" })}`,
               owner: "provider_access" as const,
               ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", authority: "one" }),
               ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", receipt: "one" }),
@@ -905,6 +909,22 @@ for (const [name, options] of [
     assert.equal(containmentCalls.value, 1);
   });
 }
+
+test("indeterminate dispatch claim retires preparation into durable debt without provider retry", async () => {
+  const { current, dependencies, providerCalls } = createDependencies({ claimIndeterminate: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "lose the dispatch claim outcome" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
+  assert.equal(providerCalls.value, 0);
+  assert.equal(current()?.dispatch.kind, "unclaimed");
+  assert.equal(current()?.reconciliation.kind, "required");
+  assert.equal(current()?.terminal.kind, "open");
+});
 
 test("cancellation racing the first workspace creation reaches proved-no-start terminal closure", async () => {
   let releaseWorkspace!: () => void;

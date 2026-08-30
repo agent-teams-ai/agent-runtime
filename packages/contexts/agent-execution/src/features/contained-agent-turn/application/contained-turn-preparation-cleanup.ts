@@ -1,5 +1,6 @@
 import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
+import type { ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
 import type {
   ContainedTurnAttemptId,
   ContainedTurnCustodyId,
@@ -22,6 +23,12 @@ import {
 } from "./contained-turn-committer.js";
 import type { ContainedTurnKernelDependencies } from "./ports/outbound/contained-turn-ports.js";
 import { containedTurnOwnerStoreAuthority } from "./contained-turn-store-authority.js";
+import {
+  isContainedTurnClaimedPreparation,
+  isContainedTurnPreparationCleanupContinuation,
+  isContainedTurnRetiredPreparation,
+  isContainedTurnRetirementCurrent,
+} from "./contained-turn-preparation-scope.js";
 import type { ContainedTurnDispatchPreparation } from "../domain/contained-turn-dispatch-preparation.js";
 
 export const containedTurnPreparationToken = (input: Readonly<{
@@ -52,7 +59,7 @@ export const retireAndCleanupContainedTurnPreparation = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
   trustedScope: ContainedTurnScope,
-  preparationToken: ContainedTurnPreparationToken,
+  owner: ContainedTurnDispatchGrantSubject,
   reason: "claim_lost" | "open_failed" | "prevention" | "reconciliation",
 ): Promise<RetireContainedTurnPreparationOutcome> => {
   const retire = dependencies.operationStore.retireDispatchPreparation;
@@ -64,17 +71,27 @@ export const retireAndCleanupContainedTurnPreparation = async (
       authority,
       expectedOperationCutoffRevision: operation.operationCutoff.revision,
       expectedOperationRevision: operation.revision,
-      preparationToken,
+      preparationToken: owner.preparationToken,
       reason,
     });
   } catch {
-    return { kind: "cleanup_pending", operation };
+    return Object.freeze({ kind: "cleanup_pending", operation });
   }
   if (retirement.kind === "claimed") {
-    return { kind: "claimed", operation: retirement.operation };
+    return isContainedTurnClaimedPreparation(authority, owner, retirement.operation)
+      ? Object.freeze({ kind: "claimed", operation: retirement.operation })
+      : Object.freeze({ kind: "cleanup_pending", operation });
   }
   if (retirement.kind !== "retired") {
-    return { kind: "cleanup_pending", operation: retirement.kind === "stale" ? retirement.current : operation };
+    if (retirement.kind === "stale") {
+      if (isContainedTurnRetirementCurrent(authority, operation, owner, retirement.current)) {
+        return Object.freeze({ kind: "cleanup_pending", operation: retirement.current });
+      }
+    }
+    return Object.freeze({ kind: "cleanup_pending", operation });
+  }
+  if (!isContainedTurnRetiredPreparation(authority, operation, owner, retirement.preparation)) {
+    return Object.freeze({ kind: "cleanup_pending", operation });
   }
   const pending = retirement.preparation;
   const permit = pending.cleanupPermit;
@@ -90,13 +107,17 @@ export const retireAndCleanupContainedTurnPreparation = async (
         outcome.kind !== "settled" && outcome.kind !== "already_settled") {
       if (outcome.evidenceId === undefined) {return;}
       try {
-        current = await record({ authority, evidenceId: outcome.evidenceId, permit, target });
-      } catch {}
+        const recorded = await record(Object.freeze({
+          authority, evidenceId: outcome.evidenceId, permit, target,
+        }));
+        if (isContainedTurnPreparationCleanupContinuation(current, recorded)) {current = recorded;}
+      } catch {return;}
       return;
     }
     try {
-      current = await record({ authority, permit, target });
-    } catch {}
+      const recorded = await record(Object.freeze({ authority, permit, target }));
+      if (isContainedTurnPreparationCleanupContinuation(current, recorded)) {current = recorded;}
+    } catch {return;}
     void grantRequestId;
   };
   await cleanup("custody", () => dependencies.custody.releaseRetiredReservation({ cleanupPermit: permit }));
@@ -104,8 +125,8 @@ export const retireAndCleanupContainedTurnPreparation = async (
   await cleanup("runtime_security", () => dependencies.security.settleConsumedGrant({ cleanupPermit: permit, grantRequestId: pending.runtimeSecurityGrantRequestId }));
   const finalPreparation = current as ContainedTurnDispatchPreparation;
   return finalPreparation.kind === "cleanup_closed"
-    ? { kind: "cleanup_closed", operation, preparation: finalPreparation }
-    : { kind: "cleanup_pending", operation, preparation: finalPreparation };
+    ? Object.freeze({ kind: "cleanup_closed", operation, preparation: finalPreparation })
+    : Object.freeze({ kind: "cleanup_pending", operation, preparation: finalPreparation });
 };
 
 export const quarantineLosingContainedTurnWorkspace = async (

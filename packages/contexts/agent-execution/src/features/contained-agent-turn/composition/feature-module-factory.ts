@@ -2,10 +2,7 @@ import {
   containedTurnApplicationView,
   createContainedTurnEngine,
 } from "../application/contained-turn-engine.js";
-import {
-  validateContainedTurnKernelDependencies,
-  type ContainedTurnKernelDependencies,
-} from "../application/ports/outbound/contained-turn-ports.js";
+import type { ContainedTurnKernelDependencies } from "../application/ports/outbound/contained-turn-ports.js";
 import type {
   ContainedTurnFeatureApi,
   ObserveContainedTurnInput,
@@ -15,6 +12,7 @@ import type {
   ContainedTurnOperationRef,
   ContainedTurnScope,
 } from "../contracts/contained-agent-turn.js";
+import { createContainedTurnPreparationScopeDependencies } from "./preparation-scope-anti-corruption.js";
 
 export type ContainedTurnFeatureDependencies = ContainedTurnKernelDependencies;
 
@@ -33,8 +31,9 @@ const mapOperationRef = (operationId: string, scope: ContainedTurnScope): Contai
 export const createContainedTurnFeature = (
   dependencies: ContainedTurnFeatureDependencies,
 ): ContainedTurnFeatureApi => {
-  validateContainedTurnKernelDependencies(dependencies);
-  const application = createContainedTurnEngine(dependencies);
+  const application = createContainedTurnEngine(
+    createContainedTurnPreparationScopeDependencies(dependencies),
+  );
   const feature: ContainedTurnFeatureApi = {
     cancel: Object.freeze({
       execute: async (input: RequestContainedTurnCancellationInput, options?: { readonly signal?: AbortSignal }) => {

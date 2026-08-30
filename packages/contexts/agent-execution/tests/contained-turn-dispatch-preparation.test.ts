@@ -4,6 +4,7 @@ import test from "node:test";
 import { reconcileContainedTurnClaimPreparation } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 import { claimContainedTurnWithConsumedGrants } from "../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "../dist/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.js";
+import { createContainedTurnPreparationScopeDependencies } from "../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
 import { containedTurnScopeDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
@@ -33,6 +34,10 @@ import {
   scope,
   workspaceId,
 } from "./contained-turn-kernel-fixtures.ts";
+
+const unusedMandatoryDependency = async (): Promise<never> => {
+  throw new Error("unused mandatory dependency");
+};
 
 test("dispatch preparation cleanup retains possible winners and releases only proved losers", async () => {
   const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
@@ -137,19 +142,26 @@ test("normalized consumed receipts bind the exact final claim and reject replay 
     workspaceId,
   });
   const claimBindingDigest = containedTurnDispatchClaimBindingDigest(subject);
-  const receipt = (owner: "provider_access" | "runtime_security") => Object.freeze({
-    claimBindingDigest,
-    grantRequestDigest: digestContainedTurnCanonicalValue({ owner, request: 1 }),
-    grantRequestId: `${owner}:grant:1`,
-    owner,
-    ownerAuthorityDigest: digestContainedTurnCanonicalValue({ authority: owner }),
-    ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner, receipt: 1 }),
-    validThroughOperationCutoffRevision: 0,
-  });
+  const receipt = (owner: "provider_access" | "runtime_security") => {
+    const grantRequestDigest = digestContainedTurnCanonicalValue({ owner, request: 1 });
+    return Object.freeze({
+      claimBindingDigest,
+      grantRequestDigest,
+      grantRequestId: `grant-request:${grantRequestDigest}`,
+      owner,
+      ownerAuthorityDigest: digestContainedTurnCanonicalValue({ authority: owner }),
+      ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner, receipt: 1 }),
+      validThroughOperationCutoffRevision: 0,
+    });
+  };
   const providerAccess = receipt("provider_access");
   const runtimeSecurity = receipt("runtime_security");
   const exact = validateContainedTurnConsumedGrantReceipts(subject, [providerAccess, runtimeSecurity]);
-  assert.strictEqual(validateContainedTurnConsumedGrantReceipts(subject, exact), exact);
+  const resanitized = validateContainedTurnConsumedGrantReceipts(subject, exact);
+  assert.notStrictEqual(resanitized, exact);
+  assert.deepEqual(resanitized, exact);
+  assert.equal(Object.isFrozen(resanitized), true);
+  assert.equal(Object.isFrozen(resanitized[0]), true);
   assert.throws(
     () => validateContainedTurnConsumedGrantReceipts(subject, [runtimeSecurity, providerAccess]),
     /ordered one per exact owner/u,
@@ -168,6 +180,34 @@ test("normalized consumed receipts bind the exact final claim and reject replay 
     ]),
     /exact closed record/u,
   );
+  for (const field of [
+    "claimBindingDigest", "grantRequestDigest", "ownerAuthorityDigest", "ownerReceiptDigest",
+  ] as const) {
+    assert.throws(
+      () => validateContainedTurnConsumedGrantReceipts(subject, [
+        { ...providerAccess, [field]: "sha256:not-canonical" }, runtimeSecurity,
+      ]),
+      /digest/u,
+    );
+  }
+  for (const grantRequestId of [
+    "../../secret", "token=owner-secret", `grant-request:${"a".repeat(600)}`,
+  ]) {
+    assert.throws(
+      () => validateContainedTurnConsumedGrantReceipts(subject, [
+        { ...providerAccess, grantRequestId }, runtimeSecurity,
+      ]),
+      /canonical digest-bound ID/u,
+    );
+  }
+  for (const cutoff of [-1, Number.MAX_SAFE_INTEGER + 1, Number.NaN]) {
+    assert.throws(
+      () => validateContainedTurnConsumedGrantReceipts(subject, [
+        { ...providerAccess, validThroughOperationCutoffRevision: cutoff }, runtimeSecurity,
+      ]),
+      /non-negative safe integer/u,
+    );
+  }
 });
 
 test("final claim follows both owner consumptions and only a fresh CAS exposes start authority", async () => {
@@ -186,19 +226,22 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
     workspaceId,
   });
   const claimBindingDigest = containedTurnDispatchClaimBindingDigest(subject);
-  const normalizedReceipt = (owner: "provider_access" | "runtime_security") => ({
-    claimBindingDigest,
-    grantRequestDigest: digestContainedTurnCanonicalValue({ owner, request: "exact" }),
-    grantRequestId: `${owner}:grant:exact`,
-    owner,
-    ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner, revision: 1 }),
-    ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner, state: "consumed_pending" }),
-    validThroughOperationCutoffRevision: 0,
-  });
+  const normalizedReceipt = (owner: "provider_access" | "runtime_security") => {
+    const grantRequestDigest = digestContainedTurnCanonicalValue({ owner, request: "exact" });
+    return {
+      claimBindingDigest,
+      grantRequestDigest,
+      grantRequestId: `grant-request:${grantRequestDigest}`,
+      owner,
+      ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner, revision: 1 }),
+      ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner, state: "consumed_pending" }),
+      validThroughOperationCutoffRevision: 0,
+    };
+  };
   const events: string[] = [];
   let observed = false;
   const winner = createReservedOperation();
-  const dependencies = {
+  const dependencies = createContainedTurnPreparationScopeDependencies({
     operationStore: {
       claimPreparedDispatch: async () => {
         events.push("agent-execution:final-claim");
@@ -206,20 +249,34 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
           ? { kind: "observed_claim" as const, operation: winner }
           : { kind: "claimed" as const, operation: winner, startAuthority: "host-start-once:1" };
       },
+      recordDispatchPreparationCleanup: unusedMandatoryDependency,
+      retireDispatchPreparation: unusedMandatoryDependency,
     },
     providerAccess: {
       consumeForDispatch: async () => {
         events.push("provider-access:consumed");
         return { kind: "consumed" as const, receipt: normalizedReceipt("provider_access") };
       },
+      settleConsumedGrant: unusedMandatoryDependency,
     },
     security: {
       consumeForDispatch: async () => {
         events.push("runtime-security:consumed");
         return { kind: "consumed" as const, receipt: normalizedReceipt("runtime_security") };
       },
+      settleConsumedGrant: unusedMandatoryDependency,
     },
-  } as unknown as ContainedTurnKernelDependencies;
+    workspace: { ensureClosed: unusedMandatoryDependency, queryClosure: unusedMandatoryDependency },
+    artifacts: { ensureSealed: unusedMandatoryDependency, querySeal: unusedMandatoryDependency },
+    custody: {
+      attestContainment: unusedMandatoryDependency,
+      ensurePhysicalContainment: unusedMandatoryDependency,
+      queryContainmentAttestation: unusedMandatoryDependency,
+      queryPhysicalContainment: unusedMandatoryDependency,
+      releaseRetiredReservation: unusedMandatoryDependency,
+    },
+    provider: {},
+  } as unknown as ContainedTurnKernelDependencies);
   const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
   const claimed = await claimContainedTurnWithConsumedGrants(dependencies, initial, scope, subject);
   assert.equal(claimed.kind, "claimed");

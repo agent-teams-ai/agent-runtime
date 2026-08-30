@@ -1,9 +1,12 @@
 import { containedTurnScopeDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { validateContainedTurnConsumedGrantReceipts, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
 import type { ContainedTurnEvidenceId, ContainedTurnPreparationToken, ContainedTurnProofId } from "../domain/contained-turn-identities.js";
+import { validateContainedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import { containedTurnOwnerStoreAuthority } from "./contained-turn-store-authority.js";
+import { isContainedTurnPreparedClaimOperation } from "./contained-turn-preparation-scope.js";
 import { retireAndCleanupContainedTurnPreparation } from "./contained-turn-preparation-cleanup.js";
+import { recordContainedTurnRejectedDebt } from "./contained-turn-closure.js";
 import type { ContainedTurnKernelDependencies } from "./ports/outbound/contained-turn-ports.js";
 
 export type ClaimContainedTurnWithConsumedGrantsOutcome =
@@ -47,20 +50,40 @@ export const claimContainedTurnWithConsumedGrants = async (
     runtimeSecurity.receipt,
   ]);
   try {
+    const authority = containedTurnOwnerStoreAuthority(operation, trustedScope);
     const outcome = await claim({
-      authority: containedTurnOwnerStoreAuthority(operation, trustedScope),
+      authority,
       consumedGrantReceipts: receipts,
       expectedOperationRevision: operation.revision,
       hostCustodyProof,
       subject,
     });
-    if (outcome.kind === "claimed" || outcome.kind === "observed_claim") {return outcome;}
-    if (outcome.kind === "stale" && outcome.current.dispatch.kind === "claimed" &&
-        outcome.current.dispatch.preparationToken === subject.preparationToken) {
-      return { kind: "observed_claim", operation: outcome.current };
+    if (outcome.kind === "claimed" || outcome.kind === "observed_claim") {
+      if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.operation)) {
+        return Object.freeze({ kind: "unavailable" });
+      }
+      if (outcome.kind === "claimed") {
+        return Object.freeze({
+          kind: "claimed",
+          operation: outcome.operation,
+          startAuthority: outcome.startAuthority,
+        });
+      }
+      return Object.freeze({ kind: "observed_claim", operation: outcome.operation });
     }
-    if (outcome.kind === "indeterminate") {return outcome;}
-    return { kind: "unavailable" };
+    if (outcome.kind === "stale") {
+      if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
+        return Object.freeze({ kind: "unavailable" });
+      }
+      return Object.freeze({ kind: "observed_claim", operation: outcome.current });
+    }
+    if (outcome.kind === "indeterminate") {
+      return Object.freeze({
+        evidenceId: validateContainedTurnIdentity("evidence", outcome.evidenceId),
+        kind: "indeterminate",
+      });
+    }
+    return Object.freeze({ kind: "unavailable" });
   } catch {
     // A lost claim acknowledgement is deliberately not recoverable into start.
     return { kind: "unavailable" };
@@ -84,7 +107,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
 }>): Promise<ClaimPreparedContainedTurnOutcome> => {
   const { custody, dependencies, operation, preparation, preparationToken, trustedScope } = input;
   if (operation.workspaceId === undefined) {return { kind: "stopped", operation };}
-  const claim = await claimContainedTurnWithConsumedGrants(dependencies, operation, trustedScope, {
+  const subject: ContainedTurnDispatchGrantSubject = Object.freeze({
     attemptId: preparation.attemptId,
     custodyId: preparation.custodyId,
     effectId: operation.effectId,
@@ -97,17 +120,26 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     purpose: "contained_turn_provider_start_v1",
     scopeDigest: containedTurnScopeDigest(trustedScope),
     workspaceId: operation.workspaceId,
-  }, custody.hostCustodyProof);
+  });
+  const claim = await claimContainedTurnWithConsumedGrants(
+    dependencies, operation, trustedScope, subject, custody.hostCustodyProof,
+  );
   if (claim.kind === "claimed") {return claim;}
   if (claim.kind === "observed_claim") {
     return { kind: "observed", operation: claim.operation };
   }
   const cleanup = await retireAndCleanupContainedTurnPreparation(
-    dependencies, operation, trustedScope, preparationToken,
+    dependencies, operation, trustedScope, subject,
     claim.kind === "prevented" ? "prevention" : "reconciliation",
   );
   if (cleanup.kind === "claimed") {return { kind: "observed", operation: cleanup.operation };}
-  return claim.kind === "prevented"
-    ? { kind: "prevented", operation: cleanup.operation, preventionProofId: claim.preventionProofId }
-    : { kind: "stopped", operation: cleanup.operation };
+  if (claim.kind === "prevented") {
+    return { kind: "prevented", operation: cleanup.operation, preventionProofId: claim.preventionProofId };
+  }
+  const reconciled = cleanup.operation.reconciliation.kind === "required"
+    ? cleanup.operation
+    : await recordContainedTurnRejectedDebt(
+      dependencies, cleanup.operation, trustedScope, "dispatch_claim_rejected", "dispatch_authority",
+    );
+  return { kind: "stopped", operation: reconciled };
 };
