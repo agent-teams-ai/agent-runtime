@@ -8,6 +8,7 @@ import {
   DockerCustodyProtocolError,
   encodeDockerCustodyFrame,
   parseDockerCustodyProtocolMessage,
+  type DockerCustodyChildSignal,
   type DockerCustodyHostHandshake,
   type DockerCustodyIdentity,
   type DockerCustodyInitMessage,
@@ -18,10 +19,13 @@ import {
   type DockerCustodyInitSyscalls,
   type DockerCustodyProviderSpawn,
   type DockerCustodyProviderRootHandle,
-  type DockerCustodyReapedChild,
+  type DockerCustodyReapedDescendant,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-runtime.js";
 
 const digest = (digit: string): string => digit.repeat(64);
+const framePayload = (payload: Buffer): Buffer => {
+  const frame = Buffer.alloc(payload.byteLength + 4); frame.writeUInt32BE(payload.byteLength, 0); payload.copy(frame, 4); return frame;
+};
 const identity: DockerCustodyIdentity = Object.freeze({
   containerImageSha256: digest("a"),
   initBinarySha256: digest("b"),
@@ -54,12 +58,14 @@ const request = (overrides: Partial<DockerCustodyProviderExecRequest> = {}): Doc
 
 class FakeSyscalls implements DockerCustodyInitSyscalls {
   public containment: string[] = [];
+  public containmentOutcomes: Array<"accepted" | "failed" | "throw"> = [];
   public input: Uint8Array[] = [];
   public inputStatus: "accepted" | "blocked" | "closed" = "accepted";
   public monotonic = 1_000;
   public output: Array<{ readonly bytes: Uint8Array; readonly stream: "stderr" | "stdout" }> = [];
   public outputStatus: "accepted" | "blocked" = "accepted";
-  public reaped: DockerCustodyReapedChild[] = [];
+  public reaped: DockerCustodyReapedDescendant[] = [];
+  public rootExits: Array<{readonly exitCode: number | null; readonly handle: DockerCustodyProviderRootHandle; readonly signal: DockerCustodyChildSignal | null}> = [];
   public signalFailure = false;
   public signals: Array<{ readonly handle: DockerCustodyProviderRootHandle; readonly signal: "SIGHUP" | "SIGINT" | "SIGKILL" | "SIGQUIT" | "SIGTERM" | "SIGUSR1" | "SIGUSR2" }> = [];
   public spawnOutcome: "ambiguous-error" | "not-started" | "started" = "started";
@@ -69,9 +75,19 @@ class FakeSyscalls implements DockerCustodyInitSyscalls {
   public assertNoNewPrivileges(): void {}
   public assertPidOne(): void {}
   public monotonicNowMs(): number {return this.monotonic;}
+  public observeProviderRootExit(handle: DockerCustodyProviderRootHandle): {readonly exitCode: number | null; readonly signal: DockerCustodyChildSignal | null} | null {
+    const index = this.rootExits.findIndex(item => item.handle.pid === handle.pid && item.handle.stableIdentity === handle.stableIdentity);
+    if (index < 0) {return null;}
+    const [observed] = this.rootExits.splice(index, 1); return observed ?? null;
+  }
   public observeIdentity(): DockerCustodyIdentity {return identity;}
-  public reapExitedChildren(): readonly DockerCustodyReapedChild[] {return this.reaped.splice(0);}
-  public requestContainerContainment(reason: string): void {this.containment.push(reason);}
+  public reapExitedDescendants(): readonly DockerCustodyReapedDescendant[] {return this.reaped.splice(0);}
+  public requestContainerContainment(reason: string): "accepted" | "failed" {
+    this.containment.push(reason);
+    const outcome = this.containmentOutcomes.shift() ?? "accepted";
+    if (outcome === "throw") {throw new Error("synthetic containment syscall failure");}
+    return outcome;
+  }
   public signalProviderRoot(handle: DockerCustodyProviderRootHandle, signal: "SIGHUP" | "SIGINT" | "SIGKILL" | "SIGQUIT" | "SIGTERM" | "SIGUSR1" | "SIGUSR2"): "sent" {
     this.signals.push({ handle, signal });
     if (this.signalFailure) {throw new Error("synthetic signal failure");}
@@ -107,6 +123,7 @@ const fixture = (changes: {
     maximumStderrBytes: 8,
     maximumStdinBytes: 8,
     maximumStdoutBytes: 8,
+    maximumProviderRuntimeMs: 30_000,
     observedIdentity: identity,
     shutdownGraceMs: 50,
     syscalls,
@@ -228,9 +245,9 @@ test("PID1 tracks only the provider root, reaps descendants and zombies, and nev
   current.syscalls.reaped.push(
     { exitCode: 0, pid: 90, signal: null },
     { exitCode: null, pid: 91, signal: "SIGKILL" },
-    { exitCode: 7, pid: 41, signal: null },
     { exitCode: 0, pid: 92, signal: null },
   );
+  current.syscalls.rootExits.push({exitCode: 7, handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: null});
   current.runtime.tick();
   const state = current.runtime.snapshot();
   assert.equal(state.phase, "provider-exited");
@@ -246,6 +263,20 @@ test("PID1 tracks only the provider root, reaps descendants and zombies, and nev
   assert.equal(current.runtime.acceptProviderOutput("stdout", Buffer.from("late")), "closed");
 });
 
+test("an invalid descendant reap makes failure absorbing before a same-tick root exit", () => {
+  const current = fixture();
+  current.runtime.receive(handshake); current.runtime.receive(request());
+  current.runtime.closeProviderOutput("stdout"); current.runtime.closeProviderOutput("stderr");
+  current.syscalls.reaped.push({exitCode: null, pid: 90, signal: null});
+  current.syscalls.rootExits.push({exitCode: 0, handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: null});
+  current.runtime.tick(); current.runtime.tick();
+  assert.equal(current.runtime.snapshot().phase, "failed");
+  assert.equal(current.runtime.snapshot().providerRootTracked, true);
+  assert.equal(current.control.some(message => message.kind === "provider-observation" && message.observation === "root-exited"), false);
+  assert.equal(current.control.some(message => message.kind === "provider-drain-complete"), false);
+  assert.deepEqual(current.syscalls.containment, ["init-failure"]);
+});
+
 test("output, input, and blocked-drain accounting is bounded and content-free", () => {
   const current = fixture();
   current.runtime.receive(handshake);
@@ -256,7 +287,8 @@ test("output, input, and blocked-drain accounting is bounded and content-free", 
   assert.equal(current.runtime.acceptProviderOutput("stderr", Buffer.from("must-wait")), "blocked");
   assert.equal(current.syscalls.output.length, 1);
   assert.equal(current.runtime.snapshot().stderr.status, "blocked");
-  current.runtime.outputDrainReady("stderr");
+  current.syscalls.outputStatus = "accepted";
+  assert.equal(current.runtime.outputDrainReady("stderr"), "accepted");
   assert.equal(current.runtime.snapshot().stderr.status, "open");
   assert.equal(current.runtime.writeProviderInput(Buffer.from("1234")), "accepted");
   current.syscalls.inputStatus = "blocked";
@@ -273,7 +305,44 @@ test("output, input, and blocked-drain accounting is bounded and content-free", 
   assert.deepEqual(current.syscalls.signals.map(item => ({ pid: item.handle.pid, signal: item.signal })), [{ pid: 41, signal: "SIGTERM" }]);
 });
 
-test("cancellation and absolute deadline TERM the root then request outer container containment", () => {
+test("EOF remains deferred until a blocked output chunk is successfully retried", () => {
+  const current = fixture();
+  current.runtime.receive(handshake); current.runtime.receive(request());
+  current.syscalls.outputStatus = "blocked";
+  assert.equal(current.runtime.acceptProviderOutput("stdout", Buffer.from("pending")), "blocked");
+  assert.equal(current.runtime.closeProviderOutput("stdout"), "deferred");
+  assert.equal(current.runtime.snapshot().stdout.eof, false);
+  assert.equal(current.runtime.closeProviderOutput("stderr"), "closed");
+  current.syscalls.rootExits.push({exitCode: 0, handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: null}); current.runtime.tick();
+  assert.equal(current.control.some(message => message.kind === "provider-drain-complete"), false);
+  assert.equal(current.runtime.outputDrainReady("stdout"), "blocked");
+  assert.equal(current.control.some(message => message.kind === "provider-drain-complete"), false);
+
+  current.syscalls.outputStatus = "accepted";
+  assert.equal(current.runtime.outputDrainReady("stdout"), "accepted");
+  assert.equal(current.runtime.snapshot().stdout.eof, true);
+  assert.equal(current.control.filter(message => message.kind === "provider-drain-complete").length, 1);
+});
+
+test("output overflow emits a typed failed drain and later EOF cannot look complete", () => {
+  const current = fixture();
+  current.runtime.receive(handshake); current.runtime.receive(request());
+  assert.equal(current.runtime.acceptProviderOutput("stderr", Buffer.from("123456789")), "overflow");
+  assert.equal(current.runtime.closeProviderOutput("stderr"), "failed");
+  assert.equal(current.runtime.closeProviderOutput("stdout"), "failed");
+  current.syscalls.rootExits.push({exitCode: 0, handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: null}); current.runtime.tick();
+  assert.deepEqual(current.runtime.snapshot().closure, {outerContainmentClaim: "unproven", providerDrain: {
+    kind: "provider-drain-failed", outerContainmentClaim: "unproven", reason: "stderr-overflow", requestId: "exec-request:one",
+  }});
+  assert.equal(current.control.filter(message => message.kind === "provider-drain-failed").length, 1);
+  assert.equal(current.control.some(message => message.kind === "provider-drain-complete"), false);
+  const failure = current.control.find(message => message.kind === "provider-drain-failed");
+  assert(failure !== undefined);
+  assert.deepEqual(parseDockerCustodyProtocolMessage(failure), failure);
+  assert.throws(() => parseDockerCustodyProtocolMessage({...failure, reason: "generic-overflow"}), /reason/u);
+});
+
+test("cancellation and a forward wall-clock jump TERM the root then request outer container containment", () => {
   for (const cause of ["cancelled", "deadline"] as const) {
     const current = fixture();
     current.runtime.receive(handshake);
@@ -288,13 +357,31 @@ test("cancellation and absolute deadline TERM the root then request outer contai
   }
 });
 
+test("wall-clock rollback cannot extend the frozen monotonic deadline or configured runtime cap", () => {
+  const rollback = fixture();
+  rollback.runtime.receive(handshake); rollback.runtime.receive(request());
+  rollback.syscalls.wall = 1_000;
+  rollback.syscalls.monotonic = 10_999; rollback.runtime.tick();
+  assert.equal(rollback.syscalls.signals.length, 0);
+  rollback.syscalls.monotonic = 11_000; rollback.runtime.tick();
+  assert.deepEqual(rollback.syscalls.signals.map(item => item.signal), ["SIGTERM"]);
+
+  const capped = fixture();
+  capped.runtime.receive(handshake); capped.runtime.receive(request({wallDeadlineUnixMs: 1_000_000}));
+  capped.syscalls.wall = 1;
+  capped.syscalls.monotonic = 30_999; capped.runtime.tick();
+  assert.equal(capped.syscalls.signals.length, 0);
+  capped.syscalls.monotonic = 31_000; capped.runtime.tick();
+  assert.deepEqual(capped.syscalls.signals.map(item => item.signal), ["SIGTERM"]);
+});
+
 test("root exit does not close a blocked drain or evade the absolute deadline", () => {
   const current = fixture();
   current.runtime.receive(handshake);
   current.runtime.receive(request());
   current.syscalls.outputStatus = "blocked";
   current.runtime.acceptProviderOutput("stdout", Buffer.from("pending"));
-  current.syscalls.reaped.push({ exitCode: 0, pid: 41, signal: null });
+  current.syscalls.rootExits.push({exitCode: 0, handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: null});
   current.runtime.tick();
   assert.equal(current.runtime.snapshot().stdout.status, "blocked");
   current.syscalls.wall = 20_000;
@@ -329,6 +416,23 @@ test("known no-start, ambiguous spawn failure, and init crash remain distinct", 
   crashed.runtime.failInit();
   assert.deepEqual(crashed.syscalls.containment, ["init-failure"]);
   assert.equal(crashed.runtime.snapshot().containmentRequested, true);
+});
+
+test("throwing and explicitly failed containment requests remain pending until acceptance", () => {
+  for (const firstOutcome of ["throw", "failed"] as const) {
+    const syscalls = new FakeSyscalls(); syscalls.containmentOutcomes.push(firstOutcome, "accepted");
+    const current = fixture({syscalls});
+    current.runtime.receive(handshake); current.runtime.receive(request()); current.runtime.requestStop();
+    current.syscalls.monotonic += 50; current.runtime.tick();
+    assert.equal(current.runtime.snapshot().containmentRequested, false);
+    assert.deepEqual(current.syscalls.containment, ["shutdown-timeout"]);
+    assert.equal(current.control.filter(message => message.kind === "container-containment-request").length, 0);
+
+    current.runtime.tick();
+    assert.equal(current.runtime.snapshot().containmentRequested, true);
+    assert.deepEqual(current.syscalls.containment, ["shutdown-timeout", "shutdown-timeout"]);
+    assert.equal(current.control.filter(message => message.kind === "container-containment-request").length, 1);
+  }
 });
 
 test("canonical control evidence omits provider content, credentials, executable paths, and raw host paths", () => {
@@ -389,6 +493,30 @@ test("decoder EOF is permanent for clean and malformed channel endings", () => {
   assert.throws(() => partial.push(encodeDockerCustodyFrame(handshake)), /sealed|EOF/u);
 });
 
+test("every decoder framing, JSON, schema, and canonicality failure permanently poisons the channel", () => {
+  const validPayload = Buffer.from(encodeDockerCustodyFrame(handshake)).subarray(4);
+  const failures = [
+    new Uint8Array(4 * (DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES + 4) + 1),
+    Uint8Array.of(0, 0, 0, 0),
+    framePayload(Buffer.from("{")),
+    framePayload(Buffer.from('{"kind":"unsupported"}')),
+    framePayload(Buffer.concat([Buffer.from(" "), validPayload])),
+  ];
+  for (const failure of failures) {
+    const decoder = new DockerCustodyFrameDecoder();
+    assert.throws(() => decoder.push(failure), DockerCustodyProtocolError);
+    assert.throws(() => decoder.push(encodeDockerCustodyFrame(handshake)), /sealed|EOF/u);
+  }
+});
+
+test("poisoned byte ingress permanently activates the runtime start fence", () => {
+  const current = fixture();
+  assert.throws(() => current.runtime.receiveControlBytes(Uint8Array.of(0, 0, 0, 1, 123)), /malformed/u);
+  assert.equal(current.runtime.snapshot().startFenced, true);
+  assert.throws(() => current.runtime.receiveControlBytes(encodeDockerCustodyFrame(handshake)), /sealed|EOF/u);
+  assert.equal(current.syscalls.spawns.length, 0);
+});
+
 test("pre-start cancellation, disconnect, malformed input, and duplicates permanently fence exec", () => {
   const actions: Array<(current: ReturnType<typeof fixture>) => void> = [
     current => {current.runtime.receive(handshake); current.runtime.requestStop();},
@@ -427,15 +555,23 @@ test("allowed host signals use the stable handle while TERM failure still escala
   assert.deepEqual(current.syscalls.containment, ["shutdown-timeout"]);
 });
 
-test("reaping revokes the stable root handle before observations and fences PID reuse", () => {
+test("same-PID descendant and mismatched-generation exit evidence cannot revoke the stable root handle", () => {
   const current = fixture();
   current.runtime.receive(handshake);
   current.runtime.receive(request());
-  current.syscalls.reaped.push({exitCode: 0, pid: 41, signal: null});
+  current.syscalls.reaped.push({exitCode: 9, pid: 41, signal: null});
+  current.syscalls.rootExits.push({exitCode: 8, handle: {pid: 41, stableIdentity: "provider-root:reused"}, signal: null});
+  current.runtime.tick();
+  assert.equal(current.runtime.snapshot().providerRootTracked, true);
+  assert.equal(current.runtime.snapshot().descendantsReaped, 1);
+  current.runtime.forwardHostSignal("SIGUSR1");
+  assert.deepEqual(current.syscalls.signals[0], {handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: "SIGUSR1"});
+
+  current.syscalls.rootExits.push({exitCode: 0, handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: null});
   current.runtime.tick();
   assert.equal(current.runtime.snapshot().providerRootTracked, false);
   current.runtime.forwardHostSignal("SIGUSR2");
-  assert.equal(current.syscalls.signals.length, 0);
+  assert.equal(current.syscalls.signals.length, 1);
   assert.deepEqual(current.runtime.snapshot().signalEvidence.at(-1), {
     action: "forward-host", kind: "provider-signal-observation", requestId: "exec-request:one", result: "absent", signal: "SIGUSR2",
   });
@@ -451,7 +587,7 @@ test("provider drain completes once for every root/stdout/stderr EOF ordering", 
     const current = fixture();
     current.runtime.receive(handshake); current.runtime.receive(request());
     for (const event of order) {
-      if (event === "root") {current.syscalls.reaped.push({exitCode: null, pid: 41, signal: "SIGXCPU"}); current.runtime.tick();}
+      if (event === "root") {current.syscalls.rootExits.push({exitCode: null, handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: "SIGXCPU"}); current.runtime.tick();}
       else {current.runtime.closeProviderOutput(event);}
     }
     const drains = current.control.filter(message => message.kind === "provider-drain-complete");
@@ -477,7 +613,7 @@ test("exit status schemas, POSIX child signals, NUL, and outer convergence bound
   const current = fixture();
   current.runtime.receive(handshake); current.runtime.receive(request());
   current.runtime.closeProviderOutput("stdout"); current.runtime.closeProviderOutput("stderr");
-  current.syscalls.reaped.push({exitCode: 0, pid: 41, signal: null}); current.runtime.tick();
+  current.syscalls.rootExits.push({exitCode: 0, handle: {pid: 41, stableIdentity: "provider-root:one"}, signal: null}); current.runtime.tick();
   const closure = current.runtime.snapshot().closure;
   assert.equal(closure?.outerContainmentClaim, "unproven");
   assert.equal(closure?.providerDrain.outerContainmentClaim, "unproven");

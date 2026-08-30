@@ -101,14 +101,23 @@ export interface DockerCustodyProviderDrainComplete {
   readonly stdout: "eof";
 }
 
+export interface DockerCustodyProviderDrainFailed {
+  readonly kind: "provider-drain-failed";
+  readonly outerContainmentClaim: "unproven";
+  readonly reason: "stderr-overflow" | "stdout-overflow";
+  readonly requestId: string;
+}
+
+export type DockerCustodyProviderDrainResult = DockerCustodyProviderDrainComplete | DockerCustodyProviderDrainFailed;
+
 export interface DockerCustodyInitClosureSubresult {
   readonly outerContainmentClaim: "unproven";
-  readonly providerDrain: DockerCustodyProviderDrainComplete;
+  readonly providerDrain: DockerCustodyProviderDrainResult;
 }
 
 export type DockerCustodyHostMessage = DockerCustodyHostHandshake | DockerCustodyProviderExecRequest;
 export type DockerCustodyInitMessage =
-  | DockerCustodyContainmentRequest | DockerCustodyInitReady | DockerCustodyProviderDrainComplete
+  | DockerCustodyContainmentRequest | DockerCustodyInitReady | DockerCustodyProviderDrainComplete | DockerCustodyProviderDrainFailed
   | DockerCustodyProviderExecAcknowledgement | DockerCustodyProviderObservation | DockerCustodySignalObservation;
 export type DockerCustodyProtocolMessage = DockerCustodyHostMessage | DockerCustodyInitMessage;
 
@@ -286,6 +295,10 @@ export const parseDockerCustodyProtocolMessage = (input: unknown): DockerCustody
       return Object.freeze({kind, outerContainmentClaim: literal(value.outerContainmentClaim, ["unproven"], "outerContainmentClaim"),
         requestId: token(value.requestId, "requestId"), rootExit: literal(value.rootExit, ["observed"], "rootExit"),
         stderr: literal(value.stderr, ["eof"], "stderr"), stdout: literal(value.stdout, ["eof"], "stdout")});
+    case "provider-drain-failed":
+      exactKeys(value, ["kind", "outerContainmentClaim", "reason", "requestId"], kind);
+      return Object.freeze({kind, outerContainmentClaim: literal(value.outerContainmentClaim, ["unproven"], "outerContainmentClaim"),
+        reason: literal(value.reason, ["stderr-overflow", "stdout-overflow"], "reason"), requestId: token(value.requestId, "requestId")});
     default: return fail("frame kind is unsupported");
   }
 };
@@ -311,22 +324,26 @@ export class DockerCustodyFrameDecoder {
 
   public push(bytes: Uint8Array): readonly DockerCustodyProtocolMessage[] {
     if (this.#sealed) {return fail("control channel is sealed after EOF");}
-    if (this.#buffer.byteLength + bytes.byteLength > 4 * (DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES + 4)) {return fail("incomplete frame exceeds the protocol bound");}
-    this.#buffer = Buffer.concat([this.#buffer, bytes]);
-    const messages: DockerCustodyProtocolMessage[] = [];
-    while (this.#buffer.byteLength >= 4) {
-      const size = this.#buffer.readUInt32BE(0);
-      if (size === 0 || size > DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES) {return fail("frame length is invalid");}
-      if (this.#buffer.byteLength < size + 4) {break;}
-      const payload = this.#buffer.subarray(4, size + 4); this.#buffer = this.#buffer.subarray(size + 4);
-      try {
+    try {
+      if (this.#buffer.byteLength + bytes.byteLength > 4 * (DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES + 4)) {return fail("incomplete frame exceeds the protocol bound");}
+      this.#buffer = Buffer.concat([this.#buffer, bytes]);
+      const messages: DockerCustodyProtocolMessage[] = [];
+      while (this.#buffer.byteLength >= 4) {
+        const size = this.#buffer.readUInt32BE(0);
+        if (size === 0 || size > DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES) {return fail("frame length is invalid");}
+        if (this.#buffer.byteLength < size + 4) {break;}
+        const payload = this.#buffer.subarray(4, size + 4); this.#buffer = this.#buffer.subarray(size + 4);
         const message = parseDockerCustodyProtocolMessage(JSON.parse(payload.toString("utf8")) as unknown);
         const canonicalPayload = Buffer.from(JSON.stringify(canonical(message)), "utf8");
         if (!payload.equals(canonicalPayload)) {return fail("frame payload is not canonical");}
         messages.push(message);
-      } catch (error) {if (error instanceof DockerCustodyProtocolError) {throw error;} return fail("frame JSON is malformed");}
+      }
+      return Object.freeze(messages);
+    } catch (error) {
+      this.#buffer = Buffer.alloc(0); this.#sealed = true;
+      if (error instanceof DockerCustodyProtocolError) {throw error;}
+      return fail("frame JSON is malformed");
     }
-    return Object.freeze(messages);
   }
 
   public finish(): void {
