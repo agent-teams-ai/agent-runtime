@@ -17,6 +17,7 @@ import {
   parseDockerMultiplexedStream,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
 import { BoundedUnixHttpClient } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-http.js";
+import { snapshotDockerEngineCall } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.js";
 import type { DockerEndpointObservation } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-http.js";
 import type {
   DockerContainerCreate,
@@ -148,6 +149,7 @@ interface SyntheticDaemon {
   inspectTransform: ((value: Record<string, unknown>) => void) | undefined;
   logLeavesRunning: boolean;
   loseNextCreate: boolean;
+  oversizeNextCreate: boolean;
   mutationPlan: MutationPlan | undefined;
   rawCreateBody: Uint8Array | undefined;
   readonly routes: string[];
@@ -163,6 +165,7 @@ const syntheticDaemon = (): SyntheticDaemon => {
     inspectTransform: undefined as ((value: Record<string, unknown>) => void) | undefined,
     logLeavesRunning: false,
     loseNextCreate: false,
+    oversizeNextCreate: false,
     mutationPlan: undefined as MutationPlan | undefined,
     present: false,
     rawCreateBody: undefined as Uint8Array | undefined,
@@ -276,6 +279,10 @@ const syntheticDaemon = (): SyntheticDaemon => {
           if (plan.statusCode !== 201) {return jsonResponse(plan.statusCode, { message: "synthetic rejection" });}
         }
         if (state.loseNextCreate) {state.loseNextCreate = false; throw new DockerEngineError("daemon-disconnected");}
+        if (state.oversizeNextCreate) {
+          state.oversizeNextCreate = false;
+          throw new DockerEngineError("response-too-large");
+        }
         if (state.rawCreateBody !== undefined) {
           const response = { body: state.rawCreateBody, contentType: "application/json", statusCode: 201 };
           state.rawCreateBody = undefined;
@@ -327,6 +334,8 @@ const syntheticDaemon = (): SyntheticDaemon => {
     set logLeavesRunning(value: boolean) {state.logLeavesRunning = value;},
     get loseNextCreate() {return state.loseNextCreate;},
     set loseNextCreate(value: boolean) {state.loseNextCreate = value;},
+    get oversizeNextCreate() {return state.oversizeNextCreate;},
+    set oversizeNextCreate(value: boolean) {state.oversizeNextCreate = value;},
     get mutationPlan() {return state.mutationPlan;},
     set mutationPlan(value: MutationPlan | undefined) {state.mutationPlan = value;},
     get rawCreateBody() {return state.rawCreateBody;},
@@ -489,6 +498,22 @@ test("public boundaries reject proxies, inherited fields, and accessors before d
     !error.message.includes("secret policy accessor diagnostic"));
 });
 
+test("engine call snapshots preserve native AbortSignal state across later expandos and cancellation", () => {
+  const controller = new AbortController();
+  Object.defineProperty(controller.signal, "addEventListener", {
+    configurable: true,
+    value() {throw new Error("shadowed signal listener");},
+  });
+  const snapshot = snapshotDockerEngineCall({ deadlineEpochMs: Date.now() + 10_000, signal: controller.signal });
+  Object.defineProperty(controller.signal, "aborted", { configurable: true, value: true, writable: true });
+  assert.equal(snapshot.signal.aborted, false);
+  Object.defineProperty(controller.signal, "aborted", { configurable: true, value: false, writable: true });
+  controller.abort();
+  assert.equal(snapshot.signal.aborted, true);
+  assert.equal(Object.isExtensible(snapshot.signal), false);
+  assert.throws(() => Object.defineProperty(snapshot.signal, "aborted", { value: false }), TypeError);
+});
+
 test("lost create reconciliation refuses every policy-adjacent foreign specification", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
@@ -504,6 +529,17 @@ test("lost create reconciliation refuses every policy-adjacent foreign specifica
       code: "create-acknowledgement-unknown",
     });
   }
+});
+
+test("an oversized create response reconciles a create that may already be committed", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  daemon.oversizeNextCreate = true;
+  const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
+  const authority = await engine.create(createInput(root, "9".repeat(64)), call());
+  assert.equal(authority.containerId, CONTAINER);
+  assert.ok(daemon.routes.includes(`GET /v1.47/containers/ar-turn-${"9".repeat(64)}/json`));
 });
 
 test("persistent daemon identity is additionally fenced by daemon and host boot generations", async t => {
@@ -531,6 +567,9 @@ test("ambiguous and 304 mutation acknowledgements require exact postconditions a
   const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
   const authority = await engine.create(createInput(root), call());
   daemon.mutationPlan = { body: { Unexpected: true }, effect: true, statusCode: 204 };
+  await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
+  assert.ok(daemon.routes.filter(route => route === `GET /v1.47/containers/${CONTAINER}/json`).length >= 2);
+  daemon.mutationPlan = { body: { Unexpected: true }, effect: true, statusCode: 304 };
   await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
   daemon.mutationPlan = { effect: true, statusCode: 304 };
   await engine.start(authority, call());

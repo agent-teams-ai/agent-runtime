@@ -37,6 +37,22 @@ const POLICY_NUMBER_KEYS = Object.freeze([
   "pidsLimit", "socketMode", "socketOwnerGid", "socketOwnerUid", "tmpfsBytes", "writableLayerBytes",
 ]);
 
+const ABORT_SIGNAL_PROTO = AbortSignal.prototype;
+const ABORTED_GETTER = Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "aborted")?.get;
+const REASON_GETTER = Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "reason")?.get;
+const THROW_IF_ABORTED = Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "throwIfAborted")?.value;
+const EVENT_TARGET_PROTO = Object.getPrototypeOf(ABORT_SIGNAL_PROTO);
+const ADD_EVENT_LISTENER = EVENT_TARGET_PROTO === null
+  ? undefined
+  : Object.getOwnPropertyDescriptor(EVENT_TARGET_PROTO, "addEventListener")?.value;
+const REMOVE_EVENT_LISTENER = EVENT_TARGET_PROTO === null
+  ? undefined
+  : Object.getOwnPropertyDescriptor(EVENT_TARGET_PROTO, "removeEventListener")?.value;
+const DISPATCH_EVENT = EVENT_TARGET_PROTO === null
+  ? undefined
+  : Object.getOwnPropertyDescriptor(EVENT_TARGET_PROTO, "dispatchEvent")?.value;
+const ABORT_SIGNAL_SNAPSHOTS = new WeakSet<AbortSignal>();
+
 const fail = (code: DockerEngineFailureCode): never => {throw new DockerEngineError(code);};
 
 const dataValues = (
@@ -174,9 +190,73 @@ export const snapshotDockerEngineCall = (value: unknown): DockerEngineCall => {
   }
   try {
     if (!(call.signal instanceof AbortSignal) || utilTypes.isProxy(call.signal) ||
-        Object.getPrototypeOf(call.signal) !== AbortSignal.prototype) {return fail("aborted");}
-    const aborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")?.get;
-    if (aborted === undefined || typeof aborted.call(call.signal) !== "boolean") {return fail("aborted");}
+        Object.getPrototypeOf(call.signal) !== ABORT_SIGNAL_PROTO) {return fail("aborted");}
+    if (ABORT_SIGNAL_SNAPSHOTS.has(call.signal)) {
+      return Object.freeze({ deadlineEpochMs: call.deadlineEpochMs, signal: call.signal }) as DockerEngineCall;
+    }
+    if (ABORTED_GETTER === undefined || REASON_GETTER === undefined || typeof THROW_IF_ABORTED !== "function" ||
+        typeof ADD_EVENT_LISTENER !== "function" || typeof REMOVE_EVENT_LISTENER !== "function" ||
+        typeof DISPATCH_EVENT !== "function") {return fail("aborted");}
+
+    const source = call.signal;
+    const nativeAborted = ABORTED_GETTER as (this: AbortSignal) => unknown;
+    const nativeReason = REASON_GETTER as (this: AbortSignal) => unknown;
+    if (typeof nativeAborted.call(source) !== "boolean") {return fail("aborted");}
+    const controller = new AbortController();
+    const snapshot = controller.signal;
+    const nativeAdd = ADD_EVENT_LISTENER as (...args: unknown[]) => unknown;
+    const nativeRemove = REMOVE_EVENT_LISTENER as (...args: unknown[]) => unknown;
+    const nativeDispatch = DISPATCH_EVENT as (...args: unknown[]) => unknown;
+    const nativeThrowIfAborted = THROW_IF_ABORTED as (...args: unknown[]) => unknown;
+    const propagateAbort = (): void => {
+      if (!nativeAborted.call(source)) {return;}
+      controller.abort(nativeReason.call(source));
+    };
+    propagateAbort();
+    if (!nativeAborted.call(source)) {
+      nativeAdd.call(source, "abort", propagateAbort, { once: true });
+    }
+    Object.defineProperties(snapshot, {
+      aborted: {
+        configurable: false,
+        enumerable: false,
+        get: () => nativeAborted.call(snapshot),
+      },
+      addEventListener: {
+        configurable: false,
+        enumerable: false,
+        value: (...args: unknown[]) => nativeAdd.apply(snapshot, args),
+        writable: false,
+      },
+      dispatchEvent: {
+        configurable: false,
+        enumerable: false,
+        value: (...args: unknown[]) => nativeDispatch.apply(snapshot, args),
+        writable: false,
+      },
+      reason: {
+        configurable: false,
+        enumerable: false,
+        get: () => nativeReason.call(snapshot),
+      },
+      removeEventListener: {
+        configurable: false,
+        enumerable: false,
+        value: (...args: unknown[]) => nativeRemove.apply(snapshot, args),
+        writable: false,
+      },
+      throwIfAborted: {
+        configurable: false,
+        enumerable: false,
+        value: (...args: unknown[]) => nativeThrowIfAborted.apply(snapshot, args),
+        writable: false,
+      },
+    });
+    // Keep the controller's native internal state writable so a later native
+    // abort can still transition the snapshot, while preventing any caller
+    // expando or method shadowing on the signal boundary.
+    Object.preventExtensions(snapshot);
+    ABORT_SIGNAL_SNAPSHOTS.add(snapshot);
+    return Object.freeze({ deadlineEpochMs: call.deadlineEpochMs, signal: snapshot }) as DockerEngineCall;
   } catch {return fail("aborted");}
-  return Object.freeze({ deadlineEpochMs: call.deadlineEpochMs, signal: call.signal }) as DockerEngineCall;
 };

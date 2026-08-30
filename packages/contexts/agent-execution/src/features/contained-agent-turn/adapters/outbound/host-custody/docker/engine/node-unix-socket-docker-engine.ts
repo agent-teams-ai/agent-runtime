@@ -147,7 +147,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
         throw new DockerEngineError("create-acknowledgement-unknown");
       }
       if (!(error instanceof DockerEngineError) || ![
-        "daemon-disconnected", "deadline-exceeded", "malformed-response", "protocol-violation",
+        "daemon-disconnected", "deadline-exceeded", "malformed-response", "protocol-violation", "response-too-large",
       ].includes(error.code)) {throw error;}
       return this.#resolveLostAcknowledgement(canonicalInput, engine, name, callSnapshot);
     }
@@ -263,6 +263,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       throw statusFailure(operation, response.statusCode);
     }
     if (response.body.byteLength !== 0 || response.contentType !== "") {
+      await this.#reconcileMutation(operation, authoritySnapshot, callSnapshot);
       throw new DockerEngineError("protocol-violation");
     }
     await this.#reconcileMutation(operation, authoritySnapshot, callSnapshot);
