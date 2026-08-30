@@ -1,5 +1,3 @@
-import { types } from "node:util";
-
 export type DispatchProvider = "claude" | "codex";
 export type DispatchDisposition = "abandoned_without_claim" | "claim_committed";
 export interface DispatchScopeValue { readonly projectId: string; readonly scopeDigest: string; readonly tenantId: string }
@@ -64,7 +62,6 @@ export type DispatchSettlementOutcome =
 
 const TOKEN = /^[\p{L}\p{N}._:@+-]+$/u;
 const DIGEST = /^[\p{L}\p{N}._:+-]+$/u;
-export const isDispatchProxy = (value: unknown): boolean => value !== null && typeof value === "object" && types.isProxy(value);
 const primitive = (name: string, value: unknown, digest = false): string => {
   if (typeof value !== "string" || value.length === 0 || value.length > 512 || !(digest ? DIGEST : TOKEN).test(value)) {
     throw new TypeError(`${name} must be a bounded primitive token`);
@@ -75,19 +72,47 @@ const positive = (name: string, value: unknown): number => {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {throw new TypeError(`${name} must be a positive safe integer`);}
   return value;
 };
-const record = (name: string, value: unknown, keys: readonly string[]): Record<string, unknown> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || isDispatchProxy(value)) {throw new TypeError(`${name} must be a data record`);}
-  const prototype = Object.getPrototypeOf(value) as unknown;
-  if (prototype !== Object.prototype && prototype !== null) {throw new TypeError(`${name} must be a data record`);}
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(value).some(key => typeof key !== "string") || Object.keys(descriptors).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {
-    throw new TypeError(`${name} has an invalid shape`);
+const preflightData = (name: string, value: unknown, seen: Set<object>, depth: number): void => {
+  if (typeof value === "string" && value.length > 512) {throw new TypeError(`${name} contains oversized data`);}
+  if (value === null || typeof value !== "object") {return;}
+  if (depth > 8 || seen.size > 128) {throw new TypeError(`${name} has an invalid aggregate`);}
+  if (seen.has(value)) {throw new TypeError(`${name} cannot be cyclic`);}
+  seen.add(value);
+  let prototype: unknown;
+  let descriptors: Record<PropertyKey, PropertyDescriptor>;
+  try {
+    prototype = Object.getPrototypeOf(value) as unknown;
+    descriptors = Object.getOwnPropertyDescriptors(value);
+  } catch {throw new TypeError(`${name} must be stable data`);}
+  if (Reflect.ownKeys(descriptors).length > 128) {throw new TypeError(`${name} contains too many fields`);}
+  if (prototype !== Object.prototype && prototype !== null && prototype !== Array.prototype) {throw new TypeError(`${name} must be a data record`);}
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== "string") {throw new TypeError(`${name} cannot contain symbol fields`);}
+    const descriptor = descriptors[key];
+    if (descriptor === undefined || !("value" in descriptor)) {throw new TypeError(`${name} cannot contain accessors`);}
+    preflightData(name, descriptor.value, seen, depth + 1);
   }
+  seen.delete(value);
+};
+export const exactDispatchDataRecord = (name: string, value: unknown, keys: readonly string[]): Record<string, unknown> => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {throw new TypeError(`${name} must be a data record`);}
+  let prototype: unknown;
+  let descriptors: Record<PropertyKey, PropertyDescriptor>;
+  try {
+    prototype = Object.getPrototypeOf(value) as unknown;
+    descriptors = Object.getOwnPropertyDescriptors(value);
+  } catch {throw new TypeError(`${name} must be stable data`);}
+  if (prototype !== Object.prototype && prototype !== null) {throw new TypeError(`${name} must be a data record`);}
+  if (Reflect.ownKeys(descriptors).some(key => typeof key !== "string") ||
+    Object.keys(descriptors).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {throw new TypeError(`${name} has an invalid shape`);}
   for (const descriptor of Object.values(descriptors)) {
     if (!("value" in descriptor)) {throw new TypeError(`${name} cannot contain accessors`);}
   }
+  preflightData(name, value, new Set(), 0);
+  try {structuredClone(value);} catch {throw new TypeError(`${name} must be cloneable data`);}
   return Object.fromEntries(keys.map(key => [key, descriptors[key]?.value]));
 };
+const record = exactDispatchDataRecord;
 export const snapshotDispatchScope = (value: DispatchScopeValue): DispatchScopeValue => {
   const data = record("scope", value, ["projectId", "scopeDigest", "tenantId"]);
   return Object.freeze({
@@ -139,6 +164,114 @@ export const snapshotDispatchExpectation = (value: DispatchExpectationValue): Di
 export const snapshotDispatchDigest = (name: string, value: unknown): string => primitive(name, value, true);
 export const snapshotDispatchId = (name: string, value: unknown): string => primitive(name, value);
 export const snapshotDispatchControlTime = (value: unknown): number => positive("controlTime", value);
+const provider = (value: unknown): DispatchProvider => {
+  if (value !== "claude" && value !== "codex") {throw new TypeError("provider is invalid");}
+  return value;
+};
+const disposition = (value: unknown): DispatchDisposition => {
+  if (value !== "abandoned_without_claim" && value !== "claim_committed") {throw new TypeError("disposition is invalid");}
+  return value;
+};
+export const snapshotDispatchConsumedReceipt = (value: unknown): DispatchConsumedReceipt => {
+  const data = record("consumption receipt", value, [
+    "acceptedAuthorityDigest", "accessRef", "authorityHeadDigestAtConsumption", "bindingDigest", "bindingRevision",
+    "claimBeforeControlTime", "claimBindingDigest", "consumedAtControlTime", "consumptionDigest", "credentialBindingDigest",
+    "credentialBindingRef", "credentialGeneration", "grantRequestId", "opaqueOwnerEvidenceRef", "operationId", "provider",
+    "providerAccountRef", "providerRouteRef", "purpose", "requestDigest", "scope",
+  ]);
+  if (data.purpose !== "contained-turn.provider-dispatch/v1") {throw new TypeError("purpose is invalid");}
+  return Object.freeze({
+    acceptedAuthorityDigest: primitive("acceptedAuthorityDigest", data.acceptedAuthorityDigest, true), accessRef: primitive("accessRef", data.accessRef),
+    authorityHeadDigestAtConsumption: primitive("authorityHeadDigestAtConsumption", data.authorityHeadDigestAtConsumption, true),
+    bindingDigest: primitive("bindingDigest", data.bindingDigest, true), bindingRevision: positive("bindingRevision", data.bindingRevision),
+    claimBeforeControlTime: positive("claimBeforeControlTime", data.claimBeforeControlTime), claimBindingDigest: primitive("claimBindingDigest", data.claimBindingDigest, true),
+    consumedAtControlTime: positive("consumedAtControlTime", data.consumedAtControlTime),
+    credentialBindingDigest: primitive("credentialBindingDigest", data.credentialBindingDigest, true), credentialBindingRef: primitive("credentialBindingRef", data.credentialBindingRef),
+    credentialGeneration: positive("credentialGeneration", data.credentialGeneration), grantRequestId: primitive("grantRequestId", data.grantRequestId),
+    opaqueOwnerEvidenceRef: primitive("opaqueOwnerEvidenceRef", data.opaqueOwnerEvidenceRef), operationId: primitive("operationId", data.operationId),
+    provider: provider(data.provider), providerAccountRef: primitive("providerAccountRef", data.providerAccountRef), providerRouteRef: primitive("providerRouteRef", data.providerRouteRef),
+    purpose: data.purpose, requestDigest: primitive("requestDigest", data.requestDigest, true), scope: snapshotDispatchScope(data.scope as DispatchScopeValue),
+    consumptionDigest: primitive("consumptionDigest", data.consumptionDigest, true),
+  });
+};
+const snapshotDispatchPrevention = (value: unknown): DispatchPrevention => {
+  const data = record("prevention", value, ["grantRequestId", "observedAtControlTime", "opaqueOwnerEvidenceRef", "reason", "requestDigest", "scope"]);
+  const reasons: readonly DispatchPreventedReason[] = [
+    "accepted_authority_changed", "access_changed", "account_changed", "already_consumed", "authority_head_changed", "binding_changed",
+    "claim_binding_mismatch", "credential_changed", "credential_rotated", "expired", "invalid_request", "provider_mismatch",
+    "request_digest_mismatch", "revision_changed", "revoked", "route_changed", "scope_mismatch", "unavailable",
+  ];
+  if (!reasons.includes(data.reason as DispatchPreventedReason)) {throw new TypeError("prevention reason is invalid");}
+  return Object.freeze({
+    grantRequestId: primitive("grantRequestId", data.grantRequestId), observedAtControlTime: positive("observedAtControlTime", data.observedAtControlTime),
+    opaqueOwnerEvidenceRef: primitive("opaqueOwnerEvidenceRef", data.opaqueOwnerEvidenceRef), reason: data.reason as DispatchPreventedReason,
+    requestDigest: primitive("requestDigest", data.requestDigest, true), scope: snapshotDispatchScope(data.scope as DispatchScopeValue),
+  });
+};
+const dispatchKind = (name: string, value: unknown): unknown => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {throw new TypeError(`${name} must be a data record`);}
+  preflightData(name, value, new Set(), 0);
+  try {structuredClone(value);} catch {throw new TypeError(`${name} must be cloneable data`);}
+  const descriptor = Object.getOwnPropertyDescriptor(value, "kind");
+  if (descriptor === undefined || !("value" in descriptor)) {throw new TypeError(`${name} kind is invalid`);}
+  return descriptor.value;
+};
+export const snapshotDispatchConsumeOutcome = (value: unknown): DispatchConsumeOutcome => {
+  const kind = dispatchKind("consume outcome", value);
+  if (kind === "consumed") {
+    const data = record("consume outcome", value, ["kind", "receipt"]); return Object.freeze({ kind: "consumed", receipt: snapshotDispatchConsumedReceipt(data.receipt) });
+  }
+  if (kind === "prevented") {
+    const data = record("consume outcome", value, ["kind", "prevention"]); return Object.freeze({ kind: "prevented", prevention: snapshotDispatchPrevention(data.prevention) });
+  }
+  if (kind === "conflict") {
+    const data = record("consume outcome", value, ["kind", "reason"]);
+    if (data.reason !== "grant_request_digest_conflict") {throw new TypeError("conflict reason is invalid");}
+    return Object.freeze({ kind: "conflict", reason: data.reason });
+  }
+  if (kind === "invalid") {
+    const data = record("consume outcome", value, ["kind", "reason"]);
+    if (data.reason !== "invalid_request") {throw new TypeError("invalid reason is invalid");}
+    return Object.freeze({ kind: "invalid", reason: data.reason });
+  }
+  if (kind === "indeterminate" || kind === "not_found") {
+    record("consume outcome", value, ["kind"]); return Object.freeze({ kind });
+  }
+  throw new TypeError("consume outcome kind is invalid");
+};
+export const snapshotDispatchSettlementReceipt = (value: unknown): DispatchSettlementReceipt => {
+  const data = record("settlement receipt", value, [
+    "consumptionDigest", "disposition", "expectedBinding", "operationId", "provider", "scope", "settledAtControlTime",
+    "settlementDigest", "settlementRequestId",
+  ]);
+  return Object.freeze({
+    consumptionDigest: primitive("consumptionDigest", data.consumptionDigest, true), disposition: disposition(data.disposition),
+    expectedBinding: snapshotDispatchExpectation(data.expectedBinding as DispatchExpectationValue), operationId: primitive("operationId", data.operationId),
+    provider: provider(data.provider), scope: snapshotDispatchScope(data.scope as DispatchScopeValue),
+    settlementRequestId: primitive("settlementRequestId", data.settlementRequestId), settledAtControlTime: positive("settledAtControlTime", data.settledAtControlTime),
+    settlementDigest: primitive("settlementDigest", data.settlementDigest, true),
+  });
+};
+export const snapshotDispatchSettlementOutcome = (value: unknown): DispatchSettlementOutcome => {
+  const kind = dispatchKind("settlement outcome", value);
+  if (kind === "settled") {
+    const data = record("settlement outcome", value, ["kind", "receipt"]); return Object.freeze({ kind: "settled", receipt: snapshotDispatchSettlementReceipt(data.receipt) });
+  }
+  if (kind === "conflict") {
+    const data = record("settlement outcome", value, ["kind", "reason"]);
+    if (data.reason !== "settlement_request_conflict") {throw new TypeError("conflict reason is invalid");}
+    return Object.freeze({ kind: "conflict", reason: data.reason });
+  }
+  if (kind === "invalid") {
+    const data = record("settlement outcome", value, ["kind", "reason"]);
+    if (data.reason !== "invalid_request") {throw new TypeError("invalid reason is invalid");}
+    return Object.freeze({ kind: "invalid", reason: data.reason });
+  }
+  if (kind === "indeterminate" || kind === "not_found") {
+    record("settlement outcome", value, ["kind"]); return Object.freeze({ kind });
+  }
+  throw new TypeError("settlement outcome kind is invalid");
+};
 export const canonicalJson = (value: unknown): string => {
   if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") {return JSON.stringify(value);}
   if (Array.isArray(value)) {return `[${value.map(canonicalJson).join(",")}]`;}
@@ -156,3 +289,9 @@ export const claimBindingDigestPayload = (command: DispatchConsumeCommand): stri
   providerAccountRef: command.binding.providerAccountRef, providerRouteRef: command.binding.providerRouteRef,
   purpose: command.purpose, scope: command.scope,
 });
+export const consumptionDigestPayload = (receipt: DispatchConsumedReceipt): string => {
+  const { consumptionDigest: _digest, ...unsigned } = receipt; return canonicalJson(unsigned);
+};
+export const settlementDigestPayload = (receipt: DispatchSettlementReceipt): string => {
+  const { settlementDigest: _digest, ...unsigned } = receipt; return canonicalJson(unsigned);
+};

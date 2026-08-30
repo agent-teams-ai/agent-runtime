@@ -75,6 +75,21 @@ const transactionBarrier = (base: DispatchConsumptionRepository) => {
   return { entered: enteredPromise, release, repository };
 };
 
+type RepositoryRead = "findBindingHead" | "findConsumption" | "findGrantRequest" | "findSettlement" | "findSettlementByConsumption";
+const repositoryReadOverride = (base: DispatchConsumptionRepository, method: RepositoryRead, value: unknown): DispatchConsumptionRepository => ({
+  observeGrantRequest: input => base.observeGrantRequest(input),
+  transact: (selector, work) => base.transact(selector, transaction => work({
+    controlTime: () => transaction.controlTime(),
+    findBindingHead: () => method === "findBindingHead" ? Promise.resolve(value as never) : transaction.findBindingHead(),
+    findConsumption: () => method === "findConsumption" ? Promise.resolve(value as never) : transaction.findConsumption(),
+    findGrantRequest: () => method === "findGrantRequest" ? Promise.resolve(value as never) : transaction.findGrantRequest(),
+    findSettlement: () => method === "findSettlement" ? Promise.resolve(value as never) : transaction.findSettlement(),
+    findSettlementByConsumption: () => method === "findSettlementByConsumption" ? Promise.resolve(value as never) : transaction.findSettlementByConsumption(),
+    isBindingConsumed: () => transaction.isBindingConsumed(), markBindingConsumed: receipt => transaction.markBindingConsumed(receipt),
+    saveGrantRequest: entry => transaction.saveGrantRequest(entry), saveSettlement: outcome => transaction.saveSettlement(outcome),
+  })),
+});
+
 test("atomically consumes the exact binding head and returns the closed V1 receipt", async () => {
   const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
   assert.deepEqual(Object.keys(harness.access).toSorted(), [
@@ -186,8 +201,7 @@ test("composition validates Pure DI once and retains bound method snapshots", as
   Object.defineProperty(accessor, "digest", { enumerable: true, get: () => valid.digest });
   Object.defineProperty(accessor, "repository", { enumerable: true, value: valid.repository });
   for (const invalidDependencies of [
-    new Proxy(valid, {}), accessor, { digest: valid.digest }, { ...valid, unknown: true },
-    { ...valid, repository: new Proxy(valid.repository, {}) },
+    accessor, { digest: valid.digest }, { ...valid, unknown: true },
     { ...valid, digest: { ...valid.digest, unknown() { return Promise.resolve("bad"); } } },
   ]) {
     assert.throws(() => createContainedTurnDispatchConsumptionV1(invalidDependencies as never), TypeError);
@@ -592,6 +606,149 @@ test("claim-committed settlement is terminal audit evidence", async () => {
     ...settlementFor(consumed.receipt), disposition: "claim_committed", settlementRequestId: "settlement:claim",
   })).kind, "settled");
   assert.equal(harness.control.observeOwnerState({ provider: "codex", scopeDigest: "scope:digest:1" }), "claim_committed");
+});
+
+test("consume replay rejects untrusted journal shapes, identities, proxies, accessors, and corrupt digests", async () => {
+  const base = repositoryHarness();
+  const input = await inputFor();
+  const initial = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: base.repository });
+  assert.equal((await initial.consumeForDispatch(input)).kind, "consumed");
+  const stored = await base.repository.observeGrantRequest(input);
+  assert.ok(stored !== undefined && stored.outcome.kind === "consumed");
+  if (stored === undefined || stored.outcome.kind !== "consumed") {return;}
+  const receipt = stored.outcome.receipt;
+  const accessor = structuredClone(stored) as Record<string, unknown>;
+  const accessorOutcome = accessor.outcome as Record<string, unknown>;
+  Object.defineProperty(accessorOutcome, "receipt", { enumerable: true, get: () => receipt });
+  const poisoned = [
+    { ...structuredClone(stored), secret: "credential" },
+    { ...structuredClone(stored), outcome: { kind: "consumed", receipt: { ...receipt, path: "/tmp/secret" } } },
+    new Proxy(structuredClone(stored), {}), accessor,
+    { ...structuredClone(stored), outcome: { kind: "consumed", receipt: { ...receipt, consumptionDigest: "sha256:deadbeef" } } },
+    { ...structuredClone(stored), operationId: "operation:foreign" },
+    { ...structuredClone(stored), provider: "claude" },
+    { ...structuredClone(stored), scope: { ...stored.scope, projectId: "project:foreign" } },
+  ];
+  for (const value of poisoned) {
+    const access = createContainedTurnDispatchConsumptionV1({
+      digest: createSha256DispatchConsumptionDigest(), repository: repositoryReadOverride(base.repository, "findGrantRequest", value),
+    });
+    assert.deepEqual(await access.consumeForDispatch(input), { kind: "indeterminate" });
+    assert.equal(Object.isFrozen(value), false);
+  }
+});
+
+test("observation detaches and deeply freezes valid persistence and rejects adversarial substitutions", async () => {
+  const base = repositoryHarness();
+  const input = await inputFor();
+  const initial = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: base.repository });
+  await initial.consumeForDispatch(input);
+  const stored = structuredClone(await base.repository.observeGrantRequest(input));
+  assert.ok(stored !== undefined && stored.outcome.kind === "consumed");
+  if (stored === undefined || stored.outcome.kind !== "consumed") {return;}
+  const mutable = structuredClone(stored);
+  const mutableRepository: DispatchConsumptionRepository = {
+    observeGrantRequest: async () => mutable, transact: (selector, work) => base.repository.transact(selector, work),
+  };
+  const detached = await createContainedTurnDispatchConsumptionV1({
+    digest: createSha256DispatchConsumptionDigest(), repository: mutableRepository,
+  }).observeDispatchConsumption({ grantRequestId: input.grantRequestId, provider: input.provider, requestDigest: input.requestDigest, scope: input.scope });
+  assert.equal(detached.kind, "consumed");
+  assert.equal(Object.isFrozen(mutable), false);
+  if (detached.kind === "consumed") {
+    mutable.outcome.receipt.operationId = "operation:mutated";
+    assert.equal(detached.receipt.operationId, "operation:1");
+    assert.ok(Object.isFrozen(detached) && Object.isFrozen(detached.receipt) && Object.isFrozen(detached.receipt.scope));
+  }
+  for (const value of [
+    { ...structuredClone(stored), provider: "claude" },
+    { ...structuredClone(stored), scope: { ...stored.scope, tenantId: "tenant:foreign" } },
+    { ...structuredClone(stored), outcome: { kind: "consumed", receipt: { ...stored.outcome.receipt, provider: "claude" } } },
+    new Proxy(structuredClone(stored), {}),
+  ]) {
+    const repository: DispatchConsumptionRepository = { observeGrantRequest: async () => value as never, transact: base.repository.transact };
+    const outcome = await createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository })
+      .observeDispatchConsumption({ grantRequestId: input.grantRequestId, provider: input.provider, requestDigest: input.requestDigest, scope: input.scope });
+    assert.deepEqual(outcome, { kind: "indeterminate" });
+  }
+});
+
+test("settlement replay rejects malformed receipts, corrupt digests, proxies, and cross-selector substitution", async () => {
+  const base = repositoryHarness();
+  const initial = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: base.repository });
+  const consumed = await initial.consumeForDispatch(await inputFor());
+  assert.equal(consumed.kind, "consumed");
+  if (consumed.kind !== "consumed") {return;}
+  const command = settlementFor(consumed.receipt);
+  const settled = await initial.settleDispatchConsumption(command);
+  assert.equal(settled.kind, "settled");
+  if (settled.kind !== "settled") {return;}
+  const receipt = settled.receipt;
+  const poisoned = [
+    { kind: "settled", receipt: { ...receipt, expectedBinding: { ...receipt.expectedBinding, path: "/secret" } } },
+    { kind: "settled", receipt: { ...receipt, settlementDigest: "sha256:bad" } },
+    { kind: "settled", receipt: { ...receipt, provider: "claude" } },
+    { kind: "settled", receipt: { ...receipt, scope: { ...receipt.scope, scopeDigest: "scope:foreign" } } },
+    { kind: "settled", receipt: { ...receipt, operationId: "operation:foreign" } },
+    new Proxy(structuredClone(settled), {}),
+  ];
+  for (const value of poisoned) {
+    const access = createContainedTurnDispatchConsumptionV1({
+      digest: createSha256DispatchConsumptionDigest(), repository: repositoryReadOverride(base.repository, "findSettlement", value),
+    });
+    assert.deepEqual(await access.settleDispatchConsumption(command), { kind: "indeterminate" });
+    assert.equal(Object.isFrozen(value), false);
+  }
+});
+
+test("digest and transaction return channels cannot substitute untrusted values", async () => {
+  const base = repositoryHarness();
+  const input = await inputFor();
+  const substituted: DispatchConsumptionRepository = {
+    observeGrantRequest: value => base.repository.observeGrantRequest(value),
+    async transact(selector, work) { await base.repository.transact(selector, work); return { kind: "consumed", secret: "foreign" } as never; },
+  };
+  assert.deepEqual(await createContainedTurnDispatchConsumptionV1({
+    digest: createSha256DispatchConsumptionDigest(), repository: substituted,
+  }).consumeForDispatch(input), { kind: "indeterminate" });
+  assert.deepEqual(await createContainedTurnDispatchConsumptionV1({
+    digest: { async digest() { return new Proxy({}, {}) as unknown as string; } }, repository: repositoryHarness().repository,
+  }).consumeForDispatch(input), { kind: "indeterminate" });
+});
+
+test("consume and settlement replay detach mutable repository identities before public return", async () => {
+  const base = repositoryHarness();
+  const input = await inputFor();
+  const initial = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: base.repository });
+  const consumed = await initial.consumeForDispatch(input);
+  assert.equal(consumed.kind, "consumed");
+  if (consumed.kind !== "consumed") {return;}
+  const journal = structuredClone(await base.repository.observeGrantRequest(input));
+  assert.ok(journal !== undefined && journal.outcome.kind === "consumed");
+  if (journal === undefined || journal.outcome.kind !== "consumed") {return;}
+  const replayAccess = createContainedTurnDispatchConsumptionV1({
+    digest: createSha256DispatchConsumptionDigest(), repository: repositoryReadOverride(base.repository, "findGrantRequest", journal),
+  });
+  const consumeReplay = await replayAccess.consumeForDispatch(input);
+  assert.equal(consumeReplay.kind, "consumed");
+  journal.outcome.receipt.operationId = "operation:mutated";
+  assert.equal(consumeReplay.kind === "consumed" ? consumeReplay.receipt.operationId : undefined, "operation:1");
+  assert.ok(consumeReplay.kind === "consumed" && Object.isFrozen(consumeReplay.receipt) && Object.isFrozen(consumeReplay.receipt.scope));
+
+  const command = settlementFor(consumed.receipt);
+  const settled = await initial.settleDispatchConsumption(command);
+  assert.equal(settled.kind, "settled");
+  if (settled.kind !== "settled") {return;}
+  const mutableSettlement = structuredClone(settled);
+  const settlementAccess = createContainedTurnDispatchConsumptionV1({
+    digest: createSha256DispatchConsumptionDigest(), repository: repositoryReadOverride(base.repository, "findSettlement", mutableSettlement),
+  });
+  const settlementReplay = await settlementAccess.settleDispatchConsumption(command);
+  assert.equal(settlementReplay.kind, "settled");
+  mutableSettlement.receipt.operationId = "operation:mutated";
+  assert.equal(settlementReplay.kind === "settled" ? settlementReplay.receipt.operationId : undefined, "operation:1");
+  assert.ok(settlementReplay.kind === "settled" && Object.isFrozen(settlementReplay.receipt) &&
+    Object.isFrozen(settlementReplay.receipt.expectedBinding) && Object.isFrozen(settlementReplay.receipt.scope));
 });
 
 test("Route C contract contains no secret, raw path, home, environment, SDK, Agent Execution, or Module Kit fields", async () => {

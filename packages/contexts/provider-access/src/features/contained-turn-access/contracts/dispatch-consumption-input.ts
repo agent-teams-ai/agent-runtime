@@ -1,28 +1,12 @@
-import { types } from "node:util";
-
 import type {
   ConsumeForDispatchInput, ObserveDispatchConsumptionInput, SettleDispatchConsumptionInput,
 } from "./dispatch-consumption-v1.js";
 import {
-  snapshotDispatchDigest, snapshotDispatchExpectation, snapshotDispatchId, snapshotDispatchScope,
+  exactDispatchDataRecord, snapshotDispatchDigest, snapshotDispatchExpectation, snapshotDispatchId, snapshotDispatchScope,
   type DispatchConsumeCommand, type DispatchDisposition, type DispatchScopeValue,
 } from "../domain/dispatch-consumption.js";
 
-const dataRecord = (name: string, value: unknown, keys: readonly string[]): Record<string, unknown> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || types.isProxy(value)) {
-    throw new TypeError(`${name} must be a plain data record`);
-  }
-  const prototype = Object.getPrototypeOf(value) as unknown;
-  if (prototype !== Object.prototype && prototype !== null) {throw new TypeError(`${name} must be a plain data record`);}
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(value).some(key => typeof key !== "string") || Object.keys(descriptors).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {
-    throw new TypeError(`${name} has an invalid shape`);
-  }
-  for (const descriptor of Object.values(descriptors)) {
-    if (!("value" in descriptor)) {throw new TypeError(`${name} cannot contain accessors`);}
-  }
-  return Object.fromEntries(keys.map(key => [key, descriptors[key]?.value]));
-};
+const dataRecord = exactDispatchDataRecord;
 
 const scopeFrom = (value: unknown): DispatchScopeValue => {
   const record = dataRecord("scope", value, ["projectId", "scopeDigest", "tenantId"]);

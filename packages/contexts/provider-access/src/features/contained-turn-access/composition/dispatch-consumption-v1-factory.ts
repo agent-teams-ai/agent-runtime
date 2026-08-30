@@ -8,15 +8,13 @@ import type { DispatchConsumptionRepository } from "../application/ports/outboun
 import {
   consumeCommandFromContract, observeInputFromContract, settlementInputFromContract,
 } from "../contracts/dispatch-consumption-input.js";
-import { isDispatchProxy } from "../domain/dispatch-consumption.js";
-
 export interface DispatchConsumptionV1Dependencies {
   readonly digest: DispatchConsumptionDigest;
   readonly repository: DispatchConsumptionRepository;
 }
 
 const methodsFrom = (name: string, value: unknown, keys: readonly string[]): Record<string, (...args: never[]) => unknown> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || isDispatchProxy(value)) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be a plain dependency record`);
   }
   const prototype = Object.getPrototypeOf(value) as unknown;
@@ -35,7 +33,7 @@ const methodsFrom = (name: string, value: unknown, keys: readonly string[]): Rec
 };
 
 const snapshotDependencies = (value: DispatchConsumptionV1Dependencies): DispatchConsumptionV1Dependencies => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || isDispatchProxy(value)) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("dependencies must be a plain data record");
   }
   const prototype = Object.getPrototypeOf(value) as unknown;

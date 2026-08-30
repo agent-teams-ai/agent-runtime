@@ -1,7 +1,10 @@
 import type { DispatchConsumptionDigest } from "./ports/outbound/dispatch-consumption-digest.js";
 import type {
-  DispatchConsumptionJournalEntry, DispatchConsumptionRepository, DispatchConsumptionTransaction,
+  DispatchConsumptionJournalEntry, DispatchConsumptionRepository, DispatchConsumptionTransaction, DispatchConsumptionTransactionSelector,
 } from "./ports/outbound/dispatch-consumption-repository.js";
+import {
+  journalMatchesCommand, verifiedBindingHead, verifiedConsumption, verifiedDigest, verifiedJournalEntry, verifiedSettlement,
+} from "./persistence-validation.js";
 import {
   canonicalJson, claimBindingDigestPayload, requestDigestPayload, snapshotDispatchControlTime, snapshotDispatchScope,
   type DispatchBindingHead, type DispatchConsumeCommand, type DispatchConsumeOutcome, type DispatchConsumedReceipt,
@@ -71,91 +74,117 @@ const receiptFor = async (command: DispatchConsumeCommand, head: DispatchBinding
     provider: head.provider, providerAccountRef: head.providerAccountRef, providerRouteRef: head.providerRouteRef,
     purpose: command.purpose, requestDigest: command.requestDigest, scope: snapshotDispatchScope(command.scope),
   } as const;
-  return Object.freeze({ ...unsigned, consumptionDigest: await digest.digest(canonicalJson(unsigned)) });
+  return Object.freeze({ ...unsigned, consumptionDigest: await verifiedDigest(digest, canonicalJson(unsigned)) });
 };
 
 const decideNewConsumption = async (
   command: DispatchConsumeCommand, transaction: DispatchConsumptionTransaction, dependencies: Dependencies,
 ): Promise<DispatchConsumeOutcome> => {
   const now = snapshotDispatchControlTime(await transaction.controlTime());
-  const head = await transaction.findBindingHead();
-  if (head === undefined) {return Object.freeze({ kind: "not_found" });}
+  const rawHead = await transaction.findBindingHead();
+  if (rawHead === undefined) {return Object.freeze({ kind: "not_found" });}
+  const head = verifiedBindingHead(rawHead, command);
   const drift = driftReason(command, head);
   if (drift !== undefined) {return prevented(command, drift, now, head.opaqueOwnerEvidenceRef);}
   if (now >= head.claimBeforeControlTime || now >= head.expiresAtControlTime) {return prevented(command, "expired", now, head.opaqueOwnerEvidenceRef);}
-  if (await transaction.isBindingConsumed()) {return prevented(command, "already_consumed", now, head.opaqueOwnerEvidenceRef);}
-  const expectedClaim = await dependencies.digest.digest(claimBindingDigestPayload(command));
+  const consumedState = await transaction.isBindingConsumed();
+  if (typeof consumedState !== "boolean") {throw new TypeError("consumption state is invalid");}
+  if (consumedState) {return prevented(command, "already_consumed", now, head.opaqueOwnerEvidenceRef);}
+  const expectedClaim = await verifiedDigest(dependencies.digest, claimBindingDigestPayload(command));
   if (expectedClaim !== command.claimBindingDigest) {return prevented(command, "claim_binding_mismatch", now, head.opaqueOwnerEvidenceRef);}
   const receipt = await receiptFor(command, head, now, dependencies.digest);
-  await transaction.markBindingConsumed(receipt);
+  if (await transaction.markBindingConsumed(receipt) !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
   return consumed(receipt);
 };
 
 const consumeInTransaction = async (
   command: DispatchConsumeCommand, semanticDigest: string, transaction: DispatchConsumptionTransaction, dependencies: Dependencies,
 ): Promise<DispatchConsumeOutcome> => {
-  const replay = await transaction.findGrantRequest();
-  if (replay !== undefined) {
+  const rawReplay = await transaction.findGrantRequest();
+  if (rawReplay !== undefined) {
+    const replay = await verifiedJournalEntry(rawReplay, command, dependencies.digest);
     if (replay.requestDigest !== semanticDigest) {return Object.freeze({ kind: "conflict", reason: "grant_request_digest_conflict" });}
+    if (!journalMatchesCommand(replay, command)) {throw new TypeError("journal entry does not bind the command");}
     return command.requestDigest === semanticDigest ? replay.outcome : invalid();
   }
   const outcome = command.requestDigest === semanticDigest ? await decideNewConsumption(command, transaction, dependencies) : invalid();
-  const entry: DispatchConsumptionJournalEntry = { outcome, requestDigest: semanticDigest, scope: command.scope };
-  await transaction.saveGrantRequest(entry);
+  const entry: DispatchConsumptionJournalEntry = Object.freeze({
+    binding: command.binding, claimBindingDigest: command.claimBindingDigest, grantRequestId: command.grantRequestId,
+    operationId: command.operationId, outcome, provider: command.provider, purpose: command.purpose,
+    requestDigest: semanticDigest, scope: command.scope,
+  });
+  if (await transaction.saveGrantRequest(entry) !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
   return outcome;
 };
 
 const settleInTransaction = async (
   input: DispatchSettlementCommand,
-  transaction: DispatchConsumptionTransaction, dependencies: Dependencies,
+  selector: Extract<DispatchConsumptionTransactionSelector, { readonly kind: "settle" }>, transaction: DispatchConsumptionTransaction, dependencies: Dependencies,
 ): Promise<DispatchSettlementOutcome> => {
-  const replay = await transaction.findSettlement();
-  if (replay !== undefined) {
+  const rawReplay = await transaction.findSettlement();
+  if (rawReplay !== undefined) {
+    const replay = await verifiedSettlement(rawReplay, selector, dependencies.digest);
     if (replay.kind !== "settled") {return replay;}
     return settlementReplayMatches(replay.receipt, input) ? replay :
       Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });
   }
-  const consumption = await transaction.findConsumption();
-  if (consumption === undefined) {return Object.freeze({ kind: "not_found" });}
-  const head = await transaction.findBindingHead();
-  if (head === undefined || !headMatches(head, input.expectedBinding) || consumption.operationId !== input.operationId ||
+  const rawConsumption = await transaction.findConsumption();
+  if (rawConsumption === undefined) {return Object.freeze({ kind: "not_found" });}
+  const consumption = await verifiedConsumption(rawConsumption, selector, dependencies.digest);
+  const rawHead = await transaction.findBindingHead();
+  if (rawHead === undefined) {return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });}
+  const head = verifiedBindingHead(rawHead, selector);
+  if (!headMatches(head, input.expectedBinding) || consumption.operationId !== input.operationId ||
     consumption.provider !== input.provider || consumption.scope.tenantId !== input.scope.tenantId ||
     consumption.scope.projectId !== input.scope.projectId || consumption.scope.scopeDigest !== input.scope.scopeDigest ||
     !receiptMatches(consumption, input.expectedBinding)) {
     return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });
   }
-  if (await transaction.findSettlementByConsumption() !== undefined) {return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });}
+  const rawExisting = await transaction.findSettlementByConsumption();
+  if (rawExisting !== undefined) {
+    await verifiedSettlement(rawExisting, selector, dependencies.digest, false);
+    return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });
+  }
   const settledAtControlTime = snapshotDispatchControlTime(await transaction.controlTime());
   const unsigned = { ...input, settledAtControlTime };
   const outcome = Object.freeze({ kind: "settled" as const, receipt: Object.freeze({
-    ...unsigned, settlementDigest: await dependencies.digest.digest(canonicalJson(unsigned)),
+    ...unsigned, settlementDigest: await verifiedDigest(dependencies.digest, canonicalJson(unsigned)),
   }) });
-  await transaction.saveSettlement(outcome);
+  if (await transaction.saveSettlement(outcome) !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
   return outcome;
 };
 
 export const createDispatchConsumptionUseCases = (dependencies: Dependencies): DispatchConsumptionUseCases => Object.freeze({
   async consume(command: DispatchConsumeCommand) {
     const { requestDigest: _claimedDigest, ...semanticRequest } = command;
-    const semanticDigest = await dependencies.digest.digest(requestDigestPayload(semanticRequest));
+    const semanticDigest = await verifiedDigest(dependencies.digest, requestDigestPayload(semanticRequest));
     if (command.requestDigest !== semanticDigest) {return invalid();}
-    return dependencies.repository.transact({
+    let decision: DispatchConsumeOutcome | undefined;
+    const returned = await dependencies.repository.transact({
       grantRequestId: command.grantRequestId, kind: "consume", provider: command.provider, scope: command.scope,
-    }, transaction => consumeInTransaction(command, semanticDigest, transaction, dependencies));
+    }, async transaction => {
+      decision = await consumeInTransaction(command, semanticDigest, transaction, dependencies); return decision;
+    });
+    if (decision === undefined || returned !== decision) {throw new TypeError("repository substituted the transaction result");}
+    return decision;
   },
   async observe(input: { readonly grantRequestId: string; readonly provider: DispatchProvider; readonly requestDigest: string; readonly scope: DispatchScopeValue }) {
-    const entry = await dependencies.repository.observeGrantRequest(input);
-    if (entry === undefined) {return Object.freeze({ kind: "not_found" });}
-    if (entry.scope.scopeDigest !== input.scope.scopeDigest || entry.scope.tenantId !== input.scope.tenantId || entry.scope.projectId !== input.scope.projectId) {
-      return Object.freeze({ kind: "not_found" });
-    }
+    const rawEntry = await dependencies.repository.observeGrantRequest(input);
+    if (rawEntry === undefined) {return Object.freeze({ kind: "not_found" });}
+    const entry = await verifiedJournalEntry(rawEntry, input, dependencies.digest);
     return entry.requestDigest === input.requestDigest ? entry.outcome : Object.freeze({ kind: "conflict", reason: "grant_request_digest_conflict" });
   },
   async settle(input: DispatchSettlementCommand) {
-    return dependencies.repository.transact({
+    const selector = Object.freeze({
       consumptionDigest: input.consumptionDigest, expectedAuthorityHeadDigest: input.expectedBinding.authorityHeadDigest,
-      kind: "settle", operationId: input.operationId, provider: input.provider, scope: input.scope,
+      kind: "settle" as const, operationId: input.operationId, provider: input.provider, scope: input.scope,
       settlementRequestId: input.settlementRequestId,
-    }, transaction => settleInTransaction(input, transaction, dependencies));
+    });
+    let decision: DispatchSettlementOutcome | undefined;
+    const returned = await dependencies.repository.transact(selector, async transaction => {
+      decision = await settleInTransaction(input, selector, transaction, dependencies); return decision;
+    });
+    if (decision === undefined || returned !== decision) {throw new TypeError("repository substituted the transaction result");}
+    return decision;
   },
 });

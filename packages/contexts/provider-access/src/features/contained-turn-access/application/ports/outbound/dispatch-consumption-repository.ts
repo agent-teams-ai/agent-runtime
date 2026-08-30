@@ -1,10 +1,16 @@
 import type {
-  DispatchBindingHead, DispatchConsumeOutcome, DispatchConsumedReceipt, DispatchProvider, DispatchScopeValue,
+  DispatchBindingHead, DispatchConsumeOutcome, DispatchConsumedReceipt, DispatchExpectationValue, DispatchProvider, DispatchScopeValue,
   DispatchSettlementOutcome,
 } from "../../../domain/dispatch-consumption.js";
 
 export interface DispatchConsumptionJournalEntry {
+  readonly binding: DispatchExpectationValue;
+  readonly claimBindingDigest: string;
+  readonly grantRequestId: string;
+  readonly operationId: string;
   readonly outcome: DispatchConsumeOutcome;
+  readonly provider: DispatchProvider;
+  readonly purpose: "contained-turn.provider-dispatch/v1";
   /** Server-derived digest of the validated semantic request; never caller authority. */
   readonly requestDigest: string;
   readonly scope: DispatchScopeValue;
