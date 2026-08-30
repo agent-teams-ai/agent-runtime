@@ -82,7 +82,198 @@ export interface ContainedTurnRuntimeAccessDependencies {
   readonly executeCall: <T>(operation: () => Promise<T>) => Promise<T>;
 }
 
-// oxlint-disable-next-line max-lines-per-function -- the Host-bound callbacks share one custody ledger.
+type SubmitResolution = (outcome: SubmitRuntimeContainedTurnOutcome) => void;
+
+class ContainedTurnSubmissionCustody {
+  readonly #dependencies: ContainedTurnRuntimeAccessDependencies;
+  readonly #ownerCall = Object.freeze({});
+  readonly #reject: (reason: unknown) => void;
+  readonly #resolve: SubmitResolution;
+  #acceptedOperationId: string | undefined;
+  #acceptanceContractViolated = false;
+  #acceptanceOpen = true;
+  #responded = false;
+
+  public constructor(
+    dependencies: ContainedTurnRuntimeAccessDependencies,
+    resolve: SubmitResolution,
+    reject: (reason: unknown) => void,
+  ) {
+    this.#dependencies = dependencies;
+    this.#resolve = resolve;
+    this.#reject = reject;
+  }
+
+  readonly #retainPotentialAcceptedOperation = (operationId: unknown): void => {
+    if (!isBoundedIdentity(operationId)) {
+      return;
+    }
+    const operation = Object.freeze({
+      operationId,
+      scope: Object.freeze({ ...this.#dependencies.scope! }),
+    });
+    this.#dependencies.onAccepted(operation, this.#ownerCall);
+    this.#dependencies.onObserved(operationId, "contract_violation");
+    this.#acceptedOperationId ??= operationId;
+    if (this.#dependencies.isDisposed()) {
+      void this.#dependencies.requestCancellation(operation);
+    }
+  };
+
+  readonly #trackAcceptedOperation = (
+    rawOperation: ContainedTurnCompositionOperationRef,
+    observedStatus?: OwnerTurnObservation["status"],
+    onOperationId?: (operationId: unknown) => void,
+  ): string => {
+    const operation = copyAcceptedOperation(
+      rawOperation,
+      this.#dependencies.scope!,
+      onOperationId,
+    );
+    if (this.#acceptedOperationId !== undefined &&
+      this.#acceptedOperationId !== operation.operationId) {
+      this.#dependencies.onObserved(this.#acceptedOperationId, "contract_violation");
+      return contractViolation("operation_id_mismatch");
+    }
+    this.#dependencies.onAccepted(operation, this.#ownerCall);
+    if (observedStatus !== undefined) {
+      this.#dependencies.onObserved(operation.operationId, observedStatus);
+    }
+    if (this.#dependencies.isDisposed() &&
+      (observedStatus === undefined || !isTerminalTurnStatus(observedStatus))) {
+      void this.#dependencies.requestCancellation(operation);
+    }
+    return operation.operationId;
+  };
+
+  readonly #resolveAcceptance = (operationId: string): void => {
+    if (this.#acceptedOperationId !== undefined && this.#acceptedOperationId !== operationId) {
+      return contractViolation("operation_id_mismatch");
+    }
+    this.#acceptedOperationId = operationId;
+    if (!this.#responded) {
+      this.#responded = true;
+      this.#resolve(Object.freeze({ operationId, status: "accepted" }));
+    }
+  };
+
+  readonly #accepted = (operation: ContainedTurnCompositionOperationRef): void => {
+    if (!this.#acceptanceOpen) {
+      return;
+    }
+    let potentialOperationId: unknown;
+    try {
+      const operationId = this.#trackAcceptedOperation(
+        operation,
+        undefined,
+        potentialId => {potentialOperationId = potentialId;},
+      );
+      this.#resolveAcceptance(operationId);
+    } catch (error) {
+      this.#acceptanceOpen = false;
+      this.#acceptanceContractViolated = true;
+      try {
+        this.#retainPotentialAcceptedOperation(potentialOperationId);
+      } catch {
+        // Registration already retains the existing owner record as a contract violation.
+      }
+      if (!this.#responded) {
+        this.#responded = true;
+        this.#reject(error);
+      }
+    }
+  };
+
+  readonly #recordCopiedObservation = (copied: CopiedSubmitOutcome): void => {
+    if (copied.observation === undefined) {
+      return;
+    }
+    if (this.#acceptanceContractViolated) {
+      const operation = copyAcceptedOperation(Object.freeze({
+        operationId: copied.observation.operationId,
+        scope: this.#dependencies.scope!,
+      }), this.#dependencies.scope!);
+      this.#dependencies.onAccepted(operation, this.#ownerCall);
+      this.#dependencies.onObserved(operation.operationId, "contract_violation");
+      return;
+    }
+    if (this.#acceptedOperationId !== undefined &&
+      copied.observation.operationId !== this.#acceptedOperationId) {
+      this.#dependencies.onObserved(this.#acceptedOperationId, "contract_violation");
+      throw new ContainedTurnOwnerContractError("operation_id_mismatch");
+    }
+    const operationId = this.#trackAcceptedOperation(Object.freeze({
+      operationId: copied.observation.operationId,
+      scope: this.#dependencies.scope!,
+    }), copied.observation.status);
+    if (this.#acceptedOperationId === undefined) {
+      this.#resolveAcceptance(operationId);
+    }
+  };
+
+  readonly #processCompletion = (outcome: unknown): void => {
+    this.#acceptanceOpen = false;
+    let potentialOperationId: unknown;
+    let copied: CopiedSubmitOutcome;
+    try {
+      copied = copySubmitOutcome(outcome, operationId => {potentialOperationId = operationId;});
+    } catch (error) {
+      this.#retainPotentialAcceptedOperation(potentialOperationId);
+      throw error;
+    }
+    this.#recordCopiedObservation(copied);
+    if (!this.#responded) {
+      this.#responded = true;
+      this.#resolve(copied.outcome);
+    }
+  };
+
+  readonly #handleCompletion = async (completion: Promise<unknown>): Promise<void> => {
+    let outcome: unknown;
+    try {
+      outcome = await completion;
+    } catch {
+      this.#acceptanceOpen = false;
+      if (this.#acceptedOperationId !== undefined) {
+        this.#dependencies.onObserved(this.#acceptedOperationId, "contract_violation");
+      }
+      if (!this.#responded) {
+        this.#responded = true;
+        this.#reject(containedTurnOwnerInvocationFailed);
+      }
+      return;
+    }
+    try {
+      this.#processCompletion(outcome);
+    } catch (error) {
+      this.#acceptanceOpen = false;
+      if (this.#acceptedOperationId !== undefined) {
+        this.#dependencies.onObserved(this.#acceptedOperationId, "contract_violation");
+      }
+      if (!this.#responded) {
+        this.#responded = true;
+        this.#reject(error);
+      }
+    }
+  };
+
+  public start(input: Readonly<SubmitRuntimeContainedTurnInput>, signal: AbortSignal): void {
+    let completion: Promise<unknown>;
+    try {
+      completion = this.#dependencies.executeCall(() =>
+        this.#dependencies.capability!.submit.execute({
+          ...input,
+          scope: this.#dependencies.scope!,
+        }, { onAccepted: this.#accepted, signal }));
+    } catch {
+      this.#acceptanceOpen = false;
+      this.#reject(containedTurnOwnerInvocationFailed);
+      return;
+    }
+    void this.#handleCompletion(completion).catch(() => {});
+  }
+}
+
 export const createContainedTurnRuntimeAccess = (
   dependencies: ContainedTurnRuntimeAccessDependencies,
 ): RuntimeContainedTurnAccess => Object.freeze({
@@ -145,7 +336,6 @@ export const createContainedTurnRuntimeAccess = (
     }
     return outcome;
   },
-  // oxlint-disable-next-line max-lines-per-function -- submission keeps one synchronous custody ledger.
   submit: async (rawInput: SubmitRuntimeContainedTurnInput, options?: { readonly signal?: AbortSignal }) => {
     dependencies.assertActive();
     const input = copyInput(rawInput);
@@ -159,162 +349,8 @@ export const createContainedTurnRuntimeAccess = (
       ? dependencies.hostSignal
       : AbortSignal.any([dependencies.hostSignal, options.signal]);
     signal.throwIfAborted();
-    // oxlint-disable-next-line max-lines-per-function -- acceptance and completion share one custody ledger.
     const response = new Promise<SubmitRuntimeContainedTurnOutcome>((resolve, reject) => {
-      const ownerCall = Object.freeze({});
-      let acceptedOperationId: string | undefined;
-      let acceptanceContractViolated = false;
-      let acceptanceOpen = true;
-      let responded = false;
-      const retainPotentialAcceptedOperation = (operationId: unknown): void => {
-        if (!isBoundedIdentity(operationId)) {
-          return;
-        }
-        const operation = Object.freeze({
-          operationId,
-          scope: Object.freeze({ ...dependencies.scope! }),
-        });
-        dependencies.onAccepted(operation, ownerCall);
-        dependencies.onObserved(operationId, "contract_violation");
-        acceptedOperationId ??= operationId;
-        if (dependencies.isDisposed()) {
-          void dependencies.requestCancellation(operation);
-        }
-      };
-      const trackAcceptedOperation = (
-        rawOperation: ContainedTurnCompositionOperationRef,
-        observedStatus?: OwnerTurnObservation["status"],
-        onOperationId?: (operationId: unknown) => void,
-      ): string => {
-        const operation = copyAcceptedOperation(rawOperation, dependencies.scope!, onOperationId);
-        if (acceptedOperationId !== undefined && acceptedOperationId !== operation.operationId) {
-          dependencies.onObserved(acceptedOperationId, "contract_violation");
-          return contractViolation("operation_id_mismatch");
-        }
-        dependencies.onAccepted(operation, ownerCall);
-        if (observedStatus !== undefined) {
-          dependencies.onObserved(operation.operationId, observedStatus);
-        }
-        if (dependencies.isDisposed() &&
-          (observedStatus === undefined || !isTerminalTurnStatus(observedStatus))) {
-          void dependencies.requestCancellation(operation);
-        }
-        return operation.operationId;
-      };
-      const resolveAcceptance = (operationId: string): void => {
-        if (acceptedOperationId !== undefined && acceptedOperationId !== operationId) {
-          return contractViolation("operation_id_mismatch");
-        }
-        acceptedOperationId = operationId;
-        if (!responded) {
-          responded = true;
-          resolve(Object.freeze({ operationId, status: "accepted" as const }));
-        }
-      };
-      const accepted = (operation: ContainedTurnCompositionOperationRef): void => {
-        if (!acceptanceOpen) {
-          return;
-        }
-        let potentialOperationId: unknown;
-        try {
-          const operationId = trackAcceptedOperation(
-            operation,
-            undefined,
-            potentialId => {potentialOperationId = potentialId;},
-          );
-          resolveAcceptance(operationId);
-        } catch (error) {
-          acceptanceOpen = false;
-          acceptanceContractViolated = true;
-          try {
-            retainPotentialAcceptedOperation(potentialOperationId);
-          } catch {
-            // Registration already retains the existing owner record as a contract violation.
-          }
-          if (!responded) {
-            responded = true;
-            reject(error);
-          }
-        }
-      };
-      let completion: Promise<unknown>;
-      try {
-        completion = dependencies.executeCall(() => dependencies.capability!.submit.execute({
-          ...input,
-          scope: dependencies.scope!,
-        }, { onAccepted: accepted, signal }));
-      } catch {
-        acceptanceOpen = false;
-        reject(containedTurnOwnerInvocationFailed);
-        return;
-      }
-      const handleCompletion = async (): Promise<void> => {
-        let outcome: unknown;
-        try {
-          outcome = await completion;
-        } catch {
-          acceptanceOpen = false;
-          if (acceptedOperationId !== undefined) {
-            dependencies.onObserved(acceptedOperationId, "contract_violation");
-          }
-          if (!responded) {
-            responded = true;
-            reject(containedTurnOwnerInvocationFailed);
-          }
-          return;
-        }
-        try {
-          acceptanceOpen = false;
-          let potentialOperationId: unknown;
-          let copied: CopiedSubmitOutcome;
-          try {
-            copied = copySubmitOutcome(
-              outcome,
-              operationId => {potentialOperationId = operationId;},
-            );
-          } catch (error) {
-            retainPotentialAcceptedOperation(potentialOperationId);
-            throw error;
-          }
-          if (copied.observation !== undefined) {
-            if (acceptanceContractViolated) {
-              const operation = copyAcceptedOperation(Object.freeze({
-                operationId: copied.observation.operationId,
-                scope: dependencies.scope!,
-              }), dependencies.scope!);
-              dependencies.onAccepted(operation, ownerCall);
-              dependencies.onObserved(operation.operationId, "contract_violation");
-              return;
-            }
-            if (acceptedOperationId !== undefined &&
-              copied.observation.operationId !== acceptedOperationId) {
-              dependencies.onObserved(acceptedOperationId, "contract_violation");
-              throw new ContainedTurnOwnerContractError("operation_id_mismatch");
-            }
-            const operationId = trackAcceptedOperation(Object.freeze({
-              operationId: copied.observation.operationId,
-              scope: dependencies.scope!,
-            }), copied.observation.status);
-            if (acceptedOperationId === undefined) {
-              resolveAcceptance(operationId);
-            }
-          }
-          if (!responded) {
-            responded = true;
-            resolve(copied.outcome);
-          }
-        } catch (error) {
-          acceptanceOpen = false;
-          if (acceptedOperationId !== undefined) {
-            dependencies.onObserved(acceptedOperationId, "contract_violation");
-          }
-          if (!responded) {
-            responded = true;
-            reject(error);
-          }
-        }
-      };
-      void handleCompletion().catch(() => {});
+      new ContainedTurnSubmissionCustody(dependencies, resolve, reject).start(input, signal);
     });
     return raceWithAbort(response, signal);
   },

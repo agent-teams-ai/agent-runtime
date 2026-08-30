@@ -1,5 +1,10 @@
 import { setTimeout as delay } from "node:timers/promises";
 
+import {
+  CONTAINED_TURN_DISPOSAL_DIAGNOSTIC_LIMIT,
+  type ContainedTurnDisposalDiagnostics,
+  projectContainedTurnDisposalDiagnostics,
+} from "./agent-runtime-host-disposal-diagnostics.js";
 import type { ContainedTurnCompositionScope } from "./trusted-runtime-access-scope.js";
 import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
 
@@ -60,22 +65,30 @@ const isTerminalContainedTurnStatus = (
 export class AgentRuntimeHostDisposalIncompleteError extends Error {
   public readonly activeCallCount: number;
   public readonly containedTurns: readonly AgentRuntimeHostContainedTurnDisposalIssue[];
+  public readonly omittedContainedTurnCount: number;
   public readonly status: AgentRuntimeHostDisposalStatus;
 
   public constructor(
     activeCallCount: number,
     status: AgentRuntimeHostDisposalStatus = "disposal_incomplete",
     containedTurns: readonly AgentRuntimeHostContainedTurnDisposalIssue[] = [],
+    omittedContainedTurnCount = 0,
   ) {
     super(status === "disposal_incomplete"
       ? "Agent Runtime Host disposal deadline elapsed with active calls"
       : "Agent Runtime Host disposal could not prove contained-turn termination");
     this.name = "AgentRuntimeHostDisposalIncompleteError";
     this.activeCallCount = activeCallCount;
-    this.containedTurns = Object.freeze(containedTurns.map(issue => Object.freeze({
+    const projectedContainedTurns = containedTurns.slice(
+      0,
+      CONTAINED_TURN_DISPOSAL_DIAGNOSTIC_LIMIT,
+    );
+    this.containedTurns = Object.freeze(projectedContainedTurns.map(issue => Object.freeze({
       operationId: issue.operationId,
       status: issue.status,
     })));
+    this.omittedContainedTurnCount = omittedContainedTurnCount +
+      containedTurns.length - projectedContainedTurns.length;
     this.status = status;
     Object.freeze(this);
   }
@@ -123,13 +136,15 @@ const settleActiveCalls = async (activeCalls: ReadonlySet<Promise<unknown>>): Pr
 
 const rejectAtDisposalDeadline = async (
   activeCalls: ReadonlySet<Promise<unknown>>,
-  containedTurns: () => readonly AgentRuntimeHostContainedTurnDisposalIssue[],
+  diagnostics: () => ContainedTurnDisposalDiagnostics,
 ): Promise<never> => {
   await delay(1_000, null, { ref: false });
+  const { containedTurns, omittedContainedTurnCount } = diagnostics();
   throw new AgentRuntimeHostDisposalIncompleteError(
     activeCalls.size,
     "disposal_incomplete",
-    containedTurns(),
+    containedTurns,
+    omittedContainedTurnCount,
   );
 };
 
@@ -331,22 +346,8 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     return executingCall;
   };
 
-  const containedTurnDisposalIssues = (): readonly AgentRuntimeHostContainedTurnDisposalIssue[] =>
-    [...activeContainedTurns.values()]
-      .map(active => Object.freeze({
-        operationId: active.operation.operationId,
-        status: active.status,
-      }))
-      .toSorted((left, right) => {
-        const leftPoints = [...left.operationId].map(point => point.codePointAt(0)!);
-        const rightPoints = [...right.operationId].map(point => point.codePointAt(0)!);
-        for (let index = 0; index < Math.min(leftPoints.length, rightPoints.length); index += 1) {
-          if (leftPoints[index] !== rightPoints[index]) {
-            return leftPoints[index]! - rightPoints[index]!;
-          }
-        }
-        return leftPoints.length - rightPoints.length;
-      });
+  const containedTurnDisposalDiagnostics = (): ContainedTurnDisposalDiagnostics =>
+    projectContainedTurnDisposalDiagnostics(activeContainedTurns);
 
   const registerContainedTurn = (operation: ContainedTurnOperation, ownerCall: object): void => {
     const knownOwner = operationOwners.get(operation.operationId);
@@ -461,12 +462,13 @@ export const createAgentRuntimeHostDisposalLifecycle = (
 
   const finishDisposal = async (): Promise<void> => {
     await settleActiveCalls(activeCalls);
-    const containedTurns = containedTurnDisposalIssues();
+    const { containedTurns, omittedContainedTurnCount } = containedTurnDisposalDiagnostics();
     if (containedTurns.length > 0) {
       throw new AgentRuntimeHostDisposalIncompleteError(
         0,
         "termination_unproven",
         containedTurns,
+        omittedContainedTurnCount,
       );
     }
   };
@@ -489,7 +491,7 @@ export const createAgentRuntimeHostDisposalLifecycle = (
       }
       void Promise.race([
         finishDisposal(),
-        rejectAtDisposalDeadline(activeCalls, containedTurnDisposalIssues),
+        rejectAtDisposalDeadline(activeCalls, containedTurnDisposalDiagnostics),
       ]).then(resolveDisposal, rejectDisposal);
     } catch (error) {
       rejectDisposal(error);

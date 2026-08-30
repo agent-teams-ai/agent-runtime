@@ -37,6 +37,7 @@ import {
   copyTrustedCodexSetupScope,
   copyTrustedClaudeCodeSetupScope,
   copyTrustedContainedTurnScope,
+  type ContainedTurnCompositionScope,
   type TrustedRuntimeAccessScope,
 } from "./trusted-runtime-access-scope.js";
 import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
@@ -45,7 +46,6 @@ import {
   createContainedTurnRuntimeAccess,
   type ContainedTurnCapabilityBundle,
 } from "./contained-turn-runtime-access.js";
-import type { ContainedTurnCompositionScope } from "./trusted-runtime-access-scope.js";
 import { createAgentRuntimeHostDisposalLifecycle } from "./agent-runtime-host-disposal.js";
 import { raceWithAbort } from "./runtime-access-lifecycle.js";
 

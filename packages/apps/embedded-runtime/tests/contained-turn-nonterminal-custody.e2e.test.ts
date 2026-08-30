@@ -171,6 +171,74 @@ for (const nonterminalStatus of ["accepted", "running", "reconcile_required"] as
   });
 }
 
+test("Host disposal bounds deterministic diagnostics without truncating nonterminal custody", async () => {
+  const operationIds = Array.from(
+    { length: 70 },
+    (_, index) => `operation:bounded:${String(index).padStart(3, "0")}`,
+  ).toReversed();
+  const scopeSecret = "project:diagnostic-secret";
+  const promptSecret = "prompt:diagnostic-secret";
+  let nextOperation = 0;
+  const cancellationCalls: string[] = [];
+  const view = (operationId: string) => Object.freeze({
+    ...turnView("running"),
+    commandId: `command:${operationId}`,
+    effectId: `effect:${operationId}`,
+    operationId,
+  });
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute(operation) {
+        cancellationCalls.push(operation.operationId);
+        return { status: "observed", turn: view(operation.operationId) } as const;
+      },
+    }),
+    observe: Object.freeze({
+      async execute(operation) {
+        return { status: "observed", turn: view(operation.operationId) } as const;
+      },
+    }),
+    submit: Object.freeze({
+      async execute(input, options) {
+        const operationId = operationIds[nextOperation++]!;
+        options?.onAccepted?.(Object.freeze({ operationId, scope: input.scope }));
+        return { status: "observed", turn: view(operationId) } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  const access = host.bindAccess({
+    containedTurn: Object.freeze({ projectId: scopeSecret, tenantId: "tenant:diagnostic-secret" }),
+  });
+  for (const index of operationIds.keys()) {
+    await access.containedTurn.submit({
+      commandId: `command:bounded:${index}`,
+      expectedProvider: "codex",
+      intent: { mode: "analysis", prompt: promptSecret },
+    });
+  }
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+
+  const firstDisposal = host.dispose();
+  assert.equal(host.dispose(), firstDisposal);
+  const error = await firstDisposal.catch(failure => failure);
+  assert.equal(error instanceof AgentRuntimeHostDisposalIncompleteError, true);
+  if (!(error instanceof AgentRuntimeHostDisposalIncompleteError)) {
+    return;
+  }
+  assert.deepEqual(
+    error.containedTurns.map(issue => issue.operationId),
+    operationIds.toSorted().slice(0, 64),
+  );
+  assert.equal(error.containedTurns.length, 64);
+  assert.equal(error.omittedContainedTurnCount, 6);
+  assert.equal(cancellationCalls.length, operationIds.length);
+  assert.deepEqual(cancellationCalls.toSorted(), operationIds.toSorted());
+  assert.equal(JSON.stringify(error).includes(scopeSecret), false);
+  assert.equal(JSON.stringify(error).includes(promptSecret), false);
+  await assert.rejects(host.dispose(), failure => failure === error);
+});
+
 test("Host disposal retains an operation accepted after shutdown starts", async () => {
   let publishAcceptance: (() => void) | undefined;
   const acceptanceGate = new Promise<void>(resolve => {publishAcceptance = resolve;});
