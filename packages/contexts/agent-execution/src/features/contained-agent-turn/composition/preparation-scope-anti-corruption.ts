@@ -14,6 +14,14 @@ import {
 } from "../domain/contained-turn-record.js";
 
 const nodeTypes = process.getBuiltinModule("node:util").types;
+const isNativePromise = nodeTypes.isPromise;
+const isProxy = nodeTypes.isProxy;
+const trustedApply = Reflect.apply;
+const trustedFreeze = Object.freeze;
+const trustedFromEntries = Object.fromEntries;
+const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+const trustedGetPrototypeOf = Object.getPrototypeOf;
+const trustedOwnKeys = Reflect.ownKeys;
 
 const PORT_VALUE_MAXIMUM_DEPTH = 32;
 const PORT_VALUE_MAXIMUM_NODES = 16_384;
@@ -27,7 +35,7 @@ const readBoundedContainedTurnDescriptors = (
   candidate: object,
   state: PortCloneState,
 ): PropertyDescriptorMap => {
-  const keys = Reflect.ownKeys(candidate);
+  const keys = trustedOwnKeys(candidate);
   state.properties += keys.length;
   if (state.properties > PORT_VALUE_MAXIMUM_PROPERTIES) {
     throw new TypeError("owner port value exceeds the bounded property limit");
@@ -46,13 +54,13 @@ const cloneContainedTurnPortArray = (
   state: PortCloneState,
 ): PortValue[] => {
   const lengthDescriptor = descriptors.length;
-  if (Object.getPrototypeOf(candidate) !== Array.prototype || lengthDescriptor === undefined ||
+  if (trustedGetPrototypeOf(candidate) !== Array.prototype || lengthDescriptor === undefined ||
       !("value" in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value) ||
       lengthDescriptor.value < 0) {
     throw new TypeError("owner port arrays must be ordinary dense arrays");
   }
   const length = lengthDescriptor.value as number;
-  const keys = Reflect.ownKeys(descriptors);
+  const keys = trustedOwnKeys(descriptors);
   if (keys.length !== length + 1 || keys.some(key => typeof key !== "string") ||
       Array.from({ length }, (_item, index) => String(index)).some(key => descriptors[key] === undefined)) {
     throw new TypeError("owner port arrays must be dense and unaugmented");
@@ -74,11 +82,11 @@ const cloneContainedTurnPortRecord = (
   depth: number,
   state: PortCloneState,
 ): { readonly [key: string]: PortValue } => {
-  if (Object.getPrototypeOf(candidate) !== Object.prototype) {
+  if (trustedGetPrototypeOf(candidate) !== Object.prototype) {
     throw new TypeError("owner port records must use the ordinary object prototype");
   }
   const entries: [string, PortValue][] = [];
-  for (const key of Reflect.ownKeys(descriptors)) {
+  for (const key of trustedOwnKeys(descriptors)) {
     if (typeof key !== "string") {throw new TypeError("owner port records must not contain symbols");}
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
@@ -98,7 +106,7 @@ const cloneContainedTurnPortEntry = (
       typeof candidate === "string") {
     return candidate;
   }
-  if (typeof candidate !== "object" || nodeTypes.isProxy(candidate)) {
+  if (typeof candidate !== "object" || isProxy(candidate)) {
     throw new TypeError("owner port values must contain only ordinary canonical data");
   }
   state.nodes += 1;
@@ -125,7 +133,7 @@ const cloneContainedTurnPortValue = <Value>(value: Value): Value => {
 
 /** Thenables are not an owner boundary: only a native Promise may carry an already-normalized value. */
 const awaitContainedTurnOwnerPromise = async <Value>(promise: Promise<Value>): Promise<Value> => {
-  if (nodeTypes.isProxy(promise) || !nodeTypes.isPromise(promise)) {
+  if (isProxy(promise) || !isNativePromise(promise)) {
     throw new TypeError("owner port call must return a native Promise, not a thenable or aggregate");
   }
   return promise;
@@ -260,7 +268,7 @@ const projectCleanupOwnerOutcome = <Outcome extends CleanupOwnerOutcome>(outcome
 };
 
 const assertBoundaryPort = (name: string, port: object): void => {
-  if (nodeTypes.isProxy(port)) {throw new TypeError(`${name} boundary port must not be a Proxy`);}
+  if (isProxy(port)) {throw new TypeError(`${name} boundary port must not be a Proxy`);}
 };
 
 /** Captures each caller-owned member once and publishes only a frozen plain facade. */
@@ -269,8 +277,11 @@ const snapshotBoundaryPort = <Port extends object>(name: string, port: Port): Po
   const members = new Map<string, unknown>();
   let owner: object | null = port;
   while (owner !== null && owner !== Object.prototype) {
-    const descriptors = Object.getOwnPropertyDescriptors(owner);
-    for (const key of Reflect.ownKeys(descriptors)) {
+    if (isProxy(owner)) {
+      throw new TypeError(`${name} boundary port prototype must not be a Proxy`);
+    }
+    const descriptors = trustedGetOwnPropertyDescriptors(owner);
+    for (const key of trustedOwnKeys(descriptors)) {
       if (typeof key !== "string" || key === "constructor" || members.has(key)) {continue;}
       const descriptor = descriptors[key];
       if (descriptor === undefined || !("value" in descriptor)) {
@@ -278,16 +289,19 @@ const snapshotBoundaryPort = <Port extends object>(name: string, port: Port): Po
       }
       const value = descriptor.value as unknown;
       if (typeof value !== "function" && key !== "adapterSnapshot" && key !== "manifest") {continue;}
+      if (typeof value === "function" && isProxy(value)) {
+        throw new TypeError(`${name}.${key} callable must not be a Proxy`);
+      }
       members.set(
         key,
         typeof value === "function"
-          ? value.bind(port)
+          ? trustedFreeze((...args: unknown[]) => trustedApply(value, port, args))
           : cloneContainedTurnPortValue(value),
       );
     }
-    owner = Object.getPrototypeOf(owner);
+    owner = trustedGetPrototypeOf(owner);
   }
-  return Object.freeze(Object.fromEntries(members)) as Port;
+  return trustedFreeze(trustedFromEntries(members)) as Port;
 };
 
 const overrideBoundaryPort = <Port extends object>(
@@ -302,13 +316,13 @@ const overrideBoundaryPort = <Port extends object>(
 export const createContainedTurnPreparationScopeDependencies = (
   dependencies: ContainedTurnKernelDependencies,
 ): ContainedTurnKernelDependencies => {
-  if (nodeTypes.isProxy(dependencies)) {
+  if (isProxy(dependencies)) {
     throw new TypeError("contained-turn composition dependencies must not be a Proxy");
   }
   assertContainedTurnExactRecord("contained-turn composition dependencies", dependencies, [
     "operationStore", "security", "providerAccess", "workspace", "artifacts", "custody", "provider",
   ]);
-  const descriptor = Object.getOwnPropertyDescriptors(dependencies);
+  const descriptor = trustedGetOwnPropertyDescriptors(dependencies);
   const raw = (key: keyof ContainedTurnKernelDependencies): object => {
     const member = descriptor[key];
     if (member === undefined || !("value" in member) || typeof member.value !== "object" || member.value === null) {

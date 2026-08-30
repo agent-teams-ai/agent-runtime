@@ -279,6 +279,7 @@ test("preparation dependencies are one-time snapshots in frozen plain facades", 
     assert.equal(Object.getPrototypeOf(port), Object.prototype);
     assert.equal(Object.isFrozen(port), true);
   }
+  assert.equal(Object.isFrozen(snapshot.operationStore.read), true);
   assert.equal(Object.isFrozen(snapshot), true);
 
   const accessorStore = { ...operationStore };
@@ -310,6 +311,85 @@ test("preparation dependencies are one-time snapshots in frozen plain facades", 
     /native Promise, not a thenable or aggregate/u,
   );
   assert.equal(hostileThenGets, 0);
+});
+
+test("preparation dependency snapshot rejects every traversed Proxy without get or apply traps", () => {
+  const operationStore = {
+    claimPreparedDispatch: unavailablePreparationDependency,
+    read: async () => {return;},
+    recordDispatchPreparationCleanup: unavailablePreparationDependency,
+    retireDispatchPreparation: unavailablePreparationDependency,
+  };
+  const dependencies = (store: object): ContainedTurnKernelDependencies => ({
+    operationStore: store,
+    security: { consumeForDispatch: unavailablePreparationDependency, settleConsumedGrant: unavailablePreparationDependency },
+    providerAccess: { consumeForDispatch: unavailablePreparationDependency, settleConsumedGrant: unavailablePreparationDependency },
+    workspace: { ensureClosed: unavailablePreparationDependency, queryClosure: unavailablePreparationDependency },
+    artifacts: { ensureSealed: unavailablePreparationDependency, querySeal: unavailablePreparationDependency },
+    custody: {
+      attestContainment: unavailablePreparationDependency,
+      ensurePhysicalContainment: unavailablePreparationDependency,
+      queryContainmentAttestation: unavailablePreparationDependency,
+      queryPhysicalContainment: unavailablePreparationDependency,
+      releaseRetiredReservation: unavailablePreparationDependency,
+    },
+    provider: {},
+  }) as unknown as ContainedTurnKernelDependencies;
+
+  let topLevelGets = 0;
+  let topLevelReflections = 0;
+  const topLevelProxy = new Proxy(operationStore, {
+    get: () => {topLevelGets += 1; throw new Error("top-level get trap must not run");},
+    getOwnPropertyDescriptor: () => {topLevelReflections += 1; throw new Error("top-level descriptor trap must not run");},
+    ownKeys: () => {topLevelReflections += 1; throw new Error("top-level ownKeys trap must not run");},
+  });
+  assert.throws(
+    () => createContainedTurnPreparationScopeDependencies(dependencies(topLevelProxy)),
+    /boundary port must not be a Proxy/u,
+  );
+  assert.deepEqual([topLevelGets, topLevelReflections], [0, 0]);
+
+  let prototypeGets = 0;
+  let prototypeReflections = 0;
+  const prototypeProxy = new Proxy({}, {
+    get: () => {prototypeGets += 1; throw new Error("prototype get trap must not run");},
+    getOwnPropertyDescriptor: () => {prototypeReflections += 1; throw new Error("prototype descriptor trap must not run");},
+    ownKeys: () => {prototypeReflections += 1; throw new Error("prototype ownKeys trap must not run");},
+  });
+  const inheritedStore = Object.assign(Object.create(prototypeProxy) as object, operationStore);
+  assert.throws(
+    () => createContainedTurnPreparationScopeDependencies(dependencies(inheritedStore)),
+    /boundary port prototype must not be a Proxy/u,
+  );
+  assert.deepEqual([prototypeGets, prototypeReflections], [0, 0]);
+
+  let callableApplies = 0;
+  const callableProxy = new Proxy(operationStore.read, {
+    apply: () => {callableApplies += 1; throw new Error("callable apply trap must not run");},
+  });
+  assert.throws(
+    () => createContainedTurnPreparationScopeDependencies(dependencies({ ...operationStore, read: callableProxy })),
+    /callable must not be a Proxy/u,
+  );
+  assert.equal(callableApplies, 0);
+
+  let permissiveGets = 0;
+  let permissiveApplies = 0;
+  const getThenApplyProxy = new Proxy(operationStore.read, {
+    apply: () => {permissiveApplies += 1; throw new Error("permissive callable apply trap must not run");},
+    get: (target, key, receiver) => {
+      permissiveGets += 1;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  assert.throws(
+    () => createContainedTurnPreparationScopeDependencies(dependencies({
+      ...operationStore,
+      read: getThenApplyProxy,
+    })),
+    /callable must not be a Proxy/u,
+  );
+  assert.deepEqual([permissiveGets, permissiveApplies], [0, 0]);
 });
 
 const activePreparation = Object.freeze({
