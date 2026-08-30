@@ -2,6 +2,7 @@ export type DockerEngineFailureCode =
   | "aborted"
   | "authority-conflict"
   | "create-acknowledgement-unknown"
+  | "mutation-acknowledgement-unknown"
   | "daemon-disconnected"
   | "daemon-identity-changed"
   | "deadline-exceeded"
@@ -15,12 +16,15 @@ export type DockerEngineFailureCode =
   | "response-too-large"
   | "stream-frame-too-large"
   | "stream-too-large"
-  | "stream-truncated";
+  | "stream-truncated"
+  | "terminal-observation-unknown"
+  | "endpoint-custody-lost";
 
 const messages: Readonly<Record<DockerEngineFailureCode, string>> = Object.freeze({
   aborted: "Docker Engine operation aborted",
   "authority-conflict": "Docker container authority does not match the observed resource",
   "create-acknowledgement-unknown": "Docker container create acknowledgement is unknown",
+  "mutation-acknowledgement-unknown": "Docker container mutation acknowledgement is unknown",
   "daemon-disconnected": "Docker Engine connection closed",
   "daemon-identity-changed": "Docker daemon identity changed",
   "deadline-exceeded": "Docker Engine operation deadline exceeded",
@@ -35,6 +39,8 @@ const messages: Readonly<Record<DockerEngineFailureCode, string>> = Object.freez
   "stream-frame-too-large": "Docker Engine stream frame exceeded its bound",
   "stream-too-large": "Docker Engine stream exceeded its bound",
   "stream-truncated": "Docker Engine stream ended inside a frame",
+  "terminal-observation-unknown": "Docker container terminal observation is unknown",
+  "endpoint-custody-lost": "Docker Engine Unix socket custody was lost",
 });
 
 export class DockerEngineError extends Error {

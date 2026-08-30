@@ -12,6 +12,7 @@ import type {
   DockerEngineIdentity,
   DockerEnginePolicy,
 } from "./docker-engine-port.js";
+import type { DockerEndpointIdentity } from "./bounded-unix-http.js";
 
 const SHA256 = /^[a-f0-9]{64}$/u;
 const FULL_IMAGE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$/u;
@@ -34,13 +35,21 @@ const LABEL_KEYS = Object.freeze([
   "com.agent-runtime.operation-nonce-sha256",
 ]);
 
-type JsonObject = Record<string, unknown>;
-
-const object = (value: unknown): JsonObject => {
+const object = (value: unknown): Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new DockerEngineError("malformed-response");
   }
-  return value as JsonObject;
+  return value as Record<string, unknown>;
+};
+
+const exactObject = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
+  const decoded = object(value);
+  const observed = Object.keys(decoded).toSorted();
+  const expected = [...keys].toSorted();
+  if (observed.length !== expected.length || observed.some((key, index) => key !== expected[index])) {
+    throw new DockerEngineError("malformed-response");
+  }
+  return decoded;
 };
 
 const string = (value: unknown): string => {
@@ -114,12 +123,23 @@ const invalidIdentityPolicy = (policy: DockerEnginePolicy): boolean => {
 const invalidPathPolicy = (policy: DockerEnginePolicy): boolean => {
   const sources = [policy.privateRootSourceRoot, policy.workspaceSourceRoot];
   return sources.some(path => !isAbsolute(path) || path === "/" || isSensitiveMountRoot(path)) ||
+    !isAbsolute(policy.daemonPidFilePath) || policy.daemonPidFilePath !== resolve(policy.daemonPidFilePath) ||
+    policy.daemonPidFilePath.includes("\0") || policy.daemonPidFilePath === policy.socketPath ||
+    !isAbsolute(policy.socketPath) || policy.socketPath !== resolve(policy.socketPath) ||
+    policy.socketPath.includes("\0") ||
     overlaps(policy.privateRootSourceRoot, policy.workspaceSourceRoot);
 };
 
 const invalidResourcePolicy = (policy: DockerEnginePolicy): boolean => {
   const limits = [policy.cpuNanoCpus, policy.memoryBytes, policy.pidsLimit, policy.tmpfsBytes, policy.writableLayerBytes];
   return limits.some(limit => !Number.isSafeInteger(limit) || limit <= 0) ||
+    !Number.isSafeInteger(policy.daemonPidFileOwnerUid) || !Number.isSafeInteger(policy.daemonPidFileOwnerGid) ||
+    policy.daemonPidFileOwnerUid < 0 || policy.daemonPidFileOwnerGid < 0 ||
+    !Number.isSafeInteger(policy.daemonPidFileMode) || policy.daemonPidFileMode < 0 ||
+    policy.daemonPidFileMode > 0o777 ||
+    !Number.isSafeInteger(policy.socketOwnerUid) || !Number.isSafeInteger(policy.socketOwnerGid) ||
+    policy.socketOwnerUid < 0 || policy.socketOwnerGid < 0 || !Number.isSafeInteger(policy.socketMode) ||
+    policy.socketMode < 0 || policy.socketMode > 0o777 ||
     policy.cpuNanoCpus > 2_000_000_000 || policy.memoryBytes > 2_147_483_648 ||
     policy.pidsLimit > 256 || policy.tmpfsBytes > 1_073_741_824 || policy.writableLayerBytes > 4_294_967_296;
 };
@@ -158,7 +178,7 @@ export const labelsFor = (
   "com.agent-runtime.operation-nonce-sha256": nonce,
 });
 
-export const encodeCreateRequest = (input: DockerContainerCreate, policy: DockerEnginePolicy): JsonObject => {
+export const encodeCreateRequest = (input: DockerContainerCreate, policy: DockerEnginePolicy): Record<string, unknown> => {
   validatePolicy(policy);
   validateEnvironment(input.environment, policy);
   if (!FULL_IMAGE.test(input.imageDigest) || !SHA256.test(input.launchFingerprintSha256) ||
@@ -253,9 +273,13 @@ export const canonicalizeCreateMounts = async (
   }
 };
 
-export const decodeEngineIdentity = (value: unknown, policy: DockerEnginePolicy): DockerEngineIdentity => {
-  const info = object(value);
-  const cgroupVersion = String(info.CgroupVersion);
+export const decodeEngineIdentity = (
+  value: unknown,
+  policy: DockerEnginePolicy,
+  endpoint: DockerEndpointIdentity,
+): DockerEngineIdentity => {
+  const info = exactObject(value, ["CgroupDriver", "CgroupVersion", "Driver", "ID", "ServerVersion"]);
+  const cgroupVersion = string(info.CgroupVersion);
   if (cgroupVersion !== "1" && cgroupVersion !== "2") {throw new DockerEngineError("malformed-response");}
   const engineVersion = string(info.ServerVersion);
   const daemonId = string(info.ID);
@@ -268,17 +292,13 @@ export const decodeEngineIdentity = (value: unknown, policy: DockerEnginePolicy)
   return {
     cgroupDriver,
     cgroupVersion,
+    daemonBootGenerationSha256: endpoint.daemonBootGenerationSha256,
     daemonIdentitySha256: sha256(JSON.stringify([daemonId, engineVersion, storageDriver, cgroupDriver, cgroupVersion])),
     engineVersion,
     hostIdentitySha256: policy.hostIdentitySha256,
+    hostBootGenerationSha256: endpoint.hostBootGenerationSha256,
     storageDriver,
   };
-};
-
-export const decodeCreateId = (value: unknown): string => {
-  const id = string(object(value).Id);
-  if (!SHA256.test(id)) {throw new DockerEngineError("malformed-response");}
-  return id;
 };
 
 const exactLabels = (value: unknown, expected: Readonly<Record<string, string>>): boolean => {
@@ -318,11 +338,11 @@ const checkedMountSources = (
 
 const configuredMountFacts = (value: unknown, policy: DockerEnginePolicy): MountFacts => {
   if (!Array.isArray(value) || value.length !== 2) {throw new DockerEngineError("authority-conflict");}
-  const mounts = value.map(object);
+  const mounts = value.map(entry => exactObject(entry, ["BindOptions", "ReadOnly", "Source", "Target", "Type"]));
   const workspace = mounts.find(mount => mount.Target === "/workspace");
   const privateRoot = mounts.find(mount => mount.Target === "/agent-private");
   for (const mount of mounts) {
-    const bindOptions = object(mount.BindOptions);
+    const bindOptions = exactObject(mount.BindOptions, ["Propagation"]);
     if (mount.Type !== "bind" || bindOptions.Propagation !== "rprivate") {
       throw new DockerEngineError("authority-conflict");
     }
@@ -337,7 +357,7 @@ const configuredMountFacts = (value: unknown, policy: DockerEnginePolicy): Mount
 
 const observedMountFacts = (value: unknown, policy: DockerEnginePolicy): MountFacts => {
   if (!Array.isArray(value) || value.length !== 2) {throw new DockerEngineError("authority-conflict");}
-  const mounts = value.map(object);
+  const mounts = value.map(entry => exactObject(entry, ["Destination", "Propagation", "RW", "Source", "Type"]));
   const workspace = mounts.find(mount => mount.Destination === "/workspace");
   const privateRoot = mounts.find(mount => mount.Destination === "/agent-private");
   if (workspace === undefined || privateRoot === undefined || privateRoot.RW !== true ||
@@ -354,13 +374,18 @@ const observedMountFacts = (value: unknown, policy: DockerEnginePolicy): MountFa
 
 const resourceFacts = (
   id: string,
-  hostConfig: JsonObject,
+  hostConfig: Record<string, unknown>,
   observedMounts: unknown,
   policy: DockerEnginePolicy,
 ): DockerContainerResourceFacts => {
-  const storage = object(hostConfig.StorageOpt);
-  const tmpfs = object(hostConfig.Tmpfs);
-  const restart = object(hostConfig.RestartPolicy);
+  exactObject(hostConfig, [
+    "AutoRemove", "CapDrop", "CgroupParent", "CgroupnsMode", "CpuPeriod", "Init", "IpcMode", "Memory",
+    "MemorySwap", "Mounts", "NanoCpus", "NetworkMode", "OomKillDisable", "PidMode", "PidsLimit",
+    "Privileged", "ReadonlyRootfs", "RestartPolicy", "SecurityOpt", "StorageOpt", "Tmpfs",
+  ]);
+  const storage = exactObject(hostConfig.StorageOpt, ["size"]);
+  const tmpfs = exactObject(hostConfig.Tmpfs, ["/tmp"]);
+  const restart = exactObject(hostConfig.RestartPolicy, ["MaximumRetryCount", "Name"]);
   const tmpfsValue = string(tmpfs["/tmp"]);
   const tmpfsMatch = /(?:^|,)size=([0-9]+)(?:,|$)/u.exec(tmpfsValue);
   const cgroupNamespaceMode = string(hostConfig.CgroupnsMode);
@@ -416,7 +441,9 @@ const resourceFacts = (
 };
 
 const stateFacts = (value: unknown): DockerContainerStateFacts => {
-  const state = object(value);
+  const state = exactObject(value, [
+    "Dead", "Error", "ExitCode", "FinishedAt", "OOMKilled", "Pid", "Running", "StartedAt", "Status",
+  ]);
   const status = string(state.Status);
   if (!STATUSES.has(status)) {throw new DockerEngineError("malformed-response");}
   return {
@@ -438,17 +465,28 @@ export const decodeInspection = (
   engine: DockerEngineIdentity,
   policy: DockerEnginePolicy,
 ): DockerContainerObservation => {
-  const inspect = object(value);
+  const inspect = exactObject(value, ["AppArmorProfile", "Config", "HostConfig", "Id", "Mounts", "Name", "State"]);
   const id = string(inspect.Id);
-  const config = object(inspect.Config);
+  const config = exactObject(inspect.Config, ["Cmd", "Entrypoint", "Env", "Image", "Labels", "User", "WorkingDir"]);
   const expectedLabels = labelsFor(
     authority.operationNonceSha256,
     authority.launchFingerprintSha256,
     authority.hostIdentitySha256,
   );
+  const observedSpecification = sha256(JSON.stringify([
+    string(inspect.Name).replace(/^\//u, ""),
+    config.Cmd,
+    config.Entrypoint,
+    config.Env,
+    config.WorkingDir,
+    config.Image,
+    config.Labels,
+    object(inspect.HostConfig).Mounts,
+  ]));
   if (id !== authority.containerId || !SHA256.test(id) || config.Image !== authority.imageDigest ||
       config.User !== policy.user || inspect.AppArmorProfile !== policy.appArmorProfile ||
-      !exactLabels(config.Labels, expectedLabels)) {
+      !exactLabels(config.Labels, expectedLabels) || observedSpecification !== authority.createSpecificationSha256 ||
+      inspect.Name !== `/${containerName(authority.operationNonceSha256)}`) {
     throw new DockerEngineError("authority-conflict");
   }
   const resources = resourceFacts(id, object(inspect.HostConfig), inspect.Mounts, policy);
@@ -470,6 +508,8 @@ export const decodeInspection = (
 
 export const validateAuthorityShape = (authority: DockerContainerAuthority): void => {
   if (!SHA256.test(authority.containerId) || !SHA256.test(authority.daemonIdentitySha256) ||
+      !SHA256.test(authority.daemonBootGenerationSha256) || !SHA256.test(authority.hostBootGenerationSha256) ||
+      !SHA256.test(authority.createSpecificationSha256) ||
       !SHA256.test(authority.hostIdentitySha256) || !SHA256.test(authority.launchFingerprintSha256) ||
       !SHA256.test(authority.operationNonceSha256) || !FULL_IMAGE.test(authority.imageDigest)) {
     throw new DockerEngineError("invalid-authority");

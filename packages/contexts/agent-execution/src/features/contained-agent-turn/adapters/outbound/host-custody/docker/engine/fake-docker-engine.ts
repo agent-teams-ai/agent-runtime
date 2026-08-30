@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 
-import { containerName, encodeCreateRequest, validateAuthorityShape } from "./docker-engine-codec.js";
+import {
+  canonicalizeCreateMounts,
+  containerName,
+  encodeCreateRequest,
+  validateAuthorityShape,
+} from "./docker-engine-codec.js";
+import { createSpecificationSha256 } from "./docker-create-specification.js";
 import { DockerEngineError } from "./docker-engine-error.js";
 import type {
   DockerContainerAuthority,
@@ -17,11 +23,12 @@ import type {
 import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_STREAM_BYTES } from "./docker-engine-port.js";
 
 export type FakeCreateOutcome = "acknowledged" | "daemon-disconnect" | "lost-acknowledgement" | "malformed-response";
-export type FakeDockerOperation = "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop";
+export type FakeDockerOperation = "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop" | "wait";
+export type FakeMutationOperation = "kill" | "remove" | "start" | "stop";
 
 interface FakeContainer {
   readonly authority: DockerContainerAuthority;
-  readonly input: DockerContainerCreate;
+  input: DockerContainerCreate;
   removed: boolean;
   state: DockerContainerStateFacts;
 }
@@ -52,10 +59,13 @@ export class FakeDockerEngine implements DockerEnginePort {
   readonly #logPlans = new Map<string, FakeLogPlan>();
   readonly #malformed = new Map<FakeDockerOperation, number>();
   readonly #names = new Map<string, string>();
+  readonly #mutationOutcomes = new Map<FakeMutationOperation, Array<{ acknowledgement: "304" | "lost"; effect: boolean }>>();
   readonly #policy: DockerEnginePolicy;
   #counter = 0;
   #daemonGeneration = "initial";
+  #hostGeneration = "initial";
   #disconnected = false;
+  #endpointCustodyLost = false;
   #replacementNameOnLostAcknowledgement: string | undefined;
   #releaseStreams: (() => void) | undefined;
   #streamsReleased = false;
@@ -87,6 +97,15 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#malformed.set(operation, count);
   }
 
+  public enqueueMutationOutcome(
+    operation: FakeMutationOperation,
+    outcome: { readonly acknowledgement: "304" | "lost"; readonly effect: "applied" | "not-applied" },
+  ): void {
+    const outcomes = this.#mutationOutcomes.get(operation) ?? [];
+    outcomes.push({ acknowledgement: outcome.acknowledgement, effect: outcome.effect === "applied" });
+    this.#mutationOutcomes.set(operation, outcomes);
+  }
+
   public releaseDelayedStreams(): void {
     this.#releaseStreams?.();
     this.#streamsReleased = true;
@@ -97,6 +116,12 @@ export class FakeDockerEngine implements DockerEnginePort {
     const existing = this.#containers.get(id);
     if (existing === undefined) {throw new DockerEngineError("resource-not-found");}
     this.#containers.set(id, { ...existing, authority: replacement });
+  }
+
+  public replaceCreateInput(id: string, replacement: DockerContainerCreate): void {
+    const existing = this.#containers.get(id);
+    if (existing === undefined) {throw new DockerEngineError("resource-not-found");}
+    existing.input = replacement;
   }
 
   public replaceName(operationNonceSha256: string, replacementContainerId: string): void {
@@ -112,6 +137,13 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#disconnected = false;
     this.#events.push("daemon:restart");
   }
+
+  public restartHost(generation: string): void {
+    this.#hostGeneration = generation;
+    this.#events.push("host:restart");
+  }
+
+  public loseEndpointCustody(): void {this.#endpointCustodyLost = true;}
 
   public setDisconnected(disconnected: boolean): void {
     this.#disconnected = disconnected;
@@ -132,25 +164,25 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   public async create(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority> {
     this.#check("create", call);
-    encodeCreateRequest(input, this.#policy);
+    const canonicalInput = await canonicalizeCreateMounts(input, this.#policy);
+    encodeCreateRequest(canonicalInput, this.#policy);
     const engine = this.#identity();
-    const name = containerName(input.operationNonceSha256);
+    const name = containerName(canonicalInput.operationNonceSha256);
     const named = this.#names.get(name);
     if (named !== undefined && this.#containers.get(named)?.removed !== true) {
       throw new DockerEngineError("resource-already-exists", 409);
     }
     const outcome = this.#createOutcomes.shift() ?? "acknowledged";
-    if (outcome === "malformed-response") {throw new DockerEngineError("malformed-response");}
     if (outcome === "daemon-disconnect") {
       this.#disconnected = true;
       throw new DockerEngineError("daemon-disconnected");
     }
-    const authority = this.#newAuthority(input, engine);
-    const record = { authority, input, removed: false, state: initialState() };
+    const authority = this.#newAuthority(canonicalInput, engine);
+    const record = { authority, input: canonicalInput, removed: false, state: initialState() };
     this.#containers.set(authority.containerId, record);
     this.#names.set(name, authority.containerId);
     this.#events.push(`create:${outcome}`);
-    if (outcome === "lost-acknowledgement") {
+    if (outcome === "lost-acknowledgement" || outcome === "malformed-response") {
       if (this.#replacementNameOnLostAcknowledgement !== undefined) {
         this.#names.set(name, this.#replacementNameOnLostAcknowledgement);
         this.#replacementNameOnLostAcknowledgement = undefined;
@@ -160,7 +192,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       if (observed === undefined || observed.removed || !this.#sameAuthority(observed.authority, authority)) {
         throw new DockerEngineError("create-acknowledgement-unknown");
       }
-      this.#events.push("create:resolved-by-name");
+      this.#events.push(`create:${outcome}:resolved-by-name`);
     }
     return authority;
   }
@@ -177,7 +209,10 @@ export class FakeDockerEngine implements DockerEnginePort {
     if (record === undefined || record.removed) {
       return { authority, cgroupTree: "unobserved", engine, existence: "absent" };
     }
-    if (!this.#sameAuthority(record.authority, authority)) {throw new DockerEngineError("authority-conflict");}
+    if (!this.#sameAuthority(record.authority, authority) ||
+        createSpecificationSha256(record.input, this.#policy) !== authority.createSpecificationSha256) {
+      throw new DockerEngineError("authority-conflict");
+    }
     return {
       authority,
       cgroupTree: "unobserved",
@@ -190,14 +225,10 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   public async start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     const record = await this.#record("start", authority, call);
-    record.state = {
-      ...record.state,
-      hostPid: 10_000 + this.#counter,
-      running: true,
-      startedAt: "2026-01-01T00:00:00Z",
-      status: "running",
-    };
+    const outcome = this.#mutationOutcome("start");
+    if (outcome?.effect !== false) {this.#start(record);}
     this.#events.push("start:id");
+    this.#assertMutationPostcondition("start", record, outcome);
   }
 
   public logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame> {
@@ -206,21 +237,38 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   public async stop(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     const record = await this.#record("stop", authority, call);
-    this.#exit(record, 0);
+    const outcome = this.#mutationOutcome("stop");
+    if (outcome?.effect !== false) {this.#exit(record, 0);}
     this.#events.push("stop:id");
+    this.#assertMutationPostcondition("stop", record, outcome);
   }
 
   public async kill(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     const record = await this.#record("kill", authority, call);
-    this.#exit(record, 137);
+    const outcome = this.#mutationOutcome("kill");
+    if (outcome?.effect !== false) {this.#exit(record, 137);}
     this.#events.push("kill:id");
+    this.#assertMutationPostcondition("kill", record, outcome);
   }
 
   public async remove(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     const record = await this.#record("remove", authority, call);
     if (record.state.running) {throw new DockerEngineError("request-rejected", 409);}
-    record.removed = true;
+    const outcome = this.#mutationOutcome("remove");
+    if (outcome?.effect !== false) {record.removed = true;}
     this.#events.push("remove:id");
+    this.#assertMutationPostcondition("remove", record, outcome);
+  }
+
+  public async wait(
+    authority: DockerContainerAuthority,
+    call: DockerEngineCall,
+  ): Promise<DockerContainerObservation> {
+    this.#check("wait", call);
+    const observation = await this.inspect(authority, call);
+    if (observation.existence !== "present") {throw new DockerEngineError("resource-not-found", 404);}
+    if (!this.#terminal(observation.state)) {throw new DockerEngineError("terminal-observation-unknown");}
+    return observation;
   }
 
   async *#logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame> {
@@ -236,6 +284,10 @@ export class FakeDockerEngine implements DockerEnginePort {
       bytes += frame.bytes.byteLength;
       if (bytes > DOCKER_LOG_MAX_STREAM_BYTES) {throw new DockerEngineError("stream-too-large");}
       yield { bytes: frame.bytes.slice(), stream: frame.stream };
+    }
+    const after = await this.inspect(authority, call);
+    if (after.existence !== "present" || !this.#terminal(after.state)) {
+      throw new DockerEngineError("terminal-observation-unknown");
     }
   }
 
@@ -255,6 +307,7 @@ export class FakeDockerEngine implements DockerEnginePort {
   #check(operation: FakeDockerOperation, call: DockerEngineCall): void {
     this.#checkCall(call);
     if (this.#disconnected) {throw new DockerEngineError("daemon-disconnected");}
+    if (this.#endpointCustodyLost) {throw new DockerEngineError("endpoint-custody-lost");}
     const malformed = this.#malformed.get(operation) ?? 0;
     if (malformed > 0) {
       this.#malformed.set(operation, malformed - 1);
@@ -279,9 +332,11 @@ export class FakeDockerEngine implements DockerEnginePort {
     return {
       cgroupDriver: "systemd",
       cgroupVersion: "2",
-      daemonIdentitySha256: hash(`fake-daemon:${this.#daemonGeneration}`),
+      daemonBootGenerationSha256: hash(`fake-daemon-boot:${this.#daemonGeneration}`),
+      daemonIdentitySha256: hash("fake-daemon-persistent-identity"),
       engineVersion: "fake-1",
       hostIdentitySha256: this.#policy.hostIdentitySha256,
+      hostBootGenerationSha256: hash(`fake-host-boot:${this.#hostGeneration}`),
       storageDriver: "overlay2",
     };
   }
@@ -290,7 +345,10 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#counter += 1;
     return {
       containerId: hash(`${engine.daemonIdentitySha256}:${this.#counter}:${input.operationNonceSha256}`),
+      createSpecificationSha256: createSpecificationSha256(input, this.#policy),
+      daemonBootGenerationSha256: engine.daemonBootGenerationSha256,
       daemonIdentitySha256: engine.daemonIdentitySha256,
+      hostBootGenerationSha256: engine.hostBootGenerationSha256,
       hostIdentitySha256: engine.hostIdentitySha256,
       imageDigest: input.imageDigest,
       launchFingerprintSha256: input.launchFingerprintSha256,
@@ -330,16 +388,53 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   #assertEngine(authority: DockerContainerAuthority, engine: DockerEngineIdentity): void {
     if (authority.daemonIdentitySha256 !== engine.daemonIdentitySha256 ||
-        authority.hostIdentitySha256 !== engine.hostIdentitySha256) {
+        authority.hostIdentitySha256 !== engine.hostIdentitySha256 ||
+        authority.daemonBootGenerationSha256 !== engine.daemonBootGenerationSha256 ||
+        authority.hostBootGenerationSha256 !== engine.hostBootGenerationSha256) {
       throw new DockerEngineError("daemon-identity-changed");
     }
   }
 
   #sameAuthority(left: DockerContainerAuthority, right: DockerContainerAuthority): boolean {
     return left.containerId === right.containerId && left.daemonIdentitySha256 === right.daemonIdentitySha256 &&
+      left.createSpecificationSha256 === right.createSpecificationSha256 &&
+      left.daemonBootGenerationSha256 === right.daemonBootGenerationSha256 &&
+      left.hostBootGenerationSha256 === right.hostBootGenerationSha256 &&
       left.hostIdentitySha256 === right.hostIdentitySha256 && left.imageDigest === right.imageDigest &&
       left.launchFingerprintSha256 === right.launchFingerprintSha256 &&
       left.operationNonceSha256 === right.operationNonceSha256;
+  }
+
+  #mutationOutcome(operation: FakeMutationOperation): { acknowledgement: "304" | "lost"; effect: boolean } | undefined {
+    return this.#mutationOutcomes.get(operation)?.shift();
+  }
+
+  #assertMutationPostcondition(
+    operation: FakeMutationOperation,
+    record: FakeContainer,
+    outcome: { acknowledgement: "304" | "lost"; effect: boolean } | undefined,
+  ): void {
+    if (outcome === undefined) {return;}
+    this.#events.push(`${operation}:${outcome.acknowledgement}`);
+    const satisfied = operation === "remove" ? record.removed : operation === "start"
+      ? record.state.running && record.state.status === "running"
+      : this.#terminal(record.state);
+    if (!satisfied) {throw new DockerEngineError("mutation-acknowledgement-unknown");}
+  }
+
+  #start(record: FakeContainer): void {
+    record.state = {
+      ...record.state,
+      hostPid: 10_000 + this.#counter,
+      running: true,
+      startedAt: "2026-01-01T00:00:00Z",
+      status: "running",
+    };
+  }
+
+  #terminal(state: DockerContainerStateFacts): boolean {
+    return !state.running && (state.status === "dead" || state.status === "exited") &&
+      state.finishedAt !== "0001-01-01T00:00:00Z";
   }
 
   #exit(record: FakeContainer, exitCode: number): void {

@@ -10,15 +10,20 @@ export interface DockerEngineIdentity {
   readonly cgroupDriver: string;
   readonly cgroupVersion: "1" | "2";
   readonly daemonIdentitySha256: string;
+  readonly daemonBootGenerationSha256: string;
   readonly engineVersion: string;
   readonly hostIdentitySha256: string;
+  readonly hostBootGenerationSha256: string;
   readonly storageDriver: string;
 }
 
 export interface DockerContainerAuthority {
   readonly containerId: string;
   readonly daemonIdentitySha256: string;
+  readonly daemonBootGenerationSha256: string;
+  readonly createSpecificationSha256: string;
   readonly hostIdentitySha256: string;
+  readonly hostBootGenerationSha256: string;
   readonly imageDigest: string;
   readonly launchFingerprintSha256: string;
   readonly operationNonceSha256: string;
@@ -105,6 +110,7 @@ export interface DockerEnginePort {
   remove(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void>;
   start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void>;
   stop(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void>;
+  wait(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation>;
 }
 
 export interface DockerEnginePolicy {
@@ -115,6 +121,16 @@ export interface DockerEnginePolicy {
   readonly hostIdentitySha256: string;
   readonly memoryBytes: number;
   readonly pidsLimit: number;
+  /** Canonical, policy-owned Docker daemon PID file used to bind the socket to one daemon process generation. */
+  readonly daemonPidFilePath: string;
+  readonly daemonPidFileOwnerGid: number;
+  readonly daemonPidFileOwnerUid: number;
+  readonly daemonPidFileMode: number;
+  /** Canonical, policy-owned Unix socket endpoint. TCP endpoints are not representable. */
+  readonly socketPath: string;
+  readonly socketOwnerGid: number;
+  readonly socketOwnerUid: number;
+  readonly socketMode: number;
   readonly privateRootSourceRoot: string;
   readonly seccompProfileJson: string;
   readonly seccompProfileSha256: string;

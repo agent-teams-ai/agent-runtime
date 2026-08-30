@@ -12,6 +12,20 @@ governedRoots:
   - packages/platform/filesystem-custody/src
   - scripts/foundation
 boundaries:
+  - id: adapter.agent-execution.docker-engine
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine
+    entrypoints: []
+    allow:
+      boundaries: []
+      packages: []
+      builtins:
+        - node:crypto
+        - node:fs/promises
+        - node:http
+        - node:path
+      runtimeReferences: []
   - id: production.agent-execution
     dependencyMode: runtime
     roots:
