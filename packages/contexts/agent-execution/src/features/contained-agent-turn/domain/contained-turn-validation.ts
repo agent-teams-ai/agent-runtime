@@ -7,6 +7,7 @@ import {
   validateContainedTurnAuthorityShape,
   validateContainedTurnManifest,
 } from "./contained-turn-authority.js";
+import { containedTurnNoWorkspaceClosureFact } from "./contained-turn-closure-recovery.js";
 import { parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import {
   validateContainedTurnIdentity,
@@ -100,6 +101,8 @@ const validateCanonicalDigests = (operation: ContainedTurnKernelOperation): void
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.containmentPolicyDigest);
   if (operation.closureRecovery.kind === "required") {
     parseContainedTurnCanonicalDigest(operation.closureRecovery.requestDigest);
+  } else if (operation.closureRecovery.kind === "proved_no_workspace") {
+    parseContainedTurnCanonicalDigest(operation.closureRecovery.fact.factDigest);
   }
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingDigest);
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.scopeDigest);
@@ -173,10 +176,25 @@ const hasAmbiguity = (operation: ContainedTurnKernelOperation): boolean =>
   operation.providerExecution.kind === "unknown" || operation.containment.kind === "uncertain" ||
   operation.effect.kind === "ambiguous";
 
+const noWorkspaceFactClosesReceipts = (operation: ContainedTurnKernelOperation): boolean => {
+  if (operation.closureRecovery.kind !== "proved_no_workspace") {return false;}
+  const expected = containedTurnNoWorkspaceClosureFact(operation);
+  const fact = operation.closureRecovery.fact;
+  if (expected === undefined || JSON.stringify(fact) !== JSON.stringify(expected) ||
+      operation.artifactManifestRef !== undefined || operation.resultRef !== undefined) {
+    return false;
+  }
+  const kinds = new Set(operation.proofs.map(proof => proof.kind));
+  return [
+    "acceptance", "no_dispatch", "no_start", "provider_not_started", "output_no_start_drain",
+    "host_custody_no_start", "effect_no_start", "containment_not_required", "cutoff",
+  ].every(kind => kinds.has(kind as never));
+};
+
 const validateTerminal = (operation: ContainedTurnKernelOperation): void => {
   if (operation.terminal.kind === "open") {return;}
   invariant(operation.reconciliation.kind === "clear", "reconciliation debt blocks terminal truth");
-  invariant(operation.closureRecovery.kind === "clear", "closure recovery debt blocks terminal truth");
+  invariant(operation.closureRecovery.kind !== "required", "closure recovery debt blocks terminal truth");
   invariant(!hasAmbiguity(operation), "ambiguous operation cannot become terminal");
   invariant(operation.output.fence.kind === "fenced", "terminal truth requires fenced output");
   invariant(operation.admissionFence.kind === "fenced", "terminal truth requires fenced admission");
@@ -200,8 +218,15 @@ const validateTerminal = (operation: ContainedTurnKernelOperation): void => {
     );
   }
   invariant(operation.containment.kind === "contained" || operation.containment.kind === "qualified_not_required", "terminal truth requires exact containment closure");
-  invariant(operation.artifactManifestRef !== undefined && operation.resultRef !== undefined, "terminal truth requires artifact and result closure");
-  invariant(containedTurnRequiredProofsSatisfied(operation), "terminal truth requires the exact frozen proof set");
+  invariant(
+    (operation.artifactManifestRef !== undefined && operation.resultRef !== undefined) ||
+      operation.closureRecovery.kind === "proved_no_workspace",
+    "terminal truth requires artifact and result closure",
+  );
+  invariant(
+    containedTurnRequiredProofsSatisfied(operation) || noWorkspaceFactClosesReceipts(operation),
+    "terminal truth requires the exact frozen proof set",
+  );
   const terminalObservation = operation.proofs.find(proof => proof.kind === "provider_terminal_observation");
   invariant(
     (terminalObservation?.kind === "provider_terminal_observation" && terminalObservation.binding.outcome === operation.terminal.outcome) ||
@@ -408,6 +433,9 @@ export const validateContainedTurnOperation = (
   if (candidate.closureRecovery.kind === "required") {
     assertContainedTurnCanonicalArray(candidate.closureRecovery.evidenceIds);
   }
+  if (candidate.closureRecovery.kind === "proved_no_workspace") {
+    invariant(noWorkspaceFactClosesReceipts(candidate), "no-workspace closure fact must be exact and authority-bound");
+  }
   invariant(isContainedTurnSchemaVersion(candidate.schemaVersion), "unsupported contained-turn schema version");
   invariant(Number.isSafeInteger(candidate.revision) && candidate.revision >= 0, "revision must be a non-negative safe integer");
   if (candidate.revision === 0) {
@@ -458,5 +486,14 @@ export const validateContainedTurnOperation = (
   }
   validateCancellation(candidate);
   validateTerminal(candidate);
-  if (options.previous !== undefined) {validateContainedTurnHistory(candidate, options.previous, invariant);}
+  if (options.previous !== undefined) {
+    if (options.previous.closureRecovery.kind === "proved_no_workspace") {
+      invariant(
+        candidate.closureRecovery.kind === "proved_no_workspace" &&
+          JSON.stringify(candidate.closureRecovery.fact) === JSON.stringify(options.previous.closureRecovery.fact),
+        "proved no-workspace closure cannot reopen or change",
+      );
+    }
+    validateContainedTurnHistory(candidate, options.previous, invariant);
+  }
 };

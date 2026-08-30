@@ -38,7 +38,8 @@ export const validateContainedTurnOperationShape = (operation: ContainedTurnKern
   exactKeys("cancellation state", operation.cancellation,
     operation.cancellation.kind === "open" ? ["kind"] : ["command", "kind", "proofId"]);
   invariant(
-    operation.closureRecovery.kind === "clear" || operation.closureRecovery.kind === "required",
+    operation.closureRecovery.kind === "clear" || operation.closureRecovery.kind === "required" ||
+      operation.closureRecovery.kind === "proved_no_workspace",
     "unknown closure-recovery state fails closed",
   );
   exactKeys(
@@ -46,8 +47,17 @@ export const validateContainedTurnOperationShape = (operation: ContainedTurnKern
     operation.closureRecovery,
     operation.closureRecovery.kind === "clear"
       ? ["kind"]
-      : ["debtId", "evidenceIds", "kind", "requestDigest", "requestId", "stage"],
+      : operation.closureRecovery.kind === "proved_no_workspace"
+        ? ["fact", "kind"]
+        : ["debtId", "evidenceIds", "kind", "requestDigest", "requestId", "stage"],
   );
+  if (operation.closureRecovery.kind === "proved_no_workspace") {
+    exactKeys("no-workspace closure fact", operation.closureRecovery.fact, [
+      "authorityVectorDigest", "cancellationCommandId", "containmentProofId", "effectProofId",
+      "factDigest", "hostCustodyProofId", "noDispatchProofId", "noStartProofId", "operationId", "outputProofId",
+      "providerProofId", "scopeDigest", "version",
+    ]);
+  }
   switch (operation.containment.kind) {
     case "not_requested": exactKeys("containment state", operation.containment, ["kind"]); break;
     case "pending": exactKeys("containment state", operation.containment, ["attemptId", "kind"]); break;
