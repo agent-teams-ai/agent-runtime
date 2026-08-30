@@ -1,0 +1,394 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  AgentRuntimeHostDisposalIncompleteError,
+  AgentRuntimeHostLifecycleError,
+  ContainedTurnOwnerContractError,
+  createAgentRuntimeHost,
+  createClaudeCodeSetupInspectionPlanner,
+  createCodexSetupInspectionPlanner,
+} from "../dist/composition.js";
+import type { ContainedTurnCapabilityBundle } from "../dist/composition.js";
+
+type ContainedTurnScope = Readonly<{ projectId: string; tenantId: string }>;
+type ContainedTurnStatus = "cancelled" | "running" | "succeeded";
+type AcceptanceObserver = (operation: Readonly<{
+  operationId: string;
+  scope: ContainedTurnScope;
+}>) => void;
+
+const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
+
+const setupDependencies = Object.freeze({
+  claudeCodeSetup: Object.freeze({
+    authorizeClaudeCodeSetupInspection: Object.freeze({ execute: unavailable }),
+    discoverClaudeCodeInstallations: Object.freeze({ execute: unavailable }),
+    inspectClaudeCodeConfiguration: Object.freeze({ execute: unavailable }),
+    planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner("linux"),
+  }),
+  codexSetup: Object.freeze({
+    authorizeSetupInspection: Object.freeze({ execute: unavailable }),
+    discoverCodexInstallations: Object.freeze({ execute: unavailable }),
+    inspectCodexConfiguration: Object.freeze({ execute: unavailable }),
+    planCodexSetupInspection: createCodexSetupInspectionPlanner("linux"),
+  }),
+});
+
+const trustedScope = Object.freeze({
+  projectId: "project:embedded",
+  tenantId: "tenant:embedded",
+});
+
+const turnView = (status: ContainedTurnStatus) => Object.freeze({
+  commandId: "command:embedded",
+  effectId: "effect:embedded",
+  operationId: "operation:embedded",
+  output: Object.freeze([]),
+  provider: "codex",
+  status,
+});
+
+test("Host ignores an acceptance callback after its owner operation has settled", async () => {
+  let lateAcceptance: AcceptanceObserver | undefined;
+  let cancellationCalls = 0;
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute() {
+        cancellationCalls += 1;
+        return { status: "observed", turn: turnView("cancelled") } as const;
+      },
+    }),
+    observe: Object.freeze({
+      async execute() {return { status: "not_found" } as const;},
+    }),
+    submit: Object.freeze({
+      async execute(_input, options) {
+        lateAcceptance = options?.onAccepted;
+        return { status: "denied" } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  const access = host.bindAccess({ containedTurn: trustedScope });
+  assert.deepEqual(await access.containedTurn.submit({
+    commandId: "command:settled-callback",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic settled callback" },
+  }), { status: "denied" });
+
+  const disposal = host.dispose();
+  await disposal;
+  lateAcceptance?.({ operationId: "operation:too-late", scope: trustedScope });
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+
+  assert.equal(cancellationCalls, 0);
+  assert.equal(host.dispose(), disposal);
+  await host.dispose();
+});
+
+test("Host rebinds acceptance custody to its immutable trusted scope", async () => {
+  const cancellationScopes: ContainedTurnScope[] = [];
+  const hostileScope = Object.create(null, {
+    projectId: { get: () => {throw new Error("owner scope must not be read");} },
+    tenantId: { get: () => {throw new Error("owner scope must not be read");} },
+  }) as ContainedTurnScope;
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute(input) {
+        cancellationScopes.push(input.scope);
+        return { status: "observed", turn: turnView("cancelled") } as const;
+      },
+    }),
+    observe: Object.freeze({
+      async execute() {return { status: "observed", turn: turnView("running") } as const;},
+    }),
+    submit: Object.freeze({
+      async execute(_input, options) {
+        options?.onAccepted?.({
+          operationId: "operation:embedded",
+          scope: hostileScope,
+        });
+        return { status: "observed", turn: turnView("running") } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  assert.deepEqual(await host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+    commandId: "command:scope-rebinding",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic scope rebinding" },
+  }), { operationId: "operation:embedded", status: "accepted" });
+
+  await host.dispose();
+
+  assert.deepEqual(cancellationScopes, [trustedScope]);
+  assert.notEqual(cancellationScopes[0], trustedScope);
+  assert.equal(Object.isFrozen(cancellationScopes[0]), true);
+});
+
+test("Host applies terminal completion proof before considering shutdown cancellation", async () => {
+  let releaseCompletion: (() => void) | undefined;
+  const completionGate = new Promise<void>(resolve => {releaseCompletion = resolve;});
+  let cancellationCalls = 0;
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute() {
+        cancellationCalls += 1;
+        return new Promise<never>(() => {});
+      },
+    }),
+    observe: Object.freeze({
+      async execute() {return { status: "not_found" } as const;},
+    }),
+    submit: Object.freeze({
+      async execute() {
+        await completionGate;
+        return { status: "observed", turn: turnView("succeeded") } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  const submission = host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+    commandId: "command:terminal-completion",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic terminal completion" },
+  });
+
+  const disposal = host.dispose();
+  await assert.rejects(submission, { name: "AbortError" });
+  releaseCompletion?.();
+  await disposal;
+
+  assert.equal(cancellationCalls, 0);
+});
+
+test("Host disposal is reentrant and deduplicates shutdown cancellation", async () => {
+  let releaseCompletion: (() => void) | undefined;
+  const completionGate = new Promise<void>(resolve => {releaseCompletion = resolve;});
+  let cancellationCalls = 0;
+  let repeatAcceptance: AcceptanceObserver | undefined;
+  let reentrantDisposal: Promise<void> | undefined;
+  let host: ReturnType<typeof createAgentRuntimeHost>;
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute() {
+        cancellationCalls += 1;
+        repeatAcceptance?.({ operationId: "operation:embedded", scope: trustedScope });
+        releaseCompletion?.();
+        return { status: "observed", turn: turnView("cancelled") } as const;
+      },
+    }),
+    observe: Object.freeze({
+      async execute() {return { status: "observed", turn: turnView("running") } as const;},
+    }),
+    submit: Object.freeze({
+      async execute(input, options) {
+        repeatAcceptance = options?.onAccepted;
+        options?.onAccepted?.(Object.freeze({
+          operationId: "operation:embedded",
+          scope: Object.freeze({ ...input.scope }),
+        }));
+        options?.signal?.addEventListener("abort", () => {
+          reentrantDisposal = host.dispose();
+        }, { once: true });
+        await completionGate;
+        return { status: "observed", turn: turnView("cancelled") } as const;
+      },
+    }),
+  });
+  host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  assert.deepEqual(await host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+    commandId: "command:reentrant-disposal",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic reentrant disposal" },
+  }), { operationId: "operation:embedded", status: "accepted" });
+
+  const disposal = host.dispose();
+
+  assert.equal(reentrantDisposal, disposal);
+  await disposal;
+  assert.equal(cancellationCalls, 1);
+});
+
+test("Host reports bounded incomplete disposal when cancellation never settles", async () => {
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute() {return new Promise<never>(() => {});},
+    }),
+    observe: Object.freeze({
+      async execute() {return { status: "observed", turn: turnView("running") } as const;},
+    }),
+    submit: Object.freeze({
+      async execute(input, options) {
+        options?.onAccepted?.(Object.freeze({
+          operationId: "operation:embedded",
+          scope: Object.freeze({ ...input.scope }),
+        }));
+        return { status: "observed", turn: turnView("running") } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  assert.deepEqual(await host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+    commandId: "command:non-cooperative-cancellation",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic non-cooperative cancellation" },
+  }), { operationId: "operation:embedded", status: "accepted" });
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+
+  const error = await host.dispose().then(
+    () => assert.fail("non-cooperative cancellation must not report clean disposal"),
+    failure => failure,
+  );
+
+  assert.equal(error instanceof AgentRuntimeHostDisposalIncompleteError, true);
+  if (!(error instanceof AgentRuntimeHostDisposalIncompleteError)) {
+    return;
+  }
+  assert.equal(error.status, "disposal_incomplete");
+  assert.equal(error.activeCallCount, 1);
+  assert.deepEqual(error.containedTurns, [{
+    operationId: "operation:embedded",
+    status: "running",
+  }]);
+  assert.equal(Object.isFrozen(error), true);
+  assert.equal(Object.isFrozen(error.containedTurns), true);
+  assert.equal(Object.isFrozen(error.containedTurns[0]), true);
+  assert.equal(JSON.stringify(error).includes("project:embedded"), false);
+  assert.equal(JSON.stringify(error).includes("tenant:embedded"), false);
+});
+
+test("Host registers an owner call before synchronous reentrant disposal", async () => {
+  let releaseOwner!: () => void;
+  const ownerGate = new Promise<void>(resolve => {releaseOwner = resolve;});
+  let reentrantDisposal: Promise<void> | undefined;
+  let host!: ReturnType<typeof createAgentRuntimeHost>;
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    submit: Object.freeze({
+      execute() {
+        reentrantDisposal = host.dispose();
+        return ownerGate.then(() => ({ status: "denied" as const }));
+      },
+    }),
+  });
+  host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  const submission = host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+    commandId: "command:sync-reentrant",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic pending owner" },
+  });
+  let disposalSettled = false;
+  void reentrantDisposal!.finally(() => {disposalSettled = true;});
+  await assert.rejects(submission, { name: "AbortError" });
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal(disposalSettled, false);
+  releaseOwner();
+  await reentrantDisposal;
+  assert.equal(disposalSettled, true);
+});
+
+test("Host rejects access after disposal with a bounded typed lifecycle error", async () => {
+  const host = createAgentRuntimeHost(setupDependencies);
+  const access = host.bindAccess({});
+  await host.dispose();
+  await assert.rejects(access.containedTurn.observe("operation:after-dispose"), error =>
+    error instanceof AgentRuntimeHostLifecycleError && error.code === "host_disposed" &&
+    !error.message.includes("operation:after-dispose"));
+  assert.throws(() => host.bindAccess({}), error =>
+    error instanceof AgentRuntimeHostLifecycleError && error.code === "host_disposed");
+});
+
+test("Host rejects a duplicate operation identity as an owner contract violation", async () => {
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute(input) {
+        return { status: "observed", turn: { ...turnView("cancelled"), operationId: input.operationId } } as const;
+      },
+    }),
+    observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    submit: Object.freeze({
+      async execute(input, options) {
+        options?.onAccepted?.({ operationId: "operation:duplicate", scope: input.scope });
+        return { status: "observed", turn: { operationId: "operation:duplicate", status: "running" } } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  const access = host.bindAccess({ containedTurn: trustedScope });
+  const input = {
+    commandId: "command:duplicate",
+    expectedProvider: "codex",
+    intent: { mode: "analysis" as const, prompt: "synthetic duplicate" },
+  };
+  assert.equal((await access.containedTurn.submit(input)).status, "accepted");
+  await assert.rejects(access.containedTurn.submit(input), error =>
+    error instanceof ContainedTurnOwnerContractError && error.code === "duplicate_operation_id");
+  await assert.rejects(host.dispose(), error =>
+    error instanceof AgentRuntimeHostDisposalIncompleteError &&
+    error.containedTurns[0]?.status === "contract_violation");
+});
+
+test("Disposal issues use deterministic Unicode code-point ordering", async () => {
+  const operationIds = ["operation:😀", "operation:ä", "operation:z", "operation:𐀀"];
+  let nextOperation = 0;
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute(input) {
+        return { status: "observed", turn: {
+          ...turnView("running"), operationId: input.operationId,
+        } } as const;
+      },
+    }),
+    observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    submit: Object.freeze({
+      async execute(input, options) {
+        const operationId = operationIds[nextOperation++]!;
+        options?.onAccepted?.({ operationId, scope: input.scope });
+        return { status: "observed", turn: { operationId, status: "running" } } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  const access = host.bindAccess({ containedTurn: trustedScope });
+  for (const index of operationIds.keys()) {
+    await access.containedTurn.submit({
+      commandId: `command:unicode:${index}`,
+      expectedProvider: "codex",
+      intent: { mode: "analysis", prompt: "synthetic Unicode order" },
+    });
+  }
+  const error = await host.dispose().catch(failure => failure);
+  assert.equal(error instanceof AgentRuntimeHostDisposalIncompleteError, true);
+  assert.deepEqual(error.containedTurns.map((issue: { operationId: string }) => issue.operationId), [
+    "operation:z", "operation:ä", "operation:𐀀", "operation:😀",
+  ]);
+});
+
+test("Embedded observation mapping rejects malformed owner DTO fields", async t => {
+  const malformedTurns = [
+    { ...turnView("running"), status: "complete" },
+    { ...turnView("running"), output: [{ cursor: Number.NaN, kind: "assistant", text: "x" }] },
+    { ...turnView("running"), operationId: "" },
+    { ...turnView("running"), operationId: "operation:other" },
+  ];
+  for (const malformed of malformedTurns) {
+    const feature: ContainedTurnCapabilityBundle = Object.freeze({
+      cancel: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+      observe: Object.freeze({ async execute() {return { status: "observed", turn: malformed } as never;} }),
+      submit: Object.freeze({ async execute() {return { status: "denied" } as const;} }),
+    });
+    const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+    t.after(() => host.dispose());
+    const observation = host.bindAccess({ containedTurn: trustedScope }).containedTurn
+      .observe("operation:embedded");
+    if (malformed.status === "complete" || Number.isNaN(malformed.output?.[0]?.cursor)) {
+      assert.deepEqual(await observation, { code: "capability_unavailable", status: "unsupported" });
+    } else {
+      await assert.rejects(observation, error => error instanceof ContainedTurnOwnerContractError &&
+        (error.code === "invalid_operation_id" || error.code === "operation_id_mismatch"));
+    }
+  }
+});

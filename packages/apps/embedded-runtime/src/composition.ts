@@ -1,9 +1,16 @@
 export {
-  AgentRuntimeHostDisposalIncompleteError,
   createAgentRuntimeHost,
   createDefaultAgentRuntimeHost,
+  AgentRuntimeHostDisposalIncompleteError,
+  AgentRuntimeHostLifecycleError,
+  ContainedTurnOwnerContractError,
   type AgentRuntimeHost,
+  type AgentRuntimeHostContainedTurnDisposalIssue,
+  type AgentRuntimeHostContainedTurnDisposalStatus,
   type AgentRuntimeHostDependencies,
+  type AgentRuntimeHostDisposalStatus,
+  type AgentRuntimeHostLifecycleErrorCode,
+  type ContainedTurnOwnerContractErrorCode,
   type ClaudeCodeSetupCapabilityBundle,
   type CodexSetupCapabilityBundle,
 } from "./composition/agent-runtime-host.js";
