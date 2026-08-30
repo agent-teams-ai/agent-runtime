@@ -25,6 +25,16 @@ export interface DispatchConsumptionV1Dependencies {
 
 type Callable = (...args: never[]) => unknown;
 const intrinsicBind = Function.prototype.bind;
+const intrinsicFunctionToString = Function.prototype.toString;
+const nativeCallableSource = /\{\s*\[native code\]\s*\}\s*$/u;
+
+const isCapturableMethod = (value: unknown): value is Callable => {
+  if (typeof value !== "function" || isRuntimeProxy(value)) { return false; }
+  let source: string;
+  try { source = Reflect.apply(intrinsicFunctionToString, value, []); }
+  catch { return false; }
+  return !nativeCallableSource.test(source) && !source.trimStart().startsWith("class");
+};
 
 const capturedMethod = (name: string, value: Callable, receiver: object): Callable => {
   let bound: unknown;
@@ -54,10 +64,10 @@ const methodsFrom = (name: string, value: unknown, keys: readonly string[]): Rea
   const receiver = Object.freeze({});
   return Object.freeze(Object.fromEntries(keys.map(key => {
     const descriptor = descriptors[key];
-    if (descriptor === undefined || !("value" in descriptor) || typeof descriptor.value !== "function" || isRuntimeProxy(descriptor.value)) {
+    if (descriptor === undefined || !("value" in descriptor) || !isCapturableMethod(descriptor.value)) {
       throw new TypeError(`${name}.${key} must be a stable method`);
     }
-    return [key, capturedMethod(`${name}.${key}`, descriptor.value as Callable, receiver)];
+    return [key, capturedMethod(`${name}.${key}`, descriptor.value, receiver)];
   })));
 };
 
@@ -131,15 +141,44 @@ const snapshotDependencies = (value: DispatchConsumptionV1Dependencies): Dispatc
       return found === undefined ? undefined : canonicalDispatchJournalEntry(found);
     },
     async transact<T>(selector: Parameters<DispatchConsumptionRepository["transact"]>[0], work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+      type CallbackState = "open" | "active" | "succeeded" | "failed" | "closed";
+      let callbackState: CallbackState = "open";
       let callbackCompleted = false;
+      let callbackRejectedReplay = false;
       let callbackResult: T | undefined;
       const transactionAcknowledgement = Object.freeze({});
       const detachedSelector = detachedDispatchData("repository transaction selector", selector);
-      const raw = repositoryMethods.transact?.(detachedSelector as never, (async (transaction: unknown) => {
-        callbackResult = await work(transactionFacade(transaction)); callbackCompleted = true; return transactionAcknowledgement;
-      }) as never);
-      const returned = await nativeResult("repository.transact", raw);
-      if (!callbackCompleted || returned !== transactionAcknowledgement) { throw new TypeError("repository substituted the transaction result"); }
+      const callback = (transaction: unknown): Promise<typeof transactionAcknowledgement> => {
+        if (callbackState !== "open") {
+          callbackRejectedReplay = true;
+          throw new TypeError("repository transaction callback is closed");
+        }
+        callbackState = "active";
+        let facade: DispatchConsumptionTransaction;
+        try { facade = transactionFacade(transaction); }
+        catch (error) { callbackState = "failed"; throw error; }
+        return (async () => {
+          try {
+            callbackResult = await work(facade);
+            callbackCompleted = true;
+            callbackState = "succeeded";
+            return transactionAcknowledgement;
+          } catch (error) {
+            callbackState = "failed";
+            throw error;
+          }
+        })();
+      };
+      let returned: unknown;
+      try {
+        const raw = repositoryMethods.transact?.(detachedSelector as never, callback as never);
+        returned = await nativeResult("repository.transact", raw);
+      } finally {
+        callbackState = "closed";
+      }
+      if (callbackRejectedReplay || !callbackCompleted || returned !== transactionAcknowledgement) {
+        throw new TypeError("repository substituted the transaction result");
+      }
       return callbackResult as T;
     },
   });

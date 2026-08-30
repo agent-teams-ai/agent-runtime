@@ -14,6 +14,13 @@ import type {
   DispatchConsumedReceipt, DispatchSettlementOutcome,
 } from "../dist/features/contained-turn-access/domain/dispatch-consumption.js";
 
+type InjectedMethod = (...args: never[]) => unknown;
+type TransactionWork = (transaction: DispatchConsumptionTransaction) => Promise<unknown>;
+
+const runtimeTypes = (process.getBuiltinModule("node:util") as {
+  readonly types: { readonly isProxy: (value: unknown) => boolean };
+}).types;
+
 const seed = () => ({
   acceptedAuthorityDigest: "authority:accepted:1", accessRef: "access:1", authorityHeadDigest: "authority:head:1",
   availability: "available" as const, bindingDigest: "binding:digest:1", bindingRevision: 1, claimBeforeControlTime: 200,
@@ -48,6 +55,81 @@ const armedHandler = (onTrap: () => void): ProxyHandler<object> => ({
   getOwnPropertyDescriptor() { onTrap(); throw new Error("proxy descriptor trap"); },
   getPrototypeOf() { onTrap(); throw new Error("proxy prototype trap"); },
   ownKeys() { onTrap(); throw new Error("proxy keys trap"); },
+});
+
+const intrinsicBoundProxyMethod = (onApply: () => void): InjectedMethod => {
+  const proxied = new Proxy(async (..._args: never[]): Promise<undefined> => undefined, {
+    apply() { onApply(); throw new Error("bound proxy apply trap"); },
+  });
+  const bound = Reflect.apply(Function.prototype.bind, proxied, [Object.freeze({})]) as InjectedMethod;
+  assert.equal(runtimeTypes.isProxy(bound), false);
+  return bound;
+};
+
+const rejectsSynchronouslyAsClosed = (invoke: () => Promise<unknown>): boolean => {
+  try {
+    void invoke().catch(() => {});
+    return false;
+  } catch (error) {
+    return error instanceof TypeError && /transaction callback is closed/u.test(error.message);
+  }
+};
+
+const inertTransaction = (onApplicationWork: () => void): DispatchConsumptionTransaction => Object.freeze({
+  async controlTime() { return 100; },
+  async findBindingHead() { return seed(); },
+  async findConsumption(): Promise<undefined> {},
+  async findGrantRequest(): Promise<undefined> { onApplicationWork(); },
+  async findSettlement(): Promise<undefined> {},
+  async findSettlementByConsumption(): Promise<undefined> {},
+  async isBindingConsumed() { return false; },
+  async markBindingConsumed() {},
+  async saveGrantRequest() {},
+  async saveSettlement() {},
+});
+
+test("every injected dependency method rejects an intrinsic-bound proxy without invoking its target", () => {
+  const base = createInMemoryDispatchConsumptionRepository([seed()], 100);
+  const digest = createSha256DispatchConsumptionDigest();
+  const cases: readonly [string, (method: InjectedMethod) => unknown][] = [
+    ["digest.digest", method => ({ digest: { digest: method }, repository: base.repository })],
+    ["repository.observeGrantRequest", method => ({
+      digest, repository: { observeGrantRequest: method, transact: base.repository.transact },
+    })],
+    ["repository.transact", method => ({
+      digest, repository: { observeGrantRequest: base.repository.observeGrantRequest, transact: method },
+    })],
+  ];
+  for (const [name, dependencies] of cases) {
+    let applyTraps = 0;
+    const method = intrinsicBoundProxyMethod(() => { applyTraps += 1; });
+    assert.throws(
+      () => createContainedTurnDispatchConsumptionV1(dependencies(method) as never),
+      { name: "TypeError" }, name,
+    );
+    assert.equal(applyTraps, 0, name);
+  }
+});
+
+test("every injected transaction method rejects an intrinsic-bound proxy without invoking its target", async () => {
+  const keys = [
+    "controlTime", "findBindingHead", "findConsumption", "findGrantRequest", "findSettlement",
+    "findSettlementByConsumption", "isBindingConsumed", "markBindingConsumed", "saveGrantRequest", "saveSettlement",
+  ] as const satisfies readonly (keyof DispatchConsumptionTransaction)[];
+  for (const key of keys) {
+    const base = createInMemoryDispatchConsumptionRepository([seed()], 100);
+    let applyTraps = 0;
+    const method = intrinsicBoundProxyMethod(() => { applyTraps += 1; });
+    const repository: DispatchConsumptionRepository = {
+      observeGrantRequest: base.repository.observeGrantRequest,
+      transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+        return base.repository.transact(selector, transaction => work({ ...transaction, [key]: method } as DispatchConsumptionTransaction));
+      },
+    };
+    const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository });
+    assert.deepEqual(await access.consumeForDispatch(await inputFor()), { kind: "indeterminate" }, key);
+    assert.equal(applyTraps, 0, key);
+  }
 });
 
 test("public dispatch inputs reject top-level and nested proxies without invoking traps", async () => {
@@ -213,4 +295,123 @@ test("repository selectors, writes, callback results, and reads are detached fro
   assert.notStrictEqual(retainedSettlement, settled);
   assert.notStrictEqual(retainedSettlement.receipt, settled.receipt);
   assert.notStrictEqual(retainedSettlement.receipt.scope, settled.receipt.scope);
+});
+
+test("transaction callback rejects concurrent and success-replay calls before repeating application work", async () => {
+  const base = createInMemoryDispatchConsumptionRepository([seed()], 100);
+  let concurrentRejected = false;
+  let successReplayRejected = false;
+  let applicationStarts = 0;
+  let consumptionWrites = 0;
+  let journalWrites = 0;
+  const repository: DispatchConsumptionRepository = {
+    observeGrantRequest: base.repository.observeGrantRequest,
+    transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+      return base.repository.transact(selector, async transaction => {
+        const counted: DispatchConsumptionTransaction = {
+          ...transaction,
+          async findGrantRequest() { applicationStarts += 1; return transaction.findGrantRequest(); },
+          async markBindingConsumed(receipt) { consumptionWrites += 1; await transaction.markBindingConsumed(receipt); },
+          async saveGrantRequest(entry) { journalWrites += 1; await transaction.saveGrantRequest(entry); },
+        };
+        const first = work(counted);
+        concurrentRejected = rejectsSynchronouslyAsClosed(() => work(counted));
+        const acknowledgement = await first;
+        successReplayRejected = rejectsSynchronouslyAsClosed(() => work(counted));
+        return acknowledgement;
+      });
+    },
+  };
+  const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository });
+  assert.deepEqual(await access.consumeForDispatch(await inputFor()), { kind: "indeterminate" });
+  assert.equal(concurrentRejected, true);
+  assert.equal(successReplayRejected, true);
+  assert.deepEqual({ applicationStarts, consumptionWrites, journalWrites }, {
+    applicationStarts: 1, consumptionWrites: 1, journalWrites: 1,
+  });
+});
+
+test("transaction callback permanently rejects a retained replay after successful repository return", async () => {
+  const base = createInMemoryDispatchConsumptionRepository([seed()], 100);
+  let retainedTransaction: DispatchConsumptionTransaction | undefined;
+  let retainedWork: TransactionWork | undefined;
+  let consumptionWrites = 0;
+  let journalWrites = 0;
+  const repository: DispatchConsumptionRepository = {
+    observeGrantRequest: base.repository.observeGrantRequest,
+    transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+      retainedWork = work;
+      return base.repository.transact(selector, transaction => {
+        retainedTransaction = transaction;
+        return work({
+          ...transaction,
+          async markBindingConsumed(receipt) { consumptionWrites += 1; await transaction.markBindingConsumed(receipt); },
+          async saveGrantRequest(entry) { journalWrites += 1; await transaction.saveGrantRequest(entry); },
+        });
+      });
+    },
+  };
+  const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository });
+  assert.equal((await access.consumeForDispatch(await inputFor())).kind, "consumed");
+  assert.ok(retainedTransaction !== undefined && retainedWork !== undefined);
+  if (retainedTransaction === undefined || retainedWork === undefined) { return; }
+  assert.equal(rejectsSynchronouslyAsClosed(() => retainedWork(retainedTransaction)), true);
+  assert.deepEqual({ consumptionWrites, journalWrites }, { consumptionWrites: 1, journalWrites: 1 });
+});
+
+test("transaction callback rejects failure replay and remains closed after repository failure", async () => {
+  const base = createInMemoryDispatchConsumptionRepository([seed()], 100);
+  let retainedTransaction: DispatchConsumptionTransaction | undefined;
+  let retainedWork: TransactionWork | undefined;
+  let firstFailed = false;
+  let failureReplayRejected = false;
+  let applicationStarts = 0;
+  const repository: DispatchConsumptionRepository = {
+    observeGrantRequest: base.repository.observeGrantRequest,
+    transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+      retainedWork = work;
+      return base.repository.transact(selector, async transaction => {
+        retainedTransaction = transaction;
+        try {
+          await work({
+            ...transaction,
+            async findGrantRequest() { applicationStarts += 1; throw new Error("synthetic application failure"); },
+          });
+        } catch { firstFailed = true; }
+        failureReplayRejected = rejectsSynchronouslyAsClosed(() => work(transaction));
+        throw new Error("synthetic repository failure");
+      });
+    },
+  };
+  const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository });
+  assert.deepEqual(await access.consumeForDispatch(await inputFor()), { kind: "indeterminate" });
+  assert.equal(firstFailed, true);
+  assert.equal(failureReplayRejected, true);
+  assert.equal(applicationStarts, 1);
+  assert.ok(retainedTransaction !== undefined && retainedWork !== undefined);
+  if (retainedTransaction === undefined || retainedWork === undefined) { return; }
+  assert.equal(rejectsSynchronouslyAsClosed(() => retainedWork(retainedTransaction)), true);
+  assert.equal(applicationStarts, 1);
+});
+
+test("transaction callback closes when a repository returns or throws before invoking it", async () => {
+  for (const mode of ["return", "throw"] as const) {
+    const base = createInMemoryDispatchConsumptionRepository([seed()], 100);
+    let retainedWork: TransactionWork | undefined;
+    let applicationStarts = 0;
+    const repository: DispatchConsumptionRepository = {
+      observeGrantRequest: base.repository.observeGrantRequest,
+      transact<T>(_selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>): Promise<T> {
+        retainedWork = work;
+        if (mode === "throw") { throw new Error("synthetic repository throw"); }
+        return Promise.resolve(Object.freeze({}) as T);
+      },
+    };
+    const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository });
+    assert.deepEqual(await access.consumeForDispatch(await inputFor()), { kind: "indeterminate" }, mode);
+    assert.ok(retainedWork !== undefined, mode);
+    if (retainedWork === undefined) { continue; }
+    assert.equal(rejectsSynchronouslyAsClosed(() => retainedWork(inertTransaction(() => { applicationStarts += 1; }))), true, mode);
+    assert.equal(applicationStarts, 0, mode);
+  }
 });
