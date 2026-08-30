@@ -41,11 +41,15 @@ const trustedScope = Object.freeze({
 });
 
 const turnView = (status: ContainedTurnStatus) => Object.freeze({
+  ...(status === "cancelled" || status === "succeeded"
+    ? { artifactManifestRef: "artifact:embedded", resultRef: "result:embedded" }
+    : {}),
   commandId: "command:embedded",
   effectId: "effect:embedded",
   operationId: "operation:embedded",
   output: Object.freeze([]),
   provider: "codex",
+  revision: 1,
   status,
 });
 
@@ -87,7 +91,7 @@ test("Host ignores an acceptance callback after its owner operation has settled"
   await host.dispose();
 });
 
-test("Host rebinds acceptance custody to its immutable trusted scope", async () => {
+test("Host rejects acceptance custody with an unreadable owner scope", async () => {
   const cancellationScopes: ContainedTurnScope[] = [];
   const hostileScope = Object.create(null, {
     projectId: { get: () => {throw new Error("owner scope must not be read");} },
@@ -114,17 +118,91 @@ test("Host rebinds acceptance custody to its immutable trusted scope", async () 
     }),
   });
   const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
-  assert.deepEqual(await host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+  await assert.rejects(host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
     commandId: "command:scope-rebinding",
     expectedProvider: "codex",
     intent: { mode: "analysis", prompt: "synthetic scope rebinding" },
-  }), { operationId: "operation:embedded", status: "accepted" });
+  }), error => error instanceof ContainedTurnOwnerContractError &&
+    error.code === "malformed_owner_outcome");
 
-  await host.dispose();
+  const disposalError = await host.dispose().catch(error => error);
 
+  assert.equal(disposalError instanceof AgentRuntimeHostDisposalIncompleteError, true);
+  assert.deepEqual(disposalError.containedTurns, [{
+    operationId: "operation:embedded",
+    status: "contract_violation",
+  }]);
   assert.deepEqual(cancellationScopes, [trustedScope]);
-  assert.notEqual(cancellationScopes[0], trustedScope);
-  assert.equal(Object.isFrozen(cancellationScopes[0]), true);
+});
+
+test("Host rejects acceptance custody with a mismatched owner scope", async () => {
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    submit: Object.freeze({
+      async execute(_input, options) {
+        options?.onAccepted?.({
+          operationId: "operation:scope-mismatch",
+          scope: { projectId: "project:crossed", tenantId: "tenant:embedded" },
+        });
+        return { status: "observed", turn: {
+          ...turnView("running"), operationId: "operation:scope-mismatch",
+        } } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+
+  await assert.rejects(host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+    commandId: "command:scope-mismatch",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic" },
+  }), error => error instanceof ContainedTurnOwnerContractError &&
+    error.code === "malformed_owner_outcome");
+  const disposalError = await host.dispose().catch(error => error);
+  assert.equal(disposalError instanceof AgentRuntimeHostDisposalIncompleteError, true);
+  assert.deepEqual(disposalError.containedTurns, [{
+    operationId: "operation:scope-mismatch",
+    status: "contract_violation",
+  }]);
+});
+
+test("Host disposal contains hostile owner cancellation failures without inspecting them", async () => {
+  let trapCalls = 0;
+  const hostile = new Proxy(Object.create(null) as object, {
+    get() {trapCalls += 1; throw new Error("owner-only disposal proxy get secret");},
+    getPrototypeOf() {trapCalls += 1; throw new Error("owner-only disposal proxy prototype secret");},
+  });
+  for (const timing of ["synchronous", "asynchronous"] as const) {
+    const fail = timing === "synchronous"
+      ? () => {throw hostile;}
+      : async () => {throw hostile;};
+    const feature = Object.freeze({
+      cancel: Object.freeze({ execute: fail }),
+      observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+      submit: Object.freeze({
+        async execute(input, options) {
+          options?.onAccepted?.({ operationId: "operation:embedded", scope: input.scope });
+          return { status: "observed", turn: turnView("running") } as const;
+        },
+      }),
+    }) as ContainedTurnCapabilityBundle;
+    const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+    assert.deepEqual(await host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+      commandId: "command:embedded",
+      expectedProvider: "codex",
+      intent: { mode: "analysis", prompt: "synthetic disposal" },
+    }), { operationId: "operation:embedded", status: "accepted" });
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    const error = await host.dispose().catch(caught => caught);
+    assert.equal(error instanceof AgentRuntimeHostDisposalIncompleteError, true);
+    assert.deepEqual(error.containedTurns, [{
+      operationId: "operation:embedded",
+      status: "cancellation_failed",
+    }]);
+    assert.equal(JSON.stringify(error).includes("owner-only disposal"), false);
+  }
+  assert.equal(trapCalls, 0);
 });
 
 test("Host applies terminal completion proof before considering shutdown cancellation", async () => {
@@ -312,7 +390,9 @@ test("Host rejects a duplicate operation identity as an owner contract violation
     submit: Object.freeze({
       async execute(input, options) {
         options?.onAccepted?.({ operationId: "operation:duplicate", scope: input.scope });
-        return { status: "observed", turn: { operationId: "operation:duplicate", status: "running" } } as const;
+        return { status: "observed", turn: {
+          ...turnView("running"), operationId: "operation:duplicate",
+        } } as const;
       },
     }),
   });
@@ -347,7 +427,9 @@ test("Disposal issues use deterministic Unicode code-point ordering", async () =
       async execute(input, options) {
         const operationId = operationIds[nextOperation++]!;
         options?.onAccepted?.({ operationId, scope: input.scope });
-        return { status: "observed", turn: { operationId, status: "running" } } as const;
+        return { status: "observed", turn: {
+          ...turnView("running"), operationId,
+        } } as const;
       },
     }),
   });
@@ -420,6 +502,61 @@ test("Host disposal rejects malformed and snapshot-unstable cancellation proof",
         turn: {
           ...turnView("succeeded"),
           get output(): never {throw new Error("owner-only terminal output");},
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a terminal turn with a throwing artifact closure getter",
+      outcome: {
+        status: "observed",
+        turn: {
+          ...turnView("succeeded"),
+          get artifactManifestRef(): never {throw new Error("owner-only terminal artifact");},
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a terminal turn with a throwing result closure getter",
+      outcome: {
+        status: "observed",
+        turn: {
+          ...turnView("succeeded"),
+          get resultRef(): never {throw new Error("owner-only terminal result");},
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a terminal turn with a throwing revision getter",
+      outcome: {
+        status: "observed",
+        turn: {
+          ...turnView("succeeded"),
+          get revision(): never {throw new Error("owner-only terminal revision");},
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a terminal turn missing result closure evidence",
+      outcome: {
+        status: "observed",
+        turn: {
+          ...turnView("succeeded"),
+          resultRef: undefined,
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a terminal turn with a mismatched revision",
+      outcome: {
+        status: "observed",
+        turn: {
+          ...turnView("succeeded"),
+          revision: -1,
         },
       },
     },
@@ -538,7 +675,10 @@ test("Host disposal rejects malformed and snapshot-unstable cancellation proof",
       const serialized = JSON.stringify(error);
       for (const secret of [
         "owner-only throwing cancellation getter",
+        "owner-only terminal artifact",
         "owner-only terminal output",
+        "owner-only terminal result",
+        "owner-only terminal revision",
         "owner-only-proxy-get-secret",
         "owner-only-proxy-prototype-secret",
       ]) {

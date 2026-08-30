@@ -33,11 +33,15 @@ const setupDependencies = Object.freeze({
 });
 
 const turnView = (status: ContainedTurnStatus) => Object.freeze({
+  ...(status === "cancelled" || status === "failed" || status === "succeeded"
+    ? { artifactManifestRef: "artifact:embedded", resultRef: "result:embedded" }
+    : {}),
   commandId: "command:embedded",
   effectId: "effect:embedded",
   operationId: "operation:embedded",
   output: Object.freeze([]),
   provider: "codex",
+  revision: 1,
   status,
 });
 
@@ -193,6 +197,7 @@ test("maps complete observations to an Embedded Runtime-owned deeply detached DT
     output: ownerOutput,
     provider: "Vendor / Model β",
     resultRef: "result:detached",
+    revision: 7,
     status: "succeeded" as const,
   };
   let receivedScope: ContainedTurnScope | undefined;
@@ -299,7 +304,7 @@ test("snapshots accessor-backed owner observations exactly once before validatio
   const reads = {
     artifactManifestRef: 0, commandId: 0, cursor: 0, effectId: 0, kind: 0,
     operationId: 0, outcomeStatus: 0, output: 0, outputIndex: 0, outputLength: 0,
-    provider: 0, resultRef: 0, text: 0, turn: 0, turnStatus: 0,
+    provider: 0, resultRef: 0, revision: 0, text: 0, turn: 0, turnStatus: 0,
   };
   const ownerOnlySentinel = { secret: "mutable-owner-sentinel" };
   const chunk = {
@@ -338,6 +343,8 @@ test("snapshots accessor-backed owner observations exactly once before validatio
       return reads.provider === 1 ? "codex" : ownerOnlySentinel;},
     get resultRef(): unknown {reads.resultRef += 1;
       return reads.resultRef === 1 ? "result:first" : ownerOnlySentinel;},
+    get revision(): unknown {reads.revision += 1;
+      return reads.revision === 1 ? 7 : ownerOnlySentinel;},
     get status(): unknown {
       reads.turnStatus += 1;
       return reads.turnStatus === 1 ? "succeeded" : "running";
@@ -380,7 +387,7 @@ test("snapshots accessor-backed owner observations exactly once before validatio
   assert.deepEqual(reads, {
     artifactManifestRef: 1, commandId: 1, cursor: 1, effectId: 1, kind: 1,
     operationId: 1, outcomeStatus: 1, output: 1, outputIndex: 1, outputLength: 1,
-    provider: 1, resultRef: 1, text: 1, turn: 1, turnStatus: 1,
+    provider: 1, resultRef: 1, revision: 1, text: 1, turn: 1, turnStatus: 1,
   });
   assert.equal(JSON.stringify(observation).includes(ownerOnlySentinel.secret), false);
   assert.equal(observation.status === "observed" && Object.isFrozen(observation.turn.output[0]), true);
@@ -530,7 +537,7 @@ test("fails closed on malformed, non-string, and oversized provider observations
   assert.deepEqual(await access.containedTurn.observe("operation:oversized-provider"), unavailableObservation);
 });
 
-test("accepts an explicit owner operation id without projecting optional observation fields", async t => {
+test("rejects a terminal submit completion missing required owner closure fields", async t => {
   const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
       async execute() {return { status: "not_found" };},
@@ -556,13 +563,127 @@ test("accepts an explicit owner operation id without projecting optional observa
   t.after(() => host.dispose());
   const access = host.bindAccess({ containedTurn: trustedScope });
 
-  assert.deepEqual(await access.containedTurn.submit({
+  await assert.rejects(access.containedTurn.submit({
     commandId: "command:accepted-without-projection",
     expectedProvider: "Vendor / Model β",
     intent: { mode: "analysis", prompt: "synthetic" },
-  }), {
-    operationId: "operation:accepted-without-projection",
-    status: "accepted",
+  }), error => error instanceof ContainedTurnOwnerContractError &&
+    error.code === "malformed_owner_outcome" &&
+    !error.message.includes("optional observation field"));
+});
+
+test("contains synchronous and asynchronous owner invocation failures behind one secret-safe error", async t => {
+  const secret = "owner-only invocation secret";
+  let proxyTrapCalls = 0;
+  const hostileProxy = new Proxy(Object.create(null) as object, {
+    get() {proxyTrapCalls += 1; throw new Error("owner-only proxy get secret");},
+    getPrototypeOf() {proxyTrapCalls += 1; throw new Error("owner-only proxy prototype secret");},
+  });
+  const failures = [secret, hostileProxy] as const;
+  let canonicalFailure: unknown;
+
+  for (const invocation of ["submit", "observe", "cancel"] as const) {
+    for (const timing of ["synchronous", "asynchronous"] as const) {
+      for (const failure of failures) {
+        const fail = timing === "synchronous"
+          ? () => {throw failure;}
+          : async () => {throw failure;};
+        const feature: ContainedTurnCapabilityBundle = Object.freeze({
+          cancel: Object.freeze({
+            execute: invocation === "cancel"
+              ? fail
+              : async () => ({ status: "not_found" as const }),
+          }),
+          observe: Object.freeze({
+            execute: invocation === "observe"
+              ? fail
+              : async () => ({ status: "not_found" as const }),
+          }),
+          submit: Object.freeze({
+            execute: invocation === "submit"
+              ? fail
+              : async () => ({ status: "denied" as const }),
+          }),
+        }) as ContainedTurnCapabilityBundle;
+        const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+        t.after(() => host.dispose());
+        const access = host.bindAccess({ containedTurn: trustedScope }).containedTurn;
+        const call = invocation === "submit"
+          ? access.submit({
+              commandId: "command:owner-failure",
+              expectedProvider: "codex",
+              intent: { mode: "analysis", prompt: "synthetic" },
+            })
+          : invocation === "observe"
+            ? access.observe("operation:owner-failure")
+            : access.cancel("operation:owner-failure");
+        const error = await call.catch(caught => caught);
+        assert.equal(error instanceof ContainedTurnOwnerContractError, true);
+        assert.equal((error as ContainedTurnOwnerContractError).code, "owner_invocation_failed");
+        assert.equal(JSON.stringify(error).includes(secret), false);
+        if (canonicalFailure === undefined) {
+          canonicalFailure = error;
+        } else {
+          assert.equal(error, canonicalFailure);
+        }
+      }
+    }
+  }
+  assert.equal(proxyTrapCalls, 0);
+});
+
+test("validates every terminal submit field once before releasing Host custody", async () => {
+  const reads = {
+    artifactManifestRef: 0,
+    commandId: 0,
+    effectId: 0,
+    operationId: 0,
+    output: 0,
+    provider: 0,
+    resultRef: 0,
+    revision: 0,
+    status: 0,
+  };
+  const once = <Key extends keyof typeof reads>(key: Key, value: unknown): unknown => {
+    reads[key] += 1;
+    return reads[key] === 1 ? value : undefined;
+  };
+  const ownerTurn = {
+    get artifactManifestRef(): unknown {return once("artifactManifestRef", "artifact:terminal");},
+    get commandId(): unknown {return once("commandId", "command:terminal");},
+    get effectId(): unknown {return once("effectId", "effect:terminal");},
+    get operationId(): unknown {return once("operationId", "operation:terminal");},
+    get output(): unknown {return once("output", []);},
+    get provider(): unknown {return once("provider", "codex");},
+    get resultRef(): unknown {return once("resultRef", "result:terminal");},
+    get revision(): unknown {return once("revision", 17);},
+    get status(): unknown {return once("status", "succeeded");},
+  };
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    submit: Object.freeze({ async execute() {
+      return { status: "observed", turn: ownerTurn } as never;
+    } }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+
+  assert.deepEqual(await host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+    commandId: "command:terminal",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic" },
+  }), { operationId: "operation:terminal", status: "accepted" });
+  await host.dispose();
+  assert.deepEqual(reads, {
+    artifactManifestRef: 1,
+    commandId: 1,
+    effectId: 1,
+    operationId: 1,
+    output: 1,
+    provider: 1,
+    resultRef: 1,
+    revision: 1,
+    status: 1,
   });
 });
 

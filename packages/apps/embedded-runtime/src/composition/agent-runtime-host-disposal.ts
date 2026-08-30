@@ -100,6 +100,7 @@ export type ContainedTurnOwnerContractErrorCode =
   | "duplicate_operation_id"
   | "invalid_operation_id"
   | "malformed_owner_outcome"
+  | "owner_invocation_failed"
   | "operation_id_mismatch";
 
 export class ContainedTurnOwnerContractError extends Error {
@@ -112,6 +113,9 @@ export class ContainedTurnOwnerContractError extends Error {
     Object.freeze(this);
   }
 }
+
+export const containedTurnOwnerInvocationFailed =
+  new ContainedTurnOwnerContractError("owner_invocation_failed");
 
 const settleActiveCalls = async (activeCalls: ReadonlySet<Promise<unknown>>): Promise<void> => {
   while (activeCalls.size > 0) {
@@ -152,6 +156,7 @@ interface CancellationTurnSnapshot {
   readonly output: readonly (CancellationOutputChunkSnapshot | undefined)[] | undefined;
   readonly provider: unknown;
   readonly resultRef: unknown;
+  readonly revision: unknown;
   readonly status: unknown;
 }
 
@@ -208,6 +213,7 @@ const snapshotCancellationOutcome = (rawOutcome: unknown): CancellationOutcomeSn
         output: snapshotCancellationOutput(record.output),
         provider: record.provider,
         resultRef: record.resultRef,
+        revision: record.revision,
         status: record.status,
       });
     }
@@ -240,14 +246,20 @@ const validateCancellationTurn = (
   turn: CancellationTurnSnapshot,
 ): Readonly<{ operationId: string; status: CancellationTurnStatus }> | undefined => {
   const {
-    artifactManifestRef, commandId, effectId, operationId, output, provider, resultRef, status,
+    artifactManifestRef, commandId, effectId, operationId, output, provider, resultRef, revision,
+    status,
   } = turn;
   if (!isBoundedOwnerIdentity(operationId) || !isBoundedOwnerIdentity(commandId) ||
     !isBoundedOwnerIdentity(effectId) || !isBoundedProviderIdentity(provider) || output === undefined ||
     (artifactManifestRef !== undefined && !isBoundedOwnerIdentity(artifactManifestRef)) ||
     (resultRef !== undefined && !isBoundedOwnerIdentity(resultRef)) ||
+    typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0 ||
     (status !== "accepted" && status !== "cancelled" && status !== "failed" &&
       status !== "reconcile_required" && status !== "running" && status !== "succeeded")) {
+    return;
+  }
+  if (isTerminalContainedTurnStatus(status) &&
+    (artifactManifestRef === undefined || resultRef === undefined)) {
     return;
   }
   let previousCursor = -1;
@@ -428,9 +440,9 @@ export const createAgentRuntimeHostDisposalLifecycle = (
       let outcome: unknown;
       try {
         outcome = await containedTurn.cancel.execute(operation);
-      } catch (error) {
+      } catch {
         recordCancellationFailure(operation.operationId, "cancellation_failed");
-        throw error;
+        throw containedTurnOwnerInvocationFailed;
       }
       const proof = snapshotCancellationProof(outcome, operation.operationId);
       if (proof.kind === "terminal") {
