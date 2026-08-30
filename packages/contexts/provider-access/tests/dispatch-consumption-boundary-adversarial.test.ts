@@ -5,8 +5,14 @@ import type { ConsumeForDispatchInput } from "../dist/index.js";
 import { createDispatchConsumptionRequestDigests, createInMemoryContainedTurnDispatchConsumptionV1 } from "../dist/composition.js";
 import { createInMemoryDispatchConsumptionRepository } from "../dist/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
 import { createSha256DispatchConsumptionDigest } from "../dist/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.js";
-import type { DispatchConsumptionRepository } from "../dist/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.js";
+import type {
+  DispatchConsumptionJournalEntry, DispatchConsumptionRepository, DispatchConsumptionTransaction,
+  DispatchConsumptionTransactionSelector,
+} from "../dist/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.js";
 import { createContainedTurnDispatchConsumptionV1 } from "../dist/features/contained-turn-access/composition/dispatch-consumption-v1-factory.js";
+import type {
+  DispatchConsumedReceipt, DispatchSettlementOutcome,
+} from "../dist/features/contained-turn-access/domain/dispatch-consumption.js";
 
 const seed = () => ({
   acceptedAuthorityDigest: "authority:accepted:1", accessRef: "access:1", authorityHeadDigest: "authority:head:1",
@@ -34,7 +40,11 @@ const inputFor = async (): Promise<ConsumeForDispatchInput> => {
 };
 
 const armedHandler = (onTrap: () => void): ProxyHandler<object> => ({
-  get() { onTrap(); throw new Error("proxy get trap"); },
+  get(_target, key) {
+    // Native promise resolution checks `then`; allow only that non-reflective handoff.
+    if (key === "then") { return; }
+    onTrap(); throw new Error("proxy get trap");
+  },
   getOwnPropertyDescriptor() { onTrap(); throw new Error("proxy descriptor trap"); },
   getPrototypeOf() { onTrap(); throw new Error("proxy prototype trap"); },
   ownKeys() { onTrap(); throw new Error("proxy keys trap"); },
@@ -57,6 +67,21 @@ test("public dispatch inputs reject top-level and nested proxies without invokin
   assert.equal(traps, 0);
 });
 
+test("in-memory composition and repository seeds reject armed proxies before reflection", () => {
+  let traps = 0;
+  const handler = armedHandler(() => { traps += 1; });
+  for (const bindings of [
+    new Proxy([seed()], handler),
+    [new Proxy(seed(), handler)],
+  ]) {
+    assert.throws(() => createInMemoryContainedTurnDispatchConsumptionV1({
+      bindings: bindings as never, initialControlTime: 100,
+    }), TypeError);
+    assert.throws(() => createInMemoryDispatchConsumptionRepository(bindings as never, 100), TypeError);
+  }
+  assert.equal(traps, 0);
+});
+
 test("repository outcomes reject top-level and nested proxies without invoking traps", async () => {
   const base = createInMemoryDispatchConsumptionRepository([seed()], 100);
   const input = await inputFor();
@@ -72,7 +97,7 @@ test("repository outcomes reject top-level and nested proxies without invoking t
     { ...structuredClone(stored), outcome: new Proxy(structuredClone(stored.outcome), handler) },
   ]) {
     const observationRepository: DispatchConsumptionRepository = {
-      observeGrantRequest: (() => value) as never, transact: base.repository.transact,
+      observeGrantRequest: (async () => value) as never, transact: base.repository.transact,
     };
     assert.deepEqual(await createContainedTurnDispatchConsumptionV1({
       digest: createSha256DispatchConsumptionDigest(), repository: observationRepository,
@@ -83,7 +108,7 @@ test("repository outcomes reject top-level and nested proxies without invoking t
       observeGrantRequest: base.repository.observeGrantRequest,
       transact: (selector, work) => base.repository.transact(selector, transaction => work({
         controlTime: transaction.controlTime, findBindingHead: transaction.findBindingHead,
-        findConsumption: transaction.findConsumption, findGrantRequest: (() => value) as never,
+        findConsumption: transaction.findConsumption, findGrantRequest: (async () => value) as never,
         findSettlement: transaction.findSettlement, findSettlementByConsumption: transaction.findSettlementByConsumption,
         isBindingConsumed: transaction.isBindingConsumed, markBindingConsumed: transaction.markBindingConsumed,
         saveGrantRequest: transaction.saveGrantRequest, saveSettlement: transaction.saveSettlement,
@@ -94,4 +119,98 @@ test("repository outcomes reject top-level and nested proxies without invoking t
     }).consumeForDispatch(input), { kind: "indeterminate" });
   }
   assert.equal(traps, 0);
+});
+
+test("repository selectors, writes, callback results, and reads are detached from public outcomes", async () => {
+  const base = createInMemoryDispatchConsumptionRepository([seed()], 100);
+  let retainedSelector: DispatchConsumptionTransactionSelector | undefined;
+  let retainedTransactionResult: unknown;
+  let retainedConsumption: DispatchConsumedReceipt | undefined;
+  let retainedJournal: DispatchConsumptionJournalEntry | undefined;
+  let retainedSettlement: DispatchSettlementOutcome | undefined;
+  let retainedObservation: DispatchConsumptionJournalEntry | undefined;
+  const repository: DispatchConsumptionRepository = {
+    async observeGrantRequest(input) {
+      const found = await base.repository.observeGrantRequest(input);
+      retainedObservation = found;
+      return found;
+    },
+    transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+      retainedSelector = selector;
+      return base.repository.transact(selector, async transaction => {
+        const intercepted: DispatchConsumptionTransaction = {
+          controlTime: transaction.controlTime,
+          findBindingHead: transaction.findBindingHead,
+          findConsumption: transaction.findConsumption,
+          findGrantRequest: transaction.findGrantRequest,
+          findSettlement: transaction.findSettlement,
+          findSettlementByConsumption: transaction.findSettlementByConsumption,
+          isBindingConsumed: transaction.isBindingConsumed,
+          async markBindingConsumed(receipt) {
+            retainedConsumption = receipt;
+            await transaction.markBindingConsumed(receipt);
+          },
+          async saveGrantRequest(entry) {
+            retainedJournal = entry;
+            await transaction.saveGrantRequest(entry);
+          },
+          async saveSettlement(outcome) {
+            retainedSettlement = outcome;
+            await transaction.saveSettlement(outcome);
+          },
+        };
+        const result = await work(intercepted);
+        retainedTransactionResult = result;
+        return result;
+      });
+    },
+  };
+  const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository });
+  const input = await inputFor();
+  const consumed = await access.consumeForDispatch(input);
+  assert.equal(consumed.kind, "consumed");
+  assert.ok(consumed.kind === "consumed" && retainedJournal?.outcome.kind === "consumed");
+  if (consumed.kind !== "consumed" || retainedJournal?.outcome.kind !== "consumed") { return; }
+  assert.notStrictEqual(retainedTransactionResult, consumed);
+  assert.notStrictEqual(retainedSelector?.scope, consumed.receipt.scope);
+  assert.notStrictEqual(retainedConsumption, consumed.receipt);
+  assert.notStrictEqual(retainedJournal.outcome, consumed);
+  assert.notStrictEqual(retainedJournal.outcome.receipt, consumed.receipt);
+  assert.notStrictEqual(retainedJournal.outcome.receipt.scope, consumed.receipt.scope);
+
+  const observed = await access.observeDispatchConsumption({
+    grantRequestId: input.grantRequestId, provider: input.provider, requestDigest: input.requestDigest, scope: input.scope,
+  });
+  assert.ok(observed.kind === "consumed" && retainedObservation?.outcome.kind === "consumed");
+  if (observed.kind !== "consumed" || retainedObservation?.outcome.kind !== "consumed") { return; }
+  assert.notStrictEqual(retainedObservation.outcome, observed);
+  assert.notStrictEqual(retainedObservation.outcome.receipt, observed.receipt);
+
+  const settled = await access.settleDispatchConsumption({
+    consumptionDigest: consumed.receipt.consumptionDigest,
+    disposition: "claim_committed",
+    expectedBinding: {
+      acceptedAuthorityDigest: consumed.receipt.acceptedAuthorityDigest,
+      accessRef: consumed.receipt.accessRef,
+      authorityHeadDigest: consumed.receipt.authorityHeadDigestAtConsumption,
+      bindingDigest: consumed.receipt.bindingDigest,
+      bindingRevision: consumed.receipt.bindingRevision,
+      credentialBindingDigest: consumed.receipt.credentialBindingDigest,
+      credentialBindingRef: consumed.receipt.credentialBindingRef,
+      credentialGeneration: consumed.receipt.credentialGeneration,
+      providerAccountRef: consumed.receipt.providerAccountRef,
+      providerRouteRef: consumed.receipt.providerRouteRef,
+    },
+    operationId: consumed.receipt.operationId,
+    provider: consumed.receipt.provider,
+    scope: consumed.receipt.scope,
+    settlementRequestId: "settlement:identity-detachment",
+  });
+  assert.ok(settled.kind === "settled" && retainedSettlement?.kind === "settled");
+  if (settled.kind !== "settled" || retainedSettlement?.kind !== "settled") { return; }
+  assert.notStrictEqual(retainedTransactionResult, settled);
+  assert.notStrictEqual(retainedSelector?.scope, settled.receipt.scope);
+  assert.notStrictEqual(retainedSettlement, settled);
+  assert.notStrictEqual(retainedSettlement.receipt, settled.receipt);
+  assert.notStrictEqual(retainedSettlement.receipt.scope, settled.receipt.scope);
 });

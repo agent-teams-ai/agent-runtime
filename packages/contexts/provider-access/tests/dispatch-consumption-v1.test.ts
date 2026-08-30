@@ -192,8 +192,27 @@ test("composition validates Pure DI once and retains detached callable-owner sna
   assert.throws(() => createContainedTurnDispatchConsumptionV1({
     digest: { digest: armedMethod }, repository: callerRepository,
   }), TypeError);
+  let hostileBindReads = 0;
+  let hostileBoundApplyTraps = 0;
+  const hostileBindDelegate = createSha256DispatchConsumptionDigest();
+  const hostileBindDigest = async (payload: string) => hostileBindDelegate.digest(payload);
+  Object.defineProperty(hostileBindDigest, "bind", {
+    configurable: true,
+    get() {
+      hostileBindReads += 1;
+      return () => new Proxy(hostileBindDigest, {
+        apply() { hostileBoundApplyTraps += 1; throw new Error("caller-controlled bind result invoked"); },
+      });
+    },
+  });
+  const hostileBindAccess = createContainedTurnDispatchConsumptionV1({
+    digest: { digest: hostileBindDigest }, repository: callerRepository,
+  });
+  assert.equal((await hostileBindAccess.consumeForDispatch(await inputFor())).kind, "consumed");
   assert.equal(ownerProxyTraps, 0);
   assert.equal(applyTraps, 0);
+  assert.equal(hostileBindReads, 0);
+  assert.equal(hostileBoundApplyTraps, 0);
 });
 
 test("server-derived replay identity rejects changed semantics with a reused claimed digest", async () => {

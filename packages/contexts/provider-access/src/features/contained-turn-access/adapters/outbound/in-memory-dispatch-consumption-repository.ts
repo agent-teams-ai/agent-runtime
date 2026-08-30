@@ -31,12 +31,14 @@ export interface InMemoryDispatchConsumptionControl {
   observeOwnerState(input: { readonly provider: "claude" | "codex"; readonly scopeDigest: string }): OwnerState | undefined;
 }
 
-const putHead = (state: State, raw: DispatchBindingHead): void => {
-  const head = snapshotDispatchBindingHead(detachedDispatchData("binding head", raw) as never);
+const putCanonicalHead = (state: State, head: DispatchBindingHead): void => {
   const key = scopeKey(head);
   const scoped = state.slots.get(key) ?? new Map();
   state.slots.set(key, scoped);
   scoped.set(head.provider, { head, state: "absent" });
+};
+const putHead = (state: State, raw: DispatchBindingHead): void => {
+  putCanonicalHead(state, snapshotDispatchBindingHead(detachedDispatchData("binding head", raw) as never));
 };
 
 interface PendingWrites {
@@ -111,9 +113,12 @@ export const createInMemoryDispatchConsumptionRepository = (
 ): { readonly control: InMemoryDispatchConsumptionControl; readonly repository: DispatchConsumptionRepository } => {
   const state: State = { consumptions: new Map(), grants: new Map(), settlements: new Map(), settlementsByConsumption: new Map(), slots: new Map() };
   let controlTime = initialControlTime;
-  for (const head of initialHeads) {
+  const detachedHeads = detachedDispatchData("initial binding heads", initialHeads);
+  if (!Array.isArray(detachedHeads)) {throw new TypeError("initial binding heads must be an array");}
+  for (const rawHead of detachedHeads) {
+    const head = snapshotDispatchBindingHead(rawHead as DispatchBindingHead);
     if (state.slots.get(scopeKey(head))?.has(head.provider)) {throw new Error("duplicate exact dispatch binding head");}
-    putHead(state, head);
+    putCanonicalHead(state, head);
   }
   let tail = Promise.resolve();
   const serialize = async <T>(work: () => Promise<T>): Promise<T> => {

@@ -24,6 +24,18 @@ export interface DispatchConsumptionV1Dependencies {
 }
 
 type Callable = (...args: never[]) => unknown;
+const intrinsicBind = Function.prototype.bind;
+
+const capturedMethod = (name: string, value: Callable, receiver: object): Callable => {
+  let bound: unknown;
+  try { bound = Reflect.apply(intrinsicBind, value, [receiver]); }
+  catch { throw new TypeError(`${name} must be a stable method`); }
+  if (typeof bound !== "function" || isRuntimeProxy(bound)) {throw new TypeError(`${name} must produce a stable method`);}
+  try { Object.freeze(bound); }
+  catch { throw new TypeError(`${name} must produce a stable method`); }
+  if (!Object.isFrozen(bound)) {throw new TypeError(`${name} must produce a frozen method`);}
+  return bound as Callable;
+};
 
 const methodsFrom = (name: string, value: unknown, keys: readonly string[]): Readonly<Record<string, Callable>> => {
   if (value === null || typeof value !== "object" || isRuntimeProxy(value) || Array.isArray(value)) {
@@ -45,7 +57,7 @@ const methodsFrom = (name: string, value: unknown, keys: readonly string[]): Rea
     if (descriptor === undefined || !("value" in descriptor) || typeof descriptor.value !== "function" || isRuntimeProxy(descriptor.value)) {
       throw new TypeError(`${name}.${key} must be a stable method`);
     }
-    return [key, (descriptor.value as Callable).bind(receiver)];
+    return [key, capturedMethod(`${name}.${key}`, descriptor.value as Callable, receiver)];
   })));
 };
 
@@ -77,9 +89,15 @@ const transactionFacade = (value: unknown): DispatchConsumptionTransaction => {
     async findSettlement() { return optionalProjection("findSettlement", snapshotDispatchSettlementOutcome); },
     async findSettlementByConsumption() { return optionalProjection("findSettlementByConsumption", snapshotDispatchSettlementOutcome); },
     async isBindingConsumed() { return await invoke("isBindingConsumed") as boolean; },
-    markBindingConsumed(receipt: DispatchConsumedReceipt) { return acknowledgement("markBindingConsumed", receipt); },
-    saveGrantRequest(entry: DispatchConsumptionJournalEntry) { return acknowledgement("saveGrantRequest", entry); },
-    saveSettlement(outcome: DispatchSettlementOutcome) { return acknowledgement("saveSettlement", outcome); },
+    markBindingConsumed(receipt: DispatchConsumedReceipt) {
+      return acknowledgement("markBindingConsumed", snapshotDispatchConsumedReceipt(detachedDispatchData("consumption write", receipt)));
+    },
+    saveGrantRequest(entry: DispatchConsumptionJournalEntry) {
+      return acknowledgement("saveGrantRequest", canonicalDispatchJournalEntry(entry));
+    },
+    saveSettlement(outcome: DispatchSettlementOutcome) {
+      return acknowledgement("saveSettlement", snapshotDispatchSettlementOutcome(detachedDispatchData("settlement write", outcome)));
+    },
   });
 };
 
@@ -108,17 +126,20 @@ const snapshotDependencies = (value: DispatchConsumptionV1Dependencies): Dispatc
   });
   const repository: DispatchConsumptionRepository = Object.freeze({
     async observeGrantRequest(input: Parameters<DispatchConsumptionRepository["observeGrantRequest"]>[0]) {
-      const found = await nativeResult("repository.observeGrantRequest", repositoryMethods.observeGrantRequest?.(input as never));
+      const detachedInput = detachedDispatchData("repository observation selector", input);
+      const found = await nativeResult("repository.observeGrantRequest", repositoryMethods.observeGrantRequest?.(detachedInput as never));
       return found === undefined ? undefined : canonicalDispatchJournalEntry(found);
     },
     async transact<T>(selector: Parameters<DispatchConsumptionRepository["transact"]>[0], work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
       let callbackCompleted = false;
       let callbackResult: T | undefined;
-      const raw = repositoryMethods.transact?.(selector as never, (async (transaction: unknown) => {
-        callbackResult = await work(transactionFacade(transaction)); callbackCompleted = true; return callbackResult;
+      const transactionAcknowledgement = Object.freeze({});
+      const detachedSelector = detachedDispatchData("repository transaction selector", selector);
+      const raw = repositoryMethods.transact?.(detachedSelector as never, (async (transaction: unknown) => {
+        callbackResult = await work(transactionFacade(transaction)); callbackCompleted = true; return transactionAcknowledgement;
       }) as never);
       const returned = await nativeResult("repository.transact", raw);
-      if (!callbackCompleted || returned !== callbackResult) { throw new TypeError("repository substituted the transaction result"); }
+      if (!callbackCompleted || returned !== transactionAcknowledgement) { throw new TypeError("repository substituted the transaction result"); }
       return callbackResult as T;
     },
   });

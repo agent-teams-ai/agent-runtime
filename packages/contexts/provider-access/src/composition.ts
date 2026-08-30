@@ -11,8 +11,9 @@ import { createContainedTurnDispatchConsumptionV1 } from "./features/contained-t
 import { createInMemoryDispatchConsumptionRepository } from "./features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
 import { createSha256DispatchConsumptionDigest } from "./features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.js";
 import {
-  claimBindingDigestPayload, exactDispatchDataRecord, requestDigestPayload, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumeCommand,
+  claimBindingDigestPayload, requestDigestPayload, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumeCommand,
 } from "./features/contained-turn-access/domain/dispatch-consumption.js";
+import { exactDispatchDataRecord } from "./features/contained-turn-access/boundary/exact-dispatch-consumption-data.js";
 import { unsignedConsumeCommandFromContract } from "./features/contained-turn-access/contracts/dispatch-consumption-input.js";
 
 /** Non-secret authority seed for deterministic same-application composition and tests. */
@@ -84,8 +85,9 @@ const seedToHead = (seed: InMemoryDispatchBindingSeed): DispatchBindingHead => {
     try {values = exactDispatchDataRecord("binding seed", seed, [...required, ...optional]); break;} catch { /* try the next exact optional shape */ }
   }
   if (values === undefined) {throw new TypeError("binding seed has an invalid shape");}
-  values.availability ??= "available"; values.revocation ??= "active";
-  return snapshotDispatchBindingHead(values as unknown as DispatchBindingHead);
+  return snapshotDispatchBindingHead({
+    ...values, availability: values.availability ?? "available", revocation: values.revocation ?? "active",
+  } as unknown as DispatchBindingHead);
 };
 
 export const createInMemoryContainedTurnDispatchConsumptionV1 = (input: {

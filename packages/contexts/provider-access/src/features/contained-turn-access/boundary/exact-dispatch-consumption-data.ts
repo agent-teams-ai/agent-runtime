@@ -5,18 +5,42 @@ import {
   snapshotDispatchScope,
 } from "../domain/dispatch-consumption.js";
 
+const detachedArray = (
+  name: string, value: object, seen: Set<object>, depth: number,
+  reflection: { readonly descriptors: Record<PropertyKey, PropertyDescriptor>; readonly prototype: unknown },
+): readonly unknown[] => {
+  const { descriptors, prototype } = reflection;
+  const lengthDescriptor = descriptors.length;
+  if (prototype !== Array.prototype || lengthDescriptor === undefined || !("value" in lengthDescriptor)
+    || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0 || lengthDescriptor.value > 128
+    || Reflect.ownKeys(descriptors).length !== lengthDescriptor.value + 1) {
+    throw new TypeError(`${name} must contain a bounded dense array`);
+  }
+  const detached: unknown[] = [];
+  for (let index = 0; index < lengthDescriptor.value; index += 1) {
+    const descriptor = descriptors[String(index)];
+    if (descriptor === undefined || !("value" in descriptor)) {
+      throw new TypeError(`${name} cannot contain sparse arrays or accessors`);
+    }
+    detached.push(detachedData(name, descriptor.value, seen, depth + 1));
+  }
+  seen.delete(value);
+  return Object.freeze(detached);
+};
+
 const detachedData = (name: string, value: unknown, seen: Set<object>, depth: number): unknown => {
   if (isRuntimeProxy(value)) { throw new TypeError(`${name} cannot contain a proxy`); }
   if (value === null || (typeof value !== "object" && typeof value !== "function")) {
     if (typeof value === "string" && value.length > 512) { throw new TypeError(`${name} contains oversized data`); }
     return value;
   }
-  if (typeof value === "function" || Array.isArray(value) || depth > 8 || seen.size > 128 || seen.has(value)) {
+  if (typeof value === "function" || depth > 8 || seen.size > 128 || seen.has(value)) {
     throw new TypeError(`${name} has an invalid aggregate`);
   }
   seen.add(value);
   const prototype = Object.getPrototypeOf(value) as unknown;
   const descriptors = Object.getOwnPropertyDescriptors(value) as Record<PropertyKey, PropertyDescriptor>;
+  if (Array.isArray(value)) {return detachedArray(name, value, seen, depth, { descriptors, prototype });}
   if ((prototype !== Object.prototype && prototype !== null) || Reflect.ownKeys(descriptors).length > 128) {
     throw new TypeError(`${name} must contain bounded plain data`);
   }
