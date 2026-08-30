@@ -82,6 +82,7 @@ boundaries:
         - node:fs
         - node:fs/promises
         - node:path
+        - node:util
       runtimeReferences: []
   - id: production.filesystem-custody
     dependencyMode: runtime

@@ -9,6 +9,23 @@ export type {
   TrustedInstallationCandidate,
   TrustedSetupPathRoot,
 } from "./features/setup-source-inspection-authorization/contracts/setup-inspection-authorization.js";
+export {
+  CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE,
+  type ConsumeForDispatchInput,
+  type ConsumeForDispatchOutcome,
+  type ContainedTurnDispatchAuthorityV1,
+  type DispatchAuthorityScope,
+  type DispatchConsumptionLifecycleState,
+  type DispatchConsumptionReceipt,
+  type DispatchConsumptionSettlementReceipt,
+  type DispatchPreventionEvidence,
+  type DispatchPreventionReason,
+  type DispatchSettlementDisposition,
+  type ObserveDispatchConsumptionInput,
+  type ObserveDispatchConsumptionOutcome,
+  type SettleDispatchConsumptionInput,
+  type SettleDispatchConsumptionOutcome,
+} from "./features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
 export type {
   AuthorizeClaudeCodeSetupInspection,
   AuthorizeClaudeCodeSetupInspectionResult,
