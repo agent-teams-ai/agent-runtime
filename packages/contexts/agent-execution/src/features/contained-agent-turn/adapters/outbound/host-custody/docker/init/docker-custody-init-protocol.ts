@@ -8,6 +8,19 @@ const MAX_VALUE_BYTES = 8_192;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const TOKEN = /^[A-Za-z0-9._:@+-]{1,256}$/u;
 
+export const DOCKER_CUSTODY_CHILD_SIGNALS = Object.freeze([
+  "SIGABRT", "SIGALRM", "SIGBUS", "SIGCHLD", "SIGCONT", "SIGFPE", "SIGHUP", "SIGILL",
+  "SIGEMT", "SIGINFO", "SIGINT", "SIGIO", "SIGIOT", "SIGKILL", "SIGLOST", "SIGPIPE",
+  "SIGPOLL", "SIGPROF", "SIGPWR", "SIGQUIT", "SIGSEGV", "SIGSTKFLT", "SIGSTOP", "SIGSYS",
+  "SIGTERM", "SIGTRAP", "SIGTSTP", "SIGTTIN", "SIGTTOU", "SIGURG", "SIGUSR1", "SIGUSR2",
+  "SIGVTALRM", "SIGWINCH", "SIGXCPU", "SIGXFSZ",
+] as const);
+export type DockerCustodyChildSignal = typeof DOCKER_CUSTODY_CHILD_SIGNALS[number];
+export const DOCKER_CUSTODY_HOST_SIGNALS = Object.freeze([
+  "SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM", "SIGUSR1", "SIGUSR2",
+] as const);
+export type DockerCustodyHostSignal = typeof DOCKER_CUSTODY_HOST_SIGNALS[number];
+
 export interface DockerCustodyIdentity {
   readonly containerImageSha256: string;
   readonly initBinarySha256: string;
@@ -33,10 +46,7 @@ export interface DockerCustodyInitReady {
   readonly protocol: typeof DOCKER_CUSTODY_INIT_PROTOCOL;
 }
 
-export interface DockerCustodyEnvironmentEntry {
-  readonly name: string;
-  readonly value: string;
-}
+export interface DockerCustodyEnvironmentEntry {readonly name: string; readonly value: string;}
 
 export interface DockerCustodyProviderExecRequest {
   readonly argv: readonly string[];
@@ -69,48 +79,109 @@ export interface DockerCustodyProviderObservation {
   readonly kind: "provider-observation";
   readonly observation: "acceptance-unknown" | "exec-acknowledgement-lost" | "root-exited" | "spawn-failed";
   readonly requestId: string;
-  readonly signal: "SIGABRT" | "SIGKILL" | "SIGTERM" | null;
+  readonly signal: DockerCustodyChildSignal | null;
   readonly treeEmptyClaim: "not-claimed";
+}
+
+export interface DockerCustodySignalObservation {
+  readonly action: "forward-host" | "stop-kill" | "stop-term";
+  readonly kind: "provider-signal-observation";
+  readonly requestId: string;
+  readonly result: "absent" | "failed" | "sent";
+  readonly signal: DockerCustodyHostSignal | "SIGKILL";
+}
+
+/** PID1 proves only root reaping plus pipe EOF. The outer Docker adapter must add exact residue evidence. */
+export interface DockerCustodyProviderDrainComplete {
+  readonly kind: "provider-drain-complete";
+  readonly outerContainmentClaim: "unproven";
+  readonly requestId: string;
+  readonly rootExit: "observed";
+  readonly stderr: "eof";
+  readonly stdout: "eof";
+}
+
+export interface DockerCustodyInitClosureSubresult {
+  readonly outerContainmentClaim: "unproven";
+  readonly providerDrain: DockerCustodyProviderDrainComplete;
 }
 
 export type DockerCustodyHostMessage = DockerCustodyHostHandshake | DockerCustodyProviderExecRequest;
 export type DockerCustodyInitMessage =
-  | DockerCustodyContainmentRequest
-  | DockerCustodyInitReady
-  | DockerCustodyProviderExecAcknowledgement
-  | DockerCustodyProviderObservation;
+  | DockerCustodyContainmentRequest | DockerCustodyInitReady | DockerCustodyProviderDrainComplete
+  | DockerCustodyProviderExecAcknowledgement | DockerCustodyProviderObservation | DockerCustodySignalObservation;
 export type DockerCustodyProtocolMessage = DockerCustodyHostMessage | DockerCustodyInitMessage;
 
 export class DockerCustodyProtocolError extends Error {
-  public constructor(message: string) {
-    super(message);
-    this.name = "DockerCustodyProtocolError";
-  }
+  public constructor(message: string) {super(message); this.name = "DockerCustodyProtocolError";}
 }
 
 type JsonObject = Record<string, unknown>;
-
 const fail = (message: string): never => {throw new DockerCustodyProtocolError(message);};
-const object = (value: unknown, label: string): JsonObject => {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {return fail(`${label} must be an object`);}
-  return value as JsonObject;
+const nodeProxyInspection = process.getBuiltinModule("node:util") as {
+  readonly types: {readonly isProxy: (value: object) => boolean};
 };
-const exactKeys = (value: JsonObject, keys: readonly string[], label: string): void => {
-  const actual = Object.keys(value).toSorted();
-  const expected = [...keys].toSorted();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
-    fail(`${label} has unknown or missing keys`);
+
+const assertDataContainer = (value: object, label: string, array: boolean): void => {
+  if (nodeProxyInspection.types.isProxy(value)) {fail(`${label} must not be a Proxy`);}
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  if (prototype !== (array ? Array.prototype : Object.prototype) && prototype !== null) {
+    fail(`${label} must be a plain data ${array ? "array" : "object"}`);
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string") {fail(`${label} must not have symbol keys`);}
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) {fail(`${label} property must have a descriptor`);}
+    const dataDescriptor = descriptor as PropertyDescriptor;
+    if (!("value" in dataDescriptor)) {fail(`${label} must not contain accessors`);}
+    if (dataDescriptor.value === undefined || typeof dataDescriptor.value === "function" || typeof dataDescriptor.value === "symbol") {
+      fail(`${label} contains a non-JSON value`);
+    }
+  }
+  if (array) {
+    const values = value as readonly unknown[];
+    for (let index = 0; index < values.length; index += 1) {
+      if (!Object.hasOwn(values, index)) {fail(`${label} must not be sparse`);}
+    }
+    const allowedKeys = new Set(["length", ...values.map((_, index) => String(index))]);
+    if (Reflect.ownKeys(value).some(key => typeof key !== "string" || !allowedKeys.has(key))) {
+      fail(`${label} must not be augmented`);
+    }
   }
 };
+
+const object = (value: unknown, label: string): JsonObject => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {return fail(`${label} must be an object`);}
+  assertDataContainer(value, label, false);
+  return value as JsonObject;
+};
+const array = (value: unknown, label: string): readonly unknown[] => {
+  if (!Array.isArray(value)) {return fail(`${label} must be an array`);}
+  assertDataContainer(value, label, true);
+  return value;
+};
+const exactKeys = (value: JsonObject, keys: readonly string[], label: string): void => {
+  const actual = Reflect.ownKeys(value).map(key => {
+    if (typeof key !== "string") {return fail(`${label} must not have symbol keys`);}
+    return key;
+  }).toSorted();
+  const expected = [...keys].toSorted();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {fail(`${label} has unknown or missing keys`);}
+};
+const ownValue = (value: JsonObject, key: string, label: string): unknown => {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  if (descriptor === undefined || !("value" in descriptor)) {return fail(`${label} must be an own data property`);}
+  return descriptor.value;
+};
 const string = (value: unknown, label: string, maximum = MAX_IDENTITY_BYTES): string => {
-  if (typeof value !== "string" || Buffer.byteLength(value) > maximum || value.length === 0) {
-    return fail(`${label} must be a bounded non-empty string`);
+  if (typeof value !== "string" || Buffer.byteLength(value) > maximum || value.length === 0 || value.includes("\0")) {
+    return fail(`${label} must be bounded, non-empty, and NUL-free`);
   }
   return value;
 };
 const boundedText = (value: unknown, label: string, maximum: number): string => {
-  if (typeof value !== "string" || Buffer.byteLength(value) > maximum) {
-    return fail(`${label} must be a bounded string`);
+  if (typeof value !== "string" || Buffer.byteLength(value) > maximum || value.includes("\0")) {
+    return fail(`${label} must be a bounded NUL-free string`);
   }
   return value;
 };
@@ -124,9 +195,7 @@ const digest = (value: unknown, label: string): string => {
   return value;
 };
 const integer = (value: unknown, label: string, minimum: number, maximum: number): number => {
-  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
-    return fail(`${label} must be a bounded integer`);
-  }
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {return fail(`${label} must be a bounded integer`);}
   return value as number;
 };
 const literal = <Value extends string>(value: unknown, allowed: readonly Value[], label: string): Value => {
@@ -148,121 +217,121 @@ export const parseDockerCustodyIdentity = (input: unknown, label = "identity"): 
 };
 
 const environment = (input: unknown): readonly DockerCustodyEnvironmentEntry[] => {
-  if (!Array.isArray(input) || input.length > MAX_ENVIRONMENT) {return fail("environment must be a bounded array");}
+  const items = array(input, "environment");
+  if (items.length > MAX_ENVIRONMENT) {return fail("environment must be bounded");}
   const seen = new Set<string>();
-  const entries = input.map((item, index) => {
+  const entries = items.map((item, index) => {
     const value = object(item, `environment[${index}]`);
     exactKeys(value, ["name", "value"], `environment[${index}]`);
     const name = string(value.name, `environment[${index}].name`, 128);
     if (!/^[A-Z_][A-Z0-9_]{0,127}$/u.test(name) || seen.has(name)) {return fail("environment names must be unique allowlist keys");}
     seen.add(name);
-    return Object.freeze({ name, value: boundedText(value.value, `environment[${index}].value`, MAX_VALUE_BYTES) });
+    return Object.freeze({name, value: boundedText(value.value, `environment[${index}].value`, MAX_VALUE_BYTES)});
   });
   return Object.freeze(entries);
 };
-
 const argumentsList = (input: unknown): readonly string[] => {
-  if (!Array.isArray(input) || input.length === 0 || input.length > MAX_ARGUMENTS) {return fail("argv must be a bounded non-empty array");}
-  return Object.freeze(input.map((item, index) => boundedText(item, `argv[${index}]`, MAX_VALUE_BYTES)));
+  const items = array(input, "argv");
+  if (items.length === 0 || items.length > MAX_ARGUMENTS) {return fail("argv must be bounded and non-empty");}
+  return Object.freeze(items.map((item, index) => boundedText(item, `argv[${index}]`, MAX_VALUE_BYTES)));
 };
 
 export const parseDockerCustodyProtocolMessage = (input: unknown): DockerCustodyProtocolMessage => {
   const value = object(input, "frame");
-  const kind = string(value.kind, "frame.kind");
+  const kind = string(ownValue(value, "kind", "frame.kind"), "frame.kind");
   switch (kind) {
     case "host-handshake":
       exactKeys(value, ["expectedIdentity", "kind", "launchFingerprintSha256", "nonce", "protocol"], kind);
-      return Object.freeze({
-        expectedIdentity: parseDockerCustodyIdentity(value.expectedIdentity, "expectedIdentity"), kind,
-        launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"),
-        nonce: token(value.nonce, "nonce"),
-        protocol: literal(value.protocol, [DOCKER_CUSTODY_INIT_PROTOCOL], "protocol"),
-      });
+      return Object.freeze({expectedIdentity: parseDockerCustodyIdentity(value.expectedIdentity, "expectedIdentity"), kind,
+        launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"), nonce: token(value.nonce, "nonce"),
+        protocol: literal(value.protocol, [DOCKER_CUSTODY_INIT_PROTOCOL], "protocol")});
     case "init-ready":
       exactKeys(value, ["kind", "launchFingerprintSha256", "nonce", "observedIdentity", "protocol"], kind);
-      return Object.freeze({ kind,
-        launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"),
+      return Object.freeze({kind, launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"),
         nonce: token(value.nonce, "nonce"), observedIdentity: parseDockerCustodyIdentity(value.observedIdentity, "observedIdentity"),
-        protocol: literal(value.protocol, [DOCKER_CUSTODY_INIT_PROTOCOL], "protocol"),
-      });
+        protocol: literal(value.protocol, [DOCKER_CUSTODY_INIT_PROTOCOL], "protocol")});
     case "provider-exec":
       exactKeys(value, ["argv", "environment", "executableSha256", "executableSlot", "gid", "handshakeNonce", "kind", "launchFingerprintSha256", "requestId", "uid", "wallDeadlineUnixMs"], kind);
-      return Object.freeze({ argv: argumentsList(value.argv), environment: environment(value.environment),
-        executableSha256: digest(value.executableSha256, "executableSha256"),
-        executableSlot: literal(value.executableSlot, ["provider-entrypoint"], "executableSlot"),
-        gid: integer(value.gid, "gid", 1, 2_147_483_647),
-        handshakeNonce: token(value.handshakeNonce, "handshakeNonce"), kind,
-        launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"),
-        requestId: token(value.requestId, "requestId"), uid: integer(value.uid, "uid", 1, 2_147_483_647),
-        wallDeadlineUnixMs: integer(value.wallDeadlineUnixMs, "wallDeadlineUnixMs", 1, Number.MAX_SAFE_INTEGER),
-      });
+      return Object.freeze({argv: argumentsList(value.argv), environment: environment(value.environment),
+        executableSha256: digest(value.executableSha256, "executableSha256"), executableSlot: literal(value.executableSlot, ["provider-entrypoint"], "executableSlot"),
+        gid: integer(value.gid, "gid", 1, 2_147_483_647), handshakeNonce: token(value.handshakeNonce, "handshakeNonce"), kind,
+        launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"), requestId: token(value.requestId, "requestId"),
+        uid: integer(value.uid, "uid", 1, 2_147_483_647), wallDeadlineUnixMs: integer(value.wallDeadlineUnixMs, "wallDeadlineUnixMs", 1, Number.MAX_SAFE_INTEGER)});
     case "provider-exec-ack":
       exactKeys(value, ["kind", "observation", "requestId"], kind);
-      return Object.freeze({ kind, observation: literal(value.observation, ["acceptance-unknown", "not-started", "started"], "observation"), requestId: token(value.requestId, "requestId") });
+      return Object.freeze({kind, observation: literal(value.observation, ["acceptance-unknown", "not-started", "started"], "observation"), requestId: token(value.requestId, "requestId")});
     case "container-containment-request":
       exactKeys(value, ["kind", "reason", "requestId"], kind);
-      return Object.freeze({ kind, reason: literal(value.reason, ["cancelled", "deadline", "init-failure", "input-limit", "output-limit", "shutdown-timeout"], "reason"), requestId: token(value.requestId, "requestId") });
-    case "provider-observation":
+      return Object.freeze({kind, reason: literal(value.reason, ["cancelled", "deadline", "init-failure", "input-limit", "output-limit", "shutdown-timeout"], "reason"), requestId: token(value.requestId, "requestId")});
+    case "provider-observation": {
       exactKeys(value, ["exitCode", "kind", "observation", "requestId", "signal", "treeEmptyClaim"], kind);
-      return Object.freeze({
-        exitCode: value.exitCode === null ? null : integer(value.exitCode, "exitCode", 0, 255), kind,
-        observation: literal(value.observation, ["acceptance-unknown", "exec-acknowledgement-lost", "root-exited", "spawn-failed"], "observation"),
-        requestId: token(value.requestId, "requestId"),
-        signal: value.signal === null ? null : literal(value.signal, ["SIGABRT", "SIGKILL", "SIGTERM"], "signal"),
-        treeEmptyClaim: literal(value.treeEmptyClaim, ["not-claimed"], "treeEmptyClaim"),
-      });
+      const observation = literal(value.observation, ["acceptance-unknown", "exec-acknowledgement-lost", "root-exited", "spawn-failed"], "observation");
+      const exitCode = value.exitCode === null ? null : integer(value.exitCode, "exitCode", 0, 255);
+      const signal = value.signal === null ? null : literal(value.signal, DOCKER_CUSTODY_CHILD_SIGNALS, "signal");
+      if (observation === "root-exited" ? (exitCode === null) === (signal === null) : exitCode !== null || signal !== null) {
+        return fail("exitCode and signal do not match the observation");
+      }
+      return Object.freeze({exitCode, kind, observation, requestId: token(value.requestId, "requestId"), signal,
+        treeEmptyClaim: literal(value.treeEmptyClaim, ["not-claimed"], "treeEmptyClaim")});
+    }
+    case "provider-signal-observation": {
+      exactKeys(value, ["action", "kind", "requestId", "result", "signal"], kind);
+      const action = literal(value.action, ["forward-host", "stop-kill", "stop-term"], "action");
+      const signal = literal(value.signal, [...DOCKER_CUSTODY_HOST_SIGNALS, "SIGKILL"], "signal");
+      if ((action === "stop-kill") !== (signal === "SIGKILL") || action === "stop-term" && signal !== "SIGTERM") {return fail("signal does not match action");}
+      return Object.freeze({action, kind, requestId: token(value.requestId, "requestId"), result: literal(value.result, ["absent", "failed", "sent"], "result"), signal});
+    }
+    case "provider-drain-complete":
+      exactKeys(value, ["kind", "outerContainmentClaim", "requestId", "rootExit", "stderr", "stdout"], kind);
+      return Object.freeze({kind, outerContainmentClaim: literal(value.outerContainmentClaim, ["unproven"], "outerContainmentClaim"),
+        requestId: token(value.requestId, "requestId"), rootExit: literal(value.rootExit, ["observed"], "rootExit"),
+        stderr: literal(value.stderr, ["eof"], "stderr"), stdout: literal(value.stdout, ["eof"], "stdout")});
     default: return fail("frame kind is unsupported");
   }
 };
 
-const compareKeys = ([left]: readonly [string, unknown], [right]: readonly [string, unknown]): number =>
-  left < right ? -1 : left > right ? 1 : 0;
-
-const canonical = (value: unknown): unknown => {
-  if (Array.isArray(value)) {return value.map(canonical);}
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).toSorted(compareKeys).map(([key, item]) => [key, canonical(item)]));
-  }
-  return value;
-};
+const compareKeys = ([left]: readonly [string, unknown], [right]: readonly [string, unknown]): number => left < right ? -1 : left > right ? 1 : 0;
+const canonical = (value: unknown): unknown => Array.isArray(value)
+  ? value.map(canonical)
+  : value !== null && typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).toSorted(compareKeys).map(([key, item]) => [key, canonical(item)]))
+    : value;
 
 export const encodeDockerCustodyFrame = (message: DockerCustodyProtocolMessage): Uint8Array => {
-  const detached = parseDockerCustodyProtocolMessage(JSON.parse(JSON.stringify(message)) as unknown);
+  const detached = parseDockerCustodyProtocolMessage(message);
   const payload = Buffer.from(JSON.stringify(canonical(detached)), "utf8");
   if (payload.byteLength > DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES) {return fail("frame exceeds the protocol bound");}
   const frame = Buffer.allocUnsafe(payload.byteLength + 4);
-  frame.writeUInt32BE(payload.byteLength, 0);
-  payload.copy(frame, 4);
-  return frame;
+  frame.writeUInt32BE(payload.byteLength, 0); payload.copy(frame, 4); return frame;
 };
 
 export class DockerCustodyFrameDecoder {
   #buffer = Buffer.alloc(0);
+  #sealed = false;
 
   public push(bytes: Uint8Array): readonly DockerCustodyProtocolMessage[] {
-    if (this.#buffer.byteLength + bytes.byteLength > 4 * (DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES + 4)) {
-      return fail("incomplete frame exceeds the protocol bound");
-    }
+    if (this.#sealed) {return fail("control channel is sealed after EOF");}
+    if (this.#buffer.byteLength + bytes.byteLength > 4 * (DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES + 4)) {return fail("incomplete frame exceeds the protocol bound");}
     this.#buffer = Buffer.concat([this.#buffer, bytes]);
     const messages: DockerCustodyProtocolMessage[] = [];
     while (this.#buffer.byteLength >= 4) {
       const size = this.#buffer.readUInt32BE(0);
       if (size === 0 || size > DOCKER_CUSTODY_INIT_MAX_FRAME_BYTES) {return fail("frame length is invalid");}
       if (this.#buffer.byteLength < size + 4) {break;}
-      const payload = this.#buffer.subarray(4, size + 4);
-      this.#buffer = this.#buffer.subarray(size + 4);
+      const payload = this.#buffer.subarray(4, size + 4); this.#buffer = this.#buffer.subarray(size + 4);
       try {
         const message = parseDockerCustodyProtocolMessage(JSON.parse(payload.toString("utf8")) as unknown);
         const canonicalPayload = Buffer.from(JSON.stringify(canonical(message)), "utf8");
         if (!payload.equals(canonicalPayload)) {return fail("frame payload is not canonical");}
         messages.push(message);
-      }
-      catch (error) {if (error instanceof DockerCustodyProtocolError) {throw error;} return fail("frame JSON is malformed");}
+      } catch (error) {if (error instanceof DockerCustodyProtocolError) {throw error;} return fail("frame JSON is malformed");}
     }
     return Object.freeze(messages);
   }
 
   public finish(): void {
-    if (this.#buffer.byteLength !== 0) {fail("control channel ended with a partial frame");}
+    if (this.#sealed) {return;}
+    this.#sealed = true;
+    if (this.#buffer.byteLength !== 0) {fail("control channel ended with a typed malformed partial frame");}
   }
 }
