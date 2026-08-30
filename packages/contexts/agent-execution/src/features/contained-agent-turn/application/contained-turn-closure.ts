@@ -27,7 +27,9 @@ export type RedactedIndeterminateSource =
   | "cancellation_closure_rejected"
   | "composite_containment_rejected"
   | "custody_open_rejected"
+  | "custody_release_rejected"
   | "custody_start_rejected"
+  | "dispatch_claim_rejected"
   | "dispatch_authority_mismatch"
   | "dispatch_authority_rejected"
   | "dispatch_preparation_rejected"
@@ -38,6 +40,9 @@ export type RedactedIndeterminateSource =
   | "provider_execution_rejected"
   | "terminal_proof_rejected"
   | "workspace_close_rejected"
+  | "workspace_bind_lost"
+  | "workspace_bind_rejected"
+  | "workspace_cleanup_rejected"
   | "workspace_create_rejected";
 
 export const redactedContainedTurnEvidenceId = (
@@ -197,6 +202,64 @@ const finalizeContainedTurn = async (
   });
 };
 
+type ExecutionAttestation =
+  | { readonly kind: "indeterminate"; readonly operation: ContainedTurnKernelOperation }
+  | {
+    readonly kind: "proved";
+    readonly proofs: Extract<Awaited<ReturnType<
+      ContainedTurnKernelDependencies["operationStore"]["proofsForAcceptedEffect"]
+    >>, { readonly kind: "proved" }> & Extract<Awaited<ReturnType<
+      ContainedTurnKernelDependencies["custody"]["attestExecutionClosure"]
+    >>, { readonly kind: "proved" }>;
+  };
+
+const attestContainedTurnExecution = async (
+  dependencies: ContainedTurnKernelDependencies,
+  operation: ContainedTurnKernelOperation,
+  trustedScope: ContainedTurnScope,
+  observation: Extract<ContainedTurnKernelProviderObservation, { readonly kind: "completed" }>,
+): Promise<ExecutionAttestation> => {
+  if (operation.dispatch.kind !== "claimed" || operation.custodyId === undefined) {
+    throw new TypeError("execution attestation requires the exact claimed custody reservation");
+  }
+  const [effectAuthority, hostAuthority] = await Promise.all([
+    dependencies.operationStore.proofsForAcceptedEffect({
+      authority: containedTurnOwnerStoreAuthority(operation, trustedScope),
+      operation,
+    }),
+    dependencies.custody.attestExecutionClosure({
+      attemptId: operation.dispatch.attemptId,
+      custodyId: operation.custodyId,
+      finalCursor: operation.output.chunks.length,
+      operationId: operation.operationId,
+    }),
+  ]);
+  if (effectAuthority.kind === "indeterminate") {
+    return {
+      kind: "indeterminate",
+      operation: await advanceContainedTurn(dependencies, operation, trustedScope, {
+        evidenceId: effectAuthority.evidenceId,
+        kind: "record_ambiguity",
+      }),
+    };
+  }
+  if (hostAuthority.kind === "indeterminate") {
+    return {
+      kind: "indeterminate",
+      operation: await advanceContainedTurn(dependencies, operation, trustedScope, {
+        evidenceId: hostAuthority.evidenceId,
+        kind: "record_ambiguity",
+      }),
+    };
+  }
+  if (hostAuthority.executionClosureProof.binding.outcome !== observation.outcome ||
+      hostAuthority.terminalObservationProof.binding.outcome !== observation.outcome ||
+      hostAuthority.executionClosureProof.binding.outcome !== hostAuthority.terminalObservationProof.binding.outcome) {
+    throw new TypeError("provider observation does not match independently attested execution closure");
+  }
+  return { kind: "proved", proofs: { ...effectAuthority, ...hostAuthority } };
+};
+
 export const closeContainedTurnExecution = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
@@ -221,11 +284,11 @@ export const closeContainedTurnExecution = async (
       });
     } else if (outcome.kind === "completed") {
       assertContainedTurnExactRecord("provider completion observation", outcome, ["kind", "outcome"]);
-      const proofs = await dependencies.operationStore.proofsForExecutionClosure({
-        authority: containedTurnOwnerStoreAuthority(current, trustedScope),
-        observation: outcome,
-        operation: current,
-      });
+      const attestation = await attestContainedTurnExecution(dependencies, current, trustedScope, outcome);
+      if (attestation.kind === "indeterminate") {
+        return closeContainedTurnPhysicalContainment(dependencies, attestation.operation, trustedScope);
+      }
+      const { proofs } = attestation;
       current = await advanceContainedTurn(dependencies, current, trustedScope, {
         kind: "record_provider_acceptance",
         proof: proofs.acceptanceProof,

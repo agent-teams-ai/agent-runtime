@@ -560,6 +560,80 @@ const buildTerminalCandidate = (): ContainedTurnKernelOperation => {
   });
 };
 
+test("post-claim cancellation containment rejects the stale dispatch cutoff and accepts the exact current cutoff", () => {
+  let operation = buildClosedExecution();
+  const commandId = containedTurnIdentity("cancellation_command", "cancellation-command:containment-cutoff");
+  const commandSubject = {
+    cancellationCommandId: commandId,
+    operationId,
+    scopeDigest: containedTurnScopeDigest(scope),
+  };
+  const command = { ...commandSubject, fingerprint: containedTurnCancellationFingerprint(commandSubject) };
+  const cancellationCutoff: Extract<ContainedTurnProof, { kind: "cutoff" }> = {
+    binding: { ...commonBinding, cancellationCommandId: commandId },
+    kind: "cutoff",
+    proofId: proofId("proof:cancellation-containment-cutoff"),
+  };
+  operation = mutateContainedTurnOperation(operation, {
+    command,
+    cutoffProof: cancellationCutoff,
+    kind: "request_cancellation",
+    proof: {
+      binding: { ...commonBinding, cancellationCommandId: commandId, cancellationFingerprint: command.fingerprint },
+      kind: "cancellation",
+      proofId: proofId("proof:cancellation-containment"),
+    },
+  });
+  operation = mutateContainedTurnOperation(operation, { kind: "record_physical_containment", proof: physicalContainmentProof });
+  operation = mutateContainedTurnOperation(operation, {
+    artifactManifestRef: "artifact-manifest:1", kind: "seal_artifact", proof: artifactProof,
+  });
+  operation = mutateContainedTurnOperation(operation, {
+    kind: "publish_result",
+    proof: { binding: { ...commonBinding, resultRef: "result:cancellation" }, kind: "result_publication", proofId: proofId("proof:result:cancellation") },
+    resultRef: "result:cancellation",
+  });
+  operation = mutateContainedTurnOperation(operation, {
+    kind: "close_workspace",
+    proof: { binding: { ...commonBinding, workspaceId }, kind: "workspace_closure", proofId: proofId("proof:workspace:cancellation") },
+  });
+  const containmentProof = (cutoffProofId: ReturnType<typeof proofId>): Extract<ContainedTurnProof, { kind: "containment" }> => ({
+    binding: {
+      ...attemptBinding,
+      adapterRevision: adapterSnapshot.adapterRevision,
+      artifactManifestSealProofId: artifactProof.proofId,
+      binaryRevision: adapterSnapshot.binaryRevision,
+      capabilityManifestRevision: manifest.manifestRevision,
+      containmentPolicyDigest: authorityVector.containmentPolicyDigest,
+      credentialBindingDigest: providerAccessSnapshot.credentialBindingDigest,
+      custodyId,
+      cutoffProofId,
+      executionClosureProofId: proofId("proof:execution"),
+      finalCursor: 1,
+      hostBootId,
+      hostInstanceId,
+      immutableScopeDigest: authorityVector.scopeDigest,
+      outputDrainProofId: proofId("proof:output-drain"),
+      physicalContainmentProofId: physicalContainmentProof.proofId,
+      providerRouteRef: providerAccessSnapshot.providerRouteRef,
+      terminalObservationProofId: proofId("proof:provider-terminal"),
+      workspaceId,
+    },
+    kind: "containment",
+    proofId: proofId(`proof:containment:${cutoffProofId}`),
+  });
+  expectInvariant(
+    () => mutateContainedTurnOperation(operation, {
+      kind: "record_containment", proof: containmentProof(proofId("proof:cutoff")),
+    }),
+    /exact current operation cutoff/u,
+  );
+  const contained = mutateContainedTurnOperation(operation, {
+    kind: "record_containment", proof: containmentProof(cancellationCutoff.proofId),
+  });
+  assert.equal(contained.containment.kind, "contained");
+});
+
 test("physical containment precedes canonical artifacts and exact composite containment", async () => {
   const closed = buildClosedExecution();
   const events: string[] = [];

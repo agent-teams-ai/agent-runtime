@@ -66,13 +66,31 @@ const attemptBinding = (operation: ContainedTurnKernelOperation) => {
   return { ...operationBinding(operation), attemptId, effectId: operation.effectId };
 };
 
+const assertOwnerAuthority = (
+  authority: Parameters<ContainedTurnKernelDependencies["operationStore"]["commit"]>[0]["authority"],
+  operation: ContainedTurnKernelOperation,
+): void => assert.deepEqual(authority, {
+  commandId: operation.commandId,
+  effectId: operation.effectId,
+  operationId: operation.operationId,
+  scope: operation.scope,
+});
+
+// The fixture deliberately assembles the exact closed set of owner ports in one place.
+// oxlint-disable-next-line max-lines-per-function
 const createDependencies = (options: Readonly<{
   artifactIndeterminate?: boolean;
+  custodyOpenThrows?: boolean;
+  dispatchPrevented?: boolean;
   emitBeforeGate?: boolean;
   forgeReceipt?: boolean;
   indeterminateFirstCommit?: boolean;
+  maliciousFakeSuccess?: boolean;
+  neverExecution?: boolean;
+  neverStart?: boolean;
   providerGate?: Promise<void>;
   providerStarted?: () => void;
+  revalidationThrows?: boolean;
   staleClaimAuthority?: boolean;
   throwAfterStart?: boolean;
   workspaceGate?: Promise<void>;
@@ -80,25 +98,26 @@ const createDependencies = (options: Readonly<{
 }> = {}): {
   claimAuthorities: Array<Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["dispatchAuthority"]>;
   containmentCalls: { value: number };
+  completionBoundaryReleases: { value: number };
+  createdWorkspaces: ContainedTurnKernelOperation["workspaceId"][];
+  custodyReleases: Array<Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]>;
   current: () => ContainedTurnKernelOperation | undefined;
   dependencies: ContainedTurnKernelDependencies;
+  openedCustodies: typeof custodyId[];
   providerCalls: { value: number };
+  workspaceQuarantines: Array<Parameters<ContainedTurnKernelDependencies["workspace"]["quarantine"]>[0]>;
 } => {
   let current: ContainedTurnKernelOperation | undefined;
   let commitCount = 0;
   let workspaceCreateCount = 0;
-  const assertOwnerAuthority = (
-    authority: Parameters<ContainedTurnKernelDependencies["operationStore"]["commit"]>[0]["authority"],
-    operation: ContainedTurnKernelOperation,
-  ): void => assert.deepEqual(authority, {
-    commandId: operation.commandId,
-    effectId: operation.effectId,
-    operationId: operation.operationId,
-    scope: operation.scope,
-  });
   const claimAuthorities: Array<Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["dispatchAuthority"]> = [];
   const containmentCalls = { value: 0 };
+  const completionBoundaryReleases = { value: 0 };
+  const createdWorkspaces: ContainedTurnKernelOperation["workspaceId"][] = [];
+  const custodyReleases: Array<Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]> = [];
+  const openedCustodies: typeof custodyId[] = [];
   const providerCalls = { value: 0 };
+  const workspaceQuarantines: Array<Parameters<ContainedTurnKernelDependencies["workspace"]["quarantine"]>[0]> = [];
   const operationStore: ContainedTurnKernelDependencies["operationStore"] = {
     accept: async (candidate, authority) => {
       assertOwnerAuthority(authority, candidate);
@@ -164,15 +183,16 @@ const createDependencies = (options: Readonly<{
       assertOwnerAuthority(authority, operation);
       return { attemptId, claimProofId: proofId("claim"), custodyId, cutoffProofId: proofId("cutoff"), executionGenerationId, writerFence };
     },
-    proofsForExecutionClosure: async ({ authority, observation, operation }) => {
+    proofsForAcceptedEffect: async ({ authority, operation }) => {
       assertOwnerAuthority(authority, operation);
+      if (options.maliciousFakeSuccess === true) {
+        return { evidenceId: identity("evidence", "owner-cannot-confirm-fake-success"), kind: "indeterminate" };
+      }
       const binding = attemptBinding(operation);
       return {
+        kind: "proved",
         acceptanceProof: { binding: { ...binding, disposition: "accepted" }, kind: "provider_acceptance", proofId: proofId("provider-acceptance") },
         effectProof: { binding: { ...binding, disposition: "committed" }, kind: "effect_resolution", proofId: proofId("effect") },
-        executionClosureProof: { binding: { ...binding, outcome: observation.outcome }, kind: "execution_closure", proofId: proofId("execution") },
-        outputDrainProof: { binding: { ...binding, finalCursor: operation.output.chunks.length }, kind: "output_drain", proofId: proofId("output-drain") },
-        terminalObservationProof: { binding: { ...binding, outcome: observation.outcome }, kind: "provider_terminal_observation", proofId: proofId("terminal-observation") },
       };
     },
     proofsForPrevention: async ({ authority, operation, preventionProofId }) => {
@@ -181,10 +201,10 @@ const createDependencies = (options: Readonly<{
         operation.cancellation.kind === "requested"
           ? proof.binding.cancellationCommandId === operation.cancellation.command.cancellationCommandId
           : proof.proofId === preventionProofId
-      )) as Extract<ContainedTurnProof, { kind: "cutoff" }>;
+      )) as Extract<ContainedTurnProof, { kind: "cutoff" }> | undefined;
       return ({
       containmentProof: { binding: { ...operationBinding(operation), effectId }, kind: "containment_not_required", proofId: proofId("containment-not-required") },
-      cutoffProof,
+      cutoffProof: cutoffProof ?? { binding: operationBinding(operation), kind: "cutoff", proofId: proofId("prevention-cutoff") },
       effectProof: { binding: { ...operationBinding(operation), disposition: "not_committed", effectId }, kind: "effect_no_start", proofId: proofId("effect-no-start") },
       executionProof: { binding: { ...operationBinding(operation), effectId }, kind: "no_start", proofId: proofId("no-start") },
       hostCustodyProof: { binding: { ...operationBinding(operation), effectId }, kind: "host_custody_no_start", proofId: proofId("host-custody-no-start") },
@@ -247,23 +267,33 @@ const createDependencies = (options: Readonly<{
         snapshot: providerAccessSnapshot,
       }),
       revalidateForDispatch: async () => ({
-        dispatchProofId: proofId("provider-access-dispatch"),
-        dispatchResolutionDigest: digestContainedTurnCanonicalValue({ current: true }),
-        kind: "current",
-        snapshot: providerAccessSnapshot,
+        ...(options.dispatchPrevented === true
+          ? { kind: "prevented" as const, preventionProofId: proofId("provider-access-prevention"), reason: "access_revoked" as const }
+          : options.revalidationThrows === true
+            ? await Promise.reject(new Error("provider access revalidation failed"))
+            : {
+              dispatchProofId: proofId("provider-access-dispatch"),
+              dispatchResolutionDigest: digestContainedTurnCanonicalValue({ current: true }),
+              kind: "current" as const,
+              snapshot: providerAccessSnapshot,
+            }),
       }),
     },
     workspace: {
       close: async input => ({ kind: "closed", proof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), workspaceId: input.workspaceId }, kind: "workspace_closure", proofId: proofId("workspace-closure") } }),
       create: async () => {
         workspaceCreateCount += 1;
+        const createdWorkspaceId = workspaceCreateCount === 1
+          ? workspaceId
+          : identity("workspace", `one-${workspaceCreateCount}`);
+        createdWorkspaces.push(createdWorkspaceId);
         if (workspaceCreateCount === 1) {
           options.workspaceStarted?.();
           await options.workspaceGate;
         }
-        return { workspaceId };
+        return { workspaceId: createdWorkspaceId };
       },
-      quarantine: async () => {},
+      quarantine: async input => {workspaceQuarantines.push(input);},
     },
     artifacts: {
       seal: async input => options.artifactIndeterminate === true
@@ -275,12 +305,45 @@ const createDependencies = (options: Readonly<{
       }),
     },
     custody: {
-      open: async () => ({
-        custodyId,
-        hostBootId,
-        hostCustodyProof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), attemptId, effectId, custodyId }, kind: "host_custody", proofId: proofId("host-custody") },
-        hostInstanceId,
-      }),
+      attestExecutionClosure: async input => {
+        const operation = current as ContainedTurnKernelOperation;
+        assert.equal(input.attemptId, attemptId);
+        assert.equal(input.custodyId, custodyId);
+        assert.equal(input.finalCursor, operation.output.chunks.length);
+        assert.equal(input.operationId, operationId);
+        const binding = attemptBinding(operation);
+        return {
+          executionClosureProof: { binding: { ...binding, outcome: "succeeded" }, kind: "execution_closure", proofId: proofId("execution") },
+          kind: "proved",
+          outputDrainProof: { binding: { ...binding, finalCursor: input.finalCursor }, kind: "output_drain", proofId: proofId("output-drain") },
+          terminalObservationProof: { binding: { ...binding, outcome: "succeeded" }, kind: "provider_terminal_observation", proofId: proofId("terminal-observation") },
+        };
+      },
+      completionBoundary: input => {
+        const expires = (input.phase === "start" && options.neverStart === true) ||
+          (input.phase === "execution" && options.neverExecution === true);
+        let timer: NodeJS.Immediate | undefined;
+        return {
+          expiration: expires
+            ? new Promise(resolve => {timer = setImmediate(() => {resolve({ evidenceId: identity("evidence", `${input.phase}-deadline`), kind: "expired" });});})
+            : new Promise(() => {}),
+          release: () => {
+            completionBoundaryReleases.value += 1;
+            if (timer !== undefined) {clearImmediate(timer);}
+          },
+        };
+      },
+      open: async () => {
+        openedCustodies.push(custodyId);
+        if (options.custodyOpenThrows === true) {throw new Error("custody failed after reserving identity");}
+        return {
+          custodyId,
+          hostBootId,
+          hostCustodyProof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), attemptId, effectId, custodyId }, kind: "host_custody", proofId: proofId("host-custody") },
+          hostInstanceId,
+        };
+      },
+      releaseReservation: async input => {custodyReleases.push(input);},
       requestContainment: async () => {
         containmentCalls.value += 1;
         const operation = current as ContainedTurnKernelOperation;
@@ -300,7 +363,9 @@ const createDependencies = (options: Readonly<{
               containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
               credentialBindingDigest: operation.providerAccessSnapshot.credentialBindingDigest,
               custodyId,
-              cutoffProofId: proof("cutoff"),
+               cutoffProofId: operation.operationCutoff.kind === "closed" && "proofId" in operation.operationCutoff
+                 ? operation.operationCutoff.proofId
+                 : operation.admissionFence.kind === "fenced" ? operation.admissionFence.proofId : proof("cutoff"),
               executionClosureProofId: proof("execution_closure"),
               finalCursor: operation.output.chunks.length,
               hostBootId,
@@ -310,7 +375,7 @@ const createDependencies = (options: Readonly<{
               physicalContainmentProofId: proof("physical_containment"),
               providerRouteRef: operation.providerAccessSnapshot.providerRouteRef,
               terminalObservationProofId: proof("provider_terminal_observation"),
-              workspaceId,
+               workspaceId: operation.workspaceId as typeof workspaceId,
             },
             kind: "containment",
             proofId: proofId("containment"),
@@ -325,6 +390,7 @@ const createDependencies = (options: Readonly<{
         };
       },
       start: async input => {
+        if (options.neverStart === true) {return new Promise(() => {});}
         const proof = { binding: { ...attemptBinding(current as ContainedTurnKernelOperation), custodyId, hostBootId, hostInstanceId }, kind: "provider_process_start" as const, proofId: proofId("process-start") };
         let reportStart!: () => void;
         const observation = new Promise<import("../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js").ContainedTurnKernelProcessStartObservation>(resolve => {
@@ -345,6 +411,8 @@ const createDependencies = (options: Readonly<{
       execute: async input => {
         providerCalls.value += 1;
         input.start.createProcess(() => Object.freeze({}));
+        if (options.neverExecution === true) {return new Promise(() => {});}
+        if (options.maliciousFakeSuccess === true) {return { kind: "completed", outcome: "succeeded" };}
         if (options.throwAfterStart === true) {throw new Error("provider crashed after the sole delegated start");}
         if (options.emitBeforeGate === true) {await input.emit({ cursor: 0, kind: "assistant", text: "before cancellation" });}
         options.providerStarted?.();
@@ -364,7 +432,7 @@ const createDependencies = (options: Readonly<{
       },
     },
   };
-  return { claimAuthorities, containmentCalls, current: () => current, dependencies, providerCalls };
+  return { claimAuthorities, completionBoundaryReleases, containmentCalls, createdWorkspaces, custodyReleases, current: () => current, dependencies, openedCustodies, providerCalls, workspaceQuarantines };
 };
 
 test("seven-port conformance reaches terminal truth through only ordered kernel APIs", async () => {
@@ -400,7 +468,7 @@ test("final dispatch claim CAS carries Provider Access and Runtime Security auth
 });
 
 test("authority change at the final dispatch CAS prevents provider start", async () => {
-  const { dependencies, providerCalls } = createDependencies({ staleClaimAuthority: true });
+  const { custodyReleases, dependencies, providerCalls } = createDependencies({ staleClaimAuthority: true });
   const outcome = await createContainedTurnFeature(dependencies).submit.execute({
     commandId: "command:one",
     expectedProvider: "codex",
@@ -408,6 +476,50 @@ test("authority change at the final dispatch CAS prevents provider start", async
     scope: { projectId: "project:one", tenantId: "tenant:one" },
   });
   assert.equal(outcome.status, "observed");
+  assert.equal(providerCalls.value, 0);
+  assert.deepEqual(custodyReleases.map(release => release.reason), ["claim_lost"]);
+});
+
+test("prevention after custody reservation releases the exact reservation before no-dispatch closure", async () => {
+  const { current, custodyReleases, dependencies, openedCustodies, providerCalls } = createDependencies({ dispatchPrevented: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "prevent after preparation" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  assert.deepEqual(openedCustodies, [custodyId]);
+  assert.deepEqual(custodyReleases.map(release => release.reason), ["prevention"]);
+  assert.equal(current()?.dispatch.kind, "prevented");
+  assert.equal(providerCalls.value, 0);
+});
+
+test("thrown dispatch revalidation releases the exact custody reservation and fails closed", async () => {
+  const { custodyReleases, dependencies, openedCustodies, providerCalls } = createDependencies({ revalidationThrows: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "throw during revalidation" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  assert.deepEqual(openedCustodies, [custodyId]);
+  assert.deepEqual(custodyReleases.map(release => release.reason), ["revalidation_failed"]);
+  assert.equal(providerCalls.value, 0);
+});
+
+test("custody open failure after reservation identity allocation executes bounded release", async () => {
+  const { custodyReleases, dependencies, openedCustodies, providerCalls } = createDependencies({ custodyOpenThrows: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "throw after custody reservation" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  assert.deepEqual(openedCustodies, [custodyId]);
+  assert.deepEqual(custodyReleases.map(release => release.reason), ["open_failed"]);
   assert.equal(providerCalls.value, 0);
 });
 
@@ -509,6 +621,54 @@ test("provider observations cannot inject Kernel-owned receipt fields", async ()
   ].includes(proof.kind)), false);
 });
 
+test("a malicious provider's immediate fake success observation cannot mint owner truth or terminalize", async () => {
+  const { current, dependencies, providerCalls } = createDependencies({ maliciousFakeSuccess: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "report fake success immediately" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
+  assert.equal(providerCalls.value, 1);
+  assert.equal(current()?.terminal.kind, "open");
+  assert.equal(current()?.providerAcceptance.kind, "unknown");
+  assert.equal(current()?.effect.kind, "ambiguous");
+  assert.equal(current()?.proofs.some(proof => proof.kind === "terminal_truth"), false);
+});
+
+test("a never-settling custody start is bounded, contained, and releases its completion boundary", async () => {
+  const { completionBoundaryReleases, current, dependencies, providerCalls } = createDependencies({ neverStart: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "never settle custody start" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
+  assert.equal(providerCalls.value, 0);
+  assert.equal(completionBoundaryReleases.value, 1);
+  assert.equal(current()?.physicalContainment.kind, "contained");
+});
+
+test("a never-settling provider execution is bounded without redispatch or a tracked submission", async () => {
+  const { completionBoundaryReleases, current, dependencies, providerCalls } = createDependencies({ neverExecution: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "never settle execution" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
+  assert.equal(providerCalls.value, 1);
+  assert.equal(completionBoundaryReleases.value, 2);
+  assert.equal(current()?.physicalContainment.kind, "contained");
+  assert.equal(current()?.terminal.kind, "open");
+});
+
 test("throw after the sole dispatch claim preserves ambiguity and never becomes not-accepted or retryable", async () => {
   const { current, dependencies, providerCalls } = createDependencies({ throwAfterStart: true });
   const outcome = await createContainedTurnFeature(dependencies).submit.execute({
@@ -531,7 +691,7 @@ test("cancellation racing the first workspace creation reaches proved-no-start t
   let workspaceStarted!: () => void;
   const started = new Promise<void>(resolve => {workspaceStarted = resolve;});
   let accepted: import("../dist/index.js").ContainedTurnOperationRef | undefined;
-  const { current, dependencies, providerCalls } = createDependencies({ workspaceGate, workspaceStarted });
+  const { createdWorkspaces, current, dependencies, providerCalls, workspaceQuarantines } = createDependencies({ workspaceGate, workspaceStarted });
   const feature = createContainedTurnFeature(dependencies);
   const submission = feature.submit.execute({
     commandId: "command:one",
@@ -550,6 +710,10 @@ test("cancellation racing the first workspace creation reaches proved-no-start t
   assert.equal(settled.status, "observed");
   if (settled.status === "observed") {assert.equal(settled.turn.status, "cancelled");}
   assert.equal(providerCalls.value, 0);
+  assert.equal(createdWorkspaces.length, 2);
+  assert.equal(workspaceQuarantines.length, 1);
+  assert.equal(workspaceQuarantines[0]?.workspaceId, createdWorkspaces[0]);
+  assert.equal(current()?.workspaceId, createdWorkspaces[1]);
 });
 
 test("composition rejects every non-exact seven-port dependency bag before effects", () => {

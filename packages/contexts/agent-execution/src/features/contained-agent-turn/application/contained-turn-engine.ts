@@ -24,6 +24,7 @@ import {
   sanitizeContainedTurnOwnerStoreOutcome,
 } from "./contained-turn-store-authority.js";
 import { submitContainedTurn } from "./contained-turn-submission.js";
+import { bindContainedTurnCancellationWorkspace } from "./contained-turn-preparation-cleanup.js";
 import {
   validateContainedTurnKernelDependencies,
   type ContainedTurnKernelDependencies,
@@ -133,14 +134,7 @@ const requestContainedTurnCancellation = async (
   }
   try {
     if (current.dispatch.kind === "unclaimed" && current.workspaceId === undefined) {
-      const workspace = await dependencies.workspace.create({
-        operationId: current.operationId,
-        scope: input.scope,
-      });
-      current = await advanceContainedTurn(dependencies, current, input.scope, {
-        kind: "bind_workspace",
-        workspaceId: workspace.workspaceId,
-      });
+      current = await bindContainedTurnCancellationWorkspace(dependencies, current, input.scope);
     }
     if (current.dispatch.kind === "unclaimed" && current.workspaceId !== undefined) {
       const proofs = await dependencies.operationStore.proofsForPrevention({

@@ -35,6 +35,7 @@ import {
   containedTurnOwnerStoreAuthority,
   sanitizeContainedTurnOwnerStoreOutcome,
 } from "./contained-turn-store-authority.js";
+import { releaseLosingContainedTurnCustody } from "./contained-turn-preparation-cleanup.js";
 import type {
   ContainedTurnKernelDependencies,
   ContainedTurnKernelProviderObservation,
@@ -43,6 +44,23 @@ import type {
 const sameSnapshot = (left: unknown, right: unknown): boolean =>
   encodeContainedTurnCanonicalValue(left as ContainedTurnCanonicalValue) ===
   encodeContainedTurnCanonicalValue(right as ContainedTurnCanonicalValue);
+
+const raceContainedTurnCompletionBoundary = async <Value>(
+  promise: Promise<Value>,
+  boundary: ReturnType<ContainedTurnKernelDependencies["custody"]["completionBoundary"]>,
+): Promise<
+  | { readonly kind: "completed"; readonly value: Value }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "expired" }
+> => {
+  try {
+    return await Promise.race([
+      promise.then(value => ({ kind: "completed" as const, value })),
+      boundary.expiration,
+    ]);
+  } finally {
+    boundary.release();
+  }
+};
 
 const preventContainedTurnDispatch = async (
   dependencies: ContainedTurnKernelDependencies,
@@ -72,85 +90,51 @@ const preventContainedTurnDispatch = async (
   return closeContainedTurnWithoutExecution(dependencies, prevented, trustedScope);
 };
 
-const claimContainedTurnDispatch = async (
+const persistContainedTurnDispatchClaim = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
   trustedScope: ContainedTurnScope,
+  input: Readonly<{
+    dispatchAuthority: Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["dispatchAuthority"];
+    mutation: Extract<ContainedTurnKernelMutation, { readonly kind: "claim_dispatch" }>;
+    releaseReservation: (reason: "claim_lost") => Promise<ContainedTurnKernelOperation>;
+  }>,
 ): Promise<ContainedTurnKernelOperation> => {
-  if (initial.workspaceId === undefined) {return initial;}
-  const workspaceId = initial.workspaceId;
-  let prepared: Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["prepareDispatch"]>>;
+  let outcome: ReturnType<typeof sanitizeContainedTurnOwnerStoreOutcome>;
   try {
-    prepared = await dependencies.operationStore.prepareDispatch({
+    outcome = sanitizeContainedTurnOwnerStoreOutcome({
       authority: containedTurnOwnerStoreAuthority(initial, trustedScope),
-      operation: initial,
+      outcome: await dependencies.operationStore.claimDispatch({
+        authority: containedTurnOwnerStoreAuthority(initial, trustedScope),
+        candidate: mutateContainedTurnOperation(initial, input.mutation),
+        dispatchAuthority: input.dispatchAuthority,
+        expectedRevision: initial.revision,
+      }),
     });
   } catch {
+    const released = await input.releaseReservation("claim_lost");
     return recordContainedTurnRejectedDebt(
-      dependencies, initial, trustedScope, "dispatch_preparation_rejected", "dispatch_authority",
+      dependencies, released, trustedScope, "dispatch_claim_rejected", "dispatch_authority",
     );
   }
-  let custody: Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["open"]>>;
-  try {
-    custody = await dependencies.custody.open({
-      adapterSnapshot: initial.adapterSnapshot,
-      attemptId: prepared.attemptId,
-      authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
-      custodyId: prepared.custodyId,
-      operationId: initial.operationId,
-      providerAccessSnapshot: initial.providerAccessSnapshot,
-      workspaceId,
-    });
-  } catch {
-    return recordContainedTurnRejectedDebt(
-      dependencies, initial, trustedScope, "custody_open_rejected", "dispatch_authority",
-    );
+  if (outcome.kind === "indeterminate") {
+    await input.releaseReservation("claim_lost");
+    return durableContainedTurnDebtOperation(outcome);
   }
-  let access: Awaited<ReturnType<ContainedTurnKernelDependencies["providerAccess"]["revalidateForDispatch"]>>;
-  let security: Awaited<ReturnType<ContainedTurnKernelDependencies["security"]["revalidateForDispatch"]>>;
-  try {
-    [access, security] = await Promise.all([
-      dependencies.providerAccess.revalidateForDispatch({
-        acceptedSnapshot: initial.providerAccessSnapshot,
-        operationId: initial.operationId,
-        scope: trustedScope,
-      }),
-      dependencies.security.revalidateForDispatch({
-        decisionDigest: initial.acceptedAuthorityVector.securityDecisionDigest,
-        operationId: initial.operationId,
-        scope: trustedScope,
-        securityAuthorityRevision: initial.acceptedAuthorityVector.securityAuthorityRevision,
-      }),
-    ]);
-  } catch {
-    return recordContainedTurnRejectedDebt(
-      dependencies, initial, trustedScope, "dispatch_authority_rejected", "dispatch_authority",
-    );
+  if (outcome.kind !== "applied") {
+    await input.releaseReservation("claim_lost");
+    throw new ContainedTurnCasLostError("dispatch claim lost its authority CAS");
   }
-  const preventionProofId = access.kind === "prevented"
-    ? access.preventionProofId
-    : security.kind === "prevented"
-      ? security.preventionProofId
-      : undefined;
-  if (preventionProofId !== undefined) {
-    return preventContainedTurnDispatch(dependencies, initial, trustedScope, preventionProofId);
-  }
-  const authorityEvidenceId = access.kind === "indeterminate"
-    ? access.evidenceId
-    : security.kind === "indeterminate"
-      ? security.evidenceId
-      : undefined;
-  if (authorityEvidenceId !== undefined) {
-    return recordContainedTurnReconciliationDebt(
-      dependencies, initial, trustedScope, authorityEvidenceId, "dispatch_authority",
-    );
-  }
-  if (access.kind !== "current" || security.kind !== "current" ||
-      !sameSnapshot(access.snapshot, initial.providerAccessSnapshot)) {
-    return recordContainedTurnRejectedDebt(
-      dependencies, initial, trustedScope, "dispatch_authority_mismatch", "dispatch_authority",
-    );
-  }
+  return outcome.operation;
+};
+
+const containedTurnClaimMutation = (
+  initial: ContainedTurnKernelOperation,
+  prepared: Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["prepareDispatch"]>>,
+  custody: Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["open"]>>,
+  access: Extract<Awaited<ReturnType<ContainedTurnKernelDependencies["providerAccess"]["revalidateForDispatch"]>>, { readonly kind: "current" }>,
+  security: Extract<Awaited<ReturnType<ContainedTurnKernelDependencies["security"]["revalidateForDispatch"]>>, { readonly kind: "current" }>,
+): Extract<ContainedTurnKernelMutation, { readonly kind: "claim_dispatch" }> => {
   const operationBinding = {
     authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
     operationId: initial.operationId,
@@ -174,16 +158,13 @@ const claimContainedTurnDispatch = async (
     kind: "runtime_security_dispatch" as const,
     proofId: security.proofId,
   };
-  const attemptBinding = {
-    ...operationBinding,
-    attemptId: prepared.attemptId,
-    effectId: initial.effectId,
-  };
-  const mutation: ContainedTurnKernelMutation = {
+  return {
     attemptId: prepared.attemptId,
     claimProof: {
       binding: {
-        ...attemptBinding,
+        ...operationBinding,
+        attemptId: prepared.attemptId,
+        effectId: initial.effectId,
         providerAccessDispatchProofId: access.dispatchProofId,
         runtimeSecurityDispatchProofId: security.proofId,
       },
@@ -201,25 +182,114 @@ const claimContainedTurnDispatch = async (
     runtimeSecurityDispatchProof,
     writerFence: prepared.writerFence,
   };
-  const outcome = sanitizeContainedTurnOwnerStoreOutcome({
-    authority: containedTurnOwnerStoreAuthority(initial, trustedScope),
-    outcome: await dependencies.operationStore.claimDispatch({
+};
+
+const claimContainedTurnDispatch = async (
+  dependencies: ContainedTurnKernelDependencies,
+  initial: ContainedTurnKernelOperation,
+  trustedScope: ContainedTurnScope,
+): Promise<ContainedTurnKernelOperation> => {
+  if (initial.workspaceId === undefined) {return initial;}
+  const workspaceId = initial.workspaceId;
+  let prepared: Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["prepareDispatch"]>>;
+  try {
+    prepared = await dependencies.operationStore.prepareDispatch({
       authority: containedTurnOwnerStoreAuthority(initial, trustedScope),
-      candidate: mutateContainedTurnOperation(initial, mutation),
-      dispatchAuthority: {
-        acceptedProviderAccessSnapshotDigest: containedTurnProviderAccessSnapshotDigest(initial.providerAccessSnapshot),
-        acceptedSecurityDecisionDigest: initial.acceptedAuthorityVector.securityDecisionDigest,
-        providerAccessDispatchProofId: access.dispatchProofId,
-        providerAccessRevision: initial.providerAccessSnapshot.revision,
-        runtimeSecurityDispatchProofId: security.proofId,
+      operation: initial,
+    });
+  } catch {
+    return recordContainedTurnRejectedDebt(
+      dependencies, initial, trustedScope, "dispatch_preparation_rejected", "dispatch_authority",
+    );
+  }
+  let custody: Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["open"]>>;
+  const releaseReservation = (reason: "claim_lost" | "open_failed" | "prevention" | "revalidation_failed") =>
+    releaseLosingContainedTurnCustody(dependencies, initial, trustedScope, {
+      attemptId: prepared.attemptId,
+      custodyId: prepared.custodyId,
+      reason,
+      workspaceId,
+    });
+  try {
+    custody = await dependencies.custody.open({
+      adapterSnapshot: initial.adapterSnapshot,
+      attemptId: prepared.attemptId,
+      authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
+      custodyId: prepared.custodyId,
+      operationId: initial.operationId,
+      providerAccessSnapshot: initial.providerAccessSnapshot,
+      workspaceId,
+    });
+  } catch {
+    const released = await releaseReservation("open_failed");
+    return recordContainedTurnRejectedDebt(
+      dependencies, released, trustedScope, "custody_open_rejected", "dispatch_authority",
+    );
+  }
+  let access: Awaited<ReturnType<ContainedTurnKernelDependencies["providerAccess"]["revalidateForDispatch"]>>;
+  let security: Awaited<ReturnType<ContainedTurnKernelDependencies["security"]["revalidateForDispatch"]>>;
+  try {
+    [access, security] = await Promise.all([
+      dependencies.providerAccess.revalidateForDispatch({
+        acceptedSnapshot: initial.providerAccessSnapshot,
+        operationId: initial.operationId,
+        scope: trustedScope,
+      }),
+      dependencies.security.revalidateForDispatch({
+        decisionDigest: initial.acceptedAuthorityVector.securityDecisionDigest,
+        operationId: initial.operationId,
+        scope: trustedScope,
         securityAuthorityRevision: initial.acceptedAuthorityVector.securityAuthorityRevision,
-      },
-      expectedRevision: initial.revision,
-    }),
+      }),
+    ]);
+  } catch {
+    const released = await releaseReservation("revalidation_failed");
+    return recordContainedTurnRejectedDebt(
+      dependencies, released, trustedScope, "dispatch_authority_rejected", "dispatch_authority",
+    );
+  }
+  const preventionProofId = access.kind === "prevented"
+    ? access.preventionProofId
+    : security.kind === "prevented"
+      ? security.preventionProofId
+      : undefined;
+  if (preventionProofId !== undefined) {
+    const released = await releaseReservation("prevention");
+    return released.reconciliation.kind === "required"
+      ? released
+      : preventContainedTurnDispatch(dependencies, released, trustedScope, preventionProofId);
+  }
+  const authorityEvidenceId = access.kind === "indeterminate"
+    ? access.evidenceId
+    : security.kind === "indeterminate"
+      ? security.evidenceId
+      : undefined;
+  if (authorityEvidenceId !== undefined) {
+    const released = await releaseReservation("revalidation_failed");
+    return recordContainedTurnReconciliationDebt(
+      dependencies, released, trustedScope, authorityEvidenceId, "dispatch_authority",
+    );
+  }
+  if (access.kind !== "current" || security.kind !== "current" ||
+      !sameSnapshot(access.snapshot, initial.providerAccessSnapshot)) {
+    const released = await releaseReservation("revalidation_failed");
+    return recordContainedTurnRejectedDebt(
+      dependencies, released, trustedScope, "dispatch_authority_mismatch", "dispatch_authority",
+    );
+  }
+  const mutation = containedTurnClaimMutation(initial, prepared, custody, access, security);
+  return persistContainedTurnDispatchClaim(dependencies, initial, trustedScope, {
+    dispatchAuthority: {
+      acceptedProviderAccessSnapshotDigest: containedTurnProviderAccessSnapshotDigest(initial.providerAccessSnapshot),
+      acceptedSecurityDecisionDigest: initial.acceptedAuthorityVector.securityDecisionDigest,
+      providerAccessDispatchProofId: access.dispatchProofId,
+      providerAccessRevision: initial.providerAccessSnapshot.revision,
+      runtimeSecurityDispatchProofId: security.proofId,
+      securityAuthorityRevision: initial.acceptedAuthorityVector.securityAuthorityRevision,
+    },
+    mutation,
+    releaseReservation,
   });
-  if (outcome.kind === "indeterminate") {return durableContainedTurnDebtOperation(outcome);}
-  if (outcome.kind !== "applied") {throw new ContainedTurnCasLostError("dispatch claim lost its authority CAS");}
-  return outcome.operation;
 };
 
 const closeUnknownStart = async (
@@ -261,8 +331,14 @@ const startContainedTurnExecution = async (
   const persistedStart = new Promise<void>(resolve => {releasePersistedStart = resolve;});
   const outputAuthority = containedTurnOutputWriteAuthority(claimed);
   let start: Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["start"]>>;
+  const startBoundary = dependencies.custody.completionBoundary({
+    attemptId: dispatch.attemptId,
+    custodyId,
+    operationId: claimed.operationId,
+    phase: "start",
+  });
   try {
-    start = await dependencies.custody.start({
+    const boundedStart = await raceContainedTurnCompletionBoundary(dependencies.custody.start({
       attemptId: dispatch.attemptId,
       custodyId,
       execute: delegatedStart => dependencies.provider.execute({
@@ -293,7 +369,12 @@ const startContainedTurnExecution = async (
       intent: claimed.intent,
       operationId: claimed.operationId,
       workspaceId,
-    });
+    }), startBoundary);
+    if (boundedStart.kind === "expired") {
+      releasePersistedStart();
+      return closeUnknownStart(dependencies, claimed, trustedScope, boundedStart.evidenceId);
+    }
+    start = boundedStart.value;
   } catch {
     releasePersistedStart();
     return closeUnknownStart(
@@ -324,8 +405,17 @@ const startContainedTurnExecution = async (
   }
   if (start.kind === "execution_started") {
     let outcome: ContainedTurnKernelProviderObservation;
+    const executionBoundary = dependencies.custody.completionBoundary({
+      attemptId: dispatch.attemptId,
+      custodyId,
+      operationId: claimed.operationId,
+      phase: "execution",
+    });
     try {
-      outcome = await start.execution;
+      const boundedExecution = await raceContainedTurnCompletionBoundary(start.execution, executionBoundary);
+      outcome = boundedExecution.kind === "completed"
+        ? boundedExecution.value
+        : { evidenceId: boundedExecution.evidenceId, kind: "indeterminate" };
     } catch {
       outcome = {
         evidenceId: redactedContainedTurnEvidenceId(current, "provider_execution_rejected"),

@@ -22,6 +22,7 @@ import {
   ContainedTurnIndeterminateCommitError,
 } from "./contained-turn-committer.js";
 import { dispatchContainedTurn } from "./contained-turn-dispatch.js";
+import { quarantineLosingContainedTurnWorkspace } from "./contained-turn-preparation-cleanup.js";
 import type {
   ContainedTurnApplicationSubmitInput,
   ContainedTurnApplicationSubmitOutcome,
@@ -67,12 +68,24 @@ const continueAfterAcceptance = async (
       status: "observed",
     };
   } catch (error) {
+    const cleaned = await quarantineLosingContainedTurnWorkspace(
+      dependencies,
+      error instanceof ContainedTurnIndeterminateCommitError ? error.operation : current,
+      trustedScope,
+      workspace.workspaceId,
+    );
     if (error instanceof ContainedTurnIndeterminateCommitError) {
-      return { operation: error.operation, status: "observed" };
+      return { operation: cleaned, status: "observed" };
     }
-    if (!(error instanceof ContainedTurnCasLostError)) {throw error;}
-    const observed = await readContainedTurnOwnedOperation(dependencies, accepted.operationId, trustedScope);
-    return { operation: observed ?? accepted, status: "observed" };
+    if (!(error instanceof ContainedTurnCasLostError)) {
+      return {
+        operation: await recordContainedTurnRejectedDebt(
+          dependencies, cleaned, trustedScope, "workspace_bind_rejected", "workspace",
+        ),
+        status: "observed",
+      };
+    }
+    return { operation: cleaned, status: "observed" };
   }
 };
 

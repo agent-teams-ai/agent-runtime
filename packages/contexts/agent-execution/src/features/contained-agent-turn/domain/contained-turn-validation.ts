@@ -172,6 +172,19 @@ const validateTerminal = (operation: ContainedTurnKernelOperation): void => {
     invariant(operation.providerExecution.outcome === operation.terminal.outcome, "terminal truth must match execution outcome");
   }
   invariant(operation.providerAcceptance.kind === "accepted" || operation.providerAcceptance.kind === "not_accepted", "terminal truth requires exact provider acceptance");
+  if (operation.terminal.outcome === "succeeded") {
+    invariant(operation.providerAcceptance.kind === "accepted", "successful terminal truth requires proved provider acceptance");
+    invariant(
+      operation.effect.kind === "resolved" && operation.effect.disposition === "committed",
+      "successful terminal truth requires proved effect commitment",
+    );
+    invariant(
+      operation.output.fence.kind === "fenced" && operation.output.fence.proofId !== undefined &&
+        operation.proofs.some(proof => proof.kind === "output_drain" &&
+          operation.output.fence.kind === "fenced" && proof.proofId === operation.output.fence.proofId),
+      "successful terminal truth requires exact output-drain evidence",
+    );
+  }
   invariant(operation.containment.kind === "contained" || operation.containment.kind === "qualified_not_required", "terminal truth requires exact containment closure");
   invariant(operation.artifactManifestRef !== undefined && operation.resultRef !== undefined, "terminal truth requires artifact and result closure");
   invariant(containedTurnRequiredProofsSatisfied(operation), "terminal truth requires the exact frozen proof set");

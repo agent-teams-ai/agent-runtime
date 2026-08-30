@@ -173,7 +173,13 @@ export const validateContainedTurnProofBinding = (
       invariant(proof.binding.containmentPolicyDigest === operation.acceptedAuthorityVector.containmentPolicyDigest, "containment proof policy binding mismatch");
       invariant(proof.binding.credentialBindingDigest === operation.providerAccessSnapshot.credentialBindingDigest, "containment proof credential binding mismatch");
       invariant(proof.binding.custodyId === operation.custodyId, "containment proof custody binding mismatch");
-      invariant(proof.binding.cutoffProofId === (operation.admissionFence.kind === "fenced" ? operation.admissionFence.proofId : undefined), "containment proof cutoff binding mismatch");
+      invariant(
+        proof.binding.cutoffProofId === (operation.operationCutoff.kind === "closed" &&
+          "proofId" in operation.operationCutoff
+          ? operation.operationCutoff.proofId
+          : operation.admissionFence.kind === "fenced" ? operation.admissionFence.proofId : undefined),
+        "containment proof must attest the exact current operation cutoff",
+      );
       invariant(proof.binding.workspaceId === operation.workspaceId, "containment proof workspace binding mismatch");
       invariant(proof.binding.finalCursor === operation.output.chunks.length, "containment proof output cursor mismatch");
       invariant(proof.binding.hostBootId === operation.hostBootId, "containment proof host boot binding mismatch");

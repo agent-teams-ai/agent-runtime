@@ -156,17 +156,14 @@ export interface ContainedTurnKernelOperationStore {
   }>): Promise<
     Omit<Extract<ContainedTurnKernelMutation, { readonly kind: "close_process_no_start" }>, "kind">
   >;
-  proofsForExecutionClosure(input: Readonly<{
+  proofsForAcceptedEffect(input: Readonly<{
     authority: ContainedTurnOwnerStoreAuthority;
-    observation: Extract<ContainedTurnKernelProviderObservation, { readonly kind: "completed" }>;
     operation: ContainedTurnKernelOperation;
   }>): Promise<Readonly<{
+    kind: "proved";
     acceptanceProof: Extract<ContainedTurnProof, { readonly kind: "provider_acceptance" }>;
     effectProof: Extract<ContainedTurnProof, { readonly kind: "effect_resolution" }>;
-    executionClosureProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>;
-    outputDrainProof: Extract<ContainedTurnProof, { readonly kind: "output_drain" }>;
-    terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }>;
-  }>>;
+  }> | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }>;
   terminalProof(input: Readonly<{
     authority: ContainedTurnOwnerStoreAuthority;
     operation: ContainedTurnKernelOperation;
@@ -250,7 +247,12 @@ export interface ContainedTurnKernelWorkspacePort {
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
   create(input: Readonly<{ operationId: ContainedTurnOperationId; scope: ContainedTurnScope }>): Promise<{ readonly workspaceId: ContainedTurnWorkspaceId }>;
-  quarantine(input: Readonly<{ evidenceId: ContainedTurnEvidenceId; workspaceId: ContainedTurnWorkspaceId }>): Promise<void>;
+  /** Idempotently quarantines only the exact losing operation-scoped workspace. */
+  quarantine(input: Readonly<{
+    evidenceId: ContainedTurnEvidenceId;
+    operationId: ContainedTurnOperationId;
+    workspaceId: ContainedTurnWorkspaceId;
+  }>): Promise<void>;
 }
 
 export interface ContainedTurnKernelArtifactPort {
@@ -294,6 +296,32 @@ export interface ContainedTurnKernelDelegatedStart {
 }
 
 export interface ContainedTurnKernelCustodyPort {
+  /** Host-owned, independently observed execution, drain, and terminal closure. */
+  attestExecutionClosure(input: Readonly<{
+    attemptId: ContainedTurnAttemptId;
+    custodyId: ContainedTurnCustodyId;
+    finalCursor: number;
+    operationId: ContainedTurnOperationId;
+  }>): Promise<Readonly<{
+    executionClosureProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>;
+    kind: "proved";
+    outputDrainProof: Extract<ContainedTurnProof, { readonly kind: "output_drain" }>;
+    terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }>;
+  }> | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }>;
+  /**
+   * Owner-controlled completion boundary used to race both custody start and
+   * provider execution. Releasing it must synchronously clear its timer and
+   * detach any cancellation listener.
+   */
+  completionBoundary(input: Readonly<{
+    attemptId: ContainedTurnAttemptId;
+    custodyId: ContainedTurnCustodyId;
+    operationId: ContainedTurnOperationId;
+    phase: "execution" | "start";
+  }>): Readonly<{
+    expiration: Promise<Readonly<{ evidenceId: ContainedTurnEvidenceId; kind: "expired" }>>;
+    release(): void;
+  }>;
   /** Reserves sole-attempt custody. Reservation is not evidence of process start. */
   open(input: Readonly<{
     adapterSnapshot: ContainedTurnProviderAdapterSnapshot;
@@ -309,6 +337,14 @@ export interface ContainedTurnKernelCustodyPort {
     hostBootId: ContainedTurnHostBootId;
     hostInstanceId: ContainedTurnHostInstanceId;
   }>>;
+  /** Idempotent, identity-bound cleanup for a reservation that never won claim. */
+  releaseReservation(input: Readonly<{
+    attemptId: ContainedTurnAttemptId;
+    custodyId: ContainedTurnCustodyId;
+    operationId: ContainedTurnOperationId;
+    reason: "claim_lost" | "open_failed" | "prevention" | "revalidation_failed";
+    workspaceId: ContainedTurnWorkspaceId;
+  }>): Promise<void>;
   /**
    * Runs provider execution with a Host-owned process-creation wrapper. The
    * provider SDK supplies its actual creator only when its selected intent is
