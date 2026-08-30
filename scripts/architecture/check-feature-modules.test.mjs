@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rename, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -40,7 +40,7 @@ const baseFiles = {
       "./composition": { types: "./dist/composition.d.ts", import: "./dist/composition.js" },
     },
   })}\n`,
-  "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: @fixture/runtime\nowner_document: ADR-0005\n---\n\n# Alpha\n",
+  "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\n---\n\n# Alpha\n",
   "src/features/alpha/index.ts": "export {};\n",
   "src/features/alpha/internal.ts": "export { value } from './domain/value.js';\n",
   "src/features/alpha/domain/value.ts": "export const value = true;\n",
@@ -49,7 +49,7 @@ const baseFiles = {
 };
 
 const secondFiles = {
-  "src/features/beta/README.md": "---\ntype: feature\nstatus: accepted\nowner: @fixture/runtime\nowner_document: ADR-0005\n---\n\n# Beta\n",
+  "src/features/beta/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\n---\n\n# Beta\n",
   "src/features/beta/index.ts": "export {};\n",
   "src/features/beta/internal.ts": "export { beta } from './domain/value.js';\n",
   "src/features/beta/domain/value.ts": "export const beta = true;\n",
@@ -63,76 +63,311 @@ const makeFixtureRoot = async () => {
   }
 };
 
+const disposableBases = await Promise.all([tmpdir(), process.cwd()].map(async (path) => ({
+  lexical: resolve(path),
+  canonical: await realpath(path),
+})));
+const disposableName = /^\.?feature-module-check-[A-Za-z0-9_-]+$/u;
+const containedBy = (base, path) => {
+  const suffix = relative(base, path);
+  return suffix && suffix !== ".." && !suffix.startsWith(`..${sep}`) && !isAbsolute(suffix);
+};
+const guardedDisposablePath = async (path) => {
+  const lexical = resolve(path), lexicalBase = disposableBases.find(({ lexical: base }) => containedBy(base, lexical));
+  assert.ok(lexicalBase, `refusing cleanup outside a disposable base: ${basename(lexical)}`);
+  assert.match(relative(lexicalBase.lexical, lexical).split(sep)[0], disposableName);
+  let canonical;
+  try {canonical = await realpath(lexical);}
+  catch (error) {if (error?.code === "ENOENT") {return;} throw error;}
+  const canonicalBase = disposableBases.find(({ canonical: base }) => containedBy(base, canonical));
+  assert.ok(canonicalBase, `refusing cleanup of an external identity: ${basename(lexical)}`);
+  assert.match(relative(canonicalBase.canonical, canonical).split(sep)[0], disposableName);
+  return lexical;
+};
+const cleanupDisposablePaths = async (paths) => {
+  for (const path of new Set(paths)) {
+    const guarded = await guardedDisposablePath(path);
+    if (guarded) {await execFileAsync("rm", ["-rf", "--", guarded]);}
+  }
+};
+
+const fixtureActivation = (status) => status === "active"
+  ? { blockers: [], acceptance: ["zero diagnostics"], authority: { acceptedAdr: "ADR-0013", decisionPath: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", owner: "architecture", governedRecords: [] }, evidence: { fixtureCommand: "pnpm test:feature-modules", candidateCommand: "pnpm architecture:feature-modules:candidate", productionDiagnostics: 0 } }
+  : { blockers: ["fix diagnostics"], acceptance: ["zero diagnostics"], authority: null, evidence: null };
+
+const applyFixtureProfileOverrides = (profile, fixture) => {
+  if (fixture.secondFeature) {profile.features.push(feature("beta", fixture.secondRoles));}
+  if (fixture.activation) {profile.activation = fixture.activation;}
+  if (fixture.activeGovernedRecords) {profile.activation.authority.governedRecords = fixture.activeGovernedRecords;}
+  if (fixture.omitActiveAdoption) {delete profile.adoption;}
+  for (const path of fixture.activeAdoptionOmit ?? []) {omitNestedField(profile.adoption, path);}
+  for (const [path, value] of Object.entries(fixture.activeAdoptionSet ?? {})) {setNestedField(profile.adoption, path, value);}
+  for (const path of fixture.activeAdoptionReverse ?? []) {
+    const segments = path.split("."), key = segments.pop();
+    let parent = profile.adoption;
+    for (const segment of segments) {parent = parent[segment];}
+    parent[key].reverse();
+  }
+  if (fixture.omitSchemaMarker) {delete profile.$schema;}
+};
+
 const structuralFixtureCoverage = new Set();
 
-for (const fixture of fixtureManifest.cases) {
+const checkerPath = fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url));
+const repositoryRoot = resolve(dirname(checkerPath), "../..");
+
+const fixtureActiveAdoption = () => ({
+  moduleRoots: ["."],
+  applicationRoots: [],
+  excludedRoots: ["excluded"],
+  abstractLayout: {
+    modules: [{
+      moduleRoot: ".",
+      sourceRoot: "src",
+      featuresRoot: "src/features",
+      moduleComposition: "src/composition.ts",
+      publicEntrypoint: "src/index.ts",
+      testRoot: "tests",
+      featureTestsRoot: "tests/features",
+      moduleTestsRoot: "tests/package",
+    }],
+    applications: [],
+  },
+  localExtensions: {
+    language: { sourceExtensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"] },
+    packaging: { manifest: "package.json", curatedExports: [".", "./composition"] },
+    transport: { publicContractRole: "contracts" },
+    composition: {
+      moduleFiles: ["index.ts", "composition.ts"],
+      featureEntrypoints: ["index.ts", "internal.ts"],
+      syntax: "imports-and-named-reexports-only",
+    },
+  },
+  localOwnership: {
+    architectureDocument: { path: "docs/architecture/feature-module-standard-v1-candidate.md", owner: "architecture" },
+    decisionRecords: [{ id: "ADR-0013", path: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", owner: "architecture" }],
+  },
+});
+
+const omitNestedField = (object, path) => {
+  const segments = path.split("."), key = segments.pop();
+  let parent = object;
+  for (const segment of segments) {parent = parent[segment];}
+  delete parent[key];
+};
+
+const setNestedField = (object, path, value) => {
+  const segments = path.split("."), key = segments.pop();
+  let parent = object;
+  for (const segment of segments) {parent = parent[segment];}
+  parent[key] = value;
+};
+
+const fixtureProfile = (fixture) => {
+  const status = fixture.status ?? "candidate";
+  const profile = {
+    $schema: fixture.schemaMarker ?? "./profile.schema.json",
+    schemaVersion: 1,
+    status,
+    authority: { ...authority, id: fixture.authorityId ?? authority.id, ...fixture.authorityExtra },
+    scope: { productionRoots: ["src"], outOfScope: ["everything else"] },
+    moduleRoles: ["contracts", "domain", "application", "adapters", "composition"],
+    features: [feature("alpha", fixture.alphaRoles)],
+    assemblyFiles: ["src/index.ts", "src/composition.ts"],
+    featureEdges: fixture.edges ?? [],
+    extensions: fixture.extensions ?? [], deviations: fixture.deviations ?? [], exceptions: fixture.exceptions ?? [],
+    enforcement: { candidate: "pnpm architecture:feature-modules:candidate", active: "pnpm architecture:feature-modules:active", fixtures: "pnpm test:feature-modules" },
+    activation: fixtureActivation(status),
+    adoption: status === "active" ? fixtureActiveAdoption() : undefined,
+    ...fixture.profileExtra,
+  };
+  applyFixtureProfileOverrides(profile, fixture);
+  return profile;
+};
+
+const fixtureDecisionFiles = (fixture) => fixture.acceptActivationAdr ? {
+  "architecture/decisions/accepted-decisions.json": `${JSON.stringify({ decisions: [
+    { id: "ADR-0007", path: "docs/decisions/0007-deterministic-documentation-governance.md" },
+    { id: "ADR-0013", path: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md" },
+  ] })}\n`,
+} : {};
+
+const writeFixtureFiles = async (root, files) => {
+  for (const [path, content] of Object.entries(files)) {
+    if (content === null) {
+      try {await unlink(join(root, path));}
+      catch (error) {if (error?.code !== "ENOENT") {throw error;}}
+      continue;
+    }
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), content);
+  }
+};
+
+const applyFixtureSymlinks = async (root, links = [], externalRoot) => {
+  for (const link of links) {
+    const linkPath = join(root, link.path), targetPath = join(link.outsideRoot ? externalRoot : root, link.target);
+    await mkdir(dirname(targetPath), { recursive: true });
+    if (link.existingTarget) {await unlink(linkPath);}
+    else {await rename(linkPath, targetPath);}
+    const target = relative(dirname(linkPath), targetPath);
+    const type = link.kind === "directory" ? process.platform === "win32" ? "junction" : "dir" : "file";
+    await symlink(target, linkPath, type);
+  }
+};
+
+const fixtureRootIdentity = async (root, mode) => {
+  if (!mode) {return { root, cleanup: [root] };}
+  if (mode === "symlink") {
+    const link = `${root}-root-link`;
+    await symlink(root, link, process.platform === "win32" ? "junction" : "dir");
+    return { root: link, cleanup: [link, root] };
+  }
+  if (mode === "symlink-ancestor") {
+    const container = `${root}-root-container`, link = `${root}-root-ancestor-link`;
+    await mkdir(container);
+    await rename(root, join(container, "fixture"));
+    await symlink(container, link, process.platform === "win32" ? "junction" : "dir");
+    return { root: join(link, "fixture"), cleanup: [link, container] };
+  }
+  throw new Error(`unsupported fixture root mode: ${mode}`);
+};
+
+const fixtureAcceptedDecisions = (fixture) => {
+  const decisions = new Map([["ADR-0007", "docs/decisions/0007-deterministic-documentation-governance.md"]]);
+  if (fixture.acceptActivationAdr) {decisions.set("ADR-0013", "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md");}
+  return decisions;
+};
+
+const runCheckerCli = (root, profilePath, arguments_) => execFileAsync(process.execPath, [checkerPath, "--root", root, "--profile", profilePath, ...arguments_])
+  .catch((error) => error);
+
+const assertStructuralAllowance = async (fixture, root, profilePath, structuralCodes) => {
+  if (!structuralCodes.size || structuralCodes.has("FM_PROFILE_STATUS")) {return;}
+  const failure = await runCheckerCli(root, profilePath, ["--allow-diagnostics"]);
+  assert.equal(failure.code, 1, `${fixture.name}: structural diagnostics must remain fatal under --allow-diagnostics`);
+};
+
+const assertRequireActive = async (fixture, root, profilePath) => {
+  if (!fixture.cliRequireActive) {return;}
+  const cliArguments = ["--require-active", ...(fixture.cliAllowDiagnostics ? ["--allow-diagnostics"] : [])];
+  const failure = await runCheckerCli(root, profilePath, cliArguments);
+  assert.equal(failure.code, 1);
+  assert.match(failure.stdout, /^profile\.json:1 FM_PROFILE_STATUS profile status must be active$/mu);
+  assert.match(failure.stdout, /Feature Module Standard active: 1 diagnostic\(s\)\. No conformance claim\./u);
+};
+
+const assertAllowDiagnosticsFailure = async (fixture, root, profilePath) => {
+  if (!fixture.cliAllowDiagnosticsFails) {return;}
+  const failure = await runCheckerCli(root, profilePath, ["--allow-diagnostics"]);
+  assert.equal(failure.code, 1);
+  assert.match(failure.stdout, /No conformance claim\./u);
+};
+
+const assertCliRuns = async (fixture, root, profilePath) => {
+  for (const cli of fixture.cliRuns ?? []) {
+    const result = await runCheckerCli(root, profilePath, cli.arguments ?? []);
+    assert.equal(result.code ?? 0, cli.exit, `${fixture.name}: ${cli.arguments?.join(" ") ?? "default"}`);
+    assert.match(result.stdout, new RegExp(cli.output, "u"));
+    for (const forbidden of cli.notOutput ?? []) {assert.doesNotMatch(result.stdout, new RegExp(forbidden, "u"));}
+  }
+};
+
+const runFixture = async (fixture, initialRoot, state) => {
+  const profile = fixtureProfile(fixture);
+  const profilePath = fixture.profilePath ?? "profile.json";
+  let profileSource = fixture.profileSource ?? JSON.stringify(profile, null, 2);
+  if (fixture.profileDuplicate) {
+    const duplicate = `${JSON.stringify(fixture.profileDuplicate.key)}: ${JSON.stringify(fixture.profileDuplicate.value)},`;
+    profileSource = profileSource.replace(/^\{/u, `{\n  ${duplicate}`);
+  }
+  const files = {
+    ...baseFiles,
+    ...fixtureDecisionFiles(fixture),
+    ...(fixture.secondFeature ? secondFiles : {}),
+    ...fixture.files,
+    [profilePath]: profileSource.endsWith("\n") ? profileSource : `${profileSource}\n`,
+  };
+  await writeFixtureFiles(initialRoot, files);
+  const externalRoot = `${initialRoot}-symlink-targets`;
+  if (fixture.symlinks?.some(({ outsideRoot }) => outsideRoot)) {state.cleanup.push(externalRoot);}
+  await applyFixtureSymlinks(initialRoot, fixture.symlinks, externalRoot);
+  const identity = await fixtureRootIdentity(initialRoot, fixture.rootMode);
+  state.cleanup = [...identity.cleanup, ...state.cleanup.filter((path) => path !== initialRoot)];
+  const decisionOptions = fixture.useDecisionRegistry ? {} : { acceptedDecisions: fixtureAcceptedDecisions(fixture) };
+  const actual = (await checkFeatureModules({ root: identity.root, profilePath, requiredStatus: fixture.requiredStatus, ...decisionOptions }))
+    .map(({ code, path, line }) => ({ code, path, line }));
+  assert.deepEqual(actual, fixture.expected);
+  const structuralCodes = new Set(fixture.expected.map(({ code }) => code).filter((code) => STRUCTURAL_CODES.has(code)));
+  for (const code of structuralCodes) {structuralFixtureCoverage.add(code);}
+  await assertStructuralAllowance(fixture, identity.root, profilePath, structuralCodes);
+  await assertRequireActive(fixture, identity.root, profilePath);
+  await assertAllowDiagnosticsFailure(fixture, identity.root, profilePath);
+  await assertCliRuns(fixture, identity.root, profilePath);
+};
+
+const expandedFixtures = fixtureManifest.cases.flatMap((fixture) => fixture.activeAdoptionOmitEach?.map((path) => ({
+  ...fixture,
+  activeAdoptionOmit: [path],
+  name: `${fixture.name}-${path.replaceAll(".", "-")}`,
+})) ?? [fixture]);
+
+for (const fixture of expandedFixtures) {
   test(fixture.name, async () => {
     const root = await makeFixtureRoot();
-    try {
-      const features = [feature("alpha", fixture.alphaRoles)];
-      if (fixture.secondFeature) {features.push(feature("beta", fixture.secondRoles));}
-      const status = fixture.status ?? "candidate";
-      const profile = {
-        schemaVersion: 1,
-        status,
-        authority: { ...authority, id: fixture.authorityId ?? authority.id, ...fixture.authorityExtra },
-        scope: { productionRoots: ["src"], outOfScope: ["everything else"] },
-        moduleRoles: ["contracts", "domain", "application", "adapters", "composition"],
-        features,
-        assemblyFiles: ["src/index.ts", "src/composition.ts"],
-        featureEdges: fixture.edges ?? [],
-        extensions: fixture.extensions ?? [], deviations: fixture.deviations ?? [], exceptions: fixture.exceptions ?? [],
-        enforcement: { candidate: "pnpm architecture:feature-modules:candidate", active: "pnpm architecture:feature-modules:active", fixtures: "pnpm test:feature-modules" },
-        activation: status === "active"
-          ? { blockers: [], acceptance: ["zero diagnostics"], authority: { acceptedAdr: "ADR-0013", decisionPath: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", owner: "architecture", governedRecords: [] }, evidence: { fixtureCommand: "pnpm test:feature-modules", candidateCommand: "pnpm architecture:feature-modules:candidate", productionDiagnostics: 0 } }
-          : { blockers: ["fix diagnostics"], acceptance: ["zero diagnostics"], authority: null, evidence: null },
-        ...fixture.profileExtra,
-      };
-      if (fixture.activation) {profile.activation = fixture.activation;}
-      const decisionFiles = fixture.acceptActivationAdr ? {
-        "architecture/decisions/accepted-decisions.json": `${JSON.stringify({ decisions: [
-          { id: "ADR-0007", path: "docs/decisions/0007-deterministic-documentation-governance.md" },
-          { id: "ADR-0013", path: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md" },
-        ] })}\n`,
-      } : {};
-      const files = { ...baseFiles, ...decisionFiles, ...(fixture.secondFeature ? secondFiles : {}), ...fixture.files, "profile.json": `${JSON.stringify(profile, null, 2)}\n` };
-      for (const [path, content] of Object.entries(files)) {
-        if (content === null) {continue;}
-        await mkdir(dirname(join(root, path)), { recursive: true });
-        await writeFile(join(root, path), content);
-      }
-      const acceptedDecisions = new Map([["ADR-0007", "docs/decisions/0007-deterministic-documentation-governance.md"]]);
-      if (fixture.acceptActivationAdr) {acceptedDecisions.set("ADR-0013", "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md");}
-      const decisionOptions = fixture.useDecisionRegistry ? {} : { acceptedDecisions };
-      const actual = (await checkFeatureModules({ root, profilePath: "profile.json", requiredStatus: fixture.requiredStatus, ...decisionOptions })).map(({ code, path, line }) => ({ code, path, line }));
-      assert.deepEqual(actual, fixture.expected);
-      const structuralCodes = new Set(fixture.expected.map(({ code }) => code).filter((code) => STRUCTURAL_CODES.has(code)));
-      for (const code of structuralCodes) {structuralFixtureCoverage.add(code);}
-      if (structuralCodes.size && !structuralCodes.has("FM_PROFILE_STATUS")) {
-        const failure = await execFileAsync(process.execPath, [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--allow-diagnostics"]).catch((error) => error);
-        assert.equal(failure.code, 1, `${fixture.name}: structural diagnostics must remain fatal under --allow-diagnostics`);
-      }
-      if (fixture.cliRequireActive) {
-        const args = [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--require-active"];
-        if (fixture.cliAllowDiagnostics) {args.push("--allow-diagnostics");}
-        const failure = await execFileAsync(process.execPath, args).catch((error) => error);
-        assert.equal(failure.code, 1);
-        assert.match(failure.stdout, /^profile\.json:1 FM_PROFILE_STATUS profile status must be active$/mu);
-        assert.match(failure.stdout, /Feature Module Standard active: 1 diagnostic\(s\)\. No conformance claim\./u);
-      }
-      if (fixture.cliAllowDiagnosticsFails) {
-        const failure = await execFileAsync(process.execPath, [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", "--allow-diagnostics"]).catch((error) => error);
-        assert.equal(failure.code, 1);
-        assert.match(failure.stdout, /No conformance claim\./u);
-      }
-      for (const cli of fixture.cliRuns ?? []) {
-        const result = await execFileAsync(process.execPath, [fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url)), "--root", root, "--profile", "profile.json", ...(cli.arguments ?? [])]).catch((error) => error);
-        assert.equal(result.code ?? 0, cli.exit, `${fixture.name}: ${cli.arguments?.join(" ") ?? "default"}`);
-        assert.match(result.stdout, new RegExp(cli.output, "u"));
-      }
-    } finally { await rm(root, { recursive: true, force: true }); }
+    const state = { cleanup: [root] };
+    try {await runFixture(fixture, root, state);}
+    finally {await cleanupDisposablePaths(state.cleanup);}
   });
 }
+
+test("CLI failures redact external profile locations and are location-independent", async () => {
+  const roots = [await makeFixtureRoot(), await makeFixtureRoot()];
+  try {
+    const outputs = [];
+    for (const root of roots) {
+      const externalProfile = join(dirname(root), "private", "missing-profile.json");
+      const failure = await execFileAsync(process.execPath, [checkerPath, "--root", root, "--profile", externalProfile]).catch((error) => error);
+      assert.equal(failure.code, 1);
+      assert.match(failure.stdout, /^<profile>:1 FM_FILESYSTEM_IDENTITY /mu);
+      assert.doesNotMatch(failure.stdout, /Require stack:|\/private\/|feature-module-check-/u);
+      outputs.push(failure.stdout);
+    }
+    assert.equal(outputs[0], outputs[1]);
+  } finally {await cleanupDisposablePaths(roots);}
+});
+
+test("candidate scope and output use canonical root identity through a symlink alias", async () => {
+  const root = await makeFixtureRoot(), alias = join(root, "repository-link");
+  try {
+    await symlink(repositoryRoot, alias, process.platform === "win32" ? "junction" : "dir");
+    const options = { profilePath: "architecture/feature-module-standard/candidate-profile.json" };
+    const canonical = await checkFeatureModules({ root: repositoryRoot, ...options });
+    const throughAlias = await checkFeatureModules({ root: alias, ...options });
+    assert.ok(canonical.length > 0, "candidate-scope comparison must exercise production diagnostics");
+    assert.deepEqual(throughAlias, canonical);
+  } finally {await cleanupDisposablePaths([root]);}
+});
+
+test("root traversal, drive, UNC, and POSIX backslash spellings fail closed", async () => {
+  const root = await makeFixtureRoot();
+  try {
+    for (const spelling of [`${root}${sep}..`, "C:\\private\\fixture", "\\\\server\\share\\fixture", "//server/share/fixture"]) {
+      const actual = await checkFeatureModules({ root: spelling, profilePath: "profile.json" });
+      assert.deepEqual(actual.map(({ code, path, line }) => ({ code, path, line })), [
+        { code: "FM_FILESYSTEM_IDENTITY", path: "<root>", line: 1 },
+      ]);
+    }
+    if (process.platform !== "win32") {
+      const unsafeRoot = join(root, "literal\\segment");
+      await mkdir(unsafeRoot);
+      const actual = await checkFeatureModules({ root: unsafeRoot, profilePath: "profile.json" });
+      assert.deepEqual(actual.map(({ code, path, line }) => ({ code, path, line })), [
+        { code: "FM_FILESYSTEM_IDENTITY", path: "<root>", line: 1 },
+      ]);
+    }
+  } finally {await cleanupDisposablePaths([root]);}
+});
 
 test("CLI structural allowance matrix covers every fatal code", () => {
   assert.deepEqual([...structuralFixtureCoverage].toSorted(), [...STRUCTURAL_CODES].toSorted());
