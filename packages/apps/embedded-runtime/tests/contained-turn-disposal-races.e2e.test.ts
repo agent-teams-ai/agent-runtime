@@ -125,13 +125,7 @@ test("Host rejects acceptance custody with an unreadable owner scope", async () 
   }), error => error instanceof ContainedTurnOwnerContractError &&
     error.code === "malformed_owner_outcome");
 
-  const disposalError = await host.dispose().catch(error => error);
-
-  assert.equal(disposalError instanceof AgentRuntimeHostDisposalIncompleteError, true);
-  assert.deepEqual(disposalError.containedTurns, [{
-    operationId: "operation:embedded",
-    status: "contract_violation",
-  }]);
+  await host.dispose();
   assert.deepEqual(cancellationScopes, [trustedScope]);
 });
 
@@ -406,9 +400,7 @@ test("Host rejects a duplicate operation identity as an owner contract violation
   assert.equal((await access.containedTurn.submit(input)).status, "accepted");
   await assert.rejects(access.containedTurn.submit(input), error =>
     error instanceof ContainedTurnOwnerContractError && error.code === "duplicate_operation_id");
-  await assert.rejects(host.dispose(), error =>
-    error instanceof AgentRuntimeHostDisposalIncompleteError &&
-    error.containedTurns[0]?.status === "contract_violation");
+  await host.dispose();
 });
 
 test("Disposal issues use deterministic Unicode code-point ordering", async () => {

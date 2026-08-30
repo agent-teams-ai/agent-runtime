@@ -44,8 +44,8 @@ import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-insp
 import {
   createContainedTurnRuntimeAccess,
   type ContainedTurnCapabilityBundle,
-  type ContainedTurnCompositionScope,
 } from "./contained-turn-runtime-access.js";
+import type { ContainedTurnCompositionScope } from "./trusted-runtime-access-scope.js";
 import { createAgentRuntimeHostDisposalLifecycle } from "./agent-runtime-host-disposal.js";
 import { raceWithAbort } from "./runtime-access-lifecycle.js";
 

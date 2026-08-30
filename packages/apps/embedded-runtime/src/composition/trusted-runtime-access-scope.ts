@@ -1,8 +1,12 @@
 import type { TrustedClaudeCodeSetupScope } from "../application/trusted-claude-code-setup-scope.js";
 import type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
-import type { ContainedTurnCompositionScope } from "./contained-turn-runtime-access.js";
 
 export type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
+
+export interface ContainedTurnCompositionScope {
+  readonly projectId: string;
+  readonly tenantId: string;
+}
 
 export interface TrustedRuntimeAccessScope {
   readonly claudeCodeSetup?: TrustedClaudeCodeSetupScope;

@@ -1,9 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-import type {
-  ContainedTurnCapabilityBundle,
-  ContainedTurnCompositionScope,
-} from "./contained-turn-runtime-access.js";
+import type { ContainedTurnCompositionScope } from "./trusted-runtime-access-scope.js";
+import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
 
 export type AgentRuntimeHostDisposalStatus =
   | "disposal_incomplete"
@@ -386,11 +384,11 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     if (active === undefined) {
       return;
     }
-    if (active.status === "contract_violation") {
-      return;
-    }
     if (isTerminalContainedTurnStatus(status)) {
       activeContainedTurns.delete(operationId);
+      return;
+    }
+    if (active.status === "contract_violation") {
       return;
     }
     if (status === "accepted" || status === "contract_violation" || status === "running" ||
