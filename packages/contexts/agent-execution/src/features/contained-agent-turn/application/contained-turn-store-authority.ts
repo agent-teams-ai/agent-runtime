@@ -133,15 +133,24 @@ export const sanitizeContainedTurnAcceptanceOutcome = (input: Readonly<{
   if (!containedTurnScopesEqual(input.candidate.scope, input.scope)) {
     return Object.freeze({ kind: "not_found" });
   }
-  const operation = input.outcome.kind === "accepted" || input.outcome.kind === "replayed"
-    ? input.outcome.operation
-    : undefined;
-  return operation === undefined || (
-    isOwnedOperation(operation, input.candidate.operationId, input.scope) &&
-    operation.commandId === input.candidate.commandId && operation.effectId === input.candidate.effectId
-  )
-    ? input.outcome
-    : Object.freeze({ kind: "not_found" });
+  if (input.outcome.kind === "accepted") {
+    const operation = input.outcome.operation;
+    return isOwnedOperation(operation, input.candidate.operationId, input.scope) &&
+        operation.commandId === input.candidate.commandId &&
+        operation.commandFingerprint === input.candidate.commandFingerprint &&
+        operation.effectId === input.candidate.effectId
+      ? input.outcome
+      : Object.freeze({ kind: "not_found" });
+  }
+  if (input.outcome.kind === "replayed") {
+    const winner = input.outcome.operation;
+    return containedTurnScopesEqual(winner.scope, input.scope) &&
+        winner.commandId === input.candidate.commandId &&
+        winner.commandFingerprint === input.candidate.commandFingerprint
+      ? input.outcome
+      : Object.freeze({ kind: "not_found" });
+  }
+  return input.outcome;
 };
 
 export const sanitizeContainedTurnIdentificationOutcome = (input: Readonly<{

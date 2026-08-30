@@ -12,6 +12,7 @@ import type {
   ContainedTurnHostBootId,
   ContainedTurnHostInstanceId,
   ContainedTurnOperationId,
+  ContainedTurnPreparationToken,
   ContainedTurnProofId,
   ContainedTurnWorkspaceId,
 } from "./contained-turn-identities.js";
@@ -84,7 +85,7 @@ export type ContainedTurnProof =
   }; readonly kind: "containment"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly effectId: ContainedTurnEffectId }; readonly kind: "containment_not_required"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly cancellationCommandId?: ContainedTurnCancellationCommandId }; readonly kind: "cutoff"; readonly proofId: ContainedTurnProofId }
-  | { readonly binding: ContainedTurnAttemptProofBinding & { readonly providerAccessDispatchProofId: ContainedTurnProofId; readonly runtimeSecurityDispatchProofId: ContainedTurnProofId }; readonly kind: "dispatch_claim"; readonly proofId: ContainedTurnProofId }
+  | { readonly binding: ContainedTurnAttemptProofBinding & { readonly preparationToken: ContainedTurnPreparationToken; readonly providerAccessDispatchProofId: ContainedTurnProofId; readonly runtimeSecurityDispatchProofId: ContainedTurnProofId }; readonly kind: "dispatch_claim"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnAttemptProofBinding & { readonly disposition: "committed" | "not_committed" }; readonly kind: "effect_resolution"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly disposition: "not_committed"; readonly effectId: ContainedTurnEffectId }; readonly kind: "effect_no_start"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnAttemptProofBinding & { readonly outcome: "cancelled" | "failed" | "succeeded" }; readonly kind: "execution_closure"; readonly proofId: ContainedTurnProofId }

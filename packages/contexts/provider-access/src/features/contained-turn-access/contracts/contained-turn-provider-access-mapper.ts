@@ -37,14 +37,36 @@ const bindingToContract = (
   });
 };
 
-const bindingEvidence = (binding: ContainedTurnProviderAccessBinding) => Object.freeze({
-  authorityDigest: binding.credentialBindingDigest,
-  proofRef: `binding:${binding.accessRef}:revision:${binding.revision}`,
+const bindingEvidence = (
+  binding: ContainedTurnProviderAccessBinding,
+  purpose: "acceptance" | "dispatch",
+) => Object.freeze({
+  authorityDigest: JSON.stringify({
+    binding: {
+      accessRef: binding.accessRef,
+      credentialBindingDigest: binding.credentialBindingDigest,
+      credentialBindingRef: binding.credentialBindingRef,
+      credentialGeneration: binding.credentialGeneration,
+      projectId: binding.projectId,
+      provider: binding.provider,
+      providerAccountRef: binding.providerAccountRef,
+      providerRouteRef: binding.providerRouteRef,
+      revision: binding.revision,
+      tenantId: binding.tenantId,
+    },
+    purpose,
+    version: 1,
+  }),
+  bindingAuthorityDigest: binding.credentialBindingDigest,
+  proofRef: `binding:${binding.accessRef}:revision:${binding.revision}:purpose:${purpose}`,
+  purpose,
 });
 
-const rejectionEvidence = (reason: string) => Object.freeze({
-  authorityDigest: `authority-observation:${reason}`,
-  proofRef: `observation:${reason}`,
+const rejectionEvidence = (reason: string, purpose: "acceptance" | "dispatch") => Object.freeze({
+  authorityDigest: JSON.stringify({ purpose, reason, version: 1 }),
+  bindingAuthorityDigest: `authority-observation:${reason}`,
+  proofRef: `observation:${reason}:purpose:${purpose}`,
+  purpose,
 });
 
 export const resolveCommandFromContract = (input: {
@@ -59,10 +81,10 @@ export const resolveResultToContract = (
   result: ResolveProviderAccessResult,
 ): ResolveContainedTurnProviderAccessOutcome => {
   if (result.kind !== "resolved") {
-    return Object.freeze({ evidence: rejectionEvidence(result.reason), kind: "unavailable", reason: result.reason });
+    return Object.freeze({ evidence: rejectionEvidence(result.reason, "acceptance"), kind: "unavailable", reason: result.reason });
   }
   const binding = bindingToContract(result.binding);
-  return Object.freeze({ binding, evidence: bindingEvidence(binding), kind: "resolved" });
+  return Object.freeze({ binding, evidence: bindingEvidence(binding, "acceptance"), kind: "resolved" });
 };
 
 export const revalidateCommandFromContract = (input: {
@@ -83,8 +105,8 @@ export const revalidateResultToContract = (
   result: RevalidateProviderAccessResult,
 ): RevalidateContainedTurnProviderAccessOutcome => {
   if (result.kind !== "valid") {
-    return Object.freeze({ evidence: rejectionEvidence(result.reason), kind: "rejected", reason: result.reason });
+    return Object.freeze({ evidence: rejectionEvidence(result.reason, "dispatch"), kind: "rejected", reason: result.reason });
   }
   const binding = bindingToContract(result.binding);
-  return Object.freeze({ binding, evidence: bindingEvidence(binding), kind: "valid" });
+  return Object.freeze({ binding, evidence: bindingEvidence(binding, "dispatch"), kind: "valid" });
 };

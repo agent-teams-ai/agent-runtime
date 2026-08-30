@@ -374,6 +374,7 @@ test("the sole V1 dispatch rejects a second claimant or successor generation", (
       hostCustodyProof: proof("host_custody"),
       hostInstanceId,
       kind: "claim_dispatch",
+      preparationToken: claimed.dispatch.preparationToken,
       providerAccessDispatchProof: proof("provider_access_dispatch"),
       runtimeSecurityDispatchProof: proof("runtime_security_dispatch"),
       writerFence: containedTurnIdentity("writer_fence", "writer-fence:successor"),

@@ -66,6 +66,7 @@ import {
   intent,
   manifest,
   operationId,
+  preparationToken,
   proofId,
   providerAccessAcceptanceProof,
   providerAccessSnapshot,
@@ -143,6 +144,43 @@ test("freezes the accepted PostgreSQL command replay and semantic-conflict invar
   });
   assert.equal((await accept(conflict, containedTurnOwnerStoreAuthority(conflict, conflict.scope))).kind, "fingerprint_conflict");
   assert.strictEqual(acceptedByCommand.get(commandId), accepted);
+});
+
+test("acceptance sanitation preserves the trusted winner IDs only for an exact command replay", () => {
+  const winner = createOperation();
+  const replayCandidate = createOperation({
+    effectId: containedTurnIdentity("effect", "effect:second-candidate"),
+    operationId: containedTurnIdentity("operation", "operation:second-candidate"),
+  });
+  const replayed = sanitizeContainedTurnAcceptanceOutcome({
+    candidate: replayCandidate,
+    outcome: { kind: "replayed", operation: winner },
+    scope,
+  });
+  assert.equal(replayed.kind, "replayed");
+  if (replayed.kind === "replayed") {
+    assert.equal(replayed.operation.operationId, winner.operationId);
+    assert.equal(replayed.operation.effectId, winner.effectId);
+    assert.notEqual(replayed.operation.operationId, replayCandidate.operationId);
+    assert.notEqual(replayed.operation.effectId, replayCandidate.effectId);
+  }
+
+  assert.deepEqual(sanitizeContainedTurnAcceptanceOutcome({
+    candidate: replayCandidate,
+    outcome: { kind: "accepted", operation: winner },
+    scope,
+  }), { kind: "not_found" }, "a fresh acceptance must preserve candidate operation/effect IDs");
+
+  const mismatchedFingerprint = createOperation({
+    effectId: containedTurnIdentity("effect", "effect:fingerprint-mismatch"),
+    intent: { mode: "analysis", prompt: "Different canonical command." },
+    operationId: containedTurnIdentity("operation", "operation:fingerprint-mismatch"),
+  });
+  assert.deepEqual(sanitizeContainedTurnAcceptanceOutcome({
+    candidate: mismatchedFingerprint,
+    outcome: { kind: "replayed", operation: winner },
+    scope,
+  }), { kind: "not_found" });
 });
 
 test("trusted scope keys identify independently and hide foreign read, accept, commit, claim, and cancel state", () => {
@@ -523,6 +561,7 @@ test("enforces disjoint immutable identities and one-attempt claim coupling", ()
   const claimProof: ContainedTurnProof = {
     binding: {
       ...attemptBinding,
+      preparationToken,
       providerAccessDispatchProofId: missingProviderAccessProofId,
       runtimeSecurityDispatchProofId: missingRuntimeSecurityProofId,
     },
@@ -537,6 +576,7 @@ test("enforces disjoint immutable identities and one-attempt claim coupling", ()
       executionGenerationId,
       kind: "claimed" as const,
       operationCutoffRevision: operation.operationCutoff.revision,
+      preparationToken,
       providerAccessDispatchProofId: missingProviderAccessProofId,
       runtimeSecurityDispatchProofId: missingRuntimeSecurityProofId,
       writerFence,

@@ -16,6 +16,8 @@ export type ContainedTurnExecutionGenerationId = ContainedTurnIdentity<"executio
 export type ContainedTurnHostBootId = ContainedTurnIdentity<"host_boot">;
 export type ContainedTurnHostInstanceId = ContainedTurnIdentity<"host_instance">;
 export type ContainedTurnOperationId = ContainedTurnIdentity<"operation">;
+/** Operation-scoped custody preparation identity, distinct from the eventual attempt. */
+export type ContainedTurnPreparationToken = ContainedTurnIdentity<"preparation">;
 export type ContainedTurnProofId = ContainedTurnIdentity<"proof">;
 export type ContainedTurnWorkspaceId = ContainedTurnIdentity<"workspace">;
 /** Private owner-store credential. It must never enter caller-facing projections. */
@@ -32,6 +34,7 @@ export const CONTAINED_TURN_IDENTITY_PREFIXES = Object.freeze({
   host_boot: "host-boot:",
   host_instance: "host-instance:",
   operation: "operation:",
+  preparation: "preparation:",
   proof: "proof:",
   workspace: "workspace:",
   writer_fence: "writer-fence:",

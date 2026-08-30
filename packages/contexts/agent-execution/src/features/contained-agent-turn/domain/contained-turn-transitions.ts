@@ -10,6 +10,7 @@ import type {
   ContainedTurnExecutionGenerationId,
   ContainedTurnHostBootId,
   ContainedTurnHostInstanceId,
+  ContainedTurnPreparationToken,
   ContainedTurnWorkspaceId,
   ContainedTurnWriterFence,
 } from "./contained-turn-identities.js";
@@ -35,6 +36,7 @@ export type ContainedTurnKernelMutation =
     readonly hostCustodyProof: Extract<ContainedTurnProof, { readonly kind: "host_custody" }>;
     readonly hostInstanceId: ContainedTurnHostInstanceId;
     readonly kind: "claim_dispatch";
+    readonly preparationToken: ContainedTurnPreparationToken;
     readonly providerAccessDispatchProof: Extract<ContainedTurnProof, { readonly kind: "provider_access_dispatch" }>;
     readonly runtimeSecurityDispatchProof: Extract<ContainedTurnProof, { readonly kind: "runtime_security_dispatch" }>;
     readonly writerFence: ContainedTurnWriterFence;
@@ -91,7 +93,7 @@ export type ContainedTurnKernelMutation =
 const validateMutationShape = (mutation: ContainedTurnKernelMutation): void => {
   const fieldsByKind: Readonly<Record<ContainedTurnKernelMutation["kind"], readonly string[]>> = {
     bind_workspace: ["kind", "workspaceId"],
-    claim_dispatch: ["attemptId", "claimProof", "custodyId", "cutoffProof", "executionGenerationId", "hostBootId", "hostCustodyProof", "hostInstanceId", "kind", "providerAccessDispatchProof", "runtimeSecurityDispatchProof", "writerFence"],
+    claim_dispatch: ["attemptId", "claimProof", "custodyId", "cutoffProof", "executionGenerationId", "hostBootId", "hostCustodyProof", "hostInstanceId", "kind", "preparationToken", "providerAccessDispatchProof", "runtimeSecurityDispatchProof", "writerFence"],
     close_process_no_start: ["containmentProof", "effectProof", "executionProof", "kind", "outputProof", "providerProof"],
     close_provider_execution: ["executionProof", "kind", "terminalObservationProof"],
     close_workspace: ["kind", "proof"],
@@ -144,6 +146,7 @@ export const mutateContainedTurnOperation = (
           executionGenerationId: mutation.executionGenerationId,
           kind: "claimed",
           operationCutoffRevision: operation.operationCutoff.revision,
+          preparationToken: mutation.preparationToken,
           providerAccessDispatchProofId: mutation.providerAccessDispatchProof.proofId,
           runtimeSecurityDispatchProofId: mutation.runtimeSecurityDispatchProof.proofId,
           writerFence: mutation.writerFence,

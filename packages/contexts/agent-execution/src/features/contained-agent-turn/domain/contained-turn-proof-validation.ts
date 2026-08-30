@@ -48,7 +48,7 @@ const validateProofShape = (proof: ContainedTurnProof): void => {
         : [...OPERATION_BINDING_KEYS, "cancellationCommandId"]);
       break;
     case "dispatch_claim":
-      exactBinding([...ATTEMPT_BINDING_KEYS, "providerAccessDispatchProofId", "runtimeSecurityDispatchProofId"]);
+      exactBinding([...ATTEMPT_BINDING_KEYS, "preparationToken", "providerAccessDispatchProofId", "runtimeSecurityDispatchProofId"]);
       break;
     case "provider_access_acceptance":
       exactBinding([...OPERATION_BINDING_KEYS, "resolutionDigest", "snapshotDigest"]);
@@ -282,9 +282,10 @@ export const validateContainedTurnProofBinding = (
       invariant(operation.dispatch.kind === "claimed", "dispatch proof requires claimed dispatch");
       if (operation.dispatch.kind === "claimed") {
         invariant(
-          proof.binding.providerAccessDispatchProofId === operation.dispatch.providerAccessDispatchProofId &&
+          proof.binding.preparationToken === operation.dispatch.preparationToken &&
+            proof.binding.providerAccessDispatchProofId === operation.dispatch.providerAccessDispatchProofId &&
             proof.binding.runtimeSecurityDispatchProofId === operation.dispatch.runtimeSecurityDispatchProofId,
-          "dispatch claim must bind the exact current authority evidence",
+          "dispatch claim must bind the exact preparation token and current authority evidence",
         );
         requireContainedTurnProof(operation, proof.binding.providerAccessDispatchProofId, "provider_access_dispatch");
         requireContainedTurnProof(operation, proof.binding.runtimeSecurityDispatchProofId, "runtime_security_dispatch");

@@ -76,6 +76,17 @@ const assertOwnerAuthority = (
   scope: operation.scope,
 });
 
+const awaitFixtureGate = async <Value>(
+  gate: Promise<void>,
+  submission: Promise<Value>,
+): Promise<void> => {
+  const outcome = await Promise.race([
+    gate.then(() => ({ kind: "started" as const })),
+    submission.then(value => ({ kind: "settled" as const, value })),
+  ]);
+  assert.equal(outcome.kind, "started", "submission settled before the fixture gate was reached");
+};
+
 // The fixture deliberately assembles the exact closed set of owner ports in one place.
 // oxlint-disable-next-line max-lines-per-function
 const createDependencies = (options: Readonly<{
@@ -537,7 +548,7 @@ test("durable acceptance is published before provider execution and accepted can
     intent: { mode: "analysis", prompt: "inspect disposable state" },
     scope: { projectId: "project:one", tenantId: "tenant:one" },
   }, { onAccepted: operation => {accepted = operation;} });
-  await started;
+  await awaitFixtureGate(started, submission);
   assert.equal(accepted?.operationId, operationId);
   let cancellation!: Awaited<ReturnType<typeof feature.cancel.execute>>;
   try {
@@ -569,11 +580,12 @@ test("abort after durable acceptance requests application cancellation without r
     intent: { mode: "analysis", prompt: "inspect disposable state" },
     scope: { projectId: "project:one", tenantId: "tenant:one" },
   }, { signal: controller.signal });
-  await started;
-  controller.abort();
-  while (containmentCalls.value === 0) {await new Promise<void>(resolve => {setImmediate(resolve);});}
-  assert.equal(containmentCalls.value, 1);
-  releaseProvider();
+  await awaitFixtureGate(started, submission);
+  try {
+    controller.abort();
+    while (containmentCalls.value === 0) {await new Promise<void>(resolve => {setImmediate(resolve);});}
+    assert.equal(containmentCalls.value, 1);
+  } finally {releaseProvider();}
   const completed = await submission;
   assert.equal(completed.status, "observed");
   if (completed.status === "observed") {assert.equal(completed.turn.status, "reconcile_required");}
@@ -699,13 +711,14 @@ test("cancellation racing the first workspace creation reaches proved-no-start t
     intent: { mode: "analysis", prompt: "cancel before workspace binding" },
     scope: { projectId: "project:one", tenantId: "tenant:one" },
   }, { onAccepted: operation => {accepted = operation;} });
-  await started;
-  const cancellation = await feature.cancel.execute(accepted as import("../dist/index.js").ContainedTurnOperationRef);
-  assert.equal(cancellation.status, "observed");
-  if (cancellation.status === "observed") {
-    assert.equal(cancellation.turn.status, "cancelled", JSON.stringify(current(), undefined, 2));
-  }
-  releaseWorkspace();
+  await awaitFixtureGate(started, submission);
+  try {
+    const cancellation = await feature.cancel.execute(accepted as import("../dist/index.js").ContainedTurnOperationRef);
+    assert.equal(cancellation.status, "observed");
+    if (cancellation.status === "observed") {
+      assert.equal(cancellation.turn.status, "cancelled", JSON.stringify(current(), undefined, 2));
+    }
+  } finally {releaseWorkspace();}
   const settled = await submission;
   assert.equal(settled.status, "observed");
   if (settled.status === "observed") {assert.equal(settled.turn.status, "cancelled");}

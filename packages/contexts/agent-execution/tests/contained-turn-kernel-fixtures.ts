@@ -78,6 +78,7 @@ export const authorityVector: ContainedTurnAuthorityVector = Object.freeze({
 });
 
 export const operationId = containedTurnIdentity("operation", "operation:1");
+export const preparationToken = containedTurnIdentity("preparation", "preparation:1");
 export const commandId = containedTurnIdentity("command", "command:1");
 export const effectId = containedTurnIdentity("effect", "effect:1");
 export const attemptId = containedTurnIdentity("attempt", "attempt:1");
@@ -209,6 +210,7 @@ export const createReservedOperation = (): ContainedTurnKernelOperation => {
   const claimProof: ContainedTurnProof = {
     binding: {
       ...attemptBinding,
+      preparationToken,
       providerAccessDispatchProofId: providerAccessDispatchProof.proofId,
       runtimeSecurityDispatchProofId: runtimeSecurityDispatchProof.proofId,
     },
@@ -235,6 +237,7 @@ export const createReservedOperation = (): ContainedTurnKernelOperation => {
     hostCustodyProof,
     hostInstanceId,
     kind: "claim_dispatch",
+    preparationToken,
     providerAccessDispatchProof,
     runtimeSecurityDispatchProof,
     writerFence,

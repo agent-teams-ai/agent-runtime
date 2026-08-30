@@ -22,6 +22,8 @@ export interface ContainedTurnProviderAccessBinding {
 /** Opaque Provider Access-owned evidence; consumers preserve it through their ACL. */
 export interface ProviderAccessAuthorityEvidence {
   readonly authorityDigest: string;
+  readonly bindingAuthorityDigest: string;
+  readonly purpose: "acceptance" | "dispatch";
   readonly proofRef: string;
 }
 

@@ -21,6 +21,7 @@ import type {
   ContainedTurnHostBootId,
   ContainedTurnHostInstanceId,
   ContainedTurnOperationId,
+  ContainedTurnPreparationToken,
   ContainedTurnProofId,
   ContainedTurnWorkspaceId,
   ContainedTurnWriterFence,
@@ -67,6 +68,7 @@ export interface ContainedTurnKernelOperation {
       readonly executionGenerationId: ContainedTurnExecutionGenerationId;
       readonly kind: "claimed";
       readonly operationCutoffRevision: ContainedTurnOperationCutoffRevision;
+      readonly preparationToken: ContainedTurnPreparationToken;
       readonly providerAccessDispatchProofId: ContainedTurnProofId;
       readonly runtimeSecurityDispatchProofId: ContainedTurnProofId;
       readonly writerFence: ContainedTurnWriterFence;

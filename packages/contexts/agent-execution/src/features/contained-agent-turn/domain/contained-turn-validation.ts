@@ -43,7 +43,11 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
   if (operation.hostInstanceId !== undefined) {primary.push(operation.hostInstanceId);}
   if (operation.dispatch.kind === "claimed") {primary.push(operation.dispatch.attemptId);}
   if (operation.dispatch.kind === "claimed") {
-    primary.push(operation.dispatch.executionGenerationId, operation.dispatch.writerFence);
+    primary.push(
+      operation.dispatch.executionGenerationId,
+      operation.dispatch.preparationToken,
+      operation.dispatch.writerFence,
+    );
   }
   if (operation.cancellation.kind === "requested") {primary.push(operation.cancellation.command.cancellationCommandId);}
   for (const proof of operation.proofs) {primary.push(proof.proofId);}
@@ -58,6 +62,7 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
   if (operation.dispatch.kind === "claimed") {validateContainedTurnIdentity("attempt", operation.dispatch.attemptId);}
   if (operation.dispatch.kind === "claimed") {
     validateContainedTurnIdentity("execution_generation", operation.dispatch.executionGenerationId);
+    validateContainedTurnIdentity("preparation", operation.dispatch.preparationToken);
     validateContainedTurnIdentity("writer_fence", operation.dispatch.writerFence);
   }
   if (operation.cancellation.kind === "requested") {
