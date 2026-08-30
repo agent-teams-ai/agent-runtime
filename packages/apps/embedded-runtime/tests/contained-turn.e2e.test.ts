@@ -1,3 +1,4 @@
+// oxlint-disable max-lines -- focused lifecycle counterexamples remain in one Embedded access suite.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -466,6 +467,15 @@ test("rejects malformed, non-string, and oversized provider input before composi
 });
 
 test("fails closed on malformed, non-string, and oversized provider observations", async t => {
+  const thrownProxy = new Proxy(Object.create(null) as object, {
+    get(_target, property) {
+      if (property === "toString" || property === Symbol.toPrimitive) {
+        throw new Error("owner-only-proxy-to-string-secret");
+      }
+      throw new Error("owner-only-proxy-getter-secret");
+    },
+    getPrototypeOf() {throw new Error("owner-only-proxy-prototype-secret");},
+  });
   const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
       async execute() {return { status: "not_found" };},
@@ -479,6 +489,16 @@ test("fails closed on malformed, non-string, and oversized provider observations
               ...turnView("running"),
               operationId: input.operationId,
               get provider(): never {throw new Error("malformed provider getter");},
+            },
+          };
+        }
+        if (input.operationId === "operation:proxy-thrown-provider") {
+          return {
+            status: "observed",
+            turn: {
+              ...turnView("succeeded"),
+              operationId: input.operationId,
+              get provider(): never {throw thrownProxy;},
             },
           };
         }
@@ -503,6 +523,9 @@ test("fails closed on malformed, non-string, and oversized provider observations
   await assert.rejects(access.containedTurn.observe("operation:malformed-provider"), error =>
     error instanceof ContainedTurnOwnerContractError && error.code === "malformed_owner_outcome" &&
     !error.message.includes("malformed provider getter"));
+  await assert.rejects(access.containedTurn.observe("operation:proxy-thrown-provider"), error =>
+    error instanceof ContainedTurnOwnerContractError && error.code === "malformed_owner_outcome" &&
+    !error.message.includes("owner-only-proxy"));
   assert.deepEqual(await access.containedTurn.observe("operation:non-string-provider"), unavailableObservation);
   assert.deepEqual(await access.containedTurn.observe("operation:oversized-provider"), unavailableObservation);
 });

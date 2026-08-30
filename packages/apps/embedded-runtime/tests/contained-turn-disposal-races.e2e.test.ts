@@ -368,6 +368,10 @@ test("Disposal issues use deterministic Unicode code-point ordering", async () =
 });
 
 test("Host disposal rejects malformed and snapshot-unstable cancellation proof", async t => {
+  const thrownProxy = new Proxy(Object.create(null) as object, {
+    get() {throw new Error("owner-only-proxy-get-secret");},
+    getPrototypeOf() {throw new Error("owner-only-proxy-prototype-secret");},
+  });
   const cases = [
     {
       expectedStatus: "contract_violation",
@@ -383,6 +387,7 @@ test("Host disposal rejects malformed and snapshot-unstable cancellation proof",
       outcome: {
         status: "observed",
         turn: {
+          ...turnView("succeeded"),
           operationIdReads: 0,
           get operationId(): string {
             this.operationIdReads += 1;
@@ -398,12 +403,63 @@ test("Host disposal rejects malformed and snapshot-unstable cancellation proof",
       outcome: {
         status: "observed",
         turn: {
-          operationId: "operation:embedded",
+          ...turnView("running"),
           statusReads: 0,
           get status(): string {
             this.statusReads += 1;
             return this.statusReads === 1 ? "running" : "succeeded";
           },
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "the review terminal turn with a throwing output counterexample",
+      outcome: {
+        status: "observed",
+        turn: {
+          ...turnView("succeeded"),
+          get output(): never {throw new Error("owner-only terminal output");},
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a terminal output getter that throws a hostile Proxy value",
+      outcome: {
+        status: "observed",
+        turn: {
+          ...turnView("succeeded"),
+          get output(): never {throw thrownProxy;},
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a mutable terminal output that becomes valid only on reread",
+      outcome: {
+        status: "observed",
+        turn: {
+          ...turnView("succeeded"),
+          outputReads: 0,
+          get output(): unknown {
+            this.outputReads += 1;
+            return this.outputReads === 1 ? [{ cursor: 0, kind: "assistant" }] : [];
+          },
+        },
+      },
+    },
+    {
+      expectedStatus: "contract_violation",
+      name: "a malformed complete terminal turn missing a required effect identity",
+      outcome: {
+        status: "observed",
+        turn: {
+          commandId: "command:embedded",
+          operationId: "operation:embedded",
+          output: [],
+          provider: "codex",
+          status: "succeeded",
         },
       },
     },
@@ -459,7 +515,7 @@ test("Host disposal rejects malformed and snapshot-unstable cancellation proof",
         status: scenario.expectedStatus,
       }]);
       const turn = Object.getOwnPropertyDescriptor(scenario.outcome, "turn")?.value as
-        | { operationIdReads?: number; statusReads?: number }
+        | { operationIdReads?: number; outputReads?: number; statusReads?: number }
         | undefined;
       const operationIdReads = turn === undefined
         ? undefined
@@ -467,13 +523,27 @@ test("Host disposal rejects malformed and snapshot-unstable cancellation proof",
       const statusReads = turn === undefined
         ? undefined
         : Object.getOwnPropertyDescriptor(turn, "statusReads")?.value;
+      const outputReads = turn === undefined
+        ? undefined
+        : Object.getOwnPropertyDescriptor(turn, "outputReads")?.value;
       if (operationIdReads !== undefined) {
         assert.equal(operationIdReads, 1);
       }
       if (statusReads !== undefined) {
         assert.equal(statusReads, 1);
       }
-      assert.equal(JSON.stringify(error).includes("owner-only throwing cancellation getter"), false);
+      if (outputReads !== undefined) {
+        assert.equal(outputReads, 1);
+      }
+      const serialized = JSON.stringify(error);
+      for (const secret of [
+        "owner-only throwing cancellation getter",
+        "owner-only terminal output",
+        "owner-only-proxy-get-secret",
+        "owner-only-proxy-prototype-secret",
+      ]) {
+        assert.equal(serialized.includes(secret), false);
+      }
     });
   }
 });
