@@ -1,5 +1,4 @@
 import {
-  snapshotProviderAccessBinding,
   type ProviderAccessBindingRecord,
   type ProviderAccessProviderValue,
   type ProviderAccessScopeValue,
@@ -33,12 +32,7 @@ export const createRevalidateContainedTurnProviderAccess = (
   repository: ProviderAccessBindingRepository,
 ): RevalidateProviderAccessUseCase => Object.freeze({
   async execute(command: RevalidateProviderAccessCommand): Promise<RevalidateProviderAccessResult> {
-    let expected: ProviderAccessBindingRecord;
-    try {
-      expected = snapshotProviderAccessBinding(command.binding);
-    } catch {
-      return rejected("indeterminate");
-    }
+    const expected = command.binding;
     if (expected.tenantId !== command.scope.tenantId || expected.projectId !== command.scope.projectId) {
       return rejected("scope_mismatch");
     }

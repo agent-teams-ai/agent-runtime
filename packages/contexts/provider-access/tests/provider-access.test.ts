@@ -193,6 +193,95 @@ test("one feature observes changed repository authority again during revalidatio
   assert.equal(observations, 2);
 });
 
+test("composition captures one detached exact repository method and remains byte-stable", async () => {
+  const currentBinding = await resolvedBinding();
+  const record = { ...currentBinding, availability: "available" as const, revocation: "active" as const };
+  const observation = { kind: "found" as const, record };
+  const observationBytes = JSON.stringify(observation);
+  let calls = 0;
+  const repository = {
+    async observeExact() {
+      assert.notEqual(this, repository);
+      calls += 1;
+      return observation;
+    },
+  };
+  const feature = createContainedTurnProviderAccessFeature({ bindingRepository: repository });
+  repository.observeExact = async () => ({
+    kind: "found" as const,
+    record: { ...record, providerAccountRef: "provider-account:substituted" },
+  });
+  const input = { provider: "codex" as const, scope: { projectId: "project:one", tenantId: "tenant:one" } };
+  const first = await feature.resolve.execute(input);
+  const replay = await feature.resolve.execute(input);
+  assert.equal(calls, 2);
+  assert.equal(JSON.stringify(observation), observationBytes);
+  assert.equal(JSON.stringify(replay), JSON.stringify(first));
+  assert.equal(first.kind, "resolved");
+  if (first.kind !== "resolved") { return; }
+  assert.equal(first.binding.providerAccountRef, "provider-account:one");
+});
+
+test("composition rejects repository proxies and accessors without invoking traps", async () => {
+  let traps = 0;
+  let getters = 0;
+  const handler: ProxyHandler<object> = {
+    get() { traps += 1; throw new Error("get trap must not run"); },
+    getOwnPropertyDescriptor() { traps += 1; throw new Error("descriptor trap must not run"); },
+    getPrototypeOf() { traps += 1; throw new Error("prototype trap must not run"); },
+    ownKeys() { traps += 1; throw new Error("keys trap must not run"); },
+  };
+  const proxiedRepository = new Proxy({ async observeExact() { return { kind: "not_found" as const }; } }, handler);
+  assert.throws(
+    () => createContainedTurnProviderAccessFeature({ bindingRepository: proxiedRepository }),
+    /plain data record/u,
+  );
+  const dependencyAccessor = Object.defineProperty({}, "bindingRepository", {
+    enumerable: true,
+    get() { getters += 1; return proxiedRepository; },
+  });
+  assert.throws(() => createContainedTurnProviderAccessFeature(dependencyAccessor as never), /accessors/u);
+  const repositoryAccessor = Object.defineProperty({}, "observeExact", {
+    enumerable: true,
+    get() { getters += 1; return async () => ({ kind: "not_found" as const }); },
+  });
+  assert.throws(
+    () => createContainedTurnProviderAccessFeature({ bindingRepository: repositoryAccessor } as never),
+    /accessors/u,
+  );
+  const proxiedMethod = new Proxy(async () => ({ kind: "not_found" as const }), handler);
+  assert.throws(
+    () => createContainedTurnProviderAccessFeature({ bindingRepository: { observeExact: proxiedMethod } }),
+    /stable method/u,
+  );
+  assert.equal(traps, 0);
+  assert.equal(getters, 0);
+});
+
+test("public observation boundary rejects aggregate proxies without invoking traps", async () => {
+  let traps = 0;
+  const handler: ProxyHandler<object> = {
+    get() { traps += 1; throw new Error("get trap must not run"); },
+    getOwnPropertyDescriptor() { traps += 1; throw new Error("descriptor trap must not run"); },
+    getPrototypeOf() { traps += 1; throw new Error("prototype trap must not run"); },
+    ownKeys() { traps += 1; throw new Error("keys trap must not run"); },
+  };
+  const record = { ...binding(), availability: "available" as const, revocation: "active" as const };
+  const observations = [
+    new Proxy({ kind: "found" as const, record }, handler),
+    { kind: "found" as const, record: new Proxy(record, handler) },
+  ];
+  for (const observation of observations) {
+    const feature = createContainedTurnProviderAccessFeature({
+      bindingRepository: { observeExact() { return observation; } },
+    } as never);
+    assert.deepEqual(await feature.resolve.execute({
+      provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), unavailable("indeterminate"));
+  }
+  assert.equal(traps, 0);
+});
+
 test("untrusted repository scope and provider mismatches fail closed", async () => {
   const expected = await resolvedBinding();
   const records = [
@@ -508,6 +597,34 @@ test("static composition snapshots inputs and isolates every returned mutation",
   assert.throws(() => {
     (outcome.binding as { providerRouteRef: string }).providerRouteRef = "provider-route:attempted";
   }, TypeError);
+});
+
+test("static persistence boundary rejects proxies and accessors without invoking traps", () => {
+  let traps = 0;
+  let getters = 0;
+  const handler: ProxyHandler<object> = {
+    get() { traps += 1; throw new Error("get trap must not run"); },
+    getOwnPropertyDescriptor() { traps += 1; throw new Error("descriptor trap must not run"); },
+    getPrototypeOf() { traps += 1; throw new Error("prototype trap must not run"); },
+    ownKeys() { traps += 1; throw new Error("keys trap must not run"); },
+  };
+  const proxiedAuthorities = new Proxy([binding()], handler);
+  assert.throws(() => createStaticContainedTurnProviderAccessFeature(proxiedAuthorities), /stable array/u);
+  assert.throws(
+    () => createStaticContainedTurnProviderAccessFeature([new Proxy(binding(), handler)]),
+    /plain data record/u,
+  );
+  const accessorAuthority = { ...binding() } as Record<string, unknown>;
+  Object.defineProperty(accessorAuthority, "accessRef", {
+    enumerable: true,
+    get() { getters += 1; return "access:trap"; },
+  });
+  assert.throws(
+    () => createStaticContainedTurnProviderAccessFeature([accessorAuthority] as never),
+    /accessors/u,
+  );
+  assert.equal(traps, 0);
+  assert.equal(getters, 0);
 });
 
 test("rejects duplicate exact authority and invalid revisions or generations", () => {

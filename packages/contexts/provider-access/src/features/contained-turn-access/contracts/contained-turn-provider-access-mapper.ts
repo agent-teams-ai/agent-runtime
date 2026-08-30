@@ -14,11 +14,11 @@ import type {
   ResolveProviderAccessResult,
 } from "../application/resolve-contained-turn-provider-access.js";
 import {
-  exactProviderAccessDataRecord,
   snapshotProviderAccessBinding,
   snapshotProviderAccessProvider,
   snapshotProviderAccessScope,
 } from "../domain/provider-access-binding.js";
+import { exactProviderAccessDataRecord } from "../boundary/exact-provider-access-data.js";
 
 const CONTRACT_BINDING_KEYS = [
   "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "projectId", "provider",
