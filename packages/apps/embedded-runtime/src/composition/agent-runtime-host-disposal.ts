@@ -128,32 +128,43 @@ export class ContainedTurnOwnerContractError extends Error {
 export const containedTurnOwnerInvocationFailed =
   new ContainedTurnOwnerContractError("owner_invocation_failed");
 
-const settleActiveCalls = async (activeCalls: ReadonlySet<Promise<unknown>>): Promise<void> => {
-  while (activeCalls.size > 0) {
-    await Promise.allSettled(activeCalls);
-  }
-};
+class HostCallLedger {
+  readonly #activeCalls = new Set<Promise<unknown>>();
 
-const rejectAtDisposalDeadline = async (
-  activeCalls: ReadonlySet<Promise<unknown>>,
-  diagnostics: () => ContainedTurnDisposalDiagnostics,
-): Promise<never> => {
-  await delay(1_000, null, { ref: false });
-  const { containedTurns, omittedContainedTurnCount } = diagnostics();
-  throw new AgentRuntimeHostDisposalIncompleteError(
-    activeCalls.size,
-    "disposal_incomplete",
-    containedTurns,
-    omittedContainedTurnCount,
-  );
-};
+  public readonly execute = <T>(operation: () => Promise<T>): Promise<T> => {
+    let resolveCall!: (value: T | PromiseLike<T>) => void;
+    let rejectCall!: (reason: unknown) => void;
+    const executingCall = new Promise<T>((resolve, reject) => {
+      resolveCall = resolve;
+      rejectCall = reject;
+    });
+    this.#activeCalls.add(executingCall);
+    void executingCall.finally(() => this.#activeCalls.delete(executingCall)).catch(() => {});
+    try {
+      Promise.resolve(operation()).then(resolveCall, rejectCall);
+    } catch (error) {
+      rejectCall(error);
+    }
+    return executingCall;
+  };
+
+  public get activeCount(): number {
+    return this.#activeCalls.size;
+  }
+
+  public async settle(): Promise<void> {
+    while (this.#activeCalls.size > 0) {
+      await Promise.allSettled(this.#activeCalls);
+    }
+  }
+}
 
 type CancellationProof =
-  | Readonly<{ kind: "contract_violation" }>
-  | Readonly<{ kind: "not_found" }>
+  | Readonly<{ kind: "contract_violation" }> | Readonly<{ kind: "not_found" }>
   | Readonly<{ kind: "nonterminal"; status: "accepted" | "reconcile_required" | "running" }>
-  | Readonly<{ kind: "operation_mismatch" }>
-  | Readonly<{ kind: "terminal"; status: "cancelled" | "failed" | "succeeded" }>;
+  | Readonly<{ kind: "operation_mismatch" }> | Readonly<{
+    kind: "terminal"; status: "cancelled" | "failed" | "succeeded";
+  }>;
 
 interface CancellationOutputChunkSnapshot {
   readonly cursor: unknown;
@@ -247,12 +258,8 @@ const isBoundedProviderIdentity = (value: unknown): value is string =>
   value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
 
 type CancellationTurnStatus =
-  | "accepted"
-  | "cancelled"
-  | "failed"
-  | "reconcile_required"
-  | "running"
-  | "succeeded";
+  | "accepted" | "cancelled" | "failed"
+  | "reconcile_required" | "running" | "succeeded";
 
 // oxlint-disable-next-line complexity -- terminal proof validates the complete detached owner DTO.
 const validateCancellationTurn = (
@@ -317,46 +324,32 @@ const snapshotCancellationProof = (
   return Object.freeze({ kind: "nonterminal", status: turn.status });
 };
 
-// oxlint-disable-next-line max-lines-per-function -- this factory intentionally closes over one Host ownership ledger.
-export const createAgentRuntimeHostDisposalLifecycle = (
-  containedTurn: ContainedTurnCapabilityBundle | undefined,
-): AgentRuntimeHostDisposalLifecycle => {
-  const hostAbort = new AbortController();
-  const activeCalls = new Set<Promise<unknown>>();
-  const activeContainedTurns = new Map<string, ActiveContainedTurn>();
-  const operationOwners = new Map<string, object>();
-  const shutdownCancellations = new Map<string, Promise<unknown>>();
-  let disposed = false;
-  let disposal: Promise<void> | undefined;
+class ContainedTurnOwnershipLedger {
+  readonly #active = new Map<string, ActiveContainedTurn>();
+  readonly #cancellations = new Map<string, Promise<unknown>>();
+  readonly #containedTurn: ContainedTurnCapabilityBundle | undefined;
+  readonly #executeCall: HostCallLedger["execute"];
+  readonly #owners = new Map<string, object>();
 
-  const executeCall = <T>(operation: () => Promise<T>): Promise<T> => {
-    let resolveCall!: (value: T | PromiseLike<T>) => void;
-    let rejectCall!: (reason: unknown) => void;
-    const executingCall = new Promise<T>((resolve, reject) => {
-      resolveCall = resolve;
-      rejectCall = reject;
-    });
-    activeCalls.add(executingCall);
-    void executingCall.finally(() => activeCalls.delete(executingCall)).catch(() => {});
-    try {
-      Promise.resolve(operation()).then(resolveCall, rejectCall);
-    } catch (error) {
-      rejectCall(error);
-    }
-    return executingCall;
-  };
+  public constructor(
+    containedTurn: ContainedTurnCapabilityBundle | undefined,
+    executeCall: HostCallLedger["execute"],
+  ) {
+    this.#containedTurn = containedTurn;
+    this.#executeCall = executeCall;
+  }
 
-  const containedTurnDisposalDiagnostics = (): ContainedTurnDisposalDiagnostics =>
-    projectContainedTurnDisposalDiagnostics(activeContainedTurns);
+  public readonly diagnostics = (): ContainedTurnDisposalDiagnostics =>
+    projectContainedTurnDisposalDiagnostics(this.#active);
 
-  const registerContainedTurn = (operation: ContainedTurnOperation, ownerCall: object): void => {
-    const knownOwner = operationOwners.get(operation.operationId);
-    const existing = activeContainedTurns.get(operation.operationId);
+  public readonly register = (operation: ContainedTurnOperation, ownerCall: object): void => {
+    const knownOwner = this.#owners.get(operation.operationId);
+    const existing = this.#active.get(operation.operationId);
     if (knownOwner === ownerCall) {
       return;
     }
     if (knownOwner !== undefined) {
-      activeContainedTurns.set(operation.operationId, Object.freeze(existing === undefined ? {
+      this.#active.set(operation.operationId, Object.freeze(existing === undefined ? {
         operation: Object.freeze({
           operationId: operation.operationId,
           scope: Object.freeze({ ...operation.scope }),
@@ -366,8 +359,8 @@ export const createAgentRuntimeHostDisposalLifecycle = (
       } : { ...existing, status: "contract_violation" }));
       throw new ContainedTurnOwnerContractError("duplicate_operation_id");
     }
-    operationOwners.set(operation.operationId, ownerCall);
-    activeContainedTurns.set(operation.operationId, Object.freeze({
+    this.#owners.set(operation.operationId, ownerCall);
+    this.#active.set(operation.operationId, Object.freeze({
       operation: Object.freeze({
         operationId: operation.operationId,
         scope: Object.freeze({ ...operation.scope }),
@@ -377,16 +370,16 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     }));
   };
 
-  const recordContainedTurnStatus = (
+  public readonly recordStatus = (
     operationId: string,
     status: AgentRuntimeHostContainedTurnStatus,
   ): void => {
-    const active = activeContainedTurns.get(operationId);
+    const active = this.#active.get(operationId);
     if (active === undefined) {
       return;
     }
     if (isTerminalContainedTurnStatus(status)) {
-      activeContainedTurns.delete(operationId);
+      this.#active.delete(operationId);
       return;
     }
     if (active.status === "contract_violation") {
@@ -394,7 +387,7 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     }
     if (status === "accepted" || status === "contract_violation" || status === "running" ||
       status === "reconcile_required") {
-      activeContainedTurns.set(operationId, Object.freeze({
+      this.#active.set(operationId, Object.freeze({
         operation: active.operation,
         ownerCall: active.ownerCall,
         status,
@@ -402,13 +395,13 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     }
   };
 
-  const recordCancellationFailure = (
+  readonly #recordCancellationFailure = (
     operationId: string,
     status: "cancellation_failed" | "contract_violation" | "not_found" | "operation_mismatch",
   ): void => {
-    const active = activeContainedTurns.get(operationId);
+    const active = this.#active.get(operationId);
     if (active !== undefined && active.status !== "contract_violation") {
-      activeContainedTurns.set(operationId, Object.freeze({
+      this.#active.set(operationId, Object.freeze({
         operation: active.operation,
         ownerCall: active.ownerCall,
         status,
@@ -416,15 +409,15 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     }
   };
 
-  const requestContainedTurnCancellation = (operation: ContainedTurnOperation): Promise<unknown> => {
-    const existing = shutdownCancellations.get(operation.operationId);
+  public readonly requestCancellation = (operation: ContainedTurnOperation): Promise<unknown> => {
+    const existing = this.#cancellations.get(operation.operationId);
     if (existing !== undefined) {
       return existing;
     }
-    if (containedTurn === undefined) {
-      recordCancellationFailure(operation.operationId, "cancellation_failed");
+    if (this.#containedTurn === undefined) {
+      this.#recordCancellationFailure(operation.operationId, "cancellation_failed");
       const unavailable = Promise.resolve();
-      shutdownCancellations.set(operation.operationId, unavailable);
+      this.#cancellations.set(operation.operationId, unavailable);
       return unavailable;
     }
     let resolveCancellation!: (value: unknown) => void;
@@ -433,26 +426,26 @@ export const createAgentRuntimeHostDisposalLifecycle = (
       resolveCancellation = resolve;
       rejectCancellation = reject;
     });
-    shutdownCancellations.set(operation.operationId, cancellation);
+    this.#cancellations.set(operation.operationId, cancellation);
     void cancellation.catch(() => {});
-    const execution = executeCall(async () => {
+    const execution = this.#executeCall(async () => {
       let outcome: unknown;
       try {
-        outcome = await containedTurn.cancel.execute(operation);
+        outcome = await this.#containedTurn!.cancel.execute(operation);
       } catch {
-        recordCancellationFailure(operation.operationId, "cancellation_failed");
+        this.#recordCancellationFailure(operation.operationId, "cancellation_failed");
         throw containedTurnOwnerInvocationFailed;
       }
       const proof = snapshotCancellationProof(outcome, operation.operationId);
       if (proof.kind === "terminal") {
-        recordContainedTurnStatus(operation.operationId, proof.status);
+        this.recordStatus(operation.operationId, proof.status);
       } else if (proof.kind === "nonterminal") {
-        recordContainedTurnStatus(operation.operationId, proof.status);
+        this.recordStatus(operation.operationId, proof.status);
       } else if (proof.kind === "contract_violation") {
-        recordCancellationFailure(operation.operationId, "contract_violation");
+        this.#recordCancellationFailure(operation.operationId, "contract_violation");
         throw new ContainedTurnOwnerContractError("malformed_owner_outcome");
       } else {
-        recordCancellationFailure(operation.operationId, proof.kind);
+        this.#recordCancellationFailure(operation.operationId, proof.kind);
       }
       return proof;
     });
@@ -460,9 +453,62 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     return cancellation;
   };
 
-  const finishDisposal = async (): Promise<void> => {
-    await settleActiveCalls(activeCalls);
-    const { containedTurns, omittedContainedTurnCount } = containedTurnDisposalDiagnostics();
+  public requestCancellationForAll(): void {
+    for (const active of this.#active.values()) {
+      void this.requestCancellation(active.operation);
+    }
+  }
+}
+
+class HostDisposalOrchestrator {
+  readonly #calls: HostCallLedger;
+  readonly #containedTurns: ContainedTurnOwnershipLedger;
+  readonly #hostAbort = new AbortController();
+  #disposal: Promise<void> | undefined;
+  #disposed = false;
+
+  public constructor(calls: HostCallLedger, containedTurns: ContainedTurnOwnershipLedger) {
+    this.#calls = calls;
+    this.#containedTurns = containedTurns;
+  }
+
+  public get signal(): AbortSignal {
+    return this.#hostAbort.signal;
+  }
+
+  public assertActive(): void {
+    if (this.#disposed) {
+      throw new AgentRuntimeHostLifecycleError("host_disposed");
+    }
+  }
+
+  public readonly dispose = (): Promise<void> => {
+    if (this.#disposal !== undefined) {
+      return this.#disposal;
+    }
+    let resolveDisposal!: () => void;
+    let rejectDisposal!: (reason: unknown) => void;
+    this.#disposal = new Promise<void>((resolve, reject) => {
+      resolveDisposal = resolve;
+      rejectDisposal = reject;
+    });
+    this.#disposed = true;
+    try {
+      this.#hostAbort.abort(new DOMException("Agent Runtime Host is disposed", "AbortError"));
+      this.#containedTurns.requestCancellationForAll();
+      void Promise.race([
+        this.#finishDisposal(),
+        this.#rejectAtDeadline(),
+      ]).then(resolveDisposal, rejectDisposal);
+    } catch (error) {
+      rejectDisposal(error);
+    }
+    return this.#disposal;
+  };
+
+  readonly #finishDisposal = async (): Promise<void> => {
+    await this.#calls.settle();
+    const { containedTurns, omittedContainedTurnCount } = this.#containedTurns.diagnostics();
     if (containedTurns.length > 0) {
       throw new AgentRuntimeHostDisposalIncompleteError(
         0,
@@ -473,44 +519,36 @@ export const createAgentRuntimeHostDisposalLifecycle = (
     }
   };
 
-  const dispose = (): Promise<void> => {
-    if (disposal !== undefined) {
-      return disposal;
-    }
-    let resolveDisposal!: () => void;
-    let rejectDisposal!: (reason: unknown) => void;
-    disposal = new Promise<void>((resolve, reject) => {
-      resolveDisposal = resolve;
-      rejectDisposal = reject;
-    });
-    disposed = true;
-    try {
-      hostAbort.abort(new DOMException("Agent Runtime Host is disposed", "AbortError"));
-      for (const active of activeContainedTurns.values()) {
-        void requestContainedTurnCancellation(active.operation);
-      }
-      void Promise.race([
-        finishDisposal(),
-        rejectAtDisposalDeadline(activeCalls, containedTurnDisposalDiagnostics),
-      ]).then(resolveDisposal, rejectDisposal);
-    } catch (error) {
-      rejectDisposal(error);
-    }
-    return disposal;
+  readonly #rejectAtDeadline = async (): Promise<never> => {
+    await delay(1_000, null, { ref: false });
+    const { containedTurns, omittedContainedTurnCount } = this.#containedTurns.diagnostics();
+    throw new AgentRuntimeHostDisposalIncompleteError(
+      this.#calls.activeCount,
+      "disposal_incomplete",
+      containedTurns,
+      omittedContainedTurnCount,
+    );
   };
 
+  public isDisposed(): boolean {
+    return this.#disposed;
+  }
+}
+
+export const createAgentRuntimeHostDisposalLifecycle = (
+  containedTurn: ContainedTurnCapabilityBundle | undefined,
+): AgentRuntimeHostDisposalLifecycle => {
+  const calls = new HostCallLedger();
+  const containedTurns = new ContainedTurnOwnershipLedger(containedTurn, calls.execute);
+  const disposal = new HostDisposalOrchestrator(calls, containedTurns);
   return Object.freeze({
-    assertActive() {
-      if (disposed) {
-        throw new AgentRuntimeHostLifecycleError("host_disposed");
-      }
-    },
-    dispose,
-    executeCall,
-    isDisposed: () => disposed,
-    recordContainedTurnStatus,
-    registerContainedTurn,
-    requestContainedTurnCancellation,
-    signal: hostAbort.signal,
+    assertActive: () => disposal.assertActive(),
+    dispose: disposal.dispose,
+    executeCall: calls.execute,
+    isDisposed: () => disposal.isDisposed(),
+    recordContainedTurnStatus: containedTurns.recordStatus,
+    registerContainedTurn: containedTurns.register,
+    requestContainedTurnCancellation: containedTurns.requestCancellation,
+    signal: disposal.signal,
   });
 };
