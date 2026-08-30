@@ -9,8 +9,9 @@ import type {
   ContainedTurnPreparationToken,
   ContainedTurnWorkspaceId,
 } from "../domain/contained-turn-identities.js";
-import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
+import { containedTurnIdentity, validateContainedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
+import { assertContainedTurnExactRecord } from "../domain/contained-turn-record.js";
 import {
   readContainedTurnOwnedOperation,
   recordContainedTurnRejectedDebt,
@@ -28,6 +29,9 @@ import {
   isContainedTurnPreparationCleanupContinuation,
   isContainedTurnRetiredPreparation,
   isContainedTurnRetirementCurrent,
+  cloneContainedTurnPortValue,
+  snapshotContainedTurnDispatchPreparation,
+  snapshotContainedTurnOwnedOperation,
 } from "./contained-turn-preparation-scope.js";
 import type { ContainedTurnDispatchPreparation } from "../domain/contained-turn-dispatch-preparation.js";
 
@@ -50,6 +54,65 @@ export type RetireContainedTurnPreparationOutcome =
   | { readonly kind: "cleanup_pending"; readonly operation: ContainedTurnKernelOperation; readonly preparation?: ContainedTurnDispatchPreparation }
   | { readonly kind: "cleanup_closed"; readonly operation: ContainedTurnKernelOperation; readonly preparation: ContainedTurnDispatchPreparation };
 
+type CleanupOwnerProjection = Readonly<{
+  evidenceId?: ContainedTurnEvidenceId;
+  successful: boolean;
+}>;
+
+const projectCleanupOwnerOutcome = (outcome: object): CleanupOwnerProjection => {
+  const safeOutcome = cloneContainedTurnPortValue(outcome);
+  const kindDescriptor = Object.getOwnPropertyDescriptor(safeOutcome, "kind");
+  if (kindDescriptor === undefined || !("value" in kindDescriptor) || typeof kindDescriptor.value !== "string") {
+    throw new TypeError("cleanup owner outcome kind must be an own primitive data property");
+  }
+  const kind = kindDescriptor.value;
+  const successful = kind === "released" || kind === "already_released" ||
+    kind === "settled" || kind === "already_settled";
+  assertContainedTurnExactRecord(
+    "cleanup owner outcome",
+    safeOutcome,
+    successful ? ["kind"] : ["evidenceId", "kind"],
+  );
+  if (successful) {return Object.freeze({ successful: true });}
+  if (kind !== "indeterminate") {throw new TypeError("unknown cleanup owner outcome");}
+  const evidenceDescriptor = Object.getOwnPropertyDescriptor(safeOutcome, "evidenceId");
+  if (evidenceDescriptor === undefined || !("value" in evidenceDescriptor)) {
+    throw new TypeError("cleanup evidence ID must be an own data property");
+  }
+  const evidenceId = validateContainedTurnIdentity("evidence", evidenceDescriptor.value as string);
+  return Object.freeze({ evidenceId, successful: false });
+};
+
+type RetirementOwnerOutcome = Awaited<ReturnType<NonNullable<
+  ContainedTurnKernelDependencies["operationStore"]["retireDispatchPreparation"]
+>>>;
+
+const projectRetirementOwnerOutcome = (outcome: RetirementOwnerOutcome): RetirementOwnerOutcome => {
+  const safeOutcome = cloneContainedTurnPortValue(outcome);
+  if (safeOutcome.kind === "claimed") {
+    assertContainedTurnExactRecord("retirement claimed outcome", safeOutcome, ["kind", "operation"]);
+    return Object.freeze({ kind: "claimed", operation: snapshotContainedTurnOwnedOperation(safeOutcome.operation) });
+  }
+  if (safeOutcome.kind === "retired") {
+    assertContainedTurnExactRecord("retirement retired outcome", safeOutcome, ["kind", "preparation"]);
+    const preparation = snapshotContainedTurnDispatchPreparation(safeOutcome.preparation);
+    if (preparation.kind !== "cleanup_pending") {throw new TypeError("retirement must return cleanup debt");}
+    return Object.freeze({ kind: "retired", preparation });
+  }
+  if (safeOutcome.kind === "stale") {
+    assertContainedTurnExactRecord("retirement stale outcome", safeOutcome, ["current", "kind"]);
+    return Object.freeze({ current: snapshotContainedTurnOwnedOperation(safeOutcome.current), kind: "stale" });
+  }
+  if (safeOutcome.kind === "indeterminate") {
+    assertContainedTurnExactRecord("retirement indeterminate outcome", safeOutcome, ["evidenceId", "kind"]);
+    return Object.freeze({
+      evidenceId: validateContainedTurnIdentity("evidence", safeOutcome.evidenceId),
+      kind: "indeterminate",
+    });
+  }
+  throw new TypeError("unknown retirement owner outcome");
+};
+
 /**
  * The authority-safe cleanup path. Retirement is the only decision point: it
  * atomically makes claim impossible and returns the one permit accepted by
@@ -70,32 +133,31 @@ export const retireAndCleanupContainedTurnPreparation = async (
   const authority = containedTurnOwnerStoreAuthority(operation, trustedScope);
   let retirement: Awaited<ReturnType<typeof retire>>;
   try {
-    retirement = await retire({
+    retirement = projectRetirementOwnerOutcome(await retire({
       authority,
       expectedOperationCutoffRevision: operation.operationCutoff.revision,
       expectedOperationRevision: operation.revision,
       preparationToken: owner.preparationToken,
       reason,
-    });
+    }));
   } catch {
-    return { kind: "cleanup_pending", operation };
+    return Object.freeze({ kind: "cleanup_pending", operation });
   }
   if (retirement.kind === "claimed") {
     return isContainedTurnClaimedPreparation(authority, owner, retirement.operation)
-      ? { kind: "claimed", operation: retirement.operation }
-      : { kind: "cleanup_pending", operation };
+      ? Object.freeze({ kind: "claimed", operation: retirement.operation })
+      : Object.freeze({ kind: "cleanup_pending", operation });
   }
   if (retirement.kind !== "retired") {
-    return {
-      kind: "cleanup_pending",
-      operation: retirement.kind === "stale" &&
-          isContainedTurnRetirementCurrent(authority, operation, owner, retirement.current)
-        ? retirement.current
-        : operation,
-    };
+    if (retirement.kind === "stale") {
+      if (isContainedTurnRetirementCurrent(authority, operation, owner, retirement.current)) {
+        return Object.freeze({ kind: "cleanup_pending", operation: retirement.current });
+      }
+    }
+    return Object.freeze({ kind: "cleanup_pending", operation });
   }
   if (!isContainedTurnRetiredPreparation(authority, operation, owner, retirement.preparation)) {
-    return { kind: "cleanup_pending", operation };
+    return Object.freeze({ kind: "cleanup_pending", operation });
   }
   const pending = retirement.preparation;
   const permit = pending.cleanupPermit;
@@ -106,36 +168,37 @@ export const retireAndCleanupContainedTurnPreparation = async (
     grantRequestId?: string,
   ): Promise<void> => {
     if (effect === undefined) {return;}
-    let outcome: { readonly kind: string; readonly evidenceId?: ContainedTurnEvidenceId };
-    try {outcome = await effect();} catch {return;}
-    if (outcome.kind !== "released" && outcome.kind !== "already_released" &&
-        outcome.kind !== "settled" && outcome.kind !== "already_settled") {
+    let outcome: CleanupOwnerProjection;
+    try {outcome = projectCleanupOwnerOutcome(await effect());} catch {return;}
+    if (!outcome.successful) {
       if (outcome.evidenceId === undefined) {return;}
       try {
-        const recorded = await record({ authority, evidenceId: outcome.evidenceId, permit, target });
+        const recorded = snapshotContainedTurnDispatchPreparation(await record(Object.freeze({
+          authority, evidenceId: outcome.evidenceId, permit, target,
+        })));
         if (isContainedTurnPreparationCleanupContinuation(current, recorded)) {current = recorded;}
-      } catch {}
+      } catch {return;}
       return;
     }
     try {
-      const recorded = await record({ authority, permit, target });
+      const recorded = snapshotContainedTurnDispatchPreparation(await record(Object.freeze({ authority, permit, target })));
       if (isContainedTurnPreparationCleanupContinuation(current, recorded)) {current = recorded;}
-    } catch {}
+    } catch {return;}
     void grantRequestId;
   };
   await cleanup("custody", dependencies.custody.releaseRetiredReservation === undefined
     ? undefined
-    : () => dependencies.custody.releaseRetiredReservation!({ cleanupPermit: permit }));
+    : () => dependencies.custody.releaseRetiredReservation!(Object.freeze({ cleanupPermit: permit })));
   await cleanup("provider_access", dependencies.providerAccess.settleConsumedGrant === undefined
     ? undefined
-    : () => dependencies.providerAccess.settleConsumedGrant!({ cleanupPermit: permit, grantRequestId: pending.providerAccessGrantRequestId }));
+    : () => dependencies.providerAccess.settleConsumedGrant!(Object.freeze({ cleanupPermit: permit, grantRequestId: pending.providerAccessGrantRequestId })));
   await cleanup("runtime_security", dependencies.security.settleConsumedGrant === undefined
     ? undefined
-    : () => dependencies.security.settleConsumedGrant!({ cleanupPermit: permit, grantRequestId: pending.runtimeSecurityGrantRequestId }));
+    : () => dependencies.security.settleConsumedGrant!(Object.freeze({ cleanupPermit: permit, grantRequestId: pending.runtimeSecurityGrantRequestId })));
   const finalPreparation = current as ContainedTurnDispatchPreparation;
   return finalPreparation.kind === "cleanup_closed"
-    ? { kind: "cleanup_closed", operation, preparation: finalPreparation }
-    : { kind: "cleanup_pending", operation, preparation: finalPreparation };
+    ? Object.freeze({ kind: "cleanup_closed", operation, preparation: finalPreparation })
+    : Object.freeze({ kind: "cleanup_pending", operation, preparation: finalPreparation });
 };
 
 export const quarantineLosingContainedTurnWorkspace = async (

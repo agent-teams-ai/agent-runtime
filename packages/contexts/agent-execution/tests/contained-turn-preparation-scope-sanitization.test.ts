@@ -110,6 +110,89 @@ test("prepared claim claimed, observed, and stale outcomes collapse foreign owne
   }
 });
 
+test("prepared claim rejects same-owner extras and returns only a detached frozen Kernel projection", async () => {
+  const withExtra = { ...winner, foreignAggregate: "must-not-leak" } as ContainedTurnKernelOperation;
+  const rejected = await claimContainedTurnWithConsumedGrants(
+    claimDependencies({ kind: "claimed", operation: withExtra, startAuthority: "start:scope-sanitization" }),
+    initial, scope, subject,
+  );
+  assert.deepEqual(rejected, { kind: "unavailable" });
+
+  const accepted = await claimContainedTurnWithConsumedGrants(
+    claimDependencies({ kind: "claimed", operation: winner, startAuthority: "start:scope-sanitization" }),
+    initial, scope, subject,
+  );
+  assert.equal(accepted.kind, "claimed");
+  if (accepted.kind === "claimed") {
+    assert.notStrictEqual(accepted.operation, winner);
+    assert.deepEqual(accepted.operation, winner);
+    assert.equal(Object.isFrozen(accepted), true);
+    assert.equal(Object.isFrozen(accepted.operation), true);
+  }
+});
+
+test("prepared claim rejects proxies, accessors, sparse or augmented arrays without invoking hostile code", async () => {
+  let traps = 0;
+  let getters = 0;
+  const proxiedDispatch = new Proxy({ ...winner.dispatch }, {
+    getOwnPropertyDescriptor: () => {traps += 1; throw new TypeError("trap must not run");},
+    ownKeys: () => {traps += 1; throw new TypeError("trap must not run");},
+  });
+  const accessorOperation = structuredClone(winner);
+  Object.defineProperty(accessorOperation, "revision", {
+    enumerable: true,
+    get: () => {getters += 1; return winner.revision;},
+  });
+  const augmentedProofs = [...winner.proofs] as ContainedTurnKernelOperation["proofs"] & { extra?: string };
+  augmentedProofs.extra = "must-not-leak";
+  const sparseProofs = [...winner.proofs];
+  delete sparseProofs[0];
+  const operations = [
+    { ...winner, dispatch: proxiedDispatch },
+    accessorOperation,
+    { ...winner, proofs: augmentedProofs },
+    { ...winner, proofs: sparseProofs },
+  ] as ContainedTurnKernelOperation[];
+  for (const operation of operations) {
+    const result = await claimContainedTurnWithConsumedGrants(
+      claimDependencies({ kind: "observed_claim", operation }), initial, scope, subject,
+    );
+    assert.deepEqual(result, { kind: "unavailable" });
+  }
+  const proxiedOutcome = new Proxy({ kind: "observed_claim" as const, operation: winner }, {
+    ownKeys: () => {traps += 1; throw new TypeError("outcome trap must not run");},
+  });
+  assert.deepEqual(
+    await claimContainedTurnWithConsumedGrants(claimDependencies(proxiedOutcome), initial, scope, subject),
+    { kind: "unavailable" },
+  );
+  assert.equal(traps, 0);
+  assert.equal(getters, 0);
+});
+
+test("prepared claim snapshots mutable aliases and rejects owner outcome extras", async () => {
+  const mutableWinner = structuredClone(winner);
+  const accepted = await claimContainedTurnWithConsumedGrants(
+    claimDependencies({ kind: "observed_claim", operation: mutableWinner }), initial, scope, subject,
+  );
+  assert.equal(accepted.kind, "observed_claim");
+  if (accepted.kind === "observed_claim") {
+    mutableWinner.scope.tenantId = "tenant:mutated-after-return";
+    assert.equal(accepted.operation.scope.tenantId, scope.tenantId);
+    assert.notStrictEqual(accepted.operation.scope, mutableWinner.scope);
+    assert.equal(Object.isFrozen(accepted.operation.scope), true);
+  }
+  const outcomeWithExtra = {
+    kind: "observed_claim" as const,
+    operation: winner,
+    rawOwnerPayload: "must-not-leak",
+  };
+  assert.deepEqual(
+    await claimContainedTurnWithConsumedGrants(claimDependencies(outcomeWithExtra), initial, scope, subject),
+    { kind: "unavailable" },
+  );
+});
+
 const activePreparation = Object.freeze({
   attemptId,
   custodyId,
@@ -181,7 +264,8 @@ test("cleanup record outcomes adopt only exact preparation and permit owner iden
     initial, scope, subject, "reconciliation",
   );
   assert.equal(rejected.kind, "cleanup_pending");
-  assert.strictEqual(rejected.preparation, retiredPreparation);
+  assert.notStrictEqual(rejected.preparation, retiredPreparation);
+  assert.deepEqual(rejected.preparation, retiredPreparation);
   assert.equal(JSON.stringify(rejected).includes("must-not-leak"), false);
 
   let current: ContainedTurnDispatchPreparation = retiredPreparation;
@@ -199,5 +283,159 @@ test("cleanup record outcomes adopt only exact preparation and permit owner iden
     initial, scope, subject, "reconciliation",
   );
   assert.equal(closed.kind, "cleanup_closed");
-  if (closed.kind === "cleanup_closed") {assert.strictEqual(closed.preparation, current);}
+  if (closed.kind === "cleanup_closed") {
+    assert.notStrictEqual(closed.preparation, current);
+    assert.deepEqual(closed.preparation, current);
+    assert.equal(Object.isFrozen(closed.preparation), true);
+  }
+});
+
+test("cleanup permits reject extras, forged digest or ID, accessors, proxies, and cross-owner substitution", async () => {
+  const attempts: ContainedTurnDispatchPreparation[] = [
+    {
+      ...retiredPreparation,
+      cleanupPermit: { ...retiredPreparation.cleanupPermit, extra: "same-owner-extra" },
+    } as ContainedTurnDispatchPreparation,
+    {
+      ...retiredPreparation,
+      cleanupPermit: {
+        ...retiredPreparation.cleanupPermit,
+        permitDigest: digestContainedTurnCanonicalValue({ forged: "digest" }),
+      },
+    } as ContainedTurnDispatchPreparation,
+    {
+      ...retiredPreparation,
+      cleanupPermit: {
+        ...retiredPreparation.cleanupPermit,
+        permitId: containedTurnIdentity("cleanup_permit", "cleanup-permit:forged"),
+      },
+    } as ContainedTurnDispatchPreparation,
+    {
+      ...retiredPreparation,
+      cleanupPermit: {
+        ...retiredPreparation.cleanupPermit,
+        operationId: containedTurnIdentity("operation", "operation:foreign-permit-owner"),
+      },
+    } as ContainedTurnDispatchPreparation,
+  ];
+  const accessorPermit = { ...retiredPreparation.cleanupPermit };
+  Object.defineProperty(accessorPermit, "permitDigest", {
+    enumerable: true,
+    get: () => retiredPreparation.cleanupPermit.permitDigest,
+  });
+  attempts.push({ ...retiredPreparation, cleanupPermit: accessorPermit } as ContainedTurnDispatchPreparation);
+  attempts.push({
+    ...retiredPreparation,
+    cleanupPermit: new Proxy({ ...retiredPreparation.cleanupPermit }, {}),
+  } as ContainedTurnDispatchPreparation);
+  const augmentedEvidenceIds = [...retiredPreparation.cleanupEvidenceIds] as string[] & { extra?: string };
+  augmentedEvidenceIds.extra = "must-not-leak";
+  attempts.push({ ...retiredPreparation, cleanupEvidenceIds: augmentedEvidenceIds });
+  const sparseEvidenceIds = ["evidence:scope-sanitization"];
+  delete sparseEvidenceIds[0];
+  attempts.push({ ...retiredPreparation, cleanupEvidenceIds: sparseEvidenceIds });
+
+  for (const preparation of attempts) {
+    let calls = 0;
+    const dependencies = cleanupDependencies({ retirement: { kind: "retired", preparation: preparation as typeof retiredPreparation } });
+    dependencies.custody.releaseRetiredReservation = async () => {calls += 1; return { kind: "released" };};
+    dependencies.providerAccess.settleConsumedGrant = async () => {calls += 1; return { kind: "settled" };};
+    dependencies.security.settleConsumedGrant = async () => {calls += 1; return { kind: "settled" };};
+    const outcome = await retireAndCleanupContainedTurnPreparation(
+      dependencies, initial, scope, subject, "reconciliation",
+    );
+    assert.deepEqual(outcome, { kind: "cleanup_pending", operation: initial });
+    assert.equal(calls, 0);
+  }
+});
+
+test("cleanup snapshots once before owner calls and never forwards or returns owner-store aggregates", async () => {
+  const rawPermit = { ...retiredPreparation.cleanupPermit };
+  const rawPreparation = {
+    ...retiredPreparation,
+    cleanupEvidenceIds: [],
+    cleanupPermit: rawPermit,
+  } as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }>;
+  const receivedPermits: unknown[] = [];
+  const recordedAggregates: ContainedTurnDispatchPreparation[] = [];
+  let current: ContainedTurnDispatchPreparation = retiredPreparation;
+  const dependencies = cleanupDependencies({
+    record: target => {
+      current = recordContainedTurnPreparationCleanup(current, {
+        permit: retiredPreparation.cleanupPermit,
+        target,
+      });
+      const rawRecorded = { ...current } as ContainedTurnDispatchPreparation;
+      recordedAggregates.push(rawRecorded);
+      return rawRecorded;
+    },
+    retirement: { kind: "retired", preparation: rawPreparation },
+  });
+  dependencies.custody.releaseRetiredReservation = async input => {
+    receivedPermits.push(input.cleanupPermit);
+    rawPermit.operationId = containedTurnIdentity("operation", "operation:mutated-after-snapshot");
+    return { kind: "released" };
+  };
+  dependencies.providerAccess.settleConsumedGrant = async input => {
+    receivedPermits.push(input.cleanupPermit);
+    return { kind: "settled" };
+  };
+  dependencies.security.settleConsumedGrant = async input => {
+    receivedPermits.push(input.cleanupPermit);
+    return { kind: "settled" };
+  };
+
+  const outcome = await retireAndCleanupContainedTurnPreparation(
+    dependencies, initial, scope, subject, "reconciliation",
+  );
+  assert.equal(receivedPermits.length, 3);
+  assert.equal(recordedAggregates.length, 3);
+  assert.equal(outcome.kind, "cleanup_closed");
+  for (const permit of receivedPermits) {
+    assert.notStrictEqual(permit, rawPermit);
+    assert.strictEqual(permit, receivedPermits[0]);
+    assert.deepEqual(permit, retiredPreparation.cleanupPermit);
+    assert.equal(Object.isFrozen(permit), true);
+  }
+  if (outcome.kind === "cleanup_closed") {
+    assert.equal(recordedAggregates.includes(outcome.preparation), false);
+    assert.equal(outcome.preparation.operationId, operationId);
+    assert.equal(Object.isFrozen(outcome.preparation), true);
+  }
+});
+
+test("cleanup rejects owner proxies, accessors, and outcome extras without invoking hostile code", async () => {
+  let traps = 0;
+  let getters = 0;
+  const proxiedPreparation = new Proxy({ ...retiredPreparation }, {
+    ownKeys: () => {traps += 1; throw new TypeError("preparation trap must not run");},
+  });
+  assert.deepEqual(
+    await retireAndCleanupContainedTurnPreparation(
+      cleanupDependencies({ retirement: { kind: "retired", preparation: proxiedPreparation } }),
+      initial, scope, subject, "reconciliation",
+    ),
+    { kind: "cleanup_pending", operation: initial },
+  );
+  const dependencies = cleanupDependencies({ retirement: { kind: "retired", preparation: retiredPreparation } });
+  dependencies.custody.releaseRetiredReservation = async () => {
+    const outcome = {};
+    Object.defineProperty(outcome, "kind", {
+      enumerable: true,
+      get: () => {getters += 1; return "released";},
+    });
+    return outcome as { readonly kind: "released" };
+  };
+  dependencies.providerAccess.settleConsumedGrant = async () =>
+    ({ kind: "settled", rawOwnerPayload: "must-not-leak" }) as { readonly kind: "settled" };
+  dependencies.security.settleConsumedGrant = async () => new Proxy({ kind: "settled" as const }, {
+    ownKeys: () => {traps += 1; throw new TypeError("cleanup outcome trap must not run");},
+  });
+  const outcome = await retireAndCleanupContainedTurnPreparation(
+    dependencies, initial, scope, subject, "reconciliation",
+  );
+  assert.equal(outcome.kind, "cleanup_pending");
+  assert.equal(JSON.stringify(outcome).includes("must-not-leak"), false);
+  assert.equal(traps, 0);
+  assert.equal(getters, 0);
 });

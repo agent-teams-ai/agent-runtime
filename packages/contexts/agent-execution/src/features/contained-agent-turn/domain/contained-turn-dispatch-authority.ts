@@ -105,4 +105,3 @@ export const validateContainedTurnConsumedGrantReceipts = (
   }
   return receipts as ContainedTurnConsumedGrantReceipts;
 };
-
