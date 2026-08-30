@@ -1,4 +1,4 @@
-import { lstat, readdir, realpath, stat } from "node:fs/promises";
+import { lstat, opendir, readdir, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, join, parse, posix, relative, resolve, win32 } from "node:path";
 
 export const FILESYSTEM_IDENTITY_CODE = "FM_FILESYSTEM_IDENTITY";
@@ -12,7 +12,15 @@ const separators = (value) => String(value).replaceAll("\\", "/");
 const folded = (value) => value.normalize("NFC").toUpperCase().toLowerCase().normalize("NFC");
 const hasControlCharacter = (value) => [...value].some((character) => {
   const codePoint = character.codePointAt(0);
-  return codePoint <= 0x1F || codePoint === 0x7F;
+  return codePoint <= 0x1F
+    || codePoint >= 0x7F && codePoint <= 0x9F
+    || codePoint === 0x61C
+    || codePoint === 0x200E
+    || codePoint === 0x200F
+    || codePoint === 0x2028
+    || codePoint === 0x2029
+    || codePoint >= 0x202A && codePoint <= 0x202E
+    || codePoint >= 0x2066 && codePoint <= 0x2069;
 });
 const windowsDeviceName = (segment) => /^(?:con|prn|aux|nul|clock\$|conin\$|conout\$|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(segment);
 const unsafeSegment = (segment) => !segment
@@ -135,45 +143,77 @@ export const inspectRepositoryPath = async (root, value, { kind = "file", option
   }
 };
 
-const recordCollisionIssues = (entries, directoryPath, issue, issues) => {
+const recordCollisionIssues = (entries, directoryPath, context) => {
   const seen = new Map();
   for (const entry of entries) {
     const key = folded(entry.name);
     const previous = seen.get(key);
     if (previous && previous !== entry.name) {
-      issues.push(filesystemIdentityIssue(issue, posix.join(directoryPath, entry.name)));
+      recordIssue(context, filesystemIdentityIssue(context.issue, posix.join(directoryPath, entry.name)));
     } else {seen.set(key, entry.name);}
   }
 };
 
-const scanDirectory = async (context, absoluteDirectory, directoryPath) => {
+const recordIssue = (context, entry) => {
+  if (context.issues.length < context.maxIssues) {context.issues.push(entry);}
+  else {context.overflow = true;}
+};
+
+const readDirectoryEntries = async (context, absoluteDirectory) => {
+  const entries = [], remaining = context.maxEntries - context.budget.entries;
+  if (remaining <= 0) {context.overflow = true; return entries;}
+  const directory = await opendir(absoluteDirectory);
+  for await (const entry of directory) {
+    if (entries.length >= remaining) {context.overflow = true; break;}
+    entries.push(entry);
+  }
+  context.budget.entries += entries.length;
+  return entries;
+};
+
+const exceedsFileBudget = (context, metadata) => metadata.size > context.maxFileBytes
+  || context.budget.files >= context.maxFiles
+  || context.budget.sourceBytes + metadata.size > context.maxSourceBytes;
+
+const scanDirectory = async (context, absoluteDirectory, directoryPath, depth = 0) => {
+  if (context.overflow) {return;}
   let entries;
-  try {entries = await readdir(absoluteDirectory, { withFileTypes: true });}
-  catch {context.issues.push(filesystemIdentityIssue(context.issue, directoryPath)); return;}
+  try {entries = await readDirectoryEntries(context, absoluteDirectory);}
+  catch {recordIssue(context, filesystemIdentityIssue(context.issue, directoryPath)); return;}
+  if (context.overflow) {return;}
   entries.sort((left, right) => compareText(left.name, right.name));
-  recordCollisionIssues(entries, directoryPath, context.issue, context.issues);
+  recordCollisionIssues(entries, directoryPath, context);
   for (const entry of entries) {
+    if (context.overflow) {break;}
     const path = posix.join(directoryPath, entry.name), absolutePath = join(absoluteDirectory, entry.name);
     if (context.excludedDirectories.has(entry.name)) {continue;}
-    if (unsafeSegment(entry.name)) {context.issues.push(filesystemIdentityIssue(context.issue, path)); continue;}
+    if (unsafeSegment(entry.name)) {recordIssue(context, filesystemIdentityIssue(context.issue, path)); continue;}
     let metadata;
     try {metadata = await lstat(absolutePath);}
-    catch {context.issues.push(filesystemIdentityIssue(context.issue, path)); continue;}
-    if (metadata.isSymbolicLink()) {context.issues.push(filesystemIdentityIssue(context.issue, path)); continue;}
-    if (metadata.isDirectory()) {await scanDirectory(context, absolutePath, path); continue;}
+    catch {recordIssue(context, filesystemIdentityIssue(context.issue, path)); continue;}
+    if (metadata.isSymbolicLink()) {recordIssue(context, filesystemIdentityIssue(context.issue, path)); continue;}
+    if (metadata.isDirectory()) {
+      if (depth >= context.maxDepth) {context.overflow = true; break;}
+      await scanDirectory(context, absolutePath, path, depth + 1); continue;
+    }
     if (!metadata.isFile()) {
-      if (context.extensions.has(extname(entry.name))) {context.issues.push(filesystemIdentityIssue(context.issue, path));}
+      if (context.extensions.has(extname(entry.name))) {recordIssue(context, filesystemIdentityIssue(context.issue, path));}
       continue;
     }
     if (!context.extensions.has(extname(entry.name))) {continue;}
+    if (exceedsFileBudget(context, metadata)) {
+      context.overflow = true; break;
+    }
     const identity = `${metadata.dev}:${metadata.ino}`, previous = context.identities.get(identity);
-    if (previous && previous !== path) {context.issues.push(filesystemIdentityIssue(context.issue, path)); continue;}
+    if (previous && previous !== path) {recordIssue(context, filesystemIdentityIssue(context.issue, path)); continue;}
     context.identities.set(identity, path);
+    context.budget.files += 1;
+    context.budget.sourceBytes += metadata.size;
     context.files.push(absolutePath);
   }
 };
 
-export const inventoryRepositoryFiles = async ({ root, startPath, extensions, issue, optional = false, excludedDirectories = new Set() }) => {
+export const inventoryRepositoryFiles = async ({ root, startPath, extensions, issue, optional = false, excludedDirectories = new Set(), identities = new Map(), budget = { entries: 0, files: 0, sourceBytes: 0 }, maxEntries = Number.POSITIVE_INFINITY, maxDepth = Number.POSITIVE_INFINITY, maxFiles = Number.POSITIVE_INFINITY, maxFileBytes = Number.POSITIVE_INFINITY, maxSourceBytes = Number.POSITIVE_INFINITY, maxIssues = Number.POSITIVE_INFINITY }) => {
   const inspected = startPath === ""
     ? { ok: true, absolutePath: root.canonicalPath, path: "" }
     : await inspectRepositoryPath(root, startPath, { kind: "directory", optional });
@@ -181,9 +221,10 @@ export const inventoryRepositoryFiles = async ({ root, startPath, extensions, is
     if (inspected.missing && optional) {return { files: [], issues: [] };}
     return { files: [], issues: [filesystemIdentityIssue(issue, inspected.path)] };
   }
-  const context = { extensions, issue, files: [], issues: [], identities: new Map(), excludedDirectories };
+  budget.entries ??= 0;
+  const context = { extensions, issue, files: [], issues: [], identities, budget, excludedDirectories, maxEntries, maxDepth, maxFiles, maxFileBytes, maxSourceBytes, maxIssues, overflow: false };
   await scanDirectory(context, inspected.absolutePath, inspected.path);
-  return { files: context.files, issues: context.issues };
+  return { files: context.files, issues: context.issues, overflow: context.overflow };
 };
 
 const sourcePath = (value) => value

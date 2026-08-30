@@ -1,11 +1,15 @@
 const MODULE_SPECIFIERS = new Set(["module", "node:module"]);
 const MAX_ALIAS_DEPTH = 8;
+const MAX_IMPORT_RECORDS = 2048;
 const CAPABILITY = Object.freeze({
   factory: "factory",
   loader: "loader",
+  builtinFactory: "builtin-factory",
+  unknownBuiltinFactory: "unknown-builtin-factory",
   metaObject: "meta-object",
   moduleObject: "module-object",
   namespace: "namespace",
+  processObject: "process-object",
   none: "none",
   unknownFactory: "unknown-factory",
   unknownLoader: "unknown-loader",
@@ -219,11 +223,13 @@ const collectCapabilities = (program) => {
 
 const isUnknown = (kind) => [CAPABILITY.unknownFactory, CAPABILITY.unknownLoader].includes(kind);
 const isCapability = (kind) => [
+  CAPABILITY.builtinFactory,
   CAPABILITY.factory,
   CAPABILITY.loader,
   CAPABILITY.moduleObject,
   CAPABILITY.namespace,
   CAPABILITY.unknownFactory,
+  CAPABILITY.unknownBuiltinFactory,
   CAPABILITY.unknownLoader,
 ].includes(kind);
 const objectValues = (object) => object.properties?.flatMap((property) => property.type === "SpreadElement"
@@ -261,6 +267,29 @@ const terminalCapability = (candidate, resolveName, classify, depth, stack) => {
   }
 };
 
+const sourcedDefinitionCapability = (sourceKind, definition) => {
+  const staticProperty = definition.kind === "property" && !definition.dynamic, property = definition.key;
+  if (sourceKind === CAPABILITY.namespace && staticProperty) {
+    if (property === "createRequire") {return CAPABILITY.factory;}
+    if (["default", "Module"].includes(property)) {return CAPABILITY.namespace;}
+    return CAPABILITY.none;
+  }
+  if (sourceKind === CAPABILITY.processObject) {
+    if (staticProperty) {return property === "getBuiltinModule" ? CAPABILITY.builtinFactory : CAPABILITY.none;}
+    return CAPABILITY.unknownBuiltinFactory;
+  }
+  if (sourceKind === CAPABILITY.namespace) {return CAPABILITY.unknownFactory;}
+  if (sourceKind === CAPABILITY.moduleObject && staticProperty) {
+    if (property === "constructor") {return CAPABILITY.namespace;}
+    if (property === "require") {return CAPABILITY.loader;}
+    return CAPABILITY.none;
+  }
+  if (sourceKind === CAPABILITY.moduleObject || sourceKind === CAPABILITY.loader) {return CAPABILITY.unknownLoader;}
+  if (sourceKind === CAPABILITY.factory) {return CAPABILITY.unknownFactory;}
+  if (isUnknown(sourceKind) || sourceKind === CAPABILITY.unknownBuiltinFactory) {return sourceKind;}
+  return CAPABILITY.none;
+};
+
 const createCapabilityAnalysis = (program) => {
   const collected = collectCapabilities(program);
   const unsafeMetaProperties = new Set();
@@ -268,22 +297,7 @@ const createCapabilityAnalysis = (program) => {
   const resolveDefinition = (definition, depth, stack) => {
     const sourceKind = definition.source ? classify(definition.source, depth + 1, stack) : CAPABILITY.none;
     if (definition.kind === "expression") {return classify(definition.expression, depth + 1, stack);}
-    if (sourceKind === CAPABILITY.namespace && definition.kind === "property" && !definition.dynamic) {
-      if (definition.key === "createRequire") {return CAPABILITY.factory;}
-      if (["default", "Module"].includes(definition.key)) {return CAPABILITY.namespace;}
-      return CAPABILITY.none;
-    }
-    if (sourceKind === CAPABILITY.namespace) {return CAPABILITY.unknownFactory;}
-    if (sourceKind === CAPABILITY.moduleObject && definition.kind === "property" && !definition.dynamic) {
-      if (definition.key === "constructor") {return CAPABILITY.namespace;}
-      if (definition.key === "require") {return CAPABILITY.loader;}
-      return CAPABILITY.none;
-    }
-    if (sourceKind === CAPABILITY.moduleObject) {return CAPABILITY.unknownLoader;}
-    if (sourceKind === CAPABILITY.factory) {return CAPABILITY.unknownFactory;}
-    if (sourceKind === CAPABILITY.loader) {return CAPABILITY.unknownLoader;}
-    if (isUnknown(sourceKind)) {return sourceKind;}
-    return CAPABILITY.none;
+    return sourcedDefinitionCapability(sourceKind, definition);
   };
   const resolveBinding = (binding, depth, stack) => {
     if (stack.has(binding)) {return CAPABILITY.none;}
@@ -311,6 +325,7 @@ const createCapabilityAnalysis = (program) => {
     if (binding) {return resolveBinding(binding, depth, stack);}
     if (collected.globalAssignments.has(node.name)) {return CAPABILITY.unknownLoader;}
     if (node.name === "module") {return CAPABILITY.moduleObject;}
+    if (node.name === "process") {return CAPABILITY.processObject;}
     return node.name === "require" ? CAPABILITY.loader : CAPABILITY.none;
   };
   const combinedCapability = (expressions, depth, stack) => {
@@ -323,6 +338,12 @@ const createCapabilityAnalysis = (program) => {
   };
   const classifyCall = (candidate, depth, stack) => {
     const calleeKind = classify(candidate.callee, depth, stack);
+    if (calleeKind === CAPABILITY.builtinFactory) {
+      const specifier = literalValue(candidate.arguments?.[0]);
+      if (MODULE_SPECIFIERS.has(specifier) && candidate.arguments?.length === 1) {return CAPABILITY.namespace;}
+      return specifier === undefined ? CAPABILITY.unknownLoader : CAPABILITY.none;
+    }
+    if (calleeKind === CAPABILITY.unknownBuiltinFactory) {return CAPABILITY.unknownLoader;}
     if (calleeKind === CAPABILITY.loader && MODULE_SPECIFIERS.has(literalValue(candidate.arguments?.[0]))) {return CAPABILITY.namespace;}
     if (calleeKind === CAPABILITY.namespace) {return CAPABILITY.moduleObject;}
     if (calleeKind === CAPABILITY.factory) {
@@ -338,9 +359,14 @@ const createCapabilityAnalysis = (program) => {
   };
   const classifyMember = (candidate, depth, stack) => {
     const objectKind = classify(candidate.object, depth, stack), property = staticPropertyName(candidate);
+    if (objectKind === CAPABILITY.processObject) {
+      if (property === "getBuiltinModule") {return CAPABILITY.builtinFactory;}
+      return candidate.computed && property === undefined ? CAPABILITY.unknownBuiltinFactory : CAPABILITY.none;
+    }
     if (objectKind === CAPABILITY.namespace) {return namespaceMemberCapability(candidate, property);}
     if (objectKind === CAPABILITY.moduleObject) {return moduleObjectMemberCapability(candidate, property);}
     if (objectKind === CAPABILITY.factory) {return callableMemberCapability(candidate, property, CAPABILITY.unknownFactory);}
+    if (objectKind === CAPABILITY.builtinFactory) {return callableMemberCapability(candidate, property, CAPABILITY.unknownBuiltinFactory);}
     if (objectKind === CAPABILITY.loader) {
       if (property === "main") {return CAPABILITY.moduleObject;}
       if (property === "resolve") {return CAPABILITY.loader;}
@@ -423,6 +449,10 @@ const directEscapeTarget = (node, analysis) => {
 };
 
 const escapeRecord = (node, source, analysis) => {
+  if (node.type === "ExportNamedDeclaration" && MODULE_SPECIFIERS.has(literalValue(node.source))
+    && node.specifiers?.some((specifier) => (specifier.local?.name ?? specifier.local?.value) === "createRequire")) {
+    return makeRecord({ node, specifierNode: node.source, kind: "runtime", syntax: "loader-escape", source, nonliteral: true });
+  }
   let target = directEscapeTarget(node, analysis);
   if (["CallExpression", "NewExpression"].includes(node.type)) {
     const calleeKind = analysis.classify(node.callee);
@@ -453,15 +483,19 @@ const mutationRecord = (node, source, analysis) => {
 
 export const importRecords = (program, source) => {
   const analysis = createCapabilityAnalysis(program), records = [];
+  let overflow = false;
   walkAst(program, (node) => {
+    if (records.length >= MAX_IMPORT_RECORDS) {overflow = true; return;}
     const imported = readImportRecord(node, source, analysis), mutated = mutationRecord(node, source, analysis);
     const escaped = mutated ? undefined : escapeRecord(node, source, analysis);
     if (imported) {records.push(imported);}
     if (mutated) {records.push(mutated);}
     if (escaped) {records.push(escaped);}
   });
-  return [...new Map(records.map((record) => [
+  const result = [...new Map(records.map((record) => [
     `${record.line}:${record.syntax}:${record.nonliteral ? "?" : record.specifier ?? "?"}`,
     record,
   ])).values()];
+  result.overflow = overflow;
+  return result;
 };

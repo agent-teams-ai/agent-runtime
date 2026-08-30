@@ -12,6 +12,7 @@ const PROFILE_SCHEMA = parseDeterministicJson(await readFile(resolve(REPOSITORY_
 const validateProfileShape = new Ajv2020({ allErrors: true, strict: true }).compile(PROFILE_SCHEMA);
 export const STRUCTURAL_CODES = new Set([
   "FM_ASSEMBLY_MISSING",
+  "FM_CHECKER_OVERFLOW",
   "FM_ENTRYPOINT_MISSING",
   "FM_INLINE_BEHAVIOR",
   "FM_INVALID_AUTHORITY",

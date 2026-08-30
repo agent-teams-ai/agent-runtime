@@ -4,6 +4,7 @@ import { posix } from "node:path";
 import { parseSync } from "oxc-parser";
 
 import { importRecords, literalValue } from "./feature-module-imports.mjs";
+import { CHECKER_LIMITS, createDiagnosticCollector, overflowIssue } from "./feature-module-limits.mjs";
 import {
   createPathIndex,
   FILESYSTEM_IDENTITY_CODE,
@@ -33,7 +34,7 @@ const importBindingNames = (program, sourceSpecifier) => (program.body ?? [])
 
 const readProgram = async (context, path) => {
   const inspected = await inspectRepositoryPath(context.root, path);
-  if (!inspected.ok) {return;}
+  if (!inspected.ok || inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes) {return;}
   try {
     const source = await readFile(inspected.absolutePath, "utf8"), parsed = parseSync(path, source);
     return parsed.errors?.length ? undefined : { program: parsed.program, source };
@@ -85,20 +86,29 @@ const readTestImports = async (context, absoluteTest) => {
     return { testPath, issues: [context.issue("FM_PARSE_FAILURE", testPath, 1, "test cannot be parsed deterministically")] };
   }
   if (parsed.errors?.length) {
+    const issues = parsed.errors.slice(0, CHECKER_LIMITS.diagnostics - 1).map(() => context.issue(
+      "FM_PARSE_FAILURE",
+      testPath,
+      1,
+      "test cannot be parsed deterministically",
+    ));
+    if (parsed.errors.length >= CHECKER_LIMITS.diagnostics) {issues.push(overflowIssue(context.issue, "parse diagnostic"));}
     return {
       testPath,
-      issues: parsed.errors.map(() => context.issue(
-        "FM_PARSE_FAILURE",
-        testPath,
-        1,
-        "test cannot be parsed deterministically",
-      )),
+      issues,
+      overflow: parsed.errors.length >= CHECKER_LIMITS.diagnostics,
     };
   }
-  const imports = importRecords(parsed.program, source), issues = imports
+  const imports = importRecords(parsed.program, source);
+  const remaining = CHECKER_LIMITS.imports - context.testImportBudget.imports;
+  const overflow = imports.overflow || imports.length > remaining;
+  const retained = imports.slice(0, Math.max(0, remaining));
+  context.testImportBudget.imports += retained.length;
+  const issues = retained
     .filter(({ nonliteral }) => nonliteral)
     .map((imported) => context.issue("FM_NONLITERAL_LOADING", testPath, imported.line, `${imported.syntax} requires a string literal`));
-  return { imports: imports.filter(({ nonliteral }) => !nonliteral), program: parsed.program, testPath, issues };
+  if (overflow) {issues.push(overflowIssue(context.issue, "test import"));}
+  return { imports: retained.filter(({ nonliteral }) => !nonliteral), program: parsed.program, testPath, issues, overflow };
 };
 
 const bindingFeatures = (program, imported, bindings) => {
@@ -118,6 +128,7 @@ const invalidResolutionIssue = (context, sourcePath, imported, resolved) => cont
 
 const detectedSourceFeatures = async (context, parsed, visited) => {
   const detected = new Set(), direct = new Set(), issues = [];
+  let overflow = false;
   for (const imported of parsed.imports ?? []) {
     const resolved = context.localPackageImports.resolve(parsed.testPath, imported.specifier, context.packagePathIndex);
     if (resolved.kind === "invalid") {
@@ -140,13 +151,15 @@ const detectedSourceFeatures = async (context, parsed, visited) => {
     visited.add(resolved.path);
     const helper = await readTestImports(context, absoluteTarget);
     issues.push(...helper.issues);
+    if (helper.overflow) {overflow = true; break;}
     if (!helper.program) {continue;}
     const nested = await detectedSourceFeatures(context, helper, visited);
     for (const id of nested.detected) {detected.add(id);}
     for (const id of nested.direct) {direct.add(id);}
     issues.push(...nested.issues);
+    if (nested.overflow) {overflow = true; break;}
   }
-  return { detected, direct, issues };
+  return { detected, direct, issues, overflow };
 };
 
 const declaredTestOwner = (testPath, packageRoot, packageFeatures) => {
@@ -171,17 +184,20 @@ const testOwnershipIssues = (context, testPath, detected, direct) => {
 };
 
 const packageTestIssues = async (context, packageFiles) => {
-  const issues = [], tests = packageFiles
+  const findings = createDiagnosticCollector(context.issue), tests = packageFiles
     .filter((absolutePath) => TEST_FILE.test(repositoryPath(context.root, absolutePath)))
     .toSorted((left, right) => compareText(repositoryPath(context.root, left), repositoryPath(context.root, right)));
   for (const absoluteTest of tests) {
     const parsed = await readTestImports(context, absoluteTest);
-    issues.push(...parsed.issues);
+    findings.add(parsed.issues);
+    if (parsed.overflow) {break;}
     if (!parsed.program) {continue;}
     const detected = await detectedSourceFeatures(context, parsed, new Set([parsed.testPath]));
-    issues.push(...detected.issues, ...testOwnershipIssues(context, parsed.testPath, detected.detected, detected.direct));
+    findings.add(detected.issues);
+    findings.add(testOwnershipIssues(context, parsed.testPath, detected.detected, detected.direct));
+    if (detected.overflow || findings.result().some(({ code }) => code === "FM_CHECKER_OVERFLOW")) {break;}
   }
-  return issues;
+  return findings.result();
 };
 
 const packageIssues = async (context, productionRoot) => {
@@ -196,8 +212,16 @@ const packageIssues = async (context, productionRoot) => {
     extensions: SOURCE_EXTENSIONS,
     issue: context.issue,
     excludedDirectories: new Set([".cache", ".git", "dist", "node_modules"]),
+    budget: context.testScanBudget,
+    maxEntries: CHECKER_LIMITS.traversalEntries,
+    maxDepth: CHECKER_LIMITS.traversalDepth,
+    maxFiles: CHECKER_LIMITS.files,
+    maxFileBytes: CHECKER_LIMITS.sourceFileBytes,
+    maxSourceBytes: CHECKER_LIMITS.sourceBytes,
+    maxIssues: CHECKER_LIMITS.diagnostics,
   });
   issues.push(...inventory.issues);
+  if (inventory.overflow) {issues.push(overflowIssue(context.issue, "test source scan")); return issues;}
   const productionPrefix = `${productionRoot}/`, colocatedTests = context.productionFiles
     .filter((path) => repositoryPath(context.root, path).startsWith(productionPrefix) && TEST_FILE.test(repositoryPath(context.root, path)));
   const packageFiles = [...new Set([...inventory.files, ...colocatedTests])];
@@ -213,7 +237,13 @@ const packageIssues = async (context, productionRoot) => {
 };
 
 export const packagePolicyIssues = async (context) => {
-  const issues = [];
-  for (const productionRoot of context.productionRoots) {issues.push(...await packageIssues(context, productionRoot));}
-  return issues;
+  const findings = createDiagnosticCollector(context.issue);
+  const testScanBudget = { entries: 0, files: 0, sourceBytes: 0 };
+  const testImportBudget = { imports: 0 };
+  for (const productionRoot of context.productionRoots) {
+    const candidates = await packageIssues({ ...context, testImportBudget, testScanBudget }, productionRoot);
+    findings.add(candidates);
+    if (candidates.some(({ code }) => code === "FM_CHECKER_OVERFLOW")) {break;}
+  }
+  return findings.result();
 };

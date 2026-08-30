@@ -7,6 +7,7 @@ import { parseSync } from "oxc-parser";
 
 import { parseDeterministicJson, readLocalPackageImports } from "./feature-module-config.mjs";
 import { importRecords } from "./feature-module-imports.mjs";
+import { boundedIssueText, CHECKER_LIMITS, createDiagnosticCollector, escapedDiagnosticText, overflowIssue } from "./feature-module-limits.mjs";
 import { parseFeatureReadmeMetadata } from "./feature-module-readme.mjs";
 import {
   canonicalRoot,
@@ -39,13 +40,13 @@ const EXTERNAL_IMPORT_ALLOWED = Object.freeze({ contracts: false, domain: false,
 
 const slash = (value) => String(value).replaceAll("\\", "/");
 const lineAt = (source, offset) => source.slice(0, Math.max(0, offset ?? 0)).split("\n").length;
-const stableMessage = (message) => String(message)
+const stableMessage = (message) => escapedDiagnosticText(String(message)
   .replace(/Require stack:[\s\S]*/gu, "dependency resolution details redacted")
   .replace(/(?:[A-Za-z]:[\\/]|\/)\S+/gu, "<path>")
-  .replace(/[\r\n\t]+/gu, " ")
+  .replace(/[\r\n\t]+/gu, " "))
   .slice(0, 240);
 const stableDiagnosticPath = (path) => {
-  const candidate = slash(String(path ?? "<path>"));
+  const candidate = escapedDiagnosticText(slash(String(path ?? "<path>")));
   return candidate.startsWith("/") || candidate.startsWith("//") || /^[A-Za-z]:\//u.test(candidate) || candidate === ".." || candidate.startsWith("../")
     ? "<path>"
     : candidate.slice(0, 240);
@@ -104,6 +105,9 @@ const readProfile = async (root, profilePath) => {
       ? filesystemIdentityIssue(issue, profilePath)
       : issue("FM_PROFILE_INVALID", profilePath, 1, "profile cannot be read or parsed deterministically")] };
   }
+  if (inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes) {
+    return { issues: [overflowIssue(issue, "source byte")] };
+  }
   try {
     const profile = parseDeterministicJson(await readFile(inspected.absolutePath, "utf8"));
     if (!profile || typeof profile !== "object" || Array.isArray(profile)) {throw new TypeError("profile must be an object");}
@@ -113,12 +117,19 @@ const readProfile = async (root, profilePath) => {
 };
 
 const collectProductionFiles = async (root, productionRoots) => {
-  const files = [], issues = [];
+  const files = [], issues = [], identities = new Map(), budget = { entries: 0, files: 0, sourceBytes: 0 };
+  let overflow = false;
   for (const productionRoot of productionRoots) {
-    const inventory = await inventoryRepositoryFiles({ root, startPath: productionRoot, extensions: SOURCE_EXTENSIONS, issue });
+    const inventory = await inventoryRepositoryFiles({
+      root, startPath: productionRoot, extensions: SOURCE_EXTENSIONS, issue, identities, budget,
+      maxEntries: CHECKER_LIMITS.traversalEntries, maxDepth: CHECKER_LIMITS.traversalDepth,
+      maxFiles: CHECKER_LIMITS.files, maxFileBytes: CHECKER_LIMITS.sourceFileBytes,
+      maxSourceBytes: CHECKER_LIMITS.sourceBytes, maxIssues: CHECKER_LIMITS.diagnostics,
+    });
     files.push(...inventory.files); issues.push(...inventory.issues);
+    if (inventory.overflow) {overflow = true; break;}
   }
-  return { files: [...new Set(files)], issues };
+  return { files: [...new Set(files)], issues, overflow };
 };
 
 const profileFilesystemPathIssues = (profile) => {
@@ -145,6 +156,7 @@ const assemblyStructureIssues = async (assemblyFiles, root) => {
     if (!inspected.ok) {issues.push(inspected.identity
       ? filesystemIdentityIssue(issue, path)
       : issue("FM_ASSEMBLY_MISSING", path, 1, "declared package assembly file is missing"));}
+    else if (inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes) {issues.push(overflowIssue(issue, "source byte"));}
   }
   return issues;
 };
@@ -199,6 +211,7 @@ const featureReadmeIssues = async (feature, root, packageMetadata) => {
       if (inspected.identity) {return [filesystemIdentityIssue(issue, readmePath)];}
       throw new Error("missing README");
     }
+    if (inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes) {return [overflowIssue(issue, "README byte")];}
     const readme = await readFile(inspected.absolutePath, "utf8");
     const metadata = parseFeatureReadmeMetadata(readme);
     if (metadata.type !== "feature" || metadata.status !== "accepted" || metadata.owner !== expected?.name || metadata.owner_document !== expected?.ownerDocument) {
@@ -228,15 +241,23 @@ const ownershipIssues = (path, sourceFeature, isAssembly, profile) => {
   return [];
 };
 
-const parseFileImports = async (absoluteFile, path) => {
+const parseFileImports = async (absoluteFile, path, resources) => {
   const source = await readFile(absoluteFile, "utf8");
   let parsed;
   try { parsed = parseSync(path, source); }
   catch { return { imports: [], issues: [issue("FM_PARSE_FAILURE", path, 1, "source cannot be parsed deterministically")] }; }
-  if (!parsed.errors?.length) {return { imports: importRecords(parsed.program, source), issues: [], program: parsed.program, source };}
+  if (!parsed.errors?.length) {
+    const imports = importRecords(parsed.program, source), remaining = CHECKER_LIMITS.imports - resources.imports;
+    const overflow = imports.overflow || imports.length > remaining;
+    const retained = imports.slice(0, Math.max(0, remaining));
+    resources.imports += retained.length;
+    return { imports: retained, issues: [], program: parsed.program, source, overflow };
+  }
   return {
     imports: [],
-    issues: parsed.errors.map((error) => issue("FM_PARSE_FAILURE", path, lineAt(source, error.labels?.[0]?.start ?? error.start), "source cannot be parsed deterministically")),
+    issues: parsed.errors.slice(0, CHECKER_LIMITS.diagnostics - 1)
+      .map((error) => issue("FM_PARSE_FAILURE", path, lineAt(source, error.labels?.[0]?.start ?? error.start), "source cannot be parsed deterministically")),
+    overflow: parsed.errors.length >= CHECKER_LIMITS.diagnostics,
   };
 };
 
@@ -377,6 +398,7 @@ const acceptedDecisionsForRoot = async (root) => {
     const registryPath = "architecture/decisions/accepted-decisions.json";
     const inspected = await inspectRepositoryPath(root, registryPath);
     if (!inspected.ok) {return new Map();}
+    if (inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes) {return new Map();}
     const registry = parseDeterministicJson(await readFile(inspected.absolutePath, "utf8"));
     return acceptedDecisionsFromRegistry(registry) ?? new Map();
   } catch {return new Map();}
@@ -391,12 +413,14 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   if (!loaded.profile) {return loaded.issues;}
   const { profile } = loaded;
   const governedDecisions = acceptedDecisions ?? await acceptedDecisionsForRoot(rootIdentity);
-  const issues = validateProfile(profile, diagnosticProfilePath, sameFilesystemIdentity(rootIdentity, REPOSITORY_IDENTITY), governedDecisions)
+  const initialIssues = validateProfile(profile, diagnosticProfilePath, sameFilesystemIdentity(rootIdentity, REPOSITORY_IDENTITY), governedDecisions)
     .map((entry) => ({ ...entry, message: stableMessage(entry.message) }));
-  if (issues.some((candidate) => candidate.code === "FM_PROFILE_INVALID")) {return issues.toSorted(compareIssues);}
-  if (requiredStatus && profile.status !== requiredStatus) {issues.push(issue("FM_PROFILE_STATUS", diagnosticProfilePath, 1, `profile status must be ${requiredStatus}`));}
+  const findings = createDiagnosticCollector(issue);
+  findings.add(initialIssues);
+  if (initialIssues.some((candidate) => candidate.code === "FM_PROFILE_INVALID")) {return findings.result().toSorted(compareIssues);}
+  if (requiredStatus && profile.status !== requiredStatus) {findings.add([issue("FM_PROFILE_STATUS", diagnosticProfilePath, 1, `profile status must be ${requiredStatus}`)]);}
   const identityIssues = profileFilesystemPathIssues(profile);
-  if (identityIssues.length) {return [...issues, ...identityIssues].toSorted(compareIssues);}
+  if (identityIssues.length) {findings.add(identityIssues); return findings.result().toSorted(compareIssues);}
 
   const productionRoots = profile.scope.productionRoots;
   const features = profile.features.map((feature) => ({ ...feature, root: portableRepositoryPath(feature.root) }));
@@ -406,7 +430,8 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   const edgeLocations = new Map();
   const inventory = await collectProductionFiles(rootIdentity, productionRoots);
   const allFiles = inventory.files;
-  issues.push(...inventory.issues);
+  findings.add(inventory.issues);
+  if (inventory.overflow) {findings.overflow("source scan");}
   const identityPaths = inventory.issues
     .filter(({ code }) => code === FILESYSTEM_IDENTITY_CODE)
     .map(({ path }) => path);
@@ -418,13 +443,13 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
     issue,
     pathIndex,
   });
-  issues.push(...localPackageImports.issues);
-  issues.push(...await assemblyStructureIssues(profile.assemblyFiles, rootIdentity));
+  findings.add(localPackageImports.issues);
+  findings.add(await assemblyStructureIssues(profile.assemblyFiles, rootIdentity));
 
   for (const feature of features) {
-    issues.push(...await featureStructureIssues(feature, allPaths, rootIdentity, localPackageImports.packageMetadata));
+    findings.add(await featureStructureIssues(feature, allPaths, rootIdentity, localPackageImports.packageMetadata));
   }
-  issues.push(...await packagePolicyIssues({
+  findings.add(await packagePolicyIssues({
     root: rootIdentity,
     productionRoots,
     features,
@@ -434,24 +459,27 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
     featureForPath,
   }));
 
+  const resources = { imports: 0 };
   for (const absoluteFile of allFiles) {
     const path = repositoryPath(rootIdentity, absoluteFile);
     const sourceFeature = featureForPath(features, path);
     const isAssembly = assemblyFiles.has(path);
-    issues.push(...ownershipIssues(path, sourceFeature, isAssembly, profile));
-    const parsed = await parseFileImports(absoluteFile, path);
-    issues.push(...parsed.issues);
-    issues.push(...assemblyGrammarIssues({ isAssembly, path, sourceFeature, program: parsed.program, source: parsed.source }));
-    for (const imported of parsed.imports) {issues.push(...inspectImport({ features, isAssembly, sourceFeature, path, imported, declaredEdges, observedEdges, edgeLocations, localPackageImports, productionRoots, identityPaths }));}
+    findings.add(ownershipIssues(path, sourceFeature, isAssembly, profile));
+    const parsed = await parseFileImports(absoluteFile, path, resources);
+    findings.add(parsed.issues);
+    findings.add(assemblyGrammarIssues({ isAssembly, path, sourceFeature, program: parsed.program, source: parsed.source }));
+    for (const imported of parsed.imports) {findings.add(inspectImport({ features, isAssembly, sourceFeature, path, imported, declaredEdges, observedEdges, edgeLocations, localPackageImports, productionRoots, identityPaths }));}
+    if (parsed.overflow) {findings.overflow("import"); break;}
   }
   const observed = [...observedEdges].map(([key, kinds]) => { const [from, to] = key.split("->"); return { from, to, kinds: [...kinds] }; });
-  issues.push(...unusedEdgeIssues(declaredEdges, observedEdges, diagnosticProfilePath));
-  issues.push(...detectCycles(observed, edgeLocations, "runtime"), ...detectCycles(observed, edgeLocations, "type"));
-  const governed = applyGovernedRecords(profile, withoutIdentityConsequences(issues), diagnosticProfilePath).toSorted(compareIssues);
+  findings.add(unusedEdgeIssues(declaredEdges, observedEdges, diagnosticProfilePath));
+  findings.add(detectCycles(observed, edgeLocations, "runtime"));
+  findings.add(detectCycles(observed, edgeLocations, "type"));
+  const governed = applyGovernedRecords(profile, withoutIdentityConsequences(findings.result()), diagnosticProfilePath).toSorted(compareIssues);
   return governed.filter((entry, index) => !index || compareIssues(entry, governed[index - 1]));
 };
 
-export const formatIssues = (issues) => issues.map((entry) => `${entry.path}:${entry.line} ${entry.code} ${entry.message}`).join("\n");
+export const formatIssues = (issues) => boundedIssueText(issues, (entry) => `${stableDiagnosticPath(entry.path)}:${entry.line} ${entry.code} ${stableMessage(entry.message)}`);
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const profileIndex = process.argv.indexOf("--profile"), rootIndex = process.argv.indexOf("--root");

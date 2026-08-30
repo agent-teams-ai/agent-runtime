@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, realpath, rename, symlink, unlink, writeFile } from "node:fs/promises";
+import { link as createHardlink, mkdtemp, mkdir, readFile, realpath, rename, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { checkFeatureModules } from "./check-feature-modules.mjs";
+import { checkFeatureModules, formatIssues } from "./check-feature-modules.mjs";
+import { CHECKER_LIMITS } from "./feature-module-limits.mjs";
 import { STRUCTURAL_CODES } from "./feature-module-profile.mjs";
 
 const fixtureManifest = JSON.parse(await readFile(new URL("./fixtures/feature-module-cases.json", import.meta.url), "utf8"));
@@ -216,6 +217,14 @@ const applyFixtureSymlinks = async (root, links = [], externalRoot) => {
   }
 };
 
+const applyFixtureHardlinks = async (root, links = []) => {
+  for (const hardlink of links) {
+    const target = join(root, hardlink.path);
+    await mkdir(dirname(target), { recursive: true });
+    await createHardlink(join(root, hardlink.source), target);
+  }
+};
+
 const fixtureRootIdentity = async (root, mode) => {
   if (!mode) {return { root, cleanup: [root] };}
   if (mode === "symlink") {
@@ -288,7 +297,19 @@ const runFixture = async (fixture, initialRoot, state) => {
     ...fixture.files,
     [profilePath]: profileSource.endsWith("\n") ? profileSource : `${profileSource}\n`,
   };
+  if (fixture.generatedImports) {
+    files[fixture.generatedImports.path] = Array.from(
+      { length: fixture.generatedImports.count },
+      (_, index) => `import * as value${index} from '${fixture.generatedImports.specifier}';`,
+    ).join("\n");
+  }
+  for (let index = 0; index < (fixture.generatedFiles?.count ?? 0); index += 1) {
+    const extension = fixture.generatedFiles.extension ?? ".ts";
+    files[`${fixture.generatedFiles.directory}/file-${String(index).padStart(5, "0")}${extension}`] = extension === ".ts" ? `export const value${index} = true;\n` : "fixture\n";
+  }
+  if (fixture.generatedLargeFile) {files[fixture.generatedLargeFile.path] = " ".repeat(fixture.generatedLargeFile.bytes);}
   await writeFixtureFiles(initialRoot, files);
+  await applyFixtureHardlinks(initialRoot, fixture.hardlinks);
   const externalRoot = `${initialRoot}-symlink-targets`;
   if (fixture.symlinks?.some(({ outsideRoot }) => outsideRoot)) {state.cleanup.push(externalRoot);}
   await applyFixtureSymlinks(initialRoot, fixture.symlinks, externalRoot);
@@ -297,8 +318,17 @@ const runFixture = async (fixture, initialRoot, state) => {
   const decisionOptions = fixture.useDecisionRegistry ? {} : { acceptedDecisions: fixtureAcceptedDecisions(fixture) };
   const actual = (await checkFeatureModules({ root: identity.root, profilePath, requiredStatus: fixture.requiredStatus, ...decisionOptions }))
     .map(({ code, path, line }) => ({ code, path, line }));
-  assert.deepEqual(actual, fixture.expected);
-  const structuralCodes = new Set(fixture.expected.map(({ code }) => code).filter((code) => STRUCTURAL_CODES.has(code)));
+  if (fixture.assertOverflow) {
+    assert.equal(actual.filter(({ code }) => code === "FM_CHECKER_OVERFLOW").length, 1);
+    assert.ok(actual.length <= CHECKER_LIMITS.diagnostics);
+    assert.ok(Buffer.byteLength(formatIssues(await checkFeatureModules({ root: identity.root, profilePath, ...decisionOptions })), "utf8") <= CHECKER_LIMITS.renderedBytes);
+  } else {assert.deepEqual(actual, fixture.expected);}
+  if (fixture.doubleRun || fixture.assertOverflow) {
+    const repeated = (await checkFeatureModules({ root: identity.root, profilePath, requiredStatus: fixture.requiredStatus, ...decisionOptions }))
+      .map(({ code, path, line }) => ({ code, path, line }));
+    assert.deepEqual(repeated, actual);
+  }
+  const structuralCodes = new Set(actual.map(({ code }) => code).filter((code) => STRUCTURAL_CODES.has(code)));
   for (const code of structuralCodes) {structuralFixtureCoverage.add(code);}
   await assertStructuralAllowance(fixture, identity.root, profilePath, structuralCodes);
   await assertRequireActive(fixture, identity.root, profilePath);

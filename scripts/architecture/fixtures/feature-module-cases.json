@@ -841,6 +841,59 @@
       "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 12 }]
     },
     {
+      "name": "process-get-builtin-module-loader-enforces-layer-deep-and-builtin-rules",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/alpha/adapters/adapter.ts": "export const adapter = true;\n",
+        "src/features/alpha/domain/value.ts": "const load = process.getBuiltinModule('node:module').createRequire(import.meta.url);\nload('../adapters/adapter.js');\nload('../../beta/domain/value.js');\nexport const value = load('node:fs');\n"
+      },
+      "expected": [
+        { "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 2 },
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/domain/value.ts", "line": 3 },
+        { "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 3 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/domain/value.ts", "line": 3 },
+        { "code": "FM_NODE_BUILTIN_IMPORT", "path": "src/features/alpha/domain/value.ts", "line": 4 }
+      ]
+    },
+    {
+      "name": "aliased-process-get-builtin-module-loader-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "const { getBuiltinModule: getBuiltin } = process;\nconst Module = getBuiltin('node:module');\nconst load = Module.createRequire(import.meta.url);\nexport const value = load('../../beta/domain/value.js');\n" },
+      "expected": [
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 4 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 4 }
+      ]
+    },
+    {
+      "name": "local-reexported-loader-capability-fails-closed",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/alpha/adapters/loader.ts": "export { createRequire as makeLoader } from 'node:module';\n",
+        "src/features/alpha/adapters/value.ts": "import { makeLoader } from './loader.js';\nconst load = makeLoader(import.meta.url);\nexport const value = load('../../beta/domain/value.js');\n"
+      },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/loader.ts", "line": 1 }]
+    },
+    {
+      "name": "hard-link-across-production-roots-fails-closed",
+      "profileExtra": {
+        "scope": { "productionRoots": ["src", "other/src"], "outOfScope": ["everything else"] },
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "other/src/index.ts", "other/src/composition.ts"]
+      },
+      "files": {
+        "other/package.json": "{\"name\":\"@fixture/other\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
+        "other/src/index.ts": "export {};\n",
+        "other/src/composition.ts": "export {};\n"
+      },
+      "hardlinks": [{ "source": "src/features/alpha/domain/value.ts", "path": "other/src/value.ts" }],
+      "expected": [
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "other/src/value.ts", "line": 1 },
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/value.ts", "line": 1 }
+      ]
+    },
+    {
       "name": "typescript-base-url-is-fatal-unsupported-config",
       "files": { "tsconfig.json": "{\"compilerOptions\":{\"baseUrl\":\".\"}}\n" },
       "expected": [{ "code": "FM_UNSUPPORTED_CONFIG", "path": "tsconfig.json", "line": 1 }]
@@ -1042,6 +1095,12 @@
         { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/strasse.ts", "line": 1 },
         { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/straße.ts", "line": 1 }
       ]
+    },
+    {
+      "name": "diagnostic-filename-controls-are-escaped-stably",
+      "files": { "src/features/alpha/domain/bad\n\u001b\u202e.ts": "export const unsafe = true;\n" },
+      "doubleRun": true,
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/bad\\u{0a}\\u{1b}\\u{202e}.ts", "line": 1 }]
     },
     {
       "name": "symlinked-source-file-fails-closed",
@@ -1364,6 +1423,12 @@
       "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/features/alpha/value.test.ts", "line": 2 }]
     },
     {
+      "name": "process-get-builtin-module-loader-cannot-hide-test-misownership",
+      "secondFeature": true,
+      "files": { "tests/features/alpha/value.test.ts": "const load = process.getBuiltinModule('node:module').createRequire(import.meta.url);\nconst value = load('../../../src/features/beta/domain/value.js');\nvoid value;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
       "name": "package-owned-test-directory-is-allowed",
       "files": { "tests/package/smoke.test.ts": "test('package', () => {});\n" },
       "expected": []
@@ -1395,6 +1460,28 @@
       "name": "parse-failure",
       "files": { "src/features/alpha/domain/value.ts": "export const value = ;\n" },
       "expected": [{ "code": "FM_PARSE_FAILURE", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "import-and-diagnostic-ceilings-are-bounded-and-deterministic",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "generatedImports": { "path": "src/features/alpha/adapters/many.ts", "count": 2200, "specifier": "../../beta/domain/value.js" },
+      "assertOverflow": true
+    },
+    {
+      "name": "traversal-entry-ceiling-cannot-be-bypassed-by-irrelevant-files",
+      "generatedFiles": { "directory": "src/generated", "count": 4100, "extension": ".txt" },
+      "assertOverflow": true
+    },
+    {
+      "name": "source-byte-ceiling-is-bounded-and-deterministic",
+      "generatedLargeFile": { "path": "src/features/alpha/domain/oversized.ts", "bytes": 1048577 },
+      "assertOverflow": true
+    },
+    {
+      "name": "configuration-byte-ceiling-is-bounded-and-deterministic",
+      "generatedLargeFile": { "path": "tsconfig.json", "bytes": 1048577 },
+      "assertOverflow": true
     }
   ]
 }

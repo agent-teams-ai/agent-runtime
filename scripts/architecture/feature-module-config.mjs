@@ -1,8 +1,10 @@
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, posix, relative, resolve } from "node:path";
 
 import { parseTree } from "jsonc-parser";
+
+import { CHECKER_LIMITS, createDiagnosticCollector, overflowIssue } from "./feature-module-limits.mjs";
 
 import {
   filesystemIdentityIssue,
@@ -54,9 +56,12 @@ export const parseDeterministicJson = (source) => {
   return JSON.parse(source);
 };
 
-const readJson = async (root, path, optional = false) => {
+const readJson = async (root, path, optional = false, budget = { bytes: 0, files: 0 }) => {
   const inspected = await inspectRepositoryPath(root, path, { optional });
   if (!inspected.ok) {return { ...inspected };}
+  if (budget.files >= CHECKER_LIMITS.configFiles || inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes
+    || budget.bytes + inspected.metadata.size > CHECKER_LIMITS.configBytes) {return { ok: false, path, overflow: true };}
+  budget.files += 1; budget.bytes += inspected.metadata.size;
   try {return { ok: true, value: parseDeterministicJson(await readFile(inspected.absolutePath, "utf8")), path };}
   catch {return { ok: false, path, invalid: true };}
 };
@@ -104,9 +109,15 @@ const containedPath = (root, path) => {
   return candidate === "" || candidate !== ".." && !candidate.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(candidate);
 };
 
-const externalPresetConfig = async (path, packageRoot, active = new Set()) => {
+const externalPresetConfig = async (path, packageRoot, active = new Set(), budget = { bytes: 0, files: 0 }) => {
   const canonicalPath = await realpath(path);
   if (!containedPath(packageRoot, canonicalPath) || active.has(canonicalPath)) {throw new Error("unsupported preset path");}
+  const metadata = await stat(canonicalPath);
+  if (active.size >= CHECKER_LIMITS.traversalDepth || budget.files >= CHECKER_LIMITS.configFiles
+    || metadata.size > CHECKER_LIMITS.sourceFileBytes || budget.bytes + metadata.size > CHECKER_LIMITS.configBytes) {
+    throw new Error("preset configuration limit exceeded");
+  }
+  budget.files += 1; budget.bytes += metadata.size;
   active.add(canonicalPath);
   const config = JSON.parse(await readFile(canonicalPath, "utf8"));
   if (!config || typeof config !== "object" || Array.isArray(config)
@@ -116,7 +127,7 @@ const externalPresetConfig = async (path, packageRoot, active = new Set()) => {
   const parents = Array.isArray(config.extends) ? config.extends : config.extends === undefined ? [] : [config.extends];
   for (const parent of parents) {
     if (typeof parent !== "string" || !(parent.startsWith("./") || parent.startsWith("../"))) {throw new Error("unsupported preset extends");}
-    await externalPresetConfig(resolve(dirname(canonicalPath), parent), packageRoot, active);
+    await externalPresetConfig(resolve(dirname(canonicalPath), parent), packageRoot, active, budget);
   }
   active.delete(canonicalPath);
 };
@@ -132,9 +143,10 @@ const inspectFoundationPreset = async (context, configPath) => {
 };
 
 const loadedTsconfig = async (context, configPath, optional) => {
-  const loaded = await readJson(context.root, configPath, optional);
+  const loaded = await readJson(context.root, configPath, optional, context.configBudget);
   if (!loaded.ok) {
-    if (loaded.identity) {context.issues.push(filesystemIdentityIssue(context.issue, configPath));}
+    if (loaded.overflow) {context.issues.push(overflowIssue(context.issue, "configuration"));}
+    else if (loaded.identity) {context.issues.push(filesystemIdentityIssue(context.issue, configPath));}
     else if (!(optional && loaded.missing)) {context.issues.push(stableConfigIssue(context.issue, configPath, configMessage));}
     return;
   }
@@ -147,6 +159,10 @@ const loadedTsconfig = async (context, configPath, optional) => {
 };
 
 const inspectTsconfig = async (context, configPath, optional, visited = new Set(), active = new Set()) => {
+  if (active.size >= CHECKER_LIMITS.traversalDepth) {
+    context.issues.push(overflowIssue(context.issue, "configuration depth"));
+    return new Map();
+  }
   if (active.has(configPath)) {
     context.issues.push(stableConfigIssue(context.issue, configPath, "cyclic TypeScript extends configuration is unsupported"));
     return new Map();
@@ -165,6 +181,7 @@ const inspectTsconfig = async (context, configPath, optional, visited = new Set(
     if (!parentPath) {context.issues.push(stableConfigIssue(context.issue, configPath, configMessage)); continue;}
     const inherited = await inspectTsconfig(context, parentPath, false, visited, active);
     for (const [key, value] of inherited) {rules.set(key, value);}
+    if (context.issues.result().some(({ code }) => code === "FM_CHECKER_OVERFLOW")) {break;}
   }
   for (const [key, value] of ownAliasRules(config, configPath, context.issues, context.issue)) {rules.set(key, value);}
   active.delete(configPath);
@@ -275,21 +292,24 @@ const configuredResolver = (packages, names, index) => (fromPath, specifier, res
 };
 
 export const readLocalPackageImports = async ({ root, productionRoots, issue, pathIndex }) => {
-  const names = new Map(), issues = [], packageMetadata = new Map(), packages = [];
-  const context = { root, issues, issue };
+  const names = new Map(), findings = createDiagnosticCollector(issue), packageMetadata = new Map(), packages = [];
+  const configBudget = { bytes: 0, files: 0 };
+  const context = { root, issues: findings, issue, configBudget };
   for (const productionRoot of productionRoots) {
     const parent = posix.dirname(productionRoot), packageRoot = parent === "." ? "" : parent;
     const packagePath = posix.join(packageRoot, "package.json");
-    const loaded = await readJson(root, packagePath);
+    const loaded = await readJson(root, packagePath, false, configBudget);
     if (!loaded.ok) {
-      issues.push(loaded.identity ? filesystemIdentityIssue(issue, packagePath) : issue("FM_PROFILE_INVALID", packagePath, 1, "package metadata cannot be read or parsed deterministically"));
+      findings.push(loaded.overflow ? overflowIssue(issue, "configuration")
+        : loaded.identity ? filesystemIdentityIssue(issue, packagePath)
+          : issue("FM_PROFILE_INVALID", packagePath, 1, "package metadata cannot be read or parsed deterministically"));
       continue;
     }
     const packageJson = loaded.value, name = packageJson?.name;
     if (!packageJson || typeof packageJson !== "object" || Array.isArray(packageJson)) {
-      issues.push(issue("FM_PROFILE_INVALID", packagePath, 1, "package metadata cannot be read or parsed deterministically")); continue;
+      findings.push(issue("FM_PROFILE_INVALID", packagePath, 1, "package metadata cannot be read or parsed deterministically")); continue;
     }
-    const imports = packageImportRules({ packageJson, packageRoot, productionRoot, issues, issue, packagePath });
+    const imports = packageImportRules({ packageJson, packageRoot, productionRoot, issues: findings, issue, packagePath });
     const aliases = await inspectTsconfig(context, posix.join(packageRoot, "tsconfig.json"), true);
     const ownedPackage = { packageRoot, productionRoot, imports, aliases, packageJson };
     packages.push(ownedPackage);
@@ -298,9 +318,9 @@ export const readLocalPackageImports = async ({ root, productionRoots, issue, pa
     if (!canonicalPackageName(name)
       || architecture?.role !== "bounded-context"
       || !canonicalOwnerDocument(ownerDocument)) {
-      issues.push(issue("FM_PROFILE_INVALID", packagePath, 1, "owned packages require a canonical name, bounded-context role, and ADR owner document"));
+      findings.push(issue("FM_PROFILE_INVALID", packagePath, 1, "owned packages require a canonical name, bounded-context role, and ADR owner document"));
     } else if (names.has(name)) {
-      issues.push(stableConfigIssue(issue, packagePath, "package names must be unique canonical values"));
+      findings.push(stableConfigIssue(issue, packagePath, "package names must be unique canonical values"));
     } else {
       const rootTarget = exportedTarget(packageJson, ".", packageRoot, productionRoot) ?? `${productionRoot}/index.ts`;
       const compositionTarget = exportedTarget(packageJson, "./composition", packageRoot, productionRoot) ?? `${productionRoot}/composition.ts`;
@@ -308,7 +328,7 @@ export const readLocalPackageImports = async ({ root, productionRoots, issue, pa
     }
   }
   return {
-    issues,
+    issues: findings.result(),
     packageMetadata,
     packages,
     names: new Set(packages.map(({ packageJson }) => packageJson.name).filter(Boolean)),
