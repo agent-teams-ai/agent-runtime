@@ -3,6 +3,7 @@ import { validateContainedTurnConsumedGrantReceipts, type ContainedTurnDispatchG
 import type { ContainedTurnEvidenceId, ContainedTurnPreparationToken, ContainedTurnProofId } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import { containedTurnOwnerStoreAuthority } from "./contained-turn-store-authority.js";
+import { isContainedTurnPreparedClaimOperation } from "./contained-turn-preparation-scope.js";
 import { retireAndCleanupContainedTurnPreparation } from "./contained-turn-preparation-cleanup.js";
 import type { ContainedTurnKernelDependencies } from "./ports/outbound/contained-turn-ports.js";
 
@@ -49,13 +50,22 @@ export const claimContainedTurnWithConsumedGrants = async (
     runtimeSecurity.receipt,
   ]);
   try {
+    const authority = containedTurnOwnerStoreAuthority(operation, trustedScope);
     const outcome = await claim({
-      authority: containedTurnOwnerStoreAuthority(operation, trustedScope),
+      authority,
       consumedGrantReceipts: receipts,
       expectedOperationRevision: operation.revision,
       subject,
     });
-    if (outcome.kind === "claimed" || outcome.kind === "observed_claim") {return outcome;}
+    if (outcome.kind === "claimed" || outcome.kind === "observed_claim") {
+      return isContainedTurnPreparedClaimOperation(authority, subject, outcome.operation)
+        ? outcome
+        : { kind: "unavailable" };
+    }
+    if (outcome.kind === "stale" &&
+        !isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
+      return { kind: "unavailable" };
+    }
     if (outcome.kind === "indeterminate") {return outcome;}
     return { kind: "unavailable" };
   } catch {
@@ -81,7 +91,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
 }>): Promise<ClaimPreparedContainedTurnOutcome> => {
   const { custody, dependencies, operation, preparation, preparationToken, trustedScope } = input;
   if (operation.workspaceId === undefined) {return { kind: "stopped", operation };}
-  const claim = await claimContainedTurnWithConsumedGrants(dependencies, operation, trustedScope, {
+  const subject = Object.freeze({
     attemptId: preparation.attemptId,
     custodyId: preparation.custodyId,
     effectId: operation.effectId,
@@ -95,12 +105,13 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     scopeDigest: containedTurnScopeDigest(trustedScope),
     workspaceId: operation.workspaceId,
   });
+  const claim = await claimContainedTurnWithConsumedGrants(dependencies, operation, trustedScope, subject);
   if (claim.kind === "claimed") {return claim;}
   if (claim.kind === "observed_claim") {
     return { kind: "observed", operation: claim.operation };
   }
   const cleanup = await retireAndCleanupContainedTurnPreparation(
-    dependencies, operation, trustedScope, preparationToken,
+    dependencies, operation, trustedScope, subject,
     claim.kind === "prevented" ? "prevention" : "reconciliation",
   );
   if (cleanup.kind === "claimed") {return { kind: "observed", operation: cleanup.operation };}
