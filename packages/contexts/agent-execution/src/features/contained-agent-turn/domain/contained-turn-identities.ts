@@ -8,6 +8,9 @@ export type ContainedTurnIdentity<Namespace extends string> = string & {
 
 export type ContainedTurnAttemptId = ContainedTurnIdentity<"attempt">;
 export type ContainedTurnCancellationCommandId = ContainedTurnIdentity<"cancellation_command">;
+export type ContainedTurnCleanupPermitIdentity = ContainedTurnIdentity<"cleanup_permit">;
+export type ContainedTurnClosureDebtIdentity = ContainedTurnIdentity<"closure_debt">;
+export type ContainedTurnClosureRequestIdentity = ContainedTurnIdentity<"closure_request">;
 export type ContainedTurnCommandId = ContainedTurnIdentity<"command">;
 export type ContainedTurnCustodyId = ContainedTurnIdentity<"custody">;
 export type ContainedTurnEffectId = ContainedTurnIdentity<"effect">;
@@ -26,6 +29,9 @@ export type ContainedTurnWriterFence = ContainedTurnIdentity<"writer_fence">;
 export const CONTAINED_TURN_IDENTITY_PREFIXES = Object.freeze({
   attempt: "attempt:",
   cancellation_command: "cancellation-command:",
+  cleanup_permit: "cleanup-permit:",
+  closure_debt: "closure-debt:",
+  closure_request: "closure-request:",
   command: "command:",
   custody: "custody:",
   effect: "effect:",

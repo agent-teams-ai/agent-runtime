@@ -138,6 +138,13 @@ export const validateContainedTurnHistory = (
   }
   if (previous.effect.kind === "resolved") {invariant(sameCanonicalValue(candidate.effect, previous.effect), "effect resolution never reopens");}
   if (previous.reconciliation.kind === "required") {invariant(candidate.reconciliation.kind === "required", "V1 reconciliation debt cannot be cleared by a turn mutation");}
+  if (previous.closureRecovery.kind === "required" && candidate.closureRecovery.kind === "required") {
+    invariant(
+      previous.closureRecovery.debtId === candidate.closureRecovery.debtId &&
+        previous.closureRecovery.stage === candidate.closureRecovery.stage,
+      "one serialized closure debt cannot be substituted",
+    );
+  }
   const candidateEvidenceIds = candidate.reconciliation.kind === "required"
     ? candidate.reconciliation.evidenceIds
     : [];

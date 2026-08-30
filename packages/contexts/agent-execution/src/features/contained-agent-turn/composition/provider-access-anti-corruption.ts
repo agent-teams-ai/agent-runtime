@@ -37,11 +37,26 @@ export interface OuterContainedTurnProviderAccess {
   > };
 }
 
+/**
+ * Published-language references are opaque owner data.  They may be long
+ * Unicode strings, so they must never be interpolated into the Kernel's
+ * bounded ASCII identity vocabulary.  The digest also binds the complete
+ * owner evidence packet, preventing a proofRef from being substituted across
+ * authority heads or purposes.
+ */
+const opaqueEvidenceDigest = (evidence: OuterEvidence): string =>
+  digestContainedTurnCanonicalValue({
+    authorityDigest: evidence.authorityDigest,
+    bindingAuthorityDigest: evidence.bindingAuthorityDigest,
+    proofRef: evidence.proofRef,
+    purpose: evidence.purpose,
+  });
+
 const proofId = (evidence: OuterEvidence, purpose: OuterEvidence["purpose"]) => containedTurnIdentity(
-  "proof", `proof:provider-access:${purpose}:${evidence.proofRef}`,
+  "proof", `proof:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`,
 );
 const evidenceId = (evidence: OuterEvidence, purpose: OuterEvidence["purpose"]) => containedTurnIdentity(
-  "evidence", `evidence:provider-access:${purpose}:${evidence.proofRef}`,
+  "evidence", `evidence:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`,
 );
 
 const snapshot = (binding: OuterBinding, evidence: OuterEvidence): ContainedTurnProviderAccessSnapshot => Object.freeze({

@@ -59,6 +59,7 @@ export const createContainedTurnOperation = (
     capabilityManifest: detached.capabilityManifest,
     commandFingerprint: containedTurnCommandFingerprint({ intent: detached.intent, provider: detached.adapterSnapshot.provider, scope: detached.scope }),
     commandId: detached.commandId,
+    closureRecovery: Object.freeze({ kind: "clear" }),
     containment: Object.freeze({ kind: "not_requested" }),
     dispatch: Object.freeze({ kind: "unclaimed" }),
     effect: Object.freeze({ kind: "unresolved" }),

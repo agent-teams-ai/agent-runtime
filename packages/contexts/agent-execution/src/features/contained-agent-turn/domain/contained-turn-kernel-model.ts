@@ -30,6 +30,7 @@ import type { ContainedTurnSchemaVersion } from "./contained-turn-limits.js";
 import type { ContainedTurnOperationCutoff, ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 import type { ContainedTurnProof } from "./contained-turn-proofs.js";
 import type { ContainedTurnRequiredReceiptSet } from "./contained-turn-required-receipts.js";
+import type { ContainedTurnClosureRecovery } from "./contained-turn-closure-recovery.js";
 
 export type ContainedTurnKernelOutputKind = "assistant" | "diagnostic" | "progress";
 
@@ -53,6 +54,7 @@ export interface ContainedTurnKernelOperation {
   readonly capabilityManifest: ContainedTurnCapabilityManifest;
   readonly commandFingerprint: ContainedTurnCommandFingerprint;
   readonly commandId: ContainedTurnCommandId;
+  readonly closureRecovery: ContainedTurnClosureRecovery;
   readonly containment:
     | { readonly kind: "not_requested" }
     | { readonly attemptId: ContainedTurnAttemptId; readonly kind: "pending" }

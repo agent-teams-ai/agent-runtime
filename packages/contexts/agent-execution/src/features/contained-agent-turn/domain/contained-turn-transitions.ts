@@ -23,23 +23,29 @@ import { assertContainedTurnExactRecord, detachAndFreezeContainedTurnValue } fro
 import { containedTurnSatisfactionDigest } from "./contained-turn-satisfaction.js";
 import { validateContainedTurnProofBinding } from "./contained-turn-proof-validation.js";
 import { validateContainedTurnOperation } from "./contained-turn-validation.js";
+import { containedTurnClosureRequest, type ContainedTurnClosureRecovery, type ContainedTurnClosureStage } from "./contained-turn-closure-recovery.js";
+
+type PendingClosure = Extract<ContainedTurnClosureRecovery, { readonly kind: "required" }>;
 
 export type ContainedTurnKernelMutation =
   | { readonly kind: "bind_workspace"; readonly workspaceId: ContainedTurnWorkspaceId }
+  | { readonly kind: "begin_closure_stage"; readonly stage: ContainedTurnClosureStage }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "note_closure_stage_unknown"; readonly request: PendingClosure }
+  | { readonly kind: "refresh_containment_attestation_request"; readonly request: PendingClosure }
+  | { readonly kind: "complete_physical_containment"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>; readonly request: PendingClosure }
+  | { readonly artifactManifestRef: string; readonly artifactProof: Extract<ContainedTurnProof, { readonly kind: "artifact_manifest_seal" }>; readonly kind: "complete_artifact_seal"; readonly request: PendingClosure; readonly resultProof: Extract<ContainedTurnProof, { readonly kind: "result_publication" }>; readonly resultRef: string }
+  | { readonly kind: "complete_workspace_close"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "workspace_closure" }>; readonly request: PendingClosure }
+  | { readonly kind: "complete_containment_attestation"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "containment" }>; readonly request: PendingClosure }
   | {
-    readonly attemptId: ContainedTurnAttemptId;
+    readonly attemptId: ContainedTurnAttemptId; readonly custodyId: ContainedTurnCustodyId;
     readonly claimProof: Extract<ContainedTurnProof, { readonly kind: "dispatch_claim" }>;
-    readonly custodyId: ContainedTurnCustodyId;
     readonly cutoffProof: Extract<ContainedTurnProof, { readonly kind: "cutoff" }>;
-    readonly executionGenerationId: ContainedTurnExecutionGenerationId;
-    readonly hostBootId: ContainedTurnHostBootId;
-    readonly hostCustodyProof: Extract<ContainedTurnProof, { readonly kind: "host_custody" }>;
-    readonly hostInstanceId: ContainedTurnHostInstanceId;
+    readonly executionGenerationId: ContainedTurnExecutionGenerationId; readonly hostBootId: ContainedTurnHostBootId;
+    readonly hostCustodyProof: Extract<ContainedTurnProof, { readonly kind: "host_custody" }>; readonly hostInstanceId: ContainedTurnHostInstanceId;
     readonly kind: "claim_dispatch";
-    readonly preparationToken: ContainedTurnPreparationToken;
+    readonly preparationToken: ContainedTurnPreparationToken; readonly writerFence: ContainedTurnWriterFence;
     readonly providerAccessDispatchProof: Extract<ContainedTurnProof, { readonly kind: "provider_access_dispatch" }>;
     readonly runtimeSecurityDispatchProof: Extract<ContainedTurnProof, { readonly kind: "runtime_security_dispatch" }>;
-    readonly writerFence: ContainedTurnWriterFence;
   }
   | {
     readonly containmentProof: Extract<ContainedTurnProof, { readonly kind: "containment_not_required" }>;
@@ -53,11 +59,7 @@ export type ContainedTurnKernelMutation =
     readonly providerProof: Extract<ContainedTurnProof, { readonly kind: "provider_not_started" }>;
   }
   | { readonly kind: "record_provider_acceptance"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_acceptance" }> }
-  | {
-    readonly executionProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>;
-    readonly kind: "close_provider_execution";
-    readonly terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }>;
-  }
+  | { readonly executionProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>; readonly kind: "close_provider_execution"; readonly terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }> }
   | { readonly kind: "drain_output"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "output_drain" }> }
   | { readonly kind: "resolve_effect"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "effect_resolution" }> }
   | { readonly artifactManifestRef: string; readonly kind: "seal_artifact"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "artifact_manifest_seal" }> }
@@ -69,10 +71,7 @@ export type ContainedTurnKernelMutation =
   | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "record_reconciliation_debt"; readonly source: "artifact" | "containment" | "dispatch_authority" | "store_commit" | "workspace" }
   | { readonly kind: "record_process_start"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }> }
   | { readonly kind: "record_process_no_start"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_no_start" }> }
-  | {
-    readonly kind: "record_physical_containment";
-    readonly proof: Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>;
-  }
+  | { readonly kind: "record_physical_containment"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "physical_containment" }> }
   | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "record_physical_containment_unknown" }
   | {
     readonly containmentProof: Extract<ContainedTurnProof, { readonly kind: "containment_not_required" }>;
@@ -83,16 +82,18 @@ export type ContainedTurnKernelMutation =
     readonly providerProof: Extract<ContainedTurnProof, { readonly kind: "provider_not_started" }>;
   }
   | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "record_process_start_unknown" }
-  | {
-    readonly command: ContainedTurnCancellationCommand;
-    readonly cutoffProof: Extract<ContainedTurnProof, { readonly kind: "cutoff" }>;
-    readonly kind: "request_cancellation";
-    readonly proof: Extract<ContainedTurnProof, { readonly kind: "cancellation" }>;
-  };
+  | { readonly command: ContainedTurnCancellationCommand; readonly cutoffProof: Extract<ContainedTurnProof, { readonly kind: "cutoff" }>; readonly kind: "request_cancellation"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "cancellation" }> };
 
 const validateMutationShape = (mutation: ContainedTurnKernelMutation): void => {
   const fieldsByKind: Readonly<Record<ContainedTurnKernelMutation["kind"], readonly string[]>> = {
     bind_workspace: ["kind", "workspaceId"],
+    begin_closure_stage: ["kind", "stage"],
+    note_closure_stage_unknown: ["evidenceId", "kind", "request"],
+    refresh_containment_attestation_request: ["kind", "request"],
+    complete_physical_containment: ["kind", "proof", "request"],
+    complete_artifact_seal: ["artifactManifestRef", "artifactProof", "kind", "request", "resultProof", "resultRef"],
+    complete_workspace_close: ["kind", "proof", "request"],
+    complete_containment_attestation: ["kind", "proof", "request"],
     claim_dispatch: ["attemptId", "claimProof", "custodyId", "cutoffProof", "executionGenerationId", "hostBootId", "hostCustodyProof", "hostInstanceId", "kind", "preparationToken", "providerAccessDispatchProof", "runtimeSecurityDispatchProof", "writerFence"],
     close_process_no_start: ["containmentProof", "effectProof", "executionProof", "kind", "outputProof", "providerProof"],
     close_provider_execution: ["executionProof", "kind", "terminalObservationProof"],
@@ -117,6 +118,22 @@ const validateMutationShape = (mutation: ContainedTurnKernelMutation): void => {
   assertContainedTurnExactRecord("contained-turn transition", mutation, fieldsByKind[mutation.kind]);
 };
 
+const requireMatchingClosureRequest = (
+  operation: ContainedTurnKernelOperation,
+  request: PendingClosure,
+  stage: ContainedTurnClosureStage,
+): void => {
+  invariant(operation.closureRecovery.kind === "required", "closure completion requires durable stage debt");
+  if (operation.closureRecovery.kind !== "required") {return;}
+  invariant(
+    operation.closureRecovery.stage === stage &&
+      operation.closureRecovery.debtId === request.debtId &&
+      operation.closureRecovery.requestId === request.requestId &&
+      operation.closureRecovery.requestDigest === request.requestDigest,
+    "closure proof/request substitution rejected",
+  );
+};
+
 // The count is the closed mutation vocabulary over orthogonal axes, not a lifecycle state machine.
 // oxlint-disable-next-line complexity, max-lines-per-function
 export const mutateContainedTurnOperation = (
@@ -128,6 +145,54 @@ export const mutateContainedTurnOperation = (
   switch (mutation.kind) {
     case "bind_workspace":
       candidate = { ...operation, revision: operation.revision + 1, workspaceId: mutation.workspaceId };
+      break;
+    case "begin_closure_stage": {
+      if (operation.closureRecovery.kind === "required") {
+        invariant(operation.closureRecovery.stage === mutation.stage, "only one exact closure stage may be pending");
+        return operation;
+      }
+      candidate = { ...operation, closureRecovery: containedTurnClosureRequest(operation, mutation.stage), revision: operation.revision + 1 };
+      break;
+    }
+    case "note_closure_stage_unknown":
+      requireMatchingClosureRequest(operation, mutation.request, mutation.request.stage);
+      invariant(operation.closureRecovery.kind === "required", "unknown closure outcome retains exact debt");
+      candidate = {
+        ...operation,
+        closureRecovery: operation.closureRecovery.kind === "required" ? {
+          ...operation.closureRecovery,
+          evidenceIds: [...new Set([...operation.closureRecovery.evidenceIds, mutation.evidenceId])],
+        } : operation.closureRecovery,
+        revision: operation.revision + 1,
+      };
+      break;
+    case "refresh_containment_attestation_request": {
+      requireMatchingClosureRequest(operation, mutation.request, "containment_attestation");
+      const refreshed = containedTurnClosureRequest(operation, "containment_attestation");
+      candidate = { ...operation, closureRecovery: refreshed, revision: operation.revision + 1 };
+      break;
+    }
+    case "complete_physical_containment":
+      requireMatchingClosureRequest(operation, mutation.request, "physical_containment");
+      invariant(operation.dispatch.kind === "claimed", "physical containment requires claimed dispatch");
+      candidate = { ...operation, closureRecovery: { kind: "clear" }, physicalContainment: {
+        kind: "contained", proofId: mutation.proof.proofId,
+      }, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
+      break;
+    case "complete_artifact_seal":
+      requireMatchingClosureRequest(operation, mutation.request, "artifact_seal");
+      invariant(operation.workspaceId !== undefined && operation.output.fence.kind === "fenced" && operation.artifactManifestRef === undefined && operation.resultRef === undefined, "artifact/result closure commits once after output fence");
+      candidate = { ...operation, artifactManifestRef: mutation.artifactManifestRef, closureRecovery: { kind: "clear" }, proofs: [...operation.proofs, mutation.artifactProof, mutation.resultProof], resultRef: mutation.resultRef, revision: operation.revision + 1 };
+      break;
+    case "complete_workspace_close":
+      requireMatchingClosureRequest(operation, mutation.request, "workspace_close");
+      invariant(operation.workspaceId !== undefined && operation.resultRef !== undefined, "workspace closure follows result publication");
+      candidate = { ...operation, closureRecovery: { kind: "clear" }, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
+      break;
+    case "complete_containment_attestation":
+      requireMatchingClosureRequest(operation, mutation.request, "containment_attestation");
+      invariant(operation.containment.kind === "pending" && operation.physicalContainment.kind === "contained", "containment attestation follows physical containment");
+      candidate = { ...operation, closureRecovery: { kind: "clear" }, containment: { kind: "contained", proofId: mutation.proof.proofId }, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
       break;
     case "claim_dispatch":
       invariant(

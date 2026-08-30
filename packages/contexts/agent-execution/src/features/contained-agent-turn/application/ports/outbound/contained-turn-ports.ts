@@ -28,11 +28,25 @@ import type {
   ContainedTurnHostBootId,
   ContainedTurnHostInstanceId,
   ContainedTurnOperationId,
+  ContainedTurnPreparationToken,
   ContainedTurnProofId,
   ContainedTurnWorkspaceId,
   ContainedTurnWriterFence,
 } from "../../../domain/contained-turn-identities.js";
 import { assertContainedTurnExactRecord } from "../../../domain/contained-turn-record.js";
+import type { ContainedTurnClosureRequestId } from "../../../domain/contained-turn-closure-recovery.js";
+import type { ContainedTurnCleanupPermit, ContainedTurnDispatchPreparation } from "../../../domain/contained-turn-dispatch-preparation.js";
+import type { ContainedTurnConsumedGrantReceipt, ContainedTurnConsumedGrantReceipts, ContainedTurnDispatchGrantSubject } from "../../../domain/contained-turn-dispatch-authority.js";
+
+export interface ContainedTurnClosureRequest {
+  readonly requestDigest: ContainedTurnCanonicalDigest;
+  readonly requestId: ContainedTurnClosureRequestId;
+}
+
+export type EnsureContainedTurnClosureOutcome<Proof> =
+  | { readonly kind: "proved"; readonly proof: Proof; readonly requestDigest: ContainedTurnCanonicalDigest; readonly requestId: ContainedTurnClosureRequestId }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "identity_conflict" };
 
 export type ResolveContainedTurnProviderAccessOutcome =
   | {
@@ -71,6 +85,16 @@ export type RevalidateContainedTurnProviderAccessOutcome =
   };
 
 export interface ContainedTurnProviderAccessPort {
+  consumeForDispatch?(input: Readonly<{ subject: ContainedTurnDispatchGrantSubject }>): Promise<
+    | { readonly kind: "consumed"; readonly receipt: ContainedTurnConsumedGrantReceipt<"provider_access"> }
+    | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+  >;
+  settleConsumedGrant?(input: Readonly<{ cleanupPermit: ContainedTurnCleanupPermit; grantRequestId: string }>): Promise<
+    | { readonly kind: "settled" }
+    | { readonly kind: "already_settled" }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+  >;
   resolveForAcceptance(input: Readonly<{
     intent: ContainedTurnIntent;
     provider: ContainedTurnProvider;
@@ -128,6 +152,36 @@ export interface ContainedTurnDispatchAuthorityPrecondition {
 }
 
 export interface ContainedTurnKernelOperationStore {
+  retireDispatchPreparation?(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    expectedOperationCutoffRevision: number;
+    expectedOperationRevision: number;
+    preparationToken: ContainedTurnPreparationToken;
+    reason: "claim_lost" | "open_failed" | "prevention" | "reconciliation";
+  }>): Promise<
+    | { readonly kind: "retired"; readonly preparation: Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }> }
+    | { readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation }
+    | { readonly current: ContainedTurnKernelOperation; readonly kind: "stale" }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+  >;
+  recordDispatchPreparationCleanup?(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    evidenceId?: ContainedTurnEvidenceId;
+    permit: ContainedTurnCleanupPermit;
+    target: "custody" | "provider_access" | "runtime_security";
+  }>): Promise<ContainedTurnDispatchPreparation>;
+  claimPreparedDispatch?(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    consumedGrantReceipts: ContainedTurnConsumedGrantReceipts;
+    expectedOperationRevision: number;
+    subject: ContainedTurnDispatchGrantSubject;
+  }>): Promise<
+    | { readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation; readonly startAuthority: string }
+    | { readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation }
+    | { readonly current: ContainedTurnKernelOperation; readonly kind: "stale" }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+    | { readonly kind: "not_found" }
+  >;
   identifyAcceptance(input: Readonly<{
     commandFingerprint: ContainedTurnCommandFingerprint;
     commandId: ContainedTurnCommandId;
@@ -220,6 +274,16 @@ export interface ContainedTurnKernelOperationStore {
 }
 
 export interface ContainedTurnKernelSecurityPort {
+  consumeForDispatch?(input: Readonly<{ subject: ContainedTurnDispatchGrantSubject }>): Promise<
+    | { readonly kind: "consumed"; readonly receipt: ContainedTurnConsumedGrantReceipt<"runtime_security"> }
+    | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+  >;
+  settleConsumedGrant?(input: Readonly<{ cleanupPermit: ContainedTurnCleanupPermit; grantRequestId: string }>): Promise<
+    | { readonly kind: "settled" }
+    | { readonly kind: "already_settled" }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+  >;
   authorizeForAcceptance(input: Readonly<{
     intent: ContainedTurnIntent;
     provider: ContainedTurnProvider;
@@ -242,6 +306,8 @@ export interface ContainedTurnKernelSecurityPort {
 }
 
 export interface ContainedTurnKernelWorkspacePort {
+  ensureClosed?(input: Readonly<ContainedTurnClosureRequest & { operationId: ContainedTurnOperationId; workspaceId: ContainedTurnWorkspaceId }>): Promise<EnsureContainedTurnClosureOutcome<Extract<ContainedTurnProof, { readonly kind: "workspace_closure" }>>>;
+  queryClosure?(input: Readonly<ContainedTurnClosureRequest & { operationId: ContainedTurnOperationId; workspaceId: ContainedTurnWorkspaceId }>): Promise<EnsureContainedTurnClosureOutcome<Extract<ContainedTurnProof, { readonly kind: "workspace_closure" }>>>;
   close(input: Readonly<{ operationId: ContainedTurnOperationId; workspaceId: ContainedTurnWorkspaceId }>): Promise<
     | { readonly kind: "closed"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "workspace_closure" }> }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
@@ -256,6 +322,18 @@ export interface ContainedTurnKernelWorkspacePort {
 }
 
 export interface ContainedTurnKernelArtifactPort {
+  ensureSealed?(input: Readonly<ContainedTurnClosureRequest & {
+    operationId: ContainedTurnOperationId;
+    output: readonly ContainedTurnKernelOutputChunk[];
+    workspaceId: ContainedTurnWorkspaceId;
+  }>): Promise<EnsureContainedTurnClosureOutcome<Readonly<{
+    artifactProof: Extract<ContainedTurnProof, { readonly kind: "artifact_manifest_seal" }>;
+    resultProof: Extract<ContainedTurnProof, { readonly kind: "result_publication" }>;
+  }>>>;
+  querySeal?(input: Readonly<ContainedTurnClosureRequest & { operationId: ContainedTurnOperationId; workspaceId: ContainedTurnWorkspaceId }>): Promise<EnsureContainedTurnClosureOutcome<Readonly<{
+    artifactProof: Extract<ContainedTurnProof, { readonly kind: "artifact_manifest_seal" }>;
+    resultProof: Extract<ContainedTurnProof, { readonly kind: "result_publication" }>;
+  }>>>;
   seal(input: Readonly<{
     operationId: ContainedTurnOperationId;
     output: readonly ContainedTurnKernelOutputChunk[];
@@ -296,6 +374,15 @@ export interface ContainedTurnKernelDelegatedStart {
 }
 
 export interface ContainedTurnKernelCustodyPort {
+  releaseRetiredReservation?(input: Readonly<{ cleanupPermit: ContainedTurnCleanupPermit }>): Promise<
+    | { readonly kind: "released" }
+    | { readonly kind: "already_released" }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+  >;
+  ensurePhysicalContainment?(input: Readonly<ContainedTurnClosureRequest & { attemptId: ContainedTurnAttemptId; custodyId: ContainedTurnCustodyId; operationId: ContainedTurnOperationId }>): Promise<EnsureContainedTurnClosureOutcome<Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>>>;
+  queryPhysicalContainment?(input: Readonly<ContainedTurnClosureRequest & { attemptId: ContainedTurnAttemptId; custodyId: ContainedTurnCustodyId; operationId: ContainedTurnOperationId }>): Promise<EnsureContainedTurnClosureOutcome<Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>>>;
+  attestContainment?(input: Readonly<ContainedTurnClosureRequest & { attemptId: ContainedTurnAttemptId; custodyId: ContainedTurnCustodyId; operationId: ContainedTurnOperationId }>): Promise<EnsureContainedTurnClosureOutcome<Extract<ContainedTurnProof, { readonly kind: "containment" }>>>;
+  queryContainmentAttestation?(input: Readonly<ContainedTurnClosureRequest & { attemptId: ContainedTurnAttemptId; custodyId: ContainedTurnCustodyId; operationId: ContainedTurnOperationId }>): Promise<EnsureContainedTurnClosureOutcome<Extract<ContainedTurnProof, { readonly kind: "containment" }>>>;
   /** Host-owned, independently observed execution, drain, and terminal closure. */
   attestExecutionClosure(input: Readonly<{
     attemptId: ContainedTurnAttemptId;
@@ -357,6 +444,8 @@ export interface ContainedTurnKernelCustodyPort {
     execute: (start: ContainedTurnKernelDelegatedStart) => Promise<ContainedTurnKernelProviderObservation>;
     intent: ContainedTurnIntent;
     operationId: ContainedTurnOperationId;
+    /** Exact one-use authority returned only by the final prepared-dispatch CAS. */
+    startAuthority: string;
     workspaceId: ContainedTurnWorkspaceId;
   }>): Promise<
     | {

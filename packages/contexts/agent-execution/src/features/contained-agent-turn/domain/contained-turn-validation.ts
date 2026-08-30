@@ -82,6 +82,11 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
   if (operation.reconciliation.kind === "required") {
     for (const evidenceId of operation.reconciliation.evidenceIds) {evidenceIds.add(evidenceId);}
   }
+  if (operation.closureRecovery.kind === "required") {
+    validateContainedTurnIdentity("closure_debt", operation.closureRecovery.debtId);
+    validateContainedTurnIdentity("closure_request", operation.closureRecovery.requestId);
+    for (const evidenceId of operation.closureRecovery.evidenceIds) {evidenceIds.add(evidenceId);}
+  }
   for (const evidenceId of evidenceIds) {
     invariant(!primary.includes(evidenceId), "evidence and authority identity namespaces must be textually disjoint");
     validateContainedTurnIdentity("evidence", evidenceId);
@@ -93,6 +98,9 @@ const validateCanonicalDigests = (operation: ContainedTurnKernelOperation): void
   parseContainedTurnCanonicalDigest(operation.commandFingerprint);
   parseContainedTurnCanonicalDigest(operation.requiredReceiptSetDigest);
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.containmentPolicyDigest);
+  if (operation.closureRecovery.kind === "required") {
+    parseContainedTurnCanonicalDigest(operation.closureRecovery.requestDigest);
+  }
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingDigest);
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.scopeDigest);
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.securityDecisionDigest);
@@ -168,6 +176,7 @@ const hasAmbiguity = (operation: ContainedTurnKernelOperation): boolean =>
 const validateTerminal = (operation: ContainedTurnKernelOperation): void => {
   if (operation.terminal.kind === "open") {return;}
   invariant(operation.reconciliation.kind === "clear", "reconciliation debt blocks terminal truth");
+  invariant(operation.closureRecovery.kind === "clear", "closure recovery debt blocks terminal truth");
   invariant(!hasAmbiguity(operation), "ambiguous operation cannot become terminal");
   invariant(operation.output.fence.kind === "fenced", "terminal truth requires fenced output");
   invariant(operation.admissionFence.kind === "fenced", "terminal truth requires fenced admission");
@@ -396,6 +405,9 @@ export const validateContainedTurnOperation = (
   if (candidate.reconciliation.kind === "required") {
     assertContainedTurnCanonicalArray(candidate.reconciliation.evidenceIds);
   }
+  if (candidate.closureRecovery.kind === "required") {
+    assertContainedTurnCanonicalArray(candidate.closureRecovery.evidenceIds);
+  }
   invariant(isContainedTurnSchemaVersion(candidate.schemaVersion), "unsupported contained-turn schema version");
   invariant(Number.isSafeInteger(candidate.revision) && candidate.revision >= 0, "revision must be a non-negative safe integer");
   if (candidate.revision === 0) {
@@ -408,6 +420,7 @@ export const validateContainedTurnOperation = (
         candidate.physicalContainment.kind === "not_requested" &&
         candidate.providerAcceptance.kind === "unobserved" && candidate.providerExecution.kind === "not_started" &&
         candidate.providerProcessStart.kind === "unobserved" && candidate.reconciliation.kind === "clear" &&
+        candidate.closureRecovery.kind === "clear" &&
         candidate.terminal.kind === "open",
       "revision zero is reserved for exact command-acceptance truth",
     );

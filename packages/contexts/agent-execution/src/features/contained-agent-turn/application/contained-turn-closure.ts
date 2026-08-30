@@ -2,6 +2,7 @@ import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { containedTurnIdentity, type ContainedTurnEvidenceId } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
+import type { ContainedTurnProof } from "../domain/contained-turn-proofs.js";
 import { containedTurnSatisfactionDigest } from "../domain/contained-turn-satisfaction.js";
 import { assertContainedTurnExactRecord } from "../domain/contained-turn-record.js";
 import type { ContainedTurnKernelMutation } from "../domain/contained-turn-transitions.js";
@@ -17,6 +18,7 @@ import type {
   ContainedTurnKernelDependencies,
   ContainedTurnKernelProviderObservation,
 } from "./ports/outbound/contained-turn-ports.js";
+import { resumeContainedTurnClosureStage } from "./contained-turn-closure-recovery.js";
 
 type DebtSource = Extract<ContainedTurnKernelMutation, {
   readonly kind: "record_reconciliation_debt";
@@ -93,6 +95,30 @@ export const closeContainedTurnPhysicalContainment = async (
       operation.physicalContainment.kind === "contained") {
     return operation;
   }
+  if (dependencies.custody.ensurePhysicalContainment !== undefined) {
+    const attemptId = operation.dispatch.attemptId;
+    const custodyId = operation.custodyId;
+    const recovered = await resumeContainedTurnClosureStage<
+      Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>
+    >(
+      dependencies,
+      operation,
+      trustedScope,
+      {
+        complete: (request, proof) => ({ kind: "complete_physical_containment", proof, request }),
+        ensure: (request) => dependencies.custody.ensurePhysicalContainment!({
+          attemptId,
+          custodyId,
+          operationId: operation.operationId,
+          requestDigest: request.requestDigest,
+          requestId: request.requestId,
+        }),
+        proofIds: proof => [proof.proofId],
+        stage: "physical_containment",
+      },
+    );
+    return recovered.operation;
+  }
   let outcome: Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["requestPhysicalContainment"]>>;
   try {
     outcome = await dependencies.custody.requestPhysicalContainment({
@@ -129,6 +155,63 @@ const sealArtifactsAndWorkspace = async (
   if (initial.workspaceId === undefined) {return { kind: "ready", operation: initial };}
   const workspaceId = initial.workspaceId;
   let current = initial;
+  if (dependencies.artifacts.ensureSealed !== undefined && current.artifactManifestRef === undefined) {
+    const recovered = await resumeContainedTurnClosureStage<Readonly<{
+      artifactProof: Extract<ContainedTurnProof, { readonly kind: "artifact_manifest_seal" }>;
+      resultProof: Extract<ContainedTurnProof, { readonly kind: "result_publication" }>;
+    }>>(
+      dependencies,
+      current,
+      trustedScope,
+      {
+        complete: (request, proof) => ({
+          artifactManifestRef: proof.artifactProof.binding.artifactManifestRef,
+          artifactProof: proof.artifactProof,
+          kind: "complete_artifact_seal",
+          request,
+          resultProof: proof.resultProof,
+          resultRef: proof.resultProof.binding.resultRef,
+        }),
+        ensure: request => dependencies.artifacts.ensureSealed!({
+          operationId: current.operationId,
+          output: current.output.chunks,
+          requestDigest: request.requestDigest,
+          requestId: request.requestId,
+          workspaceId,
+        }),
+        proofIds: proof => [proof.artifactProof.proofId, proof.resultProof.proofId],
+        stage: "artifact_seal",
+      },
+    );
+    if (recovered.kind === "debt") {return { kind: "debt", operation: recovered.operation };}
+    current = recovered.operation;
+  }
+  if (dependencies.workspace.ensureClosed !== undefined && current.resultRef !== undefined) {
+    const recovered = await resumeContainedTurnClosureStage<
+      Extract<ContainedTurnProof, { readonly kind: "workspace_closure" }>
+    >(
+      dependencies,
+      current,
+      trustedScope,
+      {
+        complete: (request, proof) => ({ kind: "complete_workspace_close", proof, request }),
+        ensure: request => dependencies.workspace.ensureClosed!({
+          operationId: current.operationId,
+          requestDigest: request.requestDigest,
+          requestId: request.requestId,
+          workspaceId,
+        }),
+        proofIds: proof => [proof.proofId],
+        stage: "workspace_close",
+      },
+    );
+    return recovered.kind === "debt"
+      ? { kind: "debt", operation: recovered.operation }
+      : { kind: "ready", operation: recovered.operation };
+  }
+  if (current.artifactManifestRef !== undefined && current.resultRef !== undefined) {
+    return { kind: "ready", operation: current };
+  }
   let artifacts: Awaited<ReturnType<ContainedTurnKernelDependencies["artifacts"]["seal"]>>;
   try {
     artifacts = await dependencies.artifacts.seal({
@@ -184,6 +267,7 @@ const finalizeContainedTurn = async (
   trustedScope: ContainedTurnScope,
 ): Promise<ContainedTurnKernelOperation> => {
   if (operation.reconciliation.kind === "required") {return operation;}
+  if (operation.closureRecovery.kind === "required") {return operation;}
   let terminalProof: Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["terminalProof"]>>;
   try {
     terminalProof = await dependencies.operationStore.terminalProof({
@@ -337,6 +421,30 @@ export const closeContainedTurnExecution = async (
   const staged = await sealArtifactsAndWorkspace(dependencies, current, trustedScope);
   if (staged.kind === "debt") {return staged.operation;}
   current = staged.operation;
+  if (dependencies.custody.attestContainment !== undefined) {
+    const recovered = await resumeContainedTurnClosureStage<
+      Extract<ContainedTurnProof, { readonly kind: "containment" }>
+    >(
+      dependencies,
+      current,
+      trustedScope,
+      {
+        complete: (request, proof) => ({ kind: "complete_containment_attestation", proof, request }),
+        ensure: request => dependencies.custody.attestContainment!({
+          attemptId,
+          custodyId,
+          operationId: current.operationId,
+          requestDigest: request.requestDigest,
+          requestId: request.requestId,
+        }),
+        proofIds: proof => [proof.proofId],
+        stage: "containment_attestation",
+      },
+    );
+    return recovered.kind === "debt"
+      ? recovered.operation
+      : finalizeContainedTurn(dependencies, recovered.operation, trustedScope);
+  }
   let containment: Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["requestContainment"]>>;
   try {
     containment = await dependencies.custody.requestContainment({

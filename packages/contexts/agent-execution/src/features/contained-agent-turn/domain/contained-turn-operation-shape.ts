@@ -12,7 +12,7 @@ const exactKeys = (name: string, value: object, expected: readonly string[]): vo
 export const validateContainedTurnOperationShape = (operation: ContainedTurnKernelOperation): void => {
   const operationKeys = [
     "acceptedAuthorityVector", "acceptedAuthorityVectorDigest", "adapterSnapshot", "admissionFence",
-    "cancellation", "capabilityManifest", "commandFingerprint", "commandId", "containment", "dispatch",
+    "cancellation", "capabilityManifest", "closureRecovery", "commandFingerprint", "commandId", "containment", "dispatch",
     "effect", "effectId", "intent", "operationCutoff", "operationId", "output", "physicalContainment", "proofs",
     "providerAcceptance", "providerAccessSnapshot", "providerExecution", "providerProcessStart", "reconciliation",
     "requiredReceiptSet", "requiredReceiptSetDigest", "revision", "schemaVersion", "scope", "terminal",
@@ -37,6 +37,17 @@ export const validateContainedTurnOperationShape = (operation: ContainedTurnKern
   );
   exactKeys("cancellation state", operation.cancellation,
     operation.cancellation.kind === "open" ? ["kind"] : ["command", "kind", "proofId"]);
+  invariant(
+    operation.closureRecovery.kind === "clear" || operation.closureRecovery.kind === "required",
+    "unknown closure-recovery state fails closed",
+  );
+  exactKeys(
+    "closure recovery",
+    operation.closureRecovery,
+    operation.closureRecovery.kind === "clear"
+      ? ["kind"]
+      : ["debtId", "evidenceIds", "kind", "requestDigest", "requestId", "stage"],
+  );
   switch (operation.containment.kind) {
     case "not_requested": exactKeys("containment state", operation.containment, ["kind"]); break;
     case "pending": exactKeys("containment state", operation.containment, ["attemptId", "kind"]); break;
