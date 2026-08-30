@@ -35,6 +35,10 @@
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
     },
+    "./testing": {
+      "types": "./tests/fixtures/testing-composition.ts",
+      "import": "./tests/fixtures/testing-composition.ts"
+    },
     "./production": {
       "types": "./dist/production.d.ts",
       "import": "./dist/production.js"

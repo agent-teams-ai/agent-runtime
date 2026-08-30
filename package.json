@@ -74,6 +74,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@agent-teams/agent-execution": "workspace:*",
     "@agent-teams/docs-protocol": "0.2.0",
     "@agent-teams/engineering-foundation": "0.20.0",
     "@agentclientprotocol/sdk": "catalog:",

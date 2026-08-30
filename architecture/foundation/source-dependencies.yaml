@@ -122,6 +122,7 @@ boundaries:
     allow:
       boundaries: []
       packages:
+        - "@agent-teams/agent-execution"
         - "@agentclientprotocol/sdk"
         - "@xstate/graph"
         - ajv

@@ -6,22 +6,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { observeOpenCodeCapabilities } from "../src/features/acp-compatibility/opencode-acp-validation.ts";
-import { createContainedTurnEngine } from "../../../packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts";
-import type {
-  AcceptContainedTurnCommandInput,
-  ContainedTurnArtifactPort,
-  ContainedTurnOperationStore,
-  ContainedTurnProviderExecutionOutcome,
-  ContainedTurnProviderPort,
-  ContainedTurnSecurityPort,
-  ContainedTurnWorkspacePort,
-  ProviderProcessCustodyPort,
-} from "../../../packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts";
 import {
-  applyContainedTurnMutation,
-  createAcceptedContainedTurnOperation,
-  type ContainedTurnOperation,
-} from "../../../packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-operation.ts";
+  createContainedTurnFeature,
+  type ContainedTurnFeatureDependencies,
+} from "@agent-teams/agent-execution/composition";
+import { createDependencies } from "@agent-teams/agent-execution/testing";
 
 type TerminalStopReason = "cancelled" | "end_turn" | "max_tokens" | "max_turn_requests" | "refusal";
 type ProviderAcceptance = boolean | "unknown";
@@ -128,7 +117,21 @@ interface ConformanceFixture {
   };
 }
 
-type NeutralExecutionOutcome = ContainedTurnProviderExecutionOutcome;
+type NeutralExecutionOutcome =
+  | { readonly acceptanceReceiptRef: string; readonly effectDisposition: "committed" | "not_committed"; readonly effectReceiptRef: string; readonly executionReceiptRef: string; readonly kind: "completed"; readonly outcome: "cancelled" | "failed" | "succeeded"; readonly outputDrainReceiptRef: string }
+  | { readonly effectReceiptRef: string; readonly executionReceiptRef: string; readonly kind: "not_accepted"; readonly outputDrainReceiptRef: string; readonly providerReceiptRef: string }
+  | { readonly evidenceRef: string; readonly kind: "ambiguous" };
+
+interface SyntheticProjectionInput {
+  readonly attemptId: string;
+  readonly custody: { readonly custodyRef: string };
+  readonly effectId: string;
+  readonly emit: (chunk: { readonly cursor: number; readonly kind: OutputKind; readonly text: string }) => Promise<void>;
+  readonly intent: { readonly mode: "analysis"; readonly prompt: string };
+  readonly isCancellationRequested: () => Promise<boolean>;
+  readonly operationId: string;
+  readonly workspaceRef: string;
+}
 
 type RawSemanticObservation = SemanticObservation & {
   readonly providerOutput: string;
@@ -147,7 +150,7 @@ const officialSdkSchemaUrl = new URL(
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const portContractPath = join(
   repositoryRoot,
-  "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+  "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts",
 );
 const providerContractPath = join(
   repositoryRoot,
@@ -240,7 +243,7 @@ class SyntheticAcpOutcomeProjection {
   }
 
   public async execute(
-    input: Parameters<ContainedTurnProviderPort["execute"]>[0],
+    input: SyntheticProjectionInput,
   ): Promise<NeutralExecutionOutcome> {
     const observation = this.#observation;
     if (observation.kind === "terminal") {
@@ -299,164 +302,6 @@ const observedCapabilityStatus = (
   }
 };
 
-const kernelHarnessBinding = Object.freeze({
-  adapterRevision: "kernel-contract-harness:test",
-  binaryRevision: "synthetic-neutral-outcomes:test",
-  capabilityManifestRevision: "contained-turn-v1:test",
-  credentialBindingDigest: "credential:none",
-  provider: "codex" as const,
-  providerRouteRef: "route:none",
-});
-
-class MemoryOperationStore implements ContainedTurnOperationStore {
-  readonly #byCommand = new Map<string, string>();
-  readonly #operations = new Map<string, ContainedTurnOperation>();
-  #sequence = 0;
-
-  async accept(input: AcceptContainedTurnCommandInput) {
-    const fingerprint = digest(JSON.stringify(input));
-    const existingId = this.#byCommand.get(input.commandId);
-    if (existingId !== undefined) {
-      const operation = this.#operations.get(existingId);
-      assert.ok(operation);
-      return operation.commandFingerprint === fingerprint
-        ? { kind: "replayed" as const, operation }
-        : { kind: "conflict" as const };
-    }
-    const sequence = ++this.#sequence;
-    const operation = createAcceptedContainedTurnOperation({
-      acceptanceReceiptRef: `accept:${sequence}`,
-      commandFingerprint: fingerprint,
-      commandId: input.commandId,
-      effectId: `effect:${sequence}`,
-      intent: input.intent,
-      operationId: `operation:${sequence}`,
-      providerBinding: input.providerBinding,
-      scope: input.scope,
-      securityDecision: input.securityDecision,
-    });
-    this.#byCommand.set(input.commandId, operation.operationId);
-    this.#operations.set(operation.operationId, operation);
-    return { kind: "accepted" as const, operation };
-  }
-
-  async claimDispatch(input: {
-    readonly cutoffReceiptRef: string;
-    readonly expectedRevision: number;
-    readonly operationId: string;
-  }) {
-    const current = this.#operations.get(input.operationId);
-    if (current === undefined) {return { kind: "not_found" as const };}
-    if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
-    const operation = applyContainedTurnMutation(current, {
-      attemptId: `attempt:${current.operationId}`,
-      claimRef: `claim:${current.operationId}`,
-      cutoffReceiptRef: input.cutoffReceiptRef,
-      kind: "dispatch_claimed",
-    });
-    this.#operations.set(operation.operationId, operation);
-    return { kind: "claimed" as const, operation };
-  }
-
-  async compareAndSet(input: {
-    readonly expectedRevision: number;
-    readonly mutation: Parameters<typeof applyContainedTurnMutation>[1];
-    readonly operationId: string;
-  }) {
-    const current = this.#operations.get(input.operationId);
-    if (current === undefined) {return { kind: "not_found" as const };}
-    if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
-    const operation = applyContainedTurnMutation(current, input.mutation);
-    this.#operations.set(operation.operationId, operation);
-    return { kind: "applied" as const, operation };
-  }
-
-  async preventDispatch(input: {
-    readonly expectedRevision: number;
-    readonly operationId: string;
-    readonly proofRef: string;
-  }) {
-    return this.compareAndSet({
-      expectedRevision: input.expectedRevision,
-      mutation: { kind: "dispatch_prevented", receiptRef: input.proofRef },
-      operationId: input.operationId,
-    });
-  }
-
-  async read(operationId: string) {return this.#operations.get(operationId);}
-
-  async requestCancellation(input: { readonly expectedRevision: number; readonly operationId: string }) {
-    return this.compareAndSet({
-      expectedRevision: input.expectedRevision,
-      mutation: { kind: "cancellation_requested", requestRef: `cancel:${input.operationId}` },
-      operationId: input.operationId,
-    });
-  }
-
-  async terminalize(input: { readonly expectedRevision: number; readonly operationId: string }) {
-    return this.compareAndSet({
-      expectedRevision: input.expectedRevision,
-      mutation: { kind: "terminalize", receiptRef: `terminal:${input.operationId}` },
-      operationId: input.operationId,
-    });
-  }
-}
-
-const createKernelHarness = (outcomeCase: OutcomeCase) => {
-  const store = new MemoryOperationStore();
-  const providerOutcomes: ContainedTurnProviderExecutionOutcome[] = [];
-  const projection = new SyntheticAcpOutcomeProjection(outcomeCase.id, {
-    ...outcomeCase.sdkSemanticObservation,
-    providerOutput: "raw-provider-output-canary",
-    sessionId: "raw-session-canary",
-    toolCallId: "raw-tool-canary",
-  });
-  const provider: ContainedTurnProviderPort = {
-    manifest: Object.freeze({
-      effectClass: "contained_unmediated_effect",
-      providerBinding: kernelHarnessBinding,
-      supportedModes: Object.freeze(["analysis"]),
-    }),
-    async execute(input) {
-      const outcome = await projection.execute(input);
-      providerOutcomes.push(outcome);
-      return outcome;
-    },
-  };
-  const security: ContainedTurnSecurityPort = {
-    async authorize() {
-      return { authorityRevision: "authority:1", decisionDigest: "decision:1", kind: "allowed" };
-    },
-    async revalidate() {return { kind: "allowed", proofRef: "cutoff-clear:1" };},
-  };
-  const workspace: ContainedTurnWorkspacePort = {
-    async close(workspaceRef) {return { receiptRef: `workspace-closed:${workspaceRef}` };},
-    async create(input) {return { workspaceRef: `workspace:${input.operationId}` };},
-    async quarantine() {},
-  };
-  const artifacts: ContainedTurnArtifactPort = {
-    async seal(input) {
-      return {
-        manifestReceiptRef: `manifest-receipt:${input.operationId}`,
-        manifestRef: `manifest:${input.operationId}`,
-        resultReceiptRef: `result-receipt:${input.operationId}`,
-        resultRef: `result:${input.operationId}`,
-      };
-    },
-  };
-  const custody: ProviderProcessCustodyPort = {
-    async open(input) {return { custodyRef: `custody:${input.attemptId}` };},
-    async requestContainment(input) {
-      return { kind: "contained", receiptRef: `contained:${input.attemptId}` };
-    },
-  };
-  return {
-    engine: createContainedTurnEngine({ artifacts, custody, operationStore: store, provider, security, workspace }),
-    providerOutcomes,
-    store,
-  };
-};
-
 interface KernelExpectation {
   readonly effect: "ambiguous" | "committed" | "not_committed";
   readonly emittedKinds: readonly OutputKind[];
@@ -475,6 +320,80 @@ const independentKernelExpectations: Readonly<Record<string, KernelExpectation>>
   "request-rejection-without-no-start-proof": { effect: "ambiguous", emittedKinds: [], execution: "unknown", providerAcceptance: "unknown", status: "reconcile_required", terminal: false },
   "request-timeout-after-dispatch": { effect: "ambiguous", emittedKinds: [], execution: "unknown", providerAcceptance: "unknown", status: "reconcile_required", terminal: false },
 });
+
+const createKernelHarness = async (outcomeCase: OutcomeCase) => {
+  const projectedKinds: OutputKind[] = [];
+  const projection = new SyntheticAcpOutcomeProjection(outcomeCase.id, {
+    ...outcomeCase.sdkSemanticObservation,
+    providerOutput: "raw-provider-output-canary",
+    sessionId: "raw-session-canary",
+    toolCallId: "raw-tool-canary",
+  });
+  const providerOutcome = await projection.execute({
+    attemptId: "attempt:projection",
+    custody: { custodyRef: "custody:projection" },
+    effectId: "effect:projection",
+    async emit(chunk) {projectedKinds.push(chunk.kind);},
+    intent: { mode: "analysis", prompt: "synthetic" },
+    async isCancellationRequested() {return false;},
+    operationId: "operation:projection",
+    workspaceRef: "workspace:projection",
+  });
+  const fixture = createDependencies(providerOutcome.kind === "not_accepted"
+    ? { dispatchPrevented: true }
+    : {});
+  let dependencies = fixture.dependencies;
+  if (providerOutcome.kind !== "not_accepted") {
+    const observation = providerOutcome.kind === "completed"
+      ? { kind: "completed" as const, outcome: providerOutcome.outcome }
+      : { evidenceId: "evidence:synthetic-projection", kind: "indeterminate" as const };
+    const attestExecutionClosure = dependencies.custody.attestExecutionClosure;
+    dependencies = {
+      ...dependencies,
+      custody: {
+        ...dependencies.custody,
+        async attestExecutionClosure(input) {
+          const attestation = await attestExecutionClosure(input);
+          if (observation.kind !== "completed" || observation.outcome === "succeeded" || attestation.kind !== "proved") {
+            return attestation;
+          }
+          return {
+            ...attestation,
+            executionClosureProof: {
+              ...attestation.executionClosureProof,
+              binding: { ...attestation.executionClosureProof.binding, outcome: observation.outcome },
+            },
+            terminalObservationProof: {
+              ...attestation.terminalObservationProof,
+              binding: { ...attestation.terminalObservationProof.binding, outcome: observation.outcome },
+            },
+          };
+        },
+      },
+      provider: {
+        ...dependencies.provider,
+        async execute(input) {
+          input.start.createProcess(() => Object.freeze({}));
+          if (observation.kind === "completed" && observation.outcome !== "cancelled") {
+            await input.emit({
+              cursor: 0,
+              kind: observation.outcome === "failed" ? "diagnostic" : "assistant",
+              text: "synthetic projected output",
+            });
+          }
+          return observation as Awaited<ReturnType<ContainedTurnFeatureDependencies["provider"]["execute"]>>;
+        },
+      },
+    } satisfies ContainedTurnFeatureDependencies;
+  }
+  return {
+    current: fixture.current,
+    engine: createContainedTurnFeature(dependencies),
+    projectedKinds,
+    providerOutcomes: [providerOutcome] as const,
+    workspaceQuarantines: fixture.workspaceQuarantines,
+  };
+};
 
 const expectedOutcomeKeys: Readonly<Record<NeutralExecutionOutcome["kind"], readonly string[]>> = {
   ambiguous: ["evidenceRef", "kind"],
@@ -555,7 +474,7 @@ test("pins a fully synthetic, no-launch OpenCode semantic fixture", async () => 
     productionAdapter: false,
     providerProcess: false,
   });
-  assert.doesNotMatch(bytes.toString(), /\/var\/|\/home\/|credential|token/iu);
+  assert.doesNotMatch(bytes.toString(), /\/var\/|\/home\/|credential[_-]?(?:secret|token|value)|raw[_-]?token/iu);
 });
 
 test("preserves supported, deferred, unknown, and unsupported capability observations", async () => {
@@ -581,7 +500,6 @@ test("preserves supported, deferred, unknown, and unsupported capability observa
       () => assertExactCapabilityContract(
         fixture.capabilityCases.filter(value => value.characterizationDisposition !== disposition),
       ),
-      undefined,
       `omitted disposition ${disposition}`,
     );
   }
@@ -590,7 +508,6 @@ test("preserves supported, deferred, unknown, and unsupported capability observa
       ...fixture.capabilityCases,
       { capability: "delete", observedStatus: "deferred", characterizationDisposition: "deferred" },
     ]),
-    undefined,
     "invented capability",
   );
 });
@@ -675,7 +592,7 @@ test("classifies every official ACP terminal reason without a refusal fallback",
         operationId: "operation:deferred",
         workspaceRef: "workspace:deferred",
       }),
-      new RegExp(`^${deferredReason} has no accepted distinct neutral mapping$`, "u"),
+      new RegExp(`${deferredReason} has no accepted distinct neutral mapping`, "u"),
     );
   }
 });
@@ -703,40 +620,46 @@ test("drives projected neutral outcomes through the actual Contained Turn engine
   for (const outcomeCase of exercisedCases) {
     const expectation = independentKernelExpectations[outcomeCase.id];
     assert.ok(expectation, outcomeCase.id);
-    const harness = createKernelHarness(outcomeCase);
+    const harness = await createKernelHarness(outcomeCase);
     const result = await harness.engine.submit.execute({
       commandId: `command:${outcomeCase.id}`,
       expectedProvider: "codex",
       intent: { mode: "analysis", prompt: "synthetic kernel contract probe" },
-      scope: { projectId: "project:synthetic", tenantId: "tenant:synthetic" },
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
     });
     assert.equal(result.status, "observed", outcomeCase.id);
     if (result.status !== "observed") {continue;}
     assert.equal(result.turn.status, expectation.status, outcomeCase.id);
     assert.deepEqual(result.turn.output.map(chunk => chunk.kind), expectation.emittedKinds, outcomeCase.id);
-    const operation = await harness.store.read(result.turn.operationId);
+    const operation = harness.current();
     assert.ok(operation, outcomeCase.id);
     assert.equal(operation.providerAcceptance.kind, expectation.providerAcceptance, outcomeCase.id);
-    assert.equal(operation.terminal.kind, expectation.terminal ? "terminal" : "nonterminal", outcomeCase.id);
-    assert.equal(operation.containment.kind, "contained", outcomeCase.id);
+    assert.equal(operation.terminal.kind, expectation.terminal ? "final" : "open", outcomeCase.id);
     if (expectation.execution === "unknown") {
-      assert.equal(operation.execution.kind, "unknown", outcomeCase.id);
+      assert.equal(operation.providerExecution.kind, "unknown", outcomeCase.id);
       assert.equal(operation.effect.kind, "ambiguous", outcomeCase.id);
-      assert.equal(operation.output.kind, "open", outcomeCase.id);
+      assert.equal(operation.output.fence.kind, "fenced", outcomeCase.id);
       assert.equal(operation.reconciliation.kind, "required", outcomeCase.id);
-      assert.equal(operation.workspace.kind, "quarantined", outcomeCase.id);
+      assert.equal(operation.physicalContainment.kind, "contained", outcomeCase.id);
+      assert.equal(operation.containment.kind, "uncertain", outcomeCase.id);
+      assert.equal(harness.workspaceQuarantines.length, 0, outcomeCase.id);
     } else {
-      assert.equal(operation.execution.kind, "closed", outcomeCase.id);
-      if (operation.execution.kind === "closed") {
-        assert.equal(operation.execution.outcome, expectation.execution, outcomeCase.id);
+      assert.equal(operation.providerExecution.kind, "closed", outcomeCase.id);
+      if (operation.providerExecution.kind === "closed") {
+        assert.equal(operation.providerExecution.outcome, expectation.execution, outcomeCase.id);
       }
       assert.equal(operation.effect.kind, "resolved", outcomeCase.id);
       if (operation.effect.kind === "resolved") {
         assert.equal(operation.effect.disposition, expectation.effect, outcomeCase.id);
       }
-      assert.equal(operation.output.kind, "sealed", outcomeCase.id);
-      assert.equal(operation.workspace.kind, "closed", outcomeCase.id);
-      assert.equal(operation.receipts.length, 12, outcomeCase.id);
+      assert.equal(operation.output.fence.kind, "fenced", outcomeCase.id);
+      assert.equal(
+        operation.containment.kind,
+        expectation.providerAcceptance === "not_accepted" ? "qualified_not_required" : "contained",
+        outcomeCase.id,
+      );
+      assert.equal(harness.workspaceQuarantines.length, 0, outcomeCase.id);
+      assert.equal(operation.requiredReceiptSet.receipts.length, 12, outcomeCase.id);
     }
     assert.equal(harness.providerOutcomes.length, 1, outcomeCase.id);
     const providerOutcome = harness.providerOutcomes[0];

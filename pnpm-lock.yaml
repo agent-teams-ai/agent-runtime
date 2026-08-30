@@ -72,6 +72,9 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
+      '@agent-teams/agent-execution':
+        specifier: workspace:*
+        version: link:packages/contexts/agent-execution
       '@agent-teams/docs-protocol':
         specifier: 0.2.0
         version: 0.2.0(@types/node@24.13.3)(supports-color@8.1.1)
