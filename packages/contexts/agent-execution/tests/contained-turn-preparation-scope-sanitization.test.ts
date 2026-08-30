@@ -4,6 +4,7 @@ import test from "node:test";
 import { claimContainedTurnWithConsumedGrants } from "../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
 import { retireAndCleanupContainedTurnPreparation } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 import type { ContainedTurnKernelDependencies } from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
+import { createContainedTurnPreparationScopeDependencies } from "../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
 import { containedTurnScopeDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnDispatchClaimBindingDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
@@ -57,9 +58,22 @@ const consumedReceipt = (owner: "provider_access" | "runtime_security") => Objec
   validThroughOperationCutoffRevision: initial.operationCutoff.revision,
 });
 
+const canonicalDependencies = (
+  dependencies: Partial<ContainedTurnKernelDependencies>,
+): ContainedTurnKernelDependencies => createContainedTurnPreparationScopeDependencies(Object.freeze({
+  operationStore: {},
+  security: {},
+  providerAccess: {},
+  workspace: {},
+  artifacts: {},
+  custody: {},
+  provider: {},
+  ...dependencies,
+}) as unknown as ContainedTurnKernelDependencies);
+
 const claimDependencies = (
   outcome: Awaited<ReturnType<NonNullable<ContainedTurnKernelDependencies["operationStore"]["claimPreparedDispatch"]>>>,
-): ContainedTurnKernelDependencies => ({
+): ContainedTurnKernelDependencies => canonicalDependencies({
   operationStore: { claimPreparedDispatch: async () => outcome },
   providerAccess: {
     consumeForDispatch: async () => ({ kind: "consumed", receipt: consumedReceipt("provider_access") }),
@@ -67,7 +81,7 @@ const claimDependencies = (
   security: {
     consumeForDispatch: async () => ({ kind: "consumed", receipt: consumedReceipt("runtime_security") }),
   },
-} as unknown as ContainedTurnKernelDependencies);
+});
 
 const foreignOperationMutations: readonly ((operation: ContainedTurnKernelOperation) => ContainedTurnKernelOperation)[] = [
   operation => ({ ...operation, scope: { ...operation.scope, tenantId: "tenant:foreign" } }),
@@ -211,7 +225,7 @@ if (retiredPreparation.kind !== "cleanup_pending") {throw new TypeError("fixture
 const cleanupDependencies = (input: Readonly<{
   record?: (target: "custody" | "provider_access" | "runtime_security") => ContainedTurnDispatchPreparation;
   retirement: Awaited<ReturnType<NonNullable<ContainedTurnKernelDependencies["operationStore"]["retireDispatchPreparation"]>>>;
-}>): ContainedTurnKernelDependencies => ({
+}>): ContainedTurnKernelDependencies => canonicalDependencies({
   custody: { releaseRetiredReservation: async () => ({ kind: "released" }) },
   operationStore: {
     recordDispatchPreparationCleanup: async ({ target }) => input.record?.(target) ?? retiredPreparation,
@@ -219,7 +233,7 @@ const cleanupDependencies = (input: Readonly<{
   },
   providerAccess: { settleConsumedGrant: async () => ({ kind: "settled" }) },
   security: { settleConsumedGrant: async () => ({ kind: "settled" }) },
-} as unknown as ContainedTurnKernelDependencies);
+});
 
 test("retirement claimed and stale outcomes never adopt foreign operation or preparation owners", async () => {
   for (const mutate of foreignOperationMutations) {

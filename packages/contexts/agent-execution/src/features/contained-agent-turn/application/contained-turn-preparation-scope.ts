@@ -1,5 +1,3 @@
-import { types as nodeTypes } from "node:util";
-
 import { containedTurnScopeDigest } from "../domain/contained-turn-authority.js";
 import { parseContainedTurnCanonicalDigest } from "../domain/contained-turn-codecs.js";
 import type { ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
@@ -29,118 +27,6 @@ const PREPARATION_IDENTITY_KEYS = Object.freeze([
   "attemptId", "custodyId", "operationCutoffRevision", "operationId", "preparationToken",
   "preparedOperationRevision", "providerAccessGrantRequestId", "runtimeSecurityGrantRequestId", "workspaceId",
 ]);
-
-const PORT_VALUE_MAXIMUM_DEPTH = 32;
-const PORT_VALUE_MAXIMUM_NODES = 16_384;
-const PORT_VALUE_MAXIMUM_PROPERTIES = 16_384;
-
-type PortScalar = boolean | number | string | null;
-type PortValue = PortScalar | readonly PortValue[] | { readonly [key: string]: PortValue };
-type PortCloneState = { readonly ancestors: WeakSet<object>; nodes: number; properties: number };
-
-const readBoundedContainedTurnDescriptors = (
-  candidate: object,
-  state: PortCloneState,
-): PropertyDescriptorMap => {
-  const keys = Reflect.ownKeys(candidate);
-  state.properties += keys.length;
-  if (state.properties > PORT_VALUE_MAXIMUM_PROPERTIES) {
-    throw new TypeError("owner port value exceeds the bounded property limit");
-  }
-  return Object.fromEntries(keys.map(key => {
-    const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
-    if (descriptor === undefined) {throw new TypeError("owner port property changed during projection");}
-    return [key, descriptor];
-  })) as PropertyDescriptorMap;
-};
-
-const cloneContainedTurnPortArray = (
-  candidate: unknown[],
-  descriptors: PropertyDescriptorMap,
-  depth: number,
-  state: PortCloneState,
-): PortValue[] => {
-  const lengthDescriptor = descriptors.length;
-  if (Object.getPrototypeOf(candidate) !== Array.prototype || lengthDescriptor === undefined ||
-      !("value" in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value) ||
-      lengthDescriptor.value < 0) {
-    throw new TypeError("owner port arrays must be ordinary dense arrays");
-  }
-  const length = lengthDescriptor.value as number;
-  const keys = Reflect.ownKeys(descriptors);
-  if (keys.length !== length + 1 || keys.some(key => typeof key !== "string") ||
-      Array.from({ length }, (_item, index) => String(index)).some(key => descriptors[key] === undefined)) {
-    throw new TypeError("owner port arrays must be dense and unaugmented");
-  }
-  const output: PortValue[] = [];
-  for (let index = 0; index < length; index += 1) {
-    const descriptor = descriptors[String(index)];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-      throw new TypeError("owner port arrays must contain only enumerable data elements");
-    }
-    output.push(cloneContainedTurnPortEntry(descriptor.value, depth + 1, state));
-  }
-  return output;
-};
-
-const cloneContainedTurnPortRecord = (
-  candidate: object,
-  descriptors: PropertyDescriptorMap,
-  depth: number,
-  state: PortCloneState,
-): { readonly [key: string]: PortValue } => {
-  if (Object.getPrototypeOf(candidate) !== Object.prototype) {
-    throw new TypeError("owner port records must use the ordinary object prototype");
-  }
-  const entries: [string, PortValue][] = [];
-  for (const key of Reflect.ownKeys(descriptors)) {
-    if (typeof key !== "string") {throw new TypeError("owner port records must not contain symbols");}
-    const descriptor = descriptors[key];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-      throw new TypeError("owner port records must contain only enumerable data properties");
-    }
-    entries.push([key, cloneContainedTurnPortEntry(descriptor.value, depth + 1, state)]);
-  }
-  return Object.fromEntries(entries) as { readonly [key: string]: PortValue };
-};
-
-const cloneContainedTurnPortEntry = (
-  candidate: unknown,
-  depth: number,
-  state: PortCloneState,
-): PortValue => {
-  if (candidate === null || typeof candidate === "boolean" || typeof candidate === "number" ||
-      typeof candidate === "string") {
-    return candidate;
-  }
-  if (typeof candidate !== "object" || nodeTypes.isProxy(candidate)) {
-    throw new TypeError("owner port values must contain only ordinary canonical data");
-  }
-  state.nodes += 1;
-  if (state.nodes > PORT_VALUE_MAXIMUM_NODES || depth > PORT_VALUE_MAXIMUM_DEPTH ||
-      state.ancestors.has(candidate)) {
-    throw new TypeError("owner port value exceeds the bounded acyclic projection limits");
-  }
-  state.ancestors.add(candidate);
-  try {
-    const descriptors = readBoundedContainedTurnDescriptors(candidate, state);
-    return Array.isArray(candidate)
-      ? cloneContainedTurnPortArray(candidate, descriptors, depth, state)
-      : cloneContainedTurnPortRecord(candidate, descriptors, depth, state);
-  } finally {
-    state.ancestors.delete(candidate);
-  }
-};
-
-/**
- * Rejects Proxy exotica before any reflective operation and copies only a
- * bounded graph of ordinary, enumerable data properties. Caller accessors are
- * rejected from their descriptors and are never invoked.
- */
-export const cloneContainedTurnPortValue = <Value>(value: Value): Value => {
-  const state: PortCloneState = { ancestors: new WeakSet<object>(), nodes: 0, properties: 0 };
-  return cloneContainedTurnPortEntry(value, 0, state) as Value;
-};
 
 const requireOrdinaryRecord = (name: string, value: object, keys: readonly string[]): void => {
   assertContainedTurnExactRecord(name, value, keys);
@@ -172,9 +58,8 @@ const validatePreparationIdentity = (preparation: ContainedTurnDispatchPreparati
 export const snapshotContainedTurnCleanupPermit = (
   permit: ContainedTurnCleanupPermit,
 ): ContainedTurnCleanupPermit => {
-  const safePermit = cloneContainedTurnPortValue(permit);
-  requireOrdinaryRecord("cleanup permit", safePermit, PERMIT_KEYS);
-  const descriptors = Object.getOwnPropertyDescriptors(safePermit);
+  requireOrdinaryRecord("cleanup permit", permit, PERMIT_KEYS);
+  const descriptors = Object.getOwnPropertyDescriptors(permit);
   const snapshot = Object.freeze({
     attemptId: descriptors.attemptId?.value as ContainedTurnCleanupPermit["attemptId"],
     custodyId: descriptors.custodyId?.value as ContainedTurnCleanupPermit["custodyId"],
@@ -271,14 +156,13 @@ const snapshotCleanupClosedPreparation = (
 export const snapshotContainedTurnDispatchPreparation = (
   preparation: ContainedTurnDispatchPreparation,
 ): ContainedTurnDispatchPreparation => {
-  const safePreparation = cloneContainedTurnPortValue(preparation);
-  requireOrdinaryRecord("dispatch preparation envelope", safePreparation, Object.keys(safePreparation));
-  const kind = safePreparation.kind;
+  requireOrdinaryRecord("dispatch preparation envelope", preparation, Object.keys(preparation));
+  const kind = preparation.kind;
   if (kind === "active" || kind === "claimed") {
-    return snapshotSimplePreparation(safePreparation, kind);
+    return snapshotSimplePreparation(preparation, kind);
   }
-  if (kind === "cleanup_pending") {return snapshotCleanupPendingPreparation(safePreparation);}
-  if (kind === "cleanup_closed") {return snapshotCleanupClosedPreparation(safePreparation);}
+  if (kind === "cleanup_pending") {return snapshotCleanupPendingPreparation(preparation);}
+  if (kind === "cleanup_closed") {return snapshotCleanupClosedPreparation(preparation);}
   throw new TypeError("unknown dispatch preparation kind");
 };
 
@@ -286,9 +170,8 @@ export const snapshotContainedTurnDispatchPreparation = (
 export const snapshotContainedTurnOwnedOperation = (
   operation: ContainedTurnKernelOperation,
 ): ContainedTurnKernelOperation => {
-  const detached = cloneContainedTurnPortValue(operation);
-  validateContainedTurnOperation(detached);
-  return detachAndFreezeContainedTurnValue(detached);
+  validateContainedTurnOperation(operation);
+  return detachAndFreezeContainedTurnValue(operation);
 };
 
 const cleanupPermitMatchesPreparation = (

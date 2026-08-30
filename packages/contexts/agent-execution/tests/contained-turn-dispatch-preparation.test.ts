@@ -4,6 +4,7 @@ import test from "node:test";
 import { reconcileContainedTurnClaimPreparation } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 import { claimContainedTurnWithConsumedGrants } from "../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "../dist/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.js";
+import { createContainedTurnPreparationScopeDependencies } from "../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
 import { containedTurnScopeDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
@@ -198,7 +199,7 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
   const events: string[] = [];
   let observed = false;
   const winner = createReservedOperation();
-  const dependencies = {
+  const dependencies = createContainedTurnPreparationScopeDependencies({
     operationStore: {
       claimPreparedDispatch: async () => {
         events.push("agent-execution:final-claim");
@@ -219,7 +220,11 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
         return { kind: "consumed" as const, receipt: normalizedReceipt("runtime_security") };
       },
     },
-  } as unknown as ContainedTurnKernelDependencies;
+    workspace: {},
+    artifacts: {},
+    custody: {},
+    provider: {},
+  } as unknown as ContainedTurnKernelDependencies);
   const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
   const claimed = await claimContainedTurnWithConsumedGrants(dependencies, initial, scope, subject);
   assert.equal(claimed.kind, "claimed");
