@@ -1,16 +1,17 @@
+/* oxlint-disable max-lines -- The test-only factory keeps its exact owner-port composition in one fixture. */
 import assert from "node:assert/strict";
-import { digestContainedTurnCanonicalValue } from "../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
-import { containedTurnIdentity } from "../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { containedTurnSatisfactionDigest } from "../../dist/features/contained-agent-turn/domain/contained-turn-satisfaction.js";
-import { appendContainedTurnOutputForOwnerStore } from "../../dist/features/contained-agent-turn/domain/contained-turn-output-transitions.js";
-import { mutateContainedTurnOperation } from "../../dist/features/contained-agent-turn/domain/contained-turn-transitions.js";
-import type { ContainedTurnKernelOperation } from "../../dist/features/contained-agent-turn/domain/contained-turn-kernel-model.js";
-import type { ContainedTurnProof } from "../../dist/features/contained-agent-turn/domain/contained-turn-proofs.js";
-import type { ContainedTurnKernelDependencies } from "../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
-import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
-import { containedTurnDispatchClaimBindingDigest } from "../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
-import { recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
-import { containedTurnPreparationToken } from "../../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
+import { digestContainedTurnCanonicalValue } from "../features/contained-agent-turn/domain/contained-turn-codecs.js";
+import { containedTurnIdentity } from "../features/contained-agent-turn/domain/contained-turn-identities.js";
+import { containedTurnSatisfactionDigest } from "../features/contained-agent-turn/domain/contained-turn-satisfaction.js";
+import { appendContainedTurnOutputForOwnerStore } from "../features/contained-agent-turn/domain/contained-turn-output-transitions.js";
+import { mutateContainedTurnOperation } from "../features/contained-agent-turn/domain/contained-turn-transitions.js";
+import type { ContainedTurnKernelOperation } from "../features/contained-agent-turn/domain/contained-turn-kernel-model.js";
+import type { ContainedTurnProof } from "../features/contained-agent-turn/domain/contained-turn-proofs.js";
+import type { ContainedTurnKernelDependencies } from "../features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
+import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnDispatchClaimBindingDigest } from "../features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
+import { recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
+import { containedTurnPreparationToken } from "../features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 
 const identity = <Namespace extends Parameters<typeof containedTurnIdentity>[0]>(namespace: Namespace, suffix: string) =>
   containedTurnIdentity(namespace, `${String(namespace).replaceAll("_", "-")}:${suffix}`);
@@ -572,7 +573,7 @@ const createDependencies = (options: Readonly<{
         if (options.neverStart === true) {return new Promise(() => {});}
         const proof = { binding: { ...attemptBinding(current as ContainedTurnKernelOperation), custodyId, hostBootId, hostInstanceId }, kind: "provider_process_start" as const, proofId: proofId("process-start") };
         let reportStart!: () => void;
-        const observation = new Promise<import("../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js").ContainedTurnKernelProcessStartObservation>(resolve => {
+        const observation = new Promise<import("../features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js").ContainedTurnKernelProcessStartObservation>(resolve => {
           reportStart = () => {resolve({ kind: "execution_started", proof });};
         });
         const execution = input.execute({

@@ -19,6 +19,7 @@ boundaries:
     entrypoints:
       - packages/contexts/agent-execution/src/index.ts
       - packages/contexts/agent-execution/src/composition.ts
+      - packages/contexts/agent-execution/src/testing/index.ts
     allow:
       boundaries: []
       packages:
@@ -27,6 +28,7 @@ boundaries:
         - pg
         - zod
       builtins:
+        - node:assert/strict
         - node:child_process
         - node:crypto
         - node:fs

@@ -2,7 +2,7 @@
   "name": "opencode-contained-turn-port-conformance",
   "provenance": "fully_synthetic_opencode_acp_sdk_semantic_observations_no_provider_launch",
   "conformanceStatus": "contract_gap",
-  "evidenceKind": "synthetic_acp_characterization_with_independent_kernel_contract_checks_not_opencode_conformance",
+  "evidenceKind": "synthetic_acp_characterization_with_current_kernel_contract_checks_not_opencode_conformance",
   "scope": {
     "acpFramingAndCorrelationAuthority": "@agentclientprotocol/sdk@1.3.0",
     "liveProvider": false,
@@ -13,16 +13,17 @@
   "authoritySeparation": {
     "fixtureRole": "acp_semantic_observations_only_no_expected_kernel_outcomes",
     "acpTerminalAuthority": "@agentclientprotocol/sdk@1.3.0/schema/schema.json#/$defs/StopReason",
-    "kernelImplementation": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts",
+    "kernelImplementation": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts",
     "kernelExpectationAuthority": [
       "docs/decisions/0010-contained-agent-turn-v1-operation-authority.md",
-      "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
-      "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-operation.ts"
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-kernel-model.ts"
     ],
     "kernelHarnessProviderIdentity": "codex_contract_only_not_opencode_identity"
   },
   "contractPin": {
-    "adapterIdentity": "opencode-acp-v1-adapter",
+    "adapterIdentity": "synthetic-opencode-acp-v1-projection",
     "provider": "opencode",
     "providerRevision": "opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
     "supportedModes": ["analysis"]
@@ -41,34 +42,53 @@
     ],
     "acceptanceDetail": {
       "observation": "closure_timeout_with_provider_accepted_true",
-      "currentAmbiguousMembers": ["evidenceRef", "kind"],
+      "currentAmbiguousMembers": ["evidenceId", "kind"],
       "lostFact": "providerAccepted_true",
       "required": "retain_known_provider_acceptance_independently_of_execution_ambiguity",
+      "status": "proposed_contract_gap_not_kernel_exercised"
+    },
+    "requestRejection": {
+      "observation": "request_rejected_with_provider_accepted_false_and_proved_no_start",
+      "currentProviderObservationKinds": ["completed", "indeterminate"],
+      "lostFacts": ["providerAccepted_false", "proved_no_start"],
+      "required": "neutral_provider_observation_for_proved_request_no_start",
       "status": "proposed_contract_gap_not_kernel_exercised"
     }
   },
   "characterizationBoundary": {
     "capabilityDisposition": {
       "required": ["supported", "deferred", "unknown", "unsupported"],
-      "currentManifestMembers": ["effectClass", "providerBinding", "supportedModes"],
-      "source": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts"
+      "currentManifestMembers": [
+        "effectCardinality",
+        "effectClass",
+        "manifestRevision",
+        "manifestVersion",
+        "provider",
+        "providerAttemptCardinality",
+        "requiredProofKinds",
+        "resourceScopeRevision",
+        "supportedModes",
+        "unknownCapabilityPolicy"
+      ],
+      "source": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts"
     },
     "anomalyDetail": {
-      "currentNeutralOutcome": "ambiguous_with_opaque_bounded_evidence_ref",
+      "currentNeutralOutcome": "indeterminate_with_opaque_bounded_evidence_id",
       "requiredSyntheticClasses": [
         "request_timeout_ambiguity",
         "late_request_rejected_after_timeout",
         "request_rejected_without_no_start_proof"
       ],
       "proposedContractGaps": [
-        "closure_timeout_with_provider_accepted_true_loses_acceptance"
+        "closure_timeout_with_provider_accepted_true_loses_acceptance",
+        "request_rejected_with_proved_no_start_is_not_a_provider_access_prevention"
       ]
     }
   },
   "evidencePolicy": {
     "maxIdentifierCharacters": 128,
     "maxRetainedTextBytes": 256,
-    "ambiguousEvidenceRef": "sha256_digest_only",
+    "indeterminateEvidenceId": "sha256_digest_only",
     "rawFieldsNeverRetained": [
       "workspace",
       "session",
@@ -166,7 +186,7 @@
     },
     {
       "id": "explicit-pre-acceptance-rejection",
-      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "evidenceClassification": "proposed_no_start_request_rejection_contract_gap",
       "sdkSemanticObservation": {
         "kind": "request_rejected",
         "providerAccepted": false,
