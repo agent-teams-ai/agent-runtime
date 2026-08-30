@@ -1,44 +1,88 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
-const runtimeRef = "6b35091c824b1d4d5ee6bf8316121ed08d3e4861";
+const runtimeRef = "75cbecab131d74021677fcd1fb21962994d306b8";
+const checkoutRef = "d23441a48e516b6c34aea4fa41551a30e30af803";
+const setupNodeRef = "249970729cb0ef3589644e2896645e5dc5ba9c38";
+const expectedWorkflowSha256 =
+  "0997a60c648fcb66e341d011a94ea2721585af9b1611c7e07445c372f0ac5008";
 const workflow = await readFile(
   resolve(repositoryRoot, ".github/workflows/reviewrouter-interaction.yml"),
   "utf8",
 );
 
-test("ReviewRouter interaction remains a pinned least-privilege reusable caller", () => {
+test("ReviewRouter interaction remains the exact audited canonical workflow", () => {
+  assert.equal(
+    createHash("sha256").update(workflow).digest("hex"),
+    expectedWorkflowSha256,
+  );
+});
+
+test("ReviewRouter interaction remains pinned and least privilege", () => {
   assert.match(workflow, /pull_request_review_comment:\n    types: \[created, edited\]/);
   assert.match(workflow, /issue_comment:\n    types: \[created, edited\]/);
   assert.match(workflow, /  workflow_dispatch:\n/);
   assert.match(workflow, /^permissions: \{\}$/m);
-  assert.ok(workflow.includes("    if: ${{ github.event_name == 'workflow_dispatch' || ((github.event_name != 'issue_comment' || github.event.issue.pull_request) && github.event.comment.user.type != 'Bot') }}"));
-  assert.match(workflow, new RegExp(
-    `^    uses: 777genius/review-router/\\.github/workflows/reviewrouter-interaction-reusable\\.yml@${runtimeRef}$`,
-    "m",
-  ));
-  assert.match(workflow, new RegExp(`^      runtime_ref: "${runtimeRef}"$`, "m"));
-  assert.match(workflow, /^      api_url: "https:\/\/api\.reviewrouter\.site"$/m);
-  assert.match(workflow, /^      runtime_config_mode: oidc$/m);
-  assert.match(workflow, /      review_workflow_file: reviewrouter-codex\.yml/);
-  assert.match(workflow, /      discussion_mode: \$\{\{ vars\.REVIEW_ROUTER_DISCUSSION_MODE \|\| 'off' \}\}/);
-  assert.match(workflow, /      discussion_model: \$\{\{ vars\.REVIEW_CODEX_MODEL \|\| 'gpt-5\.5' \}\}/);
-  assert.match(workflow, /      discussion_reasoning_effort: \$\{\{ vars\.REVIEW_CODEX_EFFORT \|\| 'xhigh' \}\}/);
-  assert.match(workflow, /      discussion_max_per_pr: \$\{\{ vars\.REVIEW_ROUTER_DISCUSSION_MAX_PER_PR \|\| '20' \}\}/);
-  assert.match(workflow, /      discussion_max_per_thread: \$\{\{ vars\.REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD \|\| '5' \}\}/);
-  assert.match(workflow, /      discussion_timeout_seconds: \$\{\{ vars\.REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS \|\| '60' \}\}/);
-  assert.match(workflow, /      REVIEW_ROUTER_LEDGER_KEY: \$\{\{ secrets\.REVIEW_ROUTER_LEDGER_KEY \}\}/);
-  assert.match(workflow, /      CODEX_AUTH_JSON: \$\{\{ secrets\.REVIEWROUTER_CODEX_AUTH_JSON \}\}/);
+  assert.ok(
+    workflow.includes(
+      "    if: ${{ github.event_name == 'workflow_dispatch' || ((github.event_name != 'issue_comment' || github.event.issue.pull_request) && github.event.comment.user.type != 'Bot') }}",
+    ),
+  );
+  assert.match(workflow, /^    runs-on: ubuntu-24\.04$/m);
+  assert.match(
+    workflow,
+    new RegExp(`^      RR_RUNTIME_REF: "${runtimeRef}"$`, "m"),
+  );
+  assert.match(workflow, /^      REVIEWROUTER_API_URL: "https:\/\/api\.reviewrouter\.site"$/m);
+  assert.match(workflow, /^      REVIEWROUTER_OIDC_AUDIENCE: "reviewrouter"$/m);
+  assert.match(workflow, /^      REVIEWROUTER_RUNTIME_CONFIG_MODE: "oidc"$/m);
+  assert.match(workflow, /^      REVIEWROUTER_COMMENT_TOKEN_MODE: "app-oidc"$/m);
+  assert.match(
+    workflow,
+    /^      CODEX_AUTH_JSON_PRESENT: \$\{\{ secrets\.REVIEWROUTER_CODEX_AUTH_JSON != '' && '1' \|\| '0' \}\}$/m,
+  );
+  assert.match(
+    workflow,
+    new RegExp(`^        uses: actions/checkout@${checkoutRef}$`, "m"),
+  );
+  assert.match(workflow, /^          repository: 777genius\/review-router$/m);
+  assert.match(workflow, /^          ref: \$\{\{ env\.RR_RUNTIME_REF \}\}$/m);
+  assert.match(workflow, /^          persist-credentials: false$/m);
+  assert.match(
+    workflow,
+    new RegExp(`^        uses: actions/setup-node@${setupNodeRef}$`, "m"),
+  );
+  assert.match(workflow, /^        run: npm install -g @openai\/codex@0\.144\.0$/m);
+  assert.match(
+    workflow,
+    /^        if: \$\{\{ steps\.preflight\.outputs\.needs_discussion == 'true' && env\.CODEX_AUTH_JSON_PRESENT == '1' \}\}$/m,
+  );
+  assert.match(
+    workflow,
+    /^          CODEX_AUTH_JSON: \$\{\{ secrets\.REVIEWROUTER_CODEX_AUTH_JSON \}\}$/m,
+  );
+  assert.match(workflow, /^          GITHUB_TOKEN: \$\{\{ github\.token \}\}$/m);
 
-  assert.match(workflow, /    permissions:\n      actions: write\n      contents: read\n      issues: read\n      pull-requests: read\n      id-token: write/);
-  assert.doesNotMatch(workflow, /(?:contents|issues|pull-requests): write/);
+  assert.match(
+    workflow,
+    /    permissions:\n      contents: read\n      issues: read\n      pull-requests: read\n      id-token: write/,
+  );
+  assert.doesNotMatch(workflow, /(?:actions|contents|issues|pull-requests): write/);
+  assert.doesNotMatch(workflow, /OPENAI_API_KEY|secrets\.CODEX_AUTH_JSON/);
 });
 
-test("ReviewRouter caller contains no copied interaction runtime", () => {
-  assert.doesNotMatch(workflow, /^    (?:runs-on|env|steps):/m);
-  assert.doesNotMatch(workflow, /\.reviewrouter-runtime|actions\/checkout@|actions\/setup-node@/);
-  assert.doesNotMatch(workflow, /dist\/index\.js|npm install|RR_RUNTIME_REF|CODEX_AUTH_JSON_PRESENT/);
+test("ReviewRouter interaction executes only its pinned checked-out runtime", () => {
+  assert.doesNotMatch(
+    workflow,
+    /uses: 777genius\/review-router\/\.github\/workflows\//,
+  );
+  assert.equal(
+    workflow.match(/run: node \.reviewrouter-runtime\/dist\/index\.js/g)?.length,
+    2,
+  );
+  assert.doesNotMatch(workflow, /npm install(?! -g @openai\/codex@0\.144\.0)/);
 });
