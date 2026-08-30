@@ -1,4 +1,3 @@
-import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "./contained-turn-authority.js";
 import {
   digestContainedTurnCanonicalValue,
   type ContainedTurnCanonicalDigest,
@@ -23,7 +22,16 @@ export const containedTurnSatisfactionDigest = (
       proofId: proof.proofId,
     }))
     .toSorted((left, right) => left.proofId.localeCompare(right.proofId)),
-  requiredProofKinds: [...CONTAINED_TURN_REQUIRED_PROOF_KINDS],
+  requiredReceiptSet: {
+    digest: operation.requiredReceiptSetDigest,
+    set: {
+      membershipFrozenAt: operation.requiredReceiptSet.membershipFrozenAt,
+      membershipMutation: operation.requiredReceiptSet.membershipMutation,
+      receipts: [...operation.requiredReceiptSet.receipts],
+      satisfaction: operation.requiredReceiptSet.satisfaction,
+      setVersion: operation.requiredReceiptSet.setVersion,
+    },
+  },
   resultRef: operation.resultRef ?? null,
   version: 1,
 });

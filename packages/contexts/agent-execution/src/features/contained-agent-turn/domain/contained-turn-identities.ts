@@ -12,11 +12,14 @@ export type ContainedTurnCommandId = ContainedTurnIdentity<"command">;
 export type ContainedTurnCustodyId = ContainedTurnIdentity<"custody">;
 export type ContainedTurnEffectId = ContainedTurnIdentity<"effect">;
 export type ContainedTurnEvidenceId = ContainedTurnIdentity<"evidence">;
+export type ContainedTurnExecutionGenerationId = ContainedTurnIdentity<"execution_generation">;
 export type ContainedTurnHostBootId = ContainedTurnIdentity<"host_boot">;
 export type ContainedTurnHostInstanceId = ContainedTurnIdentity<"host_instance">;
 export type ContainedTurnOperationId = ContainedTurnIdentity<"operation">;
 export type ContainedTurnProofId = ContainedTurnIdentity<"proof">;
 export type ContainedTurnWorkspaceId = ContainedTurnIdentity<"workspace">;
+/** Private owner-store credential. It must never enter caller-facing projections. */
+export type ContainedTurnWriterFence = ContainedTurnIdentity<"writer_fence">;
 
 export const CONTAINED_TURN_IDENTITY_PREFIXES = Object.freeze({
   attempt: "attempt:",
@@ -25,11 +28,13 @@ export const CONTAINED_TURN_IDENTITY_PREFIXES = Object.freeze({
   custody: "custody:",
   effect: "effect:",
   evidence: "evidence:",
+  execution_generation: "execution-generation:",
   host_boot: "host-boot:",
   host_instance: "host-instance:",
   operation: "operation:",
   proof: "proof:",
   workspace: "workspace:",
+  writer_fence: "writer-fence:",
 } as const);
 
 export type ContainedTurnIdentityNamespace = keyof typeof CONTAINED_TURN_IDENTITY_PREFIXES;

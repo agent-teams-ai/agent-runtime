@@ -71,6 +71,7 @@ export interface ContainedTurnCapabilityManifest {
   readonly manifestVersion: 1;
   readonly provider: ContainedTurnProvider;
   readonly providerAttemptCardinality: "at_most_one";
+  /** Compatibility declaration only; Kernel acceptance never sources receipt membership from it. */
   readonly requiredProofKinds: typeof CONTAINED_TURN_REQUIRED_PROOF_KINDS;
   readonly resourceScopeRevision: string;
   readonly supportedModes: readonly ContainedTurnMode[];

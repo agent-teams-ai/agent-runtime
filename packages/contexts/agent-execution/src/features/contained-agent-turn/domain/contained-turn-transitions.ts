@@ -1,104 +1,43 @@
 import {
-  containedTurnAuthorityVectorDigest,
   containedTurnCancellationFingerprint,
-  containedTurnCommandFingerprint,
   containedTurnScopeDigest,
-  type ContainedTurnAuthorityVector,
   type ContainedTurnCancellationCommand,
-  type ContainedTurnCapabilityManifest,
-  type ContainedTurnIntent,
-  type ContainedTurnProviderAccessSnapshot,
-  type ContainedTurnProviderAdapterSnapshot,
-  type ContainedTurnScope,
 } from "./contained-turn-authority.js";
 import type {
   ContainedTurnAttemptId,
-  ContainedTurnCommandId,
   ContainedTurnCustodyId,
-  ContainedTurnEffectId,
   ContainedTurnEvidenceId,
-  ContainedTurnOperationId,
+  ContainedTurnExecutionGenerationId,
   ContainedTurnHostBootId,
   ContainedTurnHostInstanceId,
   ContainedTurnWorkspaceId,
+  ContainedTurnWriterFence,
 } from "./contained-turn-identities.js";
 import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
-import type { ContainedTurnKernelOperation, ContainedTurnKernelOutputChunk } from "./contained-turn-kernel-model.js";
-import type { ContainedTurnSchemaVersion } from "./contained-turn-limits.js";
+import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
 import type { ContainedTurnProof } from "./contained-turn-proofs.js";
+import { nextContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
+import { closeOperationCutoffForContinuity } from "./contained-turn-output-transitions.js";
 import { assertContainedTurnExactRecord, detachAndFreezeContainedTurnValue } from "./contained-turn-record.js";
 import { containedTurnSatisfactionDigest } from "./contained-turn-satisfaction.js";
 import { validateContainedTurnProofBinding } from "./contained-turn-proof-validation.js";
 import { validateContainedTurnOperation } from "./contained-turn-validation.js";
 
-export interface CreateContainedTurnOperationInput {
-  readonly acceptanceProof: Extract<ContainedTurnProof, { readonly kind: "acceptance" }>;
-  readonly providerAccessAcceptanceProof: Extract<ContainedTurnProof, { readonly kind: "provider_access_acceptance" }>;
-  readonly runtimeSecurityAcceptanceProof: Extract<ContainedTurnProof, { readonly kind: "runtime_security_acceptance" }>;
-  readonly acceptedAuthorityVector: ContainedTurnAuthorityVector;
-  readonly adapterSnapshot: ContainedTurnProviderAdapterSnapshot;
-  readonly capabilityManifest: ContainedTurnCapabilityManifest;
-  readonly commandId: ContainedTurnCommandId;
-  readonly effectId: ContainedTurnEffectId;
-  readonly intent: ContainedTurnIntent;
-  readonly operationId: ContainedTurnOperationId;
-  readonly providerAccessSnapshot: ContainedTurnProviderAccessSnapshot;
-  readonly schemaVersion: ContainedTurnSchemaVersion;
-  readonly scope: ContainedTurnScope;
-}
-
-export const createContainedTurnOperation = (input: CreateContainedTurnOperationInput): ContainedTurnKernelOperation => {
-  assertContainedTurnExactRecord("contained-turn acceptance input", input, [
-    "acceptanceProof", "acceptedAuthorityVector", "adapterSnapshot", "capabilityManifest", "commandId",
-    "effectId", "intent", "operationId", "providerAccessAcceptanceProof", "providerAccessSnapshot",
-    "runtimeSecurityAcceptanceProof", "schemaVersion", "scope",
-  ]);
-  const detached = detachAndFreezeContainedTurnValue(input);
-  const operation: ContainedTurnKernelOperation = {
-    acceptedAuthorityVector: detached.acceptedAuthorityVector,
-    acceptedAuthorityVectorDigest: containedTurnAuthorityVectorDigest(detached.acceptedAuthorityVector),
-    adapterSnapshot: detached.adapterSnapshot,
-    admissionFence: Object.freeze({ kind: "open" }),
-    cancellation: Object.freeze({ kind: "open" }),
-    capabilityManifest: detached.capabilityManifest,
-    commandFingerprint: containedTurnCommandFingerprint({ intent: detached.intent, provider: detached.adapterSnapshot.provider, scope: detached.scope }),
-    commandId: detached.commandId,
-    containment: Object.freeze({ kind: "not_requested" }),
-    dispatch: Object.freeze({ kind: "unclaimed" }),
-    effect: Object.freeze({ kind: "unresolved" }),
-    effectId: detached.effectId,
-    intent: detached.intent,
-    operationId: detached.operationId,
-    output: Object.freeze({ chunks: Object.freeze([]), fence: Object.freeze({ kind: "open" }) }),
-    proofs: Object.freeze([detached.acceptanceProof, detached.providerAccessAcceptanceProof, detached.runtimeSecurityAcceptanceProof]),
-    providerAccessSnapshot: detached.providerAccessSnapshot,
-    providerProcessStart: Object.freeze({ kind: "unobserved" }),
-    providerAcceptance: Object.freeze({ kind: "unobserved" }),
-    providerExecution: Object.freeze({ kind: "not_started" }),
-    reconciliation: Object.freeze({ kind: "clear" }),
-    revision: 0,
-    schemaVersion: detached.schemaVersion,
-    scope: detached.scope,
-    terminal: Object.freeze({ kind: "open" }),
-  };
-  validateContainedTurnOperation(operation);
-  return detachAndFreezeContainedTurnValue(operation);
-};
-
 export type ContainedTurnKernelMutation =
-  | { readonly kind: "append_output"; readonly output: ContainedTurnKernelOutputChunk }
   | { readonly kind: "bind_workspace"; readonly workspaceId: ContainedTurnWorkspaceId }
   | {
     readonly attemptId: ContainedTurnAttemptId;
     readonly claimProof: Extract<ContainedTurnProof, { readonly kind: "dispatch_claim" }>;
     readonly custodyId: ContainedTurnCustodyId;
     readonly cutoffProof: Extract<ContainedTurnProof, { readonly kind: "cutoff" }>;
+    readonly executionGenerationId: ContainedTurnExecutionGenerationId;
     readonly hostBootId: ContainedTurnHostBootId;
     readonly hostCustodyProof: Extract<ContainedTurnProof, { readonly kind: "host_custody" }>;
     readonly hostInstanceId: ContainedTurnHostInstanceId;
     readonly kind: "claim_dispatch";
     readonly providerAccessDispatchProof: Extract<ContainedTurnProof, { readonly kind: "provider_access_dispatch" }>;
     readonly runtimeSecurityDispatchProof: Extract<ContainedTurnProof, { readonly kind: "runtime_security_dispatch" }>;
+    readonly writerFence: ContainedTurnWriterFence;
   }
   | {
     readonly containmentProof: Extract<ContainedTurnProof, { readonly kind: "containment_not_required" }>;
@@ -125,9 +64,14 @@ export type ContainedTurnKernelMutation =
   | { readonly kind: "record_containment"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "containment" }> }
   | { readonly kind: "finalize"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "terminal_truth" }> }
   | { readonly kind: "record_ambiguity"; readonly evidenceId: ContainedTurnEvidenceId }
-  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "record_reconciliation_debt"; readonly source: "artifact" | "containment" | "store_commit" | "workspace" }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "record_reconciliation_debt"; readonly source: "artifact" | "containment" | "dispatch_authority" | "store_commit" | "workspace" }
   | { readonly kind: "record_process_start"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }> }
   | { readonly kind: "record_process_no_start"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_no_start" }> }
+  | {
+    readonly kind: "record_physical_containment";
+    readonly proof: Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>;
+  }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "record_physical_containment_unknown" }
   | {
     readonly containmentProof: Extract<ContainedTurnProof, { readonly kind: "containment_not_required" }>;
     readonly effectProof: Extract<ContainedTurnProof, { readonly kind: "effect_no_start" }>;
@@ -146,9 +90,8 @@ export type ContainedTurnKernelMutation =
 
 const validateMutationShape = (mutation: ContainedTurnKernelMutation): void => {
   const fieldsByKind: Readonly<Record<ContainedTurnKernelMutation["kind"], readonly string[]>> = {
-    append_output: ["kind", "output"],
     bind_workspace: ["kind", "workspaceId"],
-    claim_dispatch: ["attemptId", "claimProof", "custodyId", "cutoffProof", "hostBootId", "hostCustodyProof", "hostInstanceId", "kind", "providerAccessDispatchProof", "runtimeSecurityDispatchProof"],
+    claim_dispatch: ["attemptId", "claimProof", "custodyId", "cutoffProof", "executionGenerationId", "hostBootId", "hostCustodyProof", "hostInstanceId", "kind", "providerAccessDispatchProof", "runtimeSecurityDispatchProof", "writerFence"],
     close_process_no_start: ["containmentProof", "effectProof", "executionProof", "kind", "outputProof", "providerProof"],
     close_provider_execution: ["executionProof", "kind", "terminalObservationProof"],
     close_workspace: ["kind", "proof"],
@@ -159,6 +102,8 @@ const validateMutationShape = (mutation: ContainedTurnKernelMutation): void => {
     record_ambiguity: ["evidenceId", "kind"],
     record_reconciliation_debt: ["evidenceId", "kind", "source"],
     record_containment: ["kind", "proof"],
+    record_physical_containment: ["kind", "proof"],
+    record_physical_containment_unknown: ["evidenceId", "kind"],
     record_process_no_start: ["kind", "proof"],
     record_process_start: ["kind", "proof"],
     record_process_start_unknown: ["evidenceId", "kind"],
@@ -179,14 +124,15 @@ export const mutateContainedTurnOperation = (
   validateMutationShape(mutation);
   let candidate: ContainedTurnKernelOperation;
   switch (mutation.kind) {
-    case "append_output":
-      candidate = { ...operation, output: { chunks: [...operation.output.chunks, mutation.output], fence: operation.output.fence }, revision: operation.revision + 1 };
-      break;
     case "bind_workspace":
       candidate = { ...operation, revision: operation.revision + 1, workspaceId: mutation.workspaceId };
       break;
     case "claim_dispatch":
-      invariant(operation.dispatch.kind === "unclaimed" && operation.workspaceId !== undefined && operation.cancellation.kind === "open", "dispatch claim requires one uncancelled, workspace-bound operation");
+      invariant(
+        operation.dispatch.kind === "unclaimed" && operation.workspaceId !== undefined &&
+          operation.cancellation.kind === "open" && operation.operationCutoff.kind === "open",
+        "dispatch claim requires one uncancelled, cutoff-current, workspace-bound operation",
+      );
       candidate = {
         ...operation,
         admissionFence: { kind: "fenced", proofId: mutation.cutoffProof.proofId },
@@ -195,12 +141,16 @@ export const mutateContainedTurnOperation = (
         dispatch: {
           attemptId: mutation.attemptId,
           claimProofId: mutation.claimProof.proofId,
+          executionGenerationId: mutation.executionGenerationId,
           kind: "claimed",
+          operationCutoffRevision: operation.operationCutoff.revision,
           providerAccessDispatchProofId: mutation.providerAccessDispatchProof.proofId,
           runtimeSecurityDispatchProofId: mutation.runtimeSecurityDispatchProof.proofId,
+          writerFence: mutation.writerFence,
         },
         hostBootId: mutation.hostBootId,
         hostInstanceId: mutation.hostInstanceId,
+        physicalContainment: { attemptId: mutation.attemptId, kind: "pending" },
         proofs: [...operation.proofs, mutation.providerAccessDispatchProof, mutation.runtimeSecurityDispatchProof, mutation.cutoffProof, mutation.claimProof, mutation.hostCustodyProof],
         providerProcessStart: { attemptId: mutation.attemptId, kind: "pending" },
         revision: operation.revision + 1,
@@ -214,6 +164,14 @@ export const mutateContainedTurnOperation = (
         containment: { kind: "qualified_not_required", proofId: mutation.containmentProof.proofId },
         dispatch: { kind: "prevented", noDispatchProofId: mutation.noDispatchProof.proofId },
         effect: { disposition: "not_committed", kind: "resolved", proofId: mutation.effectProof.proofId },
+        operationCutoff: operation.operationCutoff.kind === "open"
+          ? {
+            kind: "closed",
+            proofId: mutation.cutoffProof.proofId,
+            reason: "prevention",
+            revision: nextContainedTurnOperationCutoffRevision(operation.operationCutoff.revision),
+          }
+          : operation.operationCutoff,
         output: { chunks: operation.output.chunks, fence: { finalCursor: 0, kind: "fenced", proofId: mutation.outputProof.proofId } },
         proofs: [
           ...operation.proofs,
@@ -236,7 +194,11 @@ export const mutateContainedTurnOperation = (
       candidate = { ...operation, proofs: [...operation.proofs, mutation.executionProof, mutation.terminalObservationProof], providerExecution: { kind: "closed", outcome: mutation.executionProof.binding.outcome, proofId: mutation.executionProof.proofId }, revision: operation.revision + 1 };
       break;
     case "drain_output":
-      invariant(operation.providerExecution.kind === "closed" && operation.output.fence.kind === "open", "output drains once after provider closure");
+      invariant(
+        operation.providerExecution.kind === "closed" &&
+          (operation.output.fence.kind === "open" || operation.output.fence.proofId === undefined),
+        "output drains once after provider closure without reopening a cutoff fence",
+      );
       candidate = { ...operation, output: { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced", proofId: mutation.proof.proofId } }, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
       break;
     case "resolve_effect":
@@ -244,7 +206,12 @@ export const mutateContainedTurnOperation = (
       candidate = { ...operation, effect: { disposition: mutation.proof.binding.disposition, kind: "resolved", proofId: mutation.proof.proofId }, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
       break;
     case "seal_artifact":
-      invariant(operation.workspaceId !== undefined && operation.output.fence.kind === "fenced" && operation.artifactManifestRef === undefined, "artifact seals once after output drain");
+      invariant(
+        operation.workspaceId !== undefined && operation.output.fence.kind === "fenced" &&
+          operation.artifactManifestRef === undefined &&
+          (operation.physicalContainment.kind === "contained" || operation.containment.kind === "qualified_not_required"),
+        "artifact seals once after output drain and the physical-containment barrier",
+      );
       candidate = { ...operation, artifactManifestRef: mutation.artifactManifestRef, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
       break;
     case "publish_result":
@@ -256,13 +223,58 @@ export const mutateContainedTurnOperation = (
       candidate = { ...operation, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
       break;
     case "record_containment":
-      invariant(operation.containment.kind === "pending", "containment closure records independently exactly once");
+      invariant(
+        operation.containment.kind === "pending" && operation.physicalContainment.kind === "contained" &&
+          mutation.proof.binding.physicalContainmentProofId === operation.physicalContainment.proofId,
+        "composite containment closure requires the earlier exact physical-containment barrier",
+      );
       candidate = { ...operation, containment: { kind: "contained", proofId: mutation.proof.proofId }, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1 };
+      break;
+    case "record_physical_containment":
+      invariant(
+        (operation.physicalContainment.kind === "pending" || operation.physicalContainment.kind === "uncertain") &&
+          operation.dispatch.kind === "claimed",
+        "physical containment applies once to the sole claimed V1 attempt",
+      );
+      candidate = {
+        ...operation,
+        physicalContainment: {
+          kind: "contained",
+          proofId: mutation.proof.proofId,
+        },
+        proofs: [...operation.proofs, mutation.proof],
+        revision: operation.revision + 1,
+      };
+      break;
+    case "record_physical_containment_unknown":
+      invariant(operation.dispatch.kind === "claimed", "physical-containment ambiguity requires a dispatch claim");
+      candidate = {
+        ...operation,
+        containment: { evidenceId: mutation.evidenceId, kind: "uncertain" },
+        operationCutoff: closeOperationCutoffForContinuity(operation, mutation.evidenceId),
+        output: operation.output.fence.kind === "open"
+          ? { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced" } }
+          : operation.output,
+        physicalContainment: { evidenceId: mutation.evidenceId, kind: "uncertain" },
+        reconciliation: {
+          evidenceIds: operation.reconciliation.kind === "required"
+            ? [...new Set([...operation.reconciliation.evidenceIds, mutation.evidenceId])]
+            : [mutation.evidenceId],
+          kind: "required",
+        },
+        revision: operation.revision + 1,
+      };
       break;
     case "finalize": {
       invariant(operation.terminal.kind === "open" && operation.providerExecution.kind === "closed", "terminal truth closes once after execution closure");
       const digest = containedTurnSatisfactionDigest(operation);
-      invariant(mutation.proof.binding.satisfactionDigest === digest && mutation.proof.binding.terminalOutcome === operation.providerExecution.outcome, "terminal proof must bind the recomputed satisfaction state");
+      invariant(
+        mutation.proof.binding.satisfactionDigest === digest &&
+          mutation.proof.binding.terminalOutcome === operation.providerExecution.outcome &&
+          mutation.proof.binding.requiredReceiptSetDigest === operation.requiredReceiptSetDigest &&
+          mutation.proof.binding.requiredReceiptSetVersion === operation.requiredReceiptSet.setVersion,
+        "terminal proof must bind the recomputed satisfaction and frozen receipt-set authority",
+      );
       candidate = { ...operation, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1, terminal: { kind: "final", outcome: operation.providerExecution.outcome, satisfactionDigest: digest, terminalProofId: mutation.proof.proofId } };
       break;
     }
@@ -274,6 +286,7 @@ export const mutateContainedTurnOperation = (
           ? operation.containment
           : { evidenceId: mutation.evidenceId, kind: "uncertain" },
         effect: { evidenceId: mutation.evidenceId, kind: "ambiguous" },
+        operationCutoff: closeOperationCutoffForContinuity(operation, mutation.evidenceId),
         output: { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced" } },
         providerExecution: { evidenceId: mutation.evidenceId, kind: "unknown" },
         providerAcceptance: { evidenceId: mutation.evidenceId, kind: "unknown" },
@@ -293,6 +306,7 @@ export const mutateContainedTurnOperation = (
         containment: mutation.source === "containment" && operation.containment.kind === "pending"
           ? { evidenceId: mutation.evidenceId, kind: "uncertain" }
           : operation.containment,
+        operationCutoff: closeOperationCutoffForContinuity(operation, mutation.evidenceId),
         output: operation.output.fence.kind === "open"
           ? { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced" } }
           : operation.output,
@@ -362,6 +376,8 @@ export const mutateContainedTurnOperation = (
       candidate = {
         ...operation,
         output: { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced" } },
+        operationCutoff: closeOperationCutoffForContinuity(operation, mutation.evidenceId),
+        physicalContainment: { evidenceId: mutation.evidenceId, kind: "uncertain" },
         providerProcessStart: { evidenceId: mutation.evidenceId, kind: "unknown" },
         reconciliation: { evidenceIds: [mutation.evidenceId], kind: "required" },
         revision: operation.revision + 1,
@@ -381,35 +397,36 @@ export const mutateContainedTurnOperation = (
         validateContainedTurnProofBinding(operation, mutation.proof);
         validateContainedTurnProofBinding(operation, mutation.cutoffProof);
         invariant(
-          operation.cancellation.command.cancellationCommandId === mutation.command.cancellationCommandId &&
+            operation.cancellation.command.cancellationCommandId === mutation.command.cancellationCommandId &&
             operation.cancellation.command.fingerprint === mutation.command.fingerprint &&
-            operation.cancellation.proofId === mutation.proof.proofId && operation.admissionFence.kind === "fenced" &&
-            operation.admissionFence.proofId === mutation.cutoffProof.proofId,
+            operation.cancellation.proofId === mutation.proof.proofId && operation.operationCutoff.kind === "closed" &&
+            operation.operationCutoff.reason === "cancellation" &&
+            operation.operationCutoff.proofId === mutation.cutoffProof.proofId,
           "cancellation replay requires exact command and proof identity",
         );
         return operation;
       }
-      if (operation.admissionFence.kind === "fenced") {
-        invariant(
-          operation.admissionFence.proofId === mutation.cutoffProof.proofId &&
-            operation.proofs.some(proof => proof.kind === "cutoff" && proof.proofId === mutation.cutoffProof.proofId),
-          "post-dispatch cancellation must preserve the exact persisted admission fence",
-        );
-      } else {
-        invariant(
-          mutation.cutoffProof.binding.cancellationCommandId === mutation.command.cancellationCommandId,
-          "a cancellation-created cutoff must bind the exact cancellation command",
-        );
-      }
+      invariant(
+        mutation.cutoffProof.binding.cancellationCommandId === mutation.command.cancellationCommandId &&
+          !operation.proofs.some(proof => proof.proofId === mutation.cutoffProof.proofId),
+        "cancellation must append a fresh cutoff proof bound to the exact cancellation command",
+      );
       candidate = {
         ...operation,
         admissionFence: operation.admissionFence.kind === "fenced"
           ? operation.admissionFence
           : { kind: "fenced", proofId: mutation.cutoffProof.proofId },
         cancellation: { command: mutation.command, kind: "requested", proofId: mutation.proof.proofId },
-        proofs: operation.admissionFence.kind === "fenced"
-          ? [...operation.proofs, mutation.proof]
-          : [...operation.proofs, mutation.proof, mutation.cutoffProof],
+        operationCutoff: {
+          kind: "closed",
+          proofId: mutation.cutoffProof.proofId,
+          reason: "cancellation",
+          revision: nextContainedTurnOperationCutoffRevision(operation.operationCutoff.revision),
+        },
+        output: operation.output.fence.kind === "open"
+          ? { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced" } }
+          : operation.output,
+        proofs: [...operation.proofs, mutation.proof, mutation.cutoffProof],
         revision: operation.revision + 1,
       };
       break;

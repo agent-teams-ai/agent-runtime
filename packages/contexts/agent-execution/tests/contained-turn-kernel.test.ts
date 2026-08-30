@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { type ContainedTurnProviderAccessSnapshot } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import type { ContainedTurnKernelOperation } from "../dist/features/contained-agent-turn/domain/contained-turn-kernel-model.js";
+import {
+  containedTurnRequiredReceiptSetDigest,
+  CONTAINED_TURN_V1_REQUIRED_RECEIPT_SET_VERSION,
+  CONTAINED_TURN_V1_REQUIRED_RECEIPTS,
+  type ContainedTurnRequiredReceiptSet,
+} from "../dist/features/contained-agent-turn/domain/contained-turn-required-receipts.js";
+
+import {
+  type ContainedTurnProviderAccessSnapshot,
+  type ContainedTurnScope,
+} from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
+  appendContainedTurnOutputForOwnerStore,
   createContainedTurnOperation,
   mutateContainedTurnOperation,
   validateContainedTurnOperation,
@@ -24,6 +36,15 @@ import {
   type ContainedTurnKernelOperationStore,
 } from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import {
+  classifyContainedTurnOwnerStoreWrite,
+  containedTurnAcceptanceOwnerKey,
+  containedTurnOwnerStoreAuthority,
+  sanitizeContainedTurnAcceptanceOutcome,
+  sanitizeContainedTurnIdentificationOutcome,
+  sanitizeContainedTurnOwnerStoreOutcome,
+  selectContainedTurnOwnerStoreRead,
+} from "../dist/features/contained-agent-turn/application/contained-turn-store-authority.js";
+import {
   acceptanceProof,
   adapterSnapshot,
   attemptId,
@@ -38,6 +59,7 @@ import {
   custodyId,
   dependencyNamesAreExhaustive,
   effectId,
+  executionGenerationId,
   expectInvariant,
   hostBootId,
   hostInstanceId,
@@ -50,6 +72,7 @@ import {
   runtimeSecurityAcceptanceProof,
   scope,
   workspaceId,
+  writerFence,
 } from "./contained-turn-kernel-fixtures.ts";
 
 type SameUnion<Left, Right> =
@@ -59,6 +82,10 @@ const proofKindsAreExhaustive: SameUnion<
   ContainedTurnProofKind,
   (typeof CONTAINED_TURN_PROOF_KINDS)[number]
 > = true;
+
+const acceptanceOwnerKey = (trustedScope: ContainedTurnScope): string => JSON.stringify(
+  containedTurnAcceptanceOwnerKey({ commandId, scope: trustedScope }),
+);
 
 test("freezes the exact seven consumer-owned dependencies and separate provider authorities", () => {
   assert.equal(dependencyNamesAreExhaustive, true);
@@ -91,7 +118,8 @@ test("freezes the exact seven consumer-owned dependencies and separate provider 
 });
 test("freezes the accepted PostgreSQL command replay and semantic-conflict invariant", async () => {
   const acceptedByCommand = new Map<string, ContainedTurnKernelOperation>();
-  const accept: ContainedTurnKernelOperationStore["accept"] = async candidate => {
+  const accept: ContainedTurnKernelOperationStore["accept"] = async (candidate, ownerAuthority) => {
+    assert.deepEqual(ownerAuthority, containedTurnOwnerStoreAuthority(candidate, candidate.scope));
     const accepted = acceptedByCommand.get(candidate.commandId);
     if (accepted === undefined) {
       acceptedByCommand.set(candidate.commandId, candidate);
@@ -102,19 +130,95 @@ test("freezes the accepted PostgreSQL command replay and semantic-conflict invar
       : { kind: "fingerprint_conflict" };
   };
   const accepted = createOperation();
-  assert.equal((await accept(accepted)).kind, "accepted");
+  assert.equal((await accept(accepted, containedTurnOwnerStoreAuthority(accepted, accepted.scope))).kind, "accepted");
   const replayCandidate = createOperation({
     effectId: containedTurnIdentity("effect", "effect:replay"),
     operationId: containedTurnIdentity("operation", "operation:replay"),
   });
-  assert.equal((await accept(replayCandidate)).kind, "replayed");
+  assert.equal((await accept(replayCandidate, containedTurnOwnerStoreAuthority(replayCandidate, replayCandidate.scope))).kind, "replayed");
   const conflict = createOperation({
     effectId: containedTurnIdentity("effect", "effect:conflict"),
     intent: { mode: "analysis", prompt: "Semantically different command." },
     operationId: containedTurnIdentity("operation", "operation:conflict"),
   });
-  assert.equal((await accept(conflict)).kind, "fingerprint_conflict");
+  assert.equal((await accept(conflict, containedTurnOwnerStoreAuthority(conflict, conflict.scope))).kind, "fingerprint_conflict");
   assert.strictEqual(acceptedByCommand.get(commandId), accepted);
+});
+
+test("trusted scope keys identify independently and hide foreign read, accept, commit, claim, and cancel state", () => {
+  const secondProjectScope = { projectId: "project:second", tenantId: scope.tenantId };
+  const secondTenantScope = { projectId: scope.projectId, tenantId: "tenant:second" };
+  const acceptances = new Map<string, string>([
+    [acceptanceOwnerKey(scope), "first-project"],
+    [acceptanceOwnerKey(secondProjectScope), "second-project"],
+  ]);
+  assert.equal(acceptances.size, 2);
+  assert.equal(acceptances.get(acceptanceOwnerKey(scope)), "first-project");
+  assert.equal(acceptances.get(acceptanceOwnerKey(secondProjectScope)), "second-project");
+  assert.equal(acceptances.get(acceptanceOwnerKey(secondTenantScope)), undefined);
+
+  const operation = createOperation();
+  for (const wrongScope of [secondProjectScope, secondTenantScope]) {
+    assert.equal(selectContainedTurnOwnerStoreRead({
+      current: operation,
+      operationId,
+      scope: wrongScope,
+    }), undefined);
+
+    for (const mutation of ["commit", "claim", "cancel"] as const) {
+      assert.deepEqual(classifyContainedTurnOwnerStoreWrite({
+        current: operation,
+        expectedRevision: operation.revision + 1,
+        operationId,
+        scope: wrongScope,
+      }), { kind: "not_found" }, mutation);
+      assert.deepEqual(sanitizeContainedTurnOwnerStoreOutcome({
+        authority: {
+          commandId: operation.commandId,
+          effectId: operation.effectId,
+          operationId,
+          scope: wrongScope,
+        },
+        outcome: { current: operation, kind: "stale" },
+      }), { kind: "not_found" }, `${mutation} must not disclose stale.current`);
+    }
+
+    assert.deepEqual(sanitizeContainedTurnAcceptanceOutcome({
+      candidate: operation,
+      outcome: { kind: "accepted", operation },
+      scope: wrongScope,
+    }), { kind: "not_found" });
+    assert.deepEqual(sanitizeContainedTurnIdentificationOutcome({
+      commandId,
+      outcome: { kind: "replayed", operation },
+      scope: wrongScope,
+    }), { kind: "not_found" });
+  }
+
+  for (const authority of [
+    { commandId: containedTurnIdentity("command", "command:foreign"), effectId: operation.effectId, operationId, scope },
+    { commandId: operation.commandId, effectId: containedTurnIdentity("effect", "effect:foreign"), operationId, scope },
+  ]) {
+    assert.deepEqual(sanitizeContainedTurnOwnerStoreOutcome({
+      authority,
+      outcome: { current: operation, kind: "stale" },
+    }), { kind: "not_found" }, "stable command/effect authority mismatch must not disclose owner state");
+  }
+
+  const correctWriter = classifyContainedTurnOwnerStoreWrite({
+    current: operation,
+    expectedRevision: operation.revision,
+    operationId,
+    scope,
+  });
+  const misroutedWriter = classifyContainedTurnOwnerStoreWrite({
+    current: operation,
+    expectedRevision: operation.revision,
+    operationId,
+    scope: secondProjectScope,
+  });
+  assert.equal(correctWriter.kind, "current");
+  assert.deepEqual(misroutedWriter, { kind: "not_found" });
 });
 
 test("freezes canonical SHA-256 codecs and rejects impossible recomputed-digest states", () => {
@@ -134,6 +238,123 @@ test("freezes canonical SHA-256 codecs and rejects impossible recomputed-digest 
   expectInvariant(() => validateContainedTurnOperation(corrupted), /authority-vector digest does not recompute/u);
   const wrongFingerprint = { ...operation, commandFingerprint: digestContainedTurnCanonicalValue({ wrong: true }) as unknown as typeof commandFingerprint };
   expectInvariant(() => validateContainedTurnOperation(wrongFingerprint), /command fingerprint does not recompute/u);
+});
+
+test("Kernel acceptance owns the exact versioned RequiredReceiptSet and its canonical digest", () => {
+  const operation = createOperation();
+  assert.deepEqual(operation.requiredReceiptSet, {
+    membershipFrozenAt: "command_acceptance",
+    membershipMutation: "forbidden",
+    receipts: CONTAINED_TURN_V1_REQUIRED_RECEIPTS,
+    satisfaction: "typed_receipt_or_authority_defined_typed_non_applicability_proof",
+    setVersion: CONTAINED_TURN_V1_REQUIRED_RECEIPT_SET_VERSION,
+  });
+  assert.equal(
+    operation.requiredReceiptSetDigest,
+    "sha256:07f8b4ccca639deb7fcedcb68d4c5174ce3f158a40a7f36ab9ace244cf9673de",
+  );
+  assert.equal(
+    operation.requiredReceiptSetDigest,
+    containedTurnRequiredReceiptSetDigest(operation.requiredReceiptSet),
+  );
+  assert.equal(Object.isFrozen(operation.requiredReceiptSet), true);
+  assert.equal(Object.isFrozen(operation.requiredReceiptSet.receipts), true);
+
+  expectInvariant(
+    () => createOperation({
+      requiredReceiptSet: {
+        ...operation.requiredReceiptSet,
+        receipts: operation.requiredReceiptSet.receipts.slice(0, -1),
+      },
+    } as never),
+    /acceptance input must be an exact closed record/u,
+  );
+
+  const shrunkManifest = {
+    ...manifest,
+    requiredProofKinds: manifest.requiredProofKinds.slice(0, -1),
+  };
+  expectInvariant(
+    () => createOperation({ capabilityManifest: shrunkManifest as never }),
+    /capability manifest/u,
+  );
+  const substitutedManifest = {
+    ...manifest,
+    requiredProofKinds: ["adapter_selected_receipt", ...manifest.requiredProofKinds.slice(1)],
+  };
+  expectInvariant(
+    () => createOperation({ capabilityManifest: substitutedManifest as never }),
+    /capability manifest/u,
+  );
+});
+
+test("RequiredReceiptSet validation fails closed on shrink, substitution, corruption, and mixed versions", () => {
+  const operation = createOperation();
+  const withSet = (
+    set: unknown,
+    digest = containedTurnRequiredReceiptSetDigest(set as ContainedTurnRequiredReceiptSet),
+  ): ContainedTurnKernelOperation => ({
+    ...operation,
+    requiredReceiptSet: set,
+    requiredReceiptSetDigest: digest,
+  }) as unknown as ContainedTurnKernelOperation;
+  const recomputedCorruptions: readonly unknown[] = [
+    {
+      ...operation.requiredReceiptSet,
+      receipts: operation.requiredReceiptSet.receipts.slice(0, -1),
+    },
+    {
+      ...operation.requiredReceiptSet,
+      receipts: ["substituted_receipt", ...operation.requiredReceiptSet.receipts.slice(1)],
+    },
+    {
+      ...operation.requiredReceiptSet,
+      receipts: [operation.requiredReceiptSet.receipts[0], ...operation.requiredReceiptSet.receipts],
+    },
+    {
+      ...operation.requiredReceiptSet,
+      membershipFrozenAt: "dispatch_claim",
+    },
+    {
+      ...operation.requiredReceiptSet,
+      membershipMutation: "adapter_mutable",
+    },
+    {
+      ...operation.requiredReceiptSet,
+      satisfaction: "adapter_selected",
+    },
+    {
+      ...operation.requiredReceiptSet,
+      setVersion: "contained-turn-v1-required-receipts@2",
+    },
+  ];
+  for (const corruption of recomputedCorruptions) {
+    expectInvariant(
+      () => validateContainedTurnOperation(withSet(corruption)),
+      /required receipt snapshot/u,
+    );
+  }
+  expectInvariant(
+    () => validateContainedTurnOperation(withSet(
+      operation.requiredReceiptSet,
+      digestContainedTurnCanonicalValue({ corrupt: "required-receipt-set" }),
+    )),
+    /required receipt snapshot/u,
+  );
+  expectInvariant(
+    () => validateContainedTurnOperation(withSet(
+      { ...operation.requiredReceiptSet, setVersion: "contained-turn-v1-required-receipts@2" },
+      operation.requiredReceiptSetDigest,
+    )),
+    /required receipt snapshot/u,
+  );
+  expectInvariant(
+    () => validateContainedTurnOperation(withSet({
+      ...operation.requiredReceiptSet,
+      extraVersionSelector: "adapter-controlled",
+    })),
+    /required receipt set must be an exact closed record/u,
+  );
 });
 
 test("strict codecs reject collision-shaped values and accepted inputs are deeply detached", () => {
@@ -172,6 +393,66 @@ test("strict codecs reject collision-shaped values and accepted inputs are deepl
   expectInvariant(() => createContainedTurnOperation(symbolInput), /symbol keys/u);
 });
 
+test("JSON restart round-trip preserves and re-freezes the accepted RequiredReceiptSet", () => {
+  const accepted = createOperation();
+  const restarted = JSON.parse(JSON.stringify(accepted)) as ContainedTurnKernelOperation;
+  assert.doesNotThrow(() => validateContainedTurnOperation(restarted));
+  assert.notStrictEqual(restarted.requiredReceiptSet, accepted.requiredReceiptSet);
+  assert.deepEqual(restarted.requiredReceiptSet, accepted.requiredReceiptSet);
+  assert.equal(restarted.requiredReceiptSetDigest, accepted.requiredReceiptSetDigest);
+
+  const resumedMutation = mutateContainedTurnOperation(restarted, { kind: "bind_workspace", workspaceId });
+  assert.deepEqual(resumedMutation.requiredReceiptSet, accepted.requiredReceiptSet);
+  assert.equal(resumedMutation.requiredReceiptSetDigest, accepted.requiredReceiptSetDigest);
+  assert.equal(Object.isFrozen(resumedMutation.requiredReceiptSet), true);
+  assert.equal(Object.isFrozen(resumedMutation.requiredReceiptSet.receipts), true);
+});
+
+test("terminal proof authority rejects RequiredReceiptSet digest and version substitution", () => {
+  const operation = createOperation();
+  const satisfactionDigest = digestContainedTurnCanonicalValue({ terminal: "synthetic-binding-check" });
+  const terminalCandidate = (receiptBinding: Readonly<{
+    requiredReceiptSetDigest: typeof operation.requiredReceiptSetDigest;
+    requiredReceiptSetVersion: string;
+  }>): ContainedTurnKernelOperation => {
+    const terminalProof = {
+      binding: {
+        ...commonBinding,
+        ...receiptBinding,
+        satisfactionDigest,
+        terminalOutcome: "failed",
+      },
+      kind: "terminal_truth",
+      proofId: proofId("proof:terminal-receipt-binding"),
+    } as unknown as ContainedTurnProof;
+    return {
+      ...operation,
+      proofs: [...operation.proofs, terminalProof],
+      revision: operation.revision + 1,
+      terminal: {
+        kind: "final",
+        outcome: "failed",
+        satisfactionDigest,
+        terminalProofId: terminalProof.proofId,
+      },
+    };
+  };
+  expectInvariant(
+    () => validateContainedTurnOperation(terminalCandidate({
+      requiredReceiptSetDigest: digestContainedTurnCanonicalValue({ substituted: "receipt-set" }),
+      requiredReceiptSetVersion: operation.requiredReceiptSet.setVersion,
+    })),
+    /terminal proof receipt-set digest mismatch/u,
+  );
+  expectInvariant(
+    () => validateContainedTurnOperation(terminalCandidate({
+      requiredReceiptSetDigest: operation.requiredReceiptSetDigest,
+      requiredReceiptSetVersion: "contained-turn-v1-required-receipts@2",
+    })),
+    /terminal proof receipt-set version mismatch/u,
+  );
+});
+
 test("uses one V1/V2 byte authority with ASCII identifiers and exact one-byte-over rejection", () => {
   assert.deepEqual(CONTAINED_TURN_LIMITS.acceptedSchemaVersions, [1, 2]);
   const maximumPrompt = "p".repeat(CONTAINED_TURN_LIMITS.text.prompt.maximumBytes);
@@ -192,13 +473,10 @@ test("uses one V1/V2 byte authority with ASCII identifiers and exact one-byte-ov
   );
   const active = createActiveOperation();
   expectInvariant(
-    () => mutateContainedTurnOperation(active, {
-      kind: "append_output",
-      output: {
-        cursor: 0,
-        kind: "assistant",
-        text: "o".repeat(CONTAINED_TURN_LIMITS.text.outputChunk.maximumBytes + 1),
-      },
+    () => appendContainedTurnOutputForOwnerStore(active, {
+      cursor: 0,
+      kind: "assistant",
+      text: "o".repeat(CONTAINED_TURN_LIMITS.text.outputChunk.maximumBytes + 1),
     }),
     /2000000 utf8 bytes/u,
   );
@@ -256,9 +534,12 @@ test("enforces disjoint immutable identities and one-attempt claim coupling", ()
     dispatch: {
       attemptId,
       claimProofId: claimProof.proofId,
+      executionGenerationId,
       kind: "claimed" as const,
+      operationCutoffRevision: operation.operationCutoff.revision,
       providerAccessDispatchProofId: missingProviderAccessProofId,
       runtimeSecurityDispatchProofId: missingRuntimeSecurityProofId,
+      writerFence,
     },
     proofs: [...operation.proofs, claimProof],
     revision: operation.revision + 1,
@@ -372,7 +653,7 @@ test("enforces proof exhaustiveness, unique kinds and IDs, exact bindings, and s
   assert.deepEqual(CONTAINED_TURN_PROOF_KINDS, [
     "acceptance", "artifact_manifest_seal", "cancellation", "containment", "containment_not_required", "cutoff",
     "dispatch_claim", "effect_no_start", "effect_resolution", "execution_closure", "host_custody", "host_custody_no_start",
-    "no_dispatch", "no_start", "output_drain", "output_no_start_drain", "provider_acceptance", "provider_not_started",
+    "no_dispatch", "no_start", "output_drain", "output_no_start_drain", "physical_containment", "provider_acceptance", "provider_not_started",
     "provider_process_no_start", "provider_process_start", "provider_access_acceptance", "provider_access_dispatch",
     "provider_terminal_observation", "result_publication", "runtime_security_acceptance", "runtime_security_dispatch",
     "terminal_truth", "workspace_closure",

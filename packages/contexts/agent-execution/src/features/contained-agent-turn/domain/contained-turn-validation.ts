@@ -30,6 +30,8 @@ import {
 } from "./contained-turn-proof-validation.js";
 import { containedTurnSatisfactionDigest } from "./contained-turn-satisfaction.js";
 import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord } from "./contained-turn-record.js";
+import { containedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
+import { validateContainedTurnRequiredReceiptSnapshot } from "./contained-turn-required-receipts.js";
 
 // The count exhaustively validates every disjoint identity axis and evidence source.
 // oxlint-disable-next-line complexity
@@ -40,6 +42,9 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
   if (operation.hostBootId !== undefined) {primary.push(operation.hostBootId);}
   if (operation.hostInstanceId !== undefined) {primary.push(operation.hostInstanceId);}
   if (operation.dispatch.kind === "claimed") {primary.push(operation.dispatch.attemptId);}
+  if (operation.dispatch.kind === "claimed") {
+    primary.push(operation.dispatch.executionGenerationId, operation.dispatch.writerFence);
+  }
   if (operation.cancellation.kind === "requested") {primary.push(operation.cancellation.command.cancellationCommandId);}
   for (const proof of operation.proofs) {primary.push(proof.proofId);}
   invariant(new Set(primary).size === primary.length, "identity namespaces must be textually disjoint");
@@ -51,6 +56,10 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
   if (operation.hostBootId !== undefined) {validateContainedTurnIdentity("host_boot", operation.hostBootId);}
   if (operation.hostInstanceId !== undefined) {validateContainedTurnIdentity("host_instance", operation.hostInstanceId);}
   if (operation.dispatch.kind === "claimed") {validateContainedTurnIdentity("attempt", operation.dispatch.attemptId);}
+  if (operation.dispatch.kind === "claimed") {
+    validateContainedTurnIdentity("execution_generation", operation.dispatch.executionGenerationId);
+    validateContainedTurnIdentity("writer_fence", operation.dispatch.writerFence);
+  }
   if (operation.cancellation.kind === "requested") {
     validateContainedTurnIdentity("cancellation_command", operation.cancellation.command.cancellationCommandId);
   }
@@ -60,6 +69,10 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
   if (operation.providerAcceptance.kind === "unknown") {evidenceIds.add(operation.providerAcceptance.evidenceId);}
   if (operation.providerExecution.kind === "unknown") {evidenceIds.add(operation.providerExecution.evidenceId);}
   if (operation.containment.kind === "uncertain") {evidenceIds.add(operation.containment.evidenceId);}
+  if (operation.physicalContainment.kind === "uncertain") {evidenceIds.add(operation.physicalContainment.evidenceId);}
+  if (operation.operationCutoff.kind === "closed" && operation.operationCutoff.reason === "continuity_lost") {
+    evidenceIds.add(operation.operationCutoff.evidenceId);
+  }
   if (operation.effect.kind === "ambiguous") {evidenceIds.add(operation.effect.evidenceId);}
   if (operation.reconciliation.kind === "required") {
     for (const evidenceId of operation.reconciliation.evidenceIds) {evidenceIds.add(evidenceId);}
@@ -73,6 +86,7 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
 const validateCanonicalDigests = (operation: ContainedTurnKernelOperation): void => {
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVectorDigest);
   parseContainedTurnCanonicalDigest(operation.commandFingerprint);
+  parseContainedTurnCanonicalDigest(operation.requiredReceiptSetDigest);
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.containmentPolicyDigest);
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.providerAccessSnapshot.credentialBindingDigest);
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.scopeDigest);
@@ -282,18 +296,73 @@ const validateCancellation = (candidate: ContainedTurnKernelOperation): void => 
   );
   requireContainedTurnProof(candidate, cancellation.proofId, "cancellation");
   invariant(candidate.admissionFence.kind === "fenced", "durable cancellation requires a persisted admission fence");
-  if (candidate.admissionFence.kind === "fenced") {
-    const cutoffProofId = candidate.admissionFence.proofId;
-    const cutoffProof = requireContainedTurnProof(candidate, cutoffProofId, "cutoff");
-    const cancellationIndex = candidate.proofs.findIndex(proof => proof.proofId === cancellation.proofId);
-    const cutoffIndex = candidate.proofs.findIndex(proof => proof.proofId === cutoffProofId);
-    if (cutoffIndex > cancellationIndex) {
+  invariant(
+    candidate.operationCutoff.kind === "closed" && candidate.operationCutoff.reason === "cancellation",
+    "durable cancellation requires the current monotonic operation cutoff",
+  );
+  if (candidate.operationCutoff.kind === "closed" && candidate.operationCutoff.reason === "cancellation") {
+    const cutoffProof = requireContainedTurnProof(candidate, candidate.operationCutoff.proofId, "cutoff");
+    invariant(
+      cutoffProof.kind === "cutoff" &&
+        cutoffProof.binding.cancellationCommandId === cancellation.command.cancellationCommandId,
+      "a cancellation cutoff must bind the exact cancellation command",
+    );
+  }
+};
+
+const validateCutoffAndPhysicalContainment = (candidate: ContainedTurnKernelOperation): void => {
+  containedTurnOperationCutoffRevision(candidate.operationCutoff.revision);
+  if (candidate.operationCutoff.kind === "closed") {
+    invariant(candidate.output.fence.kind === "fenced", "closed operation cutoff must close canonical output authority");
+    if (candidate.operationCutoff.reason === "continuity_lost") {
       invariant(
-        cutoffProof.kind === "cutoff" &&
-          cutoffProof.binding.cancellationCommandId === cancellation.command.cancellationCommandId,
-        "a cancellation-created cutoff must bind the exact cancellation command",
+        candidate.reconciliation.kind === "required" &&
+          candidate.reconciliation.evidenceIds.includes(candidate.operationCutoff.evidenceId),
+        "continuity-loss cutoff requires its exact durable reconciliation evidence",
       );
+    } else {
+      requireContainedTurnProof(candidate, candidate.operationCutoff.proofId, "cutoff");
     }
+  }
+  if (candidate.dispatch.kind === "claimed") {
+    containedTurnOperationCutoffRevision(candidate.dispatch.operationCutoffRevision);
+    invariant(
+      candidate.operationCutoff.revision >= candidate.dispatch.operationCutoffRevision &&
+        (candidate.operationCutoff.kind === "closed" ||
+          candidate.operationCutoff.revision === candidate.dispatch.operationCutoffRevision),
+      "dispatch must bind the current monotonic cutoff revision",
+    );
+  }
+  switch (candidate.physicalContainment.kind) {
+    case "not_requested":
+      invariant(candidate.dispatch.kind !== "claimed", "claimed execution requires a physical-containment obligation");
+      break;
+    case "pending":
+      invariant(
+        candidate.dispatch.kind === "claimed" && candidate.physicalContainment.attemptId === candidate.dispatch.attemptId,
+        "physical-containment obligation must bind the sole attempt",
+      );
+      break;
+    case "contained":
+      invariant(candidate.dispatch.kind === "claimed", "physical containment requires the sole attempt");
+      requireContainedTurnProof(candidate, candidate.physicalContainment.proofId, "physical_containment");
+      break;
+    case "uncertain":
+      invariant(
+        candidate.dispatch.kind === "claimed" && candidate.reconciliation.kind === "required" &&
+          candidate.reconciliation.evidenceIds.includes(candidate.physicalContainment.evidenceId),
+        "uncertain physical containment requires exact reconciliation debt",
+      );
+      break;
+  }
+  if (candidate.containment.kind === "contained") {
+    invariant(candidate.physicalContainment.kind === "contained", "composite containment requires physical containment first");
+  }
+  if (candidate.artifactManifestRef !== undefined) {
+    invariant(
+      candidate.physicalContainment.kind === "contained" || candidate.containment.kind === "qualified_not_required",
+      "canonical artifacts require physical containment or proved no-start non-applicability",
+    );
   }
 };
 
@@ -317,6 +386,8 @@ export const validateContainedTurnOperation = (
         candidate.containment.kind === "not_requested" && candidate.dispatch.kind === "unclaimed" &&
         candidate.effect.kind === "unresolved" && candidate.output.chunks.length === 0 &&
         candidate.output.fence.kind === "open" && candidate.proofs.length === 3 &&
+        candidate.operationCutoff.kind === "open" && candidate.operationCutoff.revision === 0 &&
+        candidate.physicalContainment.kind === "not_requested" &&
         candidate.providerAcceptance.kind === "unobserved" && candidate.providerExecution.kind === "not_started" &&
         candidate.providerProcessStart.kind === "unobserved" && candidate.reconciliation.kind === "clear" &&
         candidate.terminal.kind === "open",
@@ -327,12 +398,20 @@ export const validateContainedTurnOperation = (
   validateContainedTurnAuthorityShape(candidate);
   validateAuthorityReferences(candidate);
   validateCanonicalDigests(candidate);
+  validateContainedTurnRequiredReceiptSnapshot({
+    digest: candidate.requiredReceiptSetDigest,
+    set: candidate.requiredReceiptSet,
+  });
   validateContainedTurnManifest(candidate.capabilityManifest, candidate.adapterSnapshot);
   invariant(candidate.capabilityManifest.supportedModes.includes(candidate.intent.mode), "unknown or missing requested capability scope fails closed");
   validateAuthorityBindings(candidate);
   invariant(candidate.proofs.length <= CONTAINED_TURN_LIMITS.collections.proofs, "proof limit exceeded");
   invariant(new Set(candidate.proofs.map(proof => proof.proofId)).size === candidate.proofs.length, "proof IDs must be unique");
-  invariant(new Set(candidate.proofs.map(proof => proof.kind)).size === candidate.proofs.length, "V1 proof kinds may be satisfied exactly once");
+  const singletonProofKinds = candidate.proofs.filter(proof => proof.kind !== "cutoff").map(proof => proof.kind);
+  invariant(
+    new Set(singletonProofKinds).size === singletonProofKinds.length,
+    "V1 proof kinds other than monotonic cutoff receipts may be satisfied exactly once",
+  );
   validateIdentities(candidate);
   candidate.proofs.forEach(proof => validateContainedTurnProofBinding(candidate, proof));
   const firstProof = candidate.proofs[0];
@@ -341,6 +420,7 @@ export const validateContainedTurnOperation = (
   validateContainedTurnAxisProofs(candidate);
   validateOutput(candidate);
   validateExecutionAxes(candidate);
+  validateCutoffAndPhysicalContainment(candidate);
   if (hasAmbiguity(candidate)) {
     invariant(candidate.reconciliation.kind === "required" && candidate.reconciliation.evidenceIds.length > 0, "ambiguity requires durable reconciliation debt");
     invariant(candidate.output.fence.kind === "fenced", "ambiguity immediately fences canonical output");

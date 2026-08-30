@@ -17,14 +17,18 @@ import type {
   ContainedTurnCustodyId,
   ContainedTurnEffectId,
   ContainedTurnEvidenceId,
+  ContainedTurnExecutionGenerationId,
   ContainedTurnHostBootId,
   ContainedTurnHostInstanceId,
   ContainedTurnOperationId,
   ContainedTurnProofId,
   ContainedTurnWorkspaceId,
+  ContainedTurnWriterFence,
 } from "./contained-turn-identities.js";
 import type { ContainedTurnSchemaVersion } from "./contained-turn-limits.js";
+import type { ContainedTurnOperationCutoff, ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 import type { ContainedTurnProof } from "./contained-turn-proofs.js";
+import type { ContainedTurnRequiredReceiptSet } from "./contained-turn-required-receipts.js";
 
 export type ContainedTurnKernelOutputKind = "assistant" | "diagnostic" | "progress";
 
@@ -60,9 +64,12 @@ export interface ContainedTurnKernelOperation {
     | {
       readonly attemptId: ContainedTurnAttemptId;
       readonly claimProofId: ContainedTurnProofId;
+      readonly executionGenerationId: ContainedTurnExecutionGenerationId;
       readonly kind: "claimed";
+      readonly operationCutoffRevision: ContainedTurnOperationCutoffRevision;
       readonly providerAccessDispatchProofId: ContainedTurnProofId;
       readonly runtimeSecurityDispatchProofId: ContainedTurnProofId;
+      readonly writerFence: ContainedTurnWriterFence;
     }
     | { readonly noDispatchProofId: ContainedTurnProofId; readonly kind: "prevented" };
   readonly effect:
@@ -74,11 +81,20 @@ export interface ContainedTurnKernelOperation {
   readonly hostInstanceId?: ContainedTurnHostInstanceId;
   readonly intent: ContainedTurnIntent;
   readonly operationId: ContainedTurnOperationId;
+  readonly operationCutoff: ContainedTurnOperationCutoff;
   readonly output: Readonly<{
     chunks: readonly ContainedTurnKernelOutputChunk[];
     fence: { readonly kind: "open" } | { readonly finalCursor: number; readonly kind: "fenced"; readonly proofId?: ContainedTurnProofId };
   }>;
   readonly proofs: readonly ContainedTurnProof[];
+  readonly physicalContainment:
+    | { readonly kind: "not_requested" }
+    | { readonly attemptId: ContainedTurnAttemptId; readonly kind: "pending" }
+    | {
+      readonly kind: "contained";
+      readonly proofId: ContainedTurnProofId;
+    }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "uncertain" };
   readonly providerAccessSnapshot: ContainedTurnProviderAccessSnapshot;
   /**
    * Host Custody's provider-neutral observation of the sole process/session
@@ -104,6 +120,8 @@ export interface ContainedTurnKernelOperation {
     | { readonly kind: "clear" }
     | { readonly evidenceIds: readonly ContainedTurnEvidenceId[]; readonly kind: "required" };
   readonly resultRef?: string;
+  readonly requiredReceiptSet: ContainedTurnRequiredReceiptSet;
+  readonly requiredReceiptSetDigest: ContainedTurnCanonicalDigest;
   readonly revision: number;
   readonly schemaVersion: ContainedTurnSchemaVersion;
   readonly scope: ContainedTurnScope;

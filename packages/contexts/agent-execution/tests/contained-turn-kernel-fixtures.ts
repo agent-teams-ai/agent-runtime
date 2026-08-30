@@ -82,9 +82,11 @@ export const commandId = containedTurnIdentity("command", "command:1");
 export const effectId = containedTurnIdentity("effect", "effect:1");
 export const attemptId = containedTurnIdentity("attempt", "attempt:1");
 export const custodyId = containedTurnIdentity("custody", "custody:1");
+export const executionGenerationId = containedTurnIdentity("execution_generation", "execution-generation:1");
 export const hostBootId = containedTurnIdentity("host_boot", "host-boot:1");
 export const hostInstanceId = containedTurnIdentity("host_instance", "host-instance:1");
 export const workspaceId = containedTurnIdentity("workspace", "workspace:1");
+export const writerFence = containedTurnIdentity("writer_fence", "writer-fence:1");
 export const proofId = (value: string) => containedTurnIdentity("proof", value);
 export const authorityDigest = containedTurnAuthorityVectorDigest(authorityVector);
 export const commandFingerprint = containedTurnCommandFingerprint({ intent, provider: "codex", scope });
@@ -228,12 +230,14 @@ export const createReservedOperation = (): ContainedTurnKernelOperation => {
     claimProof: claimProof as Extract<ContainedTurnProof, { kind: "dispatch_claim" }>,
     custodyId,
     cutoffProof: cutoffProof as Extract<ContainedTurnProof, { kind: "cutoff" }>,
+    executionGenerationId,
     hostBootId,
     hostCustodyProof,
     hostInstanceId,
     kind: "claim_dispatch",
     providerAccessDispatchProof,
     runtimeSecurityDispatchProof,
+    writerFence,
   });
 };
 

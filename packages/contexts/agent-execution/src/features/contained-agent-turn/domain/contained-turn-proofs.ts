@@ -15,6 +15,7 @@ import type {
   ContainedTurnProofId,
   ContainedTurnWorkspaceId,
 } from "./contained-turn-identities.js";
+import type { ContainedTurnRequiredReceiptSetVersion } from "./contained-turn-required-receipts.js";
 
 export type ContainedTurnProofKind =
   | "acceptance"
@@ -33,6 +34,7 @@ export type ContainedTurnProofKind =
   | "no_start"
   | "output_drain"
   | "output_no_start_drain"
+  | "physical_containment"
   | "provider_process_no_start"
   | "provider_process_start"
   | "provider_access_acceptance"
@@ -75,6 +77,7 @@ export type ContainedTurnProof =
     readonly hostInstanceId: ContainedTurnHostInstanceId;
     readonly immutableScopeDigest: ContainedTurnCanonicalDigest;
     readonly outputDrainProofId: ContainedTurnProofId;
+    readonly physicalContainmentProofId: ContainedTurnProofId;
     readonly providerRouteRef: string;
     readonly terminalObservationProofId: ContainedTurnProofId;
     readonly workspaceId: ContainedTurnWorkspaceId;
@@ -91,6 +94,11 @@ export type ContainedTurnProof =
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly effectId: ContainedTurnEffectId }; readonly kind: "no_start"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnAttemptProofBinding & { readonly finalCursor: number }; readonly kind: "output_drain"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly finalCursor: number }; readonly kind: "output_no_start_drain"; readonly proofId: ContainedTurnProofId }
+  | { readonly binding: ContainedTurnAttemptProofBinding & {
+    readonly custodyId: ContainedTurnCustodyId;
+    readonly hostBootId: ContainedTurnHostBootId;
+    readonly hostInstanceId: ContainedTurnHostInstanceId;
+  }; readonly kind: "physical_containment"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnAttemptProofBinding & { readonly custodyId: ContainedTurnCustodyId; readonly hostBootId: ContainedTurnHostBootId; readonly hostInstanceId: ContainedTurnHostInstanceId }; readonly kind: "provider_process_no_start"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnAttemptProofBinding & { readonly custodyId: ContainedTurnCustodyId; readonly hostBootId: ContainedTurnHostBootId; readonly hostInstanceId: ContainedTurnHostInstanceId }; readonly kind: "provider_process_start"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly resolutionDigest: ContainedTurnCanonicalDigest; readonly snapshotDigest: ContainedTurnCanonicalDigest }; readonly kind: "provider_access_acceptance"; readonly proofId: ContainedTurnProofId }
@@ -101,48 +109,19 @@ export type ContainedTurnProof =
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly resultRef: string }; readonly kind: "result_publication"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly securityAuthorityRevision: string; readonly securityDecisionDigest: ContainedTurnCanonicalDigest }; readonly kind: "runtime_security_acceptance"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly acceptedSecurityDecisionDigest: ContainedTurnCanonicalDigest; readonly currentSecurityDecisionDigest: ContainedTurnCanonicalDigest; readonly securityAuthorityRevision: string }; readonly kind: "runtime_security_dispatch"; readonly proofId: ContainedTurnProofId }
-  | { readonly binding: ContainedTurnOperationProofBinding & { readonly satisfactionDigest: ContainedTurnCanonicalDigest; readonly terminalOutcome: "cancelled" | "failed" | "succeeded" }; readonly kind: "terminal_truth"; readonly proofId: ContainedTurnProofId }
+  | { readonly binding: ContainedTurnOperationProofBinding & {
+    readonly requiredReceiptSetDigest: ContainedTurnCanonicalDigest;
+    readonly requiredReceiptSetVersion: ContainedTurnRequiredReceiptSetVersion;
+    readonly satisfactionDigest: ContainedTurnCanonicalDigest;
+    readonly terminalOutcome: "cancelled" | "failed" | "succeeded";
+  }; readonly kind: "terminal_truth"; readonly proofId: ContainedTurnProofId }
   | { readonly binding: ContainedTurnOperationProofBinding & { readonly workspaceId: ContainedTurnWorkspaceId }; readonly kind: "workspace_closure"; readonly proofId: ContainedTurnProofId };
 
 export const CONTAINED_TURN_PROOF_KINDS = Object.freeze([
   "acceptance", "artifact_manifest_seal", "cancellation", "containment", "containment_not_required", "cutoff",
   "dispatch_claim", "effect_no_start", "effect_resolution", "execution_closure", "host_custody", "host_custody_no_start",
-  "no_dispatch", "no_start", "output_drain", "output_no_start_drain", "provider_acceptance", "provider_not_started",
+  "no_dispatch", "no_start", "output_drain", "output_no_start_drain", "physical_containment", "provider_acceptance", "provider_not_started",
   "provider_process_no_start", "provider_process_start", "provider_access_acceptance", "provider_access_dispatch",
   "provider_terminal_observation", "result_publication",
   "runtime_security_acceptance", "runtime_security_dispatch", "terminal_truth", "workspace_closure",
 ] as const satisfies readonly ContainedTurnProofKind[]);
-
-const REQUIRED_KIND_BY_PROOF_KIND = Object.freeze({
-  acceptance: "command_acceptance",
-  artifact_manifest_seal: "artifact_manifest_seal",
-  cancellation: "cancellation",
-  containment: "containment_execution",
-  containment_not_required: "containment_execution",
-  cutoff: "cutoff_enforcement",
-  dispatch_claim: "dispatch_authority",
-  effect_no_start: "effect_resolution",
-  effect_resolution: "effect_resolution",
-  execution_closure: "execution_closure",
-  host_custody: "host_custody",
-  host_custody_no_start: "host_custody",
-  no_dispatch: "dispatch_authority",
-  no_start: "execution_closure",
-  output_drain: "output_drain",
-  output_no_start_drain: "output_drain",
-  provider_process_no_start: "provider_process_start_observation",
-  provider_process_start: "provider_process_start_observation",
-  provider_access_acceptance: "command_acceptance",
-  provider_access_dispatch: "dispatch_authority",
-  provider_acceptance: "provider_acceptance",
-  provider_not_started: "provider_terminal_observation",
-  provider_terminal_observation: "provider_terminal_observation",
-  result_publication: "canonical_result_publication",
-  runtime_security_acceptance: "command_acceptance",
-  runtime_security_dispatch: "dispatch_authority",
-  terminal_truth: "terminal_truth",
-  workspace_closure: "workspace_closure",
-} as const satisfies Readonly<Record<ContainedTurnProofKind, string>>);
-
-export const containedTurnRequiredKindForProof = (proof: ContainedTurnProof): string =>
-  REQUIRED_KIND_BY_PROOF_KIND[proof.kind];

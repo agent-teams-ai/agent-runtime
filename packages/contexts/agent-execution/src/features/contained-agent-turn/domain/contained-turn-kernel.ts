@@ -6,10 +6,13 @@ export type {
   ContainedTurnKernelOutputKind,
 } from "./contained-turn-kernel-model.js";
 export { containedTurnSatisfactionDigest } from "./contained-turn-satisfaction.js";
+export { appendContainedTurnOutputForOwnerStore } from "./contained-turn-output-transitions.js";
 export {
   createContainedTurnOperation,
+  type CreateContainedTurnOperationInput,
+} from "./contained-turn-creation.js";
+export {
   mutateContainedTurnOperation,
   type ContainedTurnKernelMutation,
-  type CreateContainedTurnOperationInput,
 } from "./contained-turn-transitions.js";
 export { validateContainedTurnOperation } from "./contained-turn-validation.js";

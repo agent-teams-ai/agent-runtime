@@ -13,9 +13,9 @@ export const validateContainedTurnOperationShape = (operation: ContainedTurnKern
   const operationKeys = [
     "acceptedAuthorityVector", "acceptedAuthorityVectorDigest", "adapterSnapshot", "admissionFence",
     "cancellation", "capabilityManifest", "commandFingerprint", "commandId", "containment", "dispatch",
-    "effect", "effectId", "intent", "operationId", "output", "proofs", "providerAcceptance",
-    "providerAccessSnapshot", "providerExecution", "providerProcessStart", "reconciliation", "revision",
-    "schemaVersion", "scope", "terminal",
+    "effect", "effectId", "intent", "operationCutoff", "operationId", "output", "physicalContainment", "proofs",
+    "providerAcceptance", "providerAccessSnapshot", "providerExecution", "providerProcessStart", "reconciliation",
+    "requiredReceiptSet", "requiredReceiptSetDigest", "revision", "schemaVersion", "scope", "terminal",
   ];
   if (operation.artifactManifestRef !== undefined) {operationKeys.push("artifactManifestRef");}
   if (operation.custodyId !== undefined) {operationKeys.push("custodyId");}
@@ -48,10 +48,22 @@ export const validateContainedTurnOperationShape = (operation: ContainedTurnKern
   switch (operation.dispatch.kind) {
     case "unclaimed": exactKeys("dispatch state", operation.dispatch, ["kind"]); break;
     case "claimed": exactKeys("dispatch state", operation.dispatch, [
-      "attemptId", "claimProofId", "kind", "providerAccessDispatchProofId", "runtimeSecurityDispatchProofId",
+      "attemptId", "claimProofId", "executionGenerationId", "kind", "operationCutoffRevision",
+      "providerAccessDispatchProofId", "runtimeSecurityDispatchProofId", "writerFence",
     ]); break;
     case "prevented": exactKeys("dispatch state", operation.dispatch, ["kind", "noDispatchProofId"]); break;
     default: invariant(false, "unknown dispatch state fails closed");
+  }
+  if (operation.operationCutoff.kind === "open") {
+    exactKeys("operation cutoff", operation.operationCutoff, ["kind", "revision"]);
+  } else if (operation.operationCutoff.reason === "continuity_lost") {
+    exactKeys("operation cutoff", operation.operationCutoff, ["evidenceId", "kind", "reason", "revision"]);
+  } else {
+    invariant(
+      operation.operationCutoff.reason === "cancellation" || operation.operationCutoff.reason === "prevention",
+      "unknown operation-cutoff reason fails closed",
+    );
+    exactKeys("operation cutoff", operation.operationCutoff, ["kind", "proofId", "reason", "revision"]);
   }
   switch (operation.effect.kind) {
     case "unresolved": exactKeys("effect state", operation.effect, ["kind"]); break;
@@ -77,6 +89,13 @@ export const validateContainedTurnOperationShape = (operation: ContainedTurnKern
     case "proved_no_start": exactKeys("provider-process-start state", operation.providerProcessStart, ["kind", "proofId"]); break;
     case "unknown": exactKeys("provider-process-start state", operation.providerProcessStart, ["evidenceId", "kind"]); break;
     default: invariant(false, "unknown provider-process-start state fails closed");
+  }
+  switch (operation.physicalContainment.kind) {
+    case "not_requested": exactKeys("physical containment state", operation.physicalContainment, ["kind"]); break;
+    case "pending": exactKeys("physical containment state", operation.physicalContainment, ["attemptId", "kind"]); break;
+    case "contained": exactKeys("physical containment state", operation.physicalContainment, ["kind", "proofId"]); break;
+    case "uncertain": exactKeys("physical containment state", operation.physicalContainment, ["evidenceId", "kind"]); break;
+    default: invariant(false, "unknown physical-containment state fails closed");
   }
   switch (operation.providerAcceptance.kind) {
     case "unobserved": exactKeys("provider-acceptance state", operation.providerAcceptance, ["kind"]); break;

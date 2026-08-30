@@ -5,6 +5,7 @@ import { createContainedTurnFeature } from "../dist/features/contained-agent-tur
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { containedTurnSatisfactionDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-satisfaction.js";
+import { appendContainedTurnOutputForOwnerStore } from "../dist/features/contained-agent-turn/domain/contained-turn-output-transitions.js";
 import { mutateContainedTurnOperation } from "../dist/features/contained-agent-turn/domain/contained-turn-transitions.js";
 import type { ContainedTurnKernelOperation } from "../dist/features/contained-agent-turn/domain/contained-turn-kernel-model.js";
 import type { ContainedTurnProof } from "../dist/features/contained-agent-turn/domain/contained-turn-proofs.js";
@@ -21,6 +22,8 @@ const custodyId = identity("custody", "one");
 const workspaceId = identity("workspace", "one");
 const hostBootId = identity("host_boot", "one");
 const hostInstanceId = identity("host_instance", "one");
+const executionGenerationId = identity("execution_generation", "one");
+const writerFence = identity("writer_fence", "one");
 
 const adapterSnapshot = Object.freeze({
   adapterRevision: "adapter:one",
@@ -66,28 +69,52 @@ const attemptBinding = (operation: ContainedTurnKernelOperation) => {
 const createDependencies = (options: Readonly<{
   artifactIndeterminate?: boolean;
   emitBeforeGate?: boolean;
+  forgeReceipt?: boolean;
   indeterminateFirstCommit?: boolean;
   providerGate?: Promise<void>;
   providerStarted?: () => void;
   staleClaimAuthority?: boolean;
+  throwAfterStart?: boolean;
+  workspaceGate?: Promise<void>;
+  workspaceStarted?: () => void;
 }> = {}): {
-  claimAuthorities: Array<Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["authority"]>;
+  claimAuthorities: Array<Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["dispatchAuthority"]>;
   containmentCalls: { value: number };
+  current: () => ContainedTurnKernelOperation | undefined;
   dependencies: ContainedTurnKernelDependencies;
   providerCalls: { value: number };
 } => {
   let current: ContainedTurnKernelOperation | undefined;
   let commitCount = 0;
-  const claimAuthorities: Array<Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["authority"]> = [];
+  let workspaceCreateCount = 0;
+  const assertOwnerAuthority = (
+    authority: Parameters<ContainedTurnKernelDependencies["operationStore"]["commit"]>[0]["authority"],
+    operation: ContainedTurnKernelOperation,
+  ): void => assert.deepEqual(authority, {
+    commandId: operation.commandId,
+    effectId: operation.effectId,
+    operationId: operation.operationId,
+    scope: operation.scope,
+  });
+  const claimAuthorities: Array<Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["dispatchAuthority"]> = [];
   const containmentCalls = { value: 0 };
   const providerCalls = { value: 0 };
   const operationStore: ContainedTurnKernelDependencies["operationStore"] = {
-    accept: async candidate => {
+    accept: async (candidate, authority) => {
+      assertOwnerAuthority(authority, candidate);
       current = candidate;
       return { kind: "accepted", operation: candidate };
     },
+    appendOutput: async input => {
+      if (current === undefined) {return { kind: "not_found" };}
+      assertOwnerAuthority(input.authority, current);
+      if (current.revision !== input.expectedRevision) {return { current, kind: "stale" };}
+      current = appendContainedTurnOutputForOwnerStore(current, input.output);
+      return { kind: "applied", operation: current };
+    },
     commit: async input => {
       if (current === undefined) {return { kind: "not_found" };}
+      assertOwnerAuthority(input.authority, current);
       if (current.revision !== input.expectedRevision) {return { current, kind: "stale" };}
       commitCount += 1;
       if (options.indeterminateFirstCommit === true && commitCount === 1) {
@@ -100,10 +127,11 @@ const createDependencies = (options: Readonly<{
     },
     claimDispatch: async input => {
       if (current === undefined) {return { kind: "not_found" };}
+      assertOwnerAuthority(input.authority, current);
       if (current.revision !== input.expectedRevision) {return { current, kind: "stale" };}
-      assert.equal(input.authority.providerAccessRevision, current.providerAccessSnapshot.revision);
-      assert.equal(input.authority.securityAuthorityRevision, current.acceptedAuthorityVector.securityAuthorityRevision);
-      claimAuthorities.push(input.authority);
+      assert.equal(input.dispatchAuthority.providerAccessRevision, current.providerAccessSnapshot.revision);
+      assert.equal(input.dispatchAuthority.securityAuthorityRevision, current.acceptedAuthorityVector.securityAuthorityRevision);
+      claimAuthorities.push(input.dispatchAuthority);
       if (options.staleClaimAuthority === true) {return { current, kind: "stale" };}
       current = input.candidate;
       return { kind: "applied", operation: current };
@@ -115,7 +143,8 @@ const createDependencies = (options: Readonly<{
       operationAuthorityRevision: "operation-authority:one",
       operationId,
     }),
-    prepareCancellation: async operation => {
+    prepareCancellation: async ({ authority, operation }) => {
+      assertOwnerAuthority(authority, operation);
       const scopeDigest = operation.acceptedAuthorityVector.scopeDigest;
       const cancellationCommandId = identity("cancellation_command", "one");
       const command = {
@@ -126,27 +155,73 @@ const createDependencies = (options: Readonly<{
       };
       return {
         command,
-        cutoffProof: operation.admissionFence.kind === "fenced"
-          ? operation.proofs.find(proof => proof.kind === "cutoff" && proof.proofId === operation.admissionFence.proofId) as Extract<ContainedTurnProof, { kind: "cutoff" }>
-          : { binding: { ...operationBinding(operation), cancellationCommandId }, kind: "cutoff", proofId: proofId("cancel-cutoff") },
+        cutoffProof: { binding: { ...operationBinding(operation), cancellationCommandId }, kind: "cutoff", proofId: proofId("cancel-cutoff") },
+        preventionProofId: proofId("cancel-no-dispatch"),
         proof: { binding: { ...operationBinding(operation), cancellationCommandId, cancellationFingerprint: command.fingerprint }, kind: "cancellation", proofId: proofId("cancellation") },
       };
     },
-    prepareDispatch: async () => ({ attemptId, claimProofId: proofId("claim"), custodyId, cutoffProofId: proofId("cutoff") }),
-    proofsForPrevention: async () => {throw new Error("not used by success conformance");},
-    proofsForProcessNoStart: async () => {throw new Error("not used by success conformance");},
-    read: async requested => requested === operationId ? current : undefined,
+    prepareDispatch: async ({ authority, operation }) => {
+      assertOwnerAuthority(authority, operation);
+      return { attemptId, claimProofId: proofId("claim"), custodyId, cutoffProofId: proofId("cutoff"), executionGenerationId, writerFence };
+    },
+    proofsForExecutionClosure: async ({ authority, observation, operation }) => {
+      assertOwnerAuthority(authority, operation);
+      const binding = attemptBinding(operation);
+      return {
+        acceptanceProof: { binding: { ...binding, disposition: "accepted" }, kind: "provider_acceptance", proofId: proofId("provider-acceptance") },
+        effectProof: { binding: { ...binding, disposition: "committed" }, kind: "effect_resolution", proofId: proofId("effect") },
+        executionClosureProof: { binding: { ...binding, outcome: observation.outcome }, kind: "execution_closure", proofId: proofId("execution") },
+        outputDrainProof: { binding: { ...binding, finalCursor: operation.output.chunks.length }, kind: "output_drain", proofId: proofId("output-drain") },
+        terminalObservationProof: { binding: { ...binding, outcome: observation.outcome }, kind: "provider_terminal_observation", proofId: proofId("terminal-observation") },
+      };
+    },
+    proofsForPrevention: async ({ authority, operation, preventionProofId }) => {
+      assertOwnerAuthority(authority, operation);
+      const cutoffProof = operation.proofs.find(proof => proof.kind === "cutoff" && (
+        operation.cancellation.kind === "requested"
+          ? proof.binding.cancellationCommandId === operation.cancellation.command.cancellationCommandId
+          : proof.proofId === preventionProofId
+      )) as Extract<ContainedTurnProof, { kind: "cutoff" }>;
+      return ({
+      containmentProof: { binding: { ...operationBinding(operation), effectId }, kind: "containment_not_required", proofId: proofId("containment-not-required") },
+      cutoffProof,
+      effectProof: { binding: { ...operationBinding(operation), disposition: "not_committed", effectId }, kind: "effect_no_start", proofId: proofId("effect-no-start") },
+      executionProof: { binding: { ...operationBinding(operation), effectId }, kind: "no_start", proofId: proofId("no-start") },
+      hostCustodyProof: { binding: { ...operationBinding(operation), effectId }, kind: "host_custody_no_start", proofId: proofId("host-custody-no-start") },
+      noDispatchProof: { binding: { ...operationBinding(operation), effectId }, kind: "no_dispatch", proofId: preventionProofId },
+      outputProof: { binding: { ...operationBinding(operation), finalCursor: 0 }, kind: "output_no_start_drain", proofId: proofId("output-no-start") },
+      providerProof: { binding: { ...operationBinding(operation), effectId }, kind: "provider_not_started", proofId: proofId("provider-not-started") },
+      });
+    },
+    proofsForProcessNoStart: async ({ authority, operation }) => {
+      assertOwnerAuthority(authority, operation);
+      throw new Error("not used by success conformance");
+    },
+    read: async requested => requested.operationId === operationId &&
+        requested.scope.projectId === current?.scope.projectId && requested.scope.tenantId === current.scope.tenantId
+      ? current
+      : undefined,
     requestCancellation: async input => {
       if (current === undefined) {return { kind: "not_found" };}
+      assertOwnerAuthority(input.authority, current);
       if (current.revision !== input.expectedRevision) {return { current, kind: "stale" };}
       current = input.candidate;
       return { kind: "applied", operation: current };
     },
     terminalProof: async input => {
+      assertOwnerAuthority(input.authority, input.operation);
       assert.equal(input.satisfactionDigest, containedTurnSatisfactionDigest(input.operation));
-      assert.equal(input.operation.providerExecution.kind, "closed");
+      if (input.operation.providerExecution.kind !== "closed") {
+        throw new TypeError("terminal fixture requires closed provider execution");
+      }
       return {
-        binding: { ...operationBinding(input.operation), satisfactionDigest: input.satisfactionDigest, terminalOutcome: input.operation.providerExecution.outcome },
+        binding: {
+          ...operationBinding(input.operation),
+          requiredReceiptSetDigest: input.operation.requiredReceiptSetDigest,
+          requiredReceiptSetVersion: input.operation.requiredReceiptSet.setVersion,
+          satisfactionDigest: input.satisfactionDigest,
+          terminalOutcome: input.operation.providerExecution.outcome,
+        },
         kind: "terminal_truth",
         proofId: proofId("terminal"),
       };
@@ -180,7 +255,14 @@ const createDependencies = (options: Readonly<{
     },
     workspace: {
       close: async input => ({ kind: "closed", proof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), workspaceId: input.workspaceId }, kind: "workspace_closure", proofId: proofId("workspace-closure") } }),
-      create: async () => ({ workspaceId }),
+      create: async () => {
+        workspaceCreateCount += 1;
+        if (workspaceCreateCount === 1) {
+          options.workspaceStarted?.();
+          await options.workspaceGate;
+        }
+        return { workspaceId };
+      },
       quarantine: async () => {},
     },
     artifacts: {
@@ -225,6 +307,7 @@ const createDependencies = (options: Readonly<{
               hostInstanceId,
               immutableScopeDigest: operation.acceptedAuthorityVector.scopeDigest,
               outputDrainProofId: proof("output_drain"),
+              physicalContainmentProofId: proof("physical_containment"),
               providerRouteRef: operation.providerAccessSnapshot.providerRouteRef,
               terminalObservationProofId: proof("provider_terminal_observation"),
               workspaceId,
@@ -234,42 +317,58 @@ const createDependencies = (options: Readonly<{
           },
         };
       },
-      start: async () => ({
-        kind: "execution_started",
-        proof: { binding: { ...attemptBinding(current as ContainedTurnKernelOperation), custodyId, hostBootId, hostInstanceId }, kind: "provider_process_start", proofId: proofId("process-start") },
-      }),
+      requestPhysicalContainment: async () => {
+        containmentCalls.value += 1;
+        return {
+          kind: "contained",
+          proof: { binding: { ...attemptBinding(current as ContainedTurnKernelOperation), custodyId, hostBootId, hostInstanceId }, kind: "physical_containment", proofId: proofId("physical-containment") },
+        };
+      },
+      start: async input => {
+        const proof = { binding: { ...attemptBinding(current as ContainedTurnKernelOperation), custodyId, hostBootId, hostInstanceId }, kind: "provider_process_start" as const, proofId: proofId("process-start") };
+        let reportStart!: () => void;
+        const observation = new Promise<import("../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js").ContainedTurnKernelProcessStartObservation>(resolve => {
+          reportStart = () => {resolve({ kind: "execution_started", proof });};
+        });
+        const execution = input.execute({
+          createProcess: createProcess => {const process = createProcess(); reportStart(); return process;},
+          observation,
+        });
+        const observed = await observation;
+        assert.equal(observed.kind, "execution_started");
+        return { execution, kind: "execution_started", proof };
+      },
     },
     provider: {
       adapterSnapshot,
       manifest,
       execute: async input => {
         providerCalls.value += 1;
-        options.providerStarted?.();
+        input.start.createProcess(() => Object.freeze({}));
+        if (options.throwAfterStart === true) {throw new Error("provider crashed after the sole delegated start");}
         if (options.emitBeforeGate === true) {await input.emit({ cursor: 0, kind: "assistant", text: "before cancellation" });}
+        options.providerStarted?.();
         await options.providerGate;
         if (await input.isCancellationRequested()) {
           return { evidenceId: identity("evidence", "provider-after-cancellation"), kind: "indeterminate" };
         }
         await input.emit({ cursor: 0, kind: "assistant", text: "ok" });
-        const operation = current as ContainedTurnKernelOperation;
-        const binding = attemptBinding(operation);
-        return {
-          acceptanceProof: { binding: { ...binding, disposition: "accepted" }, kind: "provider_acceptance", proofId: proofId("provider-acceptance") },
-          effectProof: { binding: { ...binding, disposition: "committed" }, kind: "effect_resolution", proofId: proofId("effect") },
-          executionClosureProof: { binding: { ...binding, outcome: "succeeded" }, kind: "execution_closure", proofId: proofId("execution") },
-          kind: "completed",
-          outcome: "succeeded",
-          outputDrainProof: { binding: { ...binding, finalCursor: 1 }, kind: "output_drain", proofId: proofId("output-drain") },
-          terminalObservationProof: { binding: { ...binding, outcome: "succeeded" }, kind: "provider_terminal_observation", proofId: proofId("terminal-observation") },
-        };
+        if (options.forgeReceipt === true) {
+          return {
+            acceptanceProof: { forged: true },
+            kind: "completed",
+            outcome: "succeeded",
+          } as never;
+        }
+        return { kind: "completed", outcome: "succeeded" };
       },
     },
   };
-  return { claimAuthorities, containmentCalls, dependencies, providerCalls };
+  return { claimAuthorities, containmentCalls, current: () => current, dependencies, providerCalls };
 };
 
 test("seven-port conformance reaches terminal truth through only ordered kernel APIs", async () => {
-  const { dependencies, providerCalls } = createDependencies();
+  const { current, dependencies, providerCalls } = createDependencies();
   const feature = createContainedTurnFeature(dependencies);
   const result = await feature.submit.execute({
     commandId: "command:one",
@@ -279,7 +378,7 @@ test("seven-port conformance reaches terminal truth through only ordered kernel 
   });
   assert.equal(result.status, "observed");
   if (result.status !== "observed") {return;}
-  assert.equal(result.turn.status, "succeeded");
+  assert.equal(result.turn.status, "succeeded", JSON.stringify(current(), undefined, 2));
   assert.deepEqual(result.turn.output, [{ cursor: 0, kind: "assistant", text: "ok" }]);
   assert.equal(providerCalls.value, 1);
   assert.deepEqual(await feature.observe.execute({ operationId, scope: { projectId: "project:one", tenantId: "tenant:one" } }), result);
@@ -328,14 +427,18 @@ test("durable acceptance is published before provider execution and accepted can
   }, { onAccepted: operation => {accepted = operation;} });
   await started;
   assert.equal(accepted?.operationId, operationId);
-  const cancellation = await feature.cancel.execute(accepted as import("../dist/index.js").ContainedTurnOperationRef);
+  let cancellation!: Awaited<ReturnType<typeof feature.cancel.execute>>;
+  try {
+    cancellation = await feature.cancel.execute(accepted as import("../dist/index.js").ContainedTurnOperationRef);
+  } catch (error) {
+    assert.fail(error instanceof Error ? error.stack : String(error));
+  } finally {releaseProvider();}
   assert.equal(cancellation.status, "observed");
   assert.equal(containmentCalls.value, 1);
   if (cancellation.status === "observed") {
     assert.equal(cancellation.turn.output.length, 1);
-    assert.equal(cancellation.turn.status, "reconcile_required");
+    assert.equal(cancellation.turn.status, "running");
   }
-  releaseProvider();
   const completed = await submission;
   assert.equal(completed.status, "observed");
   if (completed.status === "observed") {assert.equal(completed.turn.status, "reconcile_required");}
@@ -388,6 +491,65 @@ test("[oracle-06-seal-outbox-recovery] unknown artifact sealing persists reconci
   assert.equal(outcome.status, "observed");
   if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
   assert.equal(providerCalls.value, 1);
+});
+
+test("provider observations cannot inject Kernel-owned receipt fields", async () => {
+  const { current, dependencies, providerCalls } = createDependencies({ forgeReceipt: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "attempt to forge trusted closure" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
+  assert.equal(providerCalls.value, 1);
+  assert.equal(current()?.proofs.some(proof => [
+    "provider_acceptance", "execution_closure", "output_drain", "effect_resolution",
+  ].includes(proof.kind)), false);
+});
+
+test("throw after the sole dispatch claim preserves ambiguity and never becomes not-accepted or retryable", async () => {
+  const { current, dependencies, providerCalls } = createDependencies({ throwAfterStart: true });
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "crash after dispatch" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(outcome.status, "observed");
+  if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
+  assert.equal(providerCalls.value, 1);
+  assert.equal(current()?.dispatch.kind, "claimed");
+  assert.equal(current()?.providerAcceptance.kind, "unknown");
+  assert.equal(current()?.terminal.kind, "open");
+});
+
+test("cancellation racing the first workspace creation reaches proved-no-start terminal closure", async () => {
+  let releaseWorkspace!: () => void;
+  const workspaceGate = new Promise<void>(resolve => {releaseWorkspace = resolve;});
+  let workspaceStarted!: () => void;
+  const started = new Promise<void>(resolve => {workspaceStarted = resolve;});
+  let accepted: import("../dist/index.js").ContainedTurnOperationRef | undefined;
+  const { current, dependencies, providerCalls } = createDependencies({ workspaceGate, workspaceStarted });
+  const feature = createContainedTurnFeature(dependencies);
+  const submission = feature.submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "cancel before workspace binding" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }, { onAccepted: operation => {accepted = operation;} });
+  await started;
+  const cancellation = await feature.cancel.execute(accepted as import("../dist/index.js").ContainedTurnOperationRef);
+  assert.equal(cancellation.status, "observed");
+  if (cancellation.status === "observed") {
+    assert.equal(cancellation.turn.status, "cancelled", JSON.stringify(current(), undefined, 2));
+  }
+  releaseWorkspace();
+  const settled = await submission;
+  assert.equal(settled.status, "observed");
+  if (settled.status === "observed") {assert.equal(settled.turn.status, "cancelled");}
+  assert.equal(providerCalls.value, 0);
 });
 
 test("composition rejects every non-exact seven-port dependency bag before effects", () => {

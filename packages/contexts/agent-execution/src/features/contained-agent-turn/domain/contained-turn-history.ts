@@ -48,6 +48,16 @@ const immutableProjection = (operation: ContainedTurnKernelOperation): string =>
     revision: operation.providerAccessSnapshot.revision,
     tenantId: operation.providerAccessSnapshot.tenantId,
   },
+  requiredReceiptSet: {
+    digest: operation.requiredReceiptSetDigest,
+    set: {
+      membershipFrozenAt: operation.requiredReceiptSet.membershipFrozenAt,
+      membershipMutation: operation.requiredReceiptSet.membershipMutation,
+      receipts: [...operation.requiredReceiptSet.receipts],
+      satisfaction: operation.requiredReceiptSet.satisfaction,
+      setVersion: operation.requiredReceiptSet.setVersion,
+    },
+  },
   schemaVersion: operation.schemaVersion,
   scope: { projectId: operation.scope.projectId, tenantId: operation.scope.tenantId },
 });
@@ -63,8 +73,32 @@ export const validateContainedTurnHistory = (
   invariant(immutableProjection(candidate) === immutableProjection(previous), "accepted identity, intent, scope, manifest, and authority are immutable");
   invariant(previous.terminal.kind !== "final" || candidate.terminal.kind === "final", "terminal truth never reopens");
   invariant(previous.output.fence.kind !== "fenced" || candidate.output.fence.kind === "fenced", "output fence never reopens");
+  invariant(candidate.operationCutoff.revision >= previous.operationCutoff.revision, "operation cutoff revision never decreases");
+  invariant(
+    candidate.operationCutoff.revision <= previous.operationCutoff.revision + 1,
+    "one mutation advances operation cutoff at most once",
+  );
+  invariant(
+    previous.operationCutoff.kind !== "closed" || candidate.operationCutoff.kind === "closed",
+    "operation cutoff never reopens",
+  );
+  if (previous.operationCutoff.kind === "closed" && candidate.operationCutoff.kind === "closed" &&
+      previous.operationCutoff.reason !== "continuity_lost") {
+    invariant(
+      candidate.operationCutoff.reason === previous.operationCutoff.reason &&
+        "proofId" in candidate.operationCutoff && candidate.operationCutoff.proofId === previous.operationCutoff.proofId,
+      "proved operation cutoff authority cannot be replaced by later continuity evidence",
+    );
+  }
   invariant(previous.admissionFence.kind !== "fenced" || candidate.admissionFence.kind === "fenced", "admission fence never reopens");
-  if (previous.output.fence.kind === "fenced") {invariant(sameCanonicalValue(candidate.output.fence, previous.output.fence), "output fence truth is immutable");}
+  if (previous.output.fence.kind === "fenced") {
+    const proofEnrichment = previous.output.fence.proofId === undefined && candidate.output.fence.kind === "fenced" &&
+      candidate.output.fence.proofId !== undefined && candidate.output.fence.finalCursor === previous.output.fence.finalCursor;
+    invariant(
+      sameCanonicalValue(candidate.output.fence, previous.output.fence) || proofEnrichment,
+      "output fence truth is immutable except for its exact drain-proof enrichment",
+    );
+  }
   if (previous.admissionFence.kind === "fenced") {invariant(sameCanonicalValue(candidate.admissionFence, previous.admissionFence), "admission fence truth is immutable");}
   invariant(candidate.output.chunks.length >= previous.output.chunks.length, "output is append-only");
   if (previous.output.fence.kind === "fenced") {invariant(candidate.output.chunks.length === previous.output.chunks.length, "canonical output cannot append after its fence");}
@@ -95,6 +129,12 @@ export const validateContainedTurnHistory = (
   }
   if (previous.containment.kind === "contained" || previous.containment.kind === "qualified_not_required") {
     invariant(sameCanonicalValue(candidate.containment, previous.containment), "containment closure never reopens");
+  }
+  if (previous.physicalContainment.kind === "contained") {
+    invariant(
+      sameCanonicalValue(candidate.physicalContainment, previous.physicalContainment),
+      "physical containment proof never reopens or changes",
+    );
   }
   if (previous.effect.kind === "resolved") {invariant(sameCanonicalValue(candidate.effect, previous.effect), "effect resolution never reopens");}
   if (previous.reconciliation.kind === "required") {invariant(candidate.reconciliation.kind === "required", "V1 reconciliation debt cannot be cleared by a turn mutation");}

@@ -15,6 +15,7 @@ import type {
   ContainedTurnKernelOperation,
   ContainedTurnKernelOutputChunk,
 } from "../../../domain/contained-turn-kernel.js";
+import type { ContainedTurnOutputWriteAuthority } from "../../../domain/contained-turn-output-authority.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import type { ContainedTurnKernelMutation } from "../../../domain/contained-turn-transitions.js";
 import type {
@@ -23,11 +24,13 @@ import type {
   ContainedTurnCustodyId,
   ContainedTurnEffectId,
   ContainedTurnEvidenceId,
+  ContainedTurnExecutionGenerationId,
   ContainedTurnHostBootId,
   ContainedTurnHostInstanceId,
   ContainedTurnOperationId,
   ContainedTurnProofId,
   ContainedTurnWorkspaceId,
+  ContainedTurnWriterFence,
 } from "../../../domain/contained-turn-identities.js";
 import { assertContainedTurnExactRecord } from "../../../domain/contained-turn-record.js";
 
@@ -87,6 +90,34 @@ export type CommitContainedTurnKernelOperationOutcome =
   | { readonly kind: "not_found" }
   | { readonly current: ContainedTurnKernelOperation; readonly kind: "stale" };
 
+export type IdentifyContainedTurnAcceptanceOutcome =
+  | {
+    readonly acceptanceProofId: ContainedTurnProofId;
+    readonly effectId: ContainedTurnEffectId;
+    readonly kind: "available";
+    readonly operationId: ContainedTurnOperationId;
+    readonly operationAuthorityRevision: string;
+  }
+  | { readonly kind: "fingerprint_conflict" }
+  | { readonly kind: "not_found" }
+  | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation };
+
+export type AcceptContainedTurnKernelOperationOutcome =
+  | { readonly kind: "accepted"; readonly operation: ContainedTurnKernelOperation }
+  | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }
+  | { readonly kind: "fingerprint_conflict" }
+  | { readonly kind: "not_found" };
+
+export type AppendContainedTurnKernelOutputOutcome = CommitContainedTurnKernelOperationOutcome;
+
+/** Exact owner-store namespace for an already accepted operation. */
+export interface ContainedTurnOwnerStoreAuthority {
+  readonly commandId: ContainedTurnCommandId;
+  readonly effectId: ContainedTurnEffectId;
+  readonly operationId: ContainedTurnOperationId;
+  readonly scope: ContainedTurnScope;
+}
+
 export interface ContainedTurnDispatchAuthorityPrecondition {
   readonly acceptedProviderAccessSnapshotDigest: ContainedTurnCanonicalDigest;
   readonly acceptedSecurityDecisionDigest: ContainedTurnCanonicalDigest;
@@ -100,62 +131,95 @@ export interface ContainedTurnKernelOperationStore {
   identifyAcceptance(input: Readonly<{
     commandFingerprint: ContainedTurnCommandFingerprint;
     commandId: ContainedTurnCommandId;
-  }>): Promise<
-    | {
-      readonly acceptanceProofId: ContainedTurnProofId;
-      readonly effectId: ContainedTurnEffectId;
-      readonly kind: "available";
-      readonly operationId: ContainedTurnOperationId;
-      readonly operationAuthorityRevision: string;
-    }
-    | { readonly kind: "fingerprint_conflict" }
-    | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }
-  >;
-  prepareDispatch(operation: ContainedTurnKernelOperation): Promise<Readonly<{
+    /** Independently trusted owner scope; never derive it from a stored or candidate operation. */
+    scope: ContainedTurnScope;
+  }>): Promise<IdentifyContainedTurnAcceptanceOutcome>;
+  prepareDispatch(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    operation: ContainedTurnKernelOperation;
+  }>): Promise<Readonly<{
     attemptId: ContainedTurnAttemptId;
     claimProofId: ContainedTurnProofId;
     custodyId: ContainedTurnCustodyId;
     cutoffProofId: ContainedTurnProofId;
+    executionGenerationId: ContainedTurnExecutionGenerationId;
+    writerFence: ContainedTurnWriterFence;
   }>>;
   proofsForPrevention(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
     operation: ContainedTurnKernelOperation;
     preventionProofId: ContainedTurnProofId;
   }>): Promise<Omit<Extract<ContainedTurnKernelMutation, { readonly kind: "prevent_dispatch" }>, "kind">>;
-  proofsForProcessNoStart(operation: ContainedTurnKernelOperation): Promise<
+  proofsForProcessNoStart(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    operation: ContainedTurnKernelOperation;
+  }>): Promise<
     Omit<Extract<ContainedTurnKernelMutation, { readonly kind: "close_process_no_start" }>, "kind">
   >;
+  proofsForExecutionClosure(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    observation: Extract<ContainedTurnKernelProviderObservation, { readonly kind: "completed" }>;
+    operation: ContainedTurnKernelOperation;
+  }>): Promise<Readonly<{
+    acceptanceProof: Extract<ContainedTurnProof, { readonly kind: "provider_acceptance" }>;
+    effectProof: Extract<ContainedTurnProof, { readonly kind: "effect_resolution" }>;
+    executionClosureProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>;
+    outputDrainProof: Extract<ContainedTurnProof, { readonly kind: "output_drain" }>;
+    terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }>;
+  }>>;
   terminalProof(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
     operation: ContainedTurnKernelOperation;
     satisfactionDigest: ContainedTurnCanonicalDigest;
   }>): Promise<Extract<ContainedTurnProof, { readonly kind: "terminal_truth" }>>;
-  prepareCancellation(operation: ContainedTurnKernelOperation): Promise<Readonly<{
+  prepareCancellation(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    operation: ContainedTurnKernelOperation;
+  }>): Promise<Readonly<{
     command: ContainedTurnCancellationCommand;
     cutoffProof: Extract<ContainedTurnProof, { readonly kind: "cutoff" }>;
+    preventionProofId: ContainedTurnProofId;
     proof: Extract<ContainedTurnProof, { readonly kind: "cancellation" }>;
   }>>;
-  accept(candidate: ContainedTurnKernelOperation): Promise<
-    | { readonly kind: "accepted"; readonly operation: ContainedTurnKernelOperation }
-    | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }
-    | { readonly kind: "fingerprint_conflict" }
-  >;
+  accept(
+    candidate: ContainedTurnKernelOperation,
+    /** Independently assembled namespace; candidate fields are untrusted request data here. */
+    authority: ContainedTurnOwnerStoreAuthority,
+  ): Promise<AcceptContainedTurnKernelOperationOutcome>;
   commit(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
     candidate: ContainedTurnKernelOperation;
     expectedRevision: number;
-    operationId: ContainedTurnOperationId;
   }>): Promise<CommitContainedTurnKernelOperationOutcome>;
   /** Final owner-store CAS: validates operation and cross-context authority fences while claiming dispatch. */
   claimDispatch(input: Readonly<{
-    authority: ContainedTurnDispatchAuthorityPrecondition;
+    authority: ContainedTurnOwnerStoreAuthority;
     candidate: ContainedTurnKernelOperation;
+    dispatchAuthority: ContainedTurnDispatchAuthorityPrecondition;
     expectedRevision: number;
-    operationId: ContainedTurnOperationId;
   }>): Promise<CommitContainedTurnKernelOperationOutcome>;
-  read(operationId: ContainedTurnOperationId): Promise<ContainedTurnKernelOperation | undefined>;
+  /** A scope mismatch is represented exactly like an absent operation. */
+  read(input: Readonly<{
+    operationId: ContainedTurnOperationId;
+    scope: ContainedTurnScope;
+  }>): Promise<ContainedTurnKernelOperation | undefined>;
   requestCancellation(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
     candidate: ContainedTurnKernelOperation;
     command: ContainedTurnCancellationCommand;
     expectedRevision: number;
   }>): Promise<CommitContainedTurnKernelOperationOutcome>;
+  /**
+   * The sole canonical-output write path. The owner store must evaluate scope
+   * before revision or writer-authority predicates and append atomically.
+   */
+  appendOutput(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    expectedCursor: number;
+    expectedRevision: number;
+    outputAuthority: ContainedTurnOutputWriteAuthority;
+    output: ContainedTurnKernelOutputChunk;
+  }>): Promise<AppendContainedTurnKernelOutputOutcome>;
 }
 
 export interface ContainedTurnKernelSecurityPort {
@@ -201,6 +265,34 @@ export interface ContainedTurnKernelArtifactPort {
   }> | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }>;
 }
 
+export type ContainedTurnKernelProviderObservation =
+  | {
+    readonly kind: "completed";
+    readonly outcome: "cancelled" | "failed" | "succeeded";
+  }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" };
+
+export type ContainedTurnKernelProcessStartObservation =
+  | {
+    readonly kind: "execution_started";
+    readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }>;
+  }
+  | {
+    readonly kind: "proved_no_start";
+    readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_no_start" }>;
+  }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" };
+
+/**
+ * Host-owned wrapper installed as the provider SDK's process-creation hook.
+ * The generic return keeps the provider's private process type inside its
+ * adapter while Host Custody invokes the exact creator under its reservation.
+ */
+export interface ContainedTurnKernelDelegatedStart {
+  readonly observation: Promise<ContainedTurnKernelProcessStartObservation>;
+  createProcess<Process>(createProcess: () => Process): Process;
+}
+
 export interface ContainedTurnKernelCustodyPort {
   /** Reserves sole-attempt custody. Reservation is not evidence of process start. */
   open(input: Readonly<{
@@ -218,16 +310,21 @@ export interface ContainedTurnKernelCustodyPort {
     hostInstanceId: ContainedTurnHostInstanceId;
   }>>;
   /**
-   * Materializes the reserved process/session. Only `execution_started` permits
-   * the kernel to activate provider execution; an unknown result requires
-   * reconciliation and never permits another attempt.
+   * Runs provider execution with a Host-owned process-creation wrapper. The
+   * provider SDK supplies its actual creator only when its selected intent is
+   * ready to spawn. Only `execution_started` exposes the still-single execution
+   * promise; an unknown result requires reconciliation and never another try.
    */
   start(input: Readonly<{
     attemptId: ContainedTurnAttemptId;
     custodyId: ContainedTurnCustodyId;
+    execute: (start: ContainedTurnKernelDelegatedStart) => Promise<ContainedTurnKernelProviderObservation>;
+    intent: ContainedTurnIntent;
     operationId: ContainedTurnOperationId;
+    workspaceId: ContainedTurnWorkspaceId;
   }>): Promise<
     | {
+      readonly execution: Promise<ContainedTurnKernelProviderObservation>;
       readonly kind: "execution_started";
       readonly proof: Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }>;
     }
@@ -237,6 +334,16 @@ export interface ContainedTurnKernelCustodyPort {
     }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
+  /** Proves process/descendant closure before any canonical artifact capture. */
+  requestPhysicalContainment(input: Readonly<{
+    attemptId: ContainedTurnAttemptId;
+    custodyId: ContainedTurnCustodyId;
+    operationId: ContainedTurnOperationId;
+  }>): Promise<
+    | { readonly kind: "contained"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "physical_containment" }> }
+    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
+  >;
+  /** Builds the composite closure proof after physical closure and artifact sealing. */
   requestContainment(input: Readonly<{
     attemptId: ContainedTurnAttemptId;
     custodyId: ContainedTurnCustodyId;
@@ -262,28 +369,9 @@ export interface ContainedTurnKernelProviderPort {
     isCancellationRequested: () => Promise<boolean>;
     operationId: ContainedTurnOperationId;
     providerAccessSnapshot: ContainedTurnProviderAccessSnapshot;
-    startProofId: ContainedTurnProofId;
+    start: ContainedTurnKernelDelegatedStart;
     workspaceId: ContainedTurnWorkspaceId;
-  }>): Promise<
-    | {
-      readonly acceptanceProof: Extract<ContainedTurnProof, { readonly kind: "provider_acceptance" }>;
-      readonly effectProof: Extract<ContainedTurnProof, { readonly kind: "effect_resolution" }>;
-      readonly executionClosureProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>;
-      readonly kind: "completed";
-      readonly outcome: "cancelled" | "failed" | "succeeded";
-      readonly outputDrainProof: Extract<ContainedTurnProof, { readonly kind: "output_drain" }>;
-      readonly terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }>;
-    }
-    | {
-      readonly acceptanceProof: Extract<ContainedTurnProof, { readonly kind: "provider_acceptance" }>;
-      readonly effectProof: Extract<ContainedTurnProof, { readonly kind: "effect_resolution" }>;
-      readonly executionClosureProof: Extract<ContainedTurnProof, { readonly kind: "execution_closure" }>;
-      readonly kind: "not_accepted";
-      readonly outputDrainProof: Extract<ContainedTurnProof, { readonly kind: "output_drain" }>;
-      readonly terminalObservationProof: Extract<ContainedTurnProof, { readonly kind: "provider_terminal_observation" }>;
-    }
-    | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
-  >;
+  }>): Promise<ContainedTurnKernelProviderObservation>;
 }
 
 export interface ContainedTurnKernelDependencies {

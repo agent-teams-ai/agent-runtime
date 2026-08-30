@@ -1,14 +1,14 @@
-import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "./contained-turn-authority.js";
+import { containedTurnProviderAccessSnapshotDigest } from "./contained-turn-authority.js";
 import type { ContainedTurnAttemptId, ContainedTurnProofId } from "./contained-turn-identities.js";
 import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
 import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
 import { parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import {
-  containedTurnRequiredKindForProof,
   type ContainedTurnProof,
   type ContainedTurnProofKind,
 } from "./contained-turn-proofs.js";
+import { containedTurnRequiredReceiptsSatisfied } from "./contained-turn-required-receipts.js";
 
 const OPERATION_BINDING_KEYS = ["authorityVectorDigest", "operationId"] as const;
 const ATTEMPT_BINDING_KEYS = [...OPERATION_BINDING_KEYS, "attemptId", "effectId"] as const;
@@ -37,7 +37,9 @@ const validateProofShape = (proof: ContainedTurnProof): void => {
         ...ATTEMPT_BINDING_KEYS, "adapterRevision", "artifactManifestSealProofId", "binaryRevision",
         "capabilityManifestRevision", "containmentPolicyDigest", "credentialBindingDigest", "custodyId",
         "cutoffProofId", "executionClosureProofId", "finalCursor", "hostBootId", "hostInstanceId",
-        "immutableScopeDigest", "outputDrainProofId", "providerRouteRef", "terminalObservationProofId", "workspaceId",
+        "immutableScopeDigest", "outputDrainProofId",
+        ...(proof.binding.physicalContainmentProofId === undefined ? [] : ["physicalContainmentProofId"]),
+        "providerRouteRef", "terminalObservationProofId", "workspaceId",
       ]);
       break;
     case "cutoff":
@@ -84,11 +86,17 @@ const validateProofShape = (proof: ContainedTurnProof): void => {
     case "provider_process_start":
       exactBinding([...ATTEMPT_BINDING_KEYS, "custodyId", "hostBootId", "hostInstanceId"]);
       break;
+    case "physical_containment":
+      exactBinding([...ATTEMPT_BINDING_KEYS, "custodyId", "hostBootId", "hostInstanceId"]);
+      break;
     case "result_publication":
       exactBinding([...OPERATION_BINDING_KEYS, "resultRef"]);
       break;
     case "terminal_truth":
-      exactBinding([...OPERATION_BINDING_KEYS, "satisfactionDigest", "terminalOutcome"]);
+      exactBinding([
+        ...OPERATION_BINDING_KEYS, "requiredReceiptSetDigest", "requiredReceiptSetVersion",
+        "satisfactionDigest", "terminalOutcome",
+      ]);
       break;
     case "workspace_closure":
       exactBinding([...OPERATION_BINDING_KEYS, "workspaceId"]);
@@ -172,6 +180,11 @@ export const validateContainedTurnProofBinding = (
       invariant(proof.binding.hostInstanceId === operation.hostInstanceId, "containment proof host instance binding mismatch");
       invariant(proof.binding.immutableScopeDigest === operation.acceptedAuthorityVector.scopeDigest, "containment proof scope binding mismatch");
       invariant(proof.binding.providerRouteRef === operation.providerAccessSnapshot.providerRouteRef, "containment proof route binding mismatch");
+      invariant(
+        operation.physicalContainment.kind === "contained" &&
+          proof.binding.physicalContainmentProofId === operation.physicalContainment.proofId,
+        "containment proof must bind the exact earlier physical-containment proof",
+      );
       requireContainedTurnProof(operation, proof.binding.artifactManifestSealProofId, "artifact_manifest_seal");
       requireContainedTurnProof(operation, proof.binding.executionClosureProofId, "execution_closure");
       requireContainedTurnProof(operation, proof.binding.outputDrainProofId, "output_drain");
@@ -201,6 +214,12 @@ export const validateContainedTurnProofBinding = (
       invariant(proof.binding.custodyId === operation.custodyId, `${proof.kind} proof custody binding mismatch`);
       invariant(proof.binding.hostBootId === operation.hostBootId, `${proof.kind} proof Host boot binding mismatch`);
       invariant(proof.binding.hostInstanceId === operation.hostInstanceId, `${proof.kind} proof Host instance binding mismatch`);
+      break;
+    case "physical_containment":
+      invariant(operation.dispatch.kind === "claimed", "physical containment requires the sole claimed attempt");
+      invariant(proof.binding.custodyId === operation.custodyId, "physical containment custody binding mismatch");
+      invariant(proof.binding.hostBootId === operation.hostBootId, "physical containment Host boot binding mismatch");
+      invariant(proof.binding.hostInstanceId === operation.hostInstanceId, "physical containment Host instance binding mismatch");
       break;
     case "result_publication":
       invariant(proof.binding.resultRef === operation.resultRef, "result proof binding mismatch");
@@ -246,6 +265,8 @@ export const validateContainedTurnProofBinding = (
       if (operation.terminal.kind === "final") {
         invariant(proof.binding.terminalOutcome === operation.terminal.outcome, "terminal proof outcome mismatch");
         invariant(proof.binding.satisfactionDigest === operation.terminal.satisfactionDigest, "terminal proof satisfaction mismatch");
+        invariant(proof.binding.requiredReceiptSetDigest === operation.requiredReceiptSetDigest, "terminal proof receipt-set digest mismatch");
+        invariant(proof.binding.requiredReceiptSetVersion === operation.requiredReceiptSet.setVersion, "terminal proof receipt-set version mismatch");
       }
       break;
     case "workspace_closure":
@@ -282,8 +303,10 @@ export const validateContainedTurnProofBinding = (
 };
 
 export const containedTurnRequiredProofsSatisfied = (operation: ContainedTurnKernelOperation): boolean => {
-  const satisfied = new Set(operation.proofs.map(containedTurnRequiredKindForProof));
-  return CONTAINED_TURN_REQUIRED_PROOF_KINDS.every(kind => satisfied.has(kind));
+  return containedTurnRequiredReceiptsSatisfied(
+    { digest: operation.requiredReceiptSetDigest, set: operation.requiredReceiptSet },
+    operation.proofs,
+  );
 };
 
 // The branches are the closed set of independently evidenced execution axes.
@@ -319,6 +342,9 @@ export const validateContainedTurnAxisProofs = (operation: ContainedTurnKernelOp
     );
   }
   if (operation.containment.kind === "contained") {requireContainedTurnProof(operation, operation.containment.proofId, "containment");}
+  if (operation.physicalContainment.kind === "contained") {
+    requireContainedTurnProof(operation, operation.physicalContainment.proofId, "physical_containment");
+  }
   if (operation.containment.kind === "qualified_not_required") {
     invariant(
       operation.dispatch.kind === "prevented" || operation.providerProcessStart.kind === "proved_no_start",
