@@ -1,7 +1,7 @@
 import type { DispatchConsumptionDigest } from "./ports/outbound/dispatch-consumption-digest.js";
 import type { DispatchConsumptionJournalEntry, DispatchConsumptionTransactionSelector } from "./ports/outbound/dispatch-consumption-repository.js";
 import {
-  consumptionDigestPayload, exactDispatchDataRecord, requestDigestPayload, settlementDigestPayload, snapshotDispatchBindingHead,
+  consumptionDigestPayload, exactDispatchDataRecord, journalDigestPayload, requestDigestPayload, settlementDigestPayload, snapshotDispatchBindingHead,
   snapshotDispatchConsumeOutcome, snapshotDispatchConsumedReceipt, snapshotDispatchDigest, snapshotDispatchId,
   snapshotDispatchExpectation, snapshotDispatchScope, snapshotDispatchSettlementOutcome, type DispatchBindingHead, type DispatchConsumeCommand,
   type DispatchConsumedReceipt, type DispatchProvider, type DispatchScopeValue, type DispatchSettlementCommand,
@@ -55,14 +55,15 @@ export const verifiedJournalEntry = async (
   digest: DispatchConsumptionDigest,
 ): Promise<DispatchConsumptionJournalEntry> => {
   const data = exactDispatchDataRecord("journal entry", value, [
-    "binding", "claimBindingDigest", "grantRequestId", "operationId", "outcome", "provider", "purpose", "requestDigest", "scope",
+    "binding", "claimBindingDigest", "grantRequestId", "journalDigest", "operationId", "outcome", "provider", "purpose", "requestDigest", "scope",
   ]);
   const provider = data.provider;
   if (provider !== "claude" && provider !== "codex") {throw new TypeError("journal provider is invalid");}
   if (data.purpose !== "contained-turn.provider-dispatch/v1") {throw new TypeError("journal purpose is invalid");}
   const entry = Object.freeze({
     binding: snapshotDispatchExpectation(data.binding as never), claimBindingDigest: snapshotDispatchDigest("claimBindingDigest", data.claimBindingDigest),
-    grantRequestId: snapshotDispatchId("grantRequestId", data.grantRequestId), operationId: snapshotDispatchId("operationId", data.operationId),
+    grantRequestId: snapshotDispatchId("grantRequestId", data.grantRequestId), journalDigest: snapshotDispatchDigest("journalDigest", data.journalDigest),
+    operationId: snapshotDispatchId("operationId", data.operationId),
     outcome: snapshotDispatchConsumeOutcome(data.outcome), provider, purpose: data.purpose,
     requestDigest: snapshotDispatchDigest("requestDigest", data.requestDigest),
     scope: snapshotDispatchScope(data.scope as DispatchScopeValue),
@@ -70,9 +71,10 @@ export const verifiedJournalEntry = async (
   if (entry.grantRequestId !== selector.grantRequestId || entry.provider !== selector.provider || !sameScope(entry.scope, selector.scope)) {
     throw new TypeError("journal entry is foreign to the selector");
   }
-  const { requestDigest: _requestDigest, ...semantic } = entry;
+  const { journalDigest: _journalDigest, requestDigest: _requestDigest, ...semantic } = entry;
   const { outcome: _outcome, ...commandSemantic } = semantic;
   if (await verifiedDigest(digest, requestDigestPayload(commandSemantic)) !== entry.requestDigest) {throw new TypeError("journal request digest is corrupt");}
+  if (await verifiedDigest(digest, journalDigestPayload(entry)) !== entry.journalDigest) {throw new TypeError("journal digest is corrupt");}
   if (entry.outcome.kind === "consumed") {
     const receipt = entry.outcome.receipt;
     if (!receiptIdentityMatches(receipt, entry) || !receiptBindingMatches(receipt, entry) ||

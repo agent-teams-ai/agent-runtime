@@ -363,12 +363,11 @@ Contained Agent Turn V1 implementation present; qualification remains open:
   and explicit `reconcile_required` outcomes;
 - PostgreSQL persistence, disposable workspace/artifact custody, process-tree
   custody, Codex App Server, and Claude Agent SDK adapters are present behind
-  the existing six-port Pure DI feature factory. The Provider Access contract is
-  ready, but the seventh Agent Execution consumer port and its outer-composition
-  ACL mapping remain pending kernel/integration work. Provider Access resolution
-  at acceptance and exact revalidation before dispatch therefore remain open
-  qualification paths. No Module Kit or framework type enters domain,
-  application, contracts, persistence, or provider adapters;
+  the exact seven-port Pure DI feature factory accepted by ADR-0012. Its Provider
+  Access consumer port and outer-composition ACL mapping are implemented, with
+  Provider Access resolution at acceptance and exact revalidation before
+  dispatch crossing that authority boundary. No Module Kit or framework type
+  enters domain, application, contracts, persistence, or provider adapters;
 - Embedded Runtime exposes only detached `submit`, `observe`, and `cancel`
   methods through the trusted tenant/project-bound `RuntimeAccessHandle`.
   Caller abort detaches a waiter; Host disposal issues a durable cancellation

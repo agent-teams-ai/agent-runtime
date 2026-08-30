@@ -280,6 +280,9 @@ export const canonicalJson = (value: unknown): string => {
   return `{${Object.keys(object).toSorted().map(key => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
 };
 export const requestDigestPayload = (command: Omit<DispatchConsumeCommand, "requestDigest">): string => canonicalJson(command);
+export const journalDigestPayload = (entry: { readonly journalDigest?: string } & Readonly<Record<string, unknown>>): string => {
+  const { journalDigest: _digest, ...unsigned } = entry; return canonicalJson(unsigned);
+};
 export const claimBindingDigestPayload = (command: DispatchConsumeCommand): string => canonicalJson({
   acceptedAuthorityDigest: command.binding.acceptedAuthorityDigest, accessRef: command.binding.accessRef,
   authorityHeadDigest: command.binding.authorityHeadDigest, bindingDigest: command.binding.bindingDigest,

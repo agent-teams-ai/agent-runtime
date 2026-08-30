@@ -6,7 +6,7 @@ import {
   journalMatchesCommand, verifiedBindingHead, verifiedConsumption, verifiedDigest, verifiedJournalEntry, verifiedSettlement,
 } from "./persistence-validation.js";
 import {
-  canonicalJson, claimBindingDigestPayload, requestDigestPayload, snapshotDispatchControlTime, snapshotDispatchScope,
+  canonicalJson, claimBindingDigestPayload, journalDigestPayload, requestDigestPayload, snapshotDispatchControlTime, snapshotDispatchScope,
   type DispatchBindingHead, type DispatchConsumeCommand, type DispatchConsumeOutcome, type DispatchConsumedReceipt,
   type DispatchExpectationValue, type DispatchPreventedReason, type DispatchProvider,
   type DispatchScopeValue, type DispatchSettlementCommand, type DispatchSettlementOutcome,
@@ -108,10 +108,13 @@ const consumeInTransaction = async (
     return command.requestDigest === semanticDigest ? replay.outcome : invalid();
   }
   const outcome = command.requestDigest === semanticDigest ? await decideNewConsumption(command, transaction, dependencies) : invalid();
-  const entry: DispatchConsumptionJournalEntry = Object.freeze({
+  const unsignedEntry = Object.freeze({
     binding: command.binding, claimBindingDigest: command.claimBindingDigest, grantRequestId: command.grantRequestId,
     operationId: command.operationId, outcome, provider: command.provider, purpose: command.purpose,
     requestDigest: semanticDigest, scope: command.scope,
+  });
+  const entry: DispatchConsumptionJournalEntry = Object.freeze({
+    ...unsignedEntry, journalDigest: await verifiedDigest(dependencies.digest, journalDigestPayload(unsignedEntry)),
   });
   if (await transaction.saveGrantRequest(entry) !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
   return outcome;

@@ -407,7 +407,7 @@ test("null, primitive, missing, throwing, and rejected repository observations f
   }), rejectedOutcome("indeterminate"));
 });
 
-test("canonical snapshots read stateful repository facts exactly once", async () => {
+test("canonical repository observations reject accessors without invoking them", async () => {
   let availabilityReads = 0;
   let revocationReads = 0;
   const record = {
@@ -424,12 +424,75 @@ test("canonical snapshots read stateful repository facts exactly once", async ()
   const feature = createContainedTurnProviderAccessFeature({
     bindingRepository: { async observeExact() { return { kind: "found" as const, record }; } },
   });
-  assert.equal((await feature.resolve.execute({
+  assert.deepEqual(await feature.resolve.execute({
     provider: "codex",
     scope: { projectId: "project:one", tenantId: "tenant:one" },
-  })).kind, "resolved");
-  assert.equal(availabilityReads, 1);
-  assert.equal(revocationReads, 1);
+  }), unavailable("indeterminate"));
+  assert.equal(availabilityReads, 0);
+  assert.equal(revocationReads, 0);
+});
+
+test("legacy repository observations reject unknown, proxy, accessor, and substituted path data", async () => {
+  const expected = await resolvedBinding();
+  let observationGetterReads = 0;
+  let recordGetterReads = 0;
+  const observationAccessor = Object.defineProperty({}, "kind", {
+    enumerable: true, get() { observationGetterReads += 1; return "found"; },
+  });
+  const recordAccessor = { ...binding(), availability: "available", revocation: "active" } as Record<string, unknown>;
+  Object.defineProperty(recordAccessor, "providerRouteRef", {
+    enumerable: true, get() { recordGetterReads += 1; return "provider-route:one"; },
+  });
+  const observations: readonly unknown[] = [
+    { kind: "found", record: { ...binding(), availability: "available", revocation: "active", secret: "substituted" } },
+    { kind: "found", record: { ...binding(), availability: "available", revocation: "active", path: "/provider/home" } },
+    new Proxy({ kind: "found", record: { ...binding(), availability: "available", revocation: "active" } }, {}),
+    observationAccessor,
+    { kind: "found", record: recordAccessor },
+  ];
+  for (const observation of observations) {
+    const feature = createContainedTurnProviderAccessFeature({
+      bindingRepository: { async observeExact() { return observation; } },
+    } as never);
+    assert.deepEqual(await feature.resolve.execute({
+      provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), unavailable("indeterminate"));
+    assert.deepEqual(await feature.revalidate.execute({
+      binding: expected, provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" },
+    }), rejectedOutcome("indeterminate"));
+  }
+  assert.equal(observationGetterReads, 0);
+  assert.equal(recordGetterReads, 0);
+});
+
+test("legacy public mapping rejects unknown fields, proxies, and accessors without invoking getters", async () => {
+  const feature = createStaticContainedTurnProviderAccessFeature([binding()]);
+  const expected = await resolvedBinding();
+  let outerGetterReads = 0;
+  let bindingGetterReads = 0;
+  const resolveAccessor = Object.defineProperty({ scope: { projectId: "project:one", tenantId: "tenant:one" } }, "provider", {
+    enumerable: true, get() { outerGetterReads += 1; return "codex"; },
+  });
+  const bindingAccessor = { ...expected } as Record<string, unknown>;
+  Object.defineProperty(bindingAccessor, "providerRouteRef", {
+    enumerable: true, get() { bindingGetterReads += 1; return "provider-route:one"; },
+  });
+  for (const input of [
+    { provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" }, unknown: true },
+    new Proxy({ provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" } }, {}),
+    resolveAccessor,
+  ]) {
+    assert.deepEqual(await feature.resolve.execute(input as never), unavailable("indeterminate"));
+  }
+  for (const input of [
+    { binding: expected, provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" }, secret: "substituted" },
+    { binding: bindingAccessor, provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" } },
+    new Proxy({ binding: expected, provider: "codex", scope: { projectId: "project:one", tenantId: "tenant:one" } }, {}),
+  ]) {
+    assert.deepEqual(await feature.revalidate.execute(input as never), rejectedOutcome("indeterminate"));
+  }
+  assert.equal(outerGetterReads, 0);
+  assert.equal(bindingGetterReads, 0);
 });
 
 test("static composition snapshots inputs and isolates every returned mutation", async () => {

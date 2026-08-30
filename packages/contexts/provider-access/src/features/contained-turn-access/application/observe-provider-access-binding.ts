@@ -3,6 +3,7 @@ import type {
   ProviderAccessBindingRepository,
 } from "./ports/outbound/provider-access-binding-repository.js";
 import {
+  exactProviderAccessDataRecord,
   snapshotProviderAccessBinding,
   type ProviderAccessProviderValue,
   type ProviderAccessScopeValue,
@@ -15,18 +16,21 @@ export const observeCanonicalProviderAccessBinding = async (
 ): Promise<ProviderAccessBindingObservation> => {
   try {
     const observation = await repository.observeExact(input);
-    if (observation === null || typeof observation !== "object") {
+    if (observation === null || typeof observation !== "object" || Array.isArray(observation)) {
       return Object.freeze({ kind: "indeterminate" });
     }
-    if (observation.kind === "not_found" || observation.kind === "indeterminate") {
-      return Object.freeze({ kind: observation.kind });
+    let kindDescriptor: PropertyDescriptor | undefined;
+    try { kindDescriptor = Object.getOwnPropertyDescriptor(observation, "kind"); } catch { /* fail closed below */ }
+    if (kindDescriptor === undefined || !("value" in kindDescriptor)) { return Object.freeze({ kind: "indeterminate" }); }
+    if (kindDescriptor.value === "not_found" || kindDescriptor.value === "indeterminate") {
+      const data = exactProviderAccessDataRecord("binding observation", observation, ["kind"]);
+      return Object.freeze({ kind: data.kind as "indeterminate" | "not_found" });
     }
-    if (observation.kind !== "found" || !("record" in observation)) {
-      return Object.freeze({ kind: "indeterminate" });
-    }
+    if (kindDescriptor.value !== "found") { return Object.freeze({ kind: "indeterminate" }); }
+    const data = exactProviderAccessDataRecord("binding observation", observation, ["kind", "record"]);
     return Object.freeze({
       kind: "found",
-      record: snapshotProviderAccessBinding(observation.record),
+      record: snapshotProviderAccessBinding(data.record as never),
     });
   } catch {
     return Object.freeze({ kind: "indeterminate" });

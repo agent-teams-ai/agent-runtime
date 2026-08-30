@@ -184,7 +184,7 @@ test("claim binding digest covers every safe route and full trusted scope field"
   }
 });
 
-test("composition validates Pure DI once and retains bound method snapshots", async () => {
+test("composition validates Pure DI once and retains detached callable-owner snapshots", async () => {
   const base = repositoryHarness();
   const repository = {
     observeGrantRequest: base.repository.observeGrantRequest,
@@ -197,8 +197,9 @@ test("composition validates Pure DI once and retains bound method snapshots", as
   assert.equal((await access.consumeForDispatch(await inputFor())).kind, "consumed");
 
   const valid = { digest: createSha256DispatchConsumptionDigest(), repository: base.repository };
+  let dependencyGetterReads = 0;
   const accessor = {} as Record<string, unknown>;
-  Object.defineProperty(accessor, "digest", { enumerable: true, get: () => valid.digest });
+  Object.defineProperty(accessor, "digest", { enumerable: true, get: () => { dependencyGetterReads += 1; return valid.digest; } });
   Object.defineProperty(accessor, "repository", { enumerable: true, value: valid.repository });
   for (const invalidDependencies of [
     accessor, { digest: valid.digest }, { ...valid, unknown: true },
@@ -206,6 +207,39 @@ test("composition validates Pure DI once and retains bound method snapshots", as
   ]) {
     assert.throws(() => createContainedTurnDispatchConsumptionV1(invalidDependencies as never), TypeError);
   }
+  assert.equal(dependencyGetterReads, 0);
+
+  const callerDigest = {
+    async digest(payload: string) {
+      if (this === callerDigest) { throw new Error("caller digest owner retained"); }
+      return createSha256DispatchConsumptionDigest().digest(payload);
+    },
+  };
+  const callerRepository = {
+    observeGrantRequest(input: Parameters<DispatchConsumptionRepository["observeGrantRequest"]>[0]) {
+      if (this === callerRepository) { throw new Error("caller repository owner retained"); }
+      return base.repository.observeGrantRequest(input);
+    },
+    transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
+      if (this === callerRepository) { throw new Error("caller repository owner retained"); }
+      return base.repository.transact(selector, work);
+    },
+  };
+  let armed = false;
+  let ownerProxyTraps = 0;
+  const ownerHandler: ProxyHandler<object> = {
+    get(target, key, receiver) { ownerProxyTraps += 1; if (armed) { throw new Error("post-composition get trap"); } return Reflect.get(target, key, receiver); },
+    getOwnPropertyDescriptor(target, key) { ownerProxyTraps += 1; if (armed) { throw new Error("post-composition descriptor trap"); } return Reflect.getOwnPropertyDescriptor(target, key); },
+    getPrototypeOf(target) { ownerProxyTraps += 1; if (armed) { throw new Error("post-composition prototype trap"); } return Reflect.getPrototypeOf(target); },
+    ownKeys(target) { ownerProxyTraps += 1; if (armed) { throw new Error("post-composition keys trap"); } return Reflect.ownKeys(target); },
+  };
+  const detached = createContainedTurnDispatchConsumptionV1({
+    digest: new Proxy(callerDigest, ownerHandler), repository: new Proxy(callerRepository, ownerHandler),
+  });
+  const compositionTrapCount = ownerProxyTraps;
+  armed = true;
+  assert.equal((await detached.consumeForDispatch(await inputFor(seed(), { grantRequestId: "grant-request:detached" }))).kind, "prevented");
+  assert.equal(ownerProxyTraps, compositionTrapCount);
 });
 
 test("server-derived replay identity rejects changed semantics with a reused claimed digest", async () => {
@@ -671,6 +705,45 @@ test("observation detaches and deeply freezes valid persistence and rejects adve
       .observeDispatchConsumption({ grantRequestId: input.grantRequestId, provider: input.provider, requestDigest: input.requestDigest, scope: input.scope });
     assert.deepEqual(outcome, { kind: "indeterminate" });
   }
+});
+
+test("persisted prevention public fields are bound by the full journal digest and never leak after tampering", async () => {
+  const base = createInMemoryDispatchConsumptionRepository([{
+    ...seed(), availability: "available", revocation: "revoked",
+  }], 100);
+  const input = await inputFor();
+  const initial = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository: base.repository });
+  assert.equal((await initial.consumeForDispatch(input)).kind, "prevented");
+  const stored = structuredClone(await base.repository.observeGrantRequest(input));
+  assert.ok(stored !== undefined && stored.outcome.kind === "prevented");
+  if (stored === undefined || stored.outcome.kind !== "prevented") {return;}
+  let getterReads = 0;
+  const accessorPrevention = structuredClone(stored.outcome.prevention) as Record<string, unknown>;
+  Object.defineProperty(accessorPrevention, "reason", {
+    enumerable: true, get() { getterReads += 1; return "revoked"; },
+  });
+  const tampered = [
+    { ...structuredClone(stored), outcome: { kind: "prevented", prevention: { ...stored.outcome.prevention, reason: "unavailable" } } },
+    { ...structuredClone(stored), outcome: { kind: "prevented", prevention: { ...stored.outcome.prevention, opaqueOwnerEvidenceRef: "owner:evidence:substituted" } } },
+    { ...structuredClone(stored), outcome: { kind: "prevented", prevention: { ...stored.outcome.prevention, observedAtControlTime: 101 } } },
+    { ...structuredClone(stored), outcome: { kind: "prevented", prevention: { ...stored.outcome.prevention, path: "/secret/provider-home" } } },
+    { ...structuredClone(stored), outcome: { kind: "prevented", prevention: accessorPrevention } },
+    { ...structuredClone(stored), outcome: { kind: "not_found" } },
+  ];
+  const observationInput = {
+    grantRequestId: input.grantRequestId, provider: input.provider, requestDigest: input.requestDigest, scope: input.scope,
+  };
+  for (const value of tampered) {
+    const transactionRepository = repositoryReadOverride(base.repository, "findGrantRequest", value);
+    const repository: DispatchConsumptionRepository = {
+      observeGrantRequest: async () => value as never,
+      transact: transactionRepository.transact,
+    };
+    const access = createContainedTurnDispatchConsumptionV1({ digest: createSha256DispatchConsumptionDigest(), repository });
+    assert.deepEqual(await access.consumeForDispatch(input), { kind: "indeterminate" });
+    assert.deepEqual(await access.observeDispatchConsumption(observationInput), { kind: "indeterminate" });
+  }
+  assert.equal(getterReads, 0);
 });
 
 test("settlement replay rejects malformed receipts, corrupt digests, proxies, and cross-selector substitution", async () => {

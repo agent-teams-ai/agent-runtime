@@ -17,10 +17,14 @@ const methodsFrom = (name: string, value: unknown, keys: readonly string[]): Rec
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be a plain dependency record`);
   }
-  const prototype = Object.getPrototypeOf(value) as unknown;
+  let prototype: unknown;
+  let descriptors: Record<PropertyKey, PropertyDescriptor>;
+  try {
+    prototype = Object.getPrototypeOf(value) as unknown;
+    descriptors = Object.getOwnPropertyDescriptors(value);
+  } catch { throw new TypeError(`${name} must be a stable dependency record`); }
   if (prototype !== Object.prototype && prototype !== null) {throw new TypeError(`${name} must be a plain dependency record`);}
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(value).some(key => typeof key !== "string") || Object.keys(descriptors).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {
+  if (Reflect.ownKeys(descriptors).some(key => typeof key !== "string") || Object.keys(descriptors).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {
     throw new TypeError(`${name} has an invalid dependency shape`);
   }
   return Object.fromEntries(keys.map(key => {
@@ -28,7 +32,7 @@ const methodsFrom = (name: string, value: unknown, keys: readonly string[]): Rec
     if (descriptor === undefined || !("value" in descriptor) || typeof descriptor.value !== "function") {
       throw new TypeError(`${name}.${key} must be a stable method`);
     }
-    return [key, descriptor.value.bind(value) as (...args: never[]) => unknown];
+    return [key, descriptor.value as (...args: never[]) => unknown];
   }));
 };
 
@@ -36,13 +40,20 @@ const snapshotDependencies = (value: DispatchConsumptionV1Dependencies): Dispatc
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("dependencies must be a plain data record");
   }
-  const prototype = Object.getPrototypeOf(value) as unknown;
+  let prototype: unknown;
+  let descriptors: Record<PropertyKey, PropertyDescriptor>;
+  try {
+    prototype = Object.getPrototypeOf(value) as unknown;
+    descriptors = Object.getOwnPropertyDescriptors(value);
+  } catch { throw new TypeError("dependencies must be stable data"); }
   if (prototype !== Object.prototype && prototype !== null) {throw new TypeError("dependencies must be a plain data record");}
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(value).some(key => typeof key !== "string") || Object.keys(descriptors).toSorted().join("\0") !== "digest\0repository") {
+  if (Reflect.ownKeys(descriptors).some(key => typeof key !== "string") || Object.keys(descriptors).toSorted().join("\0") !== "digest\0repository") {
     throw new TypeError("dependencies have an invalid shape");
   }
-  if (!("value" in descriptors.digest) || !("value" in descriptors.repository)) {throw new TypeError("dependencies cannot contain accessors");}
+  if (descriptors.digest === undefined || descriptors.repository === undefined
+    || !("value" in descriptors.digest) || !("value" in descriptors.repository)) {
+    throw new TypeError("dependencies cannot contain accessors");
+  }
   const digest = methodsFrom("digest", descriptors.digest.value, ["digest"]);
   const repository = methodsFrom("repository", descriptors.repository.value, ["observeGrantRequest", "transact"]);
   return Object.freeze({

@@ -7,6 +7,8 @@ export interface DispatchConsumptionJournalEntry {
   readonly binding: DispatchExpectationValue;
   readonly claimBindingDigest: string;
   readonly grantRequestId: string;
+  /** Server-derived digest of the complete persisted record, including the exact outcome. */
+  readonly journalDigest: string;
   readonly operationId: string;
   readonly outcome: DispatchConsumeOutcome;
   readonly provider: DispatchProvider;
