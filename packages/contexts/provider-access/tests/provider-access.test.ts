@@ -258,6 +258,38 @@ test("composition rejects repository proxies and accessors without invoking trap
   assert.equal(getters, 0);
 });
 
+test("composition rejects direct, intrinsic-bound, and native-exotic injected callables before invocation", () => {
+  type InjectedMethod = (...args: never[]) => unknown;
+  const runtimeTypes = (process.getBuiltinModule("node:util") as {
+    readonly types: { readonly isProxy: (value: unknown) => boolean };
+  }).types;
+  let applyTraps = 0;
+  const directProxy = new Proxy(async () => ({ kind: "not_found" as const }), {
+    apply() { applyTraps += 1; throw new Error("direct proxy apply trap"); },
+  });
+  const proxiedTarget = new Proxy(async () => ({ kind: "not_found" as const }), {
+    apply() { applyTraps += 1; throw new Error("bound proxy apply trap"); },
+  });
+  const boundProxy = Reflect.apply(Function.prototype.bind, proxiedTarget, [Object.freeze({})]) as InjectedMethod;
+  assert.equal(runtimeTypes.isProxy(boundProxy), false);
+  const boundNativeReceiver: unknown[] = [];
+  const boundNative = Reflect.apply(Function.prototype.bind, Array.prototype.push, [boundNativeReceiver]) as InjectedMethod;
+  const cases: readonly [string, InjectedMethod][] = [
+    ["direct Proxy", directProxy as InjectedMethod],
+    ["bound Proxy", boundProxy],
+    ["bound native", boundNative],
+  ];
+  for (const [name, method] of cases) {
+    assert.throws(
+      () => createContainedTurnProviderAccessFeature({ bindingRepository: { observeExact: method } } as never),
+      /stable method/u,
+      name,
+    );
+  }
+  assert.deepEqual(boundNativeReceiver, []);
+  assert.equal(applyTraps, 0);
+});
+
 test("public observation boundary rejects aggregate proxies without invoking traps", async () => {
   let traps = 0;
   const handler: ProxyHandler<object> = {

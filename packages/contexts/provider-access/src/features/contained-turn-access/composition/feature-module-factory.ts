@@ -24,6 +24,18 @@ interface ContainedTurnProviderAccessDependencies {
 
 const indeterminateObservation = () => Object.freeze({ kind: "indeterminate" as const });
 
+type Callable = (...args: never[]) => unknown;
+const intrinsicFunctionToString = Function.prototype.toString;
+const nativeCallableSource = /\{\s*\[native code\]\s*\}\s*$/u;
+
+const isCapturableMethod = (value: unknown): value is Callable => {
+  if (typeof value !== "function" || isRuntimeProxy(value)) { return false; }
+  let source: string;
+  try { source = Reflect.apply(intrinsicFunctionToString, value, []); }
+  catch { return false; }
+  return !nativeCallableSource.test(source) && !source.trimStart().startsWith("class");
+};
+
 const exactOwnDataDescriptors = (
   name: string,
   value: unknown,
@@ -59,7 +71,7 @@ const snapshotRepository = (
   const repository = dependencyDescriptors.bindingRepository?.value;
   const repositoryDescriptors = exactOwnDataDescriptors("bindingRepository", repository, ["observeExact"]);
   const observeExact = repositoryDescriptors.observeExact?.value;
-  if (typeof observeExact !== "function" || isRuntimeProxy(observeExact)) {
+  if (!isCapturableMethod(observeExact)) {
     throw new TypeError("bindingRepository.observeExact must be a stable method");
   }
   const detachedObserveExact = observeExact as (input: unknown) => unknown;
