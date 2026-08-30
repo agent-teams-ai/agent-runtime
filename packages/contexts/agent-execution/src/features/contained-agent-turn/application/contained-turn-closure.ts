@@ -108,26 +108,22 @@ export const closeContainedTurnPhysicalContainment = async (
     trustedScope,
     {
       complete: (request, proof) => ({ kind: "complete_physical_containment", proof, request }),
-      ensure: request => dependencies.custody.ensurePhysicalContainment?.({
+      ensure: request => dependencies.custody.ensurePhysicalContainment({
+          authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
           attemptId,
           custodyId,
           operationId: operation.operationId,
           requestDigest: request.requestDigest,
           requestId: request.requestId,
-        }) ?? Promise.resolve({
-          evidenceId: redactedContainedTurnEvidenceId(operation, "physical_containment_rejected"),
-          kind: "indeterminate" as const,
         }),
       proofIds: proof => [proof.proofId],
-      query: request => dependencies.custody.queryPhysicalContainment?.({
+      query: request => dependencies.custody.queryPhysicalContainment({
+        authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
         attemptId,
         custodyId,
         operationId: operation.operationId,
         requestDigest: request.requestDigest,
         requestId: request.requestId,
-      }) ?? Promise.resolve({
-        evidenceId: redactedContainedTurnEvidenceId(operation, "physical_containment_rejected"),
-        kind: "indeterminate" as const,
       }),
       stage: "physical_containment",
     },
@@ -169,25 +165,21 @@ const sealArtifactsAndWorkspace = async (
           resultProof: proof.resultProof,
           resultRef: proof.resultProof.binding.resultRef,
         }),
-        ensure: request => dependencies.artifacts.ensureSealed?.({
+        ensure: request => dependencies.artifacts.ensureSealed({
+          authorityVectorDigest: current.acceptedAuthorityVectorDigest,
           operationId: current.operationId,
           output: current.output.chunks,
           requestDigest: request.requestDigest,
           requestId: request.requestId,
           workspaceId,
-        }) ?? Promise.resolve({
-          evidenceId: redactedContainedTurnEvidenceId(current, "artifact_seal_rejected"),
-          kind: "indeterminate" as const,
         }),
         proofIds: proof => [proof.artifactProof.proofId, proof.resultProof.proofId],
-        query: request => dependencies.artifacts.querySeal?.({
+        query: request => dependencies.artifacts.querySeal({
+          authorityVectorDigest: current.acceptedAuthorityVectorDigest,
           operationId: current.operationId,
           requestDigest: request.requestDigest,
           requestId: request.requestId,
           workspaceId,
-        }) ?? Promise.resolve({
-          evidenceId: redactedContainedTurnEvidenceId(current, "artifact_seal_rejected"),
-          kind: "indeterminate" as const,
         }),
         stage: "artifact_seal",
       },
@@ -207,24 +199,20 @@ const sealArtifactsAndWorkspace = async (
       trustedScope,
       {
         complete: (request, proof) => ({ kind: "complete_workspace_close", proof, request }),
-        ensure: request => dependencies.workspace.ensureClosed?.({
+        ensure: request => dependencies.workspace.ensureClosed({
+          authorityVectorDigest: current.acceptedAuthorityVectorDigest,
           operationId: current.operationId,
           requestDigest: request.requestDigest,
           requestId: request.requestId,
           workspaceId,
-        }) ?? Promise.resolve({
-          evidenceId: redactedContainedTurnEvidenceId(current, "workspace_close_rejected"),
-          kind: "indeterminate" as const,
         }),
         proofIds: proof => [proof.proofId],
-        query: request => dependencies.workspace.queryClosure?.({
+        query: request => dependencies.workspace.queryClosure({
+          authorityVectorDigest: current.acceptedAuthorityVectorDigest,
           operationId: current.operationId,
           requestDigest: request.requestDigest,
           requestId: request.requestId,
           workspaceId,
-        }) ?? Promise.resolve({
-          evidenceId: redactedContainedTurnEvidenceId(current, "workspace_close_rejected"),
-          kind: "indeterminate" as const,
         }),
         stage: "workspace_close",
       },
@@ -261,6 +249,47 @@ const finalizeContainedTurn = async (
   return advanceContainedTurn(dependencies, operation, trustedScope, {
     kind: "finalize",
     proof: terminalProof,
+  });
+};
+
+const containedTurnCompositeContainmentBinding = (
+  operation: ContainedTurnKernelOperation,
+): Extract<ContainedTurnProof, { readonly kind: "containment" }>["binding"] => {
+  if (operation.dispatch.kind !== "claimed" || operation.custodyId === undefined ||
+      operation.hostBootId === undefined || operation.hostInstanceId === undefined ||
+      operation.workspaceId === undefined || operation.admissionFence.kind !== "fenced") {
+    throw new TypeError("composite containment requires exact claimed closure identities");
+  }
+  const requiredProofId = (kind: ContainedTurnProof["kind"]) => {
+    const proof = operation.proofs.find(candidate => candidate.kind === kind);
+    if (proof === undefined) {throw new TypeError(`composite containment is missing ${kind} proof`);}
+    return proof.proofId;
+  };
+  return Object.freeze({
+    adapterRevision: operation.adapterSnapshot.adapterRevision,
+    artifactManifestSealProofId: requiredProofId("artifact_manifest_seal"),
+    attemptId: operation.dispatch.attemptId,
+    authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
+    binaryRevision: operation.adapterSnapshot.binaryRevision,
+    capabilityManifestRevision: operation.capabilityManifest.manifestRevision,
+    containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
+    credentialBindingDigest: operation.providerAccessSnapshot.credentialBindingDigest,
+    custodyId: operation.custodyId,
+    cutoffProofId: operation.operationCutoff.kind === "closed" && "proofId" in operation.operationCutoff
+      ? operation.operationCutoff.proofId
+      : operation.admissionFence.proofId,
+    effectId: operation.effectId,
+    executionClosureProofId: requiredProofId("execution_closure"),
+    finalCursor: operation.output.chunks.length,
+    hostBootId: operation.hostBootId,
+    hostInstanceId: operation.hostInstanceId,
+    immutableScopeDigest: operation.acceptedAuthorityVector.scopeDigest,
+    operationId: operation.operationId,
+    outputDrainProofId: requiredProofId("output_drain"),
+    physicalContainmentProofId: requiredProofId("physical_containment"),
+    providerRouteRef: operation.providerAccessSnapshot.providerRouteRef,
+    terminalObservationProofId: requiredProofId("provider_terminal_observation"),
+    workspaceId: operation.workspaceId,
   });
 };
 
@@ -407,26 +436,24 @@ export const closeContainedTurnExecution = async (
     trustedScope,
     {
       complete: (request, proof) => ({ kind: "complete_containment_attestation", proof, request }),
-      ensure: request => dependencies.custody.attestContainment?.({
+      ensure: request => dependencies.custody.attestContainment({
+          authorityVectorDigest: current.acceptedAuthorityVectorDigest,
           attemptId,
+          binding: containedTurnCompositeContainmentBinding(current),
           custodyId,
           operationId: current.operationId,
           requestDigest: request.requestDigest,
           requestId: request.requestId,
-        }) ?? Promise.resolve({
-          evidenceId: redactedContainedTurnEvidenceId(current, "composite_containment_rejected"),
-          kind: "indeterminate" as const,
         }),
       proofIds: proof => [proof.proofId],
-      query: request => dependencies.custody.queryContainmentAttestation?.({
+      query: request => dependencies.custody.queryContainmentAttestation({
+        authorityVectorDigest: current.acceptedAuthorityVectorDigest,
         attemptId,
+        binding: containedTurnCompositeContainmentBinding(current),
         custodyId,
         operationId: current.operationId,
         requestDigest: request.requestDigest,
         requestId: request.requestId,
-      }) ?? Promise.resolve({
-        evidenceId: redactedContainedTurnEvidenceId(current, "composite_containment_rejected"),
-        kind: "indeterminate" as const,
       }),
       stage: "containment_attestation",
     },

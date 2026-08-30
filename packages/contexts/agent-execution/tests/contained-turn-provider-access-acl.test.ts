@@ -71,11 +71,11 @@ test("Provider Access ACL maps owner rejection evidence without exposing owner r
     provider: "codex",
     scope,
   });
-  assert.deepEqual(outcome, {
-    kind: "prevented",
-    preventionProofId: "proof:provider-access:acceptance:binding:access:one:revision:11:purpose:acceptance",
-    reason: "access_denied",
-  });
+  assert.equal(outcome.kind, "prevented");
+  if (outcome.kind === "prevented") {
+    assert.match(outcome.preventionProofId, /^proof:provider-access:acceptance:sha256:[0-9a-f]{64}$/u);
+    assert.equal(outcome.reason, "access_denied");
+  }
 });
 
 test("real Provider Access revalidation accepts unchanged evidence and fails closed on drift, revocation, and scope mismatch", async () => {
@@ -132,12 +132,14 @@ test("real Provider Access revalidation accepts unchanged evidence and fails clo
 });
 
 test("production exports expose one kernel authority and isolate only non-authoritative legacy adapters", async () => {
-  const [composition, compatibility] = await Promise.all([
+  const [composition, manifest, dispatch] = await Promise.all([
     readFile(new URL("../src/composition.ts", import.meta.url), "utf8"),
-    readFile(new URL("../src/legacy-compatibility.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/contained-agent-turn/application/contained-turn-dispatch.ts", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(composition, /PostgresContainedTurn|ContainedTurnOperationStore|contained-turn-state/u);
-  assert.doesNotMatch(compatibility, /PostgresContainedTurn|OperationStore|state-machine|authorityDigest/u);
+  assert.doesNotMatch(manifest, /legacy-compatibility/u);
+  assert.doesNotMatch(dispatch, /LegacyClaim|legacy-claim|claimDispatch\(/u);
   assert.match(composition, /createContainedTurnFeature/u);
   assert.match(composition, /createContainedTurnProviderAccessPort/u);
 });

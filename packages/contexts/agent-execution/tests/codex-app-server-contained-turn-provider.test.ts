@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-  CodexAppServerContainedTurnProvider,
-  createCodexAppServerLaunchPlan,
-  type CustodiedProviderProcess,
-} from "../dist/legacy-compatibility.js";
+import { CodexAppServerContainedTurnProvider } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
+import { createCodexAppServerLaunchPlan } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
+import type { CustodiedProviderProcess } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 
 type Message = Record<string, unknown>;
 

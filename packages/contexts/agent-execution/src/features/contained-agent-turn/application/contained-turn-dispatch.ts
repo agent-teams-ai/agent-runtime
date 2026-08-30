@@ -1,8 +1,4 @@
-import { containedTurnProviderAccessSnapshotDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
-import {
-  encodeContainedTurnCanonicalValue,
-  type ContainedTurnCanonicalValue,
-} from "../domain/contained-turn-codecs.js";
+import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import type {
   ContainedTurnEvidenceId,
   ContainedTurnPreparationToken,
@@ -10,10 +6,7 @@ import type {
 } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import { containedTurnOutputWriteAuthority } from "../domain/contained-turn-output-authority.js";
-import {
-  mutateContainedTurnOperation,
-  type ContainedTurnKernelMutation,
-} from "../domain/contained-turn-transitions.js";
+import type { ContainedTurnKernelMutation } from "../domain/contained-turn-transitions.js";
 import {
   closeContainedTurnExecution,
   closeContainedTurnPhysicalContainment,
@@ -25,33 +18,14 @@ import {
 import {
   advanceContainedTurn,
   appendContainedTurnCanonicalOutput,
-  durableContainedTurnDebtOperation,
-  recordContainedTurnReconciliationDebt,
 } from "./contained-turn-committer.js";
-import {
-  containedTurnOwnerStoreAuthority,
-  sanitizeContainedTurnOwnerStoreOutcome,
-} from "./contained-turn-store-authority.js";
-import {
-  containedTurnPreparationToken,
-  reconcileContainedTurnClaimPreparation,
-  releaseLosingContainedTurnCustody,
-} from "./contained-turn-preparation-cleanup.js";
+import { containedTurnOwnerStoreAuthority } from "./contained-turn-store-authority.js";
+import { containedTurnPreparationToken, releaseLosingContainedTurnCustody } from "./contained-turn-preparation-cleanup.js";
 import { claimPreparedContainedTurn } from "./contained-turn-grant-claim.js";
-import { containedTurnLegacyClaimMutation } from "./contained-turn-legacy-claim.js";
 import type {
   ContainedTurnKernelDependencies,
   ContainedTurnKernelProviderObservation,
 } from "./ports/outbound/contained-turn-ports.js";
-
-const sameSnapshot = (left: unknown, right: unknown): boolean =>
-  encodeContainedTurnCanonicalValue(left as ContainedTurnCanonicalValue) ===
-  encodeContainedTurnCanonicalValue(right as ContainedTurnCanonicalValue);
-
-const hasConsumedGrantClaim = (dependencies: ContainedTurnKernelDependencies): boolean =>
-  dependencies.providerAccess.consumeForDispatch !== undefined &&
-  dependencies.security.consumeForDispatch !== undefined &&
-  dependencies.operationStore.claimPreparedDispatch !== undefined;
 
 const raceContainedTurnCompletionBoundary = async <Value>(
   promise: Promise<Value>,
@@ -98,49 +72,6 @@ const preventContainedTurnDispatch = async (
   return closeContainedTurnWithoutExecution(dependencies, prevented, trustedScope);
 };
 
-const persistContainedTurnDispatchClaim = async (
-  dependencies: ContainedTurnKernelDependencies,
-  initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
-  input: Readonly<{
-    dispatchAuthority: Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["dispatchAuthority"];
-    mutation: Extract<ContainedTurnKernelMutation, { readonly kind: "claim_dispatch" }>;
-    reservation: Readonly<{
-      attemptId: Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]["attemptId"];
-      custodyId: Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]["custodyId"];
-      preparationToken: ContainedTurnPreparationToken;
-      workspaceId: Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]["workspaceId"];
-    }>;
-  }>,
-): Promise<Readonly<{ operation: ContainedTurnKernelOperation; startPermitted: boolean }>> => {
-  let outcome: ReturnType<typeof sanitizeContainedTurnOwnerStoreOutcome>;
-  try {
-    outcome = sanitizeContainedTurnOwnerStoreOutcome({
-      authority: containedTurnOwnerStoreAuthority(initial, trustedScope),
-      outcome: await dependencies.operationStore.claimDispatch({
-        authority: containedTurnOwnerStoreAuthority(initial, trustedScope),
-        candidate: mutateContainedTurnOperation(initial, input.mutation),
-        dispatchAuthority: input.dispatchAuthority,
-        expectedRevision: initial.revision,
-      }),
-    });
-  } catch {
-    return reconcileContainedTurnClaimPreparation(
-      dependencies, initial, trustedScope, input.reservation,
-    );
-  }
-  if (outcome.kind === "applied") {
-    // Legacy claims cannot manufacture the Host's one-use start authority.
-    return Object.freeze({ operation: outcome.operation, startPermitted: false });
-  }
-  const durableFallback = outcome.kind === "indeterminate"
-    ? durableContainedTurnDebtOperation(outcome)
-    : outcome.kind === "stale" ? outcome.current : undefined;
-  return reconcileContainedTurnClaimPreparation(
-    dependencies, initial, trustedScope, input.reservation, durableFallback,
-  );
-};
-
 const claimContainedTurnConsumedGrantDispatch = async (input: Readonly<{
   custody: Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["open"]>>;
   dependencies: ContainedTurnKernelDependencies;
@@ -160,7 +91,15 @@ const claimContainedTurnConsumedGrantDispatch = async (input: Readonly<{
     return Object.freeze({ operation: claim.operation, startAuthority: claim.startAuthority, startPermitted: true });
   }
   if (claim.kind === "observed") {
-    return Object.freeze({ operation: claim.operation, startPermitted: false });
+    return Object.freeze({
+      operation: await closeUnknownStart(
+        dependencies,
+        claim.operation,
+        trustedScope,
+        redactedContainedTurnEvidenceId(claim.operation, "dispatch_claim_rejected"),
+      ),
+      startPermitted: false,
+    });
   }
   return claim.kind === "prevented"
     ? Object.freeze({ operation: await preventContainedTurnDispatch(
@@ -215,6 +154,7 @@ const claimContainedTurnDispatch = async (
       attemptId: prepared.attemptId,
       authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
       custodyId: prepared.custodyId,
+      effectId: initial.effectId,
       operationId: initial.operationId,
       providerAccessSnapshot: initial.providerAccessSnapshot,
       workspaceId,
@@ -228,91 +168,8 @@ const claimContainedTurnDispatch = async (
       startPermitted: false,
     });
   }
-  if (hasConsumedGrantClaim(dependencies)) {
-    return claimContainedTurnConsumedGrantDispatch({
-      custody, dependencies, initial, preparationToken, prepared, trustedScope,
-    });
-  }
-  let access: Awaited<ReturnType<ContainedTurnKernelDependencies["providerAccess"]["revalidateForDispatch"]>>;
-  let security: Awaited<ReturnType<ContainedTurnKernelDependencies["security"]["revalidateForDispatch"]>>;
-  try {
-    [access, security] = await Promise.all([
-      dependencies.providerAccess.revalidateForDispatch({
-        acceptedSnapshot: initial.providerAccessSnapshot,
-        operationId: initial.operationId,
-        scope: trustedScope,
-      }),
-      dependencies.security.revalidateForDispatch({
-        decisionDigest: initial.acceptedAuthorityVector.securityDecisionDigest,
-        operationId: initial.operationId,
-        scope: trustedScope,
-        securityAuthorityRevision: initial.acceptedAuthorityVector.securityAuthorityRevision,
-      }),
-    ]);
-  } catch {
-    const released = await releaseReservation("revalidation_failed");
-    return Object.freeze({
-      operation: await recordContainedTurnRejectedDebt(
-        dependencies, released, trustedScope, "dispatch_authority_rejected", "dispatch_authority",
-      ),
-      startPermitted: false,
-    });
-  }
-  const preventionProofId = access.kind === "prevented"
-    ? access.preventionProofId
-    : security.kind === "prevented"
-      ? security.preventionProofId
-      : undefined;
-  if (preventionProofId !== undefined) {
-    const released = await releaseReservation("prevention");
-    const operation = released.reconciliation.kind === "required"
-      ? released
-      : preventContainedTurnDispatch(dependencies, released, trustedScope, preventionProofId);
-    return Object.freeze({ operation: await operation, startPermitted: false });
-  }
-  const authorityEvidenceId = access.kind === "indeterminate"
-    ? access.evidenceId
-    : security.kind === "indeterminate"
-      ? security.evidenceId
-      : undefined;
-  if (authorityEvidenceId !== undefined) {
-    const released = await releaseReservation("revalidation_failed");
-    return Object.freeze({
-      operation: await recordContainedTurnReconciliationDebt(
-        dependencies, released, trustedScope, authorityEvidenceId, "dispatch_authority",
-      ),
-      startPermitted: false,
-    });
-  }
-  if (access.kind !== "current" || security.kind !== "current" ||
-      !sameSnapshot(access.snapshot, initial.providerAccessSnapshot)) {
-    const released = await releaseReservation("revalidation_failed");
-    return Object.freeze({
-      operation: await recordContainedTurnRejectedDebt(
-        dependencies, released, trustedScope, "dispatch_authority_mismatch", "dispatch_authority",
-      ),
-      startPermitted: false,
-    });
-  }
-  const mutation = containedTurnLegacyClaimMutation({
-    access, custody, initial, preparationToken, prepared, security,
-  });
-  return persistContainedTurnDispatchClaim(dependencies, initial, trustedScope, {
-    dispatchAuthority: {
-      acceptedProviderAccessSnapshotDigest: containedTurnProviderAccessSnapshotDigest(initial.providerAccessSnapshot),
-      acceptedSecurityDecisionDigest: initial.acceptedAuthorityVector.securityDecisionDigest,
-      providerAccessDispatchProofId: access.dispatchProofId,
-      providerAccessRevision: initial.providerAccessSnapshot.revision,
-      runtimeSecurityDispatchProofId: security.proofId,
-      securityAuthorityRevision: initial.acceptedAuthorityVector.securityAuthorityRevision,
-    },
-    mutation,
-    reservation: {
-      attemptId: prepared.attemptId,
-      custodyId: prepared.custodyId,
-      preparationToken,
-      workspaceId,
-    },
+  return claimContainedTurnConsumedGrantDispatch({
+    custody, dependencies, initial, preparationToken, prepared, trustedScope,
   });
 };
 

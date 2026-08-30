@@ -5,11 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 
-import {
-  createStaticHostCustodyLaunchPlanResolver,
-  HostCustodyUnsupportedError,
-  NodeProviderProcessCustody,
-} from "../dist/legacy-compatibility.js";
+import { NodeProviderProcessCustody } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.js";
+import { createStaticHostCustodyLaunchPlanResolver } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/static-host-custody-launch-plan-resolver.js";
+import { HostCustodyUnsupportedError } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 
 const disposableRoots: string[] = [];
 const binding = Object.freeze({

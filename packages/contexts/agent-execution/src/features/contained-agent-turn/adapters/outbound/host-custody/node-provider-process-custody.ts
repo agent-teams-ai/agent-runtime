@@ -10,6 +10,9 @@ import type {
   ContainedTurnCustodyHandle,
   ProviderProcessCustodyPort,
 } from "../legacy/legacy-contained-turn-ports.js";
+import type { ContainedTurnKernelCustodyPort } from "../../../application/ports/outbound/contained-turn-ports.js";
+import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
+import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import {
   HostCustodyUnsupportedError,
   type CustodiedProviderProcess,
@@ -34,12 +37,21 @@ interface LiveCustody {
   readonly operationId: string;
   readonly plan: HostCustodyLaunchPlan;
   readonly workspaceRef: string;
+  readonly authorityVectorDigest?: Parameters<ContainedTurnKernelCustodyPort["open"]>[0]["authorityVectorDigest"];
+  readonly effectId?: Parameters<ContainedTurnKernelCustodyPort["open"]>[0]["effectId"];
+  readonly hostBootId?: Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>["hostBootId"];
+  readonly hostInstanceId?: Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>["hostInstanceId"];
   child?: ChildProcessWithoutNullStreams;
+  containment?: Promise<HostContainmentOutcome>;
   exit?: Promise<CustodiedProviderProcessExit>;
   process?: CustodiedProviderProcess;
   sealed?: boolean;
   sdkProcess?: CustodiedSdkProcess;
 }
+
+type HostContainmentOutcome =
+  | { readonly kind: "contained"; readonly receiptRef: string }
+  | { readonly evidenceRef: string; readonly kind: "unproven" };
 
 const processExit = (child: ChildProcessWithoutNullStreams): Promise<CustodiedProviderProcessExit> =>
   new Promise((resolve, reject) => {
@@ -168,6 +180,8 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
   readonly #forceKillAfterMs: number;
   readonly #launchPlans: HostCustodyLaunchPlanResolver;
   readonly #terminateAfterMs: number;
+  readonly #hostBootId = containedTurnIdentity("host_boot", `host-boot:node:${randomUUID()}`);
+  readonly #hostInstanceId = containedTurnIdentity("host_instance", `host-instance:node:${randomUUID()}`);
 
   public constructor(options: NodeProviderProcessCustodyOptions) {
     if (process.platform === "win32") {
@@ -209,8 +223,13 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
     });
     const sdkProcess = new NodeCustodiedSdkProcess(child);
     if (input.signal !== undefined) {
-      const pid = child.pid;
-      const terminate = (): void => {signalProcessGroup(pid, "SIGTERM");};
+      const terminate = (): void => {
+        void this.requestContainment({
+          attemptId: live.attemptId,
+          custodyRef: live.custodyRef,
+          operationId: live.operationId,
+        }).catch(() => {});
+      };
       input.signal.addEventListener("abort", terminate, { once: true });
       void exit.finally(() => input.signal?.removeEventListener("abort", terminate)).catch(() => {});
     }
@@ -247,28 +266,68 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
     return this.#spawn(live, { arguments: input.arguments, environment: input.environment, signal: input.signal });
   }
 
-  public async open(input: {
-    readonly attemptId: string;
-    readonly operationId: string;
-    readonly providerBinding: Parameters<ProviderProcessCustodyPort["open"]>[0]["providerBinding"];
-    readonly workspaceRef: string;
-  }): Promise<ContainedTurnCustodyHandle> {
+  #kernelHandle(
+    live: LiveCustody,
+    input: Parameters<ContainedTurnKernelCustodyPort["open"]>[0],
+  ): Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>> {
+    if (live.effectId === undefined || live.authorityVectorDigest === undefined ||
+        live.hostBootId === undefined || live.hostInstanceId === undefined) {
+      throw new TypeError("legacy custody reservation cannot be promoted into kernel authority");
+    }
+    return Object.freeze({
+      custodyId: input.custodyId,
+      hostBootId: live.hostBootId,
+      hostCustodyProof: Object.freeze({
+        binding: Object.freeze({
+          attemptId: input.attemptId,
+          authorityVectorDigest: input.authorityVectorDigest,
+          custodyId: input.custodyId,
+          effectId: input.effectId,
+          operationId: input.operationId,
+        }),
+        kind: "host_custody" as const,
+        proofId: containedTurnIdentity("proof", `proof:host-custody:${digestContainedTurnCanonicalValue({ attemptId: input.attemptId, custodyId: input.custodyId, hostBootId: live.hostBootId, hostInstanceId: live.hostInstanceId })}`),
+      }),
+      hostInstanceId: live.hostInstanceId,
+    });
+  }
+
+  public open(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle>;
+  public open(input: Parameters<ContainedTurnKernelCustodyPort["open"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["open"]>;
+  public async open(input: Parameters<ProviderProcessCustodyPort["open"]>[0] | Parameters<ContainedTurnKernelCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle | Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>> {
+    const kernelInput = "adapterSnapshot" in input ? input : undefined;
+    const legacyInput = kernelInput === undefined
+      ? input as Parameters<ProviderProcessCustodyPort["open"]>[0]
+      : undefined;
+    const workspaceRef = kernelInput === undefined
+      ? legacyInput!.workspaceRef
+      : kernelInput.workspaceId.slice("workspace:".length);
+    const providerBinding = kernelInput === undefined ? legacyInput!.providerBinding : {
+      adapterRevision: kernelInput.adapterSnapshot.adapterRevision,
+      binaryRevision: kernelInput.adapterSnapshot.binaryRevision,
+      capabilityManifestRevision: kernelInput.adapterSnapshot.capabilityManifestRevision,
+      credentialBindingDigest: kernelInput.providerAccessSnapshot.credentialBindingDigest,
+      provider: kernelInput.adapterSnapshot.provider,
+      providerRouteRef: kernelInput.providerAccessSnapshot.providerRouteRef,
+    };
     const existing = this.#byAttempt.get(input.attemptId);
     if (existing !== undefined) {
-      if (existing.operationId !== input.operationId || existing.workspaceRef !== input.workspaceRef) {
+      if (existing.operationId !== input.operationId || existing.workspaceRef !== workspaceRef) {
         throw new Error("Host Custody attempt identity conflict");
       }
-      return Object.freeze({ custodyRef: existing.custodyRef });
+      return kernelInput === undefined
+        ? Object.freeze({ custodyRef: existing.custodyRef })
+        : this.#kernelHandle(existing, kernelInput);
     }
-    const plan = await this.#launchPlans.resolve({ providerBinding: input.providerBinding, workspaceRef: input.workspaceRef });
+    const plan = await this.#launchPlans.resolve({ providerBinding, workspaceRef });
     if (plan === undefined) {throw new HostCustodyUnsupportedError("no exact Host Custody launch plan exists");}
-    if (plan.provider !== input.providerBinding.provider || plan.binaryRevision !== input.providerBinding.binaryRevision) {
+    if (plan.provider !== providerBinding.provider || plan.binaryRevision !== providerBinding.binaryRevision) {
       throw new Error("Host Custody launch plan does not match the provider binding");
     }
     const binaryDigest = await verifyExecutable(plan);
-    const canonicalWorkspace = await realpath(input.workspaceRef);
-    if (canonicalWorkspace !== input.workspaceRef) {throw new Error("Host Custody workspace is not canonical");}
-    const custodyRef = `urn:agent-runtime:host-custody:${randomUUID()}`;
+    const canonicalWorkspace = await realpath(workspaceRef);
+    if (canonicalWorkspace !== workspaceRef) {throw new Error("Host Custody workspace is not canonical");}
+    const custodyRef = kernelInput?.custodyId ?? `urn:agent-runtime:host-custody:${randomUUID()}`;
     const live: LiveCustody = {
       attemptId: input.attemptId,
       binaryDigest,
@@ -276,27 +335,46 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
       operationId: input.operationId,
       plan,
       workspaceRef: canonicalWorkspace,
+      ...(kernelInput === undefined ? {} : {
+        authorityVectorDigest: kernelInput.authorityVectorDigest,
+        effectId: kernelInput.effectId,
+        hostBootId: this.#hostBootId,
+        hostInstanceId: this.#hostInstanceId,
+      }),
     };
     if ((plan.spawnMode ?? "eager") === "eager") {
       this.#spawn(live, { arguments: plan.arguments, environment: plan.environment });
     }
     this.#byAttempt.set(input.attemptId, live);
     this.#byRef.set(custodyRef, live);
-    return Object.freeze({ custodyRef });
+    return kernelInput === undefined ? Object.freeze({ custodyRef }) : this.#kernelHandle(live, kernelInput);
   }
 
   public async requestContainment(input: {
     readonly attemptId: string;
     readonly custodyRef?: string;
     readonly operationId: string;
-  }): Promise<
-    | { readonly kind: "contained"; readonly receiptRef: string }
-    | { readonly evidenceRef: string; readonly kind: "unproven" }
-  > {
+  }): Promise<HostContainmentOutcome> {
     const live = input.custodyRef === undefined ? this.#byAttempt.get(input.attemptId) : this.#byRef.get(input.custodyRef);
     if (live === undefined || live.attemptId !== input.attemptId || live.operationId !== input.operationId) {
       return { evidenceRef: `host-custody-missing:${input.attemptId}`, kind: "unproven" };
     }
+    const containment = live.containment ?? this.#contain(live, input);
+    live.containment = containment;
+    try {
+      const outcome = await containment;
+      if (outcome.kind === "unproven" && live.containment === containment) {delete live.containment;}
+      return outcome;
+    } catch (error) {
+      if (live.containment === containment) {delete live.containment;}
+      throw error;
+    }
+  }
+
+  async #contain(
+    live: LiveCustody,
+    input: Readonly<{ attemptId: string; custodyRef?: string; operationId: string }>,
+  ): Promise<HostContainmentOutcome> {
     live.sealed = true;
     if (live.child === undefined || live.exit === undefined) {
       const receiptIdentity = JSON.stringify([
@@ -345,5 +423,106 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
     } catch {
       return { evidenceRef: `host-custody-signal-failed:${input.attemptId}`, kind: "unproven" };
     }
+  }
+
+  async #physicalClosure(
+    input: Parameters<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]>[0],
+    initiate: boolean,
+  ): ReturnType<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]> {
+    const live = this.#byRef.get(input.custodyId);
+    if (live === undefined || live.attemptId !== input.attemptId || live.operationId !== input.operationId ||
+        live.authorityVectorDigest !== input.authorityVectorDigest || live.effectId === undefined ||
+        live.hostBootId === undefined || live.hostInstanceId === undefined) {
+      return Object.freeze({
+        evidenceId: containedTurnIdentity("evidence", `evidence:host-custody-identity:${digestContainedTurnCanonicalValue({ attemptId: input.attemptId, custodyId: input.custodyId, operationId: input.operationId })}`),
+        kind: "identity_conflict" as const,
+      });
+    }
+    if (!initiate && live.sealed !== true) {
+      return Object.freeze({
+        evidenceId: containedTurnIdentity("evidence", `evidence:host-custody-not-contained:${input.requestDigest}`),
+        kind: "indeterminate" as const,
+      });
+    }
+    const outcome = await this.requestContainment({ attemptId: input.attemptId, custodyRef: input.custodyId, operationId: input.operationId });
+    if (outcome.kind !== "contained") {
+      return Object.freeze({
+        evidenceId: containedTurnIdentity("evidence", `evidence:host-custody-containment:${digestContainedTurnCanonicalValue({ evidenceRef: outcome.evidenceRef })}`),
+        kind: "indeterminate" as const,
+      });
+    }
+    return Object.freeze({
+      kind: "proved" as const,
+      proof: Object.freeze({
+        binding: Object.freeze({
+          attemptId: input.attemptId,
+          authorityVectorDigest: input.authorityVectorDigest,
+          custodyId: input.custodyId,
+          effectId: live.effectId,
+          hostBootId: live.hostBootId,
+          hostInstanceId: live.hostInstanceId,
+          operationId: input.operationId,
+        }),
+        kind: "physical_containment" as const,
+        proofId: containedTurnIdentity("proof", `proof:physical-containment:${digestContainedTurnCanonicalValue({ receiptRef: outcome.receiptRef, requestDigest: input.requestDigest })}`),
+      }),
+      requestDigest: input.requestDigest,
+      requestId: input.requestId,
+    });
+  }
+
+  public ensurePhysicalContainment(input: Parameters<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]> {
+    return this.#physicalClosure(input, true);
+  }
+
+  public queryPhysicalContainment(input: Parameters<ContainedTurnKernelCustodyPort["queryPhysicalContainment"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["queryPhysicalContainment"]> {
+    return this.#physicalClosure(input, false);
+  }
+
+  async #compositeClosure(
+    input: Parameters<ContainedTurnKernelCustodyPort["attestContainment"]>[0],
+    initiate: boolean,
+  ): ReturnType<ContainedTurnKernelCustodyPort["attestContainment"]> {
+    const physical = await this.#physicalClosure(input, initiate);
+    if (physical.kind !== "proved") {return physical;}
+    if (input.binding.operationId !== input.operationId || input.binding.attemptId !== input.attemptId ||
+        input.binding.custodyId !== input.custodyId || input.binding.authorityVectorDigest !== input.authorityVectorDigest ||
+        input.binding.physicalContainmentProofId !== physical.proof.proofId) {
+      return Object.freeze({
+        evidenceId: containedTurnIdentity("evidence", `evidence:containment-binding-conflict:${input.requestDigest}`),
+        kind: "identity_conflict" as const,
+      });
+    }
+    return Object.freeze({
+      kind: "proved" as const,
+      proof: Object.freeze({
+        binding: input.binding,
+        kind: "containment" as const,
+        proofId: containedTurnIdentity("proof", `proof:containment:${input.requestDigest}`),
+      }),
+      requestDigest: input.requestDigest,
+      requestId: input.requestId,
+    });
+  }
+
+  public attestContainment(input: Parameters<ContainedTurnKernelCustodyPort["attestContainment"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["attestContainment"]> {
+    return this.#compositeClosure(input, true);
+  }
+
+  public queryContainmentAttestation(input: Parameters<ContainedTurnKernelCustodyPort["queryContainmentAttestation"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["queryContainmentAttestation"]> {
+    return this.#compositeClosure(input, false);
+  }
+
+  public async releaseRetiredReservation(input: Parameters<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]>[0]) {
+    const live = this.#byRef.get(input.cleanupPermit.custodyId);
+    if (live === undefined) {return Object.freeze({ kind: "already_released" as const });}
+    const outcome = await this.requestContainment({
+      attemptId: input.cleanupPermit.attemptId,
+      custodyRef: input.cleanupPermit.custodyId,
+      operationId: input.cleanupPermit.operationId,
+    });
+    return outcome.kind === "contained"
+      ? Object.freeze({ kind: "released" as const })
+      : Object.freeze({ evidenceId: containedTurnIdentity("evidence", `evidence:retired-custody:${digestContainedTurnCanonicalValue({ evidenceRef: outcome.evidenceRef })}`), kind: "indeterminate" as const });
   }
 }

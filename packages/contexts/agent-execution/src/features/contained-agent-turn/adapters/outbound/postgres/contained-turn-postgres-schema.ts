@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { Pool, PoolClient } from "pg";
 
-export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 1;
+export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 2;
 
 const MIGRATION_SQL = `
 CREATE SCHEMA IF NOT EXISTS agent_execution;
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS agent_execution.contained_turn_operation_v1 (
   operation_id text PRIMARY KEY CHECK (char_length(operation_id) BETWEEN 1 AND 512),
   tenant_id text NOT NULL CHECK (char_length(tenant_id) BETWEEN 1 AND 512),
   command_id text NOT NULL CHECK (char_length(command_id) BETWEEN 1 AND 256),
-  command_fingerprint text NOT NULL CHECK (command_fingerprint ~ '^[a-f0-9]{64}$'),
+  command_fingerprint text NOT NULL,
   effect_id text NOT NULL CHECK (char_length(effect_id) BETWEEN 1 AND 512),
   revision bigint NOT NULL CHECK (revision >= 0),
   state jsonb NOT NULL,
@@ -39,7 +39,22 @@ CREATE TABLE IF NOT EXISTS agent_execution.contained_turn_receipt_v1 (
   operation_id text NOT NULL REFERENCES agent_execution.contained_turn_operation_v1(operation_id) ON DELETE RESTRICT,
   receipt_kind text NOT NULL,
   receipt_ref text NOT NULL CHECK (char_length(receipt_ref) BETWEEN 1 AND 4096),
-  PRIMARY KEY (operation_id, receipt_kind)
+  PRIMARY KEY (operation_id, receipt_ref)
+);
+
+ALTER TABLE agent_execution.contained_turn_operation_v1
+  DROP CONSTRAINT IF EXISTS contained_turn_operation_v1_command_fingerprint_check;
+
+ALTER TABLE agent_execution.contained_turn_receipt_v1
+  DROP CONSTRAINT IF EXISTS contained_turn_receipt_v1_pkey;
+ALTER TABLE agent_execution.contained_turn_receipt_v1
+  ADD CONSTRAINT contained_turn_receipt_v1_pkey PRIMARY KEY (operation_id, receipt_ref);
+
+CREATE TABLE IF NOT EXISTS agent_execution.contained_turn_dispatch_preparation_v1 (
+  operation_id text NOT NULL REFERENCES agent_execution.contained_turn_operation_v1(operation_id) ON DELETE RESTRICT,
+  preparation_token text NOT NULL,
+  state jsonb NOT NULL,
+  PRIMARY KEY (operation_id, preparation_token)
 );
 `;
 
@@ -62,6 +77,13 @@ const applyInsideTransaction = async (client: PoolClient): Promise<void> => {
     return;
   }
   const row = existing.rows[0];
+  if (row?.version === 1) {
+    await client.query(
+      "UPDATE agent_execution.schema_migration SET version = $2, migration_digest = $3 WHERE component = $1",
+      ["contained-agent-turn", CONTAINED_TURN_POSTGRES_SCHEMA_VERSION, CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST],
+    );
+    return;
+  }
   if (row?.version !== CONTAINED_TURN_POSTGRES_SCHEMA_VERSION || row.migration_digest !== CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST) {
     throw new Error("contained turn PostgreSQL schema identity mismatch");
   }

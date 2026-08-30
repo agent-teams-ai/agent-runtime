@@ -8,6 +8,7 @@ import {
 } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
+import { normalizeContainedTurnConsumedGrantReceipt, type OuterContainedTurnConsumedGrantReceipt } from "./dispatch-grant-anti-corruption.js";
 
 interface OuterEvidence {
   readonly authorityDigest: string;
@@ -27,6 +28,11 @@ interface OuterBinding extends ContainedTurnScope {
 }
 
 export interface OuterContainedTurnProviderAccess {
+  readonly consumeDispatchGrant: { execute(input: Readonly<{ subject: Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0]["subject"] }>): Promise<
+    | { readonly kind: "consumed"; readonly receipt: OuterContainedTurnConsumedGrantReceipt }
+    | { readonly kind: "prevented"; readonly proofRef: string }
+    | { readonly evidenceRef: string; readonly kind: "indeterminate" }
+  > };
   readonly resolve: { execute(input: Readonly<{ provider: ContainedTurnProvider; scope: ContainedTurnScope }>): Promise<
     | { readonly binding: OuterBinding; readonly evidence: OuterEvidence; readonly kind: "resolved" }
     | { readonly evidence: OuterEvidence; readonly kind: "unavailable"; readonly reason: string }
@@ -34,6 +40,10 @@ export interface OuterContainedTurnProviderAccess {
   readonly revalidate: { execute(input: Readonly<{ binding: OuterBinding; provider: ContainedTurnProvider; scope: ContainedTurnScope }>): Promise<
     | { readonly binding: OuterBinding; readonly evidence: OuterEvidence; readonly kind: "valid" }
     | { readonly evidence: OuterEvidence; readonly kind: "rejected"; readonly reason: string }
+  > };
+  readonly settleDispatchGrant: { execute(input: Readonly<{ grantRequestId: string; permitDigest: string; permitId: string }>): Promise<
+    | { readonly kind: "already_settled" | "settled" }
+    | { readonly evidenceRef: string; readonly kind: "indeterminate" }
   > };
 }
 
@@ -86,6 +96,18 @@ const resolutionDigest = (binding: ContainedTurnProviderAccessSnapshot, evidence
 export const createContainedTurnProviderAccessPort = (
   outer: OuterContainedTurnProviderAccess,
 ): ContainedTurnProviderAccessPort => Object.freeze({
+  async consumeForDispatch(input: Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0]) {
+    const outcome = await outer.consumeDispatchGrant.execute(input);
+    if (outcome.kind === "consumed") {
+      return Object.freeze({
+        kind: "consumed" as const,
+        receipt: normalizeContainedTurnConsumedGrantReceipt("provider_access", input.subject, outcome.receipt),
+      });
+    }
+    return outcome.kind === "prevented"
+      ? Object.freeze({ kind: "prevented" as const, preventionProofId: containedTurnIdentity("proof", `proof:provider-access:grant:${digestContainedTurnCanonicalValue({ proofRef: outcome.proofRef })}`) })
+      : Object.freeze({ evidenceId: containedTurnIdentity("evidence", `evidence:provider-access:grant:${digestContainedTurnCanonicalValue({ evidenceRef: outcome.evidenceRef })}`), kind: "indeterminate" as const });
+  },
   async resolveForAcceptance(input: Readonly<{ intent: ContainedTurnIntent; provider: ContainedTurnProvider; scope: ContainedTurnScope }>) {
     const outcome = await outer.resolve.execute({ provider: input.provider, scope: input.scope });
     if (outcome.evidence.purpose !== "acceptance") {
@@ -127,5 +149,15 @@ export const createContainedTurnProviderAccessPort = (
       return Object.freeze({ kind: "prevented" as const, preventionProofId: proofId(outcome.evidence, "dispatch"), reason: "access_revoked" as const });
     }
     return Object.freeze({ evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate" as const, reason: "authority_unknown" as const });
+  },
+  async settleConsumedGrant(input: Parameters<ContainedTurnProviderAccessPort["settleConsumedGrant"]>[0]) {
+    const outcome = await outer.settleDispatchGrant.execute({
+      grantRequestId: input.grantRequestId,
+      permitDigest: input.cleanupPermit.permitDigest,
+      permitId: input.cleanupPermit.permitId,
+    });
+    return outcome.kind === "indeterminate"
+      ? Object.freeze({ evidenceId: containedTurnIdentity("evidence", `evidence:provider-access:settle:${digestContainedTurnCanonicalValue({ evidenceRef: outcome.evidenceRef })}`), kind: "indeterminate" as const })
+      : outcome;
   },
 });

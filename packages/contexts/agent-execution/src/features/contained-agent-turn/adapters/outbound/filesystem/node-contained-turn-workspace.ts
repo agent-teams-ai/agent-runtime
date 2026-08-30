@@ -3,6 +3,9 @@ import { lstat, mkdir, readdir, rename } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import type { ContainedTurnWorkspacePort } from "../legacy/legacy-contained-turn-ports.js";
+import type { ContainedTurnKernelWorkspacePort } from "../../../application/ports/outbound/contained-turn-ports.js";
+import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
+import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import {
   assertPrivateDirectory,
   ensurePrivateDirectory,
@@ -45,7 +48,7 @@ const directoryExists = async (path: string): Promise<boolean> => {
 
 export const createNodeContainedTurnWorkspace = async (
   options: NodeContainedTurnWorkspaceOptions,
-): Promise<ContainedTurnWorkspacePort> => {
+): Promise<ContainedTurnWorkspacePort & Pick<ContainedTurnKernelWorkspacePort, "ensureClosed" | "queryClosure">> => {
   if (!isAbsolute(options.root) || resolve(options.root) !== options.root) {
     throw new TypeError("contained turn workspace custody root must be a normalized absolute path");
   }
@@ -60,7 +63,51 @@ export const createNodeContainedTurnWorkspace = async (
     ensurePrivateDirectory(quarantineRoot),
   ]);
 
-  const adapter: ContainedTurnWorkspacePort = {
+  const closureOutcome = async (input: Parameters<ContainedTurnKernelWorkspacePort["ensureClosed"]>[0], closeWorkspace: boolean) => {
+    const workspaceRef = input.workspaceId.startsWith("workspace:")
+      ? input.workspaceId.slice("workspace:".length)
+      : input.workspaceId;
+    const name = assertWorkspaceRef(workspaceRef, activeRoot);
+    const closedPath = join(closedRoot, name);
+    const activeExists = await directoryExists(workspaceRef);
+    const closedExists = await directoryExists(closedPath);
+    if (activeExists && closedExists) {throw new Error("contained turn workspace has conflicting active and closed custody");}
+    if (!activeExists && !closedExists) {
+      return Object.freeze({
+        evidenceId: containedTurnIdentity("evidence", `evidence:workspace-closure:${digestContainedTurnCanonicalValue({ operationId: input.operationId, requestDigest: input.requestDigest })}`),
+        kind: "indeterminate" as const,
+      });
+    }
+    if (activeExists && !closeWorkspace) {
+      return Object.freeze({
+        evidenceId: containedTurnIdentity("evidence", `evidence:workspace-closure-pending:${digestContainedTurnCanonicalValue({ operationId: input.operationId, requestDigest: input.requestDigest })}`),
+        kind: "indeterminate" as const,
+      });
+    }
+    if (activeExists) {
+      await scanContainedTurnWorkspace(workspaceRef, limits);
+      await rename(workspaceRef, closedPath);
+      await fsyncDirectory(activeRoot);
+      await fsyncDirectory(closedRoot);
+    }
+    return Object.freeze({
+      kind: "proved" as const,
+      proof: Object.freeze({
+        binding: Object.freeze({
+          authorityVectorDigest: input.authorityVectorDigest,
+          operationId: input.operationId,
+          workspaceId: input.workspaceId,
+        }),
+        kind: "workspace_closure" as const,
+        proofId: containedTurnIdentity("proof", `proof:workspace-closure:${input.requestDigest}`),
+      }),
+      requestDigest: input.requestDigest,
+      requestId: input.requestId,
+    });
+  };
+  const adapter: ContainedTurnWorkspacePort & Pick<ContainedTurnKernelWorkspacePort, "ensureClosed" | "queryClosure"> = {
+    ensureClosed: input => closureOutcome(input, true),
+    queryClosure: input => closureOutcome(input, false),
     async close(workspaceRef) {
       const name = assertWorkspaceRef(workspaceRef, activeRoot);
       const closedPath = join(closedRoot, name);

@@ -57,9 +57,6 @@ export const retireAndCleanupContainedTurnPreparation = async (
 ): Promise<RetireContainedTurnPreparationOutcome> => {
   const retire = dependencies.operationStore.retireDispatchPreparation;
   const record = dependencies.operationStore.recordDispatchPreparationCleanup;
-  if (retire === undefined || record === undefined) {
-    return { kind: "cleanup_pending", operation };
-  }
   const authority = containedTurnOwnerStoreAuthority(operation, trustedScope);
   let retirement: Awaited<ReturnType<typeof retire>>;
   try {
@@ -84,10 +81,9 @@ export const retireAndCleanupContainedTurnPreparation = async (
   let current: ContainedTurnDispatchPreparation = pending;
   const cleanup = async (
     target: "custody" | "provider_access" | "runtime_security",
-    effect: (() => Promise<{ readonly kind: string; readonly evidenceId?: ContainedTurnEvidenceId }>) | undefined,
+    effect: () => Promise<{ readonly kind: string; readonly evidenceId?: ContainedTurnEvidenceId }>,
     grantRequestId?: string,
   ): Promise<void> => {
-    if (effect === undefined) {return;}
     let outcome: { readonly kind: string; readonly evidenceId?: ContainedTurnEvidenceId };
     try {outcome = await effect();} catch {return;}
     if (outcome.kind !== "released" && outcome.kind !== "already_released" &&
@@ -103,15 +99,9 @@ export const retireAndCleanupContainedTurnPreparation = async (
     } catch {}
     void grantRequestId;
   };
-  await cleanup("custody", dependencies.custody.releaseRetiredReservation === undefined
-    ? undefined
-    : () => dependencies.custody.releaseRetiredReservation!({ cleanupPermit: permit }));
-  await cleanup("provider_access", dependencies.providerAccess.settleConsumedGrant === undefined
-    ? undefined
-    : () => dependencies.providerAccess.settleConsumedGrant!({ cleanupPermit: permit, grantRequestId: pending.providerAccessGrantRequestId }));
-  await cleanup("runtime_security", dependencies.security.settleConsumedGrant === undefined
-    ? undefined
-    : () => dependencies.security.settleConsumedGrant!({ cleanupPermit: permit, grantRequestId: pending.runtimeSecurityGrantRequestId }));
+  await cleanup("custody", () => dependencies.custody.releaseRetiredReservation({ cleanupPermit: permit }));
+  await cleanup("provider_access", () => dependencies.providerAccess.settleConsumedGrant({ cleanupPermit: permit, grantRequestId: pending.providerAccessGrantRequestId }));
+  await cleanup("runtime_security", () => dependencies.security.settleConsumedGrant({ cleanupPermit: permit, grantRequestId: pending.runtimeSecurityGrantRequestId }));
   const finalPreparation = current as ContainedTurnDispatchPreparation;
   return finalPreparation.kind === "cleanup_closed"
     ? { kind: "cleanup_closed", operation, preparation: finalPreparation }

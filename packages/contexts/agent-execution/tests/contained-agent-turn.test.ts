@@ -1,3 +1,4 @@
+// oxlint-disable max-lines
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -10,7 +11,10 @@ import { mutateContainedTurnOperation } from "../dist/features/contained-agent-t
 import type { ContainedTurnKernelOperation } from "../dist/features/contained-agent-turn/domain/contained-turn-kernel-model.js";
 import type { ContainedTurnProof } from "../dist/features/contained-agent-turn/domain/contained-turn-proofs.js";
 import type { ContainedTurnKernelDependencies } from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
-import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnDispatchClaimBindingDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
+import { recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
+import { containedTurnPreparationToken } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 
 const identity = <Namespace extends Parameters<typeof containedTurnIdentity>[0]>(namespace: Namespace, suffix: string) =>
   containedTurnIdentity(namespace, `${String(namespace).replaceAll("_", "-")}:${suffix}`);
@@ -24,6 +28,15 @@ const hostBootId = identity("host_boot", "one");
 const hostInstanceId = identity("host_instance", "one");
 const executionGenerationId = identity("execution_generation", "one");
 const writerFence = identity("writer_fence", "one");
+
+interface ClaimAuthorityObservation {
+  readonly acceptedProviderAccessSnapshotDigest: string;
+  readonly acceptedSecurityDecisionDigest: string;
+  readonly providerAccessDispatchProofId: string;
+  readonly providerAccessRevision: number;
+  readonly runtimeSecurityDispatchProofId: string;
+  readonly securityAuthorityRevision: string;
+}
 
 const adapterSnapshot = Object.freeze({
   adapterRevision: "adapter:one",
@@ -92,6 +105,7 @@ const awaitFixtureGate = async <Value>(
 const createDependencies = (options: Readonly<{
   artifactIndeterminate?: boolean;
   custodyOpenThrows?: boolean;
+  claimCommitThenThrow?: boolean;
   dispatchPrevented?: boolean;
   emitBeforeGate?: boolean;
   forgeReceipt?: boolean;
@@ -103,11 +117,14 @@ const createDependencies = (options: Readonly<{
   providerStarted?: () => void;
   revalidationThrows?: boolean;
   staleClaimAuthority?: boolean;
+  staleOwnerAfterClaim?: boolean;
   throwAfterStart?: boolean;
+  containmentIndeterminate?: boolean;
   workspaceGate?: Promise<void>;
+  workspaceClosureIndeterminate?: boolean;
   workspaceStarted?: () => void;
 }> = {}): {
-  claimAuthorities: Array<Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["dispatchAuthority"]>;
+  claimAuthorities: ClaimAuthorityObservation[];
   containmentCalls: { value: number };
   completionBoundaryReleases: { value: number };
   createdWorkspaces: ContainedTurnKernelOperation["workspaceId"][];
@@ -121,7 +138,8 @@ const createDependencies = (options: Readonly<{
   let current: ContainedTurnKernelOperation | undefined;
   let commitCount = 0;
   let workspaceCreateCount = 0;
-  const claimAuthorities: Array<Parameters<ContainedTurnKernelDependencies["operationStore"]["claimDispatch"]>[0]["dispatchAuthority"]> = [];
+  let preparation: ContainedTurnDispatchPreparation | undefined;
+  const claimAuthorities: ClaimAuthorityObservation[] = [];
   const containmentCalls = { value: 0 };
   const completionBoundaryReleases = { value: 0 };
   const createdWorkspaces: ContainedTurnKernelOperation["workspaceId"][] = [];
@@ -155,16 +173,70 @@ const createDependencies = (options: Readonly<{
       current = input.candidate;
       return { kind: "applied", operation: current };
     },
-    claimDispatch: async input => {
+    claimPreparedDispatch: async input => {
       if (current === undefined) {return { kind: "not_found" };}
       assertOwnerAuthority(input.authority, current);
-      if (current.revision !== input.expectedRevision) {return { current, kind: "stale" };}
-      assert.equal(input.dispatchAuthority.providerAccessRevision, current.providerAccessSnapshot.revision);
-      assert.equal(input.dispatchAuthority.securityAuthorityRevision, current.acceptedAuthorityVector.securityAuthorityRevision);
-      claimAuthorities.push(input.dispatchAuthority);
-      if (options.staleClaimAuthority === true) {return { current, kind: "stale" };}
-      current = input.candidate;
-      return { kind: "applied", operation: current };
+      if (current.revision !== input.expectedOperationRevision || options.staleClaimAuthority === true) {
+        return { current, kind: "stale" };
+      }
+      const subject = input.subject;
+      const providerAccessDispatchProof = {
+        binding: {
+          ...operationBinding(current),
+          acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(current.providerAccessSnapshot),
+          resolutionDigest: digestContainedTurnCanonicalValue({ current: true }),
+        },
+        kind: "provider_access_dispatch" as const,
+        proofId: proofId("provider-access-dispatch"),
+      };
+      const runtimeSecurityDispatchProof = {
+        binding: {
+          ...operationBinding(current),
+          acceptedSecurityDecisionDigest: current.acceptedAuthorityVector.securityDecisionDigest,
+          currentSecurityDecisionDigest: digestContainedTurnCanonicalValue({ current: true }),
+          securityAuthorityRevision: current.acceptedAuthorityVector.securityAuthorityRevision,
+        },
+        kind: "runtime_security_dispatch" as const,
+        proofId: proofId("security-dispatch"),
+      };
+      claimAuthorities.push({
+        acceptedProviderAccessSnapshotDigest: providerAccessDispatchProof.binding.acceptedSnapshotDigest,
+        acceptedSecurityDecisionDigest: current.acceptedAuthorityVector.securityDecisionDigest,
+        providerAccessDispatchProofId: providerAccessDispatchProof.proofId,
+        providerAccessRevision: current.providerAccessSnapshot.revision,
+        runtimeSecurityDispatchProofId: runtimeSecurityDispatchProof.proofId,
+        securityAuthorityRevision: current.acceptedAuthorityVector.securityAuthorityRevision,
+      });
+      current = mutateContainedTurnOperation(current, {
+        attemptId: subject.attemptId,
+        claimProof: {
+          binding: {
+            ...operationBinding(current),
+            attemptId: subject.attemptId,
+            effectId: current.effectId,
+            preparationToken: subject.preparationToken,
+            providerAccessDispatchProofId: providerAccessDispatchProof.proofId,
+            runtimeSecurityDispatchProofId: runtimeSecurityDispatchProof.proofId,
+          },
+          kind: "dispatch_claim",
+          proofId: proofId("claim"),
+        },
+        custodyId: subject.custodyId,
+        cutoffProof: { binding: operationBinding(current), kind: "cutoff", proofId: proofId("cutoff") },
+        executionGenerationId: subject.executionGenerationId,
+        hostBootId: subject.hostBootId,
+        hostCustodyProof: input.hostCustodyProof,
+        hostInstanceId: subject.hostInstanceId,
+        kind: "claim_dispatch",
+        preparationToken: subject.preparationToken,
+        providerAccessDispatchProof,
+        runtimeSecurityDispatchProof,
+        writerFence,
+      });
+      preparation = preparation === undefined ? undefined : { ...preparation, kind: "claimed" };
+      if (options.claimCommitThenThrow === true) {throw new Error("claim committed; acknowledgement lost");}
+      if (options.staleOwnerAfterClaim === true) {return { current, kind: "stale" };}
+      return { kind: "claimed", operation: current, startAuthority: "test-start-authority:one" };
     },
     identifyAcceptance: async () => ({
       acceptanceProofId: proofId("acceptance"),
@@ -192,7 +264,29 @@ const createDependencies = (options: Readonly<{
     },
     prepareDispatch: async ({ authority, operation }) => {
       assertOwnerAuthority(authority, operation);
+      preparation = {
+        attemptId, custodyId, kind: "active", operationCutoffRevision: operation.operationCutoff.revision,
+        operationId, preparationToken: containedTurnPreparationToken({ attemptId, custodyId, operationId }), preparedOperationRevision: operation.revision,
+        providerAccessGrantRequestId: "provider-access-grant:one", runtimeSecurityGrantRequestId: "runtime-security-grant:one",
+        workspaceId: operation.workspaceId as typeof workspaceId,
+      };
       return { attemptId, claimProofId: proofId("claim"), custodyId, cutoffProofId: proofId("cutoff"), executionGenerationId, writerFence };
+    },
+    recordDispatchPreparationCleanup: async input => {
+      if (preparation === undefined) {throw new Error("missing test preparation");}
+      preparation = recordContainedTurnPreparationCleanup(preparation, input);
+      return preparation;
+    },
+    retireDispatchPreparation: async input => {
+      if (current === undefined) {return { evidenceId: identity("evidence", "retire-missing"), kind: "indeterminate" };}
+      if (current.dispatch.kind === "claimed" && current.dispatch.preparationToken === input.preparationToken) {
+        return { kind: "claimed", operation: current };
+      }
+      if (preparation === undefined || preparation.kind !== "active") {
+        return { current, kind: "stale" };
+      }
+      preparation = retireContainedTurnDispatchPreparation(preparation, "test-retirement");
+      return { kind: "retired", preparation: preparation as Extract<ContainedTurnDispatchPreparation, { kind: "cleanup_pending" }> };
     },
     proofsForAcceptedEffect: async ({ authority, operation }) => {
       assertOwnerAuthority(authority, operation);
@@ -261,6 +355,19 @@ const createDependencies = (options: Readonly<{
   const dependencies: ContainedTurnKernelDependencies = {
     operationStore,
     security: {
+      consumeForDispatch: async ({ subject }) => ({
+        kind: "consumed",
+        receipt: {
+          claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
+          grantRequestDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", request: "one" }),
+          grantRequestId: "runtime-security-grant:one",
+          owner: "runtime_security",
+          ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", authority: "one" }),
+          ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", receipt: "one" }),
+          validThroughOperationCutoffRevision: subject.operationCutoffRevision,
+        },
+      }),
+      settleConsumedGrant: async () => ({ kind: "settled" }),
       authorizeForAcceptance: async () => ({
         acceptanceProofId: proofId("security-acceptance"),
         authorityRevision: "security-authority:one",
@@ -271,6 +378,22 @@ const createDependencies = (options: Readonly<{
       revalidateForDispatch: async () => ({ dispatchDecisionDigest: digestContainedTurnCanonicalValue({ current: true }), kind: "current", proofId: proofId("security-dispatch") }),
     },
     providerAccess: {
+      consumeForDispatch: async ({ subject }) => options.revalidationThrows === true
+        ? Promise.reject(new Error("provider access consumption failed"))
+        : options.dispatchPrevented === true
+          ? { kind: "prevented" as const, preventionProofId: proofId("provider-access-prevention") }
+          : ({
+            kind: "consumed" as const,
+            receipt: {
+              claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
+              grantRequestDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", request: "one" }),
+              grantRequestId: "provider-access-grant:one",
+              owner: "provider_access" as const,
+              ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", authority: "one" }),
+              ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", receipt: "one" }),
+              validThroughOperationCutoffRevision: subject.operationCutoffRevision,
+            },
+          }),
       resolveForAcceptance: async () => ({
         acceptanceProofId: proofId("provider-access-acceptance"),
         acceptanceResolutionDigest: digestContainedTurnCanonicalValue({ resolved: true }),
@@ -289,8 +412,19 @@ const createDependencies = (options: Readonly<{
               snapshot: providerAccessSnapshot,
             }),
       }),
+      settleConsumedGrant: async () => ({ kind: "settled" }),
     },
     workspace: {
+      ensureClosed: async input => {
+        if (options.workspaceClosureIndeterminate === true) {
+          return { evidenceId: identity("evidence", "workspace-closure-unknown"), kind: "indeterminate" };
+        }
+        const outcome = await dependencies.workspace.close({ operationId: input.operationId, workspaceId: input.workspaceId });
+        return outcome.kind === "closed"
+          ? { kind: "proved", proof: outcome.proof, requestDigest: input.requestDigest, requestId: input.requestId }
+          : outcome;
+      },
+      queryClosure: input => dependencies.workspace.ensureClosed(input),
       close: async input => ({ kind: "closed", proof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), workspaceId: input.workspaceId }, kind: "workspace_closure", proofId: proofId("workspace-closure") } }),
       create: async () => {
         workspaceCreateCount += 1;
@@ -307,6 +441,13 @@ const createDependencies = (options: Readonly<{
       quarantine: async input => {workspaceQuarantines.push(input);},
     },
     artifacts: {
+      ensureSealed: async input => {
+        const outcome = await dependencies.artifacts.seal(input);
+        return outcome.kind === "sealed"
+          ? { kind: "proved", proof: { artifactProof: outcome.artifactProof, resultProof: outcome.resultProof }, requestDigest: input.requestDigest, requestId: input.requestId }
+          : outcome;
+      },
+      querySeal: input => dependencies.artifacts.ensureSealed({ ...input, output: current?.output.chunks ?? [] }),
       seal: async input => options.artifactIndeterminate === true
         ? { evidenceId: identity("evidence", "artifact-unknown"), kind: "indeterminate" }
         : ({
@@ -316,6 +457,15 @@ const createDependencies = (options: Readonly<{
       }),
     },
     custody: {
+      attestContainment: async input => {
+        if (options.containmentIndeterminate === true) {
+          return { evidenceId: identity("evidence", "containment-attestation-unknown"), kind: "indeterminate" };
+        }
+        const outcome = await dependencies.custody.requestContainment(input);
+        return outcome.kind === "contained"
+          ? { kind: "proved", proof: outcome.proof, requestDigest: input.requestDigest, requestId: input.requestId }
+          : outcome;
+      },
       attestExecutionClosure: async input => {
         const operation = current as ContainedTurnKernelOperation;
         assert.equal(input.attemptId, attemptId);
@@ -344,6 +494,12 @@ const createDependencies = (options: Readonly<{
           },
         };
       },
+      ensurePhysicalContainment: async input => {
+        const outcome = await dependencies.custody.requestPhysicalContainment(input);
+        return outcome.kind === "contained"
+          ? { kind: "proved", proof: outcome.proof, requestDigest: input.requestDigest, requestId: input.requestId }
+          : outcome;
+      },
       open: async () => {
         openedCustodies.push(custodyId);
         if (options.custodyOpenThrows === true) {throw new Error("custody failed after reserving identity");}
@@ -355,6 +511,18 @@ const createDependencies = (options: Readonly<{
         };
       },
       releaseReservation: async input => {custodyReleases.push(input);},
+      releaseRetiredReservation: async input => {
+        custodyReleases.push({
+          attemptId: input.cleanupPermit.attemptId,
+          custodyId: input.cleanupPermit.custodyId,
+          operationId: input.cleanupPermit.operationId,
+          reason: "claim_lost",
+          workspaceId: input.cleanupPermit.workspaceId,
+        });
+        return { kind: "released" };
+      },
+      queryContainmentAttestation: input => dependencies.custody.attestContainment(input),
+      queryPhysicalContainment: input => dependencies.custody.ensurePhysicalContainment(input),
       requestContainment: async () => {
         containmentCalls.value += 1;
         const operation = current as ContainedTurnKernelOperation;
@@ -501,7 +669,7 @@ test("prevention after custody reservation releases the exact reservation before
   });
   assert.equal(outcome.status, "observed");
   assert.deepEqual(openedCustodies, [custodyId]);
-  assert.deepEqual(custodyReleases.map(release => release.reason), ["prevention"]);
+  assert.deepEqual(custodyReleases.map(release => release.reason), ["claim_lost"]);
   assert.equal(current()?.dispatch.kind, "prevented");
   assert.equal(providerCalls.value, 0);
 });
@@ -516,7 +684,7 @@ test("thrown dispatch revalidation releases the exact custody reservation and fa
   });
   assert.equal(outcome.status, "observed");
   assert.deepEqual(openedCustodies, [custodyId]);
-  assert.deepEqual(custodyReleases.map(release => release.reason), ["revalidation_failed"]);
+  assert.deepEqual(custodyReleases.map(release => release.reason), ["claim_lost"]);
   assert.equal(providerCalls.value, 0);
 });
 
@@ -617,6 +785,24 @@ test("[oracle-06-seal-outbox-recovery] unknown artifact sealing persists reconci
   assert.equal(providerCalls.value, 1);
 });
 
+for (const [stage, options] of [
+  ["workspace", { workspaceClosureIndeterminate: true }],
+  ["containment", { containmentIndeterminate: true }],
+] as const) {
+  test(`durable ${stage} closure debt projects only reconcile_required`, async () => {
+    const { current, dependencies } = createDependencies(options);
+    const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+      commandId: "command:one",
+      expectedProvider: "codex",
+      intent: { mode: "analysis", prompt: `observe ${stage} closure debt` },
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    });
+    assert.equal(outcome.status, "observed");
+    if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
+    assert.equal(current()?.closureRecovery.kind, "required");
+  });
+}
+
 test("provider observations cannot inject Kernel-owned receipt fields", async () => {
   const { current, dependencies, providerCalls } = createDependencies({ forgeReceipt: true });
   const outcome = await createContainedTurnFeature(dependencies).submit.execute({
@@ -696,6 +882,29 @@ test("throw after the sole dispatch claim preserves ambiguity and never becomes 
   assert.equal(current()?.providerAcceptance.kind, "unknown");
   assert.equal(current()?.terminal.kind, "open");
 });
+
+for (const [name, options] of [
+  ["commit-then-throw", { claimCommitThenThrow: true }],
+  ["stale owner response after commit", { staleOwnerAfterClaim: true }],
+] as const) {
+  test(`${name} records exact reconciliation debt and contains without provider dispatch`, async () => {
+    const { containmentCalls, current, dependencies, providerCalls } = createDependencies(options);
+    const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+      commandId: "command:one",
+      expectedProvider: "codex",
+      intent: { mode: "analysis", prompt: "lose the durable claim acknowledgement" },
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    });
+    assert.equal(outcome.status, "observed");
+    if (outcome.status === "observed") {assert.equal(outcome.turn.status, "reconcile_required");}
+    assert.equal(providerCalls.value, 0);
+    assert.equal(current()?.dispatch.kind, "claimed");
+    assert.equal(current()?.providerProcessStart.kind, "unknown");
+    assert.equal(current()?.reconciliation.kind, "required");
+    assert.equal(current()?.physicalContainment.kind, "contained");
+    assert.equal(containmentCalls.value, 1);
+  });
+}
 
 test("cancellation racing the first workspace creation reaches proved-no-start terminal closure", async () => {
   let releaseWorkspace!: () => void;

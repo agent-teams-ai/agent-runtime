@@ -67,7 +67,6 @@ export const containedTurnCleanupPermit = (
     workspaceId: preparation.workspaceId,
   });
 };
-
 export const claimContainedTurnDispatchPreparation = (
   preparation: ContainedTurnDispatchPreparation,
 ): ContainedTurnDispatchPreparation => {
@@ -141,4 +140,3 @@ export const recordContainedTurnPreparationCleanup = (
   }
   return Object.freeze(candidate);
 };
-

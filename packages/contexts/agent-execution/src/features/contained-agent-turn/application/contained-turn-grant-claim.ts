@@ -23,13 +23,11 @@ export const claimContainedTurnWithConsumedGrants = async (
   operation: ContainedTurnKernelOperation,
   trustedScope: ContainedTurnScope,
   subject: ContainedTurnDispatchGrantSubject,
+  hostCustodyProof: Extract<Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["open"]>>["hostCustodyProof"], { readonly kind: "host_custody" }>,
 ): Promise<ClaimContainedTurnWithConsumedGrantsOutcome> => {
   const providerAccessConsume = dependencies.providerAccess.consumeForDispatch;
   const runtimeSecurityConsume = dependencies.security.consumeForDispatch;
   const claim = dependencies.operationStore.claimPreparedDispatch;
-  if (providerAccessConsume === undefined || runtimeSecurityConsume === undefined || claim === undefined) {
-    return { kind: "unavailable" };
-  }
   let providerAccess: Awaited<ReturnType<typeof providerAccessConsume>>;
   let runtimeSecurity: Awaited<ReturnType<typeof runtimeSecurityConsume>>;
   try {
@@ -53,9 +51,14 @@ export const claimContainedTurnWithConsumedGrants = async (
       authority: containedTurnOwnerStoreAuthority(operation, trustedScope),
       consumedGrantReceipts: receipts,
       expectedOperationRevision: operation.revision,
+      hostCustodyProof,
       subject,
     });
     if (outcome.kind === "claimed" || outcome.kind === "observed_claim") {return outcome;}
+    if (outcome.kind === "stale" && outcome.current.dispatch.kind === "claimed" &&
+        outcome.current.dispatch.preparationToken === subject.preparationToken) {
+      return { kind: "observed_claim", operation: outcome.current };
+    }
     if (outcome.kind === "indeterminate") {return outcome;}
     return { kind: "unavailable" };
   } catch {
@@ -94,7 +97,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     purpose: "contained_turn_provider_start_v1",
     scopeDigest: containedTurnScopeDigest(trustedScope),
     workspaceId: operation.workspaceId,
-  });
+  }, custody.hostCustodyProof);
   if (claim.kind === "claimed") {return claim;}
   if (claim.kind === "observed_claim") {
     return { kind: "observed", operation: claim.operation };

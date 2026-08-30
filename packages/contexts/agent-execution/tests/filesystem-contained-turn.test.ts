@@ -4,10 +4,8 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, test } from "node:test";
 
-import {
-  createNodeContainedTurnArtifacts,
-  createNodeContainedTurnWorkspace,
-} from "../dist/legacy-compatibility.js";
+import { createNodeContainedTurnArtifacts } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-artifacts.js";
+import { createNodeContainedTurnWorkspace } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.js";
 
 const disposableRoots: string[] = [];
 

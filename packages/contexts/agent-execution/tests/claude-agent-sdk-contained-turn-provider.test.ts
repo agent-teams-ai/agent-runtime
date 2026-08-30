@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { ClaudeAgentSdkContainedTurnProvider } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-contained-turn-provider.js";
 import {
   claudeAgentSdkArguments,
-  ClaudeAgentSdkContainedTurnProvider,
   createClaudeAgentSdkEnvironment,
   createClaudeAgentSdkLaunchPlan,
-  type CustodiedProviderProcess,
-  type CustodiedSdkProcess,
-} from "../dist/legacy-compatibility.js";
+} from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
+import type { CustodiedProviderProcess, CustodiedSdkProcess } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 
 const workspaceRef = "/tmp/agent-runtime-claude-contained-turn";
 const executablePath = "/synthetic/claude";

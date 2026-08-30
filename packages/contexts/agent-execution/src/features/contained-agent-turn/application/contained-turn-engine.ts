@@ -204,7 +204,7 @@ export const containedTurnApplicationView = (
   revision: operation.revision,
   status: operation.terminal.kind === "final"
     ? operation.terminal.outcome
-    : operation.reconciliation.kind === "required"
+    : operation.reconciliation.kind === "required" || operation.closureRecovery.kind === "required"
       ? "reconcile_required"
       : operation.dispatch.kind === "claimed"
         ? "running"
