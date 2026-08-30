@@ -3,7 +3,7 @@ import type {
   DispatchConsumptionTransactionSelector,
 } from "../../application/ports/outbound/dispatch-consumption-repository.js";
 import {
-  snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumedReceipt,
+  canonicalJson, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumedReceipt,
   type DispatchDisposition, type DispatchScopeValue, type DispatchSettlementOutcome,
 } from "../../domain/dispatch-consumption.js";
 
@@ -25,6 +25,13 @@ const deepFreeze = <T>(value: T): T => {
   return value;
 };
 const frozen = <T>(value: T): T => deepFreeze(clone(value));
+const scopeKey = (scope: DispatchScopeValue): string => canonicalJson({
+  projectId: scope.projectId, scopeDigest: scope.scopeDigest, tenantId: scope.tenantId,
+});
+const grantKey = (input: { readonly grantRequestId: string; readonly provider: "claude" | "codex"; readonly scope: DispatchScopeValue }): string =>
+  canonicalJson({ grantRequestId: input.grantRequestId, provider: input.provider, scope: input.scope });
+const settlementKey = (input: Extract<DispatchConsumptionTransactionSelector, { readonly kind: "settle" }>): string =>
+  canonicalJson({ operationId: input.operationId, provider: input.provider, scope: input.scope, settlementRequestId: input.settlementRequestId });
 
 export interface InMemoryDispatchConsumptionControl {
   advanceControlTime(value: number): Promise<void>;
@@ -34,15 +41,14 @@ export interface InMemoryDispatchConsumptionControl {
 
 const putHead = (state: State, raw: DispatchBindingHead): void => {
   const head = snapshotDispatchBindingHead(raw);
-  const scoped = state.slots.get(head.scopeDigest) ?? new Map();
-  const existing = scoped.get(head.provider);
-  state.slots.set(head.scopeDigest, scoped);
-  if (existing === undefined) {scoped.set(head.provider, { head, state: "absent" });}
-  else {existing.head = head;}
+  const key = scopeKey(head);
+  const scoped = state.slots.get(key) ?? new Map();
+  state.slots.set(key, scoped);
+  scoped.set(head.provider, { head, state: "absent" });
 };
 
 const createTransaction = (state: State, selector: DispatchConsumptionTransactionSelector, now: () => number): DispatchConsumptionTransaction => {
-  const slot = selector.kind === "consume" ? state.slots.get(selector.scopeDigest)?.get(selector.provider) : undefined;
+  const slot = state.slots.get(scopeKey(selector.scope))?.get(selector.provider);
   let pendingConsumption: DispatchConsumedReceipt | undefined;
   let pendingGrant: DispatchConsumptionJournalEntry | undefined;
   let pendingSettlement: DispatchSettlementOutcome | undefined;
@@ -50,8 +56,8 @@ const createTransaction = (state: State, selector: DispatchConsumptionTransactio
     async controlTime() { return now(); },
     async findBindingHead() { return slot?.head; },
     async findConsumption() { return selector.kind === "settle" ? state.consumptions.get(selector.consumptionDigest)?.receipt : undefined; },
-    async findGrantRequest() { return selector.kind === "consume" ? state.grants.get(selector.grantRequestId) : undefined; },
-    async findSettlement() { return selector.kind === "settle" ? state.settlements.get(selector.settlementRequestId) : undefined; },
+    async findGrantRequest() { return selector.kind === "consume" ? state.grants.get(grantKey(selector)) : undefined; },
+    async findSettlement() { return selector.kind === "settle" ? state.settlements.get(settlementKey(selector)) : undefined; },
     async findSettlementByConsumption() { return selector.kind === "settle" ? state.settlementsByConsumption.get(selector.consumptionDigest) : undefined; },
     async isBindingConsumed() { return slot !== undefined && slot.state !== "absent"; },
     async markBindingConsumed(receipt) {
@@ -77,9 +83,9 @@ const commit = (state: State, selector: DispatchConsumptionTransactionSelector, 
     slot.consumption = pendingConsumption; slot.state = "consumed_pending";
     state.consumptions.set(pendingConsumption.consumptionDigest, { receipt: pendingConsumption, slot });
   }
-  if (pendingGrant !== undefined && selector.kind === "consume") {state.grants.set(selector.grantRequestId, pendingGrant);}
+  if (pendingGrant !== undefined && selector.kind === "consume") {state.grants.set(grantKey(selector), pendingGrant);}
   if (pendingSettlement !== undefined && selector.kind === "settle") {
-    state.settlements.set(selector.settlementRequestId, pendingSettlement);
+    state.settlements.set(settlementKey(selector), pendingSettlement);
     if (pendingSettlement.kind === "settled") {
       state.settlementsByConsumption.set(selector.consumptionDigest, pendingSettlement);
       const owner = state.consumptions.get(selector.consumptionDigest);
@@ -94,7 +100,7 @@ export const createInMemoryDispatchConsumptionRepository = (
   const state: State = { consumptions: new Map(), grants: new Map(), settlements: new Map(), settlementsByConsumption: new Map(), slots: new Map() };
   let controlTime = initialControlTime;
   for (const head of initialHeads) {
-    if (state.slots.get(head.scopeDigest)?.has(head.provider)) {throw new Error("duplicate exact dispatch binding head");}
+    if (state.slots.get(scopeKey(head))?.has(head.provider)) {throw new Error("duplicate exact dispatch binding head");}
     putHead(state, head);
   }
   let tail = Promise.resolve();
@@ -112,9 +118,9 @@ export const createInMemoryDispatchConsumptionRepository = (
         const result = await work(transaction); commit(state, selector, transaction); return result;
       });
     },
-    async observeGrantRequest(input: { readonly grantRequestId: string; readonly scope: DispatchScopeValue }) {
+    async observeGrantRequest(input: { readonly grantRequestId: string; readonly provider: "claude" | "codex"; readonly scope: DispatchScopeValue }) {
       await tail;
-      const entry = state.grants.get(input.grantRequestId); return entry === undefined ? undefined : frozen(entry);
+      const entry = state.grants.get(grantKey(input)); return entry === undefined ? undefined : frozen(entry);
     },
   });
   return Object.freeze({
@@ -123,7 +129,11 @@ export const createInMemoryDispatchConsumptionRepository = (
         if (!Number.isSafeInteger(value) || value < controlTime) {throw new TypeError("control time must advance monotonically");}
         controlTime = value;
       }),
-      observeOwnerState: (input: { readonly provider: "claude" | "codex"; readonly scopeDigest: string }) => state.slots.get(input.scopeDigest)?.get(input.provider)?.state,
+      observeOwnerState: (input: { readonly provider: "claude" | "codex"; readonly scopeDigest: string }) => {
+        const matches = [...state.slots.values()].map(scoped => scoped.get(input.provider))
+          .filter((slot): slot is BindingSlot => slot?.head.scopeDigest === input.scopeDigest);
+        return matches.length === 1 ? matches[0]?.state : undefined;
+      },
       replaceBindingHead: (head: DispatchBindingHead) => serialize(async () => { putHead(state, head); }),
     }), repository,
   });

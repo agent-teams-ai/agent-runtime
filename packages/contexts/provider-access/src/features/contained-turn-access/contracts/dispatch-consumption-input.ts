@@ -67,21 +67,32 @@ export const unsignedConsumeCommandFromContract = (
 };
 
 export const observeInputFromContract = (value: ObserveDispatchConsumptionInput) => {
-  const input = dataRecord("observe input", value, ["grantRequestId", "requestDigest", "scope"]);
+  const input = dataRecord("observe input", value, ["grantRequestId", "provider", "requestDigest", "scope"]);
+  if (input.provider !== "claude" && input.provider !== "codex") {throw new TypeError("provider is invalid");}
   return Object.freeze({
-    grantRequestId: snapshotDispatchId("grantRequestId", input.grantRequestId),
+    grantRequestId: snapshotDispatchId("grantRequestId", input.grantRequestId), provider: input.provider,
     requestDigest: snapshotDispatchDigest("requestDigest", input.requestDigest), scope: scopeFrom(input.scope),
   });
 };
 
 export const settlementInputFromContract = (value: SettleDispatchConsumptionInput) => {
-  const input = dataRecord("settlement input", value, ["consumptionDigest", "disposition", "settlementRequestId"]);
+  const input = dataRecord("settlement input", value, [
+    "consumptionDigest", "disposition", "expectedBinding", "operationId", "provider", "scope", "settlementRequestId",
+  ]);
   if (input.disposition !== "claim_committed" && input.disposition !== "abandoned_without_claim") {
     throw new TypeError("disposition is invalid");
   }
+  if (input.provider !== "claude" && input.provider !== "codex") {throw new TypeError("provider is invalid");}
+  const expectedBinding = dataRecord("expected binding", input.expectedBinding, [
+    "acceptedAuthorityDigest", "accessRef", "authorityHeadDigest", "bindingDigest", "bindingRevision",
+    "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "providerAccountRef", "providerRouteRef",
+  ]);
   return Object.freeze({
     consumptionDigest: snapshotDispatchDigest("consumptionDigest", input.consumptionDigest),
     disposition: input.disposition as DispatchDisposition,
+    expectedBinding: snapshotDispatchExpectation(expectedBinding as unknown as Parameters<typeof snapshotDispatchExpectation>[0]),
+    operationId: snapshotDispatchId("operationId", input.operationId), provider: input.provider,
+    scope: scopeFrom(input.scope),
     settlementRequestId: snapshotDispatchId("settlementRequestId", input.settlementRequestId),
   });
 };

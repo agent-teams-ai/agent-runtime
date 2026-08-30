@@ -31,6 +31,11 @@ export interface DispatchConsumedReceipt {
   readonly provider: DispatchProvider; readonly providerAccountRef: string; readonly providerRouteRef: string;
   readonly purpose: "contained-turn.provider-dispatch/v1"; readonly requestDigest: string; readonly scope: DispatchScopeValue;
 }
+export interface DispatchSettlementCommand {
+  readonly consumptionDigest: string; readonly disposition: DispatchDisposition;
+  readonly expectedBinding: DispatchExpectationValue; readonly operationId: string; readonly provider: DispatchProvider;
+  readonly scope: DispatchScopeValue; readonly settlementRequestId: string;
+}
 export type DispatchPreventedReason =
   | "accepted_authority_changed" | "access_changed" | "account_changed" | "already_consumed" | "authority_head_changed"
   | "binding_changed" | "claim_binding_mismatch" | "credential_changed" | "credential_rotated"
@@ -47,8 +52,9 @@ export type DispatchConsumeOutcome =
   | { readonly kind: "indeterminate" } | { readonly kind: "not_found" }
   | { readonly kind: "prevented"; readonly prevention: DispatchPrevention };
 export interface DispatchSettlementReceipt {
-  readonly consumptionDigest: string; readonly disposition: DispatchDisposition; readonly settledAtControlTime: number;
-  readonly settlementDigest: string; readonly settlementRequestId: string;
+  readonly consumptionDigest: string; readonly disposition: DispatchDisposition; readonly expectedBinding: DispatchExpectationValue;
+  readonly operationId: string; readonly provider: DispatchProvider; readonly scope: DispatchScopeValue;
+  readonly settledAtControlTime: number; readonly settlementDigest: string; readonly settlementRequestId: string;
 }
 export type DispatchSettlementOutcome =
   | { readonly kind: "conflict"; readonly reason: "settlement_request_conflict" }
@@ -58,6 +64,7 @@ export type DispatchSettlementOutcome =
 
 const TOKEN = /^[\p{L}\p{N}._:@+-]+$/u;
 const DIGEST = /^[\p{L}\p{N}._:+-]+$/u;
+export const isDispatchProxy = (value: unknown): boolean => value !== null && typeof value === "object" && types.isProxy(value);
 const primitive = (name: string, value: unknown, digest = false): string => {
   if (typeof value !== "string" || value.length === 0 || value.length > 512 || !(digest ? DIGEST : TOKEN).test(value)) {
     throw new TypeError(`${name} must be a bounded primitive token`);
@@ -69,7 +76,7 @@ const positive = (name: string, value: unknown): number => {
   return value;
 };
 const record = (name: string, value: unknown, keys: readonly string[]): Record<string, unknown> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || types.isProxy(value)) {throw new TypeError(`${name} must be a data record`);}
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isDispatchProxy(value)) {throw new TypeError(`${name} must be a data record`);}
   const prototype = Object.getPrototypeOf(value) as unknown;
   if (prototype !== Object.prototype && prototype !== null) {throw new TypeError(`${name} must be a data record`);}
   const descriptors = Object.getOwnPropertyDescriptors(value);
@@ -141,8 +148,11 @@ export const canonicalJson = (value: unknown): string => {
 };
 export const requestDigestPayload = (command: Omit<DispatchConsumeCommand, "requestDigest">): string => canonicalJson(command);
 export const claimBindingDigestPayload = (command: DispatchConsumeCommand): string => canonicalJson({
-  acceptedAuthorityDigest: command.binding.acceptedAuthorityDigest, authorityHeadDigest: command.binding.authorityHeadDigest,
-  bindingDigest: command.binding.bindingDigest, bindingRevision: command.binding.bindingRevision,
+  acceptedAuthorityDigest: command.binding.acceptedAuthorityDigest, accessRef: command.binding.accessRef,
+  authorityHeadDigest: command.binding.authorityHeadDigest, bindingDigest: command.binding.bindingDigest,
+  bindingRevision: command.binding.bindingRevision, credentialBindingDigest: command.binding.credentialBindingDigest,
+  credentialBindingRef: command.binding.credentialBindingRef, credentialGeneration: command.binding.credentialGeneration,
   grantRequestId: command.grantRequestId, operationId: command.operationId, provider: command.provider,
-  purpose: command.purpose, scopeDigest: command.scope.scopeDigest,
+  providerAccountRef: command.binding.providerAccountRef, providerRouteRef: command.binding.providerRouteRef,
+  purpose: command.purpose, scope: command.scope,
 });

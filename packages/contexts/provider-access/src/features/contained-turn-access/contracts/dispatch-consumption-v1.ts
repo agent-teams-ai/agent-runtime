@@ -38,14 +38,21 @@ export type ConsumeForDispatchOutcome =
   | { readonly kind: "invalid"; readonly reason: "invalid_request" }
   | { readonly kind: "indeterminate" } | { readonly kind: "not_found" }
   | { readonly kind: "prevented"; readonly prevention: DispatchConsumptionPrevention };
-export interface ObserveDispatchConsumptionInput { readonly grantRequestId: string; readonly requestDigest: string; readonly scope: DispatchConsumptionScope }
+export interface ObserveDispatchConsumptionInput {
+  readonly grantRequestId: string; readonly provider: "claude" | "codex";
+  readonly requestDigest: string; readonly scope: DispatchConsumptionScope;
+}
 export type ObserveDispatchConsumptionOutcome = ConsumeForDispatchOutcome;
 export type DispatchConsumptionDisposition = "abandoned_without_claim" | "claim_committed";
 export interface SettleDispatchConsumptionInput {
-  readonly consumptionDigest: string; readonly disposition: DispatchConsumptionDisposition; readonly settlementRequestId: string;
+  readonly consumptionDigest: string; readonly disposition: DispatchConsumptionDisposition;
+  readonly expectedBinding: DispatchConsumptionBindingExpectation; readonly operationId: string;
+  readonly provider: "claude" | "codex"; readonly scope: DispatchConsumptionScope; readonly settlementRequestId: string;
 }
 export interface DispatchConsumptionSettlementReceipt {
   readonly consumptionDigest: string; readonly disposition: DispatchConsumptionDisposition;
+  readonly expectedBinding: DispatchConsumptionBindingExpectation; readonly operationId: string;
+  readonly provider: "claude" | "codex"; readonly scope: DispatchConsumptionScope;
   readonly settledAtControlTime: number; readonly settlementDigest: string; readonly settlementRequestId: string;
 }
 export type SettleDispatchConsumptionOutcome =

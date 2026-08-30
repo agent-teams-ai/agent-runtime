@@ -5,13 +5,14 @@ import type {
 import {
   canonicalJson, claimBindingDigestPayload, requestDigestPayload, snapshotDispatchControlTime, snapshotDispatchScope,
   type DispatchBindingHead, type DispatchConsumeCommand, type DispatchConsumeOutcome, type DispatchConsumedReceipt,
-  type DispatchDisposition, type DispatchPreventedReason, type DispatchSettlementOutcome,
+  type DispatchExpectationValue, type DispatchPreventedReason, type DispatchProvider,
+  type DispatchScopeValue, type DispatchSettlementCommand, type DispatchSettlementOutcome,
 } from "../domain/dispatch-consumption.js";
 
 export interface DispatchConsumptionUseCases {
   consume(command: DispatchConsumeCommand): Promise<DispatchConsumeOutcome>;
-  observe(input: { readonly grantRequestId: string; readonly requestDigest: string; readonly scope: ReturnType<typeof snapshotDispatchScope> }): Promise<DispatchConsumeOutcome>;
-  settle(input: { readonly consumptionDigest: string; readonly disposition: DispatchDisposition; readonly settlementRequestId: string }): Promise<DispatchSettlementOutcome>;
+  observe(input: { readonly grantRequestId: string; readonly provider: DispatchProvider; readonly requestDigest: string; readonly scope: DispatchScopeValue }): Promise<DispatchConsumeOutcome>;
+  settle(input: DispatchSettlementCommand): Promise<DispatchSettlementOutcome>;
 }
 interface Dependencies { readonly digest: DispatchConsumptionDigest; readonly repository: DispatchConsumptionRepository }
 const invalid = (): DispatchConsumeOutcome => Object.freeze({ kind: "invalid", reason: "invalid_request" });
@@ -38,6 +39,25 @@ const driftReason = (command: DispatchConsumeCommand, head: DispatchBindingHead)
   if (head.authorityHeadDigest !== command.binding.authorityHeadDigest) {return "authority_head_changed";}
   return undefined;
 };
+const headMatches = (head: DispatchBindingHead, expected: DispatchExpectationValue): boolean =>
+  head.acceptedAuthorityDigest === expected.acceptedAuthorityDigest && head.accessRef === expected.accessRef &&
+  head.authorityHeadDigest === expected.authorityHeadDigest && head.bindingDigest === expected.bindingDigest &&
+  head.bindingRevision === expected.bindingRevision && head.credentialBindingDigest === expected.credentialBindingDigest &&
+  head.credentialBindingRef === expected.credentialBindingRef && head.credentialGeneration === expected.credentialGeneration &&
+  head.providerAccountRef === expected.providerAccountRef && head.providerRouteRef === expected.providerRouteRef;
+const receiptMatches = (receipt: DispatchConsumedReceipt, expected: DispatchExpectationValue): boolean =>
+  receipt.acceptedAuthorityDigest === expected.acceptedAuthorityDigest && receipt.accessRef === expected.accessRef &&
+  receipt.authorityHeadDigestAtConsumption === expected.authorityHeadDigest && receipt.bindingDigest === expected.bindingDigest &&
+  receipt.bindingRevision === expected.bindingRevision && receipt.credentialBindingDigest === expected.credentialBindingDigest &&
+  receipt.credentialBindingRef === expected.credentialBindingRef && receipt.credentialGeneration === expected.credentialGeneration &&
+  receipt.providerAccountRef === expected.providerAccountRef && receipt.providerRouteRef === expected.providerRouteRef;
+const settlementReplayMatches = (
+  receipt: Extract<DispatchSettlementOutcome, { readonly kind: "settled" }>["receipt"], input: DispatchSettlementCommand,
+): boolean => canonicalJson({
+  consumptionDigest: receipt.consumptionDigest, disposition: receipt.disposition, expectedBinding: receipt.expectedBinding,
+  operationId: receipt.operationId, provider: receipt.provider, scope: receipt.scope,
+  settlementRequestId: receipt.settlementRequestId,
+}) === canonicalJson(input);
 
 const receiptFor = async (command: DispatchConsumeCommand, head: DispatchBindingHead, now: number, digest: DispatchConsumptionDigest) => {
   const unsigned = {
@@ -86,16 +106,24 @@ const consumeInTransaction = async (
 };
 
 const settleInTransaction = async (
-  input: { readonly consumptionDigest: string; readonly disposition: DispatchDisposition; readonly settlementRequestId: string },
+  input: DispatchSettlementCommand,
   transaction: DispatchConsumptionTransaction, dependencies: Dependencies,
 ): Promise<DispatchSettlementOutcome> => {
   const replay = await transaction.findSettlement();
   if (replay !== undefined) {
     if (replay.kind !== "settled") {return replay;}
-    return replay.receipt.consumptionDigest === input.consumptionDigest && replay.receipt.disposition === input.disposition
-      ? replay : Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });
+    return settlementReplayMatches(replay.receipt, input) ? replay :
+      Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });
   }
-  if (await transaction.findConsumption() === undefined) {return Object.freeze({ kind: "not_found" });}
+  const consumption = await transaction.findConsumption();
+  if (consumption === undefined) {return Object.freeze({ kind: "not_found" });}
+  const head = await transaction.findBindingHead();
+  if (head === undefined || !headMatches(head, input.expectedBinding) || consumption.operationId !== input.operationId ||
+    consumption.provider !== input.provider || consumption.scope.tenantId !== input.scope.tenantId ||
+    consumption.scope.projectId !== input.scope.projectId || consumption.scope.scopeDigest !== input.scope.scopeDigest ||
+    !receiptMatches(consumption, input.expectedBinding)) {
+    return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });
+  }
   if (await transaction.findSettlementByConsumption() !== undefined) {return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });}
   const settledAtControlTime = snapshotDispatchControlTime(await transaction.controlTime());
   const unsigned = { ...input, settledAtControlTime };
@@ -110,11 +138,12 @@ export const createDispatchConsumptionUseCases = (dependencies: Dependencies): D
   async consume(command: DispatchConsumeCommand) {
     const { requestDigest: _claimedDigest, ...semanticRequest } = command;
     const semanticDigest = await dependencies.digest.digest(requestDigestPayload(semanticRequest));
+    if (command.requestDigest !== semanticDigest) {return invalid();}
     return dependencies.repository.transact({
-      grantRequestId: command.grantRequestId, kind: "consume", provider: command.provider, scopeDigest: command.scope.scopeDigest,
+      grantRequestId: command.grantRequestId, kind: "consume", provider: command.provider, scope: command.scope,
     }, transaction => consumeInTransaction(command, semanticDigest, transaction, dependencies));
   },
-  async observe(input: { readonly grantRequestId: string; readonly requestDigest: string; readonly scope: ReturnType<typeof snapshotDispatchScope> }) {
+  async observe(input: { readonly grantRequestId: string; readonly provider: DispatchProvider; readonly requestDigest: string; readonly scope: DispatchScopeValue }) {
     const entry = await dependencies.repository.observeGrantRequest(input);
     if (entry === undefined) {return Object.freeze({ kind: "not_found" });}
     if (entry.scope.scopeDigest !== input.scope.scopeDigest || entry.scope.tenantId !== input.scope.tenantId || entry.scope.projectId !== input.scope.projectId) {
@@ -122,9 +151,11 @@ export const createDispatchConsumptionUseCases = (dependencies: Dependencies): D
     }
     return entry.requestDigest === input.requestDigest ? entry.outcome : Object.freeze({ kind: "conflict", reason: "grant_request_digest_conflict" });
   },
-  async settle(input: { readonly consumptionDigest: string; readonly disposition: DispatchDisposition; readonly settlementRequestId: string }) {
+  async settle(input: DispatchSettlementCommand) {
     return dependencies.repository.transact({
-      consumptionDigest: input.consumptionDigest, kind: "settle", settlementRequestId: input.settlementRequestId,
+      consumptionDigest: input.consumptionDigest, expectedAuthorityHeadDigest: input.expectedBinding.authorityHeadDigest,
+      kind: "settle", operationId: input.operationId, provider: input.provider, scope: input.scope,
+      settlementRequestId: input.settlementRequestId,
     }, transaction => settleInTransaction(input, transaction, dependencies));
   },
 });

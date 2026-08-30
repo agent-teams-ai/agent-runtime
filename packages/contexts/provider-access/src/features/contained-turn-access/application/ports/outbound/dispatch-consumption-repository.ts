@@ -10,8 +10,10 @@ export interface DispatchConsumptionJournalEntry {
   readonly scope: DispatchScopeValue;
 }
 export type DispatchConsumptionTransactionSelector =
-  | { readonly grantRequestId: string; readonly kind: "consume"; readonly provider: DispatchProvider; readonly scopeDigest: string }
-  | { readonly consumptionDigest: string; readonly kind: "settle"; readonly settlementRequestId: string };
+  | { readonly grantRequestId: string; readonly kind: "consume"; readonly provider: DispatchProvider; readonly scope: DispatchScopeValue }
+  | { readonly consumptionDigest: string; readonly expectedAuthorityHeadDigest: string; readonly kind: "settle";
+      readonly operationId: string; readonly provider: DispatchProvider; readonly scope: DispatchScopeValue;
+      readonly settlementRequestId: string };
 export interface DispatchConsumptionTransaction {
   controlTime(): Promise<number>;
   findBindingHead(): Promise<DispatchBindingHead | undefined>;
@@ -33,6 +35,6 @@ export interface DispatchConsumptionTransaction {
 export interface DispatchConsumptionRepository {
   transact<T>(selector: DispatchConsumptionTransactionSelector,
     work: (transaction: DispatchConsumptionTransaction) => Promise<T>): Promise<T>;
-  observeGrantRequest(input: { readonly grantRequestId: string; readonly scope: DispatchScopeValue }):
+  observeGrantRequest(input: { readonly grantRequestId: string; readonly provider: DispatchProvider; readonly scope: DispatchScopeValue }):
     Promise<DispatchConsumptionJournalEntry | undefined>;
 }

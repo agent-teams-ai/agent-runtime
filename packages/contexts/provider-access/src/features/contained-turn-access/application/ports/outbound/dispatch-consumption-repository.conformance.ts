@@ -8,7 +8,7 @@ const fakeAsyncRepository = (
 ): DispatchConsumptionRepository => ({
   async observeGrantRequest(input) {
     return await query({
-      grantRequestId: input.grantRequestId, kind: "consume", provider: "codex", scopeDigest: input.scope.scopeDigest,
+      grantRequestId: input.grantRequestId, kind: "consume", provider: input.provider, scope: input.scope,
     }, "observe") as Awaited<ReturnType<DispatchConsumptionRepository["observeGrantRequest"]>>;
   },
   async transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
