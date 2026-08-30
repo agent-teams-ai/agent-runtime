@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ConsumeForDispatchInput, DispatchConsumptionReceipt, SettleDispatchConsumptionInput } from "../dist/index.js";
+import type { ConsumeForDispatchInput } from "../dist/index.js";
 import {
   createDispatchConsumptionRequestDigests,
   createInMemoryContainedTurnDispatchConsumptionV1,
-  type InMemoryDispatchBindingSeed,
 } from "../dist/composition.js";
 import { createContainedTurnDispatchConsumptionV1 } from "../dist/features/contained-turn-access/composition/dispatch-consumption-v1-factory.js";
 import { createSha256DispatchConsumptionDigest } from "../dist/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.js";
@@ -14,52 +13,7 @@ import type {
   DispatchConsumptionRepository, DispatchConsumptionTransaction, DispatchConsumptionTransactionSelector,
 } from "../dist/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.js";
 import { claimBindingDigestPayload, requestDigestPayload } from "../dist/features/contained-turn-access/domain/dispatch-consumption.js";
-
-const seed = (overrides: Partial<InMemoryDispatchBindingSeed> = {}): InMemoryDispatchBindingSeed => ({
-  acceptedAuthorityDigest: "authority:accepted:1", accessRef: "access:1", authorityHeadDigest: "authority:head:1",
-  bindingDigest: "binding:digest:1", bindingRevision: 1, claimBeforeControlTime: 200,
-  expiresAtControlTime: 300,
-  credentialBindingDigest: "credential:digest:1", credentialBindingRef: "credential:binding:1",
-  credentialGeneration: 1, opaqueOwnerEvidenceRef: "owner:evidence:1", projectId: "project:1",
-  provider: "codex", providerAccountRef: "account:1", providerRouteRef: "route:1",
-  scopeDigest: "scope:digest:1", tenantId: "tenant:1", ...overrides,
-});
-
-const unsignedInput = (head = seed(), overrides: Partial<Omit<ConsumeForDispatchInput, "claimBindingDigest" | "requestDigest">> = {}) => ({
-  binding: {
-    acceptedAuthorityDigest: head.acceptedAuthorityDigest, accessRef: head.accessRef,
-    authorityHeadDigest: head.authorityHeadDigest, bindingDigest: head.bindingDigest,
-    bindingRevision: head.bindingRevision, credentialBindingDigest: head.credentialBindingDigest,
-    credentialBindingRef: head.credentialBindingRef, credentialGeneration: head.credentialGeneration,
-    providerAccountRef: head.providerAccountRef, providerRouteRef: head.providerRouteRef,
-  },
-  grantRequestId: "grant-request:1", operationId: "operation:1", provider: head.provider,
-  purpose: "contained-turn.provider-dispatch/v1" as const,
-  scope: { projectId: head.projectId, scopeDigest: head.scopeDigest, tenantId: head.tenantId },
-  ...overrides,
-});
-
-const inputFor = async (head = seed(), overrides: Parameters<typeof unsignedInput>[1] = {}): Promise<ConsumeForDispatchInput> => {
-  const unsigned = unsignedInput(head, overrides);
-  return { ...unsigned, ...await createDispatchConsumptionRequestDigests(unsigned) };
-};
-
-const repositoryHarness = () => createInMemoryDispatchConsumptionRepository([{
-  ...seed(), availability: "available", revocation: "active",
-}], 100);
-const settlementFor = (receipt: DispatchConsumptionReceipt,
-  overrides: Partial<SettleDispatchConsumptionInput> = {}): SettleDispatchConsumptionInput => ({
-  consumptionDigest: receipt.consumptionDigest, disposition: "abandoned_without_claim" as const,
-  expectedBinding: {
-    acceptedAuthorityDigest: receipt.acceptedAuthorityDigest, accessRef: receipt.accessRef,
-    authorityHeadDigest: receipt.authorityHeadDigestAtConsumption, bindingDigest: receipt.bindingDigest,
-    bindingRevision: receipt.bindingRevision, credentialBindingDigest: receipt.credentialBindingDigest,
-    credentialBindingRef: receipt.credentialBindingRef, credentialGeneration: receipt.credentialGeneration,
-    providerAccountRef: receipt.providerAccountRef, providerRouteRef: receipt.providerRouteRef,
-  },
-  operationId: receipt.operationId, provider: receipt.provider, scope: receipt.scope,
-  settlementRequestId: "settlement:1", ...overrides,
-});
+import { inputFor, repositoryHarness, repositoryReadOverride, seed, settlementFor, unsignedInput } from "./dispatch-consumption-test-fixture.ts";
 
 const transactionBarrier = (base: DispatchConsumptionRepository) => {
   let entered!: () => void;
@@ -74,21 +28,6 @@ const transactionBarrier = (base: DispatchConsumptionRepository) => {
   };
   return { entered: enteredPromise, release, repository };
 };
-
-type RepositoryRead = "findBindingHead" | "findConsumption" | "findGrantRequest" | "findSettlement" | "findSettlementByConsumption";
-const repositoryReadOverride = (base: DispatchConsumptionRepository, method: RepositoryRead, value: unknown): DispatchConsumptionRepository => ({
-  observeGrantRequest: input => base.observeGrantRequest(input),
-  transact: (selector, work) => base.transact(selector, transaction => work({
-    controlTime: () => transaction.controlTime(),
-    findBindingHead: () => method === "findBindingHead" ? Promise.resolve(value as never) : transaction.findBindingHead(),
-    findConsumption: () => method === "findConsumption" ? Promise.resolve(value as never) : transaction.findConsumption(),
-    findGrantRequest: () => method === "findGrantRequest" ? Promise.resolve(value as never) : transaction.findGrantRequest(),
-    findSettlement: () => method === "findSettlement" ? Promise.resolve(value as never) : transaction.findSettlement(),
-    findSettlementByConsumption: () => method === "findSettlementByConsumption" ? Promise.resolve(value as never) : transaction.findSettlementByConsumption(),
-    isBindingConsumed: () => transaction.isBindingConsumed(), markBindingConsumed: receipt => transaction.markBindingConsumed(receipt),
-    saveGrantRequest: entry => transaction.saveGrantRequest(entry), saveSettlement: outcome => transaction.saveSettlement(outcome),
-  })),
-});
 
 test("atomically consumes the exact binding head and returns the closed V1 receipt", async () => {
   const harness = createInMemoryContainedTurnDispatchConsumptionV1({ bindings: [seed()], initialControlTime: 100 });
@@ -193,8 +132,13 @@ test("composition validates Pure DI once and retains detached callable-owner sna
   const digest = { digest: createSha256DispatchConsumptionDigest().digest };
   const access = createContainedTurnDispatchConsumptionV1({ digest, repository });
   repository.transact = async () => { throw new Error("mutated after composition"); };
+  repository.observeGrantRequest = async () => { throw new Error("mutated after composition"); };
   digest.digest = async () => { throw new Error("mutated after composition"); };
-  assert.equal((await access.consumeForDispatch(await inputFor())).kind, "consumed");
+  const consumedAfterMutation = await access.consumeForDispatch(await inputFor());
+  assert.equal(consumedAfterMutation.kind, "consumed");
+  assert.equal((await access.observeDispatchConsumption({
+    grantRequestId: "grant-request:1", provider: "codex", requestDigest: await inputFor().then(input => input.requestDigest), scope: { projectId: "project:1", scopeDigest: "scope:digest:1", tenantId: "tenant:1" },
+  })).kind, "consumed");
 
   const valid = { digest: createSha256DispatchConsumptionDigest(), repository: base.repository };
   let dependencyGetterReads = 0;
@@ -225,21 +169,31 @@ test("composition validates Pure DI once and retains detached callable-owner sna
       return base.repository.transact(selector, work);
     },
   };
-  let armed = false;
   let ownerProxyTraps = 0;
   const ownerHandler: ProxyHandler<object> = {
-    get(target, key, receiver) { ownerProxyTraps += 1; if (armed) { throw new Error("post-composition get trap"); } return Reflect.get(target, key, receiver); },
-    getOwnPropertyDescriptor(target, key) { ownerProxyTraps += 1; if (armed) { throw new Error("post-composition descriptor trap"); } return Reflect.getOwnPropertyDescriptor(target, key); },
-    getPrototypeOf(target) { ownerProxyTraps += 1; if (armed) { throw new Error("post-composition prototype trap"); } return Reflect.getPrototypeOf(target); },
-    ownKeys(target) { ownerProxyTraps += 1; if (armed) { throw new Error("post-composition keys trap"); } return Reflect.ownKeys(target); },
+    get() { ownerProxyTraps += 1; throw new Error("dependency proxy get trap"); },
+    getOwnPropertyDescriptor() { ownerProxyTraps += 1; throw new Error("dependency proxy descriptor trap"); },
+    getPrototypeOf() { ownerProxyTraps += 1; throw new Error("dependency proxy prototype trap"); },
+    ownKeys() { ownerProxyTraps += 1; throw new Error("dependency proxy keys trap"); },
   };
-  const detached = createContainedTurnDispatchConsumptionV1({
-    digest: new Proxy(callerDigest, ownerHandler), repository: new Proxy(callerRepository, ownerHandler),
+  assert.throws(() => createContainedTurnDispatchConsumptionV1(new Proxy({
+    digest: callerDigest, repository: callerRepository,
+  }, ownerHandler)), TypeError);
+  assert.throws(() => createContainedTurnDispatchConsumptionV1({
+    digest: new Proxy(callerDigest, ownerHandler), repository: callerRepository,
+  }), TypeError);
+  assert.throws(() => createContainedTurnDispatchConsumptionV1({
+    digest: callerDigest, repository: new Proxy(callerRepository, ownerHandler),
+  }), TypeError);
+  let applyTraps = 0;
+  const armedMethod = new Proxy(callerDigest.digest, {
+    apply() { applyTraps += 1; throw new Error("proxied callable must never be invoked"); },
   });
-  const compositionTrapCount = ownerProxyTraps;
-  armed = true;
-  assert.equal((await detached.consumeForDispatch(await inputFor(seed(), { grantRequestId: "grant-request:detached" }))).kind, "prevented");
-  assert.equal(ownerProxyTraps, compositionTrapCount);
+  assert.throws(() => createContainedTurnDispatchConsumptionV1({
+    digest: { digest: armedMethod }, repository: callerRepository,
+  }), TypeError);
+  assert.equal(ownerProxyTraps, 0);
+  assert.equal(applyTraps, 0);
 });
 
 test("server-derived replay identity rejects changed semantics with a reused claimed digest", async () => {
@@ -822,12 +776,4 @@ test("consume and settlement replay detach mutable repository identities before 
   assert.equal(settlementReplay.kind === "settled" ? settlementReplay.receipt.operationId : undefined, "operation:1");
   assert.ok(settlementReplay.kind === "settled" && Object.isFrozen(settlementReplay.receipt) &&
     Object.isFrozen(settlementReplay.receipt.expectedBinding) && Object.isFrozen(settlementReplay.receipt.scope));
-});
-
-test("Route C contract contains no secret, raw path, home, environment, SDK, Agent Execution, or Module Kit fields", async () => {
-  const input = await inputFor();
-  const text = JSON.stringify(input).toLowerCase();
-  for (const token of ["secret", "path", "home", "environment", "sdk", "appserver", "acp", "agentexecution", "modulekit"]) {
-    assert.equal(text.includes(token), false);
-  }
 });

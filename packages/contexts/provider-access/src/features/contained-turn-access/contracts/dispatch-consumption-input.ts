@@ -2,9 +2,10 @@ import type {
   ConsumeForDispatchInput, ObserveDispatchConsumptionInput, SettleDispatchConsumptionInput,
 } from "./dispatch-consumption-v1.js";
 import {
-  exactDispatchDataRecord, snapshotDispatchDigest, snapshotDispatchExpectation, snapshotDispatchId, snapshotDispatchScope,
+  snapshotDispatchDigest, snapshotDispatchExpectation, snapshotDispatchId, snapshotDispatchScope,
   type DispatchConsumeCommand, type DispatchDisposition, type DispatchScopeValue,
 } from "../domain/dispatch-consumption.js";
+import { exactDispatchDataRecord } from "../boundary/exact-dispatch-consumption-data.js";
 
 const dataRecord = exactDispatchDataRecord;
 

@@ -3,9 +3,10 @@ import type {
   DispatchConsumptionTransactionSelector,
 } from "../../application/ports/outbound/dispatch-consumption-repository.js";
 import {
-  canonicalJson, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumedReceipt,
-  type DispatchDisposition, type DispatchScopeValue, type DispatchSettlementOutcome,
+  canonicalJson, snapshotDispatchBindingHead, snapshotDispatchConsumedReceipt, snapshotDispatchSettlementOutcome,
+  type DispatchBindingHead, type DispatchConsumedReceipt, type DispatchDisposition, type DispatchScopeValue, type DispatchSettlementOutcome,
 } from "../../domain/dispatch-consumption.js";
+import { canonicalDispatchJournalEntry, detachedDispatchData } from "../../boundary/exact-dispatch-consumption-data.js";
 
 type OwnerState = "absent" | "consumed_pending" | "claim_committed" | "abandoned_without_claim";
 interface BindingSlot { head: DispatchBindingHead; consumption?: DispatchConsumedReceipt; state: OwnerState }
@@ -16,15 +17,6 @@ interface State {
   readonly settlementsByConsumption: Map<string, DispatchSettlementOutcome>;
   readonly slots: Map<string, Map<"claude" | "codex", BindingSlot>>;
 }
-const clone = <T>(value: T): T => structuredClone(value);
-const deepFreeze = <T>(value: T): T => {
-  if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) {deepFreeze(nested);}
-    Object.freeze(value);
-  }
-  return value;
-};
-const frozen = <T>(value: T): T => deepFreeze(clone(value));
 const scopeKey = (scope: DispatchScopeValue): string => canonicalJson({
   projectId: scope.projectId, scopeDigest: scope.scopeDigest, tenantId: scope.tenantId,
 });
@@ -40,45 +32,65 @@ export interface InMemoryDispatchConsumptionControl {
 }
 
 const putHead = (state: State, raw: DispatchBindingHead): void => {
-  const head = snapshotDispatchBindingHead(raw);
+  const head = snapshotDispatchBindingHead(detachedDispatchData("binding head", raw) as never);
   const key = scopeKey(head);
   const scoped = state.slots.get(key) ?? new Map();
   state.slots.set(key, scoped);
   scoped.set(head.provider, { head, state: "absent" });
 };
 
-const createTransaction = (state: State, selector: DispatchConsumptionTransactionSelector, now: () => number): DispatchConsumptionTransaction => {
+interface PendingWrites {
+  readonly pendingConsumption: DispatchConsumedReceipt | undefined;
+  readonly pendingGrant: DispatchConsumptionJournalEntry | undefined;
+  readonly pendingSettlement: DispatchSettlementOutcome | undefined;
+  readonly slot: BindingSlot | undefined;
+}
+const createTransaction = (
+  state: State,
+  selector: DispatchConsumptionTransactionSelector,
+  now: () => number,
+): { readonly pending: () => PendingWrites; readonly transaction: DispatchConsumptionTransaction } => {
   const slot = state.slots.get(scopeKey(selector.scope))?.get(selector.provider);
   let pendingConsumption: DispatchConsumedReceipt | undefined;
   let pendingGrant: DispatchConsumptionJournalEntry | undefined;
   let pendingSettlement: DispatchSettlementOutcome | undefined;
-  return {
+  const transaction: DispatchConsumptionTransaction = {
     async controlTime() { return now(); },
-    async findBindingHead() { return slot?.head; },
-    async findConsumption() { return selector.kind === "settle" ? state.consumptions.get(selector.consumptionDigest)?.receipt : undefined; },
-    async findGrantRequest() { return selector.kind === "consume" ? state.grants.get(grantKey(selector)) : undefined; },
-    async findSettlement() { return selector.kind === "settle" ? state.settlements.get(settlementKey(selector)) : undefined; },
-    async findSettlementByConsumption() { return selector.kind === "settle" ? state.settlementsByConsumption.get(selector.consumptionDigest) : undefined; },
+    async findBindingHead() { return slot === undefined ? undefined : snapshotDispatchBindingHead(slot.head); },
+    async findConsumption() {
+      const receipt = selector.kind === "settle" ? state.consumptions.get(selector.consumptionDigest)?.receipt : undefined;
+      return receipt === undefined ? undefined : snapshotDispatchConsumedReceipt(receipt);
+    },
+    async findGrantRequest() {
+      const entry = selector.kind === "consume" ? state.grants.get(grantKey(selector)) : undefined;
+      return entry === undefined ? undefined : canonicalDispatchJournalEntry(entry);
+    },
+    async findSettlement() {
+      const outcome = selector.kind === "settle" ? state.settlements.get(settlementKey(selector)) : undefined;
+      return outcome === undefined ? undefined : snapshotDispatchSettlementOutcome(outcome);
+    },
+    async findSettlementByConsumption() {
+      const outcome = selector.kind === "settle" ? state.settlementsByConsumption.get(selector.consumptionDigest) : undefined;
+      return outcome === undefined ? undefined : snapshotDispatchSettlementOutcome(outcome);
+    },
     async isBindingConsumed() { return slot !== undefined && slot.state !== "absent"; },
     async markBindingConsumed(receipt) {
       if (slot === undefined || slot.state !== "absent") {throw new Error("binding head was not atomically consumable");}
-      pendingConsumption = frozen(receipt);
+      pendingConsumption = snapshotDispatchConsumedReceipt(detachedDispatchData("consumption receipt", receipt));
     },
-    async saveGrantRequest(entry) { pendingGrant = frozen(entry); },
-    async saveSettlement(outcome) { pendingSettlement = frozen(outcome); },
-    get pending() { return { pendingConsumption, pendingGrant, pendingSettlement, slot }; },
-  } as DispatchConsumptionTransaction;
+    async saveGrantRequest(entry) { pendingGrant = canonicalDispatchJournalEntry(entry); },
+    async saveSettlement(outcome) {
+      pendingSettlement = snapshotDispatchSettlementOutcome(detachedDispatchData("settlement outcome", outcome));
+    },
+  };
+  return Object.freeze({
+    pending: () => ({ pendingConsumption, pendingGrant, pendingSettlement, slot }),
+    transaction: Object.freeze(transaction),
+  });
 };
 
-interface PendingTransaction extends DispatchConsumptionTransaction {
-  readonly pending: {
-    readonly pendingConsumption?: DispatchConsumedReceipt; readonly pendingGrant?: DispatchConsumptionJournalEntry;
-    readonly pendingSettlement?: DispatchSettlementOutcome; readonly slot?: BindingSlot;
-  };
-}
-
-const commit = (state: State, selector: DispatchConsumptionTransactionSelector, transaction: PendingTransaction): void => {
-  const { pendingConsumption, pendingGrant, pendingSettlement, slot } = transaction.pending;
+const commit = (state: State, selector: DispatchConsumptionTransactionSelector, pending: PendingWrites): void => {
+  const { pendingConsumption, pendingGrant, pendingSettlement, slot } = pending;
   if (pendingConsumption !== undefined && slot !== undefined) {
     slot.consumption = pendingConsumption; slot.state = "consumed_pending";
     state.consumptions.set(pendingConsumption.consumptionDigest, { receipt: pendingConsumption, slot });
@@ -114,13 +126,13 @@ export const createInMemoryDispatchConsumptionRepository = (
   const repository: DispatchConsumptionRepository = Object.freeze({
     async transact<T>(selector: DispatchConsumptionTransactionSelector, work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
       return serialize(async () => {
-        const transaction = createTransaction(state, selector, () => controlTime) as PendingTransaction;
-        const result = await work(transaction); commit(state, selector, transaction); return result;
+        const unit = createTransaction(state, selector, () => controlTime);
+        const result = await work(unit.transaction); commit(state, selector, unit.pending()); return result;
       });
     },
     async observeGrantRequest(input: { readonly grantRequestId: string; readonly provider: "claude" | "codex"; readonly scope: DispatchScopeValue }) {
       await tail;
-      const entry = state.grants.get(grantKey(input)); return entry === undefined ? undefined : frozen(entry);
+      const entry = state.grants.get(grantKey(input)); return entry === undefined ? undefined : canonicalDispatchJournalEntry(entry);
     },
   });
   return Object.freeze({
