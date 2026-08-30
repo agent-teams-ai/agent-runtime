@@ -144,8 +144,21 @@ export interface ContainedTurnOwnerStoreAuthority {
 }
 
 export interface ContainedTurnKernelOperationStore {
+  /** Restart-safe enumeration for owner reconciliation; production durable stores implement it. */
+  listDispatchPreparations?(input: Readonly<{
+    kinds?: readonly ("active" | "cleanup_pending")[];
+    limit?: number;
+    scope: ContainedTurnScope;
+  }>): Promise<readonly Readonly<{
+    operation: ContainedTurnKernelOperation;
+    preparation: ContainedTurnDispatchPreparation;
+  }>[]>;
   retireDispatchPreparation(input: Readonly<{
     authority: ContainedTurnOwnerStoreAuthority;
+    consumedGrantRequestIds?: Readonly<{
+      providerAccessGrantRequestId?: string;
+      runtimeSecurityGrantRequestId?: string;
+    }>;
     expectedOperationCutoffRevision: number;
     expectedOperationRevision: number;
     preparationToken: ContainedTurnPreparationToken;

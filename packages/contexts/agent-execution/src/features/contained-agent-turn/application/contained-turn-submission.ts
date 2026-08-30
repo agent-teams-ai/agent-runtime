@@ -198,7 +198,7 @@ export const submitContainedTurn = async (
       kind: "runtime_security_acceptance",
       proofId: security.acceptanceProofId,
     },
-    schemaVersion: 1,
+    schemaVersion: 2,
     scope: input.scope,
   });
   const accepted = sanitizeContainedTurnAcceptanceOutcome({

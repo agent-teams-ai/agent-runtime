@@ -42,16 +42,26 @@ const validatePreparationIdentity = (preparation: ContainedTurnDispatchPreparati
   if (!Number.isSafeInteger(preparation.preparedOperationRevision) || preparation.preparedOperationRevision < 0) {
     throw new TypeError("dispatch preparation revision must be a non-negative safe integer");
   }
-  validateContainedTurnText(
-    "Provider Access cleanup grant request ID",
-    preparation.providerAccessGrantRequestId,
-    CONTAINED_TURN_LIMITS.text.identifier,
-  );
-  validateContainedTurnText(
-    "Runtime Security cleanup grant request ID",
-    preparation.runtimeSecurityGrantRequestId,
-    CONTAINED_TURN_LIMITS.text.identifier,
-  );
+  if (preparation.providerAccessGrantRequestId !== null) {
+    validateContainedTurnText(
+      "Provider Access cleanup grant request ID",
+      preparation.providerAccessGrantRequestId,
+      CONTAINED_TURN_LIMITS.text.identifier,
+    );
+    if (!/^grant-request:sha256:[a-f0-9]{64}$/u.test(preparation.providerAccessGrantRequestId)) {
+      throw new TypeError("Provider Access cleanup grant request ID must be digest-bound");
+    }
+  }
+  if (preparation.runtimeSecurityGrantRequestId !== null) {
+    validateContainedTurnText(
+      "Runtime Security cleanup grant request ID",
+      preparation.runtimeSecurityGrantRequestId,
+      CONTAINED_TURN_LIMITS.text.identifier,
+    );
+    if (!/^grant-request:sha256:[a-f0-9]{64}$/u.test(preparation.runtimeSecurityGrantRequestId)) {
+      throw new TypeError("Runtime Security cleanup grant request ID must be digest-bound");
+    }
+  }
 };
 
 /** Closed, primitive-only permit copied once from the owner-store retirement record. */
@@ -99,8 +109,8 @@ const preparationBase = (
     operationId: descriptors.operationId?.value as ContainedTurnDispatchPreparation["operationId"],
     preparationToken: descriptors.preparationToken?.value as ContainedTurnDispatchPreparation["preparationToken"],
     preparedOperationRevision: descriptors.preparedOperationRevision?.value as ContainedTurnDispatchPreparation["preparedOperationRevision"],
-    providerAccessGrantRequestId: descriptors.providerAccessGrantRequestId?.value as string,
-    runtimeSecurityGrantRequestId: descriptors.runtimeSecurityGrantRequestId?.value as string,
+    providerAccessGrantRequestId: descriptors.providerAccessGrantRequestId?.value as string | null,
+    runtimeSecurityGrantRequestId: descriptors.runtimeSecurityGrantRequestId?.value as string | null,
     workspaceId: descriptors.workspaceId?.value as ContainedTurnDispatchPreparation["workspaceId"],
   };
   validatePreparationIdentity(base as ContainedTurnDispatchPreparation);
@@ -129,6 +139,10 @@ const snapshotCleanupPendingPreparation = (
   if (typeof pending.custodyReleased !== "boolean" || typeof pending.providerAccessSettled !== "boolean" ||
       typeof pending.runtimeSecuritySettled !== "boolean") {
     throw new TypeError("cleanup preparation flags must be primitive booleans");
+  }
+  if ((pending.providerAccessGrantRequestId === null && !pending.providerAccessSettled) ||
+      (pending.runtimeSecurityGrantRequestId === null && !pending.runtimeSecuritySettled)) {
+    throw new TypeError("cleanup preparation cannot retain debt without a consumed grant identity");
   }
   return Object.freeze({
     ...preparationBase(preparation),
@@ -231,7 +245,7 @@ export const isContainedTurnRetiredPreparation = (
   preparation.preparationToken === owner.preparationToken &&
   preparation.attemptId === owner.attemptId && preparation.custodyId === owner.custodyId &&
   preparation.workspaceId === operation.workspaceId && preparation.workspaceId === owner.workspaceId &&
-  preparation.preparedOperationRevision === operation.revision &&
+  preparation.preparedOperationRevision <= operation.revision &&
   preparation.operationCutoffRevision === operation.operationCutoff.revision &&
   preparation.operationCutoffRevision === owner.operationCutoffRevision &&
   cleanupPermitMatchesPreparation(preparation.cleanupPermit, preparation);

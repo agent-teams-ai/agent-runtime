@@ -20,8 +20,8 @@ export interface ContainedTurnCleanupPermit extends ContainedTurnDispatchPrepara
 }
 
 interface PreparationBase extends ContainedTurnDispatchPreparationIdentity {
-  readonly providerAccessGrantRequestId: string;
-  readonly runtimeSecurityGrantRequestId: string;
+  readonly providerAccessGrantRequestId: string | null;
+  readonly runtimeSecurityGrantRequestId: string | null;
 }
 
 export type ContainedTurnDispatchPreparation =
@@ -52,7 +52,9 @@ export const containedTurnCleanupPermit = (
     operationId: preparation.operationId,
     preparationToken: preparation.preparationToken,
     preparedOperationRevision: preparation.preparedOperationRevision,
+    providerAccessGrantRequestId: preparation.providerAccessGrantRequestId,
     purpose: "contained_turn_preparation_cleanup_v1",
+    runtimeSecurityGrantRequestId: preparation.runtimeSecurityGrantRequestId,
     workspaceId: preparation.workspaceId,
   });
   return Object.freeze({
@@ -77,22 +79,76 @@ export const claimContainedTurnDispatchPreparation = (
   return Object.freeze({ ...preparation, kind: "claimed" });
 };
 
+export interface ContainedTurnConsumedGrantRequestIds {
+  readonly providerAccessGrantRequestId?: string;
+  readonly runtimeSecurityGrantRequestId?: string;
+}
+
+const validateGrantRequestId = (owner: string, value: string | null): void => {
+  if (value !== null && !/^grant-request:sha256:[a-f0-9]{64}$/u.test(value)) {
+    throw new TypeError(`${owner} consumed grant request ID must be digest-bound`);
+  }
+};
+
+export const bindContainedTurnPreparationGrantRequests = (
+  preparation: ContainedTurnDispatchPreparation,
+  consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds,
+): Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" }> => {
+  if (preparation.kind !== "active") {
+    throw new TypeError("only an active dispatch preparation can bind consumed grants");
+  }
+  const providerAccessGrantRequestId =
+    consumedGrantRequestIds.providerAccessGrantRequestId ?? preparation.providerAccessGrantRequestId;
+  const runtimeSecurityGrantRequestId =
+    consumedGrantRequestIds.runtimeSecurityGrantRequestId ?? preparation.runtimeSecurityGrantRequestId;
+  validateGrantRequestId("Provider Access", providerAccessGrantRequestId);
+  validateGrantRequestId("Runtime Security", runtimeSecurityGrantRequestId);
+  if (preparation.providerAccessGrantRequestId !== null &&
+      providerAccessGrantRequestId !== preparation.providerAccessGrantRequestId) {
+    throw new TypeError("Provider Access consumed grant identity substitution rejected");
+  }
+  if (preparation.runtimeSecurityGrantRequestId !== null &&
+      runtimeSecurityGrantRequestId !== preparation.runtimeSecurityGrantRequestId) {
+    throw new TypeError("Runtime Security consumed grant identity substitution rejected");
+  }
+  return Object.freeze({
+    ...preparation,
+    providerAccessGrantRequestId,
+    runtimeSecurityGrantRequestId,
+  });
+};
+
 export const retireContainedTurnDispatchPreparation = (
   preparation: ContainedTurnDispatchPreparation,
   nonce: string,
+  consumedGrantRequestIds: Readonly<{
+    providerAccessGrantRequestId?: string;
+    runtimeSecurityGrantRequestId?: string;
+  }> = {},
 ): ContainedTurnDispatchPreparation => {
   if (preparation.kind === "claimed") {
     throw new TypeError("claimed dispatch preparation can never mint a cleanup permit");
   }
+  if (consumedGrantRequestIds.providerAccessGrantRequestId !== undefined &&
+      preparation.providerAccessGrantRequestId !== null &&
+      preparation.providerAccessGrantRequestId !== consumedGrantRequestIds.providerAccessGrantRequestId) {
+    throw new TypeError("Provider Access retired grant identity substitution rejected");
+  }
+  if (consumedGrantRequestIds.runtimeSecurityGrantRequestId !== undefined &&
+      preparation.runtimeSecurityGrantRequestId !== null &&
+      preparation.runtimeSecurityGrantRequestId !== consumedGrantRequestIds.runtimeSecurityGrantRequestId) {
+    throw new TypeError("Runtime Security retired grant identity substitution rejected");
+  }
   if (preparation.kind !== "active") {return preparation;}
+  const bound = bindContainedTurnPreparationGrantRequests(preparation, consumedGrantRequestIds);
   return Object.freeze({
-    ...preparation,
+    ...bound,
     cleanupEvidenceIds: Object.freeze([]),
-    cleanupPermit: containedTurnCleanupPermit(preparation, nonce),
+    cleanupPermit: containedTurnCleanupPermit(bound, nonce),
     custodyReleased: false,
     kind: "cleanup_pending",
-    providerAccessSettled: false,
-    runtimeSecuritySettled: false,
+    providerAccessSettled: bound.providerAccessGrantRequestId === null,
+    runtimeSecuritySettled: bound.runtimeSecurityGrantRequestId === null,
   });
 };
 

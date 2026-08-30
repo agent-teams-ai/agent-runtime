@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { reconcileContainedTurnClaimPreparation } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
+import { recoverContainedTurnDispatchPreparations } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
 import { claimContainedTurnWithConsumedGrants } from "../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "../dist/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.js";
 import { createContainedTurnPreparationScopeDependencies } from "../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
@@ -89,8 +90,12 @@ test("retirement closes the cleanup TOCTOU and exact permit replay is monotone",
     operationId,
     preparationToken,
     preparedOperationRevision: 1,
-    providerAccessGrantRequestId: "provider-access-grant:1",
-    runtimeSecurityGrantRequestId: "runtime-security-grant:1",
+    providerAccessGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
+      owner: "provider_access", request: "retirement-one",
+    })}`,
+    runtimeSecurityGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
+      owner: "runtime_security", request: "retirement-one",
+    })}`,
     workspaceId,
   });
   const retired = retireContainedTurnDispatchPreparation(active, "retirement:1");
@@ -124,6 +129,51 @@ test("retirement closes the cleanup TOCTOU and exact permit replay is monotone",
     target: "runtime_security",
   }), closed, "exact cleanup replay preserves terminal evidence");
   assert.throws(() => claimContainedTurnDispatchPreparation(closed), /never be claimed/u);
+});
+
+test("restart recovery retires against the preparation revision rather than the advanced operation", async () => {
+  const winner = createReservedOperation();
+  const active = Object.freeze({
+    attemptId: containedTurnIdentity("attempt", "attempt:recovery-loser"),
+    custodyId: containedTurnIdentity("custody", "custody:recovery-loser"),
+    kind: "active" as const,
+    operationCutoffRevision: 0,
+    operationId,
+    preparationToken: containedTurnIdentity("preparation", "preparation:recovery-loser"),
+    preparedOperationRevision: 1,
+    providerAccessGrantRequestId: null,
+    runtimeSecurityGrantRequestId: null,
+    workspaceId,
+  });
+  assert.ok(winner.revision > active.preparedOperationRevision);
+  let preparation = retireContainedTurnDispatchPreparation(active, "recovery-retirement");
+  if (preparation.kind !== "cleanup_pending") {assert.fail("recovery fixture did not retire");}
+  const retirementInputs: Array<{ expectedOperationRevision: number }> = [];
+  let custodyReleases = 0;
+  const dependencies = {
+    custody: {
+      releaseRetiredReservation: async () => {custodyReleases += 1; return { kind: "released" as const };},
+    },
+    operationStore: {
+      listDispatchPreparations: async () => [{ operation: winner, preparation: active }],
+      recordDispatchPreparationCleanup: async input => {
+        preparation = recordContainedTurnPreparationCleanup(preparation, input);
+        return preparation;
+      },
+      retireDispatchPreparation: async input => {
+        retirementInputs.push(input);
+        return { kind: "retired" as const, preparation };
+      },
+    },
+    providerAccess: { settleConsumedGrant: async () => {assert.fail("unknown legacy grant must not settle");} },
+    security: { settleConsumedGrant: async () => {assert.fail("unknown legacy grant must not settle");} },
+  } as unknown as ContainedTurnKernelDependencies;
+  assert.deepEqual(await recoverContainedTurnDispatchPreparations(dependencies, scope), {
+    discovered: 1,
+    retired: 1,
+  });
+  assert.equal(retirementInputs[0]?.expectedOperationRevision, active.preparedOperationRevision);
+  assert.equal(custodyReleases, 1);
 });
 
 test("normalized consumed receipts bind the exact final claim and reject replay conflicts", () => {

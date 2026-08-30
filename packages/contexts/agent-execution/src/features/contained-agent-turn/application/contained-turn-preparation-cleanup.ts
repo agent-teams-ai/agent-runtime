@@ -55,12 +55,17 @@ export type RetireContainedTurnPreparationOutcome =
  * atomically makes claim impossible and returns the one permit accepted by
  * custody and both grant owners. Unknown outcomes remain preparation debt.
  */
+// oxlint-disable-next-line max-params -- each argument is an independent authority binding.
 export const retireAndCleanupContainedTurnPreparation = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
   trustedScope: ContainedTurnScope,
   owner: ContainedTurnDispatchGrantSubject,
   reason: "claim_lost" | "open_failed" | "prevention" | "reconciliation",
+  consumedGrantRequestIds: Readonly<{
+    providerAccessGrantRequestId?: string;
+    runtimeSecurityGrantRequestId?: string;
+  }> = {},
 ): Promise<RetireContainedTurnPreparationOutcome> => {
   const retire = dependencies.operationStore.retireDispatchPreparation;
   const record = dependencies.operationStore.recordDispatchPreparationCleanup;
@@ -69,6 +74,7 @@ export const retireAndCleanupContainedTurnPreparation = async (
   try {
     retirement = await retire({
       authority,
+      consumedGrantRequestIds,
       expectedOperationCutoffRevision: operation.operationCutoff.revision,
       expectedOperationRevision: operation.revision,
       preparationToken: owner.preparationToken,
@@ -99,7 +105,6 @@ export const retireAndCleanupContainedTurnPreparation = async (
   const cleanup = async (
     target: "custody" | "provider_access" | "runtime_security",
     effect: () => Promise<{ readonly kind: string; readonly evidenceId?: ContainedTurnEvidenceId }>,
-    grantRequestId?: string,
   ): Promise<void> => {
     let outcome: { readonly kind: string; readonly evidenceId?: ContainedTurnEvidenceId };
     try {outcome = await effect();} catch {return;}
@@ -118,11 +123,20 @@ export const retireAndCleanupContainedTurnPreparation = async (
       const recorded = await record(Object.freeze({ authority, permit, target }));
       if (isContainedTurnPreparationCleanupContinuation(current, recorded)) {current = recorded;}
     } catch {return;}
-    void grantRequestId;
   };
   await cleanup("custody", () => dependencies.custody.releaseRetiredReservation({ cleanupPermit: permit }));
-  await cleanup("provider_access", () => dependencies.providerAccess.settleConsumedGrant({ cleanupPermit: permit, grantRequestId: pending.providerAccessGrantRequestId }));
-  await cleanup("runtime_security", () => dependencies.security.settleConsumedGrant({ cleanupPermit: permit, grantRequestId: pending.runtimeSecurityGrantRequestId }));
+  const providerAccessGrantRequestId = pending.providerAccessGrantRequestId;
+  if (providerAccessGrantRequestId !== null) {
+    await cleanup("provider_access", () => dependencies.providerAccess.settleConsumedGrant({
+      cleanupPermit: permit, grantRequestId: providerAccessGrantRequestId,
+    }));
+  }
+  const runtimeSecurityGrantRequestId = pending.runtimeSecurityGrantRequestId;
+  if (runtimeSecurityGrantRequestId !== null) {
+    await cleanup("runtime_security", () => dependencies.security.settleConsumedGrant({
+      cleanupPermit: permit, grantRequestId: runtimeSecurityGrantRequestId,
+    }));
+  }
   const finalPreparation = current as ContainedTurnDispatchPreparation;
   return finalPreparation.kind === "cleanup_closed"
     ? Object.freeze({ kind: "cleanup_closed", operation, preparation: finalPreparation })

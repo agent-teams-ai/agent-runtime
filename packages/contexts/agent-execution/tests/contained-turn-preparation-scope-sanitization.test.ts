@@ -61,6 +61,14 @@ const consumedReceipt = (owner: "provider_access" | "runtime_security") => {
   });
 };
 
+const unavailableAfterConsumed = Object.freeze({
+  consumedGrantRequestIds: Object.freeze({
+    providerAccessGrantRequestId: consumedReceipt("provider_access").grantRequestId,
+    runtimeSecurityGrantRequestId: consumedReceipt("runtime_security").grantRequestId,
+  }),
+  kind: "unavailable" as const,
+});
+
 const unavailablePreparationDependency = async (): Promise<never> => {
   throw new Error("unused mandatory preparation dependency");
 };
@@ -138,7 +146,7 @@ test("prepared claim claimed, observed, and stale outcomes collapse foreign owne
       const result = await claimContainedTurnWithConsumedGrants(
         claimDependencies(outcome), initial, scope, subject,
       );
-      assert.deepEqual(result, { kind: "unavailable" });
+      assert.deepEqual(result, unavailableAfterConsumed);
       assert.equal(JSON.stringify(result).includes("must-not-leak"), false);
     }
   }
@@ -150,7 +158,7 @@ test("prepared claim rejects same-owner extras and returns only a detached froze
     claimDependencies({ kind: "claimed", operation: withExtra, startAuthority: "start:scope-sanitization" }),
     initial, scope, subject,
   );
-  assert.deepEqual(rejected, { kind: "unavailable" });
+  assert.deepEqual(rejected, unavailableAfterConsumed);
 
   const accepted = await claimContainedTurnWithConsumedGrants(
     claimDependencies({ kind: "claimed", operation: winner, startAuthority: "start:scope-sanitization" }),
@@ -192,7 +200,7 @@ test("prepared claim rejects proxies, accessors, sparse or augmented arrays with
     const result = await claimContainedTurnWithConsumedGrants(
       claimDependencies({ kind: "observed_claim", operation }), initial, scope, subject,
     );
-    assert.deepEqual(result, { kind: "unavailable" });
+    assert.deepEqual(result, unavailableAfterConsumed);
   }
   const proxiedOutcome = new Proxy({ kind: "observed_claim" as const, operation: winner }, {
     get: (_target, key) => {
@@ -214,7 +222,7 @@ test("prepared claim rejects proxies, accessors, sparse or augmented arrays with
         consumeForDispatch: async () => ({ kind: "consumed", receipt: consumedReceipt("runtime_security") }),
       },
     }), initial, scope, subject),
-    { kind: "unavailable" },
+    unavailableAfterConsumed,
   );
   assert.equal(thenGets, 0, "the trusted outer adapter rejects before Promise assimilation");
   assert.equal(traps, 0);
@@ -240,7 +248,7 @@ test("prepared claim snapshots mutable aliases and rejects owner outcome extras"
   };
   assert.deepEqual(
     await claimContainedTurnWithConsumedGrants(claimDependencies(outcomeWithExtra), initial, scope, subject),
-    { kind: "unavailable" },
+    unavailableAfterConsumed,
   );
 });
 
@@ -400,8 +408,12 @@ const activePreparation = Object.freeze({
   operationId,
   preparationToken,
   preparedOperationRevision: initial.revision,
-  providerAccessGrantRequestId: "provider-access-grant:scope-sanitization",
-  runtimeSecurityGrantRequestId: "runtime-security-grant:scope-sanitization",
+  providerAccessGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
+    owner: "provider_access", request: "scope-sanitization",
+  })}`,
+  runtimeSecurityGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
+    owner: "runtime_security", request: "scope-sanitization",
+  })}`,
   workspaceId,
 });
 const retiredPreparation = retireContainedTurnDispatchPreparation(activePreparation, "retirement:scope-sanitization");

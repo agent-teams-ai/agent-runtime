@@ -9,8 +9,8 @@ import type { ContainedTurnKernelOperation } from "../features/contained-agent-t
 import type { ContainedTurnProof } from "../features/contained-agent-turn/domain/contained-turn-proofs.js";
 import type { ContainedTurnKernelDependencies } from "../features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../features/contained-agent-turn/domain/contained-turn-authority.js";
-import { containedTurnDispatchClaimBindingDigest } from "../features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
-import { recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
+import { containedTurnDispatchClaimBindingDigest, validateContainedTurnConsumedGrantReceipts } from "../features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
+import { bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation, recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
 import { containedTurnPreparationToken } from "../features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 
 const identity = <Namespace extends Parameters<typeof containedTurnIdentity>[0]>(namespace: Namespace, suffix: string) =>
@@ -172,8 +172,23 @@ const createDependencies = (options: Readonly<{
       return { kind: "applied", operation: current };
     },
     claimPreparedDispatch: async input => {
+      const receipts = validateContainedTurnConsumedGrantReceipts(
+        input.subject, input.consumedGrantReceipts,
+      );
       if (current === undefined) {return { kind: "not_found" };}
       assertOwnerAuthority(input.authority, current);
+      if (preparation === undefined || preparation.kind !== "active" ||
+          preparation.preparationToken !== input.subject.preparationToken ||
+          preparation.attemptId !== input.subject.attemptId ||
+          preparation.custodyId !== input.subject.custodyId ||
+          preparation.workspaceId !== input.subject.workspaceId ||
+          preparation.preparedOperationRevision !== input.expectedOperationRevision) {
+        return { current, kind: "stale" };
+      }
+      preparation = bindContainedTurnPreparationGrantRequests(preparation, {
+        providerAccessGrantRequestId: receipts[0].grantRequestId,
+        runtimeSecurityGrantRequestId: receipts[1].grantRequestId,
+      });
       if (current.revision !== input.expectedOperationRevision || options.staleClaimAuthority === true) {
         return { current, kind: "stale" };
       }
@@ -234,7 +249,7 @@ const createDependencies = (options: Readonly<{
         runtimeSecurityDispatchProof,
         writerFence,
       });
-      preparation = preparation === undefined ? undefined : { ...preparation, kind: "claimed" };
+      preparation = claimContainedTurnDispatchPreparation(preparation);
       if (options.claimCommitThenThrow === true) {throw new Error("claim committed; acknowledgement lost");}
       if (options.staleOwnerAfterClaim === true) {return { current, kind: "stale" };}
       return { kind: "claimed", operation: current, startAuthority: "test-start-authority:one" };
@@ -268,7 +283,7 @@ const createDependencies = (options: Readonly<{
       preparation = {
         attemptId, custodyId, kind: "active", operationCutoffRevision: operation.operationCutoff.revision,
         operationId, preparationToken: containedTurnPreparationToken({ attemptId, custodyId, operationId }), preparedOperationRevision: operation.revision,
-        providerAccessGrantRequestId: "provider-access-grant:one", runtimeSecurityGrantRequestId: "runtime-security-grant:one",
+        providerAccessGrantRequestId: null, runtimeSecurityGrantRequestId: null,
         workspaceId: operation.workspaceId as typeof workspaceId,
       };
       return { attemptId, claimProofId: proofId("claim"), custodyId, cutoffProofId: proofId("cutoff"), executionGenerationId, writerFence };
@@ -286,7 +301,13 @@ const createDependencies = (options: Readonly<{
       if (preparation === undefined || preparation.kind !== "active") {
         return { current, kind: "stale" };
       }
-      preparation = retireContainedTurnDispatchPreparation(preparation, "test-retirement");
+      if (preparation.preparedOperationRevision !== input.expectedOperationRevision ||
+          preparation.operationCutoffRevision !== input.expectedOperationCutoffRevision) {
+        return { current, kind: "stale" };
+      }
+      preparation = retireContainedTurnDispatchPreparation(
+        preparation, "test-retirement", input.consumedGrantRequestIds,
+      );
       return { kind: "retired", preparation: preparation as Extract<ContainedTurnDispatchPreparation, { kind: "cleanup_pending" }> };
     },
     proofsForAcceptedEffect: async ({ authority, operation }) => {

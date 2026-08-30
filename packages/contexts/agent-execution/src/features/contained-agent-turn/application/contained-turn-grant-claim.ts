@@ -9,18 +9,26 @@ import { retireAndCleanupContainedTurnPreparation } from "./contained-turn-prepa
 import { recordContainedTurnRejectedDebt } from "./contained-turn-closure.js";
 import type { ContainedTurnKernelDependencies } from "./ports/outbound/contained-turn-ports.js";
 
+type ConsumedGrantRequestIds = Readonly<{
+  providerAccessGrantRequestId?: string;
+  runtimeSecurityGrantRequestId?: string;
+}>;
+
 export type ClaimContainedTurnWithConsumedGrantsOutcome =
   | { readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation; readonly startAuthority: string }
-  | { readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation }
-  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
-  | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
-  | { readonly kind: "unavailable" };
+  | { readonly consumedGrantRequestIds: ConsumedGrantRequestIds; readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation }
+  | ({ readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" } &
+    { readonly consumedGrantRequestIds: ConsumedGrantRequestIds })
+  | ({ readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId } &
+    { readonly consumedGrantRequestIds: ConsumedGrantRequestIds })
+  | { readonly consumedGrantRequestIds: ConsumedGrantRequestIds; readonly kind: "unavailable" };
 
 /**
  * Consumes one grant per owner and submits the exact pair to the final local
  * claim. A read/replay/lost acknowledgement never manufactures start
  * authority; only the store's known `claimed` response can carry it.
  */
+// oxlint-disable-next-line complexity -- the ordered owner outcomes are intentionally fail-closed.
 export const claimContainedTurnWithConsumedGrants = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
@@ -31,20 +39,35 @@ export const claimContainedTurnWithConsumedGrants = async (
   const providerAccessConsume = dependencies.providerAccess.consumeForDispatch;
   const runtimeSecurityConsume = dependencies.security.consumeForDispatch;
   const claim = dependencies.operationStore.claimPreparedDispatch;
-  let providerAccess: Awaited<ReturnType<typeof providerAccessConsume>>;
-  let runtimeSecurity: Awaited<ReturnType<typeof runtimeSecurityConsume>>;
-  try {
-    [providerAccess, runtimeSecurity] = await Promise.all([
-      providerAccessConsume({ subject }),
-      runtimeSecurityConsume({ subject }),
-    ]);
-  } catch {
-    return { kind: "unavailable" };
+  const [providerAccessResult, runtimeSecurityResult] = await Promise.allSettled([
+    providerAccessConsume({ subject }),
+    runtimeSecurityConsume({ subject }),
+  ]);
+  const providerAccess = providerAccessResult.status === "fulfilled"
+    ? providerAccessResult.value : undefined;
+  const runtimeSecurity = runtimeSecurityResult.status === "fulfilled"
+    ? runtimeSecurityResult.value : undefined;
+  const consumedGrantRequestIds: ConsumedGrantRequestIds = Object.freeze({
+    ...(providerAccess?.kind === "consumed"
+      ? { providerAccessGrantRequestId: providerAccess.receipt.grantRequestId } : {}),
+    ...(runtimeSecurity?.kind === "consumed"
+      ? { runtimeSecurityGrantRequestId: runtimeSecurity.receipt.grantRequestId } : {}),
+  });
+  if (providerAccess === undefined || runtimeSecurity === undefined) {
+    return { consumedGrantRequestIds, kind: "unavailable" };
   }
-  if (providerAccess.kind === "prevented") {return providerAccess;}
-  if (runtimeSecurity.kind === "prevented") {return runtimeSecurity;}
-  if (providerAccess.kind === "indeterminate") {return providerAccess;}
-  if (runtimeSecurity.kind === "indeterminate") {return runtimeSecurity;}
+  if (providerAccess.kind === "prevented") {
+    return { ...providerAccess, consumedGrantRequestIds };
+  }
+  if (runtimeSecurity.kind === "prevented") {
+    return { ...runtimeSecurity, consumedGrantRequestIds };
+  }
+  if (providerAccess.kind === "indeterminate") {
+    return { ...providerAccess, consumedGrantRequestIds };
+  }
+  if (runtimeSecurity.kind === "indeterminate") {
+    return { ...runtimeSecurity, consumedGrantRequestIds };
+  }
   const receipts = validateContainedTurnConsumedGrantReceipts(subject, [
     providerAccess.receipt,
     runtimeSecurity.receipt,
@@ -60,7 +83,7 @@ export const claimContainedTurnWithConsumedGrants = async (
     });
     if (outcome.kind === "claimed" || outcome.kind === "observed_claim") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.operation)) {
-        return Object.freeze({ kind: "unavailable" });
+        return Object.freeze({ consumedGrantRequestIds, kind: "unavailable" });
       }
       if (outcome.kind === "claimed") {
         return Object.freeze({
@@ -69,24 +92,25 @@ export const claimContainedTurnWithConsumedGrants = async (
           startAuthority: outcome.startAuthority,
         });
       }
-      return Object.freeze({ kind: "observed_claim", operation: outcome.operation });
+      return Object.freeze({ consumedGrantRequestIds, kind: "observed_claim", operation: outcome.operation });
     }
     if (outcome.kind === "stale") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
-        return Object.freeze({ kind: "unavailable" });
+        return Object.freeze({ consumedGrantRequestIds, kind: "unavailable" });
       }
-      return Object.freeze({ kind: "observed_claim", operation: outcome.current });
+      return Object.freeze({ consumedGrantRequestIds, kind: "observed_claim", operation: outcome.current });
     }
     if (outcome.kind === "indeterminate") {
       return Object.freeze({
+        consumedGrantRequestIds,
         evidenceId: validateContainedTurnIdentity("evidence", outcome.evidenceId),
         kind: "indeterminate",
       });
     }
-    return Object.freeze({ kind: "unavailable" });
+    return Object.freeze({ consumedGrantRequestIds, kind: "unavailable" });
   } catch {
     // A lost claim acknowledgement is deliberately not recoverable into start.
-    return { kind: "unavailable" };
+    return { consumedGrantRequestIds, kind: "unavailable" };
   }
 };
 
@@ -126,11 +150,15 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
   );
   if (claim.kind === "claimed") {return claim;}
   if (claim.kind === "observed_claim") {
-    return { kind: "observed", operation: claim.operation };
+    const cleanup = await retireAndCleanupContainedTurnPreparation(
+      dependencies, operation, trustedScope, subject, "claim_lost", claim.consumedGrantRequestIds,
+    );
+    return { kind: "observed", operation: cleanup.kind === "claimed" ? cleanup.operation : claim.operation };
   }
   const cleanup = await retireAndCleanupContainedTurnPreparation(
     dependencies, operation, trustedScope, subject,
     claim.kind === "prevented" ? "prevention" : "reconciliation",
+    claim.consumedGrantRequestIds,
   );
   if (cleanup.kind === "claimed") {return { kind: "observed", operation: cleanup.operation };}
   if (claim.kind === "prevented") {

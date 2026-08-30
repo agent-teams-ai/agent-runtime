@@ -1,58 +1,81 @@
-import { randomUUID } from "node:crypto";
+/* oxlint-disable max-lines -- this adapter is the single durable owner-store surface. */
 
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
 
 import type {
   ContainedTurnKernelOperationStore,
   ContainedTurnOwnerStoreAuthority,
 } from "../../../application/ports/outbound/contained-turn-ports.js";
-import { containedTurnCancellationFingerprint, containedTurnProviderAccessSnapshotDigest } from "../../../domain/contained-turn-authority.js";
+import {
+  containedTurnCancellationFingerprint,
+  containedTurnProviderAccessSnapshotDigest,
+  containedTurnScopeDigest,
+} from "../../../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
 import {
   claimContainedTurnDispatchPreparation,
+  bindContainedTurnPreparationGrantRequests,
   recordContainedTurnPreparationCleanup,
   retireContainedTurnDispatchPreparation,
   type ContainedTurnDispatchPreparation,
 } from "../../../domain/contained-turn-dispatch-preparation.js";
 import { validateContainedTurnConsumedGrantReceipts } from "../../../domain/contained-turn-dispatch-authority.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
+import type { ContainedTurnEvidenceId } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
 import { appendContainedTurnOutputForOwnerStore } from "../../../domain/contained-turn-output-transitions.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import { containedTurnSatisfactionDigest } from "../../../domain/contained-turn-satisfaction.js";
 import { mutateContainedTurnOperation } from "../../../domain/contained-turn-transitions.js";
-import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
 import { containedTurnPreparationToken } from "../../../application/contained-turn-preparation-cleanup.js";
-import { decodeContainedTurnState, encodeContainedTurnState } from "./contained-turn-state-codec.js";
+import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
+import {
+  CONTAINED_TURN_PREPARATION_CODEC_VERSION,
+  decodeContainedTurnPreparation,
+  encodeContainedTurnPreparation,
+} from "./contained-turn-preparation-codec.js";
+import { ContainedTurnPostgresOperationRepository } from "./contained-turn-postgres-operation-repository.js";
+import {
+  ContainedTurnPostgresTransactions,
+  PostgresCommitIndeterminateError,
+  type ContainedTurnPostgresTimeouts,
+} from "./contained-turn-postgres-transactions.js";
+import { encodeContainedTurnState } from "./contained-turn-state-codec.js";
 export { applyContainedTurnPostgresSchema } from "./contained-turn-postgres-schema.js";
+export {
+  CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS,
+  type ContainedTurnPostgresTimeouts,
+} from "./contained-turn-postgres-transactions.js";
 
-interface OperationRow {
-  readonly command_fingerprint: string;
-  readonly command_id: string;
-  readonly effect_id: string;
-  readonly operation_id: string;
-  readonly revision: string;
+interface PreparationRow {
   readonly state: unknown;
-  readonly state_digest: string;
-  readonly tenant_id: string;
-  readonly terminal: boolean;
+  readonly state_codec_version: number;
+  readonly state_digest: string | null;
 }
 
-interface OutputRow { readonly cursor: number; readonly output_kind: string; readonly output_text: string }
-interface ProofRow { readonly receipt_kind: string; readonly receipt_ref: string }
-interface PreparationRow { readonly state: unknown }
+interface PreparationRecoveryRow extends PreparationRow {
+  readonly operation_id: string;
+}
 
 export interface ContainedTurnPostgresIdentitySource {
-  nextId(kind: "attempt" | "cancellation_command" | "cleanup" | "effect" | "execution_generation" | "operation" | "proof" | "writer_fence"): string;
+  nextId(kind: "attempt" | "cancellation_command" | "cleanup" | "custody" | "effect" |
+    "execution_generation" | "operation" | "operation_authority" | "proof" | "start_authority" |
+    "writer_fence", seed?: string): string;
 }
 
 export interface PostgresContainedTurnOperationStoreOptions {
   readonly identities?: ContainedTurnPostgresIdentitySource;
   readonly pool: Pool;
+  readonly timeouts?: Partial<ContainedTurnPostgresTimeouts>;
 }
 
 const defaultIdentities: ContainedTurnPostgresIdentitySource = Object.freeze({
-  nextId(kind: Parameters<ContainedTurnPostgresIdentitySource["nextId"]>[0]) {return `${kind.replaceAll("_", "-")}:${randomUUID()}`;},
+  nextId(
+    kind: Parameters<ContainedTurnPostgresIdentitySource["nextId"]>[0],
+    seed = kind,
+  ) {
+    return `${kind.replaceAll("_", "-")}:${digestContainedTurnCanonicalValue({ kind, seed })}`;
+  },
 });
 
 const sameScope = (authority: ContainedTurnOwnerStoreAuthority, operation: ContainedTurnKernelOperation): boolean =>
@@ -78,127 +101,150 @@ const attemptBinding = (operation: ContainedTurnKernelOperation) => {
   });
 };
 
-const decodePreparation = (state: unknown): ContainedTurnDispatchPreparation => {
-  if (state === null || typeof state !== "object" || Array.isArray(state) || !("kind" in state)) {
-    throw new TypeError("contained turn PostgreSQL preparation state is malformed");
-  }
-  return Object.freeze(state) as ContainedTurnDispatchPreparation;
-};
 
 export class PostgresContainedTurnOperationStore implements ContainedTurnKernelOperationStore {
   readonly #identities: ContainedTurnPostgresIdentitySource;
-  readonly #pool: Pool;
+  readonly #operations = new ContainedTurnPostgresOperationRepository();
+  readonly #transactions: ContainedTurnPostgresTransactions;
 
   public constructor(options: PostgresContainedTurnOperationStoreOptions) {
-    this.#pool = options.pool;
     this.#identities = options.identities ?? defaultIdentities;
+    this.#transactions = new ContainedTurnPostgresTransactions(options.pool, options.timeouts);
   }
 
-  async #transaction<Result>(work: (client: PoolClient) => Promise<Result>): Promise<Result> {
-    const client = await this.#pool.connect();
-    try {
-      await client.query("BEGIN");
-      const result = await work(client);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {client.release();}
+  async #transaction<Result>(work: (client: import("pg").PoolClient) => Promise<Result>): Promise<Result> {
+    return this.#transactions.write(work);
   }
 
-  async #load(client: PoolClient, operationId: string, lock = false): Promise<ContainedTurnKernelOperation | undefined> {
-    const result = await client.query<OperationRow>(
-      `SELECT operation_id, tenant_id, command_id, command_fingerprint, effect_id,
-              revision::text, state, state_digest, terminal
-         FROM agent_execution.contained_turn_operation_v1
-        WHERE operation_id = $1${lock ? " FOR UPDATE" : ""}`,
-      [operationId],
-    );
-    const row = result.rows[0];
-    if (row === undefined) {return undefined;}
-    const operation = decodeContainedTurnState(row.state, row.state_digest);
-    if (operation.operationId !== row.operation_id || operation.scope.tenantId !== row.tenant_id ||
-        operation.commandId !== row.command_id || operation.commandFingerprint !== row.command_fingerprint ||
-        operation.effectId !== row.effect_id || operation.revision !== Number(row.revision) ||
-        (operation.terminal.kind === "final") !== row.terminal) {
-      throw new Error("contained turn authoritative PostgreSQL row mismatch");
-    }
-    const [outputs, proofs] = await Promise.all([
-      client.query<OutputRow>("SELECT cursor, output_kind, output_text FROM agent_execution.contained_turn_output_v1 WHERE operation_id = $1 ORDER BY cursor", [operationId]),
-      client.query<ProofRow>("SELECT receipt_kind, receipt_ref FROM agent_execution.contained_turn_receipt_v1 WHERE operation_id = $1 ORDER BY receipt_ref", [operationId]),
-    ]);
-    if (outputs.rows.length !== operation.output.chunks.length || proofs.rows.length !== operation.proofs.length) {
-      throw new Error("contained turn PostgreSQL projection cardinality mismatch");
-    }
-    for (const [index, chunk] of operation.output.chunks.entries()) {
-      const output = outputs.rows[index];
-      if (output?.cursor !== chunk.cursor || output.output_kind !== chunk.kind || output.output_text !== chunk.text) {
-        throw new Error("contained turn PostgreSQL output projection mismatch");
-      }
-    }
-    const proofById = new Map(proofs.rows.map(proof => [proof.receipt_ref, proof.receipt_kind]));
-    for (const proof of operation.proofs) {
-      if (proofById.get(proof.proofId) !== proof.kind) {throw new Error("contained turn PostgreSQL proof projection mismatch");}
-    }
-    return operation;
+  async #readTransaction<Result>(work: (client: import("pg").PoolClient) => Promise<Result>): Promise<Result> {
+    return this.#transactions.read(work);
   }
 
-  async #project(client: PoolClient, previous: ContainedTurnKernelOperation | undefined, next: ContainedTurnKernelOperation): Promise<void> {
-    const previousChunks = previous?.output.chunks ?? [];
-    for (const chunk of next.output.chunks.slice(previousChunks.length)) {
-      await client.query("INSERT INTO agent_execution.contained_turn_output_v1(operation_id, cursor, output_kind, output_text) VALUES ($1,$2,$3,$4)", [next.operationId, chunk.cursor, chunk.kind, chunk.text]);
-    }
-    const previousProofIds = new Set(previous?.proofs.map(proof => proof.proofId));
-    for (const proof of next.proofs) {
-      if (!previousProofIds.has(proof.proofId)) {
-        await client.query("INSERT INTO agent_execution.contained_turn_receipt_v1(operation_id, receipt_kind, receipt_ref) VALUES ($1,$2,$3)", [next.operationId, proof.kind, proof.proofId]);
-      }
-    }
+  async #load(
+    client: import("pg").PoolClient,
+    operationId: string,
+    lock = false,
+    scope?: import("../../../domain/contained-turn-authority.js").ContainedTurnScope,
+  ): Promise<ContainedTurnKernelOperation | undefined> {
+    return this.#operations.load(client, operationId, lock, scope);
   }
 
-  async #persist(client: PoolClient, previous: ContainedTurnKernelOperation, next: ContainedTurnKernelOperation): Promise<void> {
+  async #project(
+    client: import("pg").PoolClient,
+    previous: ContainedTurnKernelOperation | undefined,
+    next: ContainedTurnKernelOperation,
+  ): Promise<void> {
+    return this.#operations.project(client, previous, next);
+  }
+
+  async #persist(
+    client: import("pg").PoolClient,
+    previous: ContainedTurnKernelOperation,
+    next: ContainedTurnKernelOperation,
+  ): Promise<void> {
     validateContainedTurnOperation(next, { previous });
-    const encoded = encodeContainedTurnState(next);
-    const result = await client.query(
-      "UPDATE agent_execution.contained_turn_operation_v1 SET revision=$3,state=$4::jsonb,state_digest=$5,terminal=$6 WHERE operation_id=$1 AND revision=$2",
-      [next.operationId, previous.revision, next.revision, encoded.json, encoded.digest, next.terminal.kind === "final"],
-    );
-    if (result.rowCount !== 1) {throw new Error("contained turn PostgreSQL revision fence failed");}
-    await this.#project(client, previous, next);
+    return this.#operations.persist(client, previous, next);
+  }
+
+  async #reconcileIndeterminateCommit(
+    authority: ContainedTurnOwnerStoreAuthority,
+    candidate: ContainedTurnKernelOperation,
+    evidenceId: ContainedTurnEvidenceId,
+  ) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.#transaction(async client => {
+          const current = await this.#load(client, authority.operationId, true, authority.scope);
+          if (current === undefined) {return { kind: "not_found" as const };}
+          assertAuthority(authority, current);
+          const observedDigest = encodeContainedTurnState(current).digest;
+          const candidateDigest = encodeContainedTurnState(candidate).digest;
+          if (current.revision === candidate.revision && observedDigest === candidateDigest) {
+            return { kind: "applied" as const, operation: current };
+          }
+          if (current.reconciliation.kind === "required" &&
+              current.reconciliation.evidenceIds.includes(evidenceId)) {
+            return { debtOperation: current, evidenceId, kind: "indeterminate" as const };
+          }
+          if (current.terminal.kind === "final") {
+            return { current, kind: "stale" as const };
+          }
+          const debtOperation = mutateContainedTurnOperation(current, {
+            evidenceId,
+            kind: "record_reconciliation_debt",
+            source: "store_commit",
+          });
+          await this.#persist(client, current, debtOperation);
+          return { debtOperation, evidenceId, kind: "indeterminate" as const };
+        });
+      } catch (error) {
+        if (!(error instanceof PostgresCommitIndeterminateError)) {throw error;}
+        const observed = await this.read({
+          operationId: authority.operationId,
+          scope: authority.scope,
+        });
+        if (observed?.reconciliation.kind === "required" &&
+            observed.reconciliation.evidenceIds.includes(evidenceId)) {
+          return { debtOperation: observed, evidenceId, kind: "indeterminate" as const };
+        }
+      }
+    }
+    throw new Error("PostgreSQL reconciliation-debt commit remained indeterminate");
   }
 
   async #cas(input: Parameters<ContainedTurnKernelOperationStore["commit"]>[0]) {
-    return this.#transaction(async client => {
-      const current = await this.#load(client, input.authority.operationId, true);
-      if (current === undefined) {return { kind: "not_found" as const };}
-      assertAuthority(input.authority, current);
-      if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
-      await this.#persist(client, current, input.candidate);
-      return { kind: "applied" as const, operation: input.candidate };
-    });
+    try {
+      return await this.#transaction(async client => {
+        const current = await this.#load(
+          client, input.authority.operationId, true, input.authority.scope,
+        );
+        if (current === undefined) {return { kind: "not_found" as const };}
+        assertAuthority(input.authority, current);
+        if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
+        await this.#persist(client, current, input.candidate);
+        return { kind: "applied" as const, operation: input.candidate };
+      });
+    } catch (error) {
+      if (!(error instanceof PostgresCommitIndeterminateError)) {throw error;}
+      const evidenceId = containedTurnIdentity(
+        "evidence", `evidence:postgres-store-commit:${digestContainedTurnCanonicalValue({
+          candidateRevision: input.candidate.revision,
+          operationId: input.authority.operationId,
+          stateDigest: encodeContainedTurnState(input.candidate).digest,
+        })}`,
+      );
+      return this.#reconcileIndeterminateCommit(input.authority, input.candidate, evidenceId);
+    }
   }
 
   public async identifyAcceptance(input: Parameters<ContainedTurnKernelOperationStore["identifyAcceptance"]>[0]) {
-    const result = await this.#pool.query<{ operation_id: string }>(
-      "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND command_id=$2",
-      [input.scope.tenantId, input.commandId],
-    );
-    const operationId = result.rows[0]?.operation_id;
-    if (operationId !== undefined) {
-      const operation = await this.read({ operationId: containedTurnIdentity("operation", operationId), scope: input.scope });
-      if (operation === undefined) {return { kind: "not_found" as const };}
-      return operation.commandFingerprint === input.commandFingerprint
-        ? { kind: "replayed" as const, operation }
-        : { kind: "fingerprint_conflict" as const };
-    }
-    return {
-      acceptanceProofId: containedTurnIdentity("proof", this.#identities.nextId("proof")),
-      effectId: containedTurnIdentity("effect", this.#identities.nextId("effect")),
-      kind: "available" as const,
-      operationAuthorityRevision: `postgres-operation-authority:${randomUUID()}`,
-      operationId: containedTurnIdentity("operation", this.#identities.nextId("operation")),
-    };
+    return this.#readTransaction(async client => {
+      const result = await client.query<{ operation_id: string }>(
+        "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3",
+        [input.scope.tenantId, input.scope.projectId, input.commandId],
+      );
+      const operationId = result.rows[0]?.operation_id;
+      if (operationId !== undefined) {
+        const operation = await this.#load(client, operationId, false, input.scope);
+        if (operation === undefined) {return { kind: "not_found" as const };}
+        return operation.commandFingerprint === input.commandFingerprint
+          ? { kind: "replayed" as const, operation }
+          : { kind: "fingerprint_conflict" as const };
+      }
+      const seed = digestContainedTurnCanonicalValue({
+        commandFingerprint: input.commandFingerprint,
+        commandId: input.commandId,
+        projectId: input.scope.projectId,
+        tenantId: input.scope.tenantId,
+      });
+      return {
+        acceptanceProofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `acceptance:${seed}`)),
+        effectId: containedTurnIdentity("effect", this.#identities.nextId("effect", `acceptance:${seed}`)),
+        kind: "available" as const,
+        operationAuthorityRevision: this.#identities.nextId("operation_authority", `acceptance:${seed}`),
+        operationId: containedTurnIdentity("operation", this.#identities.nextId("operation", `acceptance:${seed}`)),
+      };
+    });
   }
 
   public async accept(candidate: ContainedTurnKernelOperation, authority: ContainedTurnOwnerStoreAuthority) {
@@ -206,18 +252,24 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     return this.#transaction(async client => {
       const encoded = encodeContainedTurnState(candidate);
       const inserted = await client.query(
-        `INSERT INTO agent_execution.contained_turn_operation_v1(operation_id,tenant_id,command_id,command_fingerprint,effect_id,revision,state,state_digest,terminal)
-         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,false) ON CONFLICT (tenant_id,command_id) DO NOTHING RETURNING operation_id`,
-        [candidate.operationId, candidate.scope.tenantId, candidate.commandId, candidate.commandFingerprint, candidate.effectId, candidate.revision, encoded.json, encoded.digest],
+        `INSERT INTO agent_execution.contained_turn_operation_v1(operation_id,tenant_id,project_id,command_id,command_fingerprint,effect_id,revision,state,state_codec_version,state_digest,terminal)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,false)
+         ON CONFLICT (tenant_id,project_id,command_id) DO NOTHING RETURNING operation_id`,
+        [candidate.operationId, candidate.scope.tenantId, candidate.scope.projectId,
+          candidate.commandId, candidate.commandFingerprint, candidate.effectId, candidate.revision,
+          encoded.json, encoded.codecVersion, encoded.digest],
       );
       if (inserted.rowCount === 1) {
         await this.#project(client, undefined, candidate);
         return { kind: "accepted" as const, operation: candidate };
       }
-      const existing = await client.query<{ operation_id: string }>("SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND command_id=$2 FOR UPDATE", [candidate.scope.tenantId, candidate.commandId]);
+      const existing = await client.query<{ operation_id: string }>(
+        "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3 FOR UPDATE",
+        [candidate.scope.tenantId, candidate.scope.projectId, candidate.commandId],
+      );
       const operationId = existing.rows[0]?.operation_id;
       if (operationId === undefined) {return { kind: "not_found" as const };}
-      const operation = await this.#load(client, operationId);
+      const operation = await this.#load(client, operationId, false, candidate.scope);
       if (operation === undefined) {return { kind: "not_found" as const };}
       return operation.commandFingerprint === candidate.commandFingerprint
         ? { kind: "replayed" as const, operation }
@@ -229,72 +281,192 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   public requestCancellation(input: Parameters<ContainedTurnKernelOperationStore["requestCancellation"]>[0]) {return this.#cas(input);}
 
   public async appendOutput(input: Parameters<ContainedTurnKernelOperationStore["appendOutput"]>[0]) {
-    return this.#transaction(async client => {
-      const current = await this.#load(client, input.authority.operationId, true);
-      if (current === undefined) {return { kind: "not_found" as const };}
-      assertAuthority(input.authority, current);
-      if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
-      if (current.output.chunks.length !== input.expectedCursor) {return { current, kind: "stale" as const };}
-      const next = appendContainedTurnOutputForOwnerStore(current, input.output);
-      await this.#persist(client, current, next);
-      return { kind: "applied" as const, operation: next };
-    });
+    let candidate: ContainedTurnKernelOperation | undefined;
+    try {
+      return await this.#transaction(async client => {
+        const current = await this.#load(
+          client, input.authority.operationId, true, input.authority.scope,
+        );
+        if (current === undefined) {return { kind: "not_found" as const };}
+        assertAuthority(input.authority, current);
+        if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
+        if (current.output.chunks.length !== input.expectedCursor) {return { current, kind: "stale" as const };}
+        candidate = appendContainedTurnOutputForOwnerStore(current, input.output);
+        await this.#persist(client, current, candidate);
+        return { kind: "applied" as const, operation: candidate };
+      });
+    } catch (error) {
+      if (!(error instanceof PostgresCommitIndeterminateError) || candidate === undefined) {throw error;}
+      const evidenceId = containedTurnIdentity(
+        "evidence", `evidence:postgres-output-commit:${digestContainedTurnCanonicalValue({
+          candidateRevision: candidate.revision,
+          operationId: input.authority.operationId,
+          stateDigest: encodeContainedTurnState(candidate).digest,
+        })}`,
+      );
+      return this.#reconcileIndeterminateCommit(input.authority, candidate, evidenceId);
+    }
   }
 
   public async read(input: Parameters<ContainedTurnKernelOperationStore["read"]>[0]) {
-    const client = await this.#pool.connect();
-    try {
-      await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      const operation = await this.#load(client, input.operationId);
-      await client.query("COMMIT");
-      return operation?.scope.projectId === input.scope.projectId && operation.scope.tenantId === input.scope.tenantId
-        ? operation : undefined;
-    } catch (error) {await client.query("ROLLBACK"); throw error;} finally {client.release();}
+    return this.#readTransaction(client =>
+      this.#load(client, input.operationId, false, input.scope));
+  }
+
+  public async rebuildProjections(
+    input: Parameters<ContainedTurnKernelOperationStore["read"]>[0],
+  ): Promise<ContainedTurnKernelOperation | undefined> {
+    return this.#transaction(client => this.#operations.rebuildProjections(client, input));
+  }
+
+  public async listDispatchPreparations(
+    input: Parameters<NonNullable<ContainedTurnKernelOperationStore["listDispatchPreparations"]>>[0],
+  ): ReturnType<NonNullable<ContainedTurnKernelOperationStore["listDispatchPreparations"]>> {
+    const limit = input.limit ?? 100;
+    const kinds = input.kinds ?? ["active", "cleanup_pending"] as const;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000 ||
+        kinds.length === 0 || kinds.some(kind => kind !== "active" && kind !== "cleanup_pending")) {
+      throw new TypeError("invalid dispatch preparation recovery query");
+    }
+    return this.#readTransaction(async client => {
+      const rows = await client.query<PreparationRecoveryRow>(
+        `SELECT p.operation_id,p.state,p.state_codec_version,p.state_digest
+           FROM agent_execution.contained_turn_dispatch_preparation_v1 AS p
+           JOIN agent_execution.contained_turn_operation_v1 AS o
+             ON o.operation_id = p.operation_id
+          WHERE o.tenant_id = $1 AND o.project_id = $2
+            AND (((p.state_codec_version = $4 AND p.state #>> '{payload,kind}') = ANY($3::text[]))
+                 OR ((p.state_codec_version = 1 AND p.state #>> '{kind}') = ANY($3::text[]))
+                 OR p.state_codec_version NOT IN (1, $4))
+          ORDER BY p.operation_id,p.preparation_token
+          LIMIT $5`,
+        [input.scope.tenantId, input.scope.projectId, kinds,
+          CONTAINED_TURN_PREPARATION_CODEC_VERSION, limit],
+      );
+      const recoveries = [];
+      for (const row of rows.rows) {
+        const preparation = decodeContainedTurnPreparation(
+          row.state, row.state_digest, row.state_codec_version,
+        );
+        if (preparation.kind !== "active" && preparation.kind !== "cleanup_pending") {continue;}
+        const operation = await this.#load(client, row.operation_id, false, input.scope);
+        if (operation === undefined) {
+          throw new Error("dispatch preparation recovery operation disappeared");
+        }
+        recoveries.push(Object.freeze({ operation, preparation }));
+      }
+      return Object.freeze(recoveries);
+    });
   }
 
   public async prepareDispatch(input: Parameters<ContainedTurnKernelOperationStore["prepareDispatch"]>[0]) {
     assertAuthority(input.authority, input.operation);
-    if (input.operation.workspaceId === undefined) {throw new TypeError("dispatch preparation requires workspace custody");}
-    const attemptId = containedTurnIdentity("attempt", this.#identities.nextId("attempt"));
-    const custodyId = containedTurnIdentity("custody", `custody:postgres:${randomUUID()}`);
-    const preparationToken = containedTurnPreparationToken({ attemptId, custodyId, operationId: input.operation.operationId });
-    const preparation: ContainedTurnDispatchPreparation = Object.freeze({
-      attemptId, custodyId, kind: "active", operationCutoffRevision: input.operation.operationCutoff.revision,
-      operationId: input.operation.operationId, preparationToken, preparedOperationRevision: input.operation.revision,
-      providerAccessGrantRequestId: `provider-access-grant:${randomUUID()}`,
-      runtimeSecurityGrantRequestId: `runtime-security-grant:${randomUUID()}`,
-      workspaceId: input.operation.workspaceId,
-    });
-    await this.#pool.query(
-      "INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1(operation_id,preparation_token,state) VALUES ($1,$2,$3::jsonb) ON CONFLICT DO NOTHING",
-      [input.operation.operationId, preparationToken, JSON.stringify(preparation)],
-    );
-    return Object.freeze({
-      attemptId,
-      claimProofId: containedTurnIdentity("proof", this.#identities.nextId("proof")),
-      custodyId,
-      cutoffProofId: containedTurnIdentity("proof", this.#identities.nextId("proof")),
-      executionGenerationId: containedTurnIdentity("execution_generation", this.#identities.nextId("execution_generation")),
-      writerFence: containedTurnIdentity("writer_fence", this.#identities.nextId("writer_fence")),
+    const workspaceId = input.operation.workspaceId;
+    if (workspaceId === undefined) {throw new TypeError("dispatch preparation requires workspace custody");}
+    return this.#transaction(async client => {
+      const current = await this.#load(client, input.authority.operationId, true, input.authority.scope);
+      if (current === undefined || current.revision !== input.operation.revision) {
+        throw new Error("dispatch preparation lost its operation revision fence");
+      }
+      assertAuthority(input.authority, current);
+      const ordinalResult = await client.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1",
+        [input.operation.operationId],
+      );
+      const ordinal = Number(ordinalResult.rows[0]?.count ?? "0");
+      if (!Number.isSafeInteger(ordinal) || ordinal < 0) {
+        throw new Error("dispatch preparation identity ordinal is invalid");
+      }
+      const seed = digestContainedTurnCanonicalValue({
+        operationId: input.operation.operationId,
+        operationRevision: input.operation.revision,
+        ordinal,
+      });
+      const attemptId = containedTurnIdentity("attempt", this.#identities.nextId("attempt", `preparation:${seed}:attempt`));
+      const custodyId = containedTurnIdentity("custody", this.#identities.nextId("custody", `preparation:${seed}:custody`));
+      const preparationToken = containedTurnPreparationToken({ attemptId, custodyId, operationId: input.operation.operationId });
+      const preparation: ContainedTurnDispatchPreparation = Object.freeze({
+        attemptId, custodyId, kind: "active", operationCutoffRevision: input.operation.operationCutoff.revision,
+        operationId: input.operation.operationId, preparationToken, preparedOperationRevision: input.operation.revision,
+        providerAccessGrantRequestId: null,
+        runtimeSecurityGrantRequestId: null,
+        workspaceId,
+      });
+      const encoded = encodeContainedTurnPreparation(preparation);
+      const inserted = await client.query(
+        `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+           (operation_id,preparation_token,state_codec_version,state,state_digest)
+         VALUES ($1,$2,$3,$4::jsonb,$5) ON CONFLICT DO NOTHING`,
+        [input.operation.operationId, preparationToken, encoded.codecVersion, encoded.json, encoded.digest],
+      );
+      if (inserted.rowCount !== 1) {
+        throw new Error("dispatch preparation identity collision");
+      }
+      return Object.freeze({
+        attemptId,
+        claimProofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `preparation:${seed}:claim`)),
+        custodyId,
+        cutoffProofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `preparation:${seed}:cutoff`)),
+        executionGenerationId: containedTurnIdentity("execution_generation", this.#identities.nextId("execution_generation", `preparation:${seed}:generation`)),
+        writerFence: containedTurnIdentity("writer_fence", this.#identities.nextId("writer_fence", `preparation:${seed}:writer`)),
+      });
     });
   }
 
   public async claimPreparedDispatch(input: Parameters<ContainedTurnKernelOperationStore["claimPreparedDispatch"]>[0]) {
-    validateContainedTurnConsumedGrantReceipts(input.subject, input.consumedGrantReceipts);
-    const startAuthority = `host-start-once:${randomUUID()}`;
+    const consumedReceipts = validateContainedTurnConsumedGrantReceipts(
+      input.subject, input.consumedGrantReceipts,
+    );
+    const claimSeed = digestContainedTurnCanonicalValue({
+      attemptId: input.subject.attemptId,
+      operationId: input.subject.operationId,
+      preparationToken: input.subject.preparationToken,
+    });
+    const startAuthority = this.#identities.nextId("start_authority", `claim:${claimSeed}`);
     return this.#transaction(async client => {
-      const current = await this.#load(client, input.authority.operationId, true);
+      const current = await this.#load(
+        client, input.authority.operationId, true, input.authority.scope,
+      );
       if (current === undefined) {return { kind: "not_found" as const };}
       assertAuthority(input.authority, current);
       if (current.dispatch.kind === "claimed" && current.dispatch.preparationToken === input.subject.preparationToken) {
         return { kind: "observed_claim" as const, operation: current };
       }
-      if (current.revision !== input.expectedOperationRevision) {return { current, kind: "stale" as const };}
-      const row = await client.query<PreparationRow>("SELECT state FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE", [current.operationId, input.subject.preparationToken]);
-      const preparation = row.rows[0] === undefined ? undefined : decodePreparation(row.rows[0].state);
+      const row = await client.query<PreparationRow>(
+        "SELECT state,state_codec_version,state_digest FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE",
+        [current.operationId, input.subject.preparationToken],
+      );
+      const persisted = row.rows[0];
+      const preparation = persisted === undefined ? undefined : decodeContainedTurnPreparation(
+        persisted.state, persisted.state_digest, persisted.state_codec_version,
+      );
       if (preparation === undefined || preparation.kind !== "active") {return { current, kind: "stale" as const };}
-      const providerAccessReceipt = input.consumedGrantReceipts[0];
-      const runtimeSecurityReceipt = input.consumedGrantReceipts[1];
+      if (preparation.operationId !== current.operationId ||
+          preparation.operationId !== input.subject.operationId ||
+          preparation.preparationToken !== input.subject.preparationToken ||
+          preparation.attemptId !== input.subject.attemptId ||
+          preparation.custodyId !== input.subject.custodyId ||
+          preparation.workspaceId !== current.workspaceId ||
+          preparation.workspaceId !== input.subject.workspaceId ||
+          preparation.operationCutoffRevision !== input.subject.operationCutoffRevision ||
+          preparation.preparedOperationRevision !== input.expectedOperationRevision ||
+          current.effectId !== input.subject.effectId ||
+          containedTurnScopeDigest(current.scope) !== input.subject.scopeDigest) {
+        return { current, kind: "stale" as const };
+      }
+      const providerAccessReceipt = consumedReceipts[0];
+      const runtimeSecurityReceipt = consumedReceipts[1];
+      const bound = bindContainedTurnPreparationGrantRequests(preparation, {
+        providerAccessGrantRequestId: providerAccessReceipt.grantRequestId,
+        runtimeSecurityGrantRequestId: runtimeSecurityReceipt.grantRequestId,
+      });
+      const encodedBound = encodeContainedTurnPreparation(bound);
+      await client.query(
+        "UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb,state_codec_version=$4,state_digest=$5 WHERE operation_id=$1 AND preparation_token=$2",
+        [current.operationId, input.subject.preparationToken, encodedBound.json,
+          encodedBound.codecVersion, encodedBound.digest],
+      );
+      if (current.revision !== input.expectedOperationRevision) {return { current, kind: "stale" as const };}
       const providerAccessProof: Extract<ContainedTurnProof, { kind: "provider_access_dispatch" }> = {
         binding: { ...operationBinding(current), acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(current.providerAccessSnapshot), resolutionDigest: providerAccessReceipt.ownerReceiptDigest },
         kind: "provider_access_dispatch", proofId: containedTurnIdentity("proof", `proof:provider-access-grant:${providerAccessReceipt.ownerReceiptDigest}`),
@@ -305,19 +477,23 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       };
       const claimProof: Extract<ContainedTurnProof, { kind: "dispatch_claim" }> = {
         binding: { ...operationBinding(current), attemptId: input.subject.attemptId, effectId: current.effectId, preparationToken: input.subject.preparationToken, providerAccessDispatchProofId: providerAccessProof.proofId, runtimeSecurityDispatchProofId: runtimeSecurityProof.proofId },
-        kind: "dispatch_claim", proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")),
+        kind: "dispatch_claim", proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `claim:${claimSeed}:dispatch`)),
       };
       const next = mutateContainedTurnOperation(current, {
         attemptId: input.subject.attemptId, claimProof, custodyId: input.subject.custodyId,
-        cutoffProof: { binding: operationBinding(current), kind: "cutoff", proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) },
+        cutoffProof: { binding: operationBinding(current), kind: "cutoff", proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `claim:${claimSeed}:cutoff`)) },
         executionGenerationId: input.subject.executionGenerationId, hostBootId: input.subject.hostBootId,
         hostCustodyProof: input.hostCustodyProof, hostInstanceId: input.subject.hostInstanceId, kind: "claim_dispatch",
         preparationToken: input.subject.preparationToken, providerAccessDispatchProof: providerAccessProof,
-        runtimeSecurityDispatchProof: runtimeSecurityProof, writerFence: containedTurnIdentity("writer_fence", this.#identities.nextId("writer_fence")),
+        runtimeSecurityDispatchProof: runtimeSecurityProof, writerFence: containedTurnIdentity("writer_fence", this.#identities.nextId("writer_fence", `claim:${claimSeed}:writer`)),
       });
       await this.#persist(client, current, next);
-      const claimed = claimContainedTurnDispatchPreparation(preparation);
-      await client.query("UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb WHERE operation_id=$1 AND preparation_token=$2", [current.operationId, input.subject.preparationToken, JSON.stringify(claimed)]);
+      const claimed = encodeContainedTurnPreparation(claimContainedTurnDispatchPreparation(bound));
+      await client.query(
+        "UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb,state_codec_version=$4,state_digest=$5 WHERE operation_id=$1 AND preparation_token=$2",
+        [current.operationId, input.subject.preparationToken, claimed.json,
+          claimed.codecVersion, claimed.digest],
+      );
       return { kind: "claimed" as const, operation: next, startAuthority };
     });
   }
@@ -326,51 +502,93 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     input: Parameters<ContainedTurnKernelOperationStore["retireDispatchPreparation"]>[0],
   ): ReturnType<ContainedTurnKernelOperationStore["retireDispatchPreparation"]> {
     return this.#transaction(async client => {
-      const current = await this.#load(client, input.authority.operationId, true);
+      const current = await this.#load(client, input.authority.operationId, true, input.authority.scope);
       if (current === undefined) {return { evidenceId: containedTurnIdentity("evidence", `evidence:postgres-retire-missing:${digestContainedTurnCanonicalValue({ operationId: input.authority.operationId, preparationToken: input.preparationToken })}`), kind: "indeterminate" as const };}
       assertAuthority(input.authority, current);
       if (current.dispatch.kind === "claimed" && current.dispatch.preparationToken === input.preparationToken) {return { kind: "claimed" as const, operation: current };}
-      const row = await client.query<PreparationRow>("SELECT state FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE", [current.operationId, input.preparationToken]);
-      const preparation = row.rows[0] === undefined ? undefined : decodePreparation(row.rows[0].state);
+      const row = await client.query<PreparationRow>(
+        "SELECT state,state_codec_version,state_digest FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE",
+        [current.operationId, input.preparationToken],
+      );
+      const persisted = row.rows[0];
+      const preparation = persisted === undefined ? undefined : decodeContainedTurnPreparation(
+        persisted.state, persisted.state_digest, persisted.state_codec_version,
+      );
       if (preparation === undefined) {return { current, kind: "stale" as const };}
       if (preparation.kind === "claimed") {return { current, kind: "stale" as const };}
-      const retired = retireContainedTurnDispatchPreparation(preparation, this.#identities.nextId("cleanup"));
-      await client.query("UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb WHERE operation_id=$1 AND preparation_token=$2", [current.operationId, input.preparationToken, JSON.stringify(retired)]);
+      if (preparation.operationId !== current.operationId ||
+          preparation.workspaceId !== current.workspaceId ||
+          preparation.operationCutoffRevision !== current.operationCutoff.revision ||
+          preparation.preparedOperationRevision !== input.expectedOperationRevision ||
+          preparation.operationCutoffRevision !== input.expectedOperationCutoffRevision) {
+        return { current, kind: "stale" as const };
+      }
+      const retired = retireContainedTurnDispatchPreparation(
+        preparation,
+        this.#identities.nextId("cleanup", `retirement:${digestContainedTurnCanonicalValue({
+          operationId: current.operationId,
+          preparationToken: input.preparationToken,
+          reason: input.reason,
+        })}`),
+        input.consumedGrantRequestIds,
+      );
+      const encoded = encodeContainedTurnPreparation(retired);
+      await client.query(
+        "UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb,state_codec_version=$4,state_digest=$5 WHERE operation_id=$1 AND preparation_token=$2",
+        [current.operationId, input.preparationToken, encoded.json, encoded.codecVersion, encoded.digest],
+      );
       return retired.kind === "cleanup_pending" ? { kind: "retired" as const, preparation: retired } : { current, kind: "stale" as const };
     });
   }
 
   public async recordDispatchPreparationCleanup(input: Parameters<ContainedTurnKernelOperationStore["recordDispatchPreparationCleanup"]>[0]) {
     return this.#transaction(async client => {
-      const current = await this.#load(client, input.authority.operationId, true);
+      const current = await this.#load(client, input.authority.operationId, true, input.authority.scope);
       if (current === undefined) {throw new Error("cleanup operation disappeared");}
       assertAuthority(input.authority, current);
-      const row = await client.query<PreparationRow>("SELECT state FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE", [current.operationId, input.permit.preparationToken]);
-      if (row.rows[0] === undefined) {throw new Error("cleanup preparation disappeared");}
-      const next = recordContainedTurnPreparationCleanup(decodePreparation(row.rows[0].state), input);
-      await client.query("UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb WHERE operation_id=$1 AND preparation_token=$2", [current.operationId, input.permit.preparationToken, JSON.stringify(next)]);
+      const row = await client.query<PreparationRow>(
+        "SELECT state,state_codec_version,state_digest FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE",
+        [current.operationId, input.permit.preparationToken],
+      );
+      const persisted = row.rows[0];
+      if (persisted === undefined) {throw new Error("cleanup preparation disappeared");}
+      const next = recordContainedTurnPreparationCleanup(decodeContainedTurnPreparation(
+        persisted.state, persisted.state_digest, persisted.state_codec_version,
+      ), input);
+      const encoded = encodeContainedTurnPreparation(next);
+      await client.query("UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb,state_codec_version=$4,state_digest=$5 WHERE operation_id=$1 AND preparation_token=$2", [current.operationId, input.permit.preparationToken, encoded.json, encoded.codecVersion, encoded.digest]);
       return next;
     });
   }
 
   public async prepareCancellation(input: Parameters<ContainedTurnKernelOperationStore["prepareCancellation"]>[0]) {
     assertAuthority(input.authority, input.operation);
-    const cancellationCommandId = containedTurnIdentity("cancellation_command", this.#identities.nextId("cancellation_command"));
+    const cancellationSeed = digestContainedTurnCanonicalValue({
+      operationId: input.operation.operationId,
+      revision: input.operation.revision,
+      scopeDigest: input.operation.acceptedAuthorityVector.scopeDigest,
+    });
+    const cancellationCommandId = containedTurnIdentity("cancellation_command", this.#identities.nextId("cancellation_command", `cancellation:${cancellationSeed}:command`));
     const fingerprint = containedTurnCancellationFingerprint({ cancellationCommandId, operationId: input.operation.operationId, scopeDigest: input.operation.acceptedAuthorityVector.scopeDigest });
     return Object.freeze({
       command: Object.freeze({ cancellationCommandId, fingerprint, operationId: input.operation.operationId, scopeDigest: input.operation.acceptedAuthorityVector.scopeDigest }),
-      cutoffProof: Object.freeze({ binding: { ...operationBinding(input.operation), cancellationCommandId }, kind: "cutoff" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) }),
-      preventionProofId: containedTurnIdentity("proof", this.#identities.nextId("proof")),
-      proof: Object.freeze({ binding: { ...operationBinding(input.operation), cancellationCommandId, cancellationFingerprint: fingerprint }, kind: "cancellation" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) }),
+      cutoffProof: Object.freeze({ binding: { ...operationBinding(input.operation), cancellationCommandId }, kind: "cutoff" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `cancellation:${cancellationSeed}:cutoff`)) }),
+      preventionProofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `cancellation:${cancellationSeed}:prevention`)),
+      proof: Object.freeze({ binding: { ...operationBinding(input.operation), cancellationCommandId, cancellationFingerprint: fingerprint }, kind: "cancellation" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `cancellation:${cancellationSeed}:command`)) }),
     });
   }
 
   public async proofsForAcceptedEffect(input: Parameters<ContainedTurnKernelOperationStore["proofsForAcceptedEffect"]>[0]) {
     assertAuthority(input.authority, input.operation);
     const binding = attemptBinding(input.operation);
+    const seed = digestContainedTurnCanonicalValue({
+      attemptId: binding.attemptId,
+      operationId: input.operation.operationId,
+      revision: input.operation.revision,
+    });
     return Object.freeze({
-      acceptanceProof: { binding: { ...binding, disposition: "accepted" as const }, kind: "provider_acceptance" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) },
-      effectProof: { binding: { ...binding, disposition: "committed" as const }, kind: "effect_resolution" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) },
+      acceptanceProof: { binding: { ...binding, disposition: "accepted" as const }, kind: "provider_acceptance" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `effect:${seed}:acceptance`)) },
+      effectProof: { binding: { ...binding, disposition: "committed" as const }, kind: "effect_resolution" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `effect:${seed}:resolution`)) },
       kind: "proved" as const,
     });
   }
@@ -378,38 +596,50 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   public async proofsForProcessNoStart(input: Parameters<ContainedTurnKernelOperationStore["proofsForProcessNoStart"]>[0]) {
     assertAuthority(input.authority, input.operation);
     const binding = operationBinding(input.operation);
+    const seed = digestContainedTurnCanonicalValue({ operationId: input.operation.operationId, revision: input.operation.revision });
+    const proof = (role: string) => containedTurnIdentity("proof", this.#identities.nextId("proof", `no-start:${seed}:${role}`));
     return Object.freeze({
-      containmentProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "containment_not_required" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) },
-      effectProof: { binding: { ...binding, disposition: "not_committed" as const, effectId: input.operation.effectId }, kind: "effect_no_start" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) },
-      executionProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_start" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) },
-      outputProof: { binding: { ...binding, finalCursor: input.operation.output.chunks.length }, kind: "output_no_start_drain" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) },
-      providerProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "provider_not_started" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")) },
+      containmentProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "containment_not_required" as const, proofId: proof("containment") },
+      effectProof: { binding: { ...binding, disposition: "not_committed" as const, effectId: input.operation.effectId }, kind: "effect_no_start" as const, proofId: proof("effect") },
+      executionProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_start" as const, proofId: proof("execution") },
+      outputProof: { binding: { ...binding, finalCursor: input.operation.output.chunks.length }, kind: "output_no_start_drain" as const, proofId: proof("output") },
+      providerProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "provider_not_started" as const, proofId: proof("provider") },
     });
   }
 
   public async proofsForPrevention(input: Parameters<ContainedTurnKernelOperationStore["proofsForPrevention"]>[0]) {
     assertAuthority(input.authority, input.operation);
     const binding = operationBinding(input.operation);
-    const proof = (kind: Parameters<ContainedTurnPostgresIdentitySource["nextId"]>[0] = "proof") => containedTurnIdentity("proof", this.#identities.nextId(kind));
+    const seed = digestContainedTurnCanonicalValue({
+      operationId: input.operation.operationId,
+      preventionProofId: input.preventionProofId,
+      revision: input.operation.revision,
+    });
+    const proof = (role: string) => containedTurnIdentity("proof", this.#identities.nextId("proof", `prevention:${seed}:${role}`));
     return Object.freeze({
-      containmentProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "containment_not_required" as const, proofId: proof() },
-      cutoffProof: { binding, kind: "cutoff" as const, proofId: proof() },
-      effectProof: { binding: { ...binding, disposition: "not_committed" as const, effectId: input.operation.effectId }, kind: "effect_no_start" as const, proofId: proof() },
-      executionProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_start" as const, proofId: proof() },
-      hostCustodyProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "host_custody_no_start" as const, proofId: proof() },
+      containmentProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "containment_not_required" as const, proofId: proof("containment") },
+      cutoffProof: { binding, kind: "cutoff" as const, proofId: proof("cutoff") },
+      effectProof: { binding: { ...binding, disposition: "not_committed" as const, effectId: input.operation.effectId }, kind: "effect_no_start" as const, proofId: proof("effect") },
+      executionProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_start" as const, proofId: proof("execution") },
+      hostCustodyProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "host_custody_no_start" as const, proofId: proof("custody") },
       noDispatchProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_dispatch" as const, proofId: input.preventionProofId },
-      outputProof: { binding: { ...binding, finalCursor: 0 }, kind: "output_no_start_drain" as const, proofId: proof() },
-      providerProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "provider_not_started" as const, proofId: proof() },
+      outputProof: { binding: { ...binding, finalCursor: 0 }, kind: "output_no_start_drain" as const, proofId: proof("output") },
+      providerProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "provider_not_started" as const, proofId: proof("provider") },
     });
   }
 
   public async terminalProof(input: Parameters<ContainedTurnKernelOperationStore["terminalProof"]>[0]) {
     assertAuthority(input.authority, input.operation);
     if (input.satisfactionDigest !== containedTurnSatisfactionDigest(input.operation) || input.operation.providerExecution.kind !== "closed") {throw new TypeError("terminal proof precondition mismatch");}
+    const seed = digestContainedTurnCanonicalValue({
+      operationId: input.operation.operationId,
+      revision: input.operation.revision,
+      satisfactionDigest: input.satisfactionDigest,
+    });
     return Object.freeze({
       binding: { ...operationBinding(input.operation), requiredReceiptSetDigest: input.operation.requiredReceiptSetDigest, requiredReceiptSetVersion: input.operation.requiredReceiptSet.setVersion, satisfactionDigest: input.satisfactionDigest, terminalOutcome: input.operation.providerExecution.outcome },
       kind: "terminal_truth" as const,
-      proofId: containedTurnIdentity("proof", this.#identities.nextId("proof")),
+      proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `terminal:${seed}`)),
     });
   }
 }
