@@ -664,6 +664,49 @@ transition. Adapter conformance and E2E suites may reuse oracle scenario IDs.
 
 ## Pull request sequence
 
+### Delivery ratchet
+
+The default human-review budget is about 2,000 changed LOC per PR. Generated
+oracle output, frozen fixtures, lockfiles, and other mechanically verified bytes
+are reported separately from handwritten production and test LOC. The budget is
+a delivery target, not permission to split one active safety invariant: any
+larger PR must state the indivisible invariant and prove why a dormant or
+dependency-ordered split is unsafe.
+
+Every PR:
+
+- starts from current `main` or names one exact upstream stacked PR;
+- owns one bounded context or one explicit composition/activation event;
+- is independently buildable, focused-testable, normally mergeable, and
+  reversible by one merge revert;
+- leaves unfinished downstream behavior dormant or typed `unsupported` rather
+  than publishing a partially safe execution path;
+- records handwritten, test, generated/fixture, and total changed LOC
+  separately;
+- receives one review per exact SHA. A failed review requires a remediation SHA
+  before another review; unchanged PASS evidence is reused;
+- runs focused owner checks during development, `check:fast` on a stable PR
+  checkpoint, and one full `check` on the exact mergeable head.
+
+Hosted delivery uses at most two writers, one reviewer, and one reserved
+integrator/gate lane per worker host under normal capacity. A writer checkpoints
+every 20 minutes or 500 changed LOC, whichever comes first. A PASS is integrated
+or turned into the next mergeable PR within 45 minutes. If the accepted frontier
+does not advance for 60 minutes, stop adding writer lanes and clear integration
+before expanding scope.
+
+Preflight each hosted lane with the exact Node/pnpm tuple, fresh resource and
+account capacity, and Git write capability. If safe execution exposes read-only
+Git metadata, the worker produces one deterministic patch or bundle; the
+orchestration shell performs the mechanical commit/cherry-pick and a read-only
+worker reviews that exact SHA. Do not spend repeated turns retrying `index.lock`,
+quota, or account-capacity failures.
+
+An existing mega-PR is closed as superseded only after every valuable hunk,
+review finding, and exact evidence artifact maps to a replacement PR or an
+explicit exclusion. Its branch and discussion remain immutable evidence; no
+force-push repurposes it.
+
 1. `docs(architecture): narrow contained agent turn v1 decision`
 2. `feat(agent-execution): add contained turn operation kernel`
 3. `feat(agent-execution): add durable operation persistence`
