@@ -28,10 +28,7 @@ import type { StableProcessGroupGuardian } from "./host-custody-stable-guardian.
 import type { OperationResidueAuthority, OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import type { HostStderrIngress, HostStdoutIngress } from "./host-custody-stdio.js";
 import { notStartedIdentity, strictClosure } from "./host-custody-evidence.js";
-import type {
-  HostCustodyMountIdentityObserver,
-  RetainedHostCustodyWorkspaceAuthority,
-} from "./private-host-custody-reservation.js";
+import type { RetainedHostCustodyWorkspaceAuthority } from "./private-host-custody-reservation.js";
 
 export const HOST_CUSTODY_LIMITS = Object.freeze({
   maxDiagnosticBytes: 65_536,
@@ -50,7 +47,6 @@ export interface LiveCustody {
   readonly providerBinding: Parameters<ProviderProcessCustodyPort["open"]>[0]["providerBinding"];
   readonly workspaceRef: string;
   readonly workspaceAuthority?: HostCustodyWorkspaceAuthority;
-  readonly mountIdentityObserver: HostCustodyMountIdentityObserver;
   readonly retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
   closureEvidence: HostCustodyStrictClosureEvidence;
   containment?: Promise<ContainmentResult>;
@@ -94,7 +90,6 @@ export const createLiveCustody = (
   hostLifecycleGenerationSha256: string,
   inputIdentitySha256: string,
   options: Readonly<{
-    mountIdentityObserver: HostCustodyMountIdentityObserver;
     opening: Promise<void>;
     retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
     workspaceAuthority?: HostCustodyWorkspaceAuthority;
@@ -107,7 +102,6 @@ export const createLiveCustody = (
   evidenceSealed: false,
   identity: notStartedIdentity(hostLifecycleGenerationSha256),
   inputIdentitySha256,
-  mountIdentityObserver: options.mountIdentityObserver,
   opening: options.opening,
   operationId: input.operationId,
   providerBinding: Object.freeze({ ...input.providerBinding }),
@@ -144,7 +138,6 @@ export interface NodeProviderProcessCustodyOptions {
   readonly maxStdoutBytes?: number;
   readonly maxTombstones?: number;
   readonly monotonicNow?: () => number;
-  readonly mountIdentityObserver?: HostCustodyMountIdentityObserver;
   readonly processIdentityObserver?: HostCustodyProcessIdentityObserver;
   readonly residueAuthorityFactory?: OperationResidueAuthorityFactory;
   readonly spawnAcknowledgementObserver?: (input: {

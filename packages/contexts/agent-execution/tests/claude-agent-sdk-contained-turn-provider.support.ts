@@ -233,9 +233,22 @@ export const kernelManifest = Object.freeze({
 export const kernelAttemptId = containedTurnIdentity("attempt", "attempt:claude-kernel-test");
 export const kernelAuthorityVectorDigest = digestContainedTurnCanonicalValue(["kernel-authority"]);
 export const kernelCustodyId = containedTurnIdentity("custody", "custody:claude-kernel-test");
+export const kernelCustodyRef = "urn:agent-runtime:host-custody:random-claude-kernel-test";
 export const kernelEffectId = containedTurnIdentity("effect", "effect:claude-kernel-test");
 export const kernelOperationId = containedTurnIdentity("operation", "operation:claude-kernel-test");
 export const kernelWorkspaceId = containedTurnIdentity("workspace", "workspace:opaque-claude-kernel-test");
+export const kernelProviderBinding = Object.freeze({
+  ...kernelAdapterSnapshot,
+  credentialBindingDigest: "sha256:credential-test",
+  providerRouteRef: "route:claude-test",
+});
+export const kernelPrivateExecution = Object.freeze({
+  custodyRef: kernelCustodyRef,
+  kernelCustodyId,
+  privateProjection,
+  providerBinding: kernelProviderBinding,
+  workspaceRef,
+});
 export const kernelStartProof = (overrides: Record<string, unknown> = {}) => Object.freeze({
   binding: Object.freeze({
     attemptId: kernelAttemptId,
@@ -304,9 +317,10 @@ export const kernelProvider = (
         custodyId: kernelCustodyId,
         effectId: kernelEffectId,
         operationId: kernelOperationId,
+        providerBinding: kernelProviderBinding,
         workspaceId: kernelWorkspaceId,
       });
-      return consume({ privateProjection, workspaceRef });
+      return consume(kernelPrivateExecution);
     },
   },
   processes: { get: () => inertRegistryProcess(), start: () => inertProcess() },

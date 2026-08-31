@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, open, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
@@ -52,6 +52,17 @@ const createFixture = async (spawnMode: HostCustodyLaunchPlan["spawnMode"]) => {
     mkdir(temporary, { mode: 0o700 }),
     mkdir(codexHome, { mode: 0o700 }),
   ]);
+  const workspaceIdentity = await stat(workspaceRef, {bigint: true});
+  const workspaceHandle = await open(workspaceRef, "r");
+  const fdinfo = await readFile(`/proc/self/fdinfo/${workspaceHandle.fd}`, "utf8");
+  await workspaceHandle.close();
+  const mountId = /^mnt_id:\s*(\d+)$/mu.exec(fdinfo)?.[1];
+  assert.ok(mountId);
+  const workspaceAuthority = Object.freeze({
+    canonicalPath: workspaceRef,
+    descriptorPath: workspaceRef,
+    identity: Object.freeze({dev: workspaceIdentity.dev, ino: workspaceIdentity.ino, mountId}),
+  });
   const marker = join(root, "provider-executed");
   const executablePath = await realpath(process.execPath);
   const launchArguments = Object.freeze([
@@ -95,14 +106,20 @@ const createFixture = async (spawnMode: HostCustodyLaunchPlan["spawnMode"]) => {
     }),
     terminateAfterMs: 1_000,
   });
-  return { counts, custody, marker, workspaceRef };
+  return { counts, custody, marker, plan, workspaceAuthority, workspaceRef };
 };
 
-const hostOpenInput = (workspaceRef: string) => Object.freeze({
+const hostOpenInput = (
+  workspaceRef: string,
+  workspaceAuthority: Awaited<ReturnType<typeof createFixture>>["workspaceAuthority"],
+  launchPlan: HostCustodyLaunchPlan,
+) => Object.freeze({
   attemptId,
   intentMode: "analysis" as const,
   operationId,
+  launchPlan,
   providerBinding,
+  workspaceAuthority,
   workspaceRef,
 });
 
@@ -116,7 +133,7 @@ test("Host no-start reserve rejects eager and omitted modes before guardian or p
     await t.test(spawnMode ?? "omitted", async () => {
       const fixture = await createFixture(spawnMode);
       await assert.rejects(
-        fixture.custody.reserve(hostOpenInput(fixture.workspaceRef)),
+        fixture.custody.reserve(hostOpenInput(fixture.workspaceRef, fixture.workspaceAuthority, fixture.plan)),
         (error: unknown) => error instanceof HostCustodyLaunchRejectedError &&
           error.code === "authority-verification-failed",
       );
@@ -128,7 +145,9 @@ test("Host no-start reserve rejects eager and omitted modes before guardian or p
 
 test("real Node Host delegated reserve remains never-started without start authority", async () => {
   const fixture = await createFixture("sdk-delegated");
-  const rawReservation = await fixture.custody.reserve(hostOpenInput(fixture.workspaceRef));
+  const rawReservation = await fixture.custody.reserve(hostOpenInput(
+    fixture.workspaceRef, fixture.workspaceAuthority, fixture.plan,
+  ));
   assert.equal(fixture.custody.get(rawReservation.custodyRef), undefined);
   assert.equal(fixture.custody.evidence(rawReservation.custodyRef)?.spawn, "never-started");
   assert.deepEqual(fixture.counts, { guardianAuthorizations: 0, residueAuthorities: 1 });

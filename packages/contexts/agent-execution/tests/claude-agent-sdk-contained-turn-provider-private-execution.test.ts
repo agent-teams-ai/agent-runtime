@@ -18,7 +18,9 @@ import {
   kernelInput,
   kernelManifest,
   kernelOperationId,
+  kernelPrivateExecution,
   kernelProvider,
+  kernelProviderBinding,
   kernelStartProof,
   kernelWorkspaceId,
   nextTurn,
@@ -53,8 +55,8 @@ test("current-kernel adapter makes a duplicate private callback effect-free and 
   const adapter = kernelProvider(spawnedQuery([success("double-private-callback")]), {
     privateExecutions: {
       consume: async (_request, consume) => {
-        const first = await consume({ privateProjection, workspaceRef });
-        const duplicate = await consume({ privateProjection, workspaceRef });
+        const first = await consume(kernelPrivateExecution);
+        const duplicate = await consume(kernelPrivateExecution);
         assert.equal(duplicate.kind, "indeterminate");
         return first;
       },
@@ -95,7 +97,7 @@ test("current-kernel adapter drains a callback already started before its resolv
   }, {
     privateExecutions: {
       consume: async (_request, consume) => {
-        void consume({ privateProjection, workspaceRef });
+        void consume(kernelPrivateExecution);
         await waitFor(() => iteratorStarted);
         throw new Error("synthetic resolver rejection after callback");
       },
@@ -124,7 +126,7 @@ test("current-kernel adapter observes a callback rejection after resolver reject
   }, {
     privateExecutions: {
       consume: async (_request, consume) => {
-        void consume({ privateProjection, workspaceRef });
+        void consume(kernelPrivateExecution);
         throw new Error("synthetic resolver rejection after callback rejection");
       },
     },
@@ -136,10 +138,7 @@ test("current-kernel adapter observes a callback rejection after resolver reject
 });
 
 test("current-kernel adapter makes a retained callback invoked after resolver settlement effect-free", async () => {
-  let retained: ((execution: {
-    privateProjection: typeof privateProjection;
-    workspaceRef: string;
-  }) => Promise<unknown>) | undefined;
+  let retained: ((execution: typeof kernelPrivateExecution) => Promise<unknown>) | undefined;
   let queryCalls = 0;
   let guardianSpawns = 0;
   const adapter = kernelProvider(() => {
@@ -161,7 +160,7 @@ test("current-kernel adapter makes a retained callback invoked after resolver se
   });
   assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
   assert.ok(retained);
-  const late = await retained({ privateProjection, workspaceRef });
+  const late = await retained(kernelPrivateExecution);
   assert.equal((late as { kind: string }).kind, "indeterminate");
   assert.deepEqual([queryCalls, guardianSpawns], [0, 0]);
 });
@@ -181,14 +180,14 @@ test("current-kernel adapter makes callbacks queued on an already-settled resolv
             if (settlement === "fulfilled") {
               const settled = Promise.resolve();
               void settled.then(() => {
-                void consume({ privateProjection, workspaceRef });
+                void consume(kernelPrivateExecution);
                 return settlement;
               });
               return settled;
             }
             const settled = Promise.reject<void>(new Error("synthetic resolver rejection"));
             void settled.catch(() => {
-              void consume({ privateProjection, workspaceRef });
+              void consume(kernelPrivateExecution);
               return settlement;
             });
             return settled;
@@ -219,7 +218,7 @@ test("current-kernel adapter rejects a resolver substitute for the exactly-once 
   const adapter = kernelProvider(spawnedQuery([success("substituted-private-result")]), {
     privateExecutions: {
       consume: async (_request, consume) => {
-        const actual = await consume({ privateProjection, workspaceRef });
+        const actual = await consume(kernelPrivateExecution);
         return { ...actual };
       },
     },
@@ -239,7 +238,7 @@ test("current-kernel private execution lookup is bound to the exact attempt and 
     privateExecutions: {
       consume: async (request, consume) => {
         observedRequest = request;
-        return consume({ privateProjection, workspaceRef });
+        return consume(kernelPrivateExecution);
       },
     },
   });
@@ -256,8 +255,53 @@ test("current-kernel private execution lookup is bound to the exact attempt and 
     custodyId: kernelCustodyId,
     effectId: kernelEffectId,
     operationId: kernelOperationId,
+    providerBinding: kernelProviderBinding,
     workspaceId: kernelWorkspaceId,
   });
+});
+
+test("current-kernel adapter rejects missing or swapped callback authority before Claude provider effect", async t => {
+  for (const row of [
+    { name: "missing-custody-ref", execution: { ...kernelPrivateExecution, custodyRef: null } },
+    { name: "missing-kernel-custody-id", execution: { ...kernelPrivateExecution, kernelCustodyId: null } },
+    {
+      name: "swapped-kernel-custody-id",
+      execution: {
+        ...kernelPrivateExecution,
+        kernelCustodyId: containedTurnIdentity("custody", "custody:claude-kernel-swapped"),
+      },
+    },
+    { name: "missing-provider-binding", execution: { ...kernelPrivateExecution, providerBinding: null } },
+    {
+      name: "swapped-provider-binding",
+      execution: {
+        ...kernelPrivateExecution,
+        providerBinding: { ...kernelProviderBinding, providerRouteRef: "route:claude:swapped" },
+      },
+    },
+  ] as const) {
+    await t.test(row.name, async () => {
+      let providerEffects = 0;
+      const adapter = kernelProvider(() => {
+        providerEffects += 1;
+        throw new Error("provider effect forbidden");
+      }, {
+        privateExecutions: { consume: async (_request, consume) => consume(row.execution as never) },
+        processes: {
+          get: () => {
+            providerEffects += 1;
+            return inertRegistryProcess();
+          },
+          start: () => {
+            providerEffects += 1;
+            return inertProcess();
+          },
+        },
+      });
+      assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+      assert.equal(providerEffects, 0);
+    });
+  }
 });
 
 test("current-kernel adapter rejects every wrong-bound Host start observation", async t => {
@@ -381,14 +425,11 @@ test("current-kernel adapter snapshots mutable constructor options before execut
     async consume(
       this: { ownerState: string },
       _request: unknown,
-      consume: (execution: {
-        privateProjection: typeof privateProjection;
-        workspaceRef: string;
-      }) => Promise<unknown>,
+      consume: (execution: typeof kernelPrivateExecution) => Promise<unknown>,
     ) {
       assert.equal(this.ownerState, "original");
       originalResolverCalls += 1;
-      return consume({ privateProjection, workspaceRef });
+      return consume(kernelPrivateExecution);
     },
   };
   const processes = {

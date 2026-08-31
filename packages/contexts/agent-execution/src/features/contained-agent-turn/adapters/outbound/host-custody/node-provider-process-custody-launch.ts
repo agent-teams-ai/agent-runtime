@@ -68,7 +68,7 @@ const descriptorFailureClass = (error: unknown): string => {
 
 export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): GuardedProviderLaunch => {
   const { live } = options;
-  let authority: VerifiedLaunchDescriptors;
+  let authority: VerifiedLaunchDescriptors | undefined;
   try {
     authority = acquireVerifiedLaunchDescriptors(
       live.plan!, live.executable!, live.workspaceRef,
@@ -77,11 +77,16 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
         : Object.freeze({observation: live.workspace!, retainedDescriptorPath: options.workspaceDescriptorPath}),
       live.privatePaths!,
     );
+    live.retainedWorkspaceAuthority?.assertLaunchDescriptor(
+      authority.workspaceDescriptor.parentDescriptor,
+    );
   } catch (error) {
+    authority?.close();
     const failure = new DescriptorAuthorityAcquisitionError();
     failure.name = descriptorFailureClass(error);
     throw failure;
   }
+  if (authority === undefined) {throw new DescriptorAuthorityAcquisitionError();}
   let guardian: StableProcessGroupGuardian;
   try {
     guardian = new StableProcessGroupGuardian({

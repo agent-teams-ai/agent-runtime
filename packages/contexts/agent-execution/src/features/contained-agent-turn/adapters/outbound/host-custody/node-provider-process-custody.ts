@@ -62,7 +62,6 @@ import {
   assertReservedWorkspaceAuthority,
   bindPrivateHostCustodyReservation,
   closeRetainedWorkspaceAuthority,
-  observeHostCustodyMountIdentity,
 } from "./private-host-custody-reservation.js";
 import {
   createLiveCustody,
@@ -94,7 +93,6 @@ export class NodeProviderProcessCustody implements
   readonly #maxStdoutBytes: number;
   readonly #maxTombstones: number;
   readonly #monotonicNow: () => number;
-  readonly #mountIdentityObserver: NonNullable<NodeProviderProcessCustodyOptions["mountIdentityObserver"]>;
   readonly #processIdentityObserver: HostCustodyProcessIdentityObserver | undefined;
   readonly #residueAuthorityFactory: OperationResidueAuthorityFactory;
   readonly #identityObservationAfterMs: number;
@@ -123,7 +121,6 @@ export class NodeProviderProcessCustody implements
     this.#maxTombstones = positiveInteger("maxTombstones", options.maxTombstones, 10_000);
     this.#stdoutHighWaterBytes = positiveInteger("stdoutHighWaterBytes", options.stdoutHighWaterBytes, HOST_CUSTODY_LIMITS.stdoutHighWaterBytes);
     this.#monotonicNow = options.monotonicNow ?? (() => performance.now());
-    this.#mountIdentityObserver = options.mountIdentityObserver ?? observeHostCustodyMountIdentity;
     this.#identityObservationAfterMs = positiveInteger("identityObservationAfterMs", options.identityObservationAfterMs, 2_000);
     this.#processIdentityObserver = options.processIdentityObserver ?? createPosixProcessIdentityObserver();
     this.#residueAuthorityFactory = options.residueAuthorityFactory ?? unsupportedOperationResidueAuthorityFactory;
@@ -170,7 +167,7 @@ export class NodeProviderProcessCustody implements
   }
 
   public async reserve(input: HostCustodyReservationInput): Promise<ContainedTurnCustodyHandle> {
-    const reservation = await bindPrivateHostCustodyReservation(input, this.#mountIdentityObserver);
+    const reservation = await bindPrivateHostCustodyReservation(input, this);
     try {
       const opened = await this.#open(
         input, "sdk-delegated", reservation.launchPlans, reservation.retainedWorkspaceAuthority,
@@ -224,7 +221,6 @@ export class NodeProviderProcessCustody implements
       this.#hostLifecycleGenerationSha256,
       identitySha256,
       {
-        mountIdentityObserver: this.#mountIdentityObserver,
         opening,
         ...("workspaceAuthority" in input ? { workspaceAuthority: input.workspaceAuthority } : {}),
         ...(retainedWorkspaceAuthority === undefined ? {} : { retainedWorkspaceAuthority }),
