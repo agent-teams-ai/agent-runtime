@@ -14,6 +14,8 @@ import {
   ClaudeAgentSdkCurrentKernelAdapter,
   mapClaudeAgentSdkKernelObservation,
 } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-current-kernel-adapter.js";
+import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import { containedTurnIdentity } from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {
   claudeAgentSdkArguments,
   createClaudeAgentSdkLaunchPlan,
@@ -340,6 +342,7 @@ class ManualClock implements ClaudeAgentSdkControlClock {
   advanceWithoutDeliveryBeforeRead(reads: number, milliseconds: number): void {
     this.#advanceBeforeRead = { milliseconds, reads };
   }
+  activeWaiterCount(): number {return this.#waiters.filter(waiter => !waiter.signal.aborted).length;}
   rollback(milliseconds: number): void {this.#reported -= milliseconds;}
 }
 
@@ -747,19 +750,39 @@ const kernelManifest = Object.freeze({
   supportedModes: Object.freeze(["analysis", "workspace-write"] as const),
   unknownCapabilityPolicy: "fail_closed" as const,
 });
+const kernelAttemptId = containedTurnIdentity("attempt", "attempt:claude-kernel-test");
+const kernelAuthorityVectorDigest = digestContainedTurnCanonicalValue(["kernel-authority"]);
+const kernelCustodyId = containedTurnIdentity("custody", "custody:claude-kernel-test");
+const kernelEffectId = containedTurnIdentity("effect", "effect:claude-kernel-test");
+const kernelOperationId = containedTurnIdentity("operation", "operation:claude-kernel-test");
+const kernelWorkspaceId = containedTurnIdentity("workspace", "workspace:opaque-claude-kernel-test");
+const kernelStartProof = (overrides: Record<string, unknown> = {}) => Object.freeze({
+  binding: Object.freeze({
+    attemptId: kernelAttemptId,
+    authorityVectorDigest: kernelAuthorityVectorDigest,
+    custodyId: kernelCustodyId,
+    effectId: kernelEffectId,
+    hostBootId: containedTurnIdentity("host_boot", "host-boot:claude-kernel-test"),
+    hostInstanceId: containedTurnIdentity("host_instance", "host-instance:claude-kernel-test"),
+    operationId: kernelOperationId,
+    ...overrides,
+  }),
+  kind: "provider_process_start" as const,
+  proofId: containedTurnIdentity("proof", "proof:claude-kernel-start"),
+});
 const kernelInput = (
   overrides: Record<string, unknown> = {},
   startOverrides: Record<string, unknown> = {},
 ) => ({
   adapterSnapshot: kernelAdapterSnapshot,
-  attemptId: "attempt:claude-kernel-test",
-  authorityVectorDigest: "sha256:kernel-authority",
-  custodyId: "custody:claude-kernel-test",
-  effectId: "effect:claude-kernel-test",
+  attemptId: kernelAttemptId,
+  authorityVectorDigest: kernelAuthorityVectorDigest,
+  custodyId: kernelCustodyId,
+  effectId: kernelEffectId,
   emit: async (_chunk: { readonly cursor: number; readonly kind: "assistant" | "diagnostic" | "progress"; readonly text: string }) => {},
   intent: { mode: "analysis" as const, prompt: "reply exactly OK" },
   isCancellationRequested: async () => false,
-  operationId: "operation:claude-kernel-test",
+  operationId: kernelOperationId,
   providerAccessSnapshot: {
     accessRef: "access:claude-test",
     credentialBindingDigest: "sha256:credential-test",
@@ -775,10 +798,10 @@ const kernelInput = (
   },
   start: {
     createProcess: <Process>(create: () => Process): Process => create(),
-    observation: Promise.resolve({ kind: "execution_started" as const, proof: undefined as never }),
+    observation: Promise.resolve({ kind: "execution_started" as const, proof: kernelStartProof() }),
     ...startOverrides,
   },
-  workspaceId: "workspace:opaque-claude-kernel-test",
+  workspaceId: kernelWorkspaceId,
   ...overrides,
 });
 const kernelProvider = (
@@ -792,7 +815,14 @@ const kernelProvider = (
   manifest: kernelManifest,
   privateExecutions: {
     consume: async (request, consume) => {
-      assert.equal(request.workspaceId, "workspace:opaque-claude-kernel-test");
+      assert.deepEqual(request, {
+        attemptId: kernelAttemptId,
+        authorityVectorDigest: kernelAuthorityVectorDigest,
+        custodyId: kernelCustodyId,
+        effectId: kernelEffectId,
+        operationId: kernelOperationId,
+        workspaceId: kernelWorkspaceId,
+      });
       return consume({ privateProjection, workspaceRef });
     },
   },
@@ -943,4 +973,205 @@ test("current-kernel adapter bounds a stuck iterator, cancellation lookup, inter
   assert.equal(outcome.kind, "indeterminate");
   assert.equal(interruptCalled, false);
   assert.equal(closeCalled, false);
+});
+
+test("current-kernel adapter rejects a resolver result produced without its private callback", async () => {
+  let guardianSpawns = 0;
+  const adapter = kernelProvider(spawnedQuery([success("forged-without-callback")]), {
+    privateExecutions: {
+      consume: async () => ({ kind: "completed" as const, outcome: "succeeded" as const }),
+    },
+    processes: {
+      get: () => inertRegistryProcess(),
+      start: () => {guardianSpawns += 1; return inertProcess();},
+    },
+  });
+  assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+  assert.equal(guardianSpawns, 0);
+});
+
+test("current-kernel adapter rejects two private callback invocations even when the resolver substitutes the first result", async () => {
+  let guardianSpawns = 0;
+  const adapter = kernelProvider(spawnedQuery([success("double-private-callback")]), {
+    privateExecutions: {
+      consume: async (_request, consume) => {
+        const first = await consume({ privateProjection, workspaceRef });
+        try {await consume({ privateProjection, workspaceRef });} catch {}
+        return first;
+      },
+    },
+    processes: {
+      get: () => inertRegistryProcess(),
+      start: () => {guardianSpawns += 1; return inertProcess();},
+    },
+  });
+  assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+  assert.equal(guardianSpawns, 1);
+});
+
+test("current-kernel adapter rejects a resolver substitute for the exactly-once callback result", async () => {
+  const adapter = kernelProvider(spawnedQuery([success("substituted-private-result")]), {
+    privateExecutions: {
+      consume: async (_request, consume) => {
+        const actual = await consume({ privateProjection, workspaceRef });
+        return { ...actual };
+      },
+    },
+  });
+  assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+});
+
+test("current-kernel private execution lookup is bound to the exact attempt and authority identities", async () => {
+  const differentAttemptId = containedTurnIdentity("attempt", "attempt:claude-kernel-different");
+  const differentAuthority = digestContainedTurnCanonicalValue(["different-kernel-authority"]);
+  const differentProof = kernelStartProof({
+    attemptId: differentAttemptId,
+    authorityVectorDigest: differentAuthority,
+  });
+  let observedRequest: unknown;
+  const adapter = kernelProvider(spawnedQuery([success("different-private-identity")]), {
+    privateExecutions: {
+      consume: async (request, consume) => {
+        observedRequest = request;
+        return consume({ privateProjection, workspaceRef });
+      },
+    },
+  });
+  const outcome = await adapter.execute(kernelInput({
+    attemptId: differentAttemptId,
+    authorityVectorDigest: differentAuthority,
+  }, {
+    observation: Promise.resolve({ kind: "execution_started" as const, proof: differentProof }),
+  }) as never);
+  assert.deepEqual(outcome, { kind: "completed", outcome: "succeeded" });
+  assert.deepEqual(observedRequest, {
+    attemptId: differentAttemptId,
+    authorityVectorDigest: differentAuthority,
+    custodyId: kernelCustodyId,
+    effectId: kernelEffectId,
+    operationId: kernelOperationId,
+    workspaceId: kernelWorkspaceId,
+  });
+});
+
+test("current-kernel adapter rejects every wrong-bound Host start observation", async t => {
+  const rows = [
+    { field: "operationId", value: containedTurnIdentity("operation", "operation:wrong-start") },
+    { field: "attemptId", value: containedTurnIdentity("attempt", "attempt:wrong-start") },
+    { field: "custodyId", value: containedTurnIdentity("custody", "custody:wrong-start") },
+    { field: "effectId", value: containedTurnIdentity("effect", "effect:wrong-start") },
+    { field: "authorityVectorDigest", value: digestContainedTurnCanonicalValue(["wrong-start-authority"]) },
+  ] as const;
+  for (const row of rows) {
+    await t.test(row.field, async () => {
+      const adapter = kernelProvider(spawnedQuery([success(`wrong-start-${row.field}`)]));
+      const proof = kernelStartProof({ [row.field]: row.value });
+      const outcome = await adapter.execute(kernelInput({}, {
+        observation: Promise.resolve({ kind: "execution_started" as const, proof }),
+      }) as never);
+      assert.equal(outcome.kind, "indeterminate");
+    });
+  }
+});
+
+test("current-kernel adapter keeps rejected and never-resolving start observations indeterminate", async t => {
+  await t.test("rejected", async () => {
+    const clock = new ManualClock();
+    let guardianSpawns = 0;
+    let rejectObservation: ((error: Error) => void) | undefined;
+    const observation = new Promise<never>((_resolve, reject) => {rejectObservation = reject;});
+    const adapter = kernelProvider(spawnedQuery([success("rejected-start-observation")]), {
+      clock,
+      processes: {
+        get: () => inertRegistryProcess(),
+        start: () => {guardianSpawns += 1; return inertProcess();},
+      },
+      turnTimeoutMs: 10,
+    });
+    const outcomePromise = adapter.execute(kernelInput({}, { observation }) as never);
+    await waitFor(() => guardianSpawns === 1 && clock.activeWaiterCount() === 1);
+    rejectObservation?.(new Error("synthetic missing start observation"));
+    const outcome = await outcomePromise;
+    assert.equal(outcome.kind, "indeterminate");
+  });
+
+  await t.test("never resolving", async () => {
+    const clock = new ManualClock();
+    let guardianSpawns = 0;
+    const adapter = kernelProvider(spawnedQuery([success("never-start-observation")]), {
+      clock,
+      processes: {
+        get: () => inertRegistryProcess(),
+        start: () => {guardianSpawns += 1; return inertProcess();},
+      },
+      turnTimeoutMs: 10,
+    });
+    const outcomePromise = adapter.execute(kernelInput({}, {
+      observation: new Promise(() => {}),
+    }) as never);
+    await waitFor(() => guardianSpawns === 1 && clock.activeWaiterCount() === 1);
+    clock.advance(10);
+    const outcome = await Promise.race([
+      outcomePromise,
+      new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("start observation was not bounded")), 1_000)),
+    ]);
+    assert.equal(outcome.kind, "indeterminate");
+    assert.equal(guardianSpawns, 1);
+  });
+});
+
+test("current-kernel adapter rejects a start observation delivered after the original absolute turn deadline", async () => {
+  const clock = new ManualClock();
+  let guardianSpawns = 0;
+  let resolveObservation: ((value: { readonly kind: "execution_started"; readonly proof: ReturnType<typeof kernelStartProof> }) => void) | undefined;
+  const observation = new Promise<{ readonly kind: "execution_started"; readonly proof: ReturnType<typeof kernelStartProof> }>(resolve => {
+    resolveObservation = resolve;
+  });
+  const adapter = kernelProvider(spawnedQuery([success("late-start-observation")]), {
+    clock,
+    processes: {
+      get: () => inertRegistryProcess(),
+      start: () => {guardianSpawns += 1; return inertProcess();},
+    },
+    turnTimeoutMs: 10,
+  });
+  const outcomePromise = adapter.execute(kernelInput({}, { observation }) as never);
+  await waitFor(() => guardianSpawns === 1 && clock.activeWaiterCount() === 1);
+  clock.advance(10);
+  const outcome = await outcomePromise;
+  assert.equal(outcome.kind, "indeterminate");
+  resolveObservation?.({ kind: "execution_started", proof: kernelStartProof() });
+  await nextTurn();
+  assert.equal(guardianSpawns, 1);
+});
+
+test("current-kernel adapter snapshots mutable constructor options before execution", async () => {
+  let originalResolverCalls = 0;
+  let replacementResolverCalls = 0;
+  const mutableOptions = {
+    adapterSnapshot: kernelAdapterSnapshot,
+    cancellationPollMs: 1,
+    executablePath,
+    interruptGraceMs: 5,
+    manifest: kernelManifest,
+    privateExecutions: {
+      consume: async (_request: unknown, consume: (execution: { privateProjection: typeof privateProjection; workspaceRef: string }) => Promise<unknown>) => {
+        originalResolverCalls += 1;
+        return consume({ privateProjection, workspaceRef });
+      },
+    },
+    processes: { get: () => inertRegistryProcess(), start: () => inertProcess() },
+    queryFactory: spawnedQuery([success("snapshotted-options")]),
+    turnTimeoutMs: 100,
+  };
+  const adapter = new ClaudeAgentSdkCurrentKernelAdapter(mutableOptions);
+  mutableOptions.privateExecutions = {
+    consume: async () => {
+      replacementResolverCalls += 1;
+      return { kind: "completed", outcome: "succeeded" };
+    },
+  };
+  mutableOptions.queryFactory = () => {throw new Error("mutated query factory must not run");};
+  assert.deepEqual(await adapter.execute(kernelInput() as never), { kind: "completed", outcome: "succeeded" });
+  assert.deepEqual([originalResolverCalls, replacementResolverCalls], [1, 0]);
 });
