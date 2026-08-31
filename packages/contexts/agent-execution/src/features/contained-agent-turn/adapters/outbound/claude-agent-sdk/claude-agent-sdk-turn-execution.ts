@@ -4,6 +4,7 @@ import type {
   ContainedTurnProviderExecutionOutcome,
   ContainedTurnProviderPort,
 } from "../legacy/legacy-contained-turn-ports.js";
+import type { PrivateDirectoryCustodyPort } from "../host-custody/custodied-provider-process.js";
 import {
   claudeResultDiagnostic,
   normalizeClaudeSdkMessage,
@@ -190,6 +191,7 @@ interface TurnExecutionOptions {
   readonly clock: ClaudeAgentSdkControlClock;
   readonly input: ProviderInput;
   readonly interruptGraceMs: number;
+  readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly turnTimeoutMs: number;
 }
 
@@ -237,7 +239,11 @@ export class ClaudeAgentSdkTurnExecution {
       return claudeNotAccepted(this.#input, "private-projection-unavailable");
     }
     const usable = await this.#clock.settleCall(
-      () => isClaudeAgentSdkPrivateProjectionUsable(projection, this.#input.workspaceRef),
+      () => isClaudeAgentSdkPrivateProjectionUsable(
+        projection,
+        this.#input.workspaceRef,
+        this.#options.privateDirectoryCustody,
+      ),
       this.#turnDeadline,
     );
     if (usable.kind !== "fulfilled" || !usable.value) {

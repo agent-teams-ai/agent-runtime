@@ -16,6 +16,7 @@ import {
   executablePath,
   input,
   privateProjection,
+  privateDirectoryCustody,
   privateRoot,
   provider,
   success,
@@ -54,6 +55,7 @@ test("uses only an external frozen private projection while tools remain workspa
     executableSha256: "0".repeat(64),
     intentMode: "analysis",
     privateProjection,
+    privateDirectoryCustody,
     privateRootPath: privateRoot,
     workspaceRef,
   });
@@ -91,13 +93,18 @@ test("rejects forward and reverse symlink aliases between private roots and the 
     tempRoot: join(projection, "tmp"),
     workspaceRef: workspace,
   });
-  assert.equal(await isClaudeAgentSdkPrivateProjectionUsable(forwardProjection, workspace), false);
+  assert.equal(await isClaudeAgentSdkPrivateProjectionUsable(
+    forwardProjection,
+    workspace,
+    privateDirectoryCustody,
+  ), false);
   await assert.rejects(createClaudeAgentSdkLaunchPlan({
     binaryRevision: binding.binaryRevision,
     executablePath,
     executableSha256: "0".repeat(64),
     intentMode: "analysis",
     privateProjection: forwardProjection,
+    privateDirectoryCustody,
     privateRootPath: projection,
     workspaceRef: workspace,
   }), /disjoint/u);
@@ -111,13 +118,18 @@ test("rejects forward and reverse symlink aliases between private roots and the 
     tempRoot: join(projection, "tmp"),
     workspaceRef: reverseAlias,
   });
-  assert.equal(await isClaudeAgentSdkPrivateProjectionUsable(reverseProjection, reverseAlias), false);
+  assert.equal(await isClaudeAgentSdkPrivateProjectionUsable(
+    reverseProjection,
+    reverseAlias,
+    privateDirectoryCustody,
+  ), false);
   await assert.rejects(createClaudeAgentSdkLaunchPlan({
     binaryRevision: binding.binaryRevision,
     executablePath,
     executableSha256: "0".repeat(64),
     intentMode: "analysis",
     privateProjection: reverseProjection,
+    privateDirectoryCustody,
     privateRootPath: projection,
     workspaceRef: reverseAlias,
   }), /disjoint/u);

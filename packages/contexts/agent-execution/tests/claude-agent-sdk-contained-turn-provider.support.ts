@@ -23,6 +23,7 @@ import type {
   CustodiedProviderProcess,
   CustodiedSdkProcess,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
+import { assertPrivateDirectory } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js";
 
 export { nextTurn };
 
@@ -61,6 +62,7 @@ const manifest = Object.freeze({
   supportedModes: Object.freeze(["analysis", "workspace-write"] as const),
 });
 const privateProjections = Object.freeze({ resolve: () => privateProjection });
+export const privateDirectoryCustody = Object.freeze({ assertPrivateDirectory });
 
 export const input = (mode: "analysis" | "workspace-write" = "analysis") => ({
   attemptId: "attempt:claude-test",
@@ -107,6 +109,7 @@ export const provider = (
   executablePath,
   interruptGraceMs: 20,
   manifest,
+  privateDirectoryCustody,
   privateProjections,
   processes: { get: () => inertRegistryProcess(), start: () => inertProcess() },
   queryFactory,
@@ -292,6 +295,7 @@ export const kernelProvider = (
   executablePath,
   interruptGraceMs: 5,
   manifest: kernelManifest,
+  privateDirectoryCustody,
   privateExecutions: {
     consume: async (request, consume) => {
       assert.deepEqual(request, {

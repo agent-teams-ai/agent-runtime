@@ -50,7 +50,7 @@ boundaries:
     roots:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine
     entrypoints:
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts
     allow:
       boundaries: []
       packages: []
@@ -108,8 +108,8 @@ boundaries:
     allow:
       boundaries:
         - adapter.agent-execution.host-custody
+        - adapter.agent-execution.legacy-contained-turn-ports
         - core.agent-execution.contained-turn
-        - production.agent-execution
       packages:
         - "@anthropic-ai/claude-agent-sdk"
       builtins:
@@ -117,6 +117,18 @@ boundaries:
         - node:path
         - node:perf_hooks
         - node:timers/promises
+      runtimeReferences: []
+  - id: adapter.agent-execution.legacy-contained-turn-ports
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts
+    allow:
+      boundaries:
+        - core.agent-execution.contained-turn
+      packages: []
+      builtins: []
       runtimeReferences: []
   - id: production.agent-execution
     dependencyMode: runtime
@@ -126,10 +138,10 @@ boundaries:
       - packages/contexts/agent-execution/src/index.ts
       - packages/contexts/agent-execution/src/composition.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts
     allow:
       boundaries:
         - adapter.agent-execution.host-custody
+        - adapter.agent-execution.legacy-contained-turn-ports
         - core.agent-execution.contained-turn
       packages:
         - "@agent-teams/filesystem-custody"

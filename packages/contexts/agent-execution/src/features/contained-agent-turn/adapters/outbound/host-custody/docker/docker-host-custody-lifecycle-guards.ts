@@ -3,7 +3,7 @@ import type {
   DockerContainerCreate,
   DockerContainerObservation,
   DockerEngineIdentity,
-} from "./engine/index.js";
+} from "./engine/docker-engine-port.js";
 import {
   bindDockerCustodyAttemptKey,
   dockerCustodyOwnerIdentitySha256,

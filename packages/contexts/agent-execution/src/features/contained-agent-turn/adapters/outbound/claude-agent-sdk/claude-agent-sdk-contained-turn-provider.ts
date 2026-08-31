@@ -9,6 +9,7 @@ import type {
 import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
+  PrivateDirectoryCustodyPort,
 } from "../host-custody/custodied-provider-process.js";
 import {
   claudeAgentSdkTools,
@@ -52,6 +53,7 @@ export interface ClaudeAgentSdkContainedTurnProviderOptions {
   readonly interruptGraceMs?: number;
   readonly manifest: ContainedTurnAdapterCapabilityManifest;
   readonly privateProjections: ClaudeAgentSdkPrivateProjectionResolver;
+  readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly processes: CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
   readonly queryFactory?: ClaudeQueryFactory;
   readonly turnTimeoutMs?: number;
@@ -63,6 +65,7 @@ interface ProviderSnapshot {
   readonly executablePath: string;
   readonly interruptGraceMs: number;
   readonly privateProjections: ClaudeAgentSdkPrivateProjectionResolver;
+  readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly processes: CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
   readonly queryFactory: ClaudeQueryFactory | undefined;
   readonly turnTimeoutMs: number;
@@ -121,6 +124,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
         DEFAULT_INTERRUPT_GRACE_MS,
       ),
       privateProjections: options.privateProjections,
+      privateDirectoryCustody: options.privateDirectoryCustody,
       processes: options.processes,
       queryFactory: options.queryFactory,
       turnTimeoutMs: positiveInteger("turnTimeoutMs", options.turnTimeoutMs, DEFAULT_TURN_TIMEOUT_MS),
@@ -140,6 +144,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
       clock: this.#snapshot.clock,
       input,
       interruptGraceMs: this.#snapshot.interruptGraceMs,
+      privateDirectoryCustody: this.#snapshot.privateDirectoryCustody,
       turnTimeoutMs: this.#snapshot.turnTimeoutMs,
     });
     return execution.run({

@@ -62,6 +62,7 @@ export interface ClaudeAgentSdkCurrentKernelAdapterOptions {
   readonly executablePath: string;
   readonly interruptGraceMs?: number;
   readonly manifest: ContainedTurnCapabilityManifest;
+  readonly privateDirectoryCustody: ClaudeAgentSdkContainedTurnProviderOptions["privateDirectoryCustody"];
   readonly privateExecutions: ClaudeAgentSdkKernelPrivateExecutionResolver;
   /** The accepted Guardian-backed launcher; it performs the sole physical spawn. */
   readonly processes: CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
@@ -313,6 +314,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
       privateProjections: {
         resolve: () => execution.privateProjection,
       },
+      privateDirectoryCustody: this.#options.privateDirectoryCustody,
       processes,
       ...(this.#options.queryFactory === undefined ? {} : { queryFactory: this.#options.queryFactory }),
       turnTimeoutMs,
