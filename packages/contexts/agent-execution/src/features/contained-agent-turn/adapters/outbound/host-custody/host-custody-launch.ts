@@ -54,6 +54,11 @@ export interface PrivateLaunchPathObservations {
   readonly root: PrivatePathObservation;
 }
 
+interface FilesystemObjectIdentity {
+  readonly dev: bigint;
+  readonly ino: bigint;
+}
+
 interface LaunchCandidate {
   readonly canonicalWorkspace: string;
   readonly fingerprint: HostCustodyLaunchFingerprintEvidence;
@@ -304,6 +309,21 @@ const privatePathObservation = (path: string, observation: BigIntStats): Private
   uid: observation.uid,
 });
 
+const sameFilesystemObject = (left: FilesystemObjectIdentity, right: FilesystemObjectIdentity): boolean =>
+  left.dev === right.dev && left.ino === right.ino;
+
+const assertDistinctPrivateFilesystemObjects = (
+  workspace: FilesystemObjectIdentity,
+  root: FilesystemObjectIdentity,
+  environmentPaths: Readonly<Record<string, FilesystemObjectIdentity>>,
+): void => {
+  const identities = [workspace, root, ...Object.values(environmentPaths)];
+  if (identities.some((identity, index) => identities.some((other, otherIndex) =>
+    index !== otherIndex && sameFilesystemObject(identity, other)))) {
+    throw new Error("Host Custody private launch paths must identify distinct filesystem objects");
+  }
+};
+
 export const verifyPrivateLaunchPaths = async (
   plan: HostCustodyLaunchPlan,
   workspaceRef: string,
@@ -359,12 +379,17 @@ export const verifyPrivateLaunchPaths = async (
     index !== otherIndex && (isWithin(path, other) || isWithin(other, path))))) {
     throw new Error("Host Custody private environment paths must be pairwise disjoint");
   }
+  assertDistinctPrivateFilesystemObjects(workspaceStats, rootObservation, observations);
   return Object.freeze({
     byEnvironmentKey: Object.freeze(observations),
     environmentKeys: keys,
     root: privatePathObservation(plan.privateRootPath, rootObservation),
   });
 };
+
+export const hostCustodyLaunchTestSupport = Object.freeze({
+  assertDistinctPrivateFilesystemObjects,
+});
 
 export const createFingerprint = (
   input: Parameters<ProviderProcessCustodyPort["open"]>[0],

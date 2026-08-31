@@ -100,6 +100,52 @@ const closeOptionalDescriptor = (descriptor: number | undefined): void => {
   if (descriptor !== undefined) {closeSync(descriptor);}
 };
 
+interface FilesystemObjectIdentity {
+  readonly dev: bigint;
+  readonly ino: bigint;
+}
+
+const sameFilesystemObject = (left: FilesystemObjectIdentity, right: FilesystemObjectIdentity): boolean =>
+  left.dev === right.dev && left.ino === right.ino;
+
+interface SealDescriptorOperations {
+  chmod(descriptor: number, mode: number): void;
+  close(descriptor: number): void;
+  fstat(descriptor: number): BigIntStats;
+  lstat(path: string): BigIntStats;
+  open(path: string, flags: number, mode?: number): number;
+  read(descriptor: number): Uint8Array;
+  sync(descriptor: number): void;
+  unlink(path: string): void;
+  write(descriptor: number, data: Uint8Array): void;
+}
+
+const sealDescriptorOperations: SealDescriptorOperations = Object.freeze({
+  chmod: fchmodSync,
+  close: closeSync,
+  fstat: (descriptor: number) => fstatSync(descriptor, { bigint: true }),
+  lstat: (path: string) => lstatSync(path, { bigint: true }),
+  open: openSync,
+  read: (descriptor: number) => readFileSync(descriptor),
+  sync: fsyncSync,
+  unlink: unlinkSync,
+  write: writeFileSync,
+});
+
+const unlinkSealedPathIfOwned = (
+  sealedPath: string,
+  createdIdentity: FilesystemObjectIdentity | undefined,
+  operations: SealDescriptorOperations,
+): boolean => {
+  if (createdIdentity === undefined) {return false;}
+  try {
+    const namedIdentity = operations.lstat(sealedPath);
+    if (!sameFilesystemObject(namedIdentity, createdIdentity)) {return false;}
+    operations.unlink(sealedPath);
+    return true;
+  } catch {return false;}
+};
+
 interface PrivateLaunchDescriptor {
   readonly childDescriptor: number;
   readonly key: string;
@@ -110,55 +156,88 @@ const sealExecutableDescriptor = (
   executable: ExecutableObservation,
   sourceDescriptor: number,
   sealedPath: string,
+  operations: SealDescriptorOperations = sealDescriptorOperations,
 ): { readonly descriptor: number; readonly observation: ExecutableObservation } => {
   let writableDescriptor: number | undefined;
   let descriptor: number | undefined;
+  let createdIdentity: FilesystemObjectIdentity | undefined;
   try {
-    writableDescriptor = openSync(
+    writableDescriptor = operations.open(
       sealedPath,
       constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | (constants.O_NOFOLLOW ?? 0),
       0o500,
     );
-    writeFileSync(writableDescriptor, readFileSync(sourceDescriptor));
-    fchmodSync(writableDescriptor, 0o500);
-    fsyncSync(writableDescriptor);
-    descriptor = openSync(`/proc/self/fd/${writableDescriptor}`, constants.O_RDONLY);
-    unlinkSync(sealedPath);
-    closeSync(writableDescriptor);
+    const createdDescriptorIdentity = operations.fstat(writableDescriptor);
+    const createdPathIdentity = operations.lstat(sealedPath);
+    if (!sameFilesystemObject(createdDescriptorIdentity, createdPathIdentity)) {
+      throw new Error("Host Custody sealed executable path identity changed during creation");
+    }
+    createdIdentity = Object.freeze({ dev: createdDescriptorIdentity.dev, ino: createdDescriptorIdentity.ino });
+    operations.write(writableDescriptor, operations.read(sourceDescriptor));
+    operations.chmod(writableDescriptor, 0o500);
+    operations.sync(writableDescriptor);
+    descriptor = operations.open(`/proc/self/fd/${writableDescriptor}`, constants.O_RDONLY);
+    if (!unlinkSealedPathIfOwned(sealedPath, createdIdentity, operations)) {
+      throw new Error("Host Custody sealed executable path identity changed before cleanup");
+    }
+    operations.close(writableDescriptor);
     writableDescriptor = undefined;
-    const stats = fstatSync(descriptor, { bigint: true });
-    const digest = sha256(readFileSync(descriptor));
+    const stats = operations.fstat(descriptor);
+    const digest = sha256(operations.read(descriptor));
     if (digest !== executable.digest || stats.nlink !== 0n || (stats.mode & 0o222n) !== 0n) {
       throw new Error("Host Custody sealed executable identity is invalid");
     }
     return { descriptor, observation: executableObservation(digest, stats) };
   } catch (error) {
-    closeOptionalDescriptor(descriptor);
-    closeOptionalDescriptor(writableDescriptor);
-    try {unlinkSync(sealedPath);} catch {}
+    if (descriptor !== undefined) {operations.close(descriptor);}
+    if (writableDescriptor !== undefined) {operations.close(writableDescriptor);}
+    unlinkSealedPathIfOwned(sealedPath, createdIdentity, operations);
     throw error;
   }
 };
 
+interface PrivateDescriptorOperations {
+  close(descriptor: number): void;
+  open(path: string, flags: number): number;
+}
+
+const privateDescriptorOperations: PrivateDescriptorOperations = Object.freeze({
+  close: closeSync,
+  open: openSync,
+});
+
 const openPrivateDescriptors = (
   privatePaths: PrivateLaunchPathObservations,
-): readonly PrivateLaunchDescriptor[] => privatePaths.environmentKeys.map((key, index) => {
-  const observation = privatePaths.byEnvironmentKey[key];
-  if (observation === undefined) {throw new Error("Host Custody private descriptor observation is missing");}
-  return {
-    childDescriptor: 6 + index,
-    key,
-    parentDescriptor: openSync(
-      observation.path,
-      constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
-    ),
-  };
-});
+  operations: PrivateDescriptorOperations = privateDescriptorOperations,
+): readonly PrivateLaunchDescriptor[] => {
+  const descriptors: PrivateLaunchDescriptor[] = [];
+  try {
+    for (const [index, key] of privatePaths.environmentKeys.entries()) {
+      const observation = privatePaths.byEnvironmentKey[key];
+      if (observation === undefined) {throw new Error("Host Custody private descriptor observation is missing");}
+      descriptors.push({
+        childDescriptor: 6 + index,
+        key,
+        parentDescriptor: operations.open(
+          observation.path,
+          constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
+        ),
+      });
+    }
+    return descriptors;
+  } catch (error) {
+    for (const descriptor of descriptors) {
+      try {operations.close(descriptor.parentDescriptor);} catch {}
+    }
+    throw error;
+  }
+};
 
 const assertPrivateDescriptorIdentities = (
   descriptors: readonly PrivateLaunchDescriptor[],
   privatePaths: PrivateLaunchPathObservations,
-): void => {
+): readonly BigIntStats[] => {
+  const observations: BigIntStats[] = [];
   for (const descriptor of descriptors) {
     const expected = privatePaths.byEnvironmentKey[descriptor.key];
     const observed = fstatSync(descriptor.parentDescriptor, { bigint: true });
@@ -166,6 +245,15 @@ const assertPrivateDescriptorIdentities = (
       ? expected !== undefined && directoryObjectMatches(observed, expected)
       : expected !== undefined && directoryIdentityMatches(observed, expected);
     if (!matches) {throw new Error("Host Custody private path changed while acquiring launch authority");}
+    observations.push(observed);
+  }
+  return observations;
+};
+
+const assertDistinctDescriptorObjects = (observations: readonly FilesystemObjectIdentity[]): void => {
+  if (observations.some((identity, index) => observations.some((other, otherIndex) =>
+    index !== otherIndex && sameFilesystemObject(identity, other)))) {
+    throw new Error("Host Custody acquired launch descriptors must identify distinct filesystem objects");
   }
 };
 
@@ -203,13 +291,16 @@ export const acquireVerifiedLaunchDescriptors = (
     if (!executableIdentityMatches(fstatSync(sourceDescriptor, { bigint: true }), executable)) {
       throw new Error("Host Custody executable identity changed while acquiring launch authority");
     }
-    if (!directoryIdentityMatches(fstatSync(workspaceDescriptor, { bigint: true }), workspace)) {
+    const acquiredWorkspace = fstatSync(workspaceDescriptor, { bigint: true });
+    if (!directoryIdentityMatches(acquiredWorkspace, workspace)) {
       throw new Error("Host Custody workspace identity changed while acquiring launch authority");
     }
-    if (!directoryObjectMatches(fstatSync(privateRootDescriptor, { bigint: true }), privatePaths.root)) {
+    const acquiredPrivateRoot = fstatSync(privateRootDescriptor, { bigint: true });
+    if (!directoryObjectMatches(acquiredPrivateRoot, privatePaths.root)) {
       throw new Error("Host Custody private root changed while acquiring launch authority");
     }
-    assertPrivateDescriptorIdentities(privateDescriptors, privatePaths);
+    const acquiredPrivatePaths = assertPrivateDescriptorIdentities(privateDescriptors, privatePaths);
+    assertDistinctDescriptorObjects([acquiredWorkspace, acquiredPrivateRoot, ...acquiredPrivatePaths]);
     if (sealedExecutable === undefined) {throw new Error("Host Custody sealed executable observation is missing");}
     let closed = false;
     return Object.freeze({
@@ -237,13 +328,18 @@ export const acquireVerifiedLaunchDescriptors = (
   } catch (error) {
     closeSync(sourceDescriptor);
     closeOptionalDescriptor(executableDescriptor);
-    try {unlinkSync(sealedPath);} catch {}
     closeOptionalDescriptor(workspaceDescriptor);
     closeOptionalDescriptor(privateRootDescriptor);
     for (const descriptor of privateDescriptors) {closeSync(descriptor.parentDescriptor);}
     throw error;
   }
 };
+
+export const hostCustodyDescriptorLaunchTestSupport = Object.freeze({
+  assertDistinctDescriptorObjects,
+  openPrivateDescriptors,
+  sealExecutableDescriptor,
+});
 
 export const descriptorBoundEnvironment = (
   environment: Readonly<Record<string, string>>,
