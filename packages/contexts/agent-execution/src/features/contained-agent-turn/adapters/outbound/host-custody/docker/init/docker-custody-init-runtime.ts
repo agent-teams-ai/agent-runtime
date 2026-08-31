@@ -131,7 +131,7 @@ export class DockerCustodyInitRuntime {
   readonly #observedIdentity: DockerCustodyIdentity;
   #pendingContainmentReason: DockerCustodyContainmentRequest["reason"] | undefined;
   #phase: DockerCustodyInitSnapshot["phase"] = "awaiting-handshake";
-  #providerDeadlineMonotonicMs?: number;
+  #providerDeadlineMonotonicMs: number | undefined;
   #providerRootTracked = false;
   #request?: DockerCustodyProviderExecRequest;
   #rootExitObserved = false;
@@ -143,7 +143,7 @@ export class DockerCustodyInitRuntime {
   #stderr = newStreamEvidence();
   #stdinBytes = 0;
   #stdinStatus: DockerCustodyInitSnapshot["stdinStatus"] = "open";
-  #stopDeadlineMonotonicMs?: number;
+  #stopDeadlineMonotonicMs: number | undefined;
   #stopReason: DockerCustodyContainmentRequest["reason"] | undefined;
   #stdout = newStreamEvidence();
   readonly #syscalls: DockerCustodyInitSyscalls;
