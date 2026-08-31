@@ -34,14 +34,6 @@
     "./composition": {
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
-    },
-    "./testing": {
-      "types": "./dist/testing/index.d.ts",
-      "import": "./dist/testing/index.js"
-    },
-    "./production": {
-      "types": "./dist/production.d.ts",
-      "import": "./dist/production.js"
     }
   }
 }

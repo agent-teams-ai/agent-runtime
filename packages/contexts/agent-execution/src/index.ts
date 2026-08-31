@@ -6,7 +6,7 @@ export type {
   InstallationCandidateSource,
   RuntimeInstallationDiagnostic,
   RuntimeInstallationObservation,
-} from "./features/runtime-installation-discovery/contracts/runtime-installation-observation.js";
+} from "./features/runtime-installation-discovery/index.js";
 export type {
   ClaudeCodeInstallationCandidate,
   ClaudeCodeInstallationCandidateSource,
@@ -15,7 +15,7 @@ export type {
   DiscoverClaudeCodeInstallations,
   DiscoverClaudeCodeInstallationsInput,
   DiscoverClaudeCodeInstallationsResult,
-} from "./features/runtime-installation-discovery/contracts/claude-code-installation-observation.js";
+} from "./features/runtime-installation-discovery/index.js";
 export type {
   ContainedTurnFeatureApi,
   ContainedTurnMode,
@@ -37,4 +37,4 @@ export type {
   SubmitContainedTurnInput,
   SubmitContainedTurnOptions,
   SubmitContainedTurnOutcome,
-} from "./features/contained-agent-turn/contracts/contained-agent-turn.js";
+} from "./features/contained-agent-turn/index.js";

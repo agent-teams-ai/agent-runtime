@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -24,16 +23,28 @@ const run = (command: string, args: readonly string[], cwd: string) => {
   return result.stdout;
 };
 
-test("ships ./testing as built ESM and declarations to an isolated packed consumer", async () => {
-  const temporaryRoot = await mkdtemp(join(tmpdir(), "agent-execution-testing-pack-"));
+test("qualifies the two packed curated package assembly entrypoints", async () => {
+  const temporaryParent = join(packageRoot, ".cache");
+  await mkdir(temporaryParent, { recursive: true });
+  const temporaryRoot = await mkdtemp(join(temporaryParent, "assembly-pack-"));
   try {
     const packOutput = run(
       "npm",
       ["pack", "--ignore-scripts", "--json", "--pack-destination", temporaryRoot, "."],
       packageRoot,
     );
-    const packResult = JSON.parse(packOutput) as readonly [{ readonly filename: string }];
+    const packResult = JSON.parse(packOutput) as readonly [{
+      readonly filename: string;
+      readonly files: readonly { readonly path: string }[];
+    }];
     assert.equal(packResult.length, 1);
+    const packedPaths = packResult[0]?.files.map(file => file.path) ?? [];
+    assert.ok(packedPaths.includes("dist/index.js"));
+    assert.ok(packedPaths.includes("dist/index.d.ts"));
+    assert.ok(packedPaths.includes("dist/composition.js"));
+    assert.ok(packedPaths.includes("dist/composition.d.ts"));
+    assert.equal(packedPaths.some(path => /^dist\/(?:production|testing)(?:\.|\/)/u.test(path)), false);
+    assert.equal(packedPaths.some(path => path.includes("contained-agent-turn-fixture")), false);
     const archive = join(temporaryRoot, packResult[0]?.filename ?? "missing.tgz");
     run("tar", ["-xzf", archive, "-C", temporaryRoot], packageRoot);
 
@@ -52,38 +63,57 @@ test("ships ./testing as built ESM and declarations to an isolated packed consum
     ) as {
       readonly exports: Readonly<Record<string, Readonly<Record<string, string>>>>;
     };
-    assert.deepEqual(packedManifest.exports["./testing"], {
-      import: "./dist/testing/index.js",
-      types: "./dist/testing/index.d.ts",
+    assert.deepEqual(packedManifest.exports, {
+      ".": {
+        import: "./dist/index.js",
+        types: "./dist/index.d.ts",
+      },
+      "./composition": {
+        import: "./dist/composition.js",
+        types: "./dist/composition.d.ts",
+      },
     });
-    await access(join(installedPackage, "dist/testing/index.js"));
-    await access(join(installedPackage, "dist/testing/index.d.ts"));
-    assert.doesNotMatch(await readFile(join(installedPackage, "dist/index.js"), "utf8"), /createDependencies/u);
-    assert.doesNotMatch(await readFile(join(installedPackage, "dist/production.js"), "utf8"), /createDependencies/u);
+    for (const entrypoint of ["index", "composition"]) {
+      await access(join(installedPackage, `dist/${entrypoint}.js`));
+      await access(join(installedPackage, `dist/${entrypoint}.d.ts`));
+    }
 
     const consumerPath = join(temporaryRoot, "consumer", "consume.mjs");
     await writeFile(consumerPath, [
-      'import { createDependencies } from "@agent-teams/agent-execution/testing";',
-      "const fixture = createDependencies();",
-      "const manifest = fixture.dependencies.provider.manifest;",
-      "process.stdout.write(JSON.stringify({ manifestKeys: Object.keys(manifest).sort(), provider: manifest.provider }));",
+      'import * as contracts from "@agent-teams/agent-execution";',
+      'import * as composition from "@agent-teams/agent-execution/composition";',
+      "const rejected = [];",
+      'for (const subpath of ["production", "testing"]) {',
+      "  try { await import(`@agent-teams/agent-execution/${subpath}`); }",
+      "  catch (error) { rejected.push(error?.code); }",
+      "}",
+      "process.stdout.write(JSON.stringify({ compositionKeys: Object.keys(composition).sort(), contractKeys: Object.keys(contracts), rejected }));",
     ].join("\n"));
     const consumerOutput = run(process.execPath, [consumerPath], dirname(consumerPath));
-    assert.deepEqual(JSON.parse(consumerOutput), {
-      manifestKeys: [
-        "effectCardinality",
-        "effectClass",
-        "manifestRevision",
-        "manifestVersion",
-        "provider",
-        "providerAttemptCardinality",
-        "requiredProofKinds",
-        "resourceScopeRevision",
-        "supportedModes",
-        "unknownCapabilityPolicy",
-      ],
-      provider: "codex",
-    });
+    const resolved = JSON.parse(consumerOutput) as {
+      readonly compositionKeys: readonly string[];
+      readonly contractKeys: readonly string[];
+      readonly rejected: readonly string[];
+    };
+    assert.deepEqual(resolved.compositionKeys, [
+      "CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE",
+      "CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS",
+      "CONTAINED_TURN_POSTGRES_SCHEMA_VERSION",
+      "CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS",
+      "NodeProviderProcessCustody",
+      "PostgresContainedTurnOperationStore",
+      "applyContainedTurnPostgresSchema",
+      "createContainedTurnFeature",
+      "createContainedTurnProviderAccessPort",
+      "createNodeContainedTurnArtifacts",
+      "createNodeContainedTurnWorkspace",
+      "createNodeExecutableFileObserver",
+      "createRuntimeInstallationDiscoveryFeature",
+      "recoverContainedTurnDispatchPreparations",
+      "rollbackContainedTurnPostgresSchemaV4",
+    ]);
+    assert.deepEqual(resolved.contractKeys, []);
+    assert.deepEqual(resolved.rejected, ["ERR_PACKAGE_PATH_NOT_EXPORTED", "ERR_PACKAGE_PATH_NOT_EXPORTED"]);
   } finally {
     await rm(temporaryRoot, { force: true, recursive: true });
   }

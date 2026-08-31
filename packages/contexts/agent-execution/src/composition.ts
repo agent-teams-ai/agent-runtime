@@ -1,15 +1,29 @@
-export { createNodeExecutableFileObserver } from "./features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.js";
-export type { ExecutableFileObserver } from "./features/runtime-installation-discovery/application/ports/outbound/executable-file-observation.js";
 export {
+  createNodeExecutableFileObserver,
   createRuntimeInstallationDiscoveryFeature,
+  type ExecutableFileObserver,
   type RuntimeInstallationDiscoveryDependencies,
-} from "./features/runtime-installation-discovery/composition/feature-module-factory.js";
+} from "./features/runtime-installation-discovery/internal.js";
 export {
+  applyContainedTurnPostgresSchema,
+  CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
+  CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS,
+  CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
+  CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS,
   createContainedTurnFeature,
-  type ContainedTurnFeatureDependencies,
-} from "./features/contained-agent-turn/composition/feature-module-factory.js";
-export type { ContainedTurnProviderAccessPort } from "./features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
-export {
   createContainedTurnProviderAccessPort,
+  createNodeContainedTurnArtifacts,
+  createNodeContainedTurnWorkspace,
+  NodeProviderProcessCustody,
+  PostgresContainedTurnOperationStore,
+  recoverContainedTurnDispatchPreparations,
+  rollbackContainedTurnPostgresSchemaV4,
+  type ContainedTurnFeatureDependencies,
+  type ContainedTurnPostgresTimeouts,
+  type ContainedTurnProviderAccessPort,
+  type NodeContainedTurnArtifactOptions,
+  type NodeContainedTurnWorkspaceOptions,
+  type NodeProviderProcessCustodyOptions,
   type OuterContainedTurnProviderAccess,
-} from "./features/contained-agent-turn/composition/provider-access-anti-corruption.js";
+  type PostgresContainedTurnOperationStoreOptions,
+} from "./features/contained-agent-turn/internal.js";

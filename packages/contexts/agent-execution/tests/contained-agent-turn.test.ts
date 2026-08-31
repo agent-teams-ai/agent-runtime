@@ -10,7 +10,7 @@ import {
   custodyId,
   operationId,
   proofId,
-} from "../dist/testing/contained-agent-turn-fixture.js";
+} from "./features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 test("seven-port conformance reaches terminal truth through only ordered kernel APIs", async () => {
   const { current, dependencies, providerCalls } = createDependencies();
