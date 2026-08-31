@@ -114,6 +114,12 @@ class FakeHost {
 }
 async function* emptyBytes(): AsyncIterable<Uint8Array> {}
 
+const privateDirectoryCustody = Object.freeze({
+  async assertPrivateDirectory(path: string): Promise<void> {
+    assert.equal((await stat(path)).isDirectory(), true);
+  },
+});
+
 const workspaceOwner = (expected: ReturnType<typeof ids>, workspaceRef: string) => Object.freeze({
   async withLaunchAuthority<Result>(input: any, consume: (authority: any) => Promise<Result>): Promise<Result> {
     assert.deepEqual(input, {
@@ -195,7 +201,7 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
       });
       return ({privateProjection, privateRootPath});
     }},
-    manifest: claudeManifest,
+    manifest: claudeManifest, privateDirectoryCustody,
     queryFactory: input => {
       const plan = host.plans.at(-1) as any;
       input.options.spawnClaudeCodeProcess({
@@ -269,6 +275,16 @@ test("provider owners keep stable kernel and random Host identities distinct and
       .map(path => mkdir(path, { recursive: true, mode: 0o700 }))]);
     const claudeIds = ids("claude", "one");
     const claudeHost = new FakeHost();
+    const originalCustodyPaths: string[] = [];
+    let replacementCustodyCalls = 0;
+    const mutablePrivateDirectoryCustody = {
+      async assertPrivateDirectory(this: object, path: string): Promise<void> {
+        assert.equal(Object.isFrozen(this), true);
+        assert.equal(Object.getPrototypeOf(this), null);
+        originalCustodyPaths.push(path);
+        assert.equal((await stat(path)).isDirectory(), true);
+      },
+    };
     const claude = createClaudeCurrentKernelOwner({
       adapterSnapshot: claudeSnapshot, executablePath: "/synthetic/claude", executableSha256: "a".repeat(64),
       hostBootId: "host-boot:current-owner", hostCustody: claudeHost as any,
@@ -285,6 +301,7 @@ test("provider owners keep stable kernel and random Host identities distinct and
         resourceScopeRevision: "contained-workspace-network-credential:1",
         supportedModes: Object.freeze(["analysis", "workspace-write"] as const), unknownCapabilityPolicy: "fail_closed",
       }),
+      privateDirectoryCustody: mutablePrivateDirectoryCustody,
       queryFactory: input => {
         input.options.spawnClaudeCodeProcess({
           args: [...(claudeHost.plans[0] as any).arguments], command: "/synthetic/claude",
@@ -296,10 +313,18 @@ test("provider owners keep stable kernel and random Host identities distinct and
       },
       workspaceOwner: workspaceOwner(claudeIds, claudeWorkspace),
     });
+    mutablePrivateDirectoryCustody.assertPrivateDirectory = async () => {replacementCustodyCalls += 1;};
     await claude.custody.open(openInput(claudeIds, "claude", claudeSnapshot));
+    assert.deepEqual(originalCustodyPaths, [claudeWorkspace, configRoot, homeRoot, tempRoot]);
+    assert.equal(replacementCustodyCalls, 0);
     assert.equal(claudeHost.starts, 0);
     assert.notEqual(claudeHost.refs.get(claudeIds.attemptId), claudeIds.custodyId);
     assert.equal((await claude.provider.execute(executeInput(claudeIds, "claude", claudeSnapshot))).kind, "indeterminate");
+    assert.deepEqual(originalCustodyPaths, [
+      claudeWorkspace, configRoot, homeRoot, tempRoot,
+      claudeWorkspace, configRoot, homeRoot, tempRoot,
+    ]);
+    assert.equal(replacementCustodyCalls, 0);
     assert.equal(claudeHost.reserves, 1);
     assert.equal(claudeHost.starts, 1);
     codex.dispose(); claude.dispose();
@@ -438,7 +463,7 @@ test("raw Host reservation rejects exact path, device and inode on a substituted
         binaryRevision: claudeSnapshot.binaryRevision,
         executablePath: process.execPath,
         executableSha256: createHash("sha256").update(await readFile(process.execPath)).digest("hex"),
-        intentMode: "analysis", privateProjection: projection, privateRootPath, workspaceRef,
+        intentMode: "analysis", privateDirectoryCustody, privateProjection: projection, privateRootPath, workspaceRef,
       });
       const effects = {descriptorCloses: 0, guardianAuthorizations: 0, providerStarts: 0};
       const host = new NodeProviderProcessCustody({
@@ -631,6 +656,7 @@ test("duplicate and late Claude private callbacks remain effect-free", async () 
   const host = new FakeHost();
   const duplicate = new ClaudeAgentSdkCurrentKernelAdapter({
     adapterSnapshot: snapshot, executablePath: "/synthetic/claude", manifest,
+    privateDirectoryCustody,
     privateExecutions: {async consume(input, callback) {
       const first = callback(execution); void callback(execution); return first;
     }},
@@ -641,6 +667,7 @@ test("duplicate and late Claude private callbacks remain effect-free", async () 
   let late: ((value: typeof execution) => Promise<unknown>) | undefined;
   const lateAdapter = new ClaudeAgentSdkCurrentKernelAdapter({
     adapterSnapshot: snapshot, executablePath: "/synthetic/claude", manifest,
+    privateDirectoryCustody,
     privateExecutions: {async consume(input, callback) {late = callback; return null as never;}},
     processes: host as any,
   });

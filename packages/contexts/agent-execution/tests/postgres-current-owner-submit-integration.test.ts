@@ -26,6 +26,7 @@ import { createDependencies } from "./features/contained-agent-turn/support/cont
 import { createSyntheticFilesystemLayout } from "./filesystem-contained-turn/fixture.ts";
 
 const databaseUrl = process.env.POSTGRES_DURABILITY_URL;
+const privateDirectoryCustody = Object.freeze({assertPrivateDirectory: async (_path: string) => {}});
 
 type PersistedOperation = NonNullable<Awaited<ReturnType<PostgresContainedTurnOperationStore["read"]>>>;
 
@@ -224,6 +225,7 @@ const createOwner = async (
       providerAttemptCardinality: "at_most_one", requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
       resourceScopeRevision: "contained-workspace-network-credential:1", supportedModes: ["analysis", "workspace-write"],
       unknownCapabilityPolicy: "fail_closed"},
+    privateDirectoryCustody,
     queryFactory: deterministicSuccess ? successfulClaudeQuery(host as DeterministicCurrentOwnerHost, workspaceRef) : input => {
       const plan = host.plans.at(-1)!;
       input.options.spawnClaudeCodeProcess({args: [...plan.arguments], command: "/synthetic/claude", cwd: workspaceRef,

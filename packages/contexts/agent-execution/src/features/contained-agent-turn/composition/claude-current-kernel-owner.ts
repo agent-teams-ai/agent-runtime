@@ -16,6 +16,8 @@ import {
   type ClaudeAgentSdkPrivateProjection,
 } from "../adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import type { ClaudeAgentSdkContainedTurnProviderOptions } from "../adapters/outbound/claude-agent-sdk/claude-agent-sdk-contained-turn-provider.js";
+import { captureClaudePrivateDirectoryCustody } from "../adapters/outbound/claude-agent-sdk/claude-private-directory-custody.js";
+import type { PrivateDirectoryCustodyPort } from "../adapters/outbound/provider-delegation-ports/private-directory-custody-port.js";
 import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
@@ -60,6 +62,7 @@ export interface CreateClaudeCurrentKernelOwnerOptions {
   readonly hostInstanceId: string;
   readonly launchRecords: ClaudeCurrentKernelLaunchRecordResolver;
   readonly manifest: ContainedTurnCapabilityManifest;
+  readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly queryFactory?: ClaudeAgentSdkContainedTurnProviderOptions["queryFactory"];
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
 }
@@ -93,6 +96,7 @@ export const createClaudeCurrentKernelOwner = (
   options: CreateClaudeCurrentKernelOwnerOptions,
 ): ClaudeCurrentKernelOwner => {
   const records = new Map<string, PreparedRecord>();
+  const privateDirectoryCustody = captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody);
   const processes: Processes = Object.freeze({
     get: options.hostCustody.get.bind(options.hostCustody),
     start: options.hostCustody.start.bind(options.hostCustody),
@@ -131,7 +135,8 @@ export const createClaudeCurrentKernelOwner = (
         binaryRevision: options.adapterSnapshot.binaryRevision,
         executablePath: options.executablePath, executableSha256: options.executableSha256,
         intentMode: input.kernel.intentMode, privateProjection: launch.privateProjection,
-        privateRootPath: launch.privateRootPath, workspaceRef: input.workspaceAuthority.canonicalPath,
+        privateDirectoryCustody, privateRootPath: launch.privateRootPath,
+        workspaceRef: input.workspaceAuthority.canonicalPath,
       });
       records.set(input.kernel.custodyId, {
         binding: input.providerBinding, kernel: input.kernel, plan, privateProjection: launch.privateProjection,
@@ -156,7 +161,7 @@ export const createClaudeCurrentKernelOwner = (
   });
   const provider = new ClaudeAgentSdkCurrentKernelAdapter({
     adapterSnapshot: options.adapterSnapshot, executablePath: options.executablePath,
-    manifest: options.manifest, privateExecutions, processes,
+    manifest: options.manifest, privateDirectoryCustody, privateExecutions, processes,
     ...(options.queryFactory === undefined ? {} : { queryFactory: options.queryFactory }),
   });
   return Object.freeze({custody, dispose() {disposed = true; records.clear();}, provider});
