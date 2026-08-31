@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { createContainedTurnProviderAccessPort } from "../dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
-import { createContainedTurnProviderAccessFeature } from "../../provider-access/dist/features/contained-turn-access/composition/feature-module-factory.js";
+import { createStaticContainedTurnProviderAccessFeature } from "../../provider-access/dist/composition.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
   containedTurnDispatchGrantRequestId,
@@ -150,11 +150,13 @@ test("real Provider Access revalidation accepts unchanged evidence and fails clo
     revocation: "active" as const,
   };
   let currentRecord = record;
-  const feature = createContainedTurnProviderAccessFeature({
-    bindingRepository: {
-      async observeExact() { return { kind: "found" as const, record: currentRecord }; },
-    },
-  });
+  const currentOwner = () => createStaticContainedTurnProviderAccessFeature([
+    { ...currentRecord, kind: "binding" as const },
+  ]);
+  const feature: ReturnType<typeof createStaticContainedTurnProviderAccessFeature> = {
+    resolve: { async execute(input) { return currentOwner().resolve.execute(input); } },
+    revalidate: { async execute(input) { return currentOwner().revalidate.execute(input); } },
+  };
   const port = createContainedTurnProviderAccessPort(feature);
   const accepted = await port.resolveForAcceptance({
     intent: { mode: "analysis", prompt: "Inspect the disposable workspace." },
