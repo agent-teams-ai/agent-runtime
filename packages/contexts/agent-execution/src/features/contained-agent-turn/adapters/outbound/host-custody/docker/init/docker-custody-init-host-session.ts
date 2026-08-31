@@ -115,7 +115,7 @@ export class DockerCustodyInitHostSession {
   readonly #onRootExit: (exit: DockerCustodyInitHostRootExit) => void | Promise<void>;
   readonly #outputIterator: AsyncIterator<Uint8Array>;
   readonly #signal: AbortSignal | undefined;
-  readonly #timeouts: {readonly acknowledgement: number; readonly ready: number};
+  readonly #timeouts: {readonly acknowledgement: number; readonly drain: number; readonly ready: number};
   readonly #queued: DockerCustodyInitMessage[] = [];
   readonly #bytes: Record<"stderr" | "stdout", number> = {stderr: 0, stdout: 0};
   readonly #decoderHeader = Buffer.alloc(4);
@@ -137,7 +137,8 @@ export class DockerCustodyInitHostSession {
   public constructor(options: DockerCustodyInitHostOptions) {
     const maximum = {stderr: boundedInteger(options.maximumStderrBytes, "maximumStderrBytes"),
       stdout: boundedInteger(options.maximumStdoutBytes, "maximumStdoutBytes")};
-    const timeouts = {acknowledgement: boundedInteger(options.acknowledgementTimeoutMs, "acknowledgementTimeoutMs"),
+    const acknowledgementTimeout = boundedInteger(options.acknowledgementTimeoutMs, "acknowledgementTimeoutMs");
+    const timeouts = {acknowledgement: acknowledgementTimeout, drain: acknowledgementTimeout,
       ready: boundedInteger(options.readyTimeoutMs, "readyTimeoutMs")};
     const identity = parseDockerCustodyIdentity(options.authority.expectedIdentity);
     const authority = Object.freeze({expectedIdentity: identity,
@@ -348,19 +349,30 @@ export class DockerCustodyInitHostSession {
   }
 
   async #drainBufferedInput(): Promise<void> {
-    for (let count = 0; count < 4; count += 1) {
-      if (this.#queued.length !== 0) {throw new DockerCustodyProtocolError("frames followed drain completion");}
-      if (this.#decoderBufferedBytes !== 0) {throw new DockerCustodyProtocolError("partial frame followed drain completion");}
-      const selected = await Promise.race([this.#outputIterator.next(), this.#wake.then(() => {
-        throw new HostSessionFailure(this.#settled?.kind === "failed" || this.#settled?.kind === "unknown"
-          ? this.#settled : this.#cancellationResult());
-      })]);
-      if (selected.done) {this.#decoder.finish(); return;}
-      this.#observeDecoderBytes(selected.value);
-      const messages = this.#decoder.push(selected.value);
-      if (messages.length !== 0) {throw new DockerCustodyProtocolError("frames followed drain completion");}
+    const deadline = this.#monotonicNow() + this.#timeouts.drain;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      for (let count = 0; count < 4; count += 1) {
+        if (this.#queued.length !== 0) {throw new DockerCustodyProtocolError("frames followed drain completion");}
+        if (this.#decoderBufferedBytes !== 0) {throw new DockerCustodyProtocolError("partial frame followed drain completion");}
+        const timeout = new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {reject(new HostSessionFailure(this.#failed("transport-failed")));},
+            Math.max(0, deadline - this.#monotonicNow()));
+        });
+        const selected = await Promise.race([this.#outputIterator.next(), timeout, this.#wake.then(() => {
+          throw new HostSessionFailure(this.#settled?.kind === "failed" || this.#settled?.kind === "unknown"
+            ? this.#settled : this.#cancellationResult());
+        })]);
+        clearTimeout(timer); timer = undefined;
+        if (selected.done) {this.#decoder.finish(); return;}
+        this.#observeDecoderBytes(selected.value);
+        const messages = this.#decoder.push(selected.value);
+        if (messages.length !== 0) {throw new DockerCustodyProtocolError("frames followed drain completion");}
+      }
+      throw new DockerCustodyProtocolError("post-drain input exceeds the protocol bound");
+    } finally {
+      if (timer !== undefined) {clearTimeout(timer);}
     }
-    throw new DockerCustodyProtocolError("post-drain input exceeds the protocol bound");
   }
 
   #assertGeneration(): void {
