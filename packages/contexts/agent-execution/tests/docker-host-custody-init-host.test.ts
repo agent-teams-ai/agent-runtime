@@ -98,6 +98,15 @@ test("late frames are rejected independently of transport chunking", async () =>
   assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
 });
 
+test("a partial late frame already buffered with drain completion is rejected", async () => {
+  const {channel, session} = create(); channel.push(ready); await tick();
+  const late = encodeDockerCustodyFrame({bytesBase64: Buffer.from("late").toString("base64"),
+    kind: "provider-output", requestId: "request:g1", stream: "stdout"});
+  channel.pushBytes(Buffer.concat([Buffer.from(encodeDockerCustodyFrame(ack)), Buffer.from(encodeDockerCustodyFrame(root)),
+    Buffer.from(encodeDockerCustodyFrame(drain)), Buffer.from(late.subarray(0, 2))]));
+  assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+});
+
 test("fragmented input retains one acknowledgement deadline and cancellation wakes the read loop", async t => {
   await t.test("deadline", async () => {
     const {channel, session} = create(new FakeChannel(), {acknowledgementTimeoutMs: 15});
@@ -107,6 +116,22 @@ test("fragmented input retains one acknowledgement deadline and cancellation wak
     setTimeout(() => {channel.pushBytes(frame.subarray(2, 4));}, 10);
     setTimeout(() => {channel.pushBytes(frame.subarray(4));}, 20);
     assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "unknown", reason: "acknowledgement-lost"});
+  });
+  await t.test("wall clock rollback", async () => {
+    let monotonic = 0; const {channel, session} = create(new FakeChannel(),
+      {acknowledgementTimeoutMs: 10, monotonicNow: () => monotonic});
+    channel.push(ready); await tick();
+    const frame = encodeDockerCustodyFrame(ack); channel.pushBytes(frame.subarray(0, 2)); await tick();
+    const originalNow = Date.now; Date.now = () => originalNow() - 60_000;
+    try {
+      monotonic = 11; channel.pushBytes(frame.subarray(2, 3));
+      const outcome = await Promise.race([session.completion, new Promise<"wall-timeout">(resolve => {
+        setTimeout(() => {resolve("wall-timeout");}, 50);
+      })]);
+      if (outcome === "wall-timeout") {await session.cancel();}
+      assert.deepEqual(outcome,
+        {generation: "generation:g1", kind: "unknown", reason: "acknowledgement-lost"});
+    } finally {Date.now = originalNow;}
   });
   await t.test("cancel", async () => {
     const {channel, session} = create();
@@ -251,12 +276,15 @@ test("cancel and close are idempotent, terminal, and clean abort listeners/chann
   assert.equal(channel.closeCalls, 1); assert.deepEqual(await session.writeInput(Buffer.from("late")), {committedBytes: 0, kind: "closed"});
 });
 
-test("cancel settles completion while a runtime callback remains backpressured", async () => {
-  const blocked = new Promise<void>(() => {}); const {channel, session} = create(new FakeChannel(), {onOutput: () => blocked});
+test("AbortSignal settles post-start cancellation while preserving backpressured callback cleanup", async () => {
+  const abort = new AbortController(); let release!: () => void; let cleaned = false;
+  const blocked = new Promise<void>(resolve => {release = resolve;}).finally(() => {cleaned = true;});
+  const {channel, session} = create(new FakeChannel(), {onOutput: () => blocked, signal: abort.signal});
   channel.push(ready); await tick(); channel.push(ack); await tick();
   channel.push({bytesBase64: Buffer.from("held").toString("base64"), kind: "provider-output",
     requestId: "request:g1", stream: "stdout"}); await tick();
-  const cancelled = await session.cancel();
-  assert.strictEqual(await session.completion, cancelled);
-  assert.deepEqual(cancelled, {generation: "generation:g1", kind: "failed", reason: "cancelled"});
+  abort.abort();
+  assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "cancelled"});
+  assert.equal(channel.closeCalls, 1); assert.equal(cleaned, false);
+  release(); await blocked; assert.equal(cleaned, true);
 });
