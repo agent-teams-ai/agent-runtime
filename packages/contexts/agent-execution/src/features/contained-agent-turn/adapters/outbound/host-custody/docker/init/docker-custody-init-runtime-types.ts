@@ -1,6 +1,5 @@
 import type {
   DockerCustodyChildSignal,
-  DockerCustodyContainmentRequest,
   DockerCustodyHostSignal,
   DockerCustodyIdentity,
   DockerCustodyInitClosureSubresult,
@@ -22,7 +21,7 @@ export interface DockerCustodyProviderSpawn {
   readonly gid: number; readonly inheritedDescriptors: readonly [0, 1, 2]; readonly noNewPrivileges: true;
   readonly shell: false; readonly uid: number;
 }
-export interface DockerCustodyReapedDescendant extends DockerCustodyProviderRootExit {readonly pid: number;}
+export interface DockerCustodyCommittedWriteResult {readonly committedBytes: number; readonly status: "accepted" | "blocked" | "closed";}
 export interface DockerCustodyOutputWriteResult {readonly committedBytes: number; readonly status: "accepted" | "blocked";}
 export interface DockerCustodyInitSyscalls {
   readonly assertNoNewPrivileges: () => void;
@@ -31,15 +30,14 @@ export interface DockerCustodyInitSyscalls {
   readonly monotonicNowMs: () => number;
   readonly observeProviderRootExit: (handle: DockerCustodyProviderRootHandle) => DockerCustodyProviderRootExit | null;
   readonly observeIdentity: () => DockerCustodyIdentity;
-  readonly reapExitedDescendants: () => readonly DockerCustodyReapedDescendant[];
-  readonly requestContainerContainment: (reason: DockerCustodyContainmentRequest["reason"]) => "accepted" | "failed";
   readonly signalProviderRoot: (handle: DockerCustodyProviderRootHandle, signal: DockerCustodyHostSignal | "SIGKILL") => "absent" | "sent";
   readonly spawnProvider: (spawn: DockerCustodyProviderSpawn) =>
     | {readonly kind: "not-started"}
     | {readonly handle: DockerCustodyProviderRootHandle; readonly kind: "started"; readonly pid: number;
       readonly stderr: DockerCustodyProviderOutputHandle; readonly stdout: DockerCustodyProviderOutputHandle;};
   readonly wallNowUnixMs: () => number;
-  readonly writeProviderInput: (bytes: Uint8Array) => "accepted" | "blocked" | "closed";
+  /** Writable-buffer acceptance is a commit: a false write return is represented as fully committed + blocked. */
+  readonly writeProviderInput: (bytes: Uint8Array) => DockerCustodyCommittedWriteResult;
   readonly writeProviderOutput: (stream: DockerCustodyOutputStream, bytes: Uint8Array) => DockerCustodyOutputWriteResult;
 }
 export interface DockerCustodyInitRuntimeOptions {
@@ -50,11 +48,11 @@ export interface DockerCustodyInitRuntimeOptions {
   readonly writeControl: (message: DockerCustodyInitMessage) => "accepted" | "blocked";
 }
 export interface DockerCustodyStreamEvidence {
-  readonly bytes: number; readonly eof: boolean; readonly sha256: string; readonly status: "blocked" | "open" | "overflow";
+  readonly bytes: number; readonly eof: boolean; readonly sha256: string; readonly status: "blocked" | "failed" | "open" | "overflow";
 }
 export interface DockerCustodyInitSnapshot {
   readonly acknowledgement: "delivered" | "lost" | "not-applicable" | "pending"; readonly closure: DockerCustodyInitClosureSubresult | null;
-  readonly containmentRequested: boolean; readonly descendantsReaped: number;
+  readonly containmentRequested: boolean; readonly failureCleanupComplete: boolean;
   readonly phase: "awaiting-handshake" | "awaiting-request" | "drained" | "failed" | "provider-exited" | "provider-running" | "stopping";
   readonly providerRootTracked: boolean; readonly requestId: string | null; readonly signalEvidence: readonly DockerCustodySignalObservation[];
   readonly startFenced: boolean; readonly stderr: DockerCustodyStreamEvidence; readonly stdinBytes: number;
