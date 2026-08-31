@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, copyFile, link, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, link, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -121,6 +121,28 @@ test("same attempt with a different complete launch fingerprint conflicts", asyn
   await assert.rejects(custody.open(request), { message: /fingerprint conflict/u, name: "HostCustodyFingerprintConflictError" });
   assert.equal(custody.evidence(opened.custodyRef)?.spawn, "acknowledged");
   await custody.requestContainment({ ...request, custodyRef: opened.custodyRef });
+});
+test("wrong executable digest rejects before any provider effect", async () => {
+  const workspaceRef = await disposableRoot();
+  const marker = join(workspaceRef, "wrong-digest-provider-effect");
+  const entry = await launchPlan({
+    script: `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "effect")`,
+    workspaceRef,
+  });
+  const custody = new NodeProviderProcessCustody({
+    launchPlans: createStaticHostCustodyLaunchPlanResolver([{
+      ...entry,
+      plan: Object.freeze({ ...entry.plan, executableSha256: "0".repeat(64) }),
+    }]),
+  });
+  const request = {
+    attemptId: "attempt:wrong-executable-digest",
+    operationId: "operation:wrong-executable-digest",
+    providerBinding: binding,
+    workspaceRef,
+  } as const;
+  await assert.rejects(custody.open(request), { name: "HostCustodyLaunchRejectedError" });
+  await assert.rejects(access(marker), { code: "ENOENT" });
 });
 test("identity failure is contained by the stable guardian before eager open rejects", async () => {
   const workspaceRef = await disposableRoot();
@@ -247,16 +269,22 @@ test("delegated SDK start is single-flight and wrapper owns group-signal state",
     environment: deferred.environment,
     signal: new AbortController().signal,
   } as const;
+  const driftedStarts = [
+    { ...exact, command: "/bin/false" },
+    { ...exact, arguments: ["-e", "setInterval(() => {}, 1)"] },
+    { ...exact, cwd: undefined },
+    { ...exact, environment: { ...deferred.environment, EXTRA: "1" } },
+  ];
+  for (const drifted of driftedStarts) {
+    assert.throws(() => deferred.custody.start(opened.custodyRef, drifted), /fingerprint conflict/u);
+    assert.equal(deferred.custody.get(opened.custodyRef), undefined);
+  }
   const first = deferred.custody.start(opened.custodyRef, exact);
   const second = deferred.custody.start(opened.custodyRef, exact);
   assert.equal(first, second);
   assert.equal(first.killed, false);
   assert.equal(first.kill("SIGCONT"), false);
   assert.equal(first.killed, false);
-  assert.throws(
-    () => deferred.custody.start(opened.custodyRef, { ...exact, arguments: ["-e", "setInterval(() => {}, 1)"] }),
-    /arguments mismatch|fingerprint conflict/u,
-  );
   await waitForProvedIdentity(deferred.custody, opened.custodyRef);
   assert.equal(first.kill("SIGCONT"), false);
   assert.equal(first.killed, false);

@@ -17,6 +17,7 @@ import { dirname, join, parse } from "node:path";
 import type { HostCustodyLaunchPlan } from "./custodied-provider-process.js";
 import {
   assertDescriptorBoundLinuxProfile,
+  isIntentionalCodexHomeAlias,
   sha256,
   type ExecutableObservation,
   type PrivateLaunchPathObservations,
@@ -148,9 +149,25 @@ const unlinkSealedPathIfOwned = (
 
 interface PrivateLaunchDescriptor {
   readonly childDescriptor: number;
-  readonly key: string;
+  readonly keys: string[];
   readonly parentDescriptor: number;
 }
+
+const assertQualifiedPrivateDescriptorAliases = (
+  plan: HostCustodyLaunchPlan,
+  privatePaths: PrivateLaunchPathObservations,
+): void => {
+  for (const [key, observation] of Object.entries(privatePaths.byEnvironmentKey)) {
+    for (const [otherKey, other] of Object.entries(privatePaths.byEnvironmentKey)) {
+      if (
+        key < otherKey && observation.path === other.path &&
+        !isIntentionalCodexHomeAlias(plan, key, observation.path, otherKey, other.path)
+      ) {
+        throw new Error("Host Custody acquired launch descriptors must identify distinct filesystem objects");
+      }
+    }
+  }
+};
 
 const sealExecutableDescriptor = (
   executable: ExecutableObservation,
@@ -211,18 +228,26 @@ const openPrivateDescriptors = (
   operations: PrivateDescriptorOperations = privateDescriptorOperations,
 ): readonly PrivateLaunchDescriptor[] => {
   const descriptors: PrivateLaunchDescriptor[] = [];
+  const descriptorByPath = new Map<string, PrivateLaunchDescriptor>();
   try {
-    for (const [index, key] of privatePaths.environmentKeys.entries()) {
+    for (const key of privatePaths.environmentKeys) {
       const observation = privatePaths.byEnvironmentKey[key];
       if (observation === undefined) {throw new Error("Host Custody private descriptor observation is missing");}
-      descriptors.push({
-        childDescriptor: 6 + index,
-        key,
+      const existing = descriptorByPath.get(observation.path);
+      if (existing !== undefined) {
+        existing.keys.push(key);
+        continue;
+      }
+      const descriptor = {
+        childDescriptor: 6 + descriptors.length,
+        keys: [key],
         parentDescriptor: operations.open(
           observation.path,
           constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
         ),
-      });
+      };
+      descriptors.push(descriptor);
+      descriptorByPath.set(observation.path, descriptor);
     }
     return descriptors;
   } catch (error) {
@@ -239,12 +264,17 @@ const assertPrivateDescriptorIdentities = (
 ): readonly BigIntStats[] => {
   const observations: BigIntStats[] = [];
   for (const descriptor of descriptors) {
-    const expected = privatePaths.byEnvironmentKey[descriptor.key];
+    const expected = privatePaths.byEnvironmentKey[descriptor.keys[0] ?? ""];
     const observed = fstatSync(descriptor.parentDescriptor, { bigint: true });
     const matches = expected?.path === privatePaths.root.path
       ? expected !== undefined && directoryObjectMatches(observed, expected)
       : expected !== undefined && directoryIdentityMatches(observed, expected);
-    if (!matches) {throw new Error("Host Custody private path changed while acquiring launch authority");}
+    if (
+      !matches ||
+      descriptor.keys.some(key => privatePaths.byEnvironmentKey[key]?.path !== expected?.path)
+    ) {
+      throw new Error("Host Custody private path changed while acquiring launch authority");
+    }
     observations.push(observed);
   }
   return observations;
@@ -255,6 +285,25 @@ const assertDistinctDescriptorObjects = (observations: readonly FilesystemObject
     index !== otherIndex && sameFilesystemObject(identity, other)))) {
     throw new Error("Host Custody acquired launch descriptors must identify distinct filesystem objects");
   }
+};
+
+const privatePathDescriptorRecord = (
+  descriptors: readonly PrivateLaunchDescriptor[],
+): VerifiedLaunchDescriptors["privatePathDescriptors"] => {
+  const result: Record<string, { readonly childDescriptor: number; readonly parentDescriptor: number }> = {};
+  for (const descriptor of descriptors) {
+    const [primaryKey, ...aliasKeys] = descriptor.keys;
+    if (primaryKey === undefined) {throw new Error("Host Custody private descriptor key is missing");}
+    const authority = Object.freeze({
+      childDescriptor: descriptor.childDescriptor,
+      parentDescriptor: descriptor.parentDescriptor,
+    });
+    result[primaryKey] = authority;
+    for (const aliasKey of aliasKeys) {
+      Object.defineProperty(result, aliasKey, { enumerable: false, value: authority });
+    }
+  }
+  return Object.freeze(result);
 };
 
 export const acquireVerifiedLaunchDescriptors = (
@@ -268,6 +317,7 @@ export const acquireVerifiedLaunchDescriptors = (
   verifyExecutableImmediatelyBeforeSpawn(plan, executable);
   verifyDirectoryImmediatelyBeforeSpawn(workspaceRef, workspace, "workspace");
   verifyDirectoryImmediatelyBeforeSpawn(privatePaths.root.path, privatePaths.root, "private root");
+  assertQualifiedPrivateDescriptorAliases(plan, privatePaths);
   for (const [key, observation] of Object.entries(privatePaths.byEnvironmentKey)) {
     verifyDirectoryImmediatelyBeforeSpawn(observation.path, observation, `private ${key}`);
   }
@@ -315,13 +365,7 @@ export const acquireVerifiedLaunchDescriptors = (
       },
       executable: sealedExecutable,
       executableDescriptor: Object.freeze({ childDescriptor: 5, parentDescriptor: executableDescriptor }),
-      privatePathDescriptors: Object.freeze(Object.fromEntries(privateDescriptors.map(descriptor => [
-        descriptor.key,
-        Object.freeze({
-          childDescriptor: descriptor.childDescriptor,
-          parentDescriptor: descriptor.parentDescriptor,
-        }),
-      ]))),
+      privatePathDescriptors: privatePathDescriptorRecord(privateDescriptors),
       workspaceDescriptor: Object.freeze({ childDescriptor: 4, parentDescriptor: workspaceDescriptor }),
       privateRootDescriptor: Object.freeze({ childDescriptor: 6 + privateDescriptors.length, parentDescriptor: privateRootDescriptor }),
     });

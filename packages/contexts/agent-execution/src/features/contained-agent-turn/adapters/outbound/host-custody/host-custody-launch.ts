@@ -312,6 +312,16 @@ const privatePathObservation = (path: string, observation: BigIntStats): Private
 const sameFilesystemObject = (left: FilesystemObjectIdentity, right: FilesystemObjectIdentity): boolean =>
   left.dev === right.dev && left.ino === right.ino;
 
+export const isIntentionalCodexHomeAlias = (
+  plan: HostCustodyLaunchPlan,
+  leftKey: string,
+  leftPath: string,
+  rightKey: string,
+  rightPath: string,
+): boolean => plan.provider === "codex" &&
+  [leftKey, rightKey].every(key => key === "CODEX_HOME" || key === "HOME") &&
+  leftPath === rightPath;
+
 const assertDistinctPrivateFilesystemObjects = (
   workspace: FilesystemObjectIdentity,
   root: FilesystemObjectIdentity,
@@ -324,6 +334,30 @@ const assertDistinctPrivateFilesystemObjects = (
   }
 };
 
+const assertQualifiedPrivateFilesystemObjects = (
+  plan: HostCustodyLaunchPlan,
+  workspace: FilesystemObjectIdentity,
+  root: FilesystemObjectIdentity,
+  environmentPaths: Readonly<Record<string, PrivatePathObservation>>,
+): void => {
+  assertDistinctPrivateFilesystemObjects(workspace, root, {});
+  for (const [key, observation] of Object.entries(environmentPaths)) {
+    if (sameFilesystemObject(workspace, observation) || sameFilesystemObject(root, observation)) {
+      throw new Error("Host Custody private launch paths must identify distinct filesystem objects");
+    }
+    for (const [otherKey, other] of Object.entries(environmentPaths)) {
+      if (
+        key < otherKey &&
+        sameFilesystemObject(observation, other) &&
+        !isIntentionalCodexHomeAlias(plan, key, observation.path, otherKey, other.path)
+      ) {
+        throw new Error("Host Custody private launch paths must identify distinct filesystem objects");
+      }
+    }
+  }
+};
+
+// oxlint-disable-next-line complexity -- exact path, ancestry, inode, and qualified-alias guards remain one verification.
 export const verifyPrivateLaunchPaths = async (
   plan: HostCustodyLaunchPlan,
   workspaceRef: string,
@@ -374,12 +408,18 @@ export const verifyPrivateLaunchPaths = async (
     }
     observations[key] = privatePathObservation(value, observation);
   }
-  const paths = Object.values(observations).map(observation => observation.path);
-  if (paths.some((path, index) => paths.some((other, otherIndex) =>
-    index !== otherIndex && (isWithin(path, other) || isWithin(other, path))))) {
-    throw new Error("Host Custody private environment paths must be pairwise disjoint");
+  for (const [key, observation] of Object.entries(observations)) {
+    for (const [otherKey, other] of Object.entries(observations)) {
+      if (
+        key < otherKey &&
+        (isWithin(observation.path, other.path) || isWithin(other.path, observation.path)) &&
+        !isIntentionalCodexHomeAlias(plan, key, observation.path, otherKey, other.path)
+      ) {
+        throw new Error("Host Custody private environment paths must be pairwise disjoint");
+      }
+    }
   }
-  assertDistinctPrivateFilesystemObjects(workspaceStats, rootObservation, observations);
+  assertQualifiedPrivateFilesystemObjects(plan, workspaceStats, rootObservation, observations);
   return Object.freeze({
     byEnvironmentKey: Object.freeze(observations),
     environmentKeys: keys,
@@ -389,6 +429,7 @@ export const verifyPrivateLaunchPaths = async (
 
 export const hostCustodyLaunchTestSupport = Object.freeze({
   assertDistinctPrivateFilesystemObjects,
+  assertQualifiedPrivateFilesystemObjects,
 });
 
 export const createFingerprint = (
