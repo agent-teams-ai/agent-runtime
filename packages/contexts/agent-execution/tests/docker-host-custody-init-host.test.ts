@@ -28,22 +28,30 @@ const drain = Object.freeze({kind: "provider-drain-complete" as const, outerCont
 
 class FakeChannel implements DockerCustodyDuplexChannel {
   readonly #pending: Array<(value: IteratorResult<Uint8Array>) => void> = [];
+  readonly #readWaiters: Array<{readonly count: number; readonly resolve: () => void}> = [];
   readonly #values: Uint8Array[] = [];
+  #ended = false;
+  #readCalls = 0;
   public closeCalls = 0;
   public closeInputCalls = 0;
   public writeGate: Promise<void> | undefined;
   public readonly writes: DockerCustodyProtocolMessage[] = [];
   public readonly output: AsyncIterable<Uint8Array> = {[Symbol.asyncIterator]: () => ({
     next: () => {
+      this.#readCalls += 1;
+      for (const waiter of this.#readWaiters.splice(0)) {
+        if (this.#readCalls >= waiter.count) {waiter.resolve();} else {this.#readWaiters.push(waiter);}
+      }
       const value = this.#values.shift();
       if (value !== undefined) {return Promise.resolve({done: false, value});}
+      if (this.#ended) {return Promise.resolve({done: true, value: undefined});}
       return new Promise(resolve => {this.#pending.push(resolve);});
     },
     return: async () => ({done: true, value: undefined}),
   })};
 
   public async close(): Promise<void> {
-    this.closeCalls += 1;
+    this.closeCalls += 1; this.#ended = true;
     for (const resolve of this.#pending.splice(0)) {resolve({done: true, value: undefined});}
   }
   public async closeInput(): Promise<void> {this.closeInputCalls += 1;}
@@ -58,6 +66,14 @@ class FakeChannel implements DockerCustodyDuplexChannel {
   }
   public push(...messages: readonly DockerCustodyProtocolMessage[]): void {
     this.pushBytes(Buffer.concat(messages.map(message => Buffer.from(encodeDockerCustodyFrame(message)))));
+  }
+  public end(): void {
+    this.#ended = true;
+    for (const resolve of this.#pending.splice(0)) {resolve({done: true, value: undefined});}
+  }
+  public waitForNextRead(): Promise<void> {
+    const count = this.#readCalls + 1;
+    return new Promise(resolve => {this.#readWaiters.push({count, resolve});});
   }
 }
 
@@ -78,6 +94,7 @@ test("fragmented ready and coalesced acknowledgement/output/exit/drain produce e
   }, onRootExit: value => {observations.push(value);}});
   const frame = encodeDockerCustodyFrame(ready); channel.pushBytes(frame.subarray(0, 3)); channel.pushBytes(frame.subarray(3));
   channel.push(ack, {bytesBase64: Buffer.from("out").toString("base64"), kind: "provider-output", requestId: "request:g1", stream: "stdout"}, root, drain);
+  channel.end();
   assert.deepEqual(await session.completion, {acknowledgement: "started", drain: {outerContainmentClaim: "unproven", rootExit: "observed", stderr: "eof", stdout: "eof"},
     generation: "generation:g1", kind: "closed", rootExit: {exitCode: 17, signal: null}, stderrBytes: 0, stdoutBytes: 3});
   assert.deepEqual(chunks, ["stdout:out"]);
@@ -96,6 +113,15 @@ test("late frames are rejected independently of transport chunking", async () =>
   channel.pushBytes(encodeDockerCustodyFrame({bytesBase64: Buffer.from("late").toString("base64"),
     kind: "provider-output", requestId: "request:g1", stream: "stdout"}));
   assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+});
+
+test("a delayed late frame is rejected after the host begins deterministic post-drain validation", async () => {
+  const {channel, session} = create(); channel.push(ready); await tick(); channel.push(ack); await tick(); channel.push(root); await tick();
+  channel.push(drain); const validationRead = channel.waitForNextRead(); await validationRead;
+  channel.push({bytesBase64: Buffer.from("delayed-late").toString("base64"), kind: "provider-output",
+    requestId: "request:g1", stream: "stderr"});
+  assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+  assert.equal(channel.closeCalls, 1);
 });
 
 test("a partial late frame already buffered with drain completion is rejected", async () => {
@@ -164,6 +190,7 @@ test("generation drift fences runtime callbacks and closed evidence", async t =>
     channel.push(ready); await tick();
     channel.push(ack, {bytesBase64: Buffer.from("out").toString("base64"), kind: "provider-output",
       requestId: "request:g1", stream: "stdout"}, root, drain);
+    channel.end();
     assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
     assert.deepEqual(callbacks, event === "output" ? ["output"] : event === "root" ? ["output", "root"] : ["output", "root", "drain"]);
   });}
@@ -238,7 +265,7 @@ test("provider input, EOF, signal and callback backpressure use the retained cha
   assert.deepEqual(await session.closeProviderInput(), {committedBytes: 0, kind: "closed"});
   assert.deepEqual(await session.signal("SIGTERM"), {committedBytes: 0, kind: "committed"});
   channel.push({bytesBase64: Buffer.from("held").toString("base64"), kind: "provider-output", requestId: "request:g1", stream: "stderr"}, root, drain);
-  await tick(); assert.equal(channel.closeCalls, 0); release(); assert.equal((await session.completion).kind, "closed");
+  channel.end(); await tick(); assert.equal(channel.closeCalls, 0); release(); assert.equal((await session.completion).kind, "closed");
   assert.deepEqual(channel.writes.slice(2).map(message => message.kind), ["provider-input", "provider-input-eof", "host-signal"]);
   assert.equal(channel.closeInputCalls, 0);
 });
@@ -251,9 +278,13 @@ test("output overflow and output after drain cannot become closed success", asyn
     assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "output-limit"});
   });
   await t.test("late coalesced", async () => {
-    const {channel, session} = create(); channel.push(ready); await tick(); channel.push(ack, root, drain,
+    let drainCalls = 0; const {channel, session} = create(new FakeChannel(), {onDrainComplete: () => {drainCalls += 1;}});
+    channel.push(ready); await tick(); channel.push(ack, root, drain,
       {bytesBase64: Buffer.from("late").toString("base64"), kind: "provider-output", requestId: "request:g1", stream: "stdout"});
-    assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+    const rejected = await session.completion;
+    assert.deepEqual(rejected, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+    assert.strictEqual(await session.close(), rejected);
+    assert.equal(drainCalls, 0); assert.equal(channel.closeCalls, 1);
   });
 });
 

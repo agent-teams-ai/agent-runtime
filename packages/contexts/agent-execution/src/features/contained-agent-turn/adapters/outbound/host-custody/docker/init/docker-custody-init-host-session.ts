@@ -241,6 +241,8 @@ export class DockerCustodyInitHostSession {
         if (closed !== undefined) {
           await this.#drainBufferedInput();
           this.#assertGeneration();
+          await this.#awaitRuntimeCallback(() => this.#onDrainComplete(closed.drain));
+          this.#assertGeneration();
           return this.#settle(closed);
         }
       }
@@ -301,10 +303,6 @@ export class DockerCustodyInitHostSession {
       if (this.#rootExit === undefined) {throw new DockerCustodyProtocolError("drain completion is out of order");}
       const drain = Object.freeze({outerContainmentClaim: message.outerContainmentClaim, rootExit: message.rootExit,
         stderr: message.stderr, stdout: message.stdout});
-      this.#assertGeneration();
-      await this.#awaitRuntimeCallback(() => this.#onDrainComplete(drain));
-      this.#assertGeneration();
-      if (this.#queued.length !== 0) {throw new DockerCustodyProtocolError("frames followed drain completion");}
       return Object.freeze({acknowledgement: "started", drain, generation: this.#authority.generation,
         kind: "closed", rootExit: this.#rootExit, stderrBytes: this.#bytes.stderr, stdoutBytes: this.#bytes.stdout});
     }
@@ -353,8 +351,10 @@ export class DockerCustodyInitHostSession {
     for (let count = 0; count < 4; count += 1) {
       if (this.#queued.length !== 0) {throw new DockerCustodyProtocolError("frames followed drain completion");}
       if (this.#decoderBufferedBytes !== 0) {throw new DockerCustodyProtocolError("partial frame followed drain completion");}
-      const selected = await Promise.race([this.#outputIterator.next(), new Promise<void>(resolve => {setImmediate(resolve);})]);
-      if (selected === undefined) {return;}
+      const selected = await Promise.race([this.#outputIterator.next(), this.#wake.then(() => {
+        throw new HostSessionFailure(this.#settled?.kind === "failed" || this.#settled?.kind === "unknown"
+          ? this.#settled : this.#cancellationResult());
+      })]);
       if (selected.done) {this.#decoder.finish(); return;}
       this.#observeDecoderBytes(selected.value);
       const messages = this.#decoder.push(selected.value);
