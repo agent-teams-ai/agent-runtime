@@ -82,6 +82,9 @@ export const createCodexCurrentKernelOwner = (
   options: CreateCodexCurrentKernelOwnerOptions,
 ): CodexCurrentKernelOwner => {
   const records = new Map<string, PreparedRecord>();
+  const processes: CustodiedProviderProcessRegistry = Object.freeze({
+    get: options.hostCustody.get.bind(options.hostCustody),
+  });
   let disposed = false;
   const attempts: CodexAppServerKernelAttemptFactory = Object.freeze({
     async prepare(input: AttemptInput) {
@@ -110,7 +113,7 @@ export const createCodexCurrentKernelOwner = (
               providerBinding: record.binding,
               supportedModes: Object.freeze(["analysis", "workspace-write"]),
             },
-            processes: options.hostCustody,
+            processes,
             tmpDir: record.record.tmpDir,
           });
           return Object.freeze({

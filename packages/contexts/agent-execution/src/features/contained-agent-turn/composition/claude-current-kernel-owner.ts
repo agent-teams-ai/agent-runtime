@@ -93,6 +93,10 @@ export const createClaudeCurrentKernelOwner = (
   options: CreateClaudeCurrentKernelOwnerOptions,
 ): ClaudeCurrentKernelOwner => {
   const records = new Map<string, PreparedRecord>();
+  const processes: Processes = Object.freeze({
+    get: options.hostCustody.get.bind(options.hostCustody),
+    start: options.hostCustody.start.bind(options.hostCustody),
+  });
   let disposed = false;
   const privateExecutions: ClaudeAgentSdkKernelPrivateExecutionResolver = Object.freeze({
     async consume<Result>(input: PrivateExecutionInput,
@@ -152,7 +156,7 @@ export const createClaudeCurrentKernelOwner = (
   });
   const provider = new ClaudeAgentSdkCurrentKernelAdapter({
     adapterSnapshot: options.adapterSnapshot, executablePath: options.executablePath,
-    manifest: options.manifest, privateExecutions, processes: options.hostCustody,
+    manifest: options.manifest, privateExecutions, processes,
     ...(options.queryFactory === undefined ? {} : { queryFactory: options.queryFactory }),
   });
   return Object.freeze({custody, dispose() {disposed = true; records.clear();}, provider});
