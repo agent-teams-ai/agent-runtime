@@ -707,6 +707,48 @@ test("attach awaits exact hijack closure when the socket dies during post-hijack
   assert.equal(daemon.hijackCloseCount, 1);
 });
 
+test("attach rejects when post-hijack identity observation resolves after the hard deadline", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  let identityReached!: () => void;
+  let releaseIdentity!: () => void;
+  const reached = new Promise<void>(resolve => {identityReached = resolve;});
+  const identityWait = new Promise<void>(resolve => {releaseIdentity = resolve;});
+  let hijacked = false;
+  const client = {
+    buffered: daemon.client.buffered,
+    async endpointIdentity() {
+      if (hijacked) {identityReached(); await identityWait;}
+      return daemon.client.endpointIdentity();
+    },
+    async hijack(input: Parameters<typeof daemon.client.hijack>[0]) {
+      const raw = await daemon.client.hijack(input);
+      hijacked = true;
+      return raw;
+    },
+    stream: daemon.client.stream,
+  };
+  const engine = new NodeUnixSocketDockerEngine({client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  const now = Date.now();
+  t.mock.timers.enable({apis: ["Date", "setTimeout"], now});
+  try {
+    const opening = engine.attachCustody(authority, {
+      deadlineEpochMs: now + 1_000,
+      signal: new AbortController().signal,
+    });
+    await reached;
+    t.mock.timers.setTime(now + 1_001);
+    releaseIdentity();
+    await assert.rejects(opening, {code: "deadline-exceeded"});
+    assert.equal(daemon.hijackCloseCount, 1);
+  } finally {
+    releaseIdentity();
+    t.mock.timers.reset();
+  }
+});
+
 test("hijack loss after start bytes is acknowledgement-unknown and removal retires the generation", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});

@@ -294,8 +294,11 @@ export class BoundedUnixHttpClient {
   }
 
   public async endpointIdentity(call: DockerEngineCall): Promise<DockerEndpointIdentity> {
-    this.#checkCall(snapshotDockerEngineCall(call));
-    return (await this.#observeCustody()).identity;
+    const snapshot = snapshotDockerEngineCall(call);
+    this.#checkCall(snapshot);
+    const custody = await this.#observeCustody();
+    this.#checkCall(snapshot);
+    return custody.identity;
   }
 
   public async buffered(input: Omit<RequestInput, "stream">): Promise<UnixHttpResponse<Uint8Array>> {
@@ -337,7 +340,9 @@ export class BoundedUnixHttpClient {
       call, effectiveMs, path: input.path, release: connection.release, request: this.#request,
       socket: connection.socket,
       verifyCustody: async () => {
-        if ((await this.#observeCustody()).token !== custody.token) {throw new DockerEngineError("endpoint-custody-lost");}
+        const current = await this.#observeCustody();
+        this.#checkCall(call);
+        if (current.token !== custody.token) {throw new DockerEngineError("endpoint-custody-lost");}
       },
     });
   }
@@ -463,6 +468,7 @@ export class BoundedUnixHttpClient {
             if (!Number.isSafeInteger(response.statusCode) || (response.statusCode ?? 0) < 100 ||
                 (response.statusCode ?? 0) > 599) {throw new DockerEngineError("protocol-violation");}
             const current = await this.#observeCustody();
+            this.#checkCall(call);
             if (current.token !== custody.token) {throw new DockerEngineError("endpoint-custody-lost");}
             settled = true;
             resolve({
@@ -511,6 +517,7 @@ export class BoundedUnixHttpClient {
         yield chunk as Uint8Array;
       }
       const custody = await this.#observeCustody();
+      this.#checkCall(input.call);
       if (!input.response.complete || custody.token !== input.custodyToken) {
         throw new DockerEngineError("endpoint-custody-lost");
       }

@@ -193,6 +193,38 @@ test("a validated hijack outlives the 120-second establishment cap without wall-
   } finally {await current.close();}
 });
 
+test("channel writes recheck an expired deadline before an overdue timer can run", async t => {
+  for (const seam of ["write", "closeInput"] as const) {
+    await t.test(seam, async context => {
+      let input = Buffer.alloc(0);
+      const current = await fixture(socket => {
+        socket.on("data", chunk => {input = Buffer.concat([input, chunk]);});
+        socket.write(upgrade);
+      });
+      const now = Date.now();
+      context.mock.timers.enable({apis: ["Date", "setTimeout"], now});
+      try {
+        const raw = await current.client.hijack({
+          call: {deadlineEpochMs: now + 1_000, signal: new AbortController().signal},
+          path: "/v1.47/containers/id/attach?stream=1&stdin=1&stdout=1&stderr=1",
+        });
+        const channel = createDockerCustodyChannel(raw);
+        context.mock.timers.setTime(now + 1_001);
+        const attempted = seam === "write" ? channel.write(Buffer.from("must-not-write")) : channel.closeInput();
+        await assert.rejects(attempted, {code: "deadline-exceeded"});
+        await new Promise<void>(resolve => {setImmediate(resolve);});
+        assert.equal(input.byteLength, 0);
+        assert.equal(current.releaseCount, 1);
+        await channel.close();
+        assert.equal(current.releaseCount, 1);
+      } finally {
+        context.mock.timers.reset();
+        await current.close();
+      }
+    });
+  }
+});
+
 test("abort is contained between accepted upgrade and custody-channel listener installation", async () => {
   const current = await fixture(socket => {socket.write(upgrade);});
   const controller = new AbortController();

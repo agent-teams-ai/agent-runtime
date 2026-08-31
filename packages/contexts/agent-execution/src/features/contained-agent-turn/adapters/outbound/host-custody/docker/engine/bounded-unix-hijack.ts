@@ -139,6 +139,24 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
         if (socket.destroyed || !socket.readable || !socket.writable) {
           throw new DockerEngineError("daemon-disconnected");
         }
+        const checkSessionCall = (): void => {
+          if (input.call.signal.aborted) {throw new DockerEngineError("aborted");}
+          if (Date.now() >= input.call.deadlineEpochMs) {
+            sessionExpired = true;
+            abort();
+            throw new DockerEngineError("deadline-exceeded");
+          }
+        };
+        const socketWrite = socket.write;
+        const socketEnd = socket.end;
+        socket.write = ((...arguments_: unknown[]) => {
+          checkSessionCall();
+          return Reflect.apply(socketWrite, socket, arguments_) as boolean;
+        }) as Duplex["write"];
+        socket.end = ((...arguments_: unknown[]) => {
+          checkSessionCall();
+          return Reflect.apply(socketEnd, socket, arguments_) as Duplex;
+        }) as Duplex["end"];
         if (head.byteLength > 0) {socket.unshift(head);}
         sessionTimer = setTimeout(() => {sessionExpired = true; abort();}, remaining);
         sessionTimer.unref();

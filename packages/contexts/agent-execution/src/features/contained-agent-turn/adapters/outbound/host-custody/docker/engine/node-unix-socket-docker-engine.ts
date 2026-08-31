@@ -277,6 +277,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       });
       session.hijack = hijack;
       this.#assertEngine(authoritySnapshot, await this.#identity(callSnapshot));
+      this.#checkCall(callSnapshot);
       if (hijack.input.destroyed || !hijack.input.readable || !hijack.input.writable) {
         throw new DockerEngineError("daemon-disconnected");
       }
@@ -491,11 +492,20 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     }
   }
 
+  #checkCall(call: DockerEngineCall): void {
+    if (call.signal.aborted) {throw new DockerEngineError("aborted");}
+    if (!Number.isSafeInteger(call.deadlineEpochMs) || call.deadlineEpochMs <= Date.now()) {
+      throw new DockerEngineError("deadline-exceeded");
+    }
+  }
+
   async #identity(call: DockerEngineCall): Promise<DockerEngineIdentity> {
     const before = await this.#client.endpointIdentity(call);
+    this.#checkCall(call);
     const response = await this.#json("GET", `${API}/info`, call);
     if (response.statusCode !== 200) {throw statusFailure("info", response.statusCode);}
     const after = await this.#client.endpointIdentity(call);
+    this.#checkCall(call);
     if (before.hostBootGenerationSha256 !== after.hostBootGenerationSha256 ||
         before.daemonBootGenerationSha256 !== after.daemonBootGenerationSha256 ||
         before.canonicalSocketPath !== after.canonicalSocketPath) {
