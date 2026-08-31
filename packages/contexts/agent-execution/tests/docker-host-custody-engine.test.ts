@@ -94,7 +94,7 @@ interface MutationPlan {
 interface SyntheticDaemon {
   readonly bodies: unknown[];
   readonly client: {
-    buffered(input: { readonly body?: Uint8Array; readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: Uint8Array; readonly contentType: string; readonly statusCode: number }>;
+    buffered(input: { readonly beforeWrite?: () => void; readonly body?: Uint8Array; readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: Uint8Array; readonly contentType: string; readonly statusCode: number }>;
     endpointIdentity(): Promise<{ readonly canonicalSocketPath: string; readonly daemonBootGenerationSha256: string; readonly hostBootGenerationSha256: string }>;
     hijack(input: {readonly call: DockerEngineCall; readonly path: string}): Promise<{
       readonly input: PassThrough; readonly output: AsyncIterable<Uint8Array>; close(): Promise<void>;
@@ -105,11 +105,14 @@ interface SyntheticDaemon {
   extraInfoField: boolean;
   infoCgroupVersion: unknown;
   inspectTransform: ((value: Record<string, unknown>) => void) | undefined;
+  readonly hijackCloseCount: number;
   logLeavesRunning: boolean;
   loseNextCreate: boolean;
   oversizeNextCreate: boolean;
   mutationPlan: MutationPlan | undefined;
   rawCreateBody: Uint8Array | undefined;
+  failHijack(): void;
+  pauseNextMutationWrite(at: "after" | "before"): { readonly reached: Promise<void>; release(): void };
   readonly routes: string[];
 }
 
@@ -130,6 +133,13 @@ const syntheticDaemon = (): SyntheticDaemon => {
     running: false,
     terminal: false,
   };
+  let hijackCloseCount = 0;
+  let hijackInput: PassThrough | undefined;
+  let mutationBarrier: {
+    readonly at: "after" | "before";
+    readonly reached: () => void;
+    readonly released: Promise<void>;
+  } | undefined;
   let created: Record<string, unknown> | undefined;
   const inspect = (): Record<string, unknown> => {
     const body = created ?? {};
@@ -213,7 +223,12 @@ const syntheticDaemon = (): SyntheticDaemon => {
     else if (path.includes("?force=")) {state.present = false;}
   };
   const client = {
-    async buffered(request: { readonly body?: Uint8Array; readonly method: string; readonly path: string }) {
+    async buffered(request: {
+      readonly beforeWrite?: () => void;
+      readonly body?: Uint8Array;
+      readonly method: string;
+      readonly path: string;
+    }) {
       routes.push(`${request.method} ${request.path}`);
       if (request.path === "/v1.47/info") {
         const value: Record<string, unknown> = {
@@ -231,6 +246,8 @@ const syntheticDaemon = (): SyntheticDaemon => {
         bodies.push(body);
         created = body;
         state.present = true;
+        state.running = false;
+        state.terminal = false;
         const plan = state.mutationPlan;
         if (plan !== undefined) {
           state.mutationPlan = undefined;
@@ -252,6 +269,11 @@ const syntheticDaemon = (): SyntheticDaemon => {
         return state.present ? jsonResponse(200, inspect()) : jsonResponse(404, { message: "gone" });
       }
       if (request.path.includes("/wait?")) {return jsonResponse(200, { StatusCode: 0 });}
+      const barrier = mutationBarrier;
+      mutationBarrier = undefined;
+      if (barrier?.at === "before") {barrier.reached(); await barrier.released;}
+      request.beforeWrite?.();
+      if (barrier?.at === "after") {barrier.reached(); await barrier.released;}
       const plan = state.mutationPlan ?? { effect: true, statusCode: 204 };
       state.mutationPlan = undefined;
       if (plan.effect) {applyMutation(request.path);}
@@ -269,8 +291,13 @@ const syntheticDaemon = (): SyntheticDaemon => {
     async hijack(request: {readonly path: string}) {
       routes.push(`POST ${request.path}`);
       const input = new PassThrough();
+      hijackInput = input;
       const output = new PassThrough();
-      return {close: async () => {input.destroy(); output.destroy();}, input, output};
+      let closed = false;
+      return {close: async () => {
+        if (closed) {return;}
+        closed = true; hijackCloseCount += 1; input.destroy(); output.destroy();
+      }, input, output};
     },
     async stream(request: { readonly method: string; readonly path: string }) {
       routes.push(`${request.method} ${request.path}`);
@@ -292,6 +319,7 @@ const syntheticDaemon = (): SyntheticDaemon => {
     set extraInfoField(value: boolean) {state.extraInfoField = value;},
     get infoCgroupVersion() {return state.infoCgroupVersion;},
     set infoCgroupVersion(value: unknown) {state.infoCgroupVersion = value;},
+    get hijackCloseCount() {return hijackCloseCount;},
     get inspectTransform() {return state.inspectTransform;},
     set inspectTransform(value: ((record: Record<string, unknown>) => void) | undefined) {state.inspectTransform = value;},
     get logLeavesRunning() {return state.logLeavesRunning;},
@@ -304,6 +332,15 @@ const syntheticDaemon = (): SyntheticDaemon => {
     set mutationPlan(value: MutationPlan | undefined) {state.mutationPlan = value;},
     get rawCreateBody() {return state.rawCreateBody;},
     set rawCreateBody(value: Uint8Array | undefined) {state.rawCreateBody = value;},
+    failHijack() {hijackInput?.destroy(new Error("synthetic hijack failure"));},
+    pauseNextMutationWrite(at: "after" | "before") {
+      let reached!: () => void;
+      let release!: () => void;
+      const reachedPromise = new Promise<void>(resolve => {reached = resolve;});
+      const released = new Promise<void>(resolve => {release = resolve;});
+      mutationBarrier = {at, reached, released};
+      return {reached: reachedPromise, release};
+    },
     routes,
   };
 };
@@ -546,7 +583,7 @@ test("ambiguous and 304 mutation acknowledgements require exact postconditions a
   const authority = await engine.create(createInput(root), call());
   await engine.attachCustody(authority, call());
   daemon.mutationPlan = { body: { Unexpected: true }, effect: true, statusCode: 204 };
-  await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
+  await assert.rejects(engine.start(authority, call()), { code: "start-acknowledgement-unknown" });
   assert.ok(daemon.routes.filter(route => route === `GET /v1.47/containers/${CONTAINER}/json`).length >= 2);
   await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
   const successful = syntheticDaemon();
@@ -569,6 +606,89 @@ test("ambiguous and 304 mutation acknowledgements require exact postconditions a
     code: "resource-already-exists",
     statusCode: 409,
   });
+});
+
+test("attach invalidation fences start at the synchronous transport-write seam", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  for (const mode of ["close", "error", "abort"] as const) {
+    await t.test(mode, async () => {
+      const daemon = syntheticDaemon();
+      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+      const authority = await engine.create(createInput(root, createHash("sha256").update(mode).digest("hex")), call());
+      const controller = new AbortController();
+      const channel = await engine.attachCustody(authority, {
+        deadlineEpochMs: Date.now() + 10_000,
+        signal: controller.signal,
+      });
+      const barrier = daemon.pauseNextMutationWrite("before");
+      const starting = engine.start(authority, call());
+      await barrier.reached;
+      if (mode === "close") {await channel.close();}
+      if (mode === "error") {daemon.failHijack();}
+      if (mode === "abort") {controller.abort();}
+      await new Promise<void>(resolve => {setImmediate(resolve);});
+      barrier.release();
+      await assert.rejects(starting, {code: mode === "abort" ? "aborted" : "daemon-disconnected"});
+      const observation = await engine.inspect(authority, call());
+      assert.equal(observation.existence, "present");
+      if (observation.existence === "present") {assert.equal(observation.state.status, "created");}
+      await channel.close();
+      controller.abort();
+      assert.equal(daemon.hijackCloseCount, 1);
+      await assert.rejects(engine.attachCustody(authority, call()), {code: "protocol-violation"});
+    });
+  }
+});
+
+test("hijack loss after start bytes is acknowledgement-unknown and removal retires the generation", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  const channel = await engine.attachCustody(authority, call());
+  const barrier = daemon.pauseNextMutationWrite("after");
+  const starting = engine.start(authority, call());
+  await barrier.reached;
+  await channel.close();
+  barrier.release();
+  await assert.rejects(starting, {code: "start-acknowledgement-unknown"});
+  assert.equal(daemon.hijackCloseCount, 1);
+  await engine.stop(authority, call());
+  await engine.remove(authority, call());
+
+  const replacement = await engine.create(createInput(root, "8".repeat(64)), call());
+  const replacementChannel = await engine.attachCustody(replacement, call());
+  await channel.close();
+  await replacementChannel.write(Buffer.from("replacement-generation"));
+  await replacementChannel.close();
+  assert.equal(daemon.hijackCloseCount, 2);
+});
+
+test("error and abort after the start write never return clean started success", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  for (const mode of ["error", "abort"] as const) {
+    await t.test(mode, async () => {
+      const daemon = syntheticDaemon();
+      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+      const authority = await engine.create(createInput(
+        root,
+        createHash("sha256").update(`after-${mode}`).digest("hex"),
+      ), call());
+      const controller = new AbortController();
+      await engine.attachCustody(authority, {deadlineEpochMs: Date.now() + 10_000, signal: controller.signal});
+      const barrier = daemon.pauseNextMutationWrite("after");
+      const starting = engine.start(authority, call());
+      await barrier.reached;
+      if (mode === "error") {daemon.failHijack();} else {controller.abort();}
+      await new Promise<void>(resolve => {setImmediate(resolve);});
+      barrier.release();
+      await assert.rejects(starting, {code: "start-acknowledgement-unknown"});
+      assert.equal(daemon.hijackCloseCount, 1);
+    });
+  }
 });
 
 test("log EOF is incomplete while running and wait requires an exact terminal observation", async t => {

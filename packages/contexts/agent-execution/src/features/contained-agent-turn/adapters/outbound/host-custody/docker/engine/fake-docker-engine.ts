@@ -43,8 +43,9 @@ interface FakeLogPlan {
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 export class FakeDockerEngine implements DockerEnginePort {
-  readonly #attachState = new Map<string, "invalid" | "open" | "started">();
+  readonly #attachState = new Map<string, "invalid" | "opening" | "open" | "starting" | "started">();
   readonly #attachCleanup = new Map<string, () => void>();
+  readonly #attachRetire = new Map<string, () => void>();
   readonly #custodyInput = new Map<string, Uint8Array[]>();
   readonly #containers = new Map<string, FakeContainer>();
   readonly #createOutcomes: FakeCreateOutcome[] = [];
@@ -247,43 +248,61 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   public async start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     const record = await this.#record("start", authority, call);
-    if (this.#attachState.get(record.authority.containerId) !== "open") {throw new DockerEngineError("protocol-violation");}
-    this.#attachCleanup.get(record.authority.containerId)?.();
-    this.#attachCleanup.delete(record.authority.containerId);
-    this.#attachState.set(record.authority.containerId, "started");
+    const id = record.authority.containerId;
+    if (this.#attachState.get(id) !== "open") {throw new DockerEngineError("protocol-violation");}
+    this.#attachState.set(id, "starting");
+    if (this.#attachState.get(id) !== "starting") {throw new DockerEngineError("daemon-disconnected");}
+    this.#attachState.set(id, "started");
     const outcome = this.#mutationOutcome("start");
-    if (outcome?.effect !== false) {this.#start(record);} else {this.#attachState.set(record.authority.containerId, "invalid");}
+    if (outcome?.effect !== false) {this.#start(record);}
     this.#events.push("start:id");
-    this.#assertMutationPostcondition("start", record, outcome);
+    try {
+      this.#assertMutationPostcondition("start", record, outcome);
+      if (outcome?.acknowledgement === "lost") {throw new DockerEngineError("start-acknowledgement-unknown");}
+    } catch (error) {
+      this.#invalidateAttach(id);
+      throw error instanceof DockerEngineError && error.code === "start-acknowledgement-unknown"
+        ? error : new DockerEngineError("start-acknowledgement-unknown");
+    }
   }
 
   public async attachCustody(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerCustodyDuplexChannel> {
     const callSnapshot = snapshotDockerEngineCall(call);
-    const record = await this.#record("attach", authority, callSnapshot);
-    if (record.state.status !== "created" || record.state.running || this.#attachState.has(record.authority.containerId)) {
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const id = authoritySnapshot.containerId;
+    if (this.#attachState.has(id)) {
       throw new DockerEngineError("protocol-violation");
     }
-    const id = record.authority.containerId;
+    this.#attachState.set(id, "opening");
+    let record: FakeContainer;
+    try {record = await this.#record("attach", authoritySnapshot, callSnapshot);}
+    catch (error) {this.#attachState.set(id, "invalid"); throw error;}
+    if (record.state.status !== "created" || record.state.running) {
+      this.#attachState.set(id, "invalid"); throw new DockerEngineError("protocol-violation");
+    }
     this.#attachState.set(id, "open");
     this.#custodyInput.set(id, []);
     this.#events.push("attach:id");
     let closed = false;
+    let retired = false;
     let valid = true;
     const cleanup = (): void => {clearTimeout(timer); callSnapshot.signal.removeEventListener("abort", invalidate);};
     const invalidate = (): void => {
-      if (!valid) {return;}
+      if (!valid || retired) {return;}
       valid = false; cleanup();
-      if (this.#attachState.get(id) !== "started") {this.#attachState.set(id, "invalid");}
+      this.#attachState.set(id, "invalid");
     };
     const timer = setTimeout(invalidate, Math.max(0, callSnapshot.deadlineEpochMs - Date.now()));
     timer.unref();
     callSnapshot.signal.addEventListener("abort", invalidate, {once: true});
     this.#attachCleanup.set(id, cleanup);
+    this.#attachRetire.set(id, () => {retired = true; closed = true; valid = false; cleanup();});
     return Object.freeze({
       close: async () => {closed = true; invalidate();},
       closeInput: async () => {closed = true; invalidate();},
       output: (async function* () {try {yield* [];} finally {invalidate();}})(),
       write: async (bytes: Uint8Array) => {
+        if (retired) {throw new DockerEngineError("protocol-violation");}
         if (closed || bytes.byteLength === 0 || this.#attachState.get(id) === "invalid") {
           this.#attachState.set(id, "invalid"); throw new DockerEngineError("protocol-violation");
         }
@@ -319,6 +338,15 @@ export class FakeDockerEngine implements DockerEnginePort {
     if (outcome?.effect !== false) {record.removed = true; this.#signalStateTransition();}
     this.#events.push("remove:id");
     this.#assertMutationPostcondition("remove", record, outcome);
+    if (record.removed) {
+      const id = record.authority.containerId;
+      this.#attachRetire.get(id)?.();
+      this.#attachRetire.delete(id);
+      this.#attachCleanup.get(id)?.();
+      this.#attachCleanup.delete(id);
+      this.#attachState.delete(id);
+      this.#custodyInput.delete(id);
+    }
   }
 
   public async wait(
@@ -491,6 +519,12 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   #mutationOutcome(operation: FakeMutationOperation): { acknowledgement: "304" | "lost"; effect: boolean } | undefined {
     return this.#mutationOutcomes.get(operation)?.shift();
+  }
+
+  #invalidateAttach(id: string): void {
+    this.#attachState.set(id, "invalid");
+    this.#attachCleanup.get(id)?.();
+    this.#attachCleanup.delete(id);
   }
 
   #assertMutationPostcondition(

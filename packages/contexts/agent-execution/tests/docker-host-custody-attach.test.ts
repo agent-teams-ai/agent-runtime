@@ -105,6 +105,17 @@ test("close, EOF, abort, and deadline poison the sole pre-start attach generatio
   }
 });
 
+test("the fake shares start ambiguity and fail-closed generation semantics", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const engine = new FakeDockerEngine(policy(root));
+  const authority = await engine.create(createInput(root), engineCall());
+  await engine.attachCustody(authority, engineCall());
+  engine.enqueueMutationOutcome("start", {acknowledgement: "lost", effect: "applied"});
+  await assert.rejects(engine.start(authority, engineCall()), {code: "start-acknowledgement-unknown"});
+  await assert.rejects(engine.attachCustody(authority, engineCall()), {code: "protocol-violation"});
+});
+
 test("v1.47 pre-start attach survives fragmented upgrade and coalesced Docker frames", async () => {
   let request = "";
   let input = Buffer.alloc(0);
@@ -128,6 +139,21 @@ test("v1.47 pre-start attach survives fragmented upgrade and coalesced Docker fr
     assert.match(request, /^POST \/v1\.47\/containers\/owner-bound-id\/attach\?stream=1&stdin=1&stdout=1&stderr=1 HTTP\/1\.1\r\n/u);
     assert.match(request.toLowerCase(), /connection: upgrade\r\n/u);
     assert.equal(input.toString(), "typed-control");
+  } finally {await current.close();}
+});
+
+test("a validated hijack outlives the 120-second establishment cap without wall-clock waiting", async t => {
+  const current = await fixture(socket => {socket.write(upgrade);});
+  try {
+    const now = Date.now();
+    t.mock.timers.enable({apis: ["Date", "setTimeout"], now});
+    const raw = await current.client.hijack({
+      call: {deadlineEpochMs: now + 180_000, signal: new AbortController().signal},
+      path: "/v1.47/containers/id/attach?stream=1&stdin=1&stdout=1&stderr=1",
+    });
+    t.mock.timers.tick(120_001);
+    assert.equal(raw.input.destroyed, false);
+    await raw.close();
   } finally {await current.close();}
 });
 

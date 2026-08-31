@@ -61,8 +61,10 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
   const agent = new Agent({keepAlive: false, maxSockets: 1});
   agent.createConnection = () => input.socket;
   let expired = false;
+  let sessionExpired = false;
   let settled = false;
   let released = false;
+  let sessionTimer: NodeJS.Timeout | undefined;
   const release = async (): Promise<void> => {
     if (released) {return;}
     released = true; agent.destroy(); await input.release();
@@ -76,16 +78,18 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
     setHost: false,
   });
   const abort = (): void => {
-    const error = failure(input.call, expired);
-    operation.destroy(error); input.socket.destroy(error);
+    const error = failure(input.call, expired || sessionExpired);
+    if (!settled) {operation.destroy(error);}
+    input.socket.destroy(error);
   };
-  const timer = setTimeout(() => {expired = true; abort();}, input.effectiveMs);
+  const establishmentTimer = setTimeout(() => {expired = true; abort();}, input.effectiveMs);
   const cleanupOpening = (): void => {
     operation.removeAllListeners();
   };
   const fail = (error?: unknown): void => {
     if (settled) {return;}
-    settled = true; clearTimeout(timer); input.call.signal.removeEventListener("abort", abort);
+    settled = true; clearTimeout(establishmentTimer); if (sessionTimer !== undefined) {clearTimeout(sessionTimer);}
+    input.call.signal.removeEventListener("abort", abort);
     input.socket.destroy(); void release();
     reject(error instanceof DockerEngineError ? error : failure(input.call, expired));
   };
@@ -99,9 +103,15 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
         if (socket !== input.socket) {throw new DockerEngineError("endpoint-custody-lost");}
         await input.verifyCustody();
         if (head.byteLength > 0) {socket.unshift(head);}
+        clearTimeout(establishmentTimer);
+        const remaining = input.call.deadlineEpochMs - Date.now();
+        if (remaining <= 0) {sessionExpired = true; throw new DockerEngineError("deadline-exceeded");}
+        sessionTimer = setTimeout(() => {sessionExpired = true; abort();}, remaining);
+        sessionTimer.unref();
         settled = true; cleanupOpening();
         const close = async (): Promise<void> => {
-          clearTimeout(timer); input.call.signal.removeEventListener("abort", abort);
+          clearTimeout(establishmentTimer); if (sessionTimer !== undefined) {clearTimeout(sessionTimer);}
+          input.call.signal.removeEventListener("abort", abort);
           if (!socket.destroyed) {socket.destroy();}
           await release();
         };

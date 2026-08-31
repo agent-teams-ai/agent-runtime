@@ -32,6 +32,8 @@ export interface UnixHttpResponse<T> {
 }
 
 interface RequestInput {
+  /** Internal start-session fence, invoked synchronously at the ClientRequest.end transport seam. */
+  readonly beforeWrite?: () => void;
   readonly body?: Uint8Array;
   readonly call: DockerEngineCall;
   readonly method: "GET" | "POST" | "DELETE";
@@ -194,6 +196,7 @@ const requestFailureFor = (
   call: DockerEngineCall,
   deadlineExpired: boolean,
 ): DockerEngineError => {
+  if (error instanceof DockerEngineError) {return error;}
   const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
   if (code === "HPE_HEADER_OVERFLOW") {return new DockerEngineError("response-too-large");}
   if (typeof code === "string" && code.startsWith("HPE_")) {return new DockerEngineError("protocol-violation");}
@@ -477,7 +480,13 @@ export class BoundedUnixHttpClient {
         };
         void settle();
       });
-      operation.end(input.body);
+      try {
+        input.beforeWrite?.();
+        operation.end(input.body);
+      } catch (error) {
+        operation.destroy();
+        finishFailure(error);
+      }
     });
   }
 

@@ -43,6 +43,7 @@ interface JsonResponse {
 
 type EngineClient = {
   buffered(input: {
+    readonly beforeWrite?: () => void;
     readonly body?: Uint8Array;
     readonly call: DockerEngineCall;
     readonly method: "DELETE" | "GET" | "POST";
@@ -59,6 +60,17 @@ type EngineClient = {
     readonly path: string;
   }): Promise<UnixHttpResponse<AsyncIterable<Uint8Array>>>;
 };
+
+type CustodySessionState = "opening" | "open" | "starting" | "started" | "invalid";
+
+interface CustodySession {
+  closePromise?: Promise<void>;
+  cleanup?: () => void;
+  failure?: DockerEngineError;
+  hijack?: UnixHijackChannel;
+  state: CustodySessionState;
+  writeLinearized: boolean;
+}
 
 const mediaType = (value: string): string => value.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 
@@ -90,10 +102,8 @@ const statusFailure = (operation: string, statusCode: number): DockerEngineError
 
 export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   readonly #client: EngineClient;
-  readonly #custodyAttachState = new Map<string, "invalid" | "open" | "opening" | "started">();
-  readonly #custodyAttachCleanup = new Map<string, () => void>();
+  readonly #custodySessions = new Map<string, CustodySession>();
   readonly #policy: DockerEnginePolicy;
-  readonly #startingContainers = new Set<string>();
 
   public constructor(input: {
     /** Internal protocol-test seam. It must supply the same boot-generation observations as production. */
@@ -215,17 +225,30 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   public async start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     const authoritySnapshot = validateAuthorityShape(authority);
     const id = authoritySnapshot.containerId;
-    const attachState = this.#custodyAttachState.get(id);
-    if (this.#startingContainers.has(id) || attachState !== "open") {
+    const session = this.#custodySessions.get(id);
+    if (session?.state !== "open") {
       throw new DockerEngineError("protocol-violation");
     }
-    this.#startingContainers.add(id);
-    this.#custodyAttachCleanup.get(id)?.();
-    this.#custodyAttachCleanup.delete(id);
-    this.#custodyAttachState.set(id, "started");
-    try {await this.#mutate("start", "POST", authoritySnapshot, call);}
-    catch (error) {this.#custodyAttachState.set(id, "invalid"); throw error;}
-    finally {this.#startingContainers.delete(id);}
+    session.state = "starting";
+    try {
+      await this.#mutate("start", "POST", authoritySnapshot, call, () => {
+        if (session.state !== "starting") {
+          throw session.failure ?? new DockerEngineError("daemon-disconnected");
+        }
+        session.writeLinearized = true;
+        session.state = "started";
+      });
+      if (this.#custodySessions.get(id)?.state !== "started") {
+        throw new DockerEngineError("start-acknowledgement-unknown");
+      }
+    } catch (error) {
+      const failure = session.writeLinearized
+        ? new DockerEngineError("start-acknowledgement-unknown")
+        : error instanceof DockerEngineError ? error : new DockerEngineError("daemon-disconnected");
+      this.#invalidateSession(session, failure);
+      await session.closePromise;
+      throw failure;
+    }
   }
 
   public async attachCustody(
@@ -235,10 +258,11 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     const authoritySnapshot = validateAuthorityShape(authority);
     const callSnapshot = snapshotDockerEngineCall(call);
     const id = authoritySnapshot.containerId;
-    if (this.#startingContainers.has(id) || this.#custodyAttachState.has(id)) {
+    if (this.#custodySessions.has(id)) {
       throw new DockerEngineError("protocol-violation");
     }
-    this.#custodyAttachState.set(id, "opening");
+    const session: CustodySession = {state: "opening", writeLinearized: false};
+    this.#custodySessions.set(id, session);
     let hijack: UnixHijackChannel | undefined;
     try {
       const observation = await this.inspect(authoritySnapshot, callSnapshot);
@@ -251,30 +275,28 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
         call: callSnapshot,
         path: `${API}/containers/${authoritySnapshot.containerId}/attach?stream=1&stdin=1&stdout=1&stderr=1`,
       });
+      session.hijack = hijack;
       this.#assertEngine(authoritySnapshot, await this.#identity(callSnapshot));
-      let valid = true;
-      const invalidate = (): void => {
-        if (!valid) {return;}
-        valid = false;
-        cleanup();
-        if (this.#custodyAttachState.get(id) !== "started") {this.#custodyAttachState.set(id, "invalid");}
-      };
-      const abort = (): void => {invalidate();};
+      const invalidate = (error: DockerEngineError): void => {this.#invalidateSession(session, error);};
+      const abort = (): void => {invalidate(new DockerEngineError("aborted"));};
       const delay = Math.max(0, callSnapshot.deadlineEpochMs - Date.now());
-      const timer = setTimeout(invalidate, delay);
+      const timer = setTimeout(() => {invalidate(new DockerEngineError("deadline-exceeded"));}, delay);
       timer.unref();
       const cleanup = (): void => {
         clearTimeout(timer);
         callSnapshot.signal.removeEventListener("abort", abort);
       };
+      session.cleanup = cleanup;
       callSnapshot.signal.addEventListener("abort", abort, {once: true});
-      this.#custodyAttachCleanup.set(id, cleanup);
-      this.#custodyAttachState.set(id, "open");
+      if (callSnapshot.signal.aborted) {abort();}
+      if (session.state !== "opening") {throw session.failure ?? new DockerEngineError("daemon-disconnected");}
+      session.state = "open";
       return createDockerCustodyChannel(hijack, invalidate);
     } catch (error) {
-      this.#custodyAttachState.set(id, "invalid");
-      await hijack?.close();
-      throw error;
+      const failure = error instanceof DockerEngineError ? error : new DockerEngineError("daemon-disconnected");
+      this.#invalidateSession(session, failure);
+      await (session.closePromise ?? hijack?.close());
+      throw failure;
     }
   }
 
@@ -291,7 +313,15 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   }
 
   public async remove(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
-    await this.#mutate("remove", "DELETE", authority, call);
+    const authoritySnapshot = validateAuthorityShape(authority);
+    await this.#mutate("remove", "DELETE", authoritySnapshot, call);
+    const id = authoritySnapshot.containerId;
+    const session = this.#custodySessions.get(id);
+    if (session !== undefined) {
+      this.#invalidateSession(session, new DockerEngineError("daemon-disconnected"));
+      await session.closePromise;
+      this.#custodySessions.delete(id);
+    }
   }
 
   public async wait(
@@ -338,6 +368,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     method: "DELETE" | "POST",
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
+    beforeWrite?: () => void,
   ): Promise<void> {
     const authoritySnapshot = validateAuthorityShape(authority);
     const callSnapshot = snapshotDockerEngineCall(call);
@@ -348,8 +379,13 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
         : operation === "kill" ? `${API}/containers/${authoritySnapshot.containerId}/kill?signal=SIGKILL`
           : `${API}/containers/${authoritySnapshot.containerId}?force=0&v=0&link=0`;
     let response: UnixHttpResponse<Uint8Array>;
-    try {response = await this.#client.buffered({ call: callSnapshot, method, path });}
+    try {
+      response = await this.#client.buffered({
+        ...(beforeWrite === undefined ? {} : {beforeWrite}), call: callSnapshot, method, path,
+      });
+    }
     catch (error) {
+      if (operation === "start" && beforeWrite !== undefined) {throw error;}
       if (error instanceof DockerEngineError && ![
         "daemon-disconnected", "deadline-exceeded", "aborted", "protocol-violation", "response-too-large",
       ].includes(error.code)) {throw error;}
@@ -366,6 +402,15 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       throw new DockerEngineError("protocol-violation");
     }
     await this.#reconcileMutation(operation, authoritySnapshot, callSnapshot);
+  }
+
+  #invalidateSession(session: CustodySession, error: DockerEngineError): void {
+    if (session.state === "invalid") {return;}
+    session.state = "invalid";
+    session.failure = error;
+    session.cleanup?.();
+    delete session.cleanup;
+    session.closePromise ??= session.hijack?.close() ?? Promise.resolve();
   }
 
   async #reconcileMutation(

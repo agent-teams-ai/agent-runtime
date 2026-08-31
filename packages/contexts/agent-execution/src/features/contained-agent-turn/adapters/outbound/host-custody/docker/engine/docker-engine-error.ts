@@ -3,6 +3,7 @@ export type DockerEngineFailureCode =
   | "authority-conflict"
   | "create-acknowledgement-unknown"
   | "mutation-acknowledgement-unknown"
+  | "start-acknowledgement-unknown"
   | "daemon-disconnected"
   | "daemon-identity-changed"
   | "deadline-exceeded"
@@ -26,6 +27,7 @@ const messages: Readonly<Record<DockerEngineFailureCode, string>> = Object.freez
   "authority-conflict": "Docker container authority does not match the observed resource",
   "create-acknowledgement-unknown": "Docker container create acknowledgement is unknown",
   "mutation-acknowledgement-unknown": "Docker container mutation acknowledgement is unknown",
+  "start-acknowledgement-unknown": "Docker container start acknowledgement is unknown",
   "daemon-disconnected": "Docker Engine connection closed",
   "daemon-identity-changed": "Docker daemon identity changed",
   "deadline-exceeded": "Docker Engine operation deadline exceeded",
