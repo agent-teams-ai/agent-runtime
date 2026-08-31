@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import {
   createClaudeCurrentKernelOwner,
   createCodexCurrentKernelOwner,
 } from "../dist/composition.js";
+import type { ContainedTurnKernelOperationStore } from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { createCodexAppServerPermissionBoundary } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import { createClaudeAgentSdkPrivateProjection } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import { applyContainedTurnPostgresSchema } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
@@ -19,7 +21,6 @@ import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../dist/features/contained-
 import { createDependencies } from "./features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 const databaseUrl = process.env.POSTGRES_DURABILITY_URL;
-const postgresTest = databaseUrl === undefined ? test.skip : test;
 
 class FakeHost {
   readonly plans: any[] = [];
@@ -84,44 +85,58 @@ class FakeHost {
 }
 async function* emptyBytes(): AsyncIterable<Uint8Array> {}
 
-const identities = Object.freeze({
+const createIdentities = (testRunId: string) => Object.freeze({
   nextId(kind: string, seed = kind): string {
-    if (["attempt", "custody", "effect", "operation"].includes(kind)) {return `${kind}:one`;}
-    if (kind === "execution_generation") {return "execution-generation:one";}
-    if (kind === "writer_fence") {return "writer-fence:one";}
-    return `${kind.replaceAll("_", "-")}:pg:${Buffer.from(seed).toString("hex").slice(0, 48)}`;
+    const digest = createHash("sha256").update(`${testRunId}:${kind}:${seed}`).digest("hex");
+    return `${kind.replaceAll("_", "-")}:${digest}`;
   },
 });
 
-const mirrorStore = (postgres: PostgresContainedTurnOperationStore, mirror: any, claimGate?: Readonly<{
+const delegatingStore = (postgres: PostgresContainedTurnOperationStore, claimGate?: Readonly<{
   reached(): void;
   wait: Promise<void>;
-}>): any => new Proxy(postgres, {get(target, property) {
-  const durable = Reflect.get(target, property, target);
-  if (typeof durable !== "function") {return durable;}
-  if (property === "identifyAcceptance" || property === "read" || property === "listDispatchPreparations") {
-    return durable.bind(target);
-  }
-  return async (...arguments_: any[]) => {
-    if (property === "claimPreparedDispatch" && claimGate !== undefined) {
-      claimGate.reached();
-      await claimGate.wait;
-    }
-    const outcome = await durable.apply(target, arguments_);
-    if (property === "claimPreparedDispatch" && outcome.kind === "claimed") {
-      const input = arguments_[0];
-      await mirror.commit({
-        authority: input.authority,
-        candidate: outcome.operation,
-        expectedRevision: input.expectedOperationRevision,
-      });
-      return outcome;
-    }
-    const mirrorMethod = mirror[property];
-    if (typeof mirrorMethod === "function") {await mirrorMethod.apply(mirror, arguments_);}
-    return outcome;
-  };
-}});
+}>): ContainedTurnKernelOperationStore => {
+  const accept = postgres.accept.bind(postgres);
+  const appendOutput = postgres.appendOutput.bind(postgres);
+  const claimPreparedDispatch = postgres.claimPreparedDispatch.bind(postgres);
+  const commit = postgres.commit.bind(postgres);
+  const identifyAcceptance = postgres.identifyAcceptance.bind(postgres);
+  const listDispatchPreparations = postgres.listDispatchPreparations.bind(postgres);
+  const prepareCancellation = postgres.prepareCancellation.bind(postgres);
+  const prepareDispatch = postgres.prepareDispatch.bind(postgres);
+  const proofsForAcceptedEffect = postgres.proofsForAcceptedEffect.bind(postgres);
+  const proofsForPrevention = postgres.proofsForPrevention.bind(postgres);
+  const proofsForProcessNoStart = postgres.proofsForProcessNoStart.bind(postgres);
+  const read = postgres.read.bind(postgres);
+  const recordDispatchPreparationCleanup = postgres.recordDispatchPreparationCleanup.bind(postgres);
+  const requestCancellation = postgres.requestCancellation.bind(postgres);
+  const retireDispatchPreparation = postgres.retireDispatchPreparation.bind(postgres);
+  const terminalProof = postgres.terminalProof.bind(postgres);
+  return Object.freeze({
+    accept,
+    appendOutput,
+    claimPreparedDispatch: async (...arguments_: Parameters<typeof claimPreparedDispatch>) => {
+      if (claimGate !== undefined) {
+        claimGate.reached();
+        await claimGate.wait;
+      }
+      return claimPreparedDispatch(...arguments_);
+    },
+    commit,
+    identifyAcceptance,
+    listDispatchPreparations,
+    prepareCancellation,
+    prepareDispatch,
+    proofsForAcceptedEffect,
+    proofsForPrevention,
+    proofsForProcessNoStart,
+    read,
+    recordDispatchPreparationCleanup,
+    requestCancellation,
+    retireDispatchPreparation,
+    terminalProof,
+  } satisfies ContainedTurnKernelOperationStore);
+};
 
 const forProvider = (fixture: ReturnType<typeof createDependencies>, provider: "claude" | "codex") => {
   if (provider === "codex") {return fixture.dependencies;}
@@ -152,7 +167,9 @@ const createOwner = async (provider: "claude" | "codex", root: string, host: Fak
         executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp})}, workspaceOwner,
     });
   }
-  const [configRoot, homeRoot, tempRoot] = ["config", "home", "temp"].map(name => join(privateRootPath, name));
+  const configRoot = join(privateRootPath, "config");
+  const homeRoot = join(privateRootPath, "home");
+  const tempRoot = join(privateRootPath, "temp");
   await Promise.all([configRoot, homeRoot, tempRoot].map(path => mkdir(path, {recursive: true, mode: 0o700})));
   const adapterSnapshot = {adapterRevision: "claude:test", binaryRevision: "claude-binary:test",
     capabilityManifestRevision: "claude-manifest:test", provider: "claude" as const};
@@ -178,9 +195,14 @@ const createOwner = async (provider: "claude" | "codex", root: string, host: Fak
   });
 };
 
-postgresTest("PostgreSQL current owners durably claim once through real Codex and Claude submit paths", async t => {
+test("PostgreSQL current owners durably claim once through real Codex and Claude submit paths", {
+  skip: databaseUrl === undefined
+    ? "coordinator rerun pending: POSTGRES_DURABILITY_URL is not available in this test-only worker"
+    : false,
+}, async t => {
   assert.ok(databaseUrl);
   const pool = new Pool({connectionString: databaseUrl, max: 12});
+  const testRunId = randomUUID();
   try {
     for (const provider of ["codex", "claude"] as const) {
       await t.test(provider, async () => {
@@ -191,15 +213,15 @@ postgresTest("PostgreSQL current owners durably claim once through real Codex an
           const preventedHost = new FakeHost();
           const preventedOwner = await createOwner(provider, join(root, "prevented"), preventedHost);
           const preventedFixture = createDependencies({dispatchPrevented: true});
-          const preventedStore = new PostgresContainedTurnOperationStore({identities, pool});
+          const preventedStore = new PostgresContainedTurnOperationStore({identities: createIdentities(`${testRunId}:${provider}:prevented`), pool});
           const preventedSelected = forProvider(preventedFixture, provider);
           const prevention = await createContainedTurnFeature({...preventedSelected,
             custody: preventedOwner.custody,
-            operationStore: mirrorStore(preventedStore, preventedSelected.operationStore),
+            operationStore: delegatingStore(preventedStore),
             provider: preventedOwner.provider,
-          }).submit.execute({commandId: `command:pg-prevented:${provider}`, expectedProvider: provider,
+          }).submit.execute({commandId: `command:pg-prevented:${provider}:${testRunId}`, expectedProvider: provider,
             intent: {mode: "analysis", prompt: "Prevent this durable dispatch."},
-            scope: {projectId: "project:pg", tenantId: "tenant:pg"}});
+            scope: {projectId: `project:pg:${testRunId}`, tenantId: `tenant:pg:${testRunId}`}});
           assert.equal(prevention.status, "observed");
           assert.deepEqual([preventedHost.starts, preventedHost.releases], [0, 1]);
           preventedOwner.dispose();
@@ -210,17 +232,19 @@ postgresTest("PostgreSQL current owners durably claim once through real Codex an
           const owner = await createOwner(provider, join(root, "claimed"), host);
           const fixture = createDependencies();
           const selected = forProvider(fixture, provider);
+          const identities = createIdentities(`${testRunId}:${provider}:claimed`);
           const durable = new PostgresContainedTurnOperationStore({identities, pool});
           let releaseClaim!: () => void;
           let reportClaim!: () => void;
           const wait = new Promise<void>(resolve => {releaseClaim = resolve;});
           const reached = new Promise<void>(resolve => {reportClaim = resolve;});
-          const store = mirrorStore(durable, selected.operationStore, {reached: reportClaim, wait});
+          const store = delegatingStore(durable, {reached: reportClaim, wait});
           const dependencies = {...selected, custody: owner.custody, operationStore: store, provider: owner.provider};
-          const request = {commandId: `command:pg-claimed:${provider}`, expectedProvider: provider,
+          const request = {commandId: `command:pg-claimed:${provider}:${testRunId}`, expectedProvider: provider,
             intent: {mode: "analysis" as const, prompt: "Exercise the durable claim."},
-            scope: {projectId: "project:pg", tenantId: "tenant:pg"}};
-          const submission = createContainedTurnFeature(dependencies).submit.execute(request);
+            scope: {projectId: `project:pg:${testRunId}`, tenantId: `tenant:pg:${testRunId}`}};
+          const feature = createContainedTurnFeature(dependencies);
+          const submission = feature.submit.execute(request);
           await reached;
           assert.equal(host.starts, 0);
           const beforeClaim = await pool.query("SELECT state FROM agent_execution.contained_turn_dispatch_preparation_v1");
@@ -234,6 +258,10 @@ postgresTest("PostgreSQL current owners durably claim once through real Codex an
           assert.ok(result.status === "observed" && ["reconcile_required", "succeeded"].includes(result.turn.status));
           assert.ok(host.containments > 0);
 
+          const secondSubmit = await feature.submit.execute(request);
+          assert.equal(secondSubmit.status, "observed");
+          assert.equal(host.starts, 1);
+
           const reconstructed = new PostgresContainedTurnOperationStore({identities, pool});
           const storedRow = await pool.query<{operation_id: string}>(
             "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE command_id=$1",
@@ -243,16 +271,20 @@ postgresTest("PostgreSQL current owners durably claim once through real Codex an
           assert.ok(operationId);
           const persisted = await reconstructed.read({operationId: operationId as never, scope: request.scope});
           assert.equal(persisted?.dispatch.kind, "claimed");
+          assert.ok(persisted?.terminal.kind === "final" || persisted?.reconciliation.kind === "required");
           const replayFixture = createDependencies();
           const replaySelected = forProvider(replayFixture, provider);
           const replay = await createContainedTurnFeature({...replaySelected, custody: owner.custody,
-            operationStore: mirrorStore(reconstructed, replaySelected.operationStore), provider: owner.provider,
+            operationStore: delegatingStore(reconstructed), provider: owner.provider,
           }).submit.execute(request);
           assert.equal(replay.status, "observed");
           assert.equal(host.starts, 1);
           assert.ok(host.releases > 0 || replay.status === "observed" && replay.turn.status === "reconcile_required");
           owner.dispose();
-        } finally {await rm(root, {recursive: true, force: true});}
+        } finally {
+          await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
+          await rm(root, {recursive: true, force: true});
+        }
       });
     }
   } finally {
