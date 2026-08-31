@@ -677,12 +677,12 @@ test("Unix transport fails closed on non-socket, symlink, owner/mode drift, inod
   await writeFile(regular, "not a socket");
   await chmod(regular, 0o600);
   await assert.rejects(new BoundedUnixHttpClient({ ...endpointPolicy, socketPath: regular }).endpointIdentity(call()), {
-    code: "endpoint-custody-lost",
+    code: process.platform === "linux" ? "endpoint-custody-lost" : "unsupported-platform",
   });
   const alias = join(root, "alias.sock");
   await symlink(socketPath, alias);
   await assert.rejects(new BoundedUnixHttpClient({ ...endpointPolicy, socketPath: alias }).endpointIdentity(call()), {
-    code: "endpoint-custody-lost",
+    code: process.platform === "linux" ? "endpoint-custody-lost" : "unsupported-platform",
   });
   await assert.rejects(new BoundedUnixHttpClient(
     { ...endpointPolicy, socketMode: 0o660 },
