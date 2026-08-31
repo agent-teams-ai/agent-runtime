@@ -2,7 +2,7 @@ import type {
   PrivateDirectoryCustodyPort,
 } from "../provider-delegation-ports/private-directory-custody-port.js";
 
-/** Capture one verifier authority without copying any of its private state. */
+/** Capture one verifier authority without retaining its mutable receiver state. */
 export const captureClaudePrivateDirectoryCustody = (
   custody: PrivateDirectoryCustodyPort,
 ): PrivateDirectoryCustodyPort => {
@@ -13,6 +13,5 @@ export const captureClaudePrivateDirectoryCustody = (
   if (typeof verifier !== "function") {
     throw new TypeError("Claude private-directory custody requires a verifier");
   }
-  const receiver = Object.freeze(custody);
-  return Object.freeze({ assertPrivateDirectory: verifier.bind(receiver) });
+  return Object.freeze({ assertPrivateDirectory: verifier });
 };

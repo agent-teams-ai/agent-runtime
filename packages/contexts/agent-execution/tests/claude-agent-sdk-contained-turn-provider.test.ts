@@ -27,12 +27,13 @@ import {
   type QueryFactory,
 } from "./claude-agent-sdk-contained-turn-provider.support.ts";
 
-test("provider construction binds the original private-directory verifier method", async () => {
+test("provider construction captures the verifier on a frozen receiver", async () => {
   let originalCalls = 0;
   let replacementCalls = 0;
   const custody = {
     async assertPrivateDirectory(this: object) {
-      assert.equal(this, custody);
+      assert.equal(Object.isFrozen(this), true);
+      assert.notEqual(this, custody);
       originalCalls += 1;
       throw new Error("synthetic private-directory rejection");
     },
@@ -43,22 +44,26 @@ test("provider construction binds the original private-directory verifier method
     throw new Error("query must remain unavailable");
   }, { privateDirectoryCustody: custody });
 
-  assert.equal(Reflect.set(custody, "assertPrivateDirectory", async () => { replacementCalls += 1; }), false);
+  custody.assertPrivateDirectory = async () => { replacementCalls += 1; };
   assert.equal((await adapter.execute(input())).kind, "not_accepted");
   assert.ok(originalCalls > 0);
   assert.equal(replacementCalls, 0);
   assert.equal(queryCalls, 0);
 });
 
-test("current-kernel construction closes receiver-state and options aliases", async () => {
-  const custody = {
-    acceptsPrivateDirectories: false,
-    async assertPrivateDirectory(this: { acceptsPrivateDirectories: boolean }) {
-      if (!this.acceptsPrivateDirectories) {
-        throw new Error("synthetic private-directory rejection");
-      }
-    },
-  };
+test("current-kernel construction cannot be redirected through private verifier state", async () => {
+  class MutablePrivateCustody {
+    #verify = async (): Promise<void> => { throw new Error("synthetic private-directory rejection"); };
+
+    public async assertPrivateDirectory(path: string): Promise<void> {
+      return this.#verify(path);
+    }
+
+    public redirect(): void {
+      this.#verify = async () => {};
+    }
+  }
+  const custody = new MutablePrivateCustody();
   const options: { privateDirectoryCustody: typeof custody } = { privateDirectoryCustody: custody };
   let queryCalls = 0;
   const adapter = kernelProvider(() => {
@@ -66,38 +71,70 @@ test("current-kernel construction closes receiver-state and options aliases", as
     throw new Error("query must remain unavailable");
   }, options);
 
-  assert.equal(Reflect.set(custody, "acceptsPrivateDirectories", true), false);
-  options.privateDirectoryCustody = {
-    acceptsPrivateDirectories: true,
-    async assertPrivateDirectory() {},
-  };
+  custody.redirect();
+  options.privateDirectoryCustody = new MutablePrivateCustody();
   assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
   assert.equal(queryCalls, 0);
 });
 
-test("launch capture cannot be bypassed by verifier or receiver mutation", async () => {
-  const custody = {
-    acceptsPrivateDirectories: false,
-    async assertPrivateDirectory(this: { acceptsPrivateDirectories: boolean }) {
-      if (!this.acceptsPrivateDirectories) {
-        throw new Error("synthetic private-directory rejection");
-      }
+test("launch capture cannot be redirected through prototype or nested receiver state", async t => {
+  const scenarios = [
+    {
+      name: "prototype method",
+      create() {
+        const prototype = {
+          async assertPrivateDirectory(): Promise<void> {
+            throw new Error("synthetic private-directory rejection");
+          },
+        };
+        const custody = Object.create(prototype) as typeof prototype;
+        return {
+          custody,
+          redirect: () => {
+            prototype.assertPrivateDirectory = async () => {};
+          },
+        };
+      },
     },
-  };
-  const launch = createClaudeAgentSdkLaunchPlan({
-    binaryRevision: binding.binaryRevision,
-    executablePath,
-    executableSha256: "0".repeat(64),
-    intentMode: "analysis",
-    privateProjection,
-    privateDirectoryCustody: custody,
-    privateRootPath: privateRoot,
-    workspaceRef,
-  });
+    {
+      name: "nested receiver state",
+      create() {
+        const custody = {
+          policy: { accept: false },
+          async assertPrivateDirectory(this: { policy?: { accept: boolean } }): Promise<void> {
+            if (this.policy?.accept !== true) {
+              throw new Error("synthetic private-directory rejection");
+            }
+          },
+        };
+        return {
+          custody,
+          redirect: () => {
+            custody.policy.accept = true;
+          },
+        };
+      },
+    },
+  ] as const;
 
-  assert.equal(Reflect.set(custody, "acceptsPrivateDirectories", true), false);
-  assert.equal(Reflect.set(custody, "assertPrivateDirectory", async () => {}), false);
-  await assert.rejects(launch, /frozen private projection/u);
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const { custody, redirect } = scenario.create();
+      const launch = createClaudeAgentSdkLaunchPlan({
+        binaryRevision: binding.binaryRevision,
+        executablePath,
+        executableSha256: "0".repeat(64),
+        intentMode: "analysis",
+        privateProjection,
+        privateDirectoryCustody: custody,
+        privateRootPath: privateRoot,
+        workspaceRef,
+      });
+
+      redirect();
+      await assert.rejects(launch, /frozen private projection/u);
+    });
+  }
 });
 
 test("uses only an external frozen private projection while tools remain workspace-bound", async () => {
