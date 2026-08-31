@@ -1,29 +1,338 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
+import { constants } from "node:fs";
 import {
   link,
   mkdir,
   mkdtemp,
   open,
+  readFile,
   realpath,
+  readdir,
   rename,
   rm,
+  stat,
   type FileHandle,
   writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { promisify } from "node:util";
 
 import {
+  assertSameStableDirectoryMountIdentity,
   capturePathLineage,
   openStablePath,
   pathLineagesEqual,
+  publishStableDirectoryNoReplace,
+  readStableDirectoryMountIdentity,
+  resolveStableDirectoryMutationCapability,
+  StableDirectoryPublicationAmbiguousResidueError,
 } from "../dist/index.js";
 
 const execFile = promisify(execFileCallback);
+const publicationCrashWorker = fileURLToPath(new URL(
+  "./publication-crash-worker.ts",
+  import.meta.url,
+));
+
+test("reports macOS destructive descriptor custody as explicitly unsupported", () => {
+  assert.deepEqual(resolveStableDirectoryMutationCapability({
+    hasDirectoryOpen: true,
+    hasNoFollowOpen: true,
+    platform: "darwin",
+  }), {
+    kind: "unsupported",
+    platform: "darwin",
+    reason: "identity-stable descriptor-relative directory mutation is unavailable through current Node APIs",
+    version: 1,
+  });
+});
+
+test("reads a bounded stable Linux mount identity without exposing a path", async t => {
+  if (process.platform !== "linux") {
+    t.skip("Linux descriptor mount identity is not claimed on this platform");
+    return;
+  }
+  const handle = await open(tmpdir(), constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    assert.match(await readStableDirectoryMountIdentity(handle.fd), /^\d+$/u);
+  } finally {
+    await handle.close();
+  }
+});
+
+test("rejects injected same-device traversal when mount identities differ", () => {
+  assert.doesNotThrow(() => assertSameStableDirectoryMountIdentity("41", "41"));
+  assert.throws(
+    () => assertSameStableDirectoryMountIdentity("41", "99"),
+    /crossed a mount boundary/u,
+  );
+});
+
+test("detects a same-device bind mount with a distinct Linux mount identity", async t => {
+  if (process.platform !== "linux") {
+    t.skip("Linux bind-mount identity is not claimed on this platform");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "ar-bind-mount-"));
+  const source = join(root, "source");
+  const mounted = join(root, "mounted");
+  await Promise.all([mkdir(source), mkdir(mounted)]);
+  let fixtureMounted = false;
+  t.after(async () => {
+    if (fixtureMounted) {await execFile("/usr/bin/umount", [mounted]);}
+    await rm(root, { force: true, recursive: true });
+  });
+  try {
+    await execFile("/usr/bin/mount", ["--bind", source, mounted]);
+    fixtureMounted = true;
+  } catch {
+    t.skip("the disposable runner cannot create a bind-mount fixture");
+    return;
+  }
+  const [sourceStat, mountedStat] = await Promise.all([stat(source), stat(mounted)]);
+  assert.equal(sourceStat.dev, mountedStat.dev);
+  const sourceHandle = await open(source, constants.O_RDONLY | constants.O_DIRECTORY);
+  const mountedHandle = await open(mounted, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    const [sourceMount, mountedMount] = await Promise.all([
+      readStableDirectoryMountIdentity(sourceHandle.fd),
+      readStableDirectoryMountIdentity(mountedHandle.fd),
+    ]);
+    assert.notEqual(sourceMount, mountedMount);
+    assert.throws(
+      () => assertSameStableDirectoryMountIdentity(sourceMount, mountedMount),
+      /crossed a mount boundary/u,
+    );
+  } finally {await Promise.all([sourceHandle.close(), mountedHandle.close()]);}
+});
+
+test("Linux no-replace publication preserves inserted destinations and replaced sources", async t => {
+  if (process.platform !== "linux") {
+    t.skip("Linux renameat2 publication is not claimed on this platform");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "ar-no-replace-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const sourceRoot = join(root, "source");
+  const destinationRoot = join(root, "destination");
+  await Promise.all([mkdir(sourceRoot), mkdir(destinationRoot)]);
+  const sourceParent = await open(sourceRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  const destinationParent = await open(destinationRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    await mkdir(join(sourceRoot, "candidate"));
+    await mkdir(join(destinationRoot, "published"));
+    const source = await open(join(sourceRoot, "candidate"), constants.O_RDONLY | constants.O_DIRECTORY);
+    const sourceIdentity = await source.stat({ bigint: true });
+    await source.close();
+    assert.equal(await publishStableDirectoryNoReplace({
+      destinationDirectory: destinationParent,
+      destinationName: "published",
+      expectedSourceIdentity: sourceIdentity,
+      sourceDirectory: sourceParent,
+      sourceName: "candidate",
+    }), "existing");
+    assert.equal((await stat(join(sourceRoot, "candidate"))).isDirectory(), true);
+
+    await rename(join(sourceRoot, "candidate"), join(sourceRoot, "displaced"));
+    await mkdir(join(sourceRoot, "candidate"));
+    await assert.rejects(
+      publishStableDirectoryNoReplace({
+        destinationDirectory: destinationParent,
+        destinationName: "other",
+        expectedSourceIdentity: sourceIdentity,
+        sourceDirectory: sourceParent,
+        sourceName: "candidate",
+      }),
+      /source identity changed/u,
+    );
+    assert.equal((await stat(join(sourceRoot, "candidate"))).isDirectory(), true);
+  } finally {
+    await Promise.all([sourceParent.close(), destinationParent.close()]);
+  }
+});
+
+test("Linux no-replace publication recovers a durably captured incomplete source", async t => {
+  if (process.platform !== "linux") {
+    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "ar-no-replace-recovery-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const sourceRoot = join(root, "source");
+  const destinationRoot = join(root, "destination");
+  await Promise.all([mkdir(sourceRoot), mkdir(destinationRoot)]);
+  await mkdir(join(sourceRoot, "candidate"));
+  const sourceParent = await open(sourceRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  const destinationParent = await open(destinationRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    const source = await open(join(sourceRoot, "candidate"), constants.O_RDONLY | constants.O_DIRECTORY);
+    const identity = await source.stat({ bigint: true });
+    await source.close();
+    const incomplete = `.ar-publish-v1-${identity.dev.toString(16)}-${identity.ino.toString(16)}-published.incomplete`;
+    await rename(join(sourceRoot, "candidate"), join(destinationRoot, incomplete));
+    assert.equal(await publishStableDirectoryNoReplace({
+      destinationDirectory: destinationParent,
+      destinationName: "published",
+      expectedSourceIdentity: identity,
+      sourceDirectory: sourceParent,
+      sourceName: "candidate",
+    }), "created");
+    assert.equal((await stat(join(destinationRoot, "published"))).ino, Number(identity.ino));
+  } finally {await Promise.all([sourceParent.close(), destinationParent.close()]);}
+});
+
+test("Linux no-replace publication recovers its identity-bound SIGKILL residue", async t => {
+  if (process.platform !== "linux") {
+    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "ar-no-replace-sigkill-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const sourceRoot = join(root, "source");
+  const destinationRoot = join(root, "destination");
+  await Promise.all([mkdir(sourceRoot), mkdir(destinationRoot)]);
+  await mkdir(join(sourceRoot, "candidate"));
+  const identity = await stat(join(sourceRoot, "candidate"), { bigint: true });
+  const child = execFileCallback(process.execPath, [publicationCrashWorker, root]);
+  const outcome = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code, signal) => resolve({ code, signal }));
+    },
+  );
+  assert.deepEqual(outcome, { code: null, signal: "SIGKILL" });
+  const [residue] = await readdir(destinationRoot);
+  assert.match(residue ?? "", /^\.ar-publish-v1-.+\.incomplete$/u);
+
+  const source = await open(sourceRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  const destination = await open(destinationRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    assert.equal(await publishStableDirectoryNoReplace({
+      destinationDirectory: destination,
+      destinationName: "published",
+      expectedSourceIdentity: identity,
+      sourceDirectory: source,
+      sourceName: "candidate",
+    }), "created");
+  } finally {await Promise.all([source.close(), destination.close()]);}
+  assert.deepEqual(await readdir(destinationRoot), ["published"]);
+  assert.equal((await stat(join(destinationRoot, "published"), { bigint: true })).ino, identity.ino);
+});
+
+test("Linux no-replace restart restores owned SIGKILL residue when a destination appeared", async t => {
+  if (process.platform !== "linux") {
+    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "ar-no-replace-sigkill-race-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const sourceRoot = join(root, "source");
+  const destinationRoot = join(root, "destination");
+  await Promise.all([mkdir(sourceRoot), mkdir(destinationRoot)]);
+  await mkdir(join(sourceRoot, "candidate"));
+  const identity = await stat(join(sourceRoot, "candidate"), { bigint: true });
+  const child = execFileCallback(process.execPath, [publicationCrashWorker, root]);
+  const outcome = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code, signal) => resolve({ code, signal }));
+    },
+  );
+  assert.deepEqual(outcome, { code: null, signal: "SIGKILL" });
+  await mkdir(join(destinationRoot, "published"));
+
+  const source = await open(sourceRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  const destination = await open(destinationRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    assert.equal(await publishStableDirectoryNoReplace({
+      destinationDirectory: destination,
+      destinationName: "published",
+      expectedSourceIdentity: identity,
+      sourceDirectory: source,
+      sourceName: "candidate",
+    }), "existing");
+  } finally {await Promise.all([source.close(), destination.close()]);}
+  assert.deepEqual(await readdir(destinationRoot), ["published"]);
+  assert.equal((await stat(join(sourceRoot, "candidate"), { bigint: true })).ino, identity.ino);
+});
+
+test("Linux no-replace restart fails closed when final, residue, and replacement source coexist", async t => {
+  if (process.platform !== "linux") {
+    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "ar-no-replace-sigkill-ambiguous-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const sourceRoot = join(root, "source");
+  const destinationRoot = join(root, "destination");
+  await Promise.all([mkdir(sourceRoot), mkdir(destinationRoot)]);
+  await mkdir(join(sourceRoot, "candidate"));
+  const identity = await stat(join(sourceRoot, "candidate"), { bigint: true });
+  const child = execFileCallback(process.execPath, [publicationCrashWorker, root]);
+  const outcome = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code, signal) => resolve({ code, signal }));
+    },
+  );
+  assert.deepEqual(outcome, { code: null, signal: "SIGKILL" });
+  const [residue] = await readdir(destinationRoot);
+  assert.match(residue ?? "", /^\.ar-publish-v1-.+\.incomplete$/u);
+  await mkdir(join(destinationRoot, "published"));
+  await mkdir(join(sourceRoot, "candidate"));
+  const replacement = await stat(join(sourceRoot, "candidate"), { bigint: true });
+
+  const source = await open(sourceRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  const destination = await open(destinationRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    await assert.rejects(publishStableDirectoryNoReplace({
+      destinationDirectory: destination,
+      destinationName: "published",
+      expectedSourceIdentity: identity,
+      sourceDirectory: source,
+      sourceName: "candidate",
+    }), error => error instanceof StableDirectoryPublicationAmbiguousResidueError);
+  } finally {await Promise.all([source.close(), destination.close()]);}
+  assert.deepEqual((await readdir(destinationRoot)).toSorted(), [residue, "published"].toSorted());
+  assert.equal((await stat(join(sourceRoot, "candidate"), { bigint: true })).ino, replacement.ino);
+  assert.notEqual(replacement.ino, identity.ino);
+});
+
+test("Linux no-replace recovery never moves arbitrary deterministic-name residue", async t => {
+  if (process.platform !== "linux") {
+    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "ar-no-replace-unowned-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const sourceRoot = join(root, "source");
+  const destinationRoot = join(root, "destination");
+  await Promise.all([mkdir(sourceRoot), mkdir(destinationRoot)]);
+  await mkdir(join(sourceRoot, "candidate"));
+  const identity = await stat(join(sourceRoot, "candidate"), { bigint: true });
+  await rename(join(sourceRoot, "candidate"), join(root, "retained-evidence"));
+  const incomplete = `.ar-publish-v1-${identity.dev.toString(16)}-${identity.ino.toString(16)}-published.incomplete`;
+  await mkdir(join(destinationRoot, incomplete));
+  await writeFile(join(destinationRoot, incomplete, "unknown"), "arbitrary");
+  const source = await open(sourceRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  const destination = await open(destinationRoot, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    await assert.rejects(publishStableDirectoryNoReplace({
+      destinationDirectory: destination,
+      destinationName: "published",
+      expectedSourceIdentity: identity,
+      sourceDirectory: source,
+      sourceName: "candidate",
+    }), /source identity changed/u);
+  } finally {await Promise.all([source.close(), destination.close()]);}
+  assert.equal(await readFile(join(destinationRoot, incomplete, "unknown"), "utf8"), "arbitrary");
+  assert.deepEqual(await readdir(sourceRoot), []);
+});
 
 const makeFifo = async (path: string): Promise<void> => {
   await execFile("/usr/bin/mkfifo", [path]);
@@ -35,14 +344,22 @@ test("opens a POSIX/macOS regular file through stable descriptor custody", async
   const path = join(root, "inside", "config.toml");
   await mkdir(join(root, "inside"));
   await writeFile(path, "model = 'synthetic'\n");
+  let retainedHandle: FileHandle | undefined;
 
-  const result = await openStablePath(path, await realpath(path), async opened => ({
-    bytes: await opened.handle.readFile(),
-    identity: `${opened.stats.dev}:${opened.stats.ino}`,
-  }));
+  const result = await openStablePath(path, await realpath(path), async opened => {
+    retainedHandle = opened.handle;
+    return {
+      bytes: await opened.handle.readFile(),
+      identity: `${opened.stats.dev}:${opened.stats.ino}`,
+    };
+  });
 
   assert.equal(result.bytes.toString("utf8"), "model = 'synthetic'\n");
   assert.match(result.identity, /^\d+:\d+$/u);
+  assert.ok(retainedHandle);
+  await assert.rejects(retainedHandle.stat(), error =>
+    typeof error === "object" && error !== null && "code" in error && error.code === "EBADF"
+  );
 });
 
 test(
@@ -101,25 +418,31 @@ test(
 
     await t.test("socket", async socketTest => {
       const server = createServer();
+      const previousDirectory = process.cwd();
       try {
+        process.chdir(root);
         await new Promise<void>((resolve, reject) => {
           server.once("error", reject);
-          server.listen(socket, resolve);
+          server.listen("socket", resolve);
         });
       } catch (error) {
+        process.chdir(previousDirectory);
         if (
           typeof error === "object" &&
           error !== null &&
           "code" in error &&
-          error.code === "EPERM"
+          (error.code === "EPERM" || error.code === "EINVAL")
         ) {
-          socketTest.skip("Unix socket creation is unavailable in this sandbox");
+          socketTest.skip("Unix socket creation is unavailable at this sandbox path");
           return;
         }
         throw error;
       }
       socketTest.after(() => new Promise<void>(resolve => {
-        server.close(() => resolve());
+        server.close(() => {
+          process.chdir(previousDirectory);
+          resolve();
+        });
       }));
       let openCalls = 0;
       let callbackCalls = 0;

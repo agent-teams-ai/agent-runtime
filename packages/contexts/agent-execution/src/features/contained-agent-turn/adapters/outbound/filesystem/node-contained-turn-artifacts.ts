@@ -1,190 +1,372 @@
-import { createHash, randomUUID } from "node:crypto";
-import { link, open, unlink } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
 
-import { openStablePath } from "@agent-teams/filesystem-custody";
-
-import type { ContainedTurnArtifactPort } from "../legacy/legacy-contained-turn-ports.js";
 import type { ContainedTurnKernelArtifactPort } from "../../../application/ports/outbound/contained-turn-ports.js";
-import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
-import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
+import type { ContainedTurnWorkspaceId } from "../../../domain/contained-turn-identities.js";
+import type { ContainedTurnFilesystemArtifactPort as ContainedTurnArtifactPort } from "./contained-turn-filesystem-port.js";
 import {
-  ensurePrivateDirectory,
-  fsyncDirectory,
+  parseContainedTurnResultUrnDigest,
+  type ContainedTurnArtifactManifest,
+} from "./contained-turn-artifact-manifest.js";
+import {
+  assertContainedTurnArtifactLimits,
+  bindArtifactCustody,
+  closeContainedTurnArtifactHandles,
+} from "./contained-turn-artifact-custody.js";
+import { rehydrateContainedTurnArtifact } from "./contained-turn-artifact-rehydration.js";
+import { sealContainedTurnArtifact } from "./contained-turn-artifact-sealing.js";
+import {
+  createContainedTurnArtifactStore,
+  type VerifiedStoredArtifact,
+} from "./contained-turn-artifact-store.js";
+import {
+  scopedArtifactWorkspaceName,
+  verifyContainedTurnArtifactLookup,
+} from "./contained-turn-artifact-verification.js";
+import {
+  guardContainedTurnFilesystemOperation,
   isMissingFilesystemEntry,
+  revalidateBoundRoots,
 } from "./contained-turn-filesystem-custody.js";
+import { openBoundDirectories } from "./contained-turn-filesystem-handles.js";
+import {
+  readStableFileAt,
+  writeImmutableFileAt,
+  type ContainedTurnFilesystemFaults,
+} from "./contained-turn-durable-file.js";
+import { parseWorkspaceCreationRecord } from "./contained-turn-workspace-state.js";
+import {
+  encodeKernelClosureRecord,
+  kernelClosureEvidenceId,
+  kernelClosureProofId,
+  kernelClosureRecordName,
+  parseKernelClosureRecord,
+  sameKernelClosureRequest,
+  type KernelArtifactClosureRecord,
+} from "./contained-turn-kernel-closure-record.js";
 import {
   DEFAULT_CONTAINED_TURN_WORKSPACE_LIMITS,
-  scanContainedTurnWorkspace,
   type ContainedTurnWorkspaceTreeLimits,
 } from "./contained-turn-workspace-tree.js";
 
+const inflightRehydrations = new Map<string, Readonly<{
+  fingerprint: string;
+  promise: Promise<string>;
+}>>();
+
+export type NodeContainedTurnArtifactDigest = (
+  domain: "blob" | "manifest", bytes: Uint8Array,
+) => string;
+
 export interface NodeContainedTurnArtifactOptions {
+  readonly canonicalProjectRoot: string;
+  readonly disposableRoot: string;
   readonly limits?: ContainedTurnWorkspaceTreeLimits;
+  readonly rehydrationRoot: string;
   readonly root: string;
+  readonly testDigest?: NodeContainedTurnArtifactDigest;
+  readonly testFaults?: ContainedTurnFilesystemFaults;
+  readonly workspaceRoot: string;
 }
 
-type ClosureInput = Parameters<ContainedTurnKernelArtifactPort["ensureSealed"]>[0];
+export type NodeContainedTurnArtifacts = ContainedTurnArtifactPort &
+  ContainedTurnKernelArtifactPort & Readonly<{
+    rehydrate(input: NodeContainedTurnArtifactLookup): Promise<string>;
+    verify(input: NodeContainedTurnArtifactLookup): Promise<ContainedTurnArtifactManifest>;
+  }>;
 
-const closureKey = (input: Pick<ClosureInput, "operationId" | "requestDigest">) =>
-  createHash("sha256").update(`${input.operationId}\0${input.requestDigest}`).digest("hex");
+export interface NodeContainedTurnArtifactLookup {
+  readonly operationId: string;
+  readonly resultRef: string;
+  readonly scope: Parameters<ContainedTurnArtifactPort["seal"]>[0]["scope"];
+}
 
-const isAlreadyPresent = (error: unknown): boolean =>
-  error instanceof Error && "code" in error && error.code === "EEXIST";
+const rehydrationFingerprint = (lookup: NodeContainedTurnArtifactLookup): string => JSON.stringify([
+  lookup.resultRef, lookup.operationId, lookup.scope.tenantId, lookup.scope.projectId,
+]);
 
-const verifyBlob = async (path: string, root: string, expected: Buffer): Promise<void> => {
-  const actual = await openStablePath(
-    path,
-    path,
-    opened => opened.handle.readFile(),
-    { custodyBoundary: { absolutePath: root, canonicalPath: root } },
-  );
-  if (!actual.equals(expected)) {throw new Error("contained turn content-addressed artifact mismatch");}
-};
+const RECORD_BYTES = 64 * 1_024;
 
-const writeContentAddressed = async (
-  root: string,
-  category: "blobs" | "closures" | "manifests",
-  digest: string,
-  bytes: Buffer,
-): Promise<string> => {
-  const categoryRoot = join(root, category);
-  const shardRoot = join(categoryRoot, digest.slice(0, 2));
-  await ensurePrivateDirectory(shardRoot);
-  const finalPath = join(shardRoot, digest);
-  const temporaryPath = join(shardRoot, `.${digest}.${randomUUID()}.tmp`);
-  const temporary = await open(temporaryPath, "wx", 0o600);
-  try {
-    await temporary.writeFile(bytes);
-    await temporary.sync();
-  } finally {
-    await temporary.close();
+const kernelWorkspaceName = (workspaceId: ContainedTurnWorkspaceId): string => {
+  const match = /^workspace:(operation-[a-f\d]{64})$/u.exec(workspaceId);
+  if (match?.[1] === undefined) {
+    throw new Error("contained turn kernel artifact workspace identity is not opaque");
   }
-  try {
-    await link(temporaryPath, finalPath);
-  } catch (error) {
-    if (!isAlreadyPresent(error)) {throw error;}
-    await verifyBlob(finalPath, root, bytes);
-  } finally {
-    await unlink(temporaryPath);
-  }
-  await fsyncDirectory(shardRoot);
-  await verifyBlob(finalPath, root, bytes);
-  return finalPath;
+  return match[1];
 };
 
 export const createNodeContainedTurnArtifacts = async (
   options: NodeContainedTurnArtifactOptions,
-): Promise<ContainedTurnArtifactPort & Pick<ContainedTurnKernelArtifactPort, "ensureSealed" | "querySeal">> => {
-  if (!isAbsolute(options.root) || resolve(options.root) !== options.root) {
-    throw new TypeError("contained turn artifact root must be a normalized absolute path");
-  }
-  const limits = options.limits ?? DEFAULT_CONTAINED_TURN_WORKSPACE_LIMITS;
-  const artifactRoot = await ensurePrivateDirectory(options.root);
-  await Promise.all([
-    ensurePrivateDirectory(join(artifactRoot, "blobs")),
-    ensurePrivateDirectory(join(artifactRoot, "closures")),
-    ensurePrivateDirectory(join(artifactRoot, "manifests")),
-  ]);
-
-  const closurePath = (input: Pick<ClosureInput, "operationId" | "requestDigest">) => {
-    const key = closureKey(input);
-    return join(artifactRoot, "closures", key.slice(0, 2), key);
-  };
-  const readClosure = async (input: ClosureInput) => {
-    try {
-      const bytes = await openStablePath(
-        closurePath(input), closurePath(input), opened => opened.handle.readFile(),
-        { custodyBoundary: { absolutePath: artifactRoot, canonicalPath: artifactRoot } },
+): Promise<NodeContainedTurnArtifacts> => guardContainedTurnFilesystemOperation(
+  "artifact_initialize",
+  async () => {
+    const limits = options.limits ?? DEFAULT_CONTAINED_TURN_WORKSPACE_LIMITS;
+    assertContainedTurnArtifactLimits(limits);
+    const { artifactRoots, custodyRoots, rehydrationRoots, resultPublications, workspaceRoots } =
+      await bindArtifactCustody(options);
+    const { contentDigest, verifyArtifact, writeContentAddressed } =
+      createContainedTurnArtifactStore({
+        faults: options.testFaults,
+        limits,
+        roots: artifactRoots,
+        testDigest: options.testDigest,
+      });
+    const verifyLookup = async (
+      lookup: NodeContainedTurnArtifactLookup,
+    ): Promise<VerifiedStoredArtifact> => verifyContainedTurnArtifactLookup({
+      lookup,
+      manifestDigest: parseContainedTurnResultUrnDigest(lookup.resultRef),
+      resultPublications,
+      verifyArtifact,
+      workspaceSeals: workspaceRoots.seals,
+    });
+    const resolveKernelWorkspace = async (input: Readonly<{
+      operationId: string;
+      workspaceId: ContainedTurnWorkspaceId;
+    }>) => {
+      await revalidateBoundRoots(custodyRoots);
+      const name = kernelWorkspaceName(input.workspaceId);
+      const [creations] = await openBoundDirectories([workspaceRoots.creations]);
+      try {
+        const creation = parseWorkspaceCreationRecord(await readStableFileAt(
+          creations, `${name}.json`, RECORD_BYTES,
+        ));
+        if (
+          creation.operationId !== input.operationId || creation.workspaceName !== name ||
+          scopedArtifactWorkspaceName(creation.operationId, creation.scope) !== name
+        ) {
+          throw new Error("contained turn kernel artifact workspace conflicts with owner creation facts");
+        }
+        return Object.freeze({
+          name,
+          operationId: creation.operationId,
+          scope: creation.scope,
+          workspaceRef: join(workspaceRoots.active.canonicalPath, name),
+        });
+      } finally {await closeContainedTurnArtifactHandles([creations]);}
+    };
+    const replayRehydration = (lookup: NodeContainedTurnArtifactLookup): Promise<string> =>
+      guardContainedTurnFilesystemOperation(
+        "artifact_rehydrate",
+        async () => rehydrateContainedTurnArtifact(lookup.resultRef, {
+          contentDigest,
+          custodyRoots,
+          faults: options.testFaults,
+          limits,
+          roots: rehydrationRoots,
+          verifyArtifact: async () => verifyLookup(lookup),
+        }),
+        options.testFaults !== undefined,
       );
-      const record = JSON.parse(bytes.toString("utf8")) as { artifactManifestRef: string; resultRef: string };
-      if (typeof record.artifactManifestRef !== "string" || typeof record.resultRef !== "string") {
-        throw new TypeError("contained turn artifact closure record is malformed");
+    const inflightSeals = new Map<string, Readonly<{
+      fingerprint: string;
+      promise: ReturnType<ContainedTurnArtifactPort["seal"]>;
+    }>>();
+    const sealDurably = async (
+      input: Parameters<ContainedTurnArtifactPort["seal"]>[0],
+    ): ReturnType<ContainedTurnArtifactPort["seal"]> => {
+      const fingerprint = JSON.stringify([
+        input.operationId, input.scope.tenantId, input.scope.projectId,
+        input.workspaceRef, input.output,
+      ]);
+      const existing = inflightSeals.get(input.workspaceRef);
+      if (existing !== undefined) {
+        if (existing.fingerprint !== fingerprint) {
+          throw new Error("contained turn artifact seal raced with conflicting input");
+        }
+        return existing.promise;
       }
+      const promise = guardContainedTurnFilesystemOperation(
+        "artifact_seal",
+        () => sealContainedTurnArtifact(input, {
+          contentDigest,
+          custodyRoots,
+          limits,
+          resultPublications,
+          testFaults: options.testFaults,
+          verifyArtifact,
+          workspaceRoots,
+          writeContentAddressed,
+        }),
+        options.testFaults !== undefined,
+      );
+      inflightSeals.set(input.workspaceRef, Object.freeze({ fingerprint, promise }));
+      try {return await promise;} finally {
+        if (inflightSeals.get(input.workspaceRef)?.promise === promise) {
+          inflightSeals.delete(input.workspaceRef);
+        }
+      }
+    };
+
+    const readKernelBinding = async (
+      input: Parameters<ContainedTurnKernelArtifactPort["querySeal"]>[0],
+    ): Promise<KernelArtifactClosureRecord | undefined> => {
+      const [results] = await openBoundDirectories([resultPublications]);
+      try {
+        let bytes: Buffer;
+        try {
+          bytes = await readStableFileAt(
+            results, kernelClosureRecordName("artifact_seal", input.requestDigest), RECORD_BYTES,
+          );
+        } catch (error) {
+          if (isMissingFilesystemEntry(error)) {return undefined;}
+          throw error;
+        }
+        const record = parseKernelClosureRecord(bytes);
+        if (record.kind !== "artifact_seal") {
+          throw new Error("contained turn kernel artifact closure record has the wrong kind");
+        }
+        return record;
+      } finally {await closeContainedTurnArtifactHandles([results]);}
+    };
+
+    const queryKernelSeal = async (
+      input: Parameters<ContainedTurnKernelArtifactPort["querySeal"]>[0],
+    ): ReturnType<ContainedTurnKernelArtifactPort["querySeal"]> => {
+      const resolved = await resolveKernelWorkspace(input);
+      const record = await readKernelBinding(input);
+      if (record === undefined) {
+        return Object.freeze({
+          evidenceId: kernelClosureEvidenceId({
+            operationId: input.operationId,
+            requestDigest: input.requestDigest,
+            source: "artifact_binding_missing",
+          }),
+          kind: "indeterminate" as const,
+        });
+      }
+      if (!sameKernelClosureRequest(record, input)) {
+        return Object.freeze({
+          evidenceId: kernelClosureEvidenceId({
+            operationId: input.operationId,
+            requestDigest: input.requestDigest,
+            source: "artifact_binding_conflict",
+          }),
+          kind: "identity_conflict" as const,
+        });
+      }
+      await verifyLookup({
+        operationId: resolved.operationId,
+        resultRef: record.resultRef,
+        scope: resolved.scope,
+      });
       return Object.freeze({
         kind: "proved" as const,
         proof: Object.freeze({
           artifactProof: Object.freeze({
             binding: Object.freeze({
-              artifactManifestRef: record.artifactManifestRef,
-              authorityVectorDigest: input.authorityVectorDigest,
-              operationId: input.operationId,
-              workspaceId: input.workspaceId,
+              artifactManifestRef: record.manifestRef,
+              authorityVectorDigest: record.authorityVectorDigest,
+              operationId: record.operationId,
+              workspaceId: record.workspaceId,
             }),
             kind: "artifact_manifest_seal" as const,
-            proofId: containedTurnIdentity("proof", `proof:artifact-seal:${input.requestDigest}`),
+            proofId: kernelClosureProofId(record, "artifact_manifest_seal"),
           }),
           resultProof: Object.freeze({
             binding: Object.freeze({
-              authorityVectorDigest: input.authorityVectorDigest,
-              operationId: input.operationId,
+              authorityVectorDigest: record.authorityVectorDigest,
+              operationId: record.operationId,
               resultRef: record.resultRef,
             }),
             kind: "result_publication" as const,
-            proofId: containedTurnIdentity("proof", `proof:result-publication:${input.requestDigest}`),
+            proofId: kernelClosureProofId(record, "result_publication"),
           }),
         }),
+        requestDigest: record.requestDigest,
+        requestId: record.requestId,
+      });
+    };
+
+    const ensureKernelSealed = async (
+      input: Parameters<ContainedTurnKernelArtifactPort["ensureSealed"]>[0],
+    ): ReturnType<ContainedTurnKernelArtifactPort["ensureSealed"]> => {
+      const observed = await queryKernelSeal(input);
+      if (observed.kind !== "indeterminate") {return observed;}
+      const resolved = await resolveKernelWorkspace(input);
+      const sealed = await sealDurably({
+        operationId: resolved.operationId,
+        output: input.output,
+        scope: resolved.scope,
+        workspaceRef: resolved.workspaceRef,
+      });
+      const record: KernelArtifactClosureRecord = Object.freeze({
+        authorityVectorDigest: input.authorityVectorDigest,
+        kind: "artifact_seal",
+        manifestReceiptRef: sealed.manifestReceiptRef,
+        manifestRef: sealed.manifestRef,
+        operationId: input.operationId,
         requestDigest: input.requestDigest,
         requestId: input.requestId,
-      });
-    } catch (error) {
-      if (!isMissingFilesystemEntry(error)) {throw error;}
-      return Object.freeze({
-        evidenceId: containedTurnIdentity("evidence", `evidence:artifact-seal-missing:${digestContainedTurnCanonicalValue({ operationId: input.operationId, requestDigest: input.requestDigest })}`),
-        kind: "indeterminate" as const,
-      });
-    }
-  };
-  const adapter: ContainedTurnArtifactPort & Pick<ContainedTurnKernelArtifactPort, "ensureSealed" | "querySeal"> = {
-    async ensureSealed(input) {
-      const observed = await readClosure(input);
-      if (observed.kind === "proved") {return observed;}
-      const workspaceRef = input.workspaceId.startsWith("workspace:")
-        ? input.workspaceId.slice("workspace:".length)
-        : input.workspaceId;
-      const sealed = await adapter.seal({ operationId: input.operationId, output: input.output, workspaceRef });
-      const record = Buffer.from(JSON.stringify({
-        artifactManifestRef: sealed.manifestRef,
+        resultReceiptRef: sealed.resultReceiptRef,
         resultRef: sealed.resultRef,
-      }), "utf8");
-      await writeContentAddressed(artifactRoot, "closures", closureKey(input), record);
-      return readClosure(input);
-    },
-    querySeal: readClosure,
-    async seal(input) {
-      const tree = await scanContainedTurnWorkspace(input.workspaceRef, limits);
-      for (const file of tree.files) {
-        await writeContentAddressed(artifactRoot, "blobs", file.digest, file.bytes);
-      }
-      const output = [];
-      for (const chunk of input.output) {
-        const bytes = Buffer.from(chunk.text, "utf8");
-        const digest = createHash("sha256").update(bytes).digest("hex");
-        await writeContentAddressed(artifactRoot, "blobs", digest, bytes);
-        output.push(Object.freeze({ cursor: chunk.cursor, digest, kind: chunk.kind, size: bytes.length }));
-      }
-      const manifest = Object.freeze({
-        files: Object.freeze(tree.files.map(file => Object.freeze({
-          digest: file.digest,
-          mode: file.mode,
-          path: file.relativePath,
-          size: file.size,
-        }))),
-        operationId: input.operationId,
-        output: Object.freeze(output),
         schemaVersion: 1,
-        treeDigest: tree.treeDigest,
+        workspaceId: input.workspaceId,
       });
-      const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
-      const manifestDigest = createHash("sha256").update(manifestBytes).digest("hex");
-      await writeContentAddressed(artifactRoot, "manifests", manifestDigest, manifestBytes);
-      return Object.freeze({
-        manifestReceiptRef: `urn:agent-runtime:artifact-manifest-sealed:${manifestDigest}`,
-        manifestRef: `urn:agent-runtime:artifact-manifest:${manifestDigest}`,
-        resultReceiptRef: `urn:agent-runtime:result-published:${manifestDigest}`,
-        resultRef: `urn:agent-runtime:contained-turn-result:${manifestDigest}`,
-      });
-    },
-  };
-  return Object.freeze(adapter);
-};
+      const [results, staging] = await openBoundDirectories([
+        resultPublications, workspaceRoots.staging,
+      ]);
+      try {
+        await writeImmutableFileAt({
+          bytes: encodeKernelClosureRecord(record),
+          faults: options.testFaults,
+          finalDirectory: results,
+          finalName: kernelClosureRecordName(record.kind, record.requestDigest),
+          stagingDirectory: staging,
+          temporaryKind: "metadata",
+        });
+      } finally {await closeContainedTurnArtifactHandles([results, staging]);}
+      return queryKernelSeal(input);
+    };
+
+    function seal(input: Parameters<ContainedTurnArtifactPort["seal"]>[0]): ReturnType<ContainedTurnArtifactPort["seal"]>;
+    function seal(input: Parameters<ContainedTurnKernelArtifactPort["seal"]>[0]): ReturnType<ContainedTurnKernelArtifactPort["seal"]>;
+    function seal(
+      input: Parameters<ContainedTurnArtifactPort["seal"]>[0] |
+        Parameters<ContainedTurnKernelArtifactPort["seal"]>[0],
+    ): ReturnType<ContainedTurnArtifactPort["seal"]> | ReturnType<ContainedTurnKernelArtifactPort["seal"]> {
+      if ("scope" in input) {return sealDurably(input);}
+      return Promise.resolve(Object.freeze({
+        evidenceId: kernelClosureEvidenceId({
+          operationId: input.operationId,
+          source: "unstaged_artifact_seal",
+        }),
+        kind: "indeterminate" as const,
+      }));
+    }
+
+    return Object.freeze<NodeContainedTurnArtifacts>({
+      ensureSealed: input => guardContainedTurnFilesystemOperation(
+        "artifact_ensure_sealed", () => ensureKernelSealed(input), options.testFaults !== undefined,
+      ),
+      querySeal: input => guardContainedTurnFilesystemOperation(
+        "artifact_query_seal", () => queryKernelSeal(input), options.testFaults !== undefined,
+      ),
+      async rehydrate(lookup) {
+        const digest = parseContainedTurnResultUrnDigest(lookup.resultRef);
+        const key = `${rehydrationRoots.results.canonicalPath}\0${digest}`;
+        const fingerprint = rehydrationFingerprint(lookup);
+        const existing = inflightRehydrations.get(key);
+        if (existing !== undefined) {
+          if (existing.fingerprint !== fingerprint) {
+            throw new Error("contained turn rehydration raced with conflicting scope or provenance");
+          }
+          await existing.promise;
+          return replayRehydration(lookup);
+        }
+        const promise = replayRehydration(lookup);
+        inflightRehydrations.set(key, Object.freeze({ fingerprint, promise }));
+        try {return await promise;} finally {
+          if (inflightRehydrations.get(key)?.promise === promise) {inflightRehydrations.delete(key);}
+        }
+      },
+      seal,
+      async verify(lookup) {
+        return guardContainedTurnFilesystemOperation("artifact_verify", async () => {
+          await revalidateBoundRoots(custodyRoots);
+          return (await verifyLookup(lookup)).manifest;
+        }, options.testFaults !== undefined);
+      },
+    });
+  },
+  options.testFaults !== undefined,
+);

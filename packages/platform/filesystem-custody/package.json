@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --project tsconfig.json --pretty false",
+    "build": "tsc --project tsconfig.json --pretty false && node scripts/build-native-helper.mjs",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
     "test": "node --test --test-concurrency=1 tests/stable-path-custody.test.ts",
