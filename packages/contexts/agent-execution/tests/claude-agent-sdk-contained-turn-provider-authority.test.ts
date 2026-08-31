@@ -24,9 +24,11 @@ import {
   inertRegistryProcess,
   kernelInput,
   kernelProvider,
+  ManualClock,
   privateProjection,
   spawnedQuery,
   success,
+  waitFor,
   workspaceRef,
 } from "./claude-agent-sdk-contained-turn-provider.support.ts";
 
@@ -207,6 +209,36 @@ test("current-kernel adapter turns rejected output admission into indeterminate"
 test("current-kernel adapter keeps a late SDK message after terminal indeterminate", async () => {
   const adapter = kernelProvider(spawnedQuery([success("terminal-first"), delta("late")]));
   assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+
+  const clock = new ManualClock();
+  let releaseTerminal: (() => void) | undefined;
+  const terminalGate = new Promise<void>(resolve => {
+    releaseTerminal = resolve;
+  });
+  let queryStarted = false;
+  const lateTerminal = kernelProvider(queryInput => {
+    queryStarted = true;
+    queryInput.options.spawnClaudeCodeProcess({
+      args: [...claudeAgentSdkArguments("analysis", workspaceRef)],
+      command: executablePath,
+      cwd: workspaceRef,
+      env: { ...privateProjection.environment },
+      signal: new AbortController().signal,
+    });
+    return {
+      close: () => {},
+      interrupt: async () => {},
+      async *[Symbol.asyncIterator]() {
+        await terminalGate;
+        yield success("terminal-after-150ms");
+      },
+    };
+  }, { clock });
+  const lateOutcome = lateTerminal.execute(kernelInput() as never);
+  await waitFor(() => queryStarted && clock.activeWaiterCount() > 0);
+  clock.advanceWithoutDelivery(150);
+  releaseTerminal?.();
+  assert.equal((await lateOutcome).kind, "indeterminate");
 });
 
 test("current-kernel adapter bounds a stuck iterator, cancellation lookup, interrupt and close", async () => {

@@ -307,7 +307,7 @@ export const kernelProvider = (
   },
   processes: { get: () => inertRegistryProcess(), start: () => inertProcess() },
   queryFactory,
-  turnTimeoutMs: 1_000,
+  turnTimeoutMs: 100,
   ...options,
 });
 
