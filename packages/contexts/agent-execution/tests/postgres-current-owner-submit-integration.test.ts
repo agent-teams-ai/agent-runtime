@@ -18,6 +18,7 @@ import { createClaudeAgentSdkPrivateProjection } from "../dist/features/containe
 import { applyContainedTurnPostgresSchema } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 import { PostgresContainedTurnOperationStore } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
 import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { DeterministicCurrentOwnerHost, successfulClaudeQuery } from "./current-owner-success-fixture.ts";
 import { createDependencies } from "./features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 const databaseUrl = process.env.POSTGRES_DURABILITY_URL;
@@ -166,7 +167,12 @@ const forProvider = (fixture: ReturnType<typeof createDependencies>, provider: "
   })});
 };
 
-const createOwner = async (provider: "claude" | "codex", root: string, host: FakeHost) => {
+const createOwner = async (
+  provider: "claude" | "codex",
+  root: string,
+  host: FakeHost | DeterministicCurrentOwnerHost,
+  deterministicSuccess = false,
+) => {
   const workspaceRef = join(root, "workspace");
   const privateRootPath = join(root, "private");
   await mkdir(workspaceRef, {recursive: true, mode: 0o700});
@@ -201,7 +207,7 @@ const createOwner = async (provider: "claude" | "codex", root: string, host: Fak
       providerAttemptCardinality: "at_most_one", requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
       resourceScopeRevision: "contained-workspace-network-credential:1", supportedModes: ["analysis", "workspace-write"],
       unknownCapabilityPolicy: "fail_closed"},
-    queryFactory: input => {
+    queryFactory: deterministicSuccess ? successfulClaudeQuery(host as DeterministicCurrentOwnerHost, workspaceRef) : input => {
       const plan = host.plans.at(-1)!;
       input.options.spawnClaudeCodeProcess({args: [...plan.arguments], command: "/synthetic/claude", cwd: workspaceRef,
         env: {...plan.environment}, signal: new AbortController().signal});
@@ -312,6 +318,80 @@ test("PostgreSQL current owners durably claim once through real Codex and Claude
           assert.equal(replay.status, "observed");
           assert.equal(host.starts, 1);
           assert.ok(host.releases > 0 || replay.status === "observed" && replay.turn.status === "reconcile_required");
+          owner.dispose();
+        } finally {
+          await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
+          await rm(root, {recursive: true, force: true});
+        }
+      });
+    }
+  } finally {
+    await pool.end();
+  }
+});
+
+test("PostgreSQL current owners durably close deterministic Codex and Claude success paths", {
+  skip: databaseUrl === undefined
+    ? "coordinator rerun pending: POSTGRES_DURABILITY_URL is not available in this test-only worker"
+    : false,
+}, async t => {
+  assert.ok(databaseUrl);
+  const pool = new Pool({connectionString: databaseUrl, max: 12});
+  const testRunId = randomUUID();
+  try {
+    for (const provider of ["codex", "claude"] as const) {
+      await t.test(provider, async () => {
+        await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
+        await applyContainedTurnPostgresSchema(pool);
+        const root = await mkdtemp(join(tmpdir(), `pg-current-owner-success-${provider}-`));
+        try {
+          const host = new DeterministicCurrentOwnerHost();
+          const owner = await createOwner(provider, root, host, true);
+          const fixture = createDependencies();
+          const selected = forProvider(fixture, provider);
+          const identities = createIdentities(`${testRunId}:${provider}:success`);
+          const durable = new PostgresContainedTurnOperationStore({identities, pool});
+          let releaseClaim!: () => void;
+          let reportClaim!: () => void;
+          const wait = new Promise<void>(resolve => {releaseClaim = resolve;});
+          const reached = new Promise<void>(resolve => {reportClaim = resolve;});
+          const feature = createContainedTurnFeature({...selected, custody: owner.custody,
+            operationStore: delegatingStore(durable, {reached: reportClaim, wait}), provider: owner.provider});
+          const request = {commandId: `command:pg-success:${provider}:${testRunId}`, expectedProvider: provider,
+            intent: {mode: "analysis" as const, prompt: "Complete the deterministic protocol fixture."},
+            scope: {projectId: `project:pg:${testRunId}`, tenantId: `tenant:pg:${testRunId}`}};
+
+          const submission = feature.submit.execute(request);
+          await reached;
+          assert.equal(host.starts, 0, "provider cannot start before the atomic PostgreSQL claim");
+          releaseClaim();
+          const result = await submission;
+          assert.equal(result.status, "observed");
+          assert.equal(result.turn.status, "succeeded");
+          assert.equal(host.starts, 1, "successful submission starts exactly one provider process");
+          assert.equal(host.containments, 1, "accepted Host closure uses one idempotent containment receipt");
+
+          const completed = await durable.read({operationId: result.turn.operationId, scope: request.scope});
+          assert.equal(completed?.providerExecution.kind, "closed");
+          assert.equal(completed?.terminal.kind, "final");
+
+          const duplicate = await feature.submit.execute(request);
+          assert.equal(duplicate.status, "observed");
+          assert.equal(duplicate.turn.status, "succeeded");
+          assert.equal(host.starts, 1, "duplicate submission cannot start the provider again");
+
+          const reconstructed = new PostgresContainedTurnOperationStore({identities, pool});
+          const persisted = await reconstructed.read({operationId: result.turn.operationId, scope: request.scope});
+          assert.equal(persisted?.providerExecution.kind, "closed");
+          assert.equal(persisted?.terminal.kind, "final");
+          const replayFixture = createDependencies();
+          const replaySelected = forProvider(replayFixture, provider);
+          const replay = await createContainedTurnFeature({...replaySelected, custody: owner.custody,
+            operationStore: delegatingStore(reconstructed), provider: owner.provider}).submit.execute(request);
+          assert.equal(replay.status, "observed");
+          assert.equal(replay.turn.status, "succeeded");
+          assert.equal(host.starts, 1, "reconstruction replay cannot start the provider again");
+          assert.equal(host.containments, 1, "replay reuses accepted Host finality");
           owner.dispose();
         } finally {
           await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
