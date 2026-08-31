@@ -8,7 +8,10 @@ import {
   containedTurnIdentity,
   type ContainedTurnWorkspaceId,
 } from "../../../domain/contained-turn-identities.js";
-import type { ContainedTurnFilesystemWorkspacePort as ContainedTurnWorkspacePort } from "./contained-turn-filesystem-port.js";
+import type {
+  ContainedTurnFilesystemWorkspacePort as ContainedTurnWorkspacePort,
+  ContainedTurnWorkspaceLaunchAuthority,
+} from "./contained-turn-filesystem-port.js";
 import {
   bindContainedTurnRootSet,
   guardContainedTurnFilesystemOperation,
@@ -50,7 +53,10 @@ import {
   type ContainedTurnWorkspaceContext as WorkspaceContext,
 } from "./contained-turn-workspace-io.js";
 import { moveDirectoryNoReplace, requireDirectoryPublication } from "./contained-turn-directory-publication.js";
-import { retainWorkspaceCapability } from "./contained-turn-workspace-capability.js";
+import {
+  retainWorkspaceCapability,
+  type WorkspaceCapabilityRetention,
+} from "./contained-turn-workspace-capability.js";
 import { createContainedTurnWorkspace } from "./contained-turn-workspace-creation.js";
 import {
   encodeKernelClosureRecord,
@@ -113,6 +119,7 @@ const resolveKernelWorkspace = async (
 const verifyWorkspace = async (
   input: Parameters<ContainedTurnWorkspacePort["verify"]>[0],
   context: WorkspaceContext,
+  retention: Pick<WorkspaceCapabilityRetention, "retain">,
 ): Promise<Awaited<ReturnType<ContainedTurnWorkspacePort["verify"]>>> => {
   await revalidateBoundRoots(context.custodyRoots);
   const name = assertWorkspaceRef(input.workspaceRef, context.roots.active.canonicalPath);
@@ -139,7 +146,7 @@ const verifyWorkspace = async (
     if (tree.treeDigest !== record.materializationDigest) {
       throw new Error("contained turn workspace changed before dispatch lookup");
     }
-    return await retainWorkspaceCapability({
+    return await retention.retain({
       canonicalPath: input.workspaceRef,
       name,
       operationId: input.operationId,
@@ -215,9 +222,24 @@ const quarantineWorkspace = async (
   } finally {await closeHandles(handles);}
 };
 
-export const createNodeContainedTurnWorkspace = async (
+export interface NodeContainedTurnWorkspaceOwnerBackend {
+  readonly resolveLaunchAuthority: (input: Readonly<{
+    operationId: string;
+    workspaceId: ContainedTurnWorkspaceId;
+  }>) => Promise<Readonly<{
+    authority: ContainedTurnWorkspaceLaunchAuthority;
+    operationId: string;
+    scope: import("../../../contracts/contained-agent-turn.js").ContainedTurnScope;
+    workspaceRef: string;
+  }>>;
+  readonly workspace: NodeContainedTurnWorkspace;
+}
+
+/* oxlint-disable max-lines-per-function -- one shared legacy/owner custody engine */
+const createNodeContainedTurnWorkspaceBackend = (
   options: NodeContainedTurnWorkspaceOptions,
-): Promise<NodeContainedTurnWorkspace> => guardContainedTurnFilesystemOperation(
+  retention: Pick<WorkspaceCapabilityRetention, "retain">,
+): Promise<NodeContainedTurnWorkspaceOwnerBackend> => guardContainedTurnFilesystemOperation(
   "workspace_initialize",
   async () => {
   const bound = await bindContainedTurnRootSet({
@@ -347,17 +369,17 @@ export const createNodeContainedTurnWorkspace = async (
       schemaVersion: 1,
       workspaceId: input.workspaceId,
     });
-    const [receipts, staging] = await openBoundDirectories([roots.receipts, roots.staging]);
+    const [receipts, receiptStaging] = await openBoundDirectories([roots.receipts, roots.staging]);
     try {
       await writeImmutableFileAt({
         bytes: encodeKernelClosureRecord(record),
         faults: options.testFaults,
         finalDirectory: receipts,
         finalName: kernelClosureRecordName(record.kind, record.requestDigest),
-        stagingDirectory: staging,
+        stagingDirectory: receiptStaging,
         temporaryKind: "metadata",
       });
-    } finally {await closeHandles([receipts, staging]);}
+    } finally {await closeHandles([receipts, receiptStaging]);}
     return queryKernelClosure(input);
   };
 
@@ -410,10 +432,47 @@ export const createNodeContainedTurnWorkspace = async (
       "workspace_query_closure", () => queryKernelClosure(input), options.testFaults !== undefined,
     ),
     verify: input => guardContainedTurnFilesystemOperation(
-      "workspace_verify", () => verifyWorkspace(input, context), options.testFaults !== undefined,
+      "workspace_verify", () => verifyWorkspace(input, context, retention), options.testFaults !== undefined,
     ),
   };
-  return Object.freeze(adapter);
+  const workspace = Object.freeze(adapter);
+  return Object.freeze({
+    resolveLaunchAuthority: async (input: Readonly<{
+      operationId: string;
+      workspaceId: ContainedTurnWorkspaceId;
+    }>) => {
+      const resolved = await resolveKernelWorkspace(input, context);
+      const authority = await guardContainedTurnFilesystemOperation(
+        "workspace_verify",
+        () => verifyWorkspace(resolved, context, retention),
+        options.testFaults !== undefined,
+      );
+      return Object.freeze({
+        authority,
+        operationId: resolved.operationId,
+        scope: resolved.scope,
+        workspaceRef: resolved.workspaceRef,
+      });
+    },
+    workspace,
+  });
   },
   options.testFaults !== undefined,
 );
+/* oxlint-enable max-lines-per-function */
+
+const legacyWorkspaceCapabilityRetention = Object.freeze({
+  retain: retainWorkspaceCapability,
+});
+
+export const createNodeContainedTurnWorkspace = async (
+  options: NodeContainedTurnWorkspaceOptions,
+): Promise<NodeContainedTurnWorkspace> =>
+  (await createNodeContainedTurnWorkspaceBackend(options, legacyWorkspaceCapabilityRetention)).workspace;
+
+/** Private construction seam for the owner composition; not a package capability. */
+export const createNodeContainedTurnWorkspaceOwnerBackend = (
+  options: NodeContainedTurnWorkspaceOptions,
+  retention: Pick<WorkspaceCapabilityRetention, "retain">,
+): Promise<NodeContainedTurnWorkspaceOwnerBackend> =>
+  createNodeContainedTurnWorkspaceBackend(options, retention);
