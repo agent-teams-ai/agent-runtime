@@ -79,6 +79,7 @@ const createAdapter = (process: FakeCodexProcess, onPrepare?: () => void) =>
         return {
           createProcess: () => ({
             custody: { custodyRef: process.custodyRef },
+            kernelCustodyId: input.custodyId,
             provider: createProvider(process),
             workspaceRef: boundary.workspaceRef,
           }),
@@ -133,9 +134,10 @@ test("preserves the prepared-attempt receiver through the Host delegated start",
       this.#process = receiverProcess;
     }
 
-    public createProcess() {
+    public createProcess(kernelCustodyId: ReturnType<typeof containedTurnIdentity>) {
       return {
         custody: { custodyRef: this.#process.custodyRef },
+        kernelCustodyId,
         provider: createProvider(this.#process),
         workspaceRef: boundary.workspaceRef,
       };
@@ -143,8 +145,9 @@ test("preserves the prepared-attempt receiver through the Host delegated start",
   }
   const adapter = new CodexAppServerCurrentKernelAdapter({
     attempts: {
-      async prepare() {
-        return new ReceiverBoundPreparedAttempt(process);
+      async prepare(input) {
+        const receiver = new ReceiverBoundPreparedAttempt(process);
+        return {createProcess: () => receiver.createProcess(input.custodyId)};
       },
     },
   });
@@ -254,10 +257,11 @@ test("rejects mismatched current-kernel and prepared-attempt identities", async 
   const prepared = kernelInput(process);
   const adapter = new CodexAppServerCurrentKernelAdapter({
     attempts: {
-      async prepare() {
+      async prepare(input) {
         return {
           createProcess: () => ({
             custody: { custodyRef: "custody:substituted" },
+            kernelCustodyId: input.custodyId,
             provider: createProvider(process),
             workspaceRef: boundary.workspaceRef,
           }),
@@ -268,4 +272,24 @@ test("rejects mismatched current-kernel and prepared-attempt identities", async 
   assert.equal((await adapter.execute(prepared.input)).kind, "indeterminate");
   assert.equal(prepared.delegatedStarts(), 1);
   assert.equal(process.requests.length, 0);
+});
+
+test("rejects missing or swapped kernel custody identity before Codex provider effect", async t => {
+  for (const row of [
+    {name: "missing", kernelCustodyId: undefined},
+    {name: "swapped", kernelCustodyId: containedTurnIdentity("custody", "custody:codex:swapped")},
+  ] as const) {
+    await t.test(row.name, async () => {
+      const process = new FakeCodexProcess(() => {});
+      const execution = kernelInput(process);
+      const adapter = new CodexAppServerCurrentKernelAdapter({attempts: {
+        async prepare() {return {createProcess: () => ({
+          custody: {custodyRef: process.custodyRef}, kernelCustodyId: row.kernelCustodyId,
+          provider: createProvider(process), workspaceRef: boundary.workspaceRef,
+        })} as never;},
+      }});
+      assert.equal((await adapter.execute(execution.input)).kind, "indeterminate");
+      assert.equal(process.requests.length, 0);
+    });
+  }
 });

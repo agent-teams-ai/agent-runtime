@@ -103,7 +103,9 @@ export const createClaudeCurrentKernelOwner = (
       records.delete(input.custodyId);
       return execute(Object.freeze({
         custodyRef: record.custodyRef,
+        kernelCustodyId: record.kernel.custodyId,
         privateProjection: record.privateProjection,
+        providerBinding: record.binding,
         workspaceRef: record.workspaceRef,
       }));
     },

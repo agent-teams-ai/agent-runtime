@@ -37,7 +37,9 @@ import type {
 
 export interface ClaudeAgentSdkKernelPrivateExecution {
   readonly custodyRef: string;
+  readonly kernelCustodyId: ContainedTurnCustodyId;
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
+  readonly providerBinding: ContainedTurnProviderBinding;
   readonly workspaceRef: string;
 }
 
@@ -177,6 +179,16 @@ const sameAdapterSnapshot = (
   left.capabilityManifestRevision === right.capabilityManifestRevision &&
   left.provider === right.provider;
 
+const sameProviderBinding = (
+  left: ContainedTurnProviderBinding,
+  right: ContainedTurnProviderBinding,
+): boolean => left.provider === right.provider &&
+  left.adapterRevision === right.adapterRevision &&
+  left.binaryRevision === right.binaryRevision &&
+  left.capabilityManifestRevision === right.capabilityManifestRevision &&
+  left.credentialBindingDigest === right.credentialBindingDigest &&
+  left.providerRouteRef === right.providerRouteRef;
+
 export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelProviderPort {
   public readonly adapterSnapshot: ContainedTurnProviderAdapterSnapshot;
   public readonly manifest: ContainedTurnCapabilityManifest;
@@ -283,6 +295,16 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     input: Parameters<ContainedTurnKernelProviderPort["execute"]>[0],
     execution: ClaudeAgentSdkKernelPrivateExecution,
   ): Promise<ContainedTurnKernelProviderObservation> {
+    const expectedProviderBinding = Object.freeze({
+      ...input.adapterSnapshot,
+      credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
+      providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
+    });
+    if (typeof execution.custodyRef !== "string" || execution.custodyRef.length === 0 ||
+        execution.kernelCustodyId !== input.custodyId ||
+        !sameProviderBinding(execution.providerBinding, expectedProviderBinding)) {
+      return indeterminate(input, "private-execution-identity-conflict");
+    }
     const clock = this.#options.clock ?? defaultClock;
     const turnTimeoutMs = positiveTurnTimeout(this.#options.turnTimeoutMs);
     const turnDeadline = new CurrentKernelTurnDeadline(clock, turnTimeoutMs);
@@ -311,11 +333,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
       ...(this.#options.interruptGraceMs === undefined ? {} : { interruptGraceMs: this.#options.interruptGraceMs }),
       manifest: {
         effectClass: this.manifest.effectClass,
-        providerBinding: {
-          ...this.adapterSnapshot,
-          credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
-          providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
-        },
+        providerBinding: expectedProviderBinding,
         supportedModes: this.manifest.supportedModes,
       },
       privateProjections: {
