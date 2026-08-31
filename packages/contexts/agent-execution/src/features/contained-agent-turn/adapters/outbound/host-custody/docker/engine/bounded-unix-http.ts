@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readlink, readdir, realpath } from "node:fs/promises";
-import { Agent, request } from "node:http";
-import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
+import { Agent, request, type ClientRequest, type IncomingMessage, type RequestOptions } from "node:http";
 import { isAbsolute, resolve as resolvePath } from "node:path";
 
 import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerEngineCall, DockerEnginePolicy } from "./docker-engine-port.js";
 import { snapshotDockerEngineCall, snapshotOwnDataObject } from "./docker-boundary-snapshot.js";
-import { assertDockerUnixPeerPlatformSupported, connectAuthenticatedUnixPeer } from "./docker-unix-peer.js";
-import type { DockerPeerConnector } from "./docker-unix-peer.js";
+import { assertDockerUnixPeerPlatformSupported, connectAuthenticatedUnixPeer, type DockerPeerConnector } from "./docker-unix-peer.js";
 import { openBoundedUnixHijack, type UnixHijackChannel } from "./bounded-unix-hijack.js";
 
 const HOST_BOOT_ID = "/proc/sys/kernel/random/boot_id";
@@ -274,13 +272,10 @@ export class BoundedUnixHttpClient {
     endpointObserver: (policy: EndpointPolicy) => Promise<DockerEndpointObservation> = observeEndpoint,
     peerConnector: DockerPeerConnector = connectAuthenticatedUnixPeer,
   ) {
-    const snapshot = snapshotOwnDataObject(policy, [
-      "daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode",
-      "socketOwnerGid", "socketOwnerUid", "socketPath",
-    ], [
-      "daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode",
-      "socketOwnerGid", "socketOwnerUid", "socketPath",
-    ], "invalid-create-request") as EndpointPolicy;
+    const snapshot = snapshotOwnDataObject(policy,
+      ["daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode", "socketOwnerGid", "socketOwnerUid", "socketPath"],
+      ["daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode", "socketOwnerGid", "socketOwnerUid", "socketPath"],
+      "invalid-create-request") as EndpointPolicy;
     if (typeof snapshot.daemonPidFilePath !== "string" || typeof snapshot.socketPath !== "string" || [
       snapshot.daemonPidFileMode, snapshot.daemonPidFileOwnerGid, snapshot.daemonPidFileOwnerUid,
       snapshot.socketMode, snapshot.socketOwnerGid, snapshot.socketOwnerUid,
@@ -329,6 +324,7 @@ export class BoundedUnixHttpClient {
       throw new DockerEngineError("protocol-violation");
     }
     const custody = await this.#observeCustody();
+    this.#checkCall(call);
     const connection = await this.#connectPeer(this.#policy, custody, call, async () => this.#observeCustody());
     try {this.#checkCall(call);} catch (error) {
       try {connection.socket.destroy();} catch {}
@@ -396,11 +392,11 @@ export class BoundedUnixHttpClient {
     if ((input.body?.byteLength ?? 0) > MAX_REQUEST_BYTES) {
       throw new DockerEngineError("invalid-create-request");
     }
-    if (!input.path.startsWith("/") || input.path.length > 4096 || input.path.includes("\0") ||
-        input.path.includes("\r") || input.path.includes("\n")) {
+    if (!input.path.startsWith("/") || input.path.length > 4096 || /[\0\r\n]/u.test(input.path)) {
       throw new DockerEngineError("protocol-violation");
     }
     const custody = await this.#observeCustody();
+    this.#checkCall(call);
     const connection = await this.#connectPeer(this.#policy, custody, call, async () => this.#observeCustody());
     try {this.#checkCall(call);} catch (error) {
       try {connection.socket.destroy();} catch {}

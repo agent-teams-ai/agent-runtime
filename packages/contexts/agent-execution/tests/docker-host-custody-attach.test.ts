@@ -23,6 +23,10 @@ const call = (signal = new AbortController().signal, milliseconds = 2_000) => ({
   signal,
 });
 
+const RELEASE_SETTLEMENT_TIMEOUT_MS = 1_000;
+const scheduleRealTimeout = setTimeout;
+const clearRealTimeout = clearTimeout;
+
 const multiplex = (stream: 1 | 2, payload: Uint8Array): Buffer => {
   const header = Buffer.alloc(8); header[0] = stream; header.writeUInt32BE(payload.byteLength, 4);
   return Buffer.concat([header, payload]);
@@ -62,8 +66,26 @@ const fixture = async (
     socket: true, symbolicLink: false, uid: 41n,
   };
   let exactSocket: Socket | undefined;
+  let connectCount = 0;
   let releaseCount = 0;
+  let settleRelease!: () => void;
+  const released = new Promise<void>(resolve => {settleRelease = resolve;});
+  const releaseSettled = async (): Promise<void> => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const outcome = await Promise.race([
+        released.then(() => "released" as const),
+        new Promise<"timed-out">(resolve => {
+          timeout = scheduleRealTimeout(() => {resolve("timed-out");}, RELEASE_SETTLEMENT_TIMEOUT_MS);
+        }),
+      ]);
+      assert.equal(outcome, "released", "release did not settle within the bounded timeout");
+    } finally {
+      if (timeout !== undefined) {clearRealTimeout(timeout);}
+    }
+  };
   const connector = async () => {
+    connectCount += 1;
     const socket = createConnection(socketPath);
     await once(socket, "connect");
     exactSocket = socket;
@@ -71,6 +93,7 @@ const fixture = async (
     return {release: async () => {
       releaseCount += 1;
       socket.destroy();
+      settleRelease();
     }, socket};
   };
   const client = new BoundedUnixHttpClient({
@@ -80,9 +103,14 @@ const fixture = async (
   }, options.requestFactory, async () => options.observe?.(observation) ?? observation, connector);
   return {
     client,
-    close: async () => {server.close(); await once(server, "close"); await rm(root, {force: true, recursive: true});},
+    close: async () => {
+      exactSocket?.destroy();
+      server.close(); await once(server, "close"); await rm(root, {force: true, recursive: true});
+    },
+    get connectCount() {return connectCount;},
     get exactSocket() {return exactSocket;},
     get releaseCount() {return releaseCount;},
+    releaseSettled,
   };
 };
 
@@ -212,7 +240,7 @@ test("channel writes recheck an expired deadline before an overdue timer can run
         context.mock.timers.setTime(now + 1_001);
         const attempted = seam === "write" ? channel.write(Buffer.from("must-not-write")) : channel.closeInput();
         await assert.rejects(attempted, {code: "deadline-exceeded"});
-        await new Promise<void>(resolve => {setImmediate(resolve);});
+        await current.releaseSettled();
         assert.equal(input.byteLength, 0);
         assert.equal(current.releaseCount, 1);
         await channel.close();
@@ -352,9 +380,12 @@ test("final Unix request and hijack seams recheck abort and frozen deadlines aft
             if (mode === "abort") {controller.abort();} else {context.mock.timers.tick(1_001);}
             releaseWait();
             await assert.rejects(opening, {code: mode === "abort" ? "aborted" : "deadline-exceeded"});
-            await new Promise<void>(resolve => {setImmediate(resolve);});
+            if (awaited === "peer") {
+              await current.releaseSettled();
+            }
             assert.equal(requestObserved, false);
-            assert.equal(current.releaseCount, 1);
+            assert.equal(current.connectCount, awaited === "peer" ? 1 : 0);
+            assert.equal(current.releaseCount, awaited === "peer" ? 1 : 0);
           } finally {
             releaseWait();
             context.mock.timers.reset();

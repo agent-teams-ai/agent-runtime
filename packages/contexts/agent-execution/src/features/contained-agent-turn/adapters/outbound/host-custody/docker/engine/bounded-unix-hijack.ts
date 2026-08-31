@@ -1,6 +1,6 @@
 import { Agent } from "node:http";
 import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
-import type { Duplex } from "node:stream";
+import type { Socket } from "node:net";
 
 import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerEngineCall } from "./docker-engine-port.js";
@@ -10,7 +10,7 @@ const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
 const ignoreSocketError = (): void => {};
 
 export interface UnixHijackChannel {
-  readonly input: Duplex;
+  readonly input: Socket;
   readonly output: AsyncIterable<Uint8Array>;
   close(): Promise<void>;
 }
@@ -21,7 +21,7 @@ interface HijackInput {
   readonly path: string;
   readonly release: () => Promise<void>;
   readonly request: (options: RequestOptions) => ClientRequest;
-  readonly socket: Duplex;
+  readonly socket: Socket;
   readonly verifyCustody: () => Promise<void>;
 }
 
@@ -122,11 +122,12 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
     try {response.destroy();} catch {}
     fail(new DockerEngineError("protocol-violation"));
   });
-  operation.once("upgrade", (response, socket, head) => {
+  operation.once("upgrade", (response, upgradedSocket, head) => {
     const accept = async (): Promise<void> => {
       try {
         validateUpgrade(response);
-        if (socket !== input.socket) {throw new DockerEngineError("endpoint-custody-lost");}
+        if (upgradedSocket !== input.socket) {throw new DockerEngineError("endpoint-custody-lost");}
+        const socket = input.socket;
         establishmentSocketError = error => {fail(error);};
         establishmentSocketClose = () => {fail(failure(input.call, expired || sessionExpired));};
         socket.once("error", establishmentSocketError);
@@ -147,16 +148,18 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
             throw new DockerEngineError("deadline-exceeded");
           }
         };
-        const socketWrite = socket.write;
-        const socketEnd = socket.end;
-        socket.write = ((...arguments_: unknown[]) => {
-          checkSessionCall();
-          return Reflect.apply(socketWrite, socket, arguments_) as boolean;
-        }) as Duplex["write"];
-        socket.end = ((...arguments_: unknown[]) => {
-          checkSessionCall();
-          return Reflect.apply(socketEnd, socket, arguments_) as Duplex;
-        }) as Duplex["end"];
+        socket.write = new Proxy(socket.write, {
+          apply: (target, _thisArgument, arguments_) => {
+            checkSessionCall();
+            return Reflect.apply(target, socket, arguments_);
+          },
+        });
+        socket.end = new Proxy(socket.end, {
+          apply: (target, _thisArgument, arguments_) => {
+            checkSessionCall();
+            return Reflect.apply(target, socket, arguments_);
+          },
+        });
         if (head.byteLength > 0) {socket.unshift(head);}
         sessionTimer = setTimeout(() => {sessionExpired = true; abort();}, remaining);
         sessionTimer.unref();
