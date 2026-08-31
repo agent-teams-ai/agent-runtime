@@ -144,10 +144,19 @@ const settleWithin = <Value>(promise: Promise<Value>, milliseconds: number): Pro
   | { readonly error: unknown; readonly kind: "rejected" }
   | { readonly kind: "timed-out" }
 > => new Promise(resolve => {
-  const timer = setTimeout(() => {resolve({ kind: "timed-out" });}, milliseconds);
+  let settled = false;
+  const settle = (outcome:
+    | { readonly kind: "fulfilled"; readonly value: Value }
+    | { readonly error: unknown; readonly kind: "rejected" }
+    | { readonly kind: "timed-out" }): void => {
+    if (settled) {return;}
+    settled = true;
+    resolve(outcome);
+  };
+  const timer = setTimeout(() => {settle({ kind: "timed-out" });}, milliseconds);
   void promise.then(
-    value => {clearTimeout(timer); resolve({ kind: "fulfilled", value });},
-    error => {clearTimeout(timer); resolve({ error, kind: "rejected" });},
+    value => {clearTimeout(timer); return settle({ kind: "fulfilled", value });},
+    error => {clearTimeout(timer); return settle({ error, kind: "rejected" });},
   );
 });
 

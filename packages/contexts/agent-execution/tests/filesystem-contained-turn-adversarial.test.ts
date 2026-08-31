@@ -273,7 +273,7 @@ linuxDurableDirectoryTest("artifact startup scavenging cannot move an active CAS
   await writeFile(join(layout.campaignRoot, "transaction-start"), "start", { flag: "wx" });
   await waitForFile(join(layout.campaignRoot, "transaction-ready"));
 
-  let reportContention = (): void => undefined;
+  let reportContention!: () => void;
   const contention = new Promise<void>(resolve => {reportContention = resolve;});
   const restarted = createNodeContainedTurnArtifacts({
     ...layout.artifactOptions,
@@ -312,7 +312,7 @@ linuxDurableDirectoryTest("workspace startup scavenging cannot move an active me
   await writeFile(join(layout.campaignRoot, "transaction-start"), "start", { flag: "wx" });
   await waitForFile(join(layout.campaignRoot, "transaction-ready"));
 
-  let reportContention = (): void => undefined;
+  let reportContention!: () => void;
   const contention = new Promise<void>(resolve => {reportContention = resolve;});
   const restarted = createNodeContainedTurnWorkspace({
     ...layout.workspaceOptions,

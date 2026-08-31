@@ -65,19 +65,20 @@ export const disposableRoot = async (): Promise<string> => {
   return root;
 };
 
+const executionStopped = async (pid: number): Promise<boolean> => {
+  try {
+    const statText = await readFile(`/proc/${pid}/stat`, "utf8");
+    const commandEnd = statText.lastIndexOf(")");
+    const state = commandEnd < 0 ? undefined : statText.slice(commandEnd + 2, commandEnd + 3);
+    return state === "X" || state === "Z";
+  } catch (error) {
+    const code = Reflect.get(error as object, "code");
+    return code === "ENOENT" || code === "ESRCH";
+  }
+};
+
 afterEach(async () => {
   const trackedPids = [...childrenToStop];
-  const executionStopped = async (pid: number): Promise<boolean> => {
-    try {
-      const statText = await readFile(`/proc/${pid}/stat`, "utf8");
-      const commandEnd = statText.lastIndexOf(")");
-      const state = commandEnd < 0 ? undefined : statText.slice(commandEnd + 2, commandEnd + 3);
-      return state === "X" || state === "Z";
-    } catch (error) {
-      const code = Reflect.get(error as object, "code");
-      return code === "ENOENT" || code === "ESRCH";
-    }
-  };
   const cleanupDeadline = performance.now() + 2_000;
   let remaining = trackedPids;
   do {

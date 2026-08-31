@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines -- Keeping this contained-turn filesystem acceptance fixture intact preserves its shared lifecycle setup. */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
