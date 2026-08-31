@@ -267,7 +267,20 @@ test("PostgreSQL current owners durably claim once through real Codex and Claude
           assert.equal(host.starts, 1);
           assert.equal(result.status, "observed");
           assert.ok(result.status === "observed" && ["reconcile_required", "succeeded"].includes(result.turn.status));
-          assert.ok(host.containments > 0);
+          const completed = await durable.read({operationId: result.turn.operationId, scope: request.scope});
+          assert.ok(completed);
+          if (result.turn.status === "succeeded") {
+            assert.equal(completed.providerExecution.kind, "closed");
+            assert.equal(completed.terminal.kind, "final");
+            assert.equal(host.containments, 0, "proved Host closure needs no outer containment request");
+          } else {
+            assert.equal(result.turn.status, "reconcile_required");
+            assert.ok(
+              host.containments > 0 || completed.reconciliation.kind === "required" ||
+                completed.closureRecovery.kind === "required",
+              "indeterminate execution requires containment or durable reconciliation evidence",
+            );
+          }
 
           const secondSubmit = await feature.submit.execute(request);
           assert.equal(secondSubmit.status, "observed");
