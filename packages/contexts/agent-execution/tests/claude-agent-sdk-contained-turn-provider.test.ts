@@ -25,6 +25,9 @@ import {
 import {
   createNodeContainedTurnArtifacts,
 } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-artifacts.js";
+import {
+  createNodeContainedTurnWorkspace,
+} from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.js";
 import type {
   CustodiedProviderProcess,
   CustodiedSdkProcess,
@@ -351,7 +354,8 @@ class ManualClock implements ClaudeAgentSdkControlClock {
 }
 
 const waitFor = async (condition: () => boolean): Promise<void> => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
     if (condition()) {return;}
     await nextTurn();
   }
@@ -706,30 +710,56 @@ test("owns forced iterator drain and rejects late output before returning", asyn
 test("external credential projection can never enter sealed workspace artifacts", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-exclusion-"));
   t.after(async () => {await import("node:fs/promises").then(fs => fs.rm(root, { recursive: true, force: true }));});
-  const workspace = join(root, "workspace");
+  const canonicalProjectRoot = join(root, "canonical-project");
+  const disposableRoot = join(root, "disposable");
+  const workspaceRoot = join(disposableRoot, "workspaces");
   const projectionRoot = join(root, "projection");
-  const artifactsRoot = join(root, "artifacts");
+  const artifactsRoot = join(disposableRoot, "artifacts");
+  const rehydrationRoot = join(disposableRoot, "rehydration");
   await Promise.all([
-    mkdir(workspace),
-    mkdir(join(projectionRoot, "config"), { recursive: true }),
-    mkdir(join(projectionRoot, "home"), { recursive: true }),
-    mkdir(join(projectionRoot, "tmp"), { recursive: true }),
+    mkdir(disposableRoot, { mode: 0o700 }),
+    mkdir(projectionRoot, { mode: 0o700 }),
   ]);
-  await writeFile(join(workspace, "deliverable.txt"), "DELIVERABLE_ONLY");
+  await Promise.all([
+    mkdir(canonicalProjectRoot, { mode: 0o700 }),
+    mkdir(workspaceRoot, { mode: 0o700 }),
+    mkdir(artifactsRoot, { mode: 0o700 }),
+    mkdir(rehydrationRoot, { mode: 0o700 }),
+    mkdir(join(projectionRoot, "config"), { mode: 0o700 }),
+    mkdir(join(projectionRoot, "home"), { mode: 0o700 }),
+    mkdir(join(projectionRoot, "tmp"), { mode: 0o700 }),
+  ]);
+  const scope = Object.freeze({ projectId: "project:artifact-test", tenantId: "tenant:artifact-test" });
+  const operationId = "operation:artifact-test";
+  const workspaceOwner = await createNodeContainedTurnWorkspace({
+    canonicalProjectRoot,
+    disposableRoot,
+    root: workspaceRoot,
+  });
+  const created = await workspaceOwner.create({ operationId, scope });
+  await writeFile(join(created.workspaceRef, "deliverable.txt"), "DELIVERABLE_ONLY");
   await writeFile(join(projectionRoot, "config", ".credentials.json"), "SYNTHETIC_CREDENTIAL_BYTES");
   const projection = createClaudeAgentSdkPrivateProjection({
     configRoot: join(projectionRoot, "config"), homeRoot: join(projectionRoot, "home"),
-    projectionRef: "projection:artifact-test", tempRoot: join(projectionRoot, "tmp"), workspaceRef: workspace,
+    projectionRef: "projection:artifact-test", tempRoot: join(projectionRoot, "tmp"),
+    workspaceRef: created.workspaceRef,
   });
   assert.equal(projection.environment.CLAUDE_CONFIG_DIR, join(projectionRoot, "config"));
-  const artifacts = await createNodeContainedTurnArtifacts({ root: artifactsRoot });
-  await artifacts.seal({ operationId: "operation:artifact-test", output: [], workspaceRef: workspace });
+  const artifacts = await createNodeContainedTurnArtifacts({
+    canonicalProjectRoot,
+    disposableRoot,
+    rehydrationRoot,
+    root: artifactsRoot,
+    workspaceRoot,
+  });
+  await artifacts.seal({ operationId, output: [], scope, workspaceRef: created.workspaceRef });
   const files = await readdir(artifactsRoot, { recursive: true });
   const contents = await Promise.all(files.map(async file => {
     try {return await readFile(join(artifactsRoot, file), "utf8");} catch {return "";}
   }));
-  assert.match(contents.join("\n"), /DELIVERABLE_ONLY/u);
-  assert.doesNotMatch(contents.join("\n"), /SYNTHETIC_CREDENTIAL_BYTES|\.credentials\.json/u);
+  const artifactEvidence = [...files, ...contents].join("\n");
+  assert.match(artifactEvidence, /DELIVERABLE_ONLY/u);
+  assert.doesNotMatch(artifactEvidence, /SYNTHETIC_CREDENTIAL_BYTES|\.credentials\.json/u);
 });
 
 const kernelAdapterSnapshot = Object.freeze({
@@ -1035,6 +1065,7 @@ test("current-kernel adapter drains a callback already started before its resolv
     privateExecutions: {
       consume: async (_request, consume) => {
         void consume({ privateProjection, workspaceRef });
+        await waitFor(() => iteratorStarted);
         throw new Error("synthetic resolver rejection after callback");
       },
     },
