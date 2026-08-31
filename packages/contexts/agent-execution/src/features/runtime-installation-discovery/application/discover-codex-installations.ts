@@ -1,12 +1,11 @@
-import { createHash } from "node:crypto";
-
 import type {
   DiscoverCodexInstallations,
   DiscoverCodexInstallationsResult,
   InstallationAliasObservation,
-  RuntimeInstallationDiagnostic,
-} from "../contracts/runtime-installation-observation.js";
+  CodexInstallationDiagnostic,
+} from "./models/installation-observation.js";
 import type { ExecutableFileObserver } from "./ports/outbound/executable-file-observation.js";
+import type { StableIdentityHasher } from "./ports/outbound/stable-identity-hashing.js";
 
 const diagnosticCode = {
   denied: "candidate_denied",
@@ -15,14 +14,12 @@ const diagnosticCode = {
   unreadable: "candidate_unreadable",
 } as const;
 
-const stableRef = (identity: string): string =>
-  `codex-installation:${createHash("sha256").update(identity).digest("hex")}`;
-
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
 export const createDiscoverCodexInstallations = (
   fileObserver: ExecutableFileObserver,
+  identityHasher: StableIdentityHasher,
 ): DiscoverCodexInstallations => ({
   async execute(input, options): Promise<DiscoverCodexInstallationsResult> {
     options?.signal?.throwIfAborted();
@@ -31,7 +28,7 @@ export const createDiscoverCodexInstallations = (
     }
 
     const grouped = new Map<string, InstallationAliasObservation[]>();
-    const diagnostics: RuntimeInstallationDiagnostic[] = [];
+    const diagnostics: CodexInstallationDiagnostic[] = [];
     const candidates = [...input.candidates].toSorted((left, right) =>
       compareText(left.displayPath, right.displayPath),
     );
@@ -72,7 +69,7 @@ export const createDiscoverCodexInstallations = (
         aliases: aliases.toSorted((left, right) =>
           compareText(left.displayPath, right.displayPath),
         ),
-        installationRef: stableRef(identity),
+        installationRef: `codex-installation:${identityHasher.digest(identity)}`,
         status: "found_unverified" as const,
       }))
       .toSorted((left, right) =>
