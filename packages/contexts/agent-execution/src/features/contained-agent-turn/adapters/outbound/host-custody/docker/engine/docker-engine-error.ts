@@ -18,6 +18,7 @@ export type DockerEngineFailureCode =
   | "stream-too-large"
   | "stream-truncated"
   | "terminal-observation-unknown"
+  | "unsupported-platform"
   | "endpoint-custody-lost";
 
 const messages: Readonly<Record<DockerEngineFailureCode, string>> = Object.freeze({
@@ -40,6 +41,7 @@ const messages: Readonly<Record<DockerEngineFailureCode, string>> = Object.freez
   "stream-too-large": "Docker Engine stream exceeded its bound",
   "stream-truncated": "Docker Engine stream ended inside a frame",
   "terminal-observation-unknown": "Docker container terminal observation is unknown",
+  "unsupported-platform": "Docker Engine Unix peer custody is unsupported on this platform",
   "endpoint-custody-lost": "Docker Engine Unix socket custody was lost",
 });
 

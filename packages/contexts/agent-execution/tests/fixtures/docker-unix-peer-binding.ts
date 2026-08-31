@@ -59,6 +59,12 @@ export const verifyProductionUnixPeerBinding = async (
     socketOwnerUid: endpointPolicy.socketOwnerUid,
     socketPath,
   });
+  if (process.platform !== "linux") {
+    await assert.rejects(client.buffered({ call: call(), method: "GET", path: "/v1.47/info" }), {
+      code: "unsupported-platform",
+    });
+    return;
+  }
   const response = await client.buffered({ call: call(), method: "GET", path: "/v1.47/info" });
   assert.equal(Buffer.from(response.body).toString("utf8"), body.toString("utf8"));
 };

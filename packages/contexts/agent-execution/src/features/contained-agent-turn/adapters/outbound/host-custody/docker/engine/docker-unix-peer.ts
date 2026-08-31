@@ -11,6 +11,10 @@ import type { EndpointPolicy, SocketCustody } from "./bounded-unix-http.js";
 const MAX_CALL_MS = 120_000;
 const LINUX_O_PATH = 0x20_0000;
 
+export const assertDockerUnixPeerPlatformSupported = (platform: string): void => {
+  if (platform !== "linux") {throw new DockerEngineError("unsupported-platform");}
+};
+
 export interface AuthenticatedUnixConnection {
   readonly release: () => Promise<void>;
   readonly socket: Socket;
@@ -55,6 +59,7 @@ const awaitConnection = async (socket: Socket, call: DockerEngineCall): Promise<
   });
 
 export const connectAuthenticatedUnixPeer: DockerPeerConnector = async (policy, custody, call, observeCustody) => {
+  assertDockerUnixPeerPlatformSupported(process.platform);
   const parent = await open(
     dirname(policy.socketPath),
     fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +17,7 @@ import {
   parseDockerMultiplexedStream,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
 import { BoundedUnixHttpClient } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-http.js";
+import { assertDockerUnixPeerPlatformSupported } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-unix-peer.js";
 import { snapshotDockerEngineCall } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.js";
 import type { DockerEndpointObservation } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-http.js";
 import type {
@@ -345,7 +346,7 @@ const syntheticDaemon = (): SyntheticDaemon => {
 };
 
 const disposable = async (): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), "ar-docker-engine-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "ar-docker-engine-")));
   await mkdir(join(root, "private", "operation"), { recursive: true });
   await mkdir(join(root, "workspaces", "operation"), { recursive: true });
   return root;
@@ -778,6 +779,10 @@ test("Unix transport holds a pinned endpoint and authenticates the daemon genera
 
 test("production Unix peer binding reaches only the descriptor-held daemon socket", async t => {
   await verifyProductionUnixPeerBinding(t, disposable, policy, call);
+});
+
+test("descriptor-held Unix peer binding is typed unsupported off Linux", () => {
+  assert.throws(() => {assertDockerUnixPeerPlatformSupported("darwin");}, { code: "unsupported-platform" });
 });
 
 test("Fake parity covers canonical mounts, exact adoption, ambiguous effects, endpoint custody, and terminal logs", async t => {

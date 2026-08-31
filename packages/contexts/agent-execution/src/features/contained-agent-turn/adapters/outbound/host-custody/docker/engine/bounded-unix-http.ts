@@ -7,7 +7,7 @@ import { isAbsolute, resolve as resolvePath } from "node:path";
 import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerEngineCall, DockerEnginePolicy } from "./docker-engine-port.js";
 import { snapshotDockerEngineCall, snapshotOwnDataObject } from "./docker-boundary-snapshot.js";
-import { connectAuthenticatedUnixPeer } from "./docker-unix-peer.js";
+import { assertDockerUnixPeerPlatformSupported, connectAuthenticatedUnixPeer } from "./docker-unix-peer.js";
 import type { DockerPeerConnector } from "./docker-unix-peer.js";
 
 const HOST_BOOT_ID = "/proc/sys/kernel/random/boot_id";
@@ -142,6 +142,7 @@ const observeDaemon = async (policy: EndpointPolicy): Promise<{
 };
 
 const observeEndpoint = async (policy: EndpointPolicy): Promise<DockerEndpointObservation> => {
+  assertDockerUnixPeerPlatformSupported(process.platform);
   const [canonicalSocketPath, facts, rawBootId] = await Promise.all([
     realpath(policy.socketPath),
     lstat(policy.socketPath, { bigint: true }),
