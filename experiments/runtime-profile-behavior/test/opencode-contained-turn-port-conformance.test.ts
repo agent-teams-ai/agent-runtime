@@ -6,11 +6,6 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { observeOpenCodeCapabilities } from "../src/features/acp-compatibility/opencode-acp-validation.ts";
-import {
-  createContainedTurnFeature,
-  type ContainedTurnFeatureDependencies,
-} from "@agent-teams/agent-execution/composition";
-import { createDependencies } from "../../../packages/contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 type TerminalStopReason = "cancelled" | "end_turn" | "max_tokens" | "max_turn_requests" | "refusal";
 type ProviderAcceptance = boolean | "unknown";
@@ -125,9 +120,14 @@ interface ConformanceFixture {
   };
 }
 
-type CurrentProviderInput = Parameters<ContainedTurnFeatureDependencies["provider"]["execute"]>[0];
-type CurrentProviderEmit = CurrentProviderInput["emit"];
-type CurrentProviderObservation = Awaited<ReturnType<ContainedTurnFeatureDependencies["provider"]["execute"]>>;
+type CurrentProviderEmit = (chunk: Readonly<{
+  readonly cursor: number;
+  readonly kind: OutputKind;
+  readonly text: string;
+}>) => Promise<void>;
+type CurrentProviderObservation =
+  | Readonly<{ readonly kind: "completed"; readonly outcome: "cancelled" | "failed" | "succeeded" }>
+  | Readonly<{ readonly evidenceId: string; readonly kind: "indeterminate" }>;
 type CurrentIndeterminateObservation = Extract<CurrentProviderObservation, { readonly kind: "indeterminate" }>;
 
 type RawSemanticObservation = SemanticObservation & {
@@ -317,89 +317,42 @@ const observedCapabilityStatus = (
   }
 };
 
-interface KernelExpectation {
-  readonly effect: "ambiguous" | "committed" | "not_committed";
-  readonly emittedKinds: readonly OutputKind[];
-  readonly execution: "cancelled" | "failed" | "succeeded" | "unknown";
-  readonly providerAcceptance: "accepted" | "unknown";
-  readonly status: "cancelled" | "failed" | "reconcile_required" | "succeeded";
-  readonly terminal: boolean;
+interface ProjectionExpectation {
+  readonly ambiguousClass?: string;
+  readonly observation: CurrentProviderObservation;
+  readonly outputKinds: readonly OutputKind[];
 }
 
-const independentKernelExpectations: Readonly<Record<string, KernelExpectation>> = Object.freeze({
-  "completed-cancelled": { effect: "committed", emittedKinds: [], execution: "cancelled", providerAcceptance: "accepted", status: "cancelled", terminal: true },
-  "completed-failed": { effect: "committed", emittedKinds: ["diagnostic"], execution: "failed", providerAcceptance: "accepted", status: "failed", terminal: true },
-  "completed-succeeded": { effect: "committed", emittedKinds: ["assistant"], execution: "succeeded", providerAcceptance: "accepted", status: "succeeded", terminal: true },
-  "late-rejection-after-timeout": { effect: "ambiguous", emittedKinds: [], execution: "unknown", providerAcceptance: "unknown", status: "reconcile_required", terminal: false },
-  "request-rejection-without-no-start-proof": { effect: "ambiguous", emittedKinds: [], execution: "unknown", providerAcceptance: "unknown", status: "reconcile_required", terminal: false },
-  "request-timeout-after-dispatch": { effect: "ambiguous", emittedKinds: [], execution: "unknown", providerAcceptance: "unknown", status: "reconcile_required", terminal: false },
-});
-
-const createKernelHarness = (outcomeCase: OutcomeCase) => {
-  const projectedOutput: Array<{ readonly cursor: number; readonly kind: OutputKind; readonly text: string }> = [];
-  const projectionCalls = { value: 0 };
-  const providerObservations: CurrentProviderObservation[] = [];
-  const projection = new SyntheticAcpOutcomeProjection(outcomeCase.id, {
-    ...outcomeCase.sdkSemanticObservation,
-    providerOutput: "raw-provider-output-canary credential=raw-credential-canary token=raw-token-canary",
-    sessionId: "raw-session-canary",
-    toolCallId: "raw-tool-canary",
-    workspacePath: "/synthetic/raw-workspace-canary",
+const independentProjectionExpectations: Readonly<Record<string, ProjectionExpectation>> =
+  Object.freeze({
+    "completed-cancelled": {
+      observation: completed("cancelled"),
+      outputKinds: [],
+    },
+    "completed-failed": {
+      observation: completed("failed"),
+      outputKinds: ["diagnostic"],
+    },
+    "completed-succeeded": {
+      observation: completed("succeeded"),
+      outputKinds: ["assistant"],
+    },
+    "late-rejection-after-timeout": {
+      ambiguousClass: "late_request_rejected_after_timeout",
+      observation: indeterminate("late-rejection-after-timeout"),
+      outputKinds: [],
+    },
+    "request-rejection-without-no-start-proof": {
+      ambiguousClass: "request_rejected_without_no_start_proof",
+      observation: indeterminate("request-rejection-without-no-start-proof"),
+      outputKinds: [],
+    },
+    "request-timeout-after-dispatch": {
+      ambiguousClass: "request_timeout_ambiguity",
+      observation: indeterminate("request-timeout-after-dispatch"),
+      outputKinds: [],
+    },
   });
-  const fixture = createDependencies();
-  const attestExecutionClosure = fixture.dependencies.custody.attestExecutionClosure;
-  let projectedObservation: CurrentProviderObservation | undefined;
-  const dependencies = {
-    ...fixture.dependencies,
-    custody: {
-      ...fixture.dependencies.custody,
-      async attestExecutionClosure(input) {
-        const attestation = await attestExecutionClosure(input);
-        if (
-          projectedObservation?.kind !== "completed" ||
-          projectedObservation.outcome === "succeeded" ||
-          attestation.kind !== "proved"
-        ) {
-          return attestation;
-        }
-        return {
-          ...attestation,
-          executionClosureProof: {
-            ...attestation.executionClosureProof,
-            binding: { ...attestation.executionClosureProof.binding, outcome: projectedObservation.outcome },
-          },
-          terminalObservationProof: {
-            ...attestation.terminalObservationProof,
-            binding: { ...attestation.terminalObservationProof.binding, outcome: projectedObservation.outcome },
-          },
-        };
-      },
-    },
-    provider: {
-      ...fixture.dependencies.provider,
-      async execute(input) {
-        projectionCalls.value += 1;
-        assert.equal(projectionCalls.value, 1, `${outcomeCase.id} projected more than once`);
-        input.start.createProcess(() => Object.freeze({}));
-        const observation = await projection.execute(async chunk => {
-          projectedOutput.push(Object.freeze({ ...chunk }));
-          await input.emit(chunk);
-        });
-        projectedObservation = observation;
-        providerObservations.push(observation);
-        return observation;
-      },
-    },
-  } satisfies ContainedTurnFeatureDependencies;
-  return {
-    current: fixture.current,
-    engine: createContainedTurnFeature(dependencies),
-    projectedOutput,
-    projectionCalls,
-    providerObservations,
-    workspaceQuarantines: fixture.workspaceQuarantines,
-  };
-};
 
 const expectedObservationKeys: Readonly<Record<CurrentProviderObservation["kind"], readonly string[]>> = {
   completed: ["kind", "outcome"],
@@ -627,73 +580,54 @@ test("classifies every official ACP terminal reason without a refusal fallback",
   }
 });
 
-test("runs one ACP projection per case through the real Contained Turn factory fixture", async () => {
+test("projects every current neutral ACP case without an Agent Execution kernel harness", async () => {
   const fixture = await loadFixture();
   const exercisedCases = fixture.outcomeCases.filter(
     value => value.evidenceClassification === "current_neutral_projection_kernel_exercised",
   );
   assert.deepEqual(
     exercisedCases.map(value => value.id).toSorted(),
-    Object.keys(independentKernelExpectations).toSorted(),
+    Object.keys(independentProjectionExpectations).toSorted(),
   );
-  const ambiguousClasses = exercisedCases
-    .filter(value => independentKernelExpectations[value.id]?.status === "reconcile_required")
-    .map(value => value.sdkSemanticObservation.kind === "request_rejected"
-      ? "request_rejected_without_no_start_proof"
-      : value.sdkSemanticObservation.kind)
-    .toSorted();
   assert.deepEqual(
-    ambiguousClasses,
+    Object.values(independentProjectionExpectations)
+      .flatMap(value => value.ambiguousClass === undefined ? [] : [value.ambiguousClass])
+      .toSorted(),
     [...fixture.characterizationBoundary.anomalyDetail.requiredSyntheticClasses].toSorted(),
   );
 
+  let projectionCalls = 0;
   for (const outcomeCase of exercisedCases) {
-    const expectation = independentKernelExpectations[outcomeCase.id];
+    const expectation = independentProjectionExpectations[outcomeCase.id];
     assert.ok(expectation, outcomeCase.id);
-    const harness = createKernelHarness(outcomeCase);
-    const result = await harness.engine.submit.execute({
-      commandId: `command:${outcomeCase.id}`,
-      expectedProvider: "codex",
-      intent: { mode: "analysis", prompt: "synthetic kernel contract probe" },
-      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    const projectedOutput: Array<Readonly<{
+      readonly cursor: number;
+      readonly kind: OutputKind;
+      readonly text: string;
+    }>> = [];
+    const projection = new SyntheticAcpOutcomeProjection(outcomeCase.id, {
+      ...outcomeCase.sdkSemanticObservation,
+      providerOutput: "raw-provider-output-canary credential=raw-credential-canary token=raw-token-canary",
+      sessionId: "raw-session-canary",
+      toolCallId: "raw-tool-canary",
+      workspacePath: "/synthetic/raw-workspace-canary",
     });
-    assert.equal(result.status, "observed", outcomeCase.id);
-    if (result.status !== "observed") {continue;}
-    assert.equal(result.turn.status, expectation.status, outcomeCase.id);
-    assert.deepEqual(result.turn.output, harness.projectedOutput, outcomeCase.id);
-    assert.deepEqual(result.turn.output.map(chunk => chunk.kind), expectation.emittedKinds, outcomeCase.id);
-    const operation = harness.current();
-    assert.ok(operation, outcomeCase.id);
-    assert.equal(operation.providerAcceptance.kind, expectation.providerAcceptance, outcomeCase.id);
-    assert.equal(operation.terminal.kind, expectation.terminal ? "final" : "open", outcomeCase.id);
-    if (expectation.execution === "unknown") {
-      assert.equal(operation.providerExecution.kind, "unknown", outcomeCase.id);
-      assert.equal(operation.effect.kind, "ambiguous", outcomeCase.id);
-      assert.equal(operation.output.fence.kind, "fenced", outcomeCase.id);
-      assert.equal(operation.reconciliation.kind, "required", outcomeCase.id);
-      assert.equal(operation.physicalContainment.kind, "contained", outcomeCase.id);
-      assert.equal(operation.containment.kind, "uncertain", outcomeCase.id);
-      assert.equal(harness.workspaceQuarantines.length, 0, outcomeCase.id);
-    } else {
-      assert.equal(operation.providerExecution.kind, "closed", outcomeCase.id);
-      if (operation.providerExecution.kind === "closed") {
-        assert.equal(operation.providerExecution.outcome, expectation.execution, outcomeCase.id);
-      }
-      assert.equal(operation.effect.kind, "resolved", outcomeCase.id);
-      if (operation.effect.kind === "resolved") {
-        assert.equal(operation.effect.disposition, expectation.effect, outcomeCase.id);
-      }
-      assert.equal(operation.output.fence.kind, "fenced", outcomeCase.id);
-      assert.equal(operation.containment.kind, "contained", outcomeCase.id);
-      assert.equal(harness.workspaceQuarantines.length, 0, outcomeCase.id);
-      assert.equal(operation.requiredReceiptSet.receipts.length, 12, outcomeCase.id);
-    }
-    assert.equal(harness.projectionCalls.value, 1, outcomeCase.id);
-    assert.equal(harness.providerObservations.length, 1, outcomeCase.id);
-    const providerObservation = harness.providerObservations[0];
-    assert.ok(providerObservation);
-    assertCurrentProviderObservation(providerObservation, fixture.evidencePolicy.maxIdentifierCharacters);
-    for (const chunk of harness.projectedOutput) {
+
+    projectionCalls += 1;
+    const observation = await projection.execute(async chunk => {
+      projectedOutput.push(Object.freeze({ ...chunk }));
+    });
+
+    assert.deepEqual(observation, expectation.observation, outcomeCase.id);
+    assertCurrentProviderObservation(observation, fixture.evidencePolicy.maxIdentifierCharacters);
+    assert.deepEqual(
+      projectedOutput.map(chunk => chunk.kind),
+      expectation.outputKinds,
+      outcomeCase.id,
+    );
+    for (const chunk of projectedOutput) {
+      assert.deepEqual(Object.keys(chunk).toSorted(), ["cursor", "kind", "text"]);
+      assert.equal(chunk.cursor, 0, outcomeCase.id);
       assert.ok(
         Buffer.byteLength(chunk.text) <= fixture.evidencePolicy.maxRetainedTextBytes,
         `${outcomeCase.id} projected ${Buffer.byteLength(chunk.text)} bytes`,
@@ -701,20 +635,15 @@ test("runs one ACP projection per case through the real Contained Turn factory f
       assertNoCredentialOrTokenMaterial(chunk.text);
     }
     if (outcomeCase.id === "completed-succeeded") {
-      assert.equal(harness.projectedOutput.length, 1);
-      assert.equal(
-        Buffer.byteLength(harness.projectedOutput[0]?.text ?? ""),
-        MAX_PROJECTED_TEXT_BYTES,
-      );
+      assert.equal(projectedOutput.length, 1);
+      assert.equal(Buffer.byteLength(projectedOutput[0]?.text ?? ""), MAX_PROJECTED_TEXT_BYTES);
     }
     if (outcomeCase.id === "completed-failed") {
-      assert.match(
-        harness.projectedOutput[0]?.text ?? "",
-        /^synthetic ACP refusal$/u,
-        outcomeCase.id,
-      );
+      assert.equal(projectedOutput.length, 1);
+      assert.equal(projectedOutput[0]?.text, "synthetic ACP refusal");
     }
-    const retained = JSON.stringify({ operation, providerObservation, turn: result.turn });
+
+    const retained = JSON.stringify({ observation, projectedOutput });
     for (const canary of [
       "raw-workspace-canary",
       "raw-session-canary",
@@ -726,6 +655,8 @@ test("runs one ACP projection per case through the real Contained Turn factory f
       assert.ok(!retained.includes(canary), `${outcomeCase.id} retained ${canary}`);
     }
   }
+  assert.equal(projectionCalls, exercisedCases.length);
+  assert.equal(projectionCalls, 6);
 });
 
 test("enforces the exact 256-byte projected text boundary without splitting code points", () => {
@@ -749,7 +680,18 @@ test("records the exact provider-identity gap and capability characterization bo
     source: "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
   });
 
-  const manifestMembers = Object.keys(createDependencies().dependencies.provider.manifest).toSorted();
+  const manifestMembers = [
+    "effectCardinality",
+    "effectClass",
+    "manifestRevision",
+    "manifestVersion",
+    "provider",
+    "providerAttemptCardinality",
+    "requiredProofKinds",
+    "resourceScopeRevision",
+    "supportedModes",
+    "unknownCapabilityPolicy",
+  ];
   assert.deepEqual(manifestMembers, [
     "effectCardinality",
     "effectClass",

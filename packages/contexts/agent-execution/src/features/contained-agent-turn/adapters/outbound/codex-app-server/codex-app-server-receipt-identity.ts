@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { types as utilTypes } from "node:util";
 
 import type {
   ContainedTurnAdapterCapabilityManifest,
@@ -14,6 +13,12 @@ import {
 } from "./codex-app-server-permission-boundary.js";
 
 type CodexExecutionInput = Parameters<ContainedTurnProviderPort["execute"]>[0];
+
+interface RuntimeTypes {
+  readonly isProxy: (value: unknown) => boolean;
+}
+
+const utilTypes = (process.getBuiltinModule("node:util") as { readonly types: RuntimeTypes }).types;
 
 export interface CodexReceiptIdentity {
   readonly attemptId: string;

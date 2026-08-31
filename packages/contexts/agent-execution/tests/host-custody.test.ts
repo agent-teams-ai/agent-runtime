@@ -305,6 +305,7 @@ test("delegated launch authority binds the exact immutable operation mode", asyn
   });
   const custody = new NodeProviderProcessCustody({
     launchPlans: createStaticHostCustodyLaunchPlanResolver([entry]),
+    residueAuthorityFactory: syntheticResidueAuthorityFactory,
   });
   const request = {
     attemptId: "attempt:delegated-authority-set",
@@ -320,6 +321,7 @@ test("delegated launch authority binds the exact immutable operation mode", asyn
     intentMode: "workspace-write",
   }), { name: "HostCustodyUnsupportedError" });
   const opened = await custody.open(request);
+  assert.equal(custody.evidence(opened.custodyRef)?.fingerprint.intentMode, "analysis");
   const exact = {
     arguments: analysis,
     command: entry.plan.executablePath,

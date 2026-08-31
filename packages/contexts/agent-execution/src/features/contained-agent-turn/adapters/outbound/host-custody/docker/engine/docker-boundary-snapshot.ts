@@ -1,5 +1,3 @@
-import { types as utilTypes } from "node:util";
-
 import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerEngineFailureCode } from "./docker-engine-error.js";
 import type {
@@ -8,6 +6,12 @@ import type {
   DockerEngineCall,
   DockerEnginePolicy,
 } from "./docker-engine-port.js";
+
+interface RuntimeTypes {
+  readonly isProxy: (value: unknown) => boolean;
+}
+
+const utilTypes = (process.getBuiltinModule("node:util") as { readonly types: RuntimeTypes }).types;
 
 const POLICY_KEYS = Object.freeze([
   "allowedEnvironmentKeys", "allowedNetworkName", "appArmorProfile", "cgroupParent", "cpuNanoCpus",

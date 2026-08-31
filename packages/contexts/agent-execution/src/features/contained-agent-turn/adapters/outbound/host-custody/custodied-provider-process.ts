@@ -19,6 +19,11 @@ export interface CustodiedProviderProcessRegistry {
   get(custodyRef: string): CustodiedProviderProcess | undefined;
 }
 
+/** Host-owned verification seam for adapter-private directory projections. */
+export interface PrivateDirectoryCustodyPort {
+  assertPrivateDirectory(path: string): Promise<void>;
+}
+
 /** Host-owned reservation surface consumed only through outer custody adapters. */
 export interface ContainedTurnCustodyHandle {
   readonly custodyRef: string;

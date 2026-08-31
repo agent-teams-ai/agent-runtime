@@ -11,6 +11,9 @@ import {
 } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import { createCodexAppServerLaunchPlan } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import { createCodexAppServerPermissionBoundary } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
+import { assertPrivateDirectory } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js";
+
+const privateDirectoryCustody = Object.freeze({ assertPrivateDirectory });
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), "ar-provider-launch-authority-"));
@@ -59,6 +62,7 @@ test("provider launch plans bind exact caller-owned root and requested mode with
       executableSha256: "0".repeat(64),
       intentMode,
       privateProjection: value.privateProjection,
+      privateDirectoryCustody,
       privateRootPath: value.privateRootPath,
       workspaceRef: value.workspaceRef,
     });
@@ -95,6 +99,7 @@ test("provider launch plan factories fail closed for missing or invalid trusted 
     executablePath: "/synthetic/claude",
     executableSha256: "0".repeat(64),
     intentMode: "analysis" as const,
+    privateDirectoryCustody,
     privateProjection: value.privateProjection,
     privateRootPath: value.privateRootPath,
     workspaceRef: value.workspaceRef,

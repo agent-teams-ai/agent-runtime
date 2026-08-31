@@ -1,7 +1,12 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
-import { assertPrivateDirectory } from "../filesystem/contained-turn-filesystem-custody.js";
-import type { HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
+import type {
+  HostCustodyLaunchPlan,
+} from "../provider-delegation-ports/contained-turn-provider-delegation-port.js";
+import type {
+  PrivateDirectoryCustodyPort,
+} from "../provider-delegation-ports/private-directory-custody-port.js";
+import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 
 export const CLAUDE_AGENT_SDK_VERSION = "0.3.251";
 export const CLAUDE_AGENT_SDK_READ_TOOLS = Object.freeze(["Read", "Glob", "Grep"] as const);
@@ -33,7 +38,9 @@ const isWithin = (parent: string, candidate: string): boolean => {
 export const isClaudeAgentSdkPrivateProjectionUsable = async (
   projection: ClaudeAgentSdkPrivateProjection,
   workspaceRef: string,
+  privateDirectoryCustody: PrivateDirectoryCustodyPort,
 ): Promise<boolean> => {
+  const custody = captureClaudePrivateDirectoryCustody(privateDirectoryCustody);
   if (!Object.isFrozen(projection) || !Object.isFrozen(projection.environment)) {return false;}
   if (!isAbsolute(workspaceRef) || resolve(workspaceRef) !== workspaceRef || projection.projectionRef.length === 0) {return false;}
   const environment = projection.environment;
@@ -43,7 +50,7 @@ export const isClaudeAgentSdkPrivateProjectionUsable = async (
   const roots = [configRoot, homeRoot, tempRoot];
   if (roots.some(root => !isAbsolute(root) || resolve(root) !== root)) {return false;}
   try {
-    await Promise.all([workspaceRef, ...roots].map(root => assertPrivateDirectory(root)));
+    await Promise.all([workspaceRef, ...roots].map(root => custody.assertPrivateDirectory(root)));
   } catch {
     return false;
   }
@@ -136,6 +143,7 @@ export interface CreateClaudeAgentSdkLaunchPlanInput {
   readonly executableSha256: string;
   readonly intentMode: "analysis" | "workspace-write";
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
+  readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly privateRootPath: string;
   readonly workspaceRef: string;
 }
@@ -170,6 +178,7 @@ const acceptedPrivateRoot = (
 export const createClaudeAgentSdkLaunchPlan = async (
   input: CreateClaudeAgentSdkLaunchPlanInput,
 ): Promise<HostCustodyLaunchPlan> => {
+  const privateDirectoryCustody = captureClaudePrivateDirectoryCustody(input.privateDirectoryCustody);
   const environment = input.privateProjection.environment;
   const intentMode = acceptedIntentMode(input.intentMode);
   if (environment.CLAUDE_AGENT_SDK_VERSION !== CLAUDE_AGENT_SDK_VERSION) {
@@ -178,7 +187,11 @@ export const createClaudeAgentSdkLaunchPlan = async (
   if (environment.CLAUDE_CODE_ENTRYPOINT !== "sdk-ts") {
     throw new Error("Claude SDK launch requires CLAUDE_CODE_ENTRYPOINT=sdk-ts");
   }
-  if (!await isClaudeAgentSdkPrivateProjectionUsable(input.privateProjection, input.workspaceRef)) {
+  if (!await isClaudeAgentSdkPrivateProjectionUsable(
+    input.privateProjection,
+    input.workspaceRef,
+    privateDirectoryCustody,
+  )) {
     throw new TypeError("Claude launch plan requires a frozen private projection disjoint from its workspace");
   }
   const privateRootPath = acceptedPrivateRoot(input.privateRootPath, input.workspaceRef, environment);

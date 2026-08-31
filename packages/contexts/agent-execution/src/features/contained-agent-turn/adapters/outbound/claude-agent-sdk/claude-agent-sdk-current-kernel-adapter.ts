@@ -21,11 +21,9 @@ import {
 } from "../../../domain/contained-turn-identities.js";
 import type {
   ContainedTurnProviderExecutionOutcome,
-} from "../legacy/legacy-contained-turn-ports.js";
-import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
-} from "../host-custody/custodied-provider-process.js";
+} from "../provider-delegation-ports/contained-turn-provider-delegation-port.js";
 import {
   ClaudeAgentSdkContainedTurnProvider,
   type ClaudeAgentSdkContainedTurnProviderOptions,
@@ -33,6 +31,7 @@ import {
 import type {
   ClaudeAgentSdkPrivateProjection,
 } from "./claude-agent-sdk-launch-plan.js";
+import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 
 export interface ClaudeAgentSdkKernelPrivateExecution {
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
@@ -62,6 +61,7 @@ export interface ClaudeAgentSdkCurrentKernelAdapterOptions {
   readonly executablePath: string;
   readonly interruptGraceMs?: number;
   readonly manifest: ContainedTurnCapabilityManifest;
+  readonly privateDirectoryCustody: ClaudeAgentSdkContainedTurnProviderOptions["privateDirectoryCustody"];
   readonly privateExecutions: ClaudeAgentSdkKernelPrivateExecutionResolver;
   /** The accepted Guardian-backed launcher; it performs the sole physical spawn. */
   readonly processes: CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
@@ -203,6 +203,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     this.#options = Object.freeze({
       ...options,
       clock,
+      privateDirectoryCustody: captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody),
       privateExecutions: Object.freeze({
         consume: options.privateExecutions.consume.bind(options.privateExecutions),
       }),
@@ -313,6 +314,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
       privateProjections: {
         resolve: () => execution.privateProjection,
       },
+      privateDirectoryCustody: this.#options.privateDirectoryCustody,
       processes,
       ...(this.#options.queryFactory === undefined ? {} : { queryFactory: this.#options.queryFactory }),
       turnTimeoutMs,
