@@ -241,9 +241,9 @@ export class DockerCustodyInitHostSession {
         const closed = await this.#acceptRuntimeMessage(message);
         if (closed !== undefined) {
           await this.#drainBufferedInput();
-          this.#assertGeneration();
+          this.#assertActive();
           await this.#awaitRuntimeCallback(() => this.#onDrainComplete(closed.drain));
-          this.#assertGeneration();
+          this.#assertActive();
           return this.#settle(closed);
         }
       }
@@ -364,6 +364,7 @@ export class DockerCustodyInitHostSession {
             ? this.#settled : this.#cancellationResult());
         })]);
         clearTimeout(timer); timer = undefined;
+        this.#assertActive();
         if (selected.done) {this.#decoder.finish(); return;}
         this.#observeDecoderBytes(selected.value);
         const messages = this.#decoder.push(selected.value);
@@ -377,6 +378,14 @@ export class DockerCustodyInitHostSession {
 
   #assertGeneration(): void {
     if (!this.#isCurrentGeneration(this.#authority.generation)) {throw new DockerCustodyProtocolError("stale Docker custody generation");}
+  }
+
+  #assertActive(): void {
+    if (this.#settled?.kind === "failed" || this.#settled?.kind === "unknown") {
+      throw new HostSessionFailure(this.#settled);
+    }
+    if (this.#signal?.aborted === true) {throw new HostSessionFailure(this.#cancellationResult());}
+    this.#assertGeneration();
   }
 
   #cancellationResult(): Exclude<DockerCustodyInitHostResult, {kind: "closed"}> {

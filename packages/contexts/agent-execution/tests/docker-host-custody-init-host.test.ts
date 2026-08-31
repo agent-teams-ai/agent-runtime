@@ -134,6 +134,19 @@ test("drain completion without transport EOF fails and cleans up within the host
   assert.equal(channel.closeCalls, 1); assert.equal(drainCalls, 0);
 });
 
+test("cancellation wins over local EOF during post-drain validation", async () => {
+  const abort = new AbortController(); const channel = new FakeChannel();
+  abort.signal.addEventListener("abort", () => {void channel.close();}, {once: true});
+  let drainCalls = 0; const {session} = create(channel,
+    {onDrainComplete: () => {drainCalls += 1;}, signal: abort.signal});
+  channel.push(ready); await tick(); channel.push(ack, root, drain);
+  await channel.waitForNextRead();
+  abort.abort(); const cancelled = await session.completion; await tick();
+  assert.deepEqual(cancelled, {generation: "generation:g1", kind: "failed", reason: "cancelled"});
+  assert.strictEqual(await session.close(), cancelled);
+  assert.equal(drainCalls, 0);
+});
+
 test("a partial late frame already buffered with drain completion is rejected", async () => {
   const {channel, session} = create(); channel.push(ready); await tick();
   const late = encodeDockerCustodyFrame({bytesBase64: Buffer.from("late").toString("base64"),
