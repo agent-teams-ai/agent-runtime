@@ -306,6 +306,7 @@ test("recovery refuses a foreign replacement with copied owner labels before sto
     ownerIdentitySha256: dockerCustodyOwnerIdentitySha256(launched.key),
   };
   const foreign = await engine.create(foreignCreate, engineCall());
+  await engine.attachCustody(foreign, engineCall());
   await engine.start(foreign, engineCall());
   const recoveryEventStart = engine.events.length;
 
@@ -339,6 +340,7 @@ test("direct containment refuses a foreign replacement with copied owner labels 
     imageDigest: `registry.invalid/foreign@sha256:${digest("foreign-image")}`,
     ownerIdentitySha256: dockerCustodyOwnerIdentitySha256(launched.key),
   }, engineCall());
+  await engine.attachCustody(foreign, engineCall());
   await engine.start(foreign, engineCall());
   const mutationStart = engine.events.length;
 
@@ -368,6 +370,7 @@ test("missing-journal containment uses only its held exact authority and refuses
     imageDigest: `registry.invalid/foreign@sha256:${digest("foreign-image")}`,
     ownerIdentitySha256: dockerCustodyOwnerIdentitySha256(launched.key),
   }, engineCall());
+  await engine.attachCustody(foreign, engineCall());
   await engine.start(foreign, engineCall());
   assert.equal(storage.files.delete(dockerCustodyAttemptLocator(launched.key)), true);
   const mutationStart = engine.events.length;
@@ -518,6 +521,7 @@ test("recovery closes every accepted live state and every external-action crash 
     if (targetIndex >= DOCKER_CUSTODY_STATES.indexOf("init_start_requested")) {
       record = await journal.beforeAction({ key, expectedSequence: record.sequence, state: "init_start_requested" });
       assert.ok(authority);
+      await engine.attachCustody(authority, engineCall());
       await engine.start(authority, engineCall());
     }
     if (targetIndex >= DOCKER_CUSTODY_STATES.indexOf("init_ready")) {

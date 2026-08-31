@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { createHash } from "node:crypto";
+import { chmod, copyFile, link, mkdir, mkdtemp, readFile, rename, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { test } from "node:test";
 
 import {
@@ -13,6 +17,9 @@ import {
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-protocol.js";
 import {
   assertDockerCustodyTopologyFacts,
+  holdDockerCustodyProviderExecutable,
+  NodeDockerCustodyInitDriver,
+  writeDockerCustodyProviderOutputFragments,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/node-docker-custody-init-driver.js";
 
 const digest = (value: string): string => value.repeat(64);
@@ -47,10 +54,10 @@ test("Node custody init launches only after exec, frames both provider streams, 
   });
   assert.equal(messages.some(message => message.kind === "provider-exec-ack"), false);
 
-  const providerCode = "process.stdin.on('data',b=>{process.stdout.write(Buffer.from(b).toString().toUpperCase());process.stderr.write('warn')});process.stdin.on('end',()=>process.exit(7))";
   const requestId = "driver-request:one";
+  const executableSha256 = createHash("sha256").update(await readFile("/bin/cat")).digest("hex");
   const frames = [
-    {argv: [process.execPath, "-e", providerCode], environment: [], executableSha256: digest("d"),
+    {argv: ["provider-entrypoint"], environment: [], executableSha256,
       executableSlot: "provider-entrypoint", gid, handshakeNonce: "driver-nonce", kind: "provider-exec",
       launchFingerprintSha256: digest("c"), requestId, uid, wallDeadlineUnixMs: Date.now() + 4_000},
     {bytesBase64: Buffer.from("hello").toString("base64"), kind: "provider-input", requestId},
@@ -68,10 +75,10 @@ test("Node custody init launches only after exec, frames both provider streams, 
   assert.equal(stderr, "");
   assert(messages.some(message => message.kind === "provider-exec-ack" && message.observation === "started"));
   const outputs = messages.filter(message => message.kind === "provider-output");
-  assert.deepEqual(outputs.map(message => [message.stream, Buffer.from(message.bytesBase64, "base64").toString()]).toSorted(), [
-    ["stderr", "warn"], ["stdout", "HELLO"],
+  assert.deepEqual(outputs.map(message => [message.stream, Buffer.from(message.bytesBase64, "base64").toString()]), [
+    ["stdout", "hello"],
   ]);
-  assert(messages.some(message => message.kind === "provider-observation" && message.observation === "root-exited" && message.exitCode === 7));
+  assert(messages.some(message => message.kind === "provider-observation" && message.observation === "root-exited" && message.exitCode === 0));
   assert.equal(messages.filter(message => message.kind === "provider-drain-complete").length, 1);
 });
 
@@ -83,4 +90,98 @@ test("PID topology rejects PID1, non-direct, root, privileged, grouped, and non-
     {...valid, pid: 1}, {...valid, parentPid: 9}, {...valid, uid: 0}, {...valid, gid: 0},
     {...valid, noNewPrivileges: false}, {...valid, groups: [10001, 10002]}, {...valid, parentName: "node"},
   ]) {assert.throws(() => {assertDockerCustodyTopologyFacts(invalid);}, /direct child/u);}
+});
+
+test("provider output chunks fragment without changing binary order, cursor, or aggregate accounting", () => {
+  for (const size of [48_001, 65_536]) {
+    const bytes = Uint8Array.from({length: size}, (_, index) => index % 251);
+    const frames: Buffer[] = [];
+    const result = writeDockerCustodyProviderOutputFragments(message => {
+      if (message.kind === "provider-output") {frames.push(Buffer.from(message.bytesBase64, "base64"));}
+      return "accepted";
+    }, "fragment-request", "stdout", bytes);
+    assert.deepEqual(frames.map(frame => frame.byteLength), size === 48_001 ? [48_000, 1] : [48_000, 17_536]);
+    assert.deepEqual(Buffer.concat(frames), Buffer.from(bytes));
+    assert.deepEqual(result, {committedBytes: size, status: "accepted"});
+  }
+  const unicodeAndBinary = Buffer.concat([Buffer.from("🙂漢字".repeat(8_001)), Buffer.from([0, 255, 128, 1])]);
+  const frames: Buffer[] = [];
+  let offers = 0;
+  const first = writeDockerCustodyProviderOutputFragments(message => {
+    offers += 1;
+    if (offers === 2) {return "blocked";}
+    if (message.kind === "provider-output") {frames.push(Buffer.from(message.bytesBase64, "base64"));}
+    return "accepted";
+  }, "cursor-request", "stderr", unicodeAndBinary);
+  assert.deepEqual(first, {committedBytes: 48_000, status: "blocked"});
+  const second = writeDockerCustodyProviderOutputFragments(message => {
+    if (message.kind === "provider-output") {frames.push(Buffer.from(message.bytesBase64, "base64"));}
+    return "accepted";
+  }, "cursor-request", "stderr", unicodeAndBinary.subarray(first.committedBytes));
+  assert.equal(first.committedBytes + second.committedBytes, unicodeAndBinary.byteLength);
+  assert.deepEqual(Buffer.concat(frames), unicodeAndBinary);
+});
+
+test("held executable authority rejects mismatch and substitutions and survives pathname replacement", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-provider-slot-"));
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const slot = join(root, "provider-entrypoint");
+  await copyFile("/bin/true", slot); await chmod(slot, 0o555);
+  const expected = createHash("sha256").update(await readFile(slot)).digest("hex");
+  assert.throws(() => holdDockerCustodyProviderExecutable(slot, "0".repeat(64)), /identity/u);
+  const held = holdDockerCustodyProviderExecutable(slot, expected);
+  const original = join(root, "original"); const replacement = join(root, "replacement");
+  await rename(slot, original); await copyFile("/bin/false", replacement); await chmod(replacement, 0o555); await rename(replacement, slot);
+  const child = spawn(held.descriptorPath, [], {stdio: ["ignore", "ignore", "ignore"]});
+  const [exitCode] = await once(child, "exit");
+  assert.equal(exitCode, 0);
+  held.close(); held.close();
+  await assert.rejects(readFile(held.descriptorPath));
+
+  await rm(slot); await symlink("/bin/true", slot);
+  assert.throws(() => holdDockerCustodyProviderExecutable(slot, expected));
+  await rm(slot); const hardlinkSource = join(root, "hardlink-source"); await copyFile("/bin/true", hardlinkSource);
+  await chmod(hardlinkSource, 0o555); await link(hardlinkSource, slot);
+  assert.throws(() => holdDockerCustodyProviderExecutable(slot, expected), /private executable/u);
+  await rm(slot); await mkdir(slot);
+  assert.throws(() => holdDockerCustodyProviderExecutable(slot, expected), /regular file|private executable/u);
+  await rm(slot, {recursive: true});
+  const realRoot = join(root, "real-root"); const aliasRoot = join(root, "alias-root");
+  await mkdir(realRoot); await copyFile("/bin/true", join(realRoot, "provider-entrypoint")); await chmod(join(realRoot, "provider-entrypoint"), 0o555); await symlink(realRoot, aliasRoot, "dir");
+  assert.throws(() => holdDockerCustodyProviderExecutable(join(aliasRoot, "provider-entrypoint"), expected), /root is substituted/u);
+});
+
+test("early spawn ENOENT settles once as not-started and closes the held descriptor", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-provider-spawn-failure-"));
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const executablePath = join(root, "provider-entrypoint");
+  await copyFile("/bin/cat", executablePath); await chmod(executablePath, 0o555);
+  const executableSha256 = createHash("sha256").update(await readFile(executablePath)).digest("hex");
+  const input = new PassThrough(); const output = new PassThrough();
+  const decoder = new DockerCustodyFrameDecoder(); const messages: DockerCustodyProtocolMessage[] = [];
+  output.on("data", chunk => {messages.push(...decoder.push(chunk));});
+  let descriptorPath = "";
+  const driver = new NodeDockerCustodyInitDriver({
+    allowedEnvironmentNames: [], controlInput: input, controlOutput: output, executablePath, executableSha256,
+    maximumProviderRuntimeMs: 1_000, maximumStderrBytes: 65_536, maximumStdinBytes: 65_536,
+    maximumStdoutBytes: 65_536, observedIdentity: identity, shutdownGraceMs: 10, tickIntervalMs: 1,
+  }, {
+    observeRestrictedIdentity: () => ({gid: 65_534, uid: 65_534}),
+    observeTopology: () => ({gid: 65_534, groups: [65_534], noNewPrivileges: true,
+      parentName: "docker-init", parentPid: 1, pid: 2, uid: 65_534}),
+    spawnProcess: specification => {
+      descriptorPath = specification.executablePath;
+      return spawn("/ar-definitely-absent-provider", [], {stdio: ["pipe", "pipe", "pipe"]});
+    },
+  });
+  const completion = driver.run();
+  input.write(encodeDockerCustodyFrame(handshake));
+  input.write(encodeDockerCustodyFrame({argv: ["provider-entrypoint"], environment: [], executableSha256,
+    executableSlot: "provider-entrypoint", gid: 65_534, handshakeNonce: "driver-nonce", kind: "provider-exec",
+    launchFingerprintSha256: digest("c"), requestId: "spawn-failure", uid: 65_534, wallDeadlineUnixMs: Date.now() + 500}));
+  assert.equal(await completion, 1);
+  decoder.finish();
+  assert.equal(messages.filter(message => message.kind === "provider-exec-ack" && message.observation === "not-started").length, 1);
+  assert.equal(messages.filter(message => message.kind === "provider-observation" && message.observation === "spawn-failed").length, 1);
+  await assert.rejects(readFile(descriptorPath));
 });

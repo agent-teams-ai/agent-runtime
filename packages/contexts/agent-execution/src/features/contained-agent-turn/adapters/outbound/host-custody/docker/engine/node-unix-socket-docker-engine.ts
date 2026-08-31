@@ -90,7 +90,8 @@ const statusFailure = (operation: string, statusCode: number): DockerEngineError
 
 export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   readonly #client: EngineClient;
-  readonly #custodyAttachState = new Map<string, "open" | "opening" | "unknown">();
+  readonly #custodyAttachState = new Map<string, "invalid" | "open" | "opening" | "started">();
+  readonly #custodyAttachCleanup = new Map<string, () => void>();
   readonly #policy: DockerEnginePolicy;
   readonly #startingContainers = new Set<string>();
 
@@ -215,11 +216,15 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     const authoritySnapshot = validateAuthorityShape(authority);
     const id = authoritySnapshot.containerId;
     const attachState = this.#custodyAttachState.get(id);
-    if (this.#startingContainers.has(id) || attachState === "opening" || attachState === "unknown") {
+    if (this.#startingContainers.has(id) || attachState !== "open") {
       throw new DockerEngineError("protocol-violation");
     }
     this.#startingContainers.add(id);
+    this.#custodyAttachCleanup.get(id)?.();
+    this.#custodyAttachCleanup.delete(id);
+    this.#custodyAttachState.set(id, "started");
     try {await this.#mutate("start", "POST", authoritySnapshot, call);}
+    catch (error) {this.#custodyAttachState.set(id, "invalid"); throw error;}
     finally {this.#startingContainers.delete(id);}
   }
 
@@ -247,10 +252,27 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
         path: `${API}/containers/${authoritySnapshot.containerId}/attach?stream=1&stdin=1&stdout=1&stderr=1`,
       });
       this.#assertEngine(authoritySnapshot, await this.#identity(callSnapshot));
+      let valid = true;
+      const invalidate = (): void => {
+        if (!valid) {return;}
+        valid = false;
+        cleanup();
+        if (this.#custodyAttachState.get(id) !== "started") {this.#custodyAttachState.set(id, "invalid");}
+      };
+      const abort = (): void => {invalidate();};
+      const delay = Math.max(0, callSnapshot.deadlineEpochMs - Date.now());
+      const timer = setTimeout(invalidate, delay);
+      timer.unref();
+      const cleanup = (): void => {
+        clearTimeout(timer);
+        callSnapshot.signal.removeEventListener("abort", abort);
+      };
+      callSnapshot.signal.addEventListener("abort", abort, {once: true});
+      this.#custodyAttachCleanup.set(id, cleanup);
       this.#custodyAttachState.set(id, "open");
-      return createDockerCustodyChannel(hijack);
+      return createDockerCustodyChannel(hijack, invalidate);
     } catch (error) {
-      this.#custodyAttachState.set(id, "unknown");
+      this.#custodyAttachState.set(id, "invalid");
       await hijack?.close();
       throw error;
     }

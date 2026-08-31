@@ -179,6 +179,8 @@ export const encodeCreateRequest = (input: DockerContainerCreate, policy: Docker
     .map(([key, value]) => `${key}=${value}`);
   const request = {
     AttachStderr: false,
+    // Stdin is reserved for the one explicit pre-start hijack; Docker must not
+    // create an implicit attach while keeping that stdin endpoint available.
     AttachStdin: false,
     AttachStdout: false,
     Cmd: [...input.arguments],
@@ -222,8 +224,10 @@ export const encodeCreateRequest = (input: DockerContainerCreate, policy: Docker
       input.ownerIdentitySha256,
     ),
     NetworkDisabled: false,
-    OpenStdin: false,
-    StdinOnce: false,
+    OpenStdin: true,
+    // The sole custody attach is one-shot: losing it closes this generation's
+    // stdin instead of permitting a replacement attach.
+    StdinOnce: true,
     StopSignal: "SIGTERM",
     Tty: false,
     User: policy.user,

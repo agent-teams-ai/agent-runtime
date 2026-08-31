@@ -212,6 +212,7 @@ test("one attested handshake launches one exact non-root provider without custod
     clearSupplementaryGroups: true,
     environment: { HOME: "/private/home" },
     executablePath: "/immutable/provider",
+    executableSha256: digest("d"),
     gid: 10001,
     inheritedDescriptors: [0, 1, 2],
     noNewPrivileges: true,

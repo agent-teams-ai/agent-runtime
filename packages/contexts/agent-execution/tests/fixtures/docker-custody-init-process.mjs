@@ -5,6 +5,10 @@ import {
   NodeDockerCustodyInitDriver,
 } from "../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/node-docker-custody-init-driver.js";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { chmodSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 const digest = value => value.repeat(64);
 const identity = Object.freeze({
@@ -14,9 +18,14 @@ const identity = Object.freeze({
 });
 const uid = 65534;
 const gid = 65534;
+const executableRoot = mkdtempSync(join(tmpdir(), "ar-init-driver-"));
+const executablePath = join(executableRoot, "provider-entrypoint");
+copyFileSync("/bin/cat", executablePath);
+chmodSync(executablePath, 0o555);
+const executableSha256 = createHash("sha256").update(readFileSync(executablePath)).digest("hex");
 const driver = new NodeDockerCustodyInitDriver({
-  allowedEnvironmentNames: Object.freeze([]), executablePath: process.execPath,
-  executableSha256: digest("d"), maximumProviderRuntimeMs: 5_000,
+  allowedEnvironmentNames: Object.freeze([]), executablePath,
+  executableSha256, maximumProviderRuntimeMs: 5_000,
   maximumStderrBytes: 65_536, maximumStdinBytes: 65_536, maximumStdoutBytes: 65_536,
   observedIdentity: identity, shutdownGraceMs: 100, tickIntervalMs: 2,
 }, {
@@ -29,3 +38,4 @@ const driver = new NodeDockerCustodyInitDriver({
   }),
 });
 process.exitCode = await driver.run();
+rmSync(executableRoot, {force: true, recursive: true});

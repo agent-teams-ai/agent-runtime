@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines -- the fake mirrors the complete strict Docker Engine state surface. */
 import { createHash } from "node:crypto";
 
 import { validateAuthorityShape } from "./docker-engine-codec.js";
@@ -42,7 +43,9 @@ interface FakeLogPlan {
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 export class FakeDockerEngine implements DockerEnginePort {
-  readonly #attached = new Set<string>();
+  readonly #attachState = new Map<string, "invalid" | "open" | "started">();
+  readonly #attachCleanup = new Map<string, () => void>();
+  readonly #custodyInput = new Map<string, Uint8Array[]>();
   readonly #containers = new Map<string, FakeContainer>();
   readonly #createOutcomes: FakeCreateOutcome[] = [];
   readonly #events: string[] = [];
@@ -81,6 +84,9 @@ export class FakeDockerEngine implements DockerEnginePort {
   }
 
   public get events(): readonly string[] {return [...this.#events];}
+  public custodyInput(authority: DockerContainerAuthority): Uint8Array {
+    return Uint8Array.from(Buffer.concat((this.#custodyInput.get(authority.containerId) ?? []).map(bytes => Buffer.from(bytes))));
+  }
 
   public enqueueCreateOutcome(outcome: FakeCreateOutcome): void {this.#createOutcomes.push(outcome);}
 
@@ -241,26 +247,47 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   public async start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     const record = await this.#record("start", authority, call);
+    if (this.#attachState.get(record.authority.containerId) !== "open") {throw new DockerEngineError("protocol-violation");}
+    this.#attachCleanup.get(record.authority.containerId)?.();
+    this.#attachCleanup.delete(record.authority.containerId);
+    this.#attachState.set(record.authority.containerId, "started");
     const outcome = this.#mutationOutcome("start");
-    if (outcome?.effect !== false) {this.#start(record);}
+    if (outcome?.effect !== false) {this.#start(record);} else {this.#attachState.set(record.authority.containerId, "invalid");}
     this.#events.push("start:id");
     this.#assertMutationPostcondition("start", record, outcome);
   }
 
   public async attachCustody(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerCustodyDuplexChannel> {
-    const record = await this.#record("attach", authority, call);
-    if (record.state.status !== "created" || record.state.running || this.#attached.has(record.authority.containerId)) {
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const record = await this.#record("attach", authority, callSnapshot);
+    if (record.state.status !== "created" || record.state.running || this.#attachState.has(record.authority.containerId)) {
       throw new DockerEngineError("protocol-violation");
     }
-    this.#attached.add(record.authority.containerId);
+    const id = record.authority.containerId;
+    this.#attachState.set(id, "open");
+    this.#custodyInput.set(id, []);
     this.#events.push("attach:id");
     let closed = false;
+    let valid = true;
+    const cleanup = (): void => {clearTimeout(timer); callSnapshot.signal.removeEventListener("abort", invalidate);};
+    const invalidate = (): void => {
+      if (!valid) {return;}
+      valid = false; cleanup();
+      if (this.#attachState.get(id) !== "started") {this.#attachState.set(id, "invalid");}
+    };
+    const timer = setTimeout(invalidate, Math.max(0, callSnapshot.deadlineEpochMs - Date.now()));
+    timer.unref();
+    callSnapshot.signal.addEventListener("abort", invalidate, {once: true});
+    this.#attachCleanup.set(id, cleanup);
     return Object.freeze({
-      close: async () => {closed = true;},
-      closeInput: async () => {closed = true;},
-      output: (async function* () {yield* [];})(),
+      close: async () => {closed = true; invalidate();},
+      closeInput: async () => {closed = true; invalidate();},
+      output: (async function* () {try {yield* [];} finally {invalidate();}})(),
       write: async (bytes: Uint8Array) => {
-        if (closed || bytes.byteLength === 0) {throw new DockerEngineError("protocol-violation");}
+        if (closed || bytes.byteLength === 0 || this.#attachState.get(id) === "invalid") {
+          this.#attachState.set(id, "invalid"); throw new DockerEngineError("protocol-violation");
+        }
+        this.#custodyInput.get(id)?.push(bytes.slice());
       },
     });
   }

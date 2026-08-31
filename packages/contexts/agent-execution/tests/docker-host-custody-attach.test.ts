@@ -73,14 +73,36 @@ test("the exact owner-bound container is attached after create and before start"
   t.after(async () => {await rm(root, {force: true, recursive: true});});
   const engine = new FakeDockerEngine(policy(root));
   const authority = await engine.create(createInput(root), engineCall());
+  await assert.rejects(engine.start(authority, engineCall()), {code: "protocol-violation"});
   const channel = await engine.attachCustody(authority, engineCall());
   await assert.rejects(engine.attachCustody(authority, engineCall()), {code: "protocol-violation"});
+  await channel.write(Buffer.from("init-stdin-control"));
+  assert.equal(Buffer.from(engine.custodyInput(authority)).toString(), "init-stdin-control");
   await engine.start(authority, engineCall());
+  await assert.rejects(engine.start(authority, engineCall()), {code: "protocol-violation"});
   assert.deepEqual(engine.events.filter(event => /^(?:create|attach|start):/u.test(event)), [
     "create:acknowledged", "attach:id", "start:id",
   ]);
   await channel.close();
   await assert.rejects(engine.attachCustody(authority, engineCall()), {code: "protocol-violation"});
+});
+
+test("close, EOF, abort, and deadline poison the sole pre-start attach generation", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  for (const mode of ["close", "input-eof", "output-eof", "abort", "deadline"] as const) {
+    const engine = new FakeDockerEngine(policy(root));
+    const authority = await engine.create(createInput(root, `${mode.charCodeAt(0)}`.repeat(64).slice(0, 64)), engineCall());
+    const controller = new AbortController();
+    const channel = await engine.attachCustody(authority, call(controller.signal, mode === "deadline" ? 2 : 2_000));
+    if (mode === "close") {await channel.close();}
+    if (mode === "input-eof") {await channel.closeInput();}
+    if (mode === "output-eof") {for await (const bytes of channel.output) {void bytes;}}
+    if (mode === "abort") {controller.abort();}
+    if (mode === "deadline") {await new Promise<void>(resolve => {setTimeout(resolve, 5);});}
+    await assert.rejects(engine.start(authority, engineCall()), {code: "protocol-violation"}, mode);
+    await assert.rejects(engine.attachCustody(authority, engineCall()), {code: "protocol-violation"}, mode);
+  }
 });
 
 test("v1.47 pre-start attach survives fragmented upgrade and coalesced Docker frames", async () => {

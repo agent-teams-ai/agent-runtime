@@ -178,7 +178,7 @@ export class DockerCustodyInitRuntime {
     this.#providerDeadlineMonotonicMs = safeMonotonicDeadline(acceptedAtMonotonicMs, Math.min(remainingWallBudgetMs, this.#maximumProviderRuntimeMs));
     try {
       const child = this.#syscalls.spawnProvider(Object.freeze({argv: Object.freeze([...message.argv]), clearSupplementaryGroups: true,
-        environment: Object.freeze(environment), executablePath: this.#executablePath, gid: message.gid,
+        environment: Object.freeze(environment), executablePath: this.#executablePath, executableSha256: this.#executableSha256, gid: message.gid,
         inheritedDescriptors: Object.freeze([0, 1, 2]) as readonly [0, 1, 2], noNewPrivileges: true, shell: false, uid: message.uid}));
       if (child.kind === "not-started") {this.#rejectExec(); return;}
       const rootHandle = child.handle as object; const stderrHandle = child.stderr as object; const stdoutHandle = child.stdout as object;

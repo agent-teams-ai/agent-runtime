@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines -- this is the closed synthetic Docker Engine conformance suite. */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -5,7 +6,7 @@ import { chmod, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises
 import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
 import { join } from "node:path";
 import { Socket } from "node:net";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { test } from "node:test";
 
 import {
@@ -95,6 +96,9 @@ interface SyntheticDaemon {
   readonly client: {
     buffered(input: { readonly body?: Uint8Array; readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: Uint8Array; readonly contentType: string; readonly statusCode: number }>;
     endpointIdentity(): Promise<{ readonly canonicalSocketPath: string; readonly daemonBootGenerationSha256: string; readonly hostBootGenerationSha256: string }>;
+    hijack(input: {readonly call: DockerEngineCall; readonly path: string}): Promise<{
+      readonly input: PassThrough; readonly output: AsyncIterable<Uint8Array>; close(): Promise<void>;
+    }>;
     stream(input: { readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: AsyncIterable<Uint8Array>; readonly contentType: string; readonly statusCode: number }>;
   };
   daemonBoot: string;
@@ -262,6 +266,12 @@ const syntheticDaemon = (): SyntheticDaemon => {
         hostBootGenerationSha256: HOST_BOOT,
       };
     },
+    async hijack(request: {readonly path: string}) {
+      routes.push(`POST ${request.path}`);
+      const input = new PassThrough();
+      const output = new PassThrough();
+      return {close: async () => {input.destroy(); output.destroy();}, input, output};
+    },
     async stream(request: { readonly method: string; readonly path: string }) {
       routes.push(`${request.method} ${request.path}`);
       const bytes = Buffer.concat([multiplex(1, Buffer.from("out")), multiplex(2, Buffer.from("err"))]);
@@ -311,6 +321,12 @@ test("Node adapter emits the closed schema and completes lifecycle only by exact
     "AttachStderr", "AttachStdin", "AttachStdout", "Cmd", "Entrypoint", "Env", "HostConfig", "Image",
     "Labels", "NetworkDisabled", "OpenStdin", "StdinOnce", "StopSignal", "Tty", "User", "WorkingDir",
   ]);
+  assert.equal(body.AttachStdin, false);
+  assert.equal(body.OpenStdin, true);
+  assert.equal(body.StdinOnce, true);
+  assert.equal(body.Tty, false);
+  const custody = await engine.attachCustody(authority, call());
+  await custody.write(Buffer.from("init-control"));
   await engine.start(authority, call());
   const frames: DockerLogFrame[] = [];
   for await (const frame of engine.logs(authority, call())) {frames.push(frame);}
@@ -334,11 +350,13 @@ test("API v1.47 decoders accept a synthetic owner-binding projection of the reta
     .replaceAll("__PRIVATE_SOURCE__", join(root, "private", "operation"));
   const fixture = JSON.parse(fixtureSource) as {
     readonly info: unknown;
-    readonly inspect: { readonly Config: { readonly Labels: Record<string, string> } };
+    readonly inspect: { readonly Config: { readonly Labels: Record<string, string>; OpenStdin: boolean; StdinOnce: boolean } };
   };
   // The captured fixture predates owner binding. Project only this synthetic test
   // response; preserve the historical capture bytes and their original evidence.
   fixture.inspect.Config.Labels["com.agent-runtime.owner-identity-sha256"] = createInput(root).ownerIdentitySha256;
+  fixture.inspect.Config.OpenStdin = true;
+  fixture.inspect.Config.StdinOnce = true;
   let present = false;
   const client = {
     async buffered(request: { readonly method: string; readonly path: string }) {
@@ -526,19 +544,23 @@ test("ambiguous and 304 mutation acknowledgements require exact postconditions a
   const daemon = syntheticDaemon();
   const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
   const authority = await engine.create(createInput(root), call());
+  await engine.attachCustody(authority, call());
   daemon.mutationPlan = { body: { Unexpected: true }, effect: true, statusCode: 204 };
   await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
   assert.ok(daemon.routes.filter(route => route === `GET /v1.47/containers/${CONTAINER}/json`).length >= 2);
-  daemon.mutationPlan = { body: { Unexpected: true }, effect: true, statusCode: 304 };
   await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
-  daemon.mutationPlan = { effect: true, statusCode: 304 };
-  await engine.start(authority, call());
-  daemon.mutationPlan = { effect: false, statusCode: 304 };
-  await assert.rejects(engine.stop(authority, call()), { code: "mutation-acknowledgement-unknown" });
-  daemon.mutationPlan = { effect: true, failure: "disconnect", statusCode: 204 };
-  await engine.stop(authority, call());
-  daemon.mutationPlan = { effect: false, statusCode: 409 };
-  await assert.rejects(engine.remove(authority, call()), { code: "request-rejected", statusCode: 409 });
+  const successful = syntheticDaemon();
+  const successfulEngine = new NodeUnixSocketDockerEngine({client: successful.client, policy: policy(root)});
+  const successfulAuthority = await successfulEngine.create(createInput(root, "9".repeat(64)), call());
+  await successfulEngine.attachCustody(successfulAuthority, call());
+  successful.mutationPlan = { effect: true, statusCode: 304 };
+  await successfulEngine.start(successfulAuthority, call());
+  successful.mutationPlan = { effect: false, statusCode: 304 };
+  await assert.rejects(successfulEngine.stop(successfulAuthority, call()), { code: "mutation-acknowledgement-unknown" });
+  successful.mutationPlan = { effect: true, failure: "disconnect", statusCode: 204 };
+  await successfulEngine.stop(successfulAuthority, call());
+  successful.mutationPlan = { effect: false, statusCode: 409 };
+  await assert.rejects(successfulEngine.remove(successfulAuthority, call()), { code: "request-rejected", statusCode: 409 });
   const duplicate = syntheticDaemon();
   const duplicateEngine = new NodeUnixSocketDockerEngine({ client: duplicate.client, policy: policy(root) });
   await duplicateEngine.create(createInput(root), call());
@@ -556,6 +578,7 @@ test("log EOF is incomplete while running and wait requires an exact terminal ob
   daemon.logLeavesRunning = true;
   const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
   const authority = await engine.create(createInput(root), call());
+  await engine.attachCustody(authority, call());
   await engine.start(authority, call());
   await assert.rejects(drain(engine.logs(authority, call())), { code: "terminal-observation-unknown" });
   await assert.rejects(engine.wait(authority, call()), { code: "terminal-observation-unknown" });
@@ -752,6 +775,7 @@ test("Fake parity covers canonical mounts, exact adoption, ambiguous effects, en
   const authority = await fake.create(createInput(root), call());
   fake.enqueueCreateOutcome("malformed-response");
   await fake.create(createInput(root, "7".repeat(64)), call());
+  await fake.attachCustody(authority, call());
   await fake.start(authority, call());
   let waitSettled = false;
   const waiting = fake.wait(authority, call()).then(observation => {waitSettled = true; return observation;});

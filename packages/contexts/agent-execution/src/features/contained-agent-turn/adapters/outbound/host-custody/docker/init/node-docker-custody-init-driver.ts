@@ -1,10 +1,13 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { closeSync, constants, fstatSync, openSync, readFileSync, readSync, realpathSync } from "node:fs";
+import { basename, dirname, resolve as resolvePath } from "node:path";
 import type { Readable, Writable } from "node:stream";
 
 import {
   DOCKER_CUSTODY_CHILD_SIGNALS,
   DOCKER_CUSTODY_HOST_SIGNALS,
+  DOCKER_CUSTODY_PROVIDER_IO_MAX_BYTES,
   encodeDockerCustodyFrame,
   type DockerCustodyChildSignal,
   type DockerCustodyHostSignal,
@@ -31,6 +34,56 @@ interface ProviderGeneration {
   readonly stderr: DockerCustodyProviderOutputHandle;
   readonly stdout: DockerCustodyProviderOutputHandle;
 }
+
+const MAX_EXECUTABLE_PATH_BYTES = 4_096;
+const PROVIDER_EXECUTABLE_SLOT = "provider-entrypoint";
+
+export interface HeldDockerCustodyProviderExecutable {
+  readonly descriptorPath: string;
+  close(): void;
+}
+
+const equalDigest = (left: string, right: string): boolean => {
+  const leftBytes = Buffer.from(left, "ascii");
+  const rightBytes = Buffer.from(right, "ascii");
+  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes);
+};
+
+export const holdDockerCustodyProviderExecutable = (
+  configuredPath: string,
+  expectedSha256: string,
+): HeldDockerCustodyProviderExecutable => {
+  if (process.platform !== "linux" || Buffer.byteLength(configuredPath) > MAX_EXECUTABLE_PATH_BYTES ||
+      configuredPath !== resolvePath(configuredPath) || basename(configuredPath) !== PROVIDER_EXECUTABLE_SLOT) {
+    throw new Error("provider executable slot is not the canonical bounded Linux slot");
+  }
+  const configuredRoot = dirname(configuredPath);
+  if (realpathSync(configuredRoot) !== configuredRoot) {throw new Error("provider executable slot root is substituted");}
+  const descriptor = openSync(configuredPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  let closed = false;
+  const close = (): void => {if (!closed) {closed = true; closeSync(descriptor);}};
+  try {
+    const before = fstatSync(descriptor, {bigint: true});
+    if (!before.isFile() || before.nlink !== 1n || (before.mode & 0o111n) === 0n || (before.mode & 0o222n) !== 0n) {
+      throw new Error("provider executable slot is not one private executable regular file");
+    }
+    const digest = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1_024);
+    let position = 0;
+    for (;;) {
+      const bytesRead = readSync(descriptor, buffer, 0, buffer.byteLength, position);
+      if (bytesRead === 0) {break;}
+      digest.update(buffer.subarray(0, bytesRead));
+      position += bytesRead;
+    }
+    const after = fstatSync(descriptor, {bigint: true});
+    if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode ||
+        before.nlink !== after.nlink || before.size !== after.size || !equalDigest(digest.digest("hex"), expectedSha256)) {
+      throw new Error("provider executable descriptor identity does not match authority");
+    }
+    return {close, descriptorPath: `/proc/self/fd/${descriptor}`};
+  } catch (error) {close(); throw error;}
+};
 
 export interface DockerCustodyTopologyFacts {
   readonly gid: number;
@@ -128,8 +181,20 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     if (this.#generation !== undefined || identity.uid !== specification.uid || identity.gid !== specification.gid) {
       return {kind: "not-started"};
     }
-    const child = this.#spawnProcess(specification);
-    if (child.pid === undefined) {return {kind: "not-started"};}
+    let executable: HeldDockerCustodyProviderExecutable;
+    try {executable = holdDockerCustodyProviderExecutable(specification.executablePath, specification.executableSha256);}
+    catch {return {kind: "not-started"};}
+    let child: ChildProcessWithoutNullStreams;
+    try {child = this.#spawnProcess({...specification, executablePath: executable.descriptorPath});}
+    catch {executable.close(); return {kind: "not-started"};}
+    let notStarted = false;
+    const spawned = (): void => {executable.close();};
+    const spawnError = (): void => {
+      child.removeListener("spawn", spawned); executable.close(); if (!notStarted) {this.runtime?.failInit();}
+    };
+    child.once("error", spawnError);
+    child.once("spawn", spawned);
+    if (child.pid === undefined) {notStarted = true; executable.close(); return {kind: "not-started"};}
     const generation: ProviderGeneration = {
       child, exit: null, exitReported: false,
       root: Object.freeze({}) as DockerCustodyProviderRootHandle,
@@ -138,9 +203,9 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     };
     this.#generation = generation;
     child.once("exit", (exitCode, signal) => {
+      child.removeListener("error", spawnError);
       try {generation.exit = Object.freeze({exitCode, signal: childSignal(signal)});} catch {this.runtime?.failInit();}
     });
-    child.once("error", () => {this.runtime?.failInit();});
     this.#bindOutput(generation, "stdout", generation.stdout, child.stdout);
     this.#bindOutput(generation, "stderr", generation.stderr, child.stderr);
     child.stdin.on("drain", () => {this.runtime?.stdinDrainReady();});
@@ -176,8 +241,7 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
   public writeProviderOutput(stream: DockerCustodyOutputStream, bytes: Uint8Array): DockerCustodyOutputWriteResult {
     const requestId = this.runtime?.snapshot().requestId;
     if (requestId === null || requestId === undefined) {throw new Error("provider output has no active request");}
-    const status = this.#writeOutput({bytesBase64: Buffer.from(bytes).toString("base64"), kind: "provider-output", requestId, stream});
-    return status === "accepted" ? {committedBytes: bytes.byteLength, status} : {committedBytes: 0, status};
+    return writeDockerCustodyProviderOutputFragments(this.#writeOutput, requestId, stream, bytes);
   }
 
   public writeProviderInput(bytes: Uint8Array): "accepted" | "closed" {
@@ -199,6 +263,23 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     return generation.child.kill(signal) ? "sent" : "absent";
   }
 }
+
+export const writeDockerCustodyProviderOutputFragments = (
+  writeOutput: (message: DockerCustodyInitMessage) => "accepted" | "blocked",
+  requestId: string,
+  stream: DockerCustodyOutputStream,
+  bytes: Uint8Array,
+): DockerCustodyOutputWriteResult => {
+  let committedBytes = 0;
+  while (committedBytes < bytes.byteLength) {
+    const end = Math.min(bytes.byteLength, committedBytes + DOCKER_CUSTODY_PROVIDER_IO_MAX_BYTES);
+    const fragment = bytes.subarray(committedBytes, end);
+    const status = writeOutput({bytesBase64: Buffer.from(fragment).toString("base64"), kind: "provider-output", requestId, stream});
+    if (status === "blocked") {return {committedBytes, status};}
+    committedBytes = end;
+  }
+  return {committedBytes, status: "accepted"};
+};
 
 export class NodeDockerCustodyInitDriver {
   readonly #input: Readable;

@@ -148,6 +148,7 @@ export class DockerHostCustodyLifecycle {
       authoritySha256, key, expectedSequence: 1, state: "created", evidence: proved,
     });
     await this.journal.beforeAction({ key, expectedSequence: created.sequence, state: "init_start_requested" });
+    await this.engine.attachCustody(authority, input.call);
     await this.engine.start(authority, input.call);
     const observation = await this.engine.inspect(authority, input.call);
     const journal = await this.journal.observe({

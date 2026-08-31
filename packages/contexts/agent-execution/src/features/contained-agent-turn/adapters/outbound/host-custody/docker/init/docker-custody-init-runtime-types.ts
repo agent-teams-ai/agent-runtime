@@ -18,7 +18,7 @@ declare const dockerCustodyProviderOutputHandle: unique symbol;
 export interface DockerCustodyProviderOutputHandle {readonly [dockerCustodyProviderOutputHandle]: never;}
 export interface DockerCustodyProviderSpawn {
   readonly argv: readonly string[]; readonly clearSupplementaryGroups: true;
-  readonly environment: Readonly<Record<string, string>>; readonly executablePath: string;
+  readonly environment: Readonly<Record<string, string>>; readonly executablePath: string; readonly executableSha256: string;
   readonly gid: number; readonly inheritedDescriptors: readonly [0, 1, 2]; readonly noNewPrivileges: true;
   readonly shell: false; readonly uid: number;
 }
