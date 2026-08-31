@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { link as createHardlink, mkdtemp, mkdir, readFile, realpath, rename, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -86,11 +86,16 @@ const guardedDisposablePath = async (path) => {
   return lexical;
 };
 const cleanupDisposablePaths = async (paths) => {
+  const guardedPaths = [];
   for (const path of new Set(paths)) {
     const guarded = await guardedDisposablePath(path);
-    if (guarded) {await execFileAsync("rm", ["-rf", "--", guarded]);}
+    if (guarded) {guardedPaths.push(guarded);}
   }
+  if (guardedPaths.length) {await execFileAsync("rm", ["-rf", "--", ...guardedPaths]);}
 };
+const scheduledCleanupPaths = [];
+const scheduleDisposablePaths = (paths) => {scheduledCleanupPaths.push(...paths);};
+after(async () => cleanupDisposablePaths(scheduledCleanupPaths));
 
 const fixtureActivation = (status) => status === "active"
   ? { blockers: [], acceptance: ["zero diagnostics"], authority: { acceptedAdr: "ADR-0013", decisionPath: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", owner: "architecture", governedRecords: [] }, evidence: { fixtureCommand: "pnpm test:feature-modules", candidateCommand: "pnpm architecture:feature-modules:candidate", productionDiagnostics: 0 } }
@@ -347,7 +352,7 @@ for (const fixture of expandedFixtures) {
     const root = await makeFixtureRoot();
     const state = { cleanup: [root] };
     try {await runFixture(fixture, root, state);}
-    finally {await cleanupDisposablePaths(state.cleanup);}
+    finally {scheduleDisposablePaths(state.cleanup);}
   });
 }
 
@@ -364,7 +369,7 @@ test("CLI failures redact external profile locations and are location-independen
       outputs.push(failure.stdout);
     }
     assert.equal(outputs[0], outputs[1]);
-  } finally {await cleanupDisposablePaths(roots);}
+  } finally {scheduleDisposablePaths(roots);}
 });
 
 test("candidate scope and output use canonical root identity through a symlink alias", async () => {
@@ -376,7 +381,7 @@ test("candidate scope and output use canonical root identity through a symlink a
     const throughAlias = await checkFeatureModules({ root: alias, ...options });
     assert.ok(canonical.length > 0, "candidate-scope comparison must exercise production diagnostics");
     assert.deepEqual(throughAlias, canonical);
-  } finally {await cleanupDisposablePaths([root]);}
+  } finally {scheduleDisposablePaths([root]);}
 });
 
 test("root traversal, drive, UNC, and POSIX backslash spellings fail closed", async () => {
@@ -396,7 +401,7 @@ test("root traversal, drive, UNC, and POSIX backslash spellings fail closed", as
         { code: "FM_FILESYSTEM_IDENTITY", path: "<root>", line: 1 },
       ]);
     }
-  } finally {await cleanupDisposablePaths([root]);}
+  } finally {scheduleDisposablePaths([root]);}
 });
 
 test("CLI structural allowance matrix covers every fatal code", () => {
