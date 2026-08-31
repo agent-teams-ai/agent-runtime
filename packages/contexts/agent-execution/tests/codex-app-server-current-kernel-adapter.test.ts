@@ -113,6 +113,49 @@ test("admits incremental output and success only from the reviewed protocol term
   assert.equal(execution.delegatedStarts(), 1);
 });
 
+test("preserves the prepared-attempt receiver through the Host delegated start", async () => {
+  const process = new FakeCodexProcess((message, target) => {
+    if (standardHandshake(message, target)) {return;}
+    if (message.method === "turn/start") {
+      target.emit({ id: message.id, result: { turn: generatedTurn("turn:kernel:receiver", "inProgress") } });
+      emitTurnStarted(target, "turn:kernel:receiver");
+      target.emit({ method: "turn/completed", params: {
+        threadId: "thread:test",
+        turn: generatedTurn("turn:kernel:receiver", "completed"),
+      } });
+    }
+  });
+  const execution = kernelInput(process);
+  class ReceiverBoundPreparedAttempt {
+    readonly #process: FakeCodexProcess;
+
+    public constructor(receiverProcess: FakeCodexProcess) {
+      this.#process = receiverProcess;
+    }
+
+    public createProcess() {
+      return {
+        custody: { custodyRef: this.#process.custodyRef },
+        provider: createProvider(this.#process),
+        workspaceRef: boundary.workspaceRef,
+      };
+    }
+  }
+  const adapter = new CodexAppServerCurrentKernelAdapter({
+    attempts: {
+      async prepare() {
+        return new ReceiverBoundPreparedAttempt(process);
+      },
+    },
+  });
+
+  assert.deepEqual(await adapter.execute(execution.input), {
+    kind: "completed", outcome: "succeeded",
+  });
+  assert.equal(execution.delegatedStarts(), 1);
+  assert.equal(process.requests.filter(message => message.method === "turn/start").length, 1);
+});
+
 test("maps validated failed and cancelled terminals without exit-code inference", async () => {
   const failure = new FakeCodexProcess((message, target) => {
     if (standardHandshake(message, target)) {return;}

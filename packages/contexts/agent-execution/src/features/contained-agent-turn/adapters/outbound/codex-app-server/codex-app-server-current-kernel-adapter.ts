@@ -148,7 +148,7 @@ export class CodexAppServerCurrentKernelAdapter implements ContainedTurnKernelPr
 
     let attempt: ReturnType<PreparedCodexAppServerKernelAttempt["createProcess"]>;
     try {
-      attempt = input.start.createProcess(prepared.createProcess);
+      attempt = input.start.createProcess(() => prepared.createProcess());
     } catch {
       return indeterminate(input, "delegated-process-start-unknown");
     }
