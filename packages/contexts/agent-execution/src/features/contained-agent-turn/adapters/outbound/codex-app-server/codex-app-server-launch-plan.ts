@@ -26,6 +26,8 @@ const DISABLED_CODEX_FEATURES = Object.freeze([
 export interface CodexAppServerLaunchPlanOptions {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly executablePath: string;
+  readonly intentMode: "analysis" | "workspace-write";
+  readonly privateRootPath: string;
   readonly tmpDir: string;
 }
 
@@ -43,6 +45,23 @@ export interface CodexAppServerLaunchPlan extends HostCustodyLaunchPlan {
 const contains = (parent: string, candidate: string): boolean => {
   const path = relative(parent, candidate);
   return path === "" || (!path.startsWith("..") && !isAbsolute(path));
+};
+
+const acceptedIntentMode = (value: unknown): "analysis" | "workspace-write" => {
+  if (value !== "analysis" && value !== "workspace-write") {
+    throw new TypeError("intentMode must be analysis or workspace-write");
+  }
+  return value;
+};
+
+const privateRoot = (value: unknown, workspaceRef: string): string => {
+  if (typeof value !== "string" || !isAbsolute(value) || resolve(value) !== value || value === "/") {
+    throw new TypeError("privateRootPath must be a normalized absolute non-root path");
+  }
+  if (contains(value, workspaceRef) || contains(workspaceRef, value)) {
+    throw new TypeError("privateRootPath and workspaceRef must be disjoint");
+  }
+  return value;
 };
 
 const privateTmpIdentity = (value: string): CodexDirectoryIdentity => {
@@ -99,9 +118,19 @@ export const validateCodexAppServerLaunchPlanRoots = (
 export const createCodexAppServerLaunchPlan = (
   options: CodexAppServerLaunchPlanOptions,
 ): CodexAppServerLaunchPlan => {
+  const intentMode = acceptedIntentMode(options.intentMode);
   validateCodexDirectoryIdentity("codexHome", options.boundary.codexHomeIdentity);
   validateCodexDirectoryIdentity("workspaceRef", options.boundary.workspaceIdentity, false);
   const tmpDirIdentity = privateTmpIdentity(options.tmpDir);
+  const privateRootPath = privateRoot(options.privateRootPath, options.boundary.workspaceRef);
+  if (
+    !contains(privateRootPath, options.boundary.codexHome)
+    || privateRootPath === options.boundary.codexHome
+    || !contains(privateRootPath, options.tmpDir)
+    || privateRootPath === options.tmpDir
+  ) {
+    throw new TypeError("Codex private home and TMPDIR must be strictly within privateRootPath");
+  }
   const roots = [options.boundary.workspaceRef, options.boundary.codexHome, options.tmpDir] as const;
   for (let left = 0; left < roots.length; left += 1) {
     for (let right = left + 1; right < roots.length; right += 1) {
@@ -123,7 +152,7 @@ export const createCodexAppServerLaunchPlan = (
     binaryRevision: CODEX_APP_SERVER_BINARY_REVISION,
     codexHome: options.boundary.codexHome,
     codexHomeIdentity: options.boundary.codexHomeIdentity,
-    containmentProfile: "cooperative-posix",
+    containmentProfile: "strict-linux-cgroup-v2",
     effectivePolicyDigest: options.boundary.effectivePolicyDigest,
     environment: Object.freeze({
       CODEX_HOME: options.boundary.codexHome,
@@ -134,8 +163,11 @@ export const createCodexAppServerLaunchPlan = (
     }),
     executablePath: options.executablePath,
     executableSha256: CODEX_APP_SERVER_BINARY_SHA256,
+    intentMode,
     permissionProfileId: CODEX_PERMISSION_PROFILE_ID,
+    privateRootPath,
     provider: "codex",
+    spawnMode: "sdk-delegated",
     tmpDir: options.tmpDir,
     tmpDirIdentity,
     workspaceRef: options.boundary.workspaceRef,

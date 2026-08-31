@@ -134,14 +134,44 @@ export interface CreateClaudeAgentSdkLaunchPlanInput {
   readonly binaryRevision: string;
   readonly executablePath: string;
   readonly executableSha256: string;
+  readonly intentMode: "analysis" | "workspace-write";
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
+  readonly privateRootPath: string;
   readonly workspaceRef: string;
 }
+
+const acceptedIntentMode = (value: unknown): "analysis" | "workspace-write" => {
+  if (value !== "analysis" && value !== "workspace-write") {
+    throw new TypeError("intentMode must be analysis or workspace-write");
+  }
+  return value;
+};
+
+const acceptedPrivateRoot = (
+  value: unknown,
+  workspaceRef: string,
+  environment: Readonly<Record<string, string>>,
+): string => {
+  if (typeof value !== "string" || !isAbsolute(value) || resolve(value) !== value || value === "/") {
+    throw new TypeError("privateRootPath must be a normalized absolute non-root path");
+  }
+  if (isWithin(value, workspaceRef) || isWithin(workspaceRef, value)) {
+    throw new TypeError("privateRootPath and workspaceRef must be disjoint");
+  }
+  for (const key of ["CLAUDE_CONFIG_DIR", "HOME", "TMPDIR"] as const) {
+    const path = environment[key];
+    if (path === undefined || path === value || !isWithin(value, path)) {
+      throw new TypeError("Claude private projection paths must be strictly within privateRootPath");
+    }
+  }
+  return value;
+};
 
 export const createClaudeAgentSdkLaunchPlan = async (
   input: CreateClaudeAgentSdkLaunchPlanInput,
 ): Promise<HostCustodyLaunchPlan> => {
   const environment = input.privateProjection.environment;
+  const intentMode = acceptedIntentMode(input.intentMode);
   if (environment.CLAUDE_AGENT_SDK_VERSION !== CLAUDE_AGENT_SDK_VERSION) {
     throw new Error(`Claude SDK launch requires CLAUDE_AGENT_SDK_VERSION=${CLAUDE_AGENT_SDK_VERSION}`);
   }
@@ -151,18 +181,16 @@ export const createClaudeAgentSdkLaunchPlan = async (
   if (!await isClaudeAgentSdkPrivateProjectionUsable(input.privateProjection, input.workspaceRef)) {
     throw new TypeError("Claude launch plan requires a frozen private projection disjoint from its workspace");
   }
-  const variants = Object.freeze([
-    claudeAgentSdkArguments("analysis", input.workspaceRef),
-    claudeAgentSdkArguments("workspace-write", input.workspaceRef),
-  ]);
+  const privateRootPath = acceptedPrivateRoot(input.privateRootPath, input.workspaceRef, environment);
   return Object.freeze({
-    arguments: variants[0] ?? Object.freeze([]),
+    arguments: claudeAgentSdkArguments(intentMode, input.workspaceRef),
     binaryRevision: input.binaryRevision,
-    containmentProfile: "cooperative-posix",
-    delegatedArgumentVariants: variants,
+    containmentProfile: "strict-linux-cgroup-v2",
     environment,
     executablePath: input.executablePath,
     executableSha256: input.executableSha256,
+    intentMode,
+    privateRootPath,
     provider: "claude",
     spawnMode: "sdk-delegated",
   });

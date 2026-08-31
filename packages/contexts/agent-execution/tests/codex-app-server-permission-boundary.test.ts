@@ -155,13 +155,20 @@ test("validates private roots, disjointness, and stable filesystem identity", as
   const caseRoot = mkdtempSync(join(tmpdir(), "agent-runtime-codex-root-validation-"));
   try {
     const workspace = join(caseRoot, "workspace");
-    const home = join(caseRoot, "home");
-    const temp = join(caseRoot, "temp");
+    const privateRoot = `${workspace}-host-private`;
+    const home = join(privateRoot, "home");
+    const temp = join(privateRoot, "temp");
     mkdirSync(workspace, { mode: 0o755 });
-    mkdirSync(home, { mode: 0o700 });
+    mkdirSync(home, { mode: 0o700, recursive: true });
     mkdirSync(temp, { mode: 0o700 });
     const exactBoundary = createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace });
-    const plan = createCodexAppServerLaunchPlan({ boundary: exactBoundary, executablePath: "/opt/codex", tmpDir: temp });
+    const plan = createCodexAppServerLaunchPlan({
+      boundary: exactBoundary,
+      executablePath: "/opt/codex",
+      intentMode: "analysis",
+      privateRootPath: privateRoot,
+      tmpDir: temp,
+    });
     assert.deepEqual(plan.arguments.slice(0, 5), [
       "app-server", "--stdio", "--strict-config", "-c",
       `default_permissions=${JSON.stringify(exactBoundary.permissionProfileId)}`,
@@ -188,7 +195,13 @@ test("validates private roots, disjointness, and stable filesystem identity", as
 
     const nestedTemp = join(workspace, "temp");
     mkdirSync(nestedTemp, { mode: 0o700 });
-    assert.throws(() => createCodexAppServerLaunchPlan({ boundary: exactBoundary, executablePath: "/opt/codex", tmpDir: nestedTemp }), /disjoint/u);
+    assert.throws(() => createCodexAppServerLaunchPlan({
+      boundary: exactBoundary,
+      executablePath: "/opt/codex",
+      intentMode: "analysis",
+      privateRootPath: privateRoot,
+      tmpDir: nestedTemp,
+    }), /privateRootPath|disjoint/u);
 
   } finally {
     rmSync(caseRoot, { force: true, recursive: true });
