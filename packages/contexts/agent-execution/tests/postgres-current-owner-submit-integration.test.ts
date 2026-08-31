@@ -369,7 +369,8 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
           assert.equal(result.status, "observed");
           assert.equal(result.turn.status, "succeeded");
           assert.equal(host.starts, 1, "successful submission starts exactly one provider process");
-          assert.equal(host.containments, 1, "accepted Host closure uses one idempotent containment receipt");
+          assert.deepEqual([host.containments, host.finalities], [1, 1],
+            "successful closure accepts exactly one Host containment finality");
 
           const completed = await durable.read({operationId: result.turn.operationId, scope: request.scope});
           assert.equal(completed?.providerExecution.kind, "closed");
@@ -391,7 +392,8 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
           assert.equal(replay.status, "observed");
           assert.equal(replay.turn.status, "succeeded");
           assert.equal(host.starts, 1, "reconstruction replay cannot start the provider again");
-          assert.equal(host.containments, 1, "replay reuses accepted Host finality");
+          assert.deepEqual([host.containments, host.finalities], [1, 1],
+            "replay reuses the one accepted Host finality");
           owner.dispose();
         } finally {
           await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
