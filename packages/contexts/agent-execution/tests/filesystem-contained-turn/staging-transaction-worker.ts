@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   createNodeContainedTurnArtifacts,
   createNodeContainedTurnWorkspace,
-} from "../../dist/production.js";
+} from "../../dist/composition.js";
 
 type StagingTransactionInput = Readonly<{
   action: "seal" | "workspace-create";

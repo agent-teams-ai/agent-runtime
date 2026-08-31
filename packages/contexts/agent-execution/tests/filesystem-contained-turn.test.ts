@@ -21,11 +21,11 @@ import {
   createNodeContainedTurnWorkspace,
   type NodeContainedTurnArtifactOptions,
   type NodeContainedTurnWorkspaceOptions,
-} from "../dist/production.js";
+} from "../dist/composition.js";
 import { createContainedTurnFeature } from "../dist/features/contained-agent-turn/composition/feature-module-factory.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { createDependencies } from "../dist/testing/contained-agent-turn-fixture.js";
+import { createDependencies } from "./features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 import {
   assertNoTemporaryResidue,
   cleanupTrackedFilesystemLayouts,
