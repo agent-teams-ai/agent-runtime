@@ -327,8 +327,12 @@ export class BoundedUnixHttpClient {
     }
     const custody = await this.#observeCustody();
     const connection = await this.#connectPeer(this.#policy, custody, call, async () => this.#observeCustody());
+    try {this.#checkCall(call);} catch (error) {
+      try {connection.socket.destroy();} catch {}
+      try {await connection.release();} catch {}
+      throw error;
+    }
     const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
-    if (effectiveMs <= 0) {connection.socket.destroy(); await connection.release(); throw new DockerEngineError("deadline-exceeded");}
     return openBoundedUnixHijack({
       call, effectiveMs, path: input.path, release: connection.release, request: this.#request,
       socket: connection.socket,
@@ -393,17 +397,20 @@ export class BoundedUnixHttpClient {
     }
     const custody = await this.#observeCustody();
     const connection = await this.#connectPeer(this.#policy, custody, call, async () => this.#observeCustody());
-    const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
-    if (effectiveMs <= 0) {
-      connection.socket.destroy();
-      await connection.release();
-      throw new DockerEngineError("deadline-exceeded");
+    try {this.#checkCall(call);} catch (error) {
+      try {connection.socket.destroy();} catch {}
+      try {await connection.release();} catch {}
+      throw error;
     }
+    const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
     const agent = new Agent({ keepAlive: false, maxSockets: 1 });
     agent.createConnection = () => connection.socket;
+    let released = false;
     const release = async (): Promise<void> => {
-      agent.destroy();
-      await connection.release();
+      if (released) {return;}
+      released = true;
+      try {agent.destroy();} catch {}
+      try {await connection.release();} catch {}
     };
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -425,25 +432,26 @@ export class BoundedUnixHttpClient {
           setHost: false,
         });
       } catch (error) {
-        void release();
         reject(requestFailureFor(error, call, deadlineExpired));
+        void release();
         return;
       }
       const cleanup = (): void => {
-        clearTimeout(timer);
-        call.signal.removeEventListener("abort", abort);
+        try {clearTimeout(timer);} catch {}
+        try {call.signal.removeEventListener("abort", abort);} catch {}
       };
       const finishFailure = (error: unknown): void => {
         if (settled) {return;}
+        const failure = requestFailureFor(error, call, deadlineExpired);
         settled = true;
+        reject(failure);
         cleanup();
         void release();
-        reject(requestFailureFor(error, call, deadlineExpired));
       };
-      const abort = (): void => {operation.destroy();};
+      const abort = (): void => {try {operation.destroy();} catch (error) {finishFailure(error);}};
       const timer = setTimeout(() => {
         deadlineExpired = true;
-        operation.destroy();
+        try {operation.destroy();} catch (error) {finishFailure(error);}
       }, effectiveMs);
       call.signal.addEventListener("abort", abort, { once: true });
       operation.once("error", finishFailure);
@@ -473,19 +481,24 @@ export class BoundedUnixHttpClient {
               statusCode: response.statusCode ?? 0,
             });
           } catch (error) {
-            response.destroy();
+            if (!settled) {
+              settled = true;
+              reject(error);
+            }
+            cleanup();
+            try {response.destroy();} catch {}
             await release();
-            if (!settled) {settled = true; cleanup(); reject(error);}
           }
         };
         void settle();
       });
       try {
         input.beforeWrite?.();
+        this.#checkCall(call);
         operation.end(input.body);
       } catch (error) {
-        operation.destroy();
         finishFailure(error);
+        try {operation.destroy();} catch {}
       }
     });
   }
@@ -508,10 +521,10 @@ export class BoundedUnixHttpClient {
       if (error instanceof DockerEngineError) {throw error;}
       throw failureFor(input.call, Date.now() >= input.call.deadlineEpochMs);
     } finally {
-      clearTimeout(input.timer);
-      input.call.signal.removeEventListener("abort", input.abort);
-      await input.release();
-      if (!input.response.complete) {input.response.destroy();}
+      try {clearTimeout(input.timer);} catch {}
+      try {input.call.signal.removeEventListener("abort", input.abort);} catch {}
+      try {await input.release();} catch {}
+      if (!input.response.complete) {try {input.response.destroy();} catch {}}
     }
   }
 }

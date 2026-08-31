@@ -3,14 +3,16 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { request as httpRequest, type ClientRequest, type RequestOptions } from "node:http";
+import { PassThrough } from "node:stream";
 import { test } from "node:test";
 
 import {
   BoundedUnixHttpClient,
   type DockerEndpointObservation,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-http.js";
+import { openBoundedUnixHijack } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-hijack.js";
 import { createDockerCustodyChannel } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-custody-channel.js";
 import { DockerEngineError } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-error.js";
 import { FakeDockerEngine } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
@@ -29,6 +31,7 @@ const multiplex = (stream: 1 | 2, payload: Uint8Array): Buffer => {
 const fixture = async (
   serve: (socket: Socket, request: Buffer) => void,
   options: {
+    readonly beforeConnectReturn?: () => Promise<void>;
     readonly observe?: (observation: DockerEndpointObservation) => Promise<DockerEndpointObservation>;
     readonly requestFactory?: (options: RequestOptions) => ClientRequest;
   } = {},
@@ -64,7 +67,11 @@ const fixture = async (
     const socket = createConnection(socketPath);
     await once(socket, "connect");
     exactSocket = socket;
-    return {release: async () => {releaseCount += 1; socket.destroy();}, socket};
+    await options.beforeConnectReturn?.();
+    return {release: async () => {
+      releaseCount += 1;
+      socket.destroy();
+    }, socket};
   };
   const client = new BoundedUnixHttpClient({
     daemonPidFileMode: 0o600, daemonPidFileOwnerGid: 42, daemonPidFileOwnerUid: 41,
@@ -277,6 +284,78 @@ test("synchronous hijack construction failures preserve typed errors and release
       } finally {await current.close();}
     });
   }
+});
+
+test("final Unix request and hijack seams recheck abort and frozen deadlines after awaited custody and peer work", async t => {
+  for (const seam of ["request", "hijack"] as const) {
+    for (const awaited of ["custody", "peer"] as const) {
+      for (const mode of ["abort", "deadline"] as const) {
+        await t.test(`${seam}-${awaited}-${mode}`, async context => {
+          let releaseWait!: () => void;
+          let reached!: () => void;
+          const wait = new Promise<void>(resolve => {releaseWait = resolve;});
+          const atWait = new Promise<void>(resolve => {reached = resolve;});
+          let observations = 0;
+          let requestObserved = false;
+          const current = await fixture(() => {requestObserved = true;}, {
+            beforeConnectReturn: awaited === "peer" ? async () => {reached(); await wait;} : undefined,
+            observe: awaited === "custody" ? async observation => {
+              observations += 1;
+              if (observations === 1) {reached(); await wait;}
+              return observation;
+            } : undefined,
+          });
+          const controller = new AbortController();
+          const now = Date.now();
+          if (mode === "deadline") {context.mock.timers.enable({apis: ["Date", "setTimeout"], now});}
+          try {
+            const boundedCall = {deadlineEpochMs: now + 1_000, signal: controller.signal};
+            const opening = seam === "request"
+              ? current.client.buffered({call: boundedCall, method: "POST", path: "/v1.47/containers/id/start"})
+              : current.client.hijack({
+                call: boundedCall,
+                path: "/v1.47/containers/id/attach?stream=1&stdin=1&stdout=1&stderr=1",
+              });
+            await atWait;
+            if (mode === "abort") {controller.abort();} else {context.mock.timers.tick(1_001);}
+            releaseWait();
+            await assert.rejects(opening, {code: mode === "abort" ? "aborted" : "deadline-exceeded"});
+            await new Promise<void>(resolve => {setImmediate(resolve);});
+            assert.equal(requestObserved, false);
+            assert.equal(current.releaseCount, 1);
+          } finally {
+            releaseWait();
+            context.mock.timers.reset();
+            await current.close();
+          }
+        });
+      }
+    }
+  }
+});
+
+test("hijack end failure settles its typed cause before every throwing cleanup and releases exactly once", async () => {
+  const cause = new DockerEngineError("protocol-violation");
+  const cleanup = {destroy: 0, listeners: 0, release: 0, socket: 0};
+  const socket = new PassThrough();
+  socket.destroy = (() => {cleanup.socket += 1; throw new Error("socket cleanup");}) as typeof socket.destroy;
+  const events = new EventEmitter();
+  const operation = Object.assign(events, {
+    destroy() {cleanup.destroy += 1; throw new Error("request cleanup");},
+    end() {throw cause;},
+    removeAllListeners() {cleanup.listeners += 1; throw new Error("listener cleanup");},
+  }) as unknown as ClientRequest;
+  let rejected: unknown;
+  try {
+    await openBoundedUnixHijack({
+      call: call(), effectiveMs: 1_000, path: "/attach",
+      release: async () => {cleanup.release += 1; throw new Error("release cleanup");},
+      request: () => operation, socket, verifyCustody: async () => {},
+    });
+  } catch (error) {rejected = error;}
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.strictEqual(rejected, cause);
+  assert.deepEqual(cleanup, {destroy: 1, listeners: 1, release: 1, socket: 1});
 });
 
 test("the real Unix transport honors abort at the final synchronous pre-write seam", async () => {

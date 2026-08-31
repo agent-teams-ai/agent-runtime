@@ -641,6 +641,72 @@ test("attach invalidation fences start at the synchronous transport-write seam",
   }
 });
 
+test("attach invokes a private-field-shaped hijack client with its receiver intact", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  class ReceiverSensitiveClient {
+    readonly #delegate = daemon.client;
+    public constructor() {
+      for (const name of ["buffered", "endpointIdentity", "hijack", "stream"] as const) {
+        Object.defineProperty(this, name, {
+          configurable: true, enumerable: true, value: ReceiverSensitiveClient.prototype[name], writable: true,
+        });
+      }
+      Object.setPrototypeOf(this, Object.prototype);
+    }
+    public buffered(...args: Parameters<typeof daemon.client.buffered>) {return this.#delegate.buffered(...args);}
+    public endpointIdentity(...args: Parameters<typeof daemon.client.endpointIdentity>) {
+      return this.#delegate.endpointIdentity(...args);
+    }
+    public hijack(...args: Parameters<typeof daemon.client.hijack>) {return this.#delegate.hijack(...args);}
+    public stream(...args: Parameters<typeof daemon.client.stream>) {return this.#delegate.stream(...args);}
+  }
+  const engine = new NodeUnixSocketDockerEngine({
+    client: new ReceiverSensitiveClient() as unknown as SyntheticDaemon["client"], policy: policy(root),
+  });
+  const authority = await engine.create(createInput(root), call());
+  const channel = await engine.attachCustody(authority, call());
+  await channel.close();
+  assert.equal(daemon.hijackCloseCount, 1);
+});
+
+test("attach awaits exact hijack closure when the socket dies during post-hijack identity verification", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  let hijackInput: PassThrough | undefined;
+  let closeFinished = false;
+  let identityReached!: () => void;
+  let releaseIdentity!: () => void;
+  const reached = new Promise<void>(resolve => {identityReached = resolve;});
+  const identityWait = new Promise<void>(resolve => {releaseIdentity = resolve;});
+  let hijacked = false;
+  const client = {
+    buffered: daemon.client.buffered,
+    async endpointIdentity() {
+      if (hijacked) {identityReached(); await identityWait;}
+      return daemon.client.endpointIdentity();
+    },
+    async hijack(input: Parameters<typeof daemon.client.hijack>[0]) {
+      const raw = await daemon.client.hijack(input);
+      hijacked = true;
+      hijackInput = raw.input;
+      return {...raw, close: async () => {await raw.close(); closeFinished = true;}};
+    },
+    stream: daemon.client.stream,
+  };
+  const engine = new NodeUnixSocketDockerEngine({client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  const opening = engine.attachCustody(authority, call());
+  await reached;
+  hijackInput?.destroy();
+  releaseIdentity();
+  await assert.rejects(opening, {code: "daemon-disconnected"});
+  assert.equal(closeFinished, true);
+  assert.equal(daemon.hijackCloseCount, 1);
+});
+
 test("hijack loss after start bytes is acknowledgement-unknown and removal retires the generation", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});

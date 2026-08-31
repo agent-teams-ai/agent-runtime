@@ -134,7 +134,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
           typeof client.stream !== "function") {
         throw new DockerEngineError("invalid-create-request");
       }
-      this.#client = client as unknown as EngineClient;
+      this.#client = construction.client as EngineClient;
     }
     this.#policy = policy;
     encodeCreateRequest({
@@ -270,14 +270,16 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       if (observation.existence !== "present" || observation.state.status !== "created" || observation.state.running) {
         throw new DockerEngineError("protocol-violation");
       }
-      const hijackClient = this.#client.hijack;
-      if (hijackClient === undefined) {throw new DockerEngineError("protocol-violation");}
-      hijack = await hijackClient({
+      if (this.#client.hijack === undefined) {throw new DockerEngineError("protocol-violation");}
+      hijack = await this.#client.hijack({
         call: callSnapshot,
         path: `${API}/containers/${authoritySnapshot.containerId}/attach?stream=1&stdin=1&stdout=1&stderr=1`,
       });
       session.hijack = hijack;
       this.#assertEngine(authoritySnapshot, await this.#identity(callSnapshot));
+      if (hijack.input.destroyed || !hijack.input.readable || !hijack.input.writable) {
+        throw new DockerEngineError("daemon-disconnected");
+      }
       const invalidate = (error: DockerEngineError): void => {this.#invalidateSession(session, error);};
       const abort = (): void => {invalidate(new DockerEngineError("aborted"));};
       const delay = Math.max(0, callSnapshot.deadlineEpochMs - Date.now());
@@ -404,9 +406,9 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     if (session.state === "invalid") {return;}
     session.state = "invalid";
     session.failure = error;
-    session.cleanup?.();
+    try {session.cleanup?.();} catch {}
     delete session.cleanup;
-    session.closePromise ??= (session.hijack?.close() ?? Promise.resolve()).catch(() => {});
+    session.closePromise ??= (async () => {try {await session.hijack?.close();} catch {}})();
   }
 
   async #retireSession(id: string): Promise<void> {
