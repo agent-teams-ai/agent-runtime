@@ -28,8 +28,6 @@ import type {
 const DEFAULT_CANCELLATION_POLL_MS = 100;
 const DEFAULT_INTERRUPT_GRACE_MS = 5_000;
 const DEFAULT_TURN_TIMEOUT_MS = 1_200_000;
-const CLAUDE_AGENT_SDK_PACKAGE: string = "@anthropic-ai/claude-agent-sdk";
-
 export type { ClaudeAgentSdkControlClock } from "./claude-agent-sdk-turn-execution.js";
 
 const defaultClock: ClaudeAgentSdkControlClock = Object.freeze({
@@ -40,7 +38,7 @@ const defaultClock: ClaudeAgentSdkControlClock = Object.freeze({
 });
 
 const loadClaudeQueryFactory = async (): Promise<ClaudeQueryFactory> => {
-  const loaded: unknown = await import(CLAUDE_AGENT_SDK_PACKAGE);
+  const loaded: unknown = await import("@anthropic-ai/claude-agent-sdk");
   if (typeof loaded !== "object" || loaded === null || !("query" in loaded) || typeof loaded.query !== "function") {
     throw new Error("Claude Agent SDK query export is unavailable");
   }

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { DockerContainerAuthority } from "../engine/docker-engine-port.js";
+import type { DockerContainerAuthority } from "../engine/index.js";
 
 import {
   DOCKER_CUSTODY_DEBT_REASONS,

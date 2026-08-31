@@ -3,7 +3,7 @@ import type {
   DockerContainerObservation,
   DockerEngineCall,
   DockerEnginePort,
-} from "./engine/docker-engine-port.js";
+} from "./engine/index.js";
 import {
   DockerCustodyJournal,
   type DockerCustodyJournalRecoveryReader,
