@@ -204,6 +204,20 @@ export interface HostCustodyLaunchPlanResolver {
   }): Promise<HostCustodyLaunchPlan | undefined>;
 }
 
+/** Private reservation handoff from the filesystem owner to raw Host Custody. */
+export interface HostCustodyWorkspaceAuthority {
+  readonly canonicalPath: string;
+  readonly descriptorPath: string;
+  readonly identity: Readonly<{ readonly dev: bigint; readonly ino: bigint; readonly mountId: string }>;
+}
+
+export type HostCustodyReservationInput = Readonly<
+  Parameters<ProviderProcessCustodyPort["open"]>[0] & {
+    readonly launchPlan: HostCustodyLaunchPlan;
+    readonly workspaceAuthority: HostCustodyWorkspaceAuthority;
+  }
+>;
+
 export type HostCustodyUnsupportedCode =
   | "launch-plan-unavailable"
   | "platform-profile-unavailable"

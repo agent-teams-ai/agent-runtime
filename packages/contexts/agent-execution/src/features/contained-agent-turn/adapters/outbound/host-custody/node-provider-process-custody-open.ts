@@ -37,6 +37,7 @@ export interface HostCustodyOpenReservation {
     arguments_: readonly string[],
     environment: Readonly<Record<string, string>>,
   ) => void;
+  readonly assertBoundReservation?: (live: LiveCustody) => void;
 }
 
 export const assertHostCustodyReservationMode = (
@@ -60,6 +61,7 @@ const bindLaunchCandidate = async (reservation: HostCustodyOpenReservation): Pro
   live.plan = candidate.plan;
   live.privatePaths = candidate.privatePaths;
   live.workspace = candidate.workspace;
+  reservation.assertBoundReservation?.(live);
   live.privateRootClosure = Object.freeze({
     identitySha256: sha256(canonicalJson([
       candidate.privatePaths.root.dev.toString(),

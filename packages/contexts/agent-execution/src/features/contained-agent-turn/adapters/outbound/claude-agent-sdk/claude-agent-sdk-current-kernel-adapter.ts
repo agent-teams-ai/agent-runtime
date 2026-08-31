@@ -22,6 +22,7 @@ import {
 import type {
   ContainedTurnProviderExecutionOutcome,
 } from "../legacy/legacy-contained-turn-ports.js";
+import type { ContainedTurnProviderBinding } from "../../../contracts/contained-agent-turn.js";
 import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
@@ -35,6 +36,7 @@ import type {
 } from "./claude-agent-sdk-launch-plan.js";
 
 export interface ClaudeAgentSdkKernelPrivateExecution {
+  readonly custodyRef: string;
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
   readonly workspaceRef: string;
 }
@@ -51,6 +53,7 @@ export interface ClaudeAgentSdkKernelPrivateExecutionResolver {
     custodyId: ContainedTurnCustodyId;
     effectId: ContainedTurnEffectId;
     operationId: ContainedTurnOperationId;
+    providerBinding: ContainedTurnProviderBinding;
     workspaceId: ContainedTurnWorkspaceId;
   }>, execute: (execution: ClaudeAgentSdkKernelPrivateExecution) => Promise<Result>): Promise<Result | undefined>;
 }
@@ -235,6 +238,11 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
         custodyId: input.custodyId,
         effectId: input.effectId,
         operationId: input.operationId,
+        providerBinding: Object.freeze({
+          ...input.adapterSnapshot,
+          credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
+          providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
+        }),
         workspaceId: input.workspaceId,
       }, execution => {
         callbackCount += 1;
@@ -319,7 +327,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     });
     const outcome = await provider.execute({
       attemptId: input.attemptId,
-      custody: { custodyRef: input.custodyId },
+      custody: { custodyRef: execution.custodyRef },
       effectId: input.effectId,
       emit: input.emit,
       intent: input.intent,

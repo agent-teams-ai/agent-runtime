@@ -8,6 +8,8 @@ import type {
 import type {
   HostCustodyEvidence,
   HostCustodyEvidenceRegistry,
+  HostCustodyLaunchPlan,
+  HostCustodyReservationInput,
   ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
 import {
@@ -29,16 +31,41 @@ import {
   reservationIdentity,
   type SealedProviderCompletion,
 } from "./contained-turn-kernel-custody-projections.js";
-export interface ContainedTurnHostCustodyPort extends ProviderProcessCustodyPort, HostCustodyEvidenceRegistry { reserve(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): ReturnType<ProviderProcessCustodyPort["open"]>; }
+export interface ContainedTurnHostCustodyPort extends ProviderProcessCustodyPort, HostCustodyEvidenceRegistry {
+  reserve(input: HostCustodyReservationInput): ReturnType<ProviderProcessCustodyPort["open"]>;
+}
 type KernelOpenInput = Parameters<ContainedTurnKernelCustodyPort["open"]>[0];
-export interface ContainedTurnKernelCustodyLaunchAuthority { readonly intentMode: "analysis" | "workspace-write"; readonly workspaceRef: string; }
+interface ContainedTurnKernelCustodyLaunchAuthority { readonly intentMode: "analysis" | "workspace-write"; readonly workspaceRef: string; }
+export interface ContainedTurnKernelWorkspaceOwner {
+  withLaunchAuthority<Result>(input: Readonly<{
+    operationId: KernelOpenInput["operationId"];
+    workspaceId: KernelOpenInput["workspaceId"];
+    attemptId: KernelOpenInput["attemptId"];
+  }>, consume: (target: Readonly<{
+    canonicalPath: string;
+    descriptorPath: string;
+    identity: Readonly<{ dev: bigint; ino: bigint; mountId: string }>;
+  }>) => Promise<Result>): Promise<Result>;
+}
+export interface ContainedTurnKernelCustodyAttemptOwner {
+  prepare(input: Readonly<{
+    kernel: KernelOpenInput;
+    providerBinding: HostCustodyReservationInput["providerBinding"];
+    workspaceAuthority: HostCustodyReservationInput["workspaceAuthority"];
+  }>): Promise<HostCustodyLaunchPlan>;
+  retain(input: Readonly<{
+    kernel: KernelOpenInput;
+    underlyingCustodyRef: string;
+    workspaceRef: string;
+  }>): void;
+  retire(input: Readonly<{ attemptId: string; custodyId: string; operationId: string }>): void;
+}
 export interface ContainedTurnKernelCustodyAdapterOptions {
   readonly completionAfterMs?: number;
   readonly hostBootId: string;
   readonly hostInstanceId: string;
-  readonly launchAuthorityFor: (
-    input: KernelOpenInput,
-  ) => ContainedTurnKernelCustodyLaunchAuthority;
+  readonly attemptOwner: ContainedTurnKernelCustodyAttemptOwner;
+  readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
   readonly monotonicNow?: () => number;
   readonly startObservationAfterMs?: number;
 }
@@ -64,6 +91,7 @@ interface KernelReservation {
   readonly custodyId: KernelOpenInput["custodyId"];
   readonly effectId: KernelOpenInput["effectId"];
   readonly intentMode: ContainedTurnKernelCustodyLaunchAuthority["intentMode"];
+  readonly kernelOpenIdentityDigest: ReturnType<typeof openIdentity>;
   readonly openIdentityDigest: ReturnType<typeof openIdentity>;
   readonly operationId: KernelOpenInput["operationId"];
   readonly underlyingCustodyRef: string;
@@ -99,7 +127,8 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   readonly #hostBootId: Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>["hostBootId"];
   readonly #hostCustody: ContainedTurnHostCustodyPort;
   readonly #hostInstanceId: Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>["hostInstanceId"];
-  readonly #launchAuthorityFor: ContainedTurnKernelCustodyAdapterOptions["launchAuthorityFor"];
+  readonly #attemptOwner: ContainedTurnKernelCustodyAttemptOwner;
+  readonly #workspaceOwner: ContainedTurnKernelWorkspaceOwner;
   readonly #monotonicNow: () => number;
   readonly #reservations = new Map<string, KernelReservation>();
   readonly #startObservationAfterMs: number;
@@ -112,18 +141,60 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     this.#startObservationAfterMs = positiveInteger(
       "startObservationAfterMs", options.startObservationAfterMs, 10_000,
     );
-    this.#launchAuthorityFor = options.launchAuthorityFor;
+    this.#attemptOwner = options.attemptOwner;
+    this.#workspaceOwner = options.workspaceOwner;
     this.#monotonicNow = options.monotonicNow ?? (() => performance.now());
     this.#hostBootId = containedTurnIdentity("host_boot", options.hostBootId);
     this.#hostInstanceId = containedTurnIdentity("host_instance", options.hostInstanceId);
   }
   public async open(input: KernelOpenInput): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
-    const authority = this.#launchAuthorityFor(input);
-    if (!exactRecord(authority, ["intentMode", "workspaceRef"]) ||
-        (authority.intentMode !== "analysis" && authority.intentMode !== "workspace-write") ||
-        typeof authority.workspaceRef !== "string" || authority.workspaceRef.length === 0) {
-      throw new TypeError("Host Custody launch authority is unavailable");
+    const existing = this.#reservations.get(input.custodyId);
+    if (existing !== undefined) {
+      const identity = openIdentity(input, {
+        intentMode: input.intentMode,
+        workspaceRef: "owner-private-workspace-not-reconsumed",
+      });
+      if (!sameReservation(existing, input) || existing.kernelOpenIdentityDigest !== identity) {
+        throw new TypeError("Host Custody kernel reservation identity conflict");
+      }
+      return this.#openOutcome(existing);
     }
+    return this.#workspaceOwner.withLaunchAuthority({
+      attemptId: input.attemptId,
+      operationId: input.operationId,
+      workspaceId: input.workspaceId,
+    }, authority => this.#openScoped(input, authority));
+  }
+  async #openScoped(
+    input: KernelOpenInput,
+    workspaceAuthority: HostCustodyReservationInput["workspaceAuthority"],
+  ): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
+    if (workspaceAuthority.canonicalPath.length === 0 || workspaceAuthority.descriptorPath.length === 0 ||
+        workspaceAuthority.identity.mountId.length === 0 || input.intentMode !== "analysis" && input.intentMode !== "workspace-write") {
+      throw new TypeError("Host Custody scoped workspace authority is unavailable");
+    }
+    const providerBinding = this.#providerBinding(input);
+    const plan = await this.#attemptOwner.prepare({ kernel: input, providerBinding, workspaceAuthority });
+    const authority = Object.freeze({ intentMode: input.intentMode, workspaceRef: workspaceAuthority.canonicalPath });
+    return this.#reserve(input, authority, providerBinding, plan, workspaceAuthority);
+  }
+  #providerBinding(input: KernelOpenInput): HostCustodyReservationInput["providerBinding"] {
+    return Object.freeze({
+      adapterRevision: input.adapterSnapshot.adapterRevision,
+      binaryRevision: input.adapterSnapshot.binaryRevision,
+      capabilityManifestRevision: input.adapterSnapshot.capabilityManifestRevision,
+      credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
+      provider: input.adapterSnapshot.provider,
+      providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
+    });
+  }
+  async #reserve(
+    input: KernelOpenInput,
+    authority: ContainedTurnKernelCustodyLaunchAuthority,
+    providerBinding: HostCustodyReservationInput["providerBinding"],
+    launchPlan: HostCustodyLaunchPlan,
+    workspaceAuthority: HostCustodyReservationInput["workspaceAuthority"],
+  ): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
     const identityDigest = openIdentity(input, authority);
     const existing = this.#reservations.get(input.custodyId);
     if (existing !== undefined) {
@@ -132,24 +203,32 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       }
       return this.#openOutcome(existing);
     }
-    const opened = await this.#hostCustody.reserve({
-      attemptId: input.attemptId,
-      intentMode: authority.intentMode,
-      operationId: input.operationId,
-      providerBinding: Object.freeze({
-        adapterRevision: input.adapterSnapshot.adapterRevision,
-        binaryRevision: input.adapterSnapshot.binaryRevision,
-        capabilityManifestRevision: input.adapterSnapshot.capabilityManifestRevision,
-        credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
-        provider: input.adapterSnapshot.provider,
-        providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
-      }),
-      workspaceRef: authority.workspaceRef,
-    });
-    if (!exactRecord(opened, ["custodyRef"]) ||
-        typeof opened.custodyRef !== "string" || opened.custodyRef.length === 0) {
-      throw new TypeError("Host Custody returned no exact reservation identity");
+    try {
+      const opened = await this.#hostCustody.reserve({
+        attemptId: input.attemptId, intentMode: authority.intentMode, launchPlan,
+        operationId: input.operationId, providerBinding, workspaceAuthority,
+        workspaceRef: authority.workspaceRef,
+      });
+      if (!exactRecord(opened, ["custodyRef"]) ||
+          typeof opened.custodyRef !== "string" || opened.custodyRef.length === 0) {
+        throw new TypeError("Host Custody returned no exact reservation identity");
+      }
+      const custodyRef = opened.custodyRef;
+      this.#attemptOwner.retain({
+        kernel: input, underlyingCustodyRef: custodyRef, workspaceRef: authority.workspaceRef,
+      });
+      return this.#recordReservation(input, authority, identityDigest, custodyRef);
+    } catch (error) {
+      this.#attemptOwner.retire(input);
+      throw error;
     }
+  }
+  #recordReservation(
+    input: KernelOpenInput,
+    authority: ContainedTurnKernelCustodyLaunchAuthority,
+    identityDigest: ReturnType<typeof openIdentity>,
+    custodyRef: string,
+  ): Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>> {
     const reservation: KernelReservation = {
       attemptId: input.attemptId,
       authorityVectorDigest: input.authorityVectorDigest,
@@ -157,6 +236,10 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       effectId: input.effectId,
       executionBoundaryOpened: false,
       intentMode: authority.intentMode,
+      kernelOpenIdentityDigest: openIdentity(input, {
+        intentMode: input.intentMode,
+        workspaceRef: "owner-private-workspace-not-reconsumed",
+      }),
       openIdentityDigest: identityDigest,
       operationId: input.operationId,
       processStartProved: false,
@@ -164,7 +247,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       released: false,
       startBoundaryCutoff: false,
       started: false,
-      underlyingCustodyRef: opened.custodyRef,
+      underlyingCustodyRef: custodyRef,
       workspaceId: input.workspaceId,
     };
     this.#reservations.set(input.custodyId, reservation);
@@ -507,6 +590,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       throw new TypeError("Host Custody reservation release is unproven");
     }
     reservation.released = true;
+    this.#attemptOwner.retire(reservation);
   }
   public async releaseRetiredReservation(
     input: Parameters<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]>[0],

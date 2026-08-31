@@ -8,6 +8,7 @@ import type {
   HostCustodyLaunchFingerprintEvidence,
   HostCustodyLaunchPlan,
   HostCustodyLaunchPlanResolver,
+  HostCustodyWorkspaceAuthority,
   HostCustodyProcessIdentityEvidence,
   HostCustodyProcessIdentityObserver,
   HostCustodyProcessIdentityProof,
@@ -44,6 +45,7 @@ export interface LiveCustody {
   readonly operationId: string;
   readonly providerBinding: Parameters<ProviderProcessCustodyPort["open"]>[0]["providerBinding"];
   readonly workspaceRef: string;
+  readonly workspaceAuthority?: HostCustodyWorkspaceAuthority;
   closureEvidence: HostCustodyStrictClosureEvidence;
   containment?: Promise<ContainmentResult>;
   contained?: Extract<ContainmentResult, { readonly kind: "contained" }>;
@@ -85,7 +87,7 @@ export const createLiveCustody = (
   custodyRef: string,
   hostLifecycleGenerationSha256: string,
   inputIdentitySha256: string,
-  opening: Promise<void>,
+  options: Readonly<{ opening: Promise<void>; workspaceAuthority?: HostCustodyWorkspaceAuthority }>,
 ): LiveCustody => ({
   abortRequested: false,
   attemptId: input.attemptId,
@@ -94,7 +96,7 @@ export const createLiveCustody = (
   evidenceSealed: false,
   identity: notStartedIdentity(hostLifecycleGenerationSha256),
   inputIdentitySha256,
-  opening,
+  opening: options.opening,
   operationId: input.operationId,
   providerBinding: Object.freeze({ ...input.providerBinding }),
   privateRootClosure: Object.freeze({ identitySha256: "", status: "active" }),
@@ -103,6 +105,7 @@ export const createLiveCustody = (
   spawnStatus: "never-started",
   stdinBytes: 0,
   workspaceRef: input.workspaceRef,
+  ...(options.workspaceAuthority === undefined ? {} : { workspaceAuthority: options.workspaceAuthority }),
 });
 
 export interface CustodyTombstone {

@@ -33,3 +33,20 @@ export {
   createContainedTurnProviderAccessPort,
   type OuterContainedTurnProviderAccess,
 } from "./composition/provider-access-anti-corruption.js";
+export {
+  createCodexCurrentKernelOwner,
+  type CodexCurrentKernelLaunchRecord,
+  type CodexCurrentKernelLaunchRecordResolver,
+  type CodexCurrentKernelOwner,
+  type CreateCodexCurrentKernelOwnerOptions,
+} from "./composition/codex-current-kernel-owner.js";
+export {
+  createClaudeCurrentKernelOwner,
+  type ClaudeCurrentKernelLaunchRecord,
+  type ClaudeCurrentKernelLaunchRecordResolver,
+  type ClaudeCurrentKernelOwner,
+  type CreateClaudeCurrentKernelOwnerOptions,
+} from "./composition/claude-current-kernel-owner.js";
+export type {
+  ContainedTurnKernelWorkspaceOwner,
+} from "./adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";

@@ -14,6 +14,7 @@ import {
   type HostCustodyEvidenceRegistry,
   type HostCustodyEvidence,
   type HostCustodyLaunchPlanResolver,
+  type HostCustodyReservationInput,
   type HostCustodyProcessIdentityObserver,
   type HostCustodyProcessIdentityProof,
   type HostCustodySpawnAcknowledgement,
@@ -56,6 +57,10 @@ import {
 import { replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
 import { boundedPromise } from "./host-custody-stdio.js";
+import {
+  assertReservedWorkspaceAuthority,
+  bindPrivateHostCustodyReservation,
+} from "./private-host-custody-reservation.js";
 import {
   createLiveCustody,
   HOST_CUSTODY_LIMITS,
@@ -154,15 +159,26 @@ export class NodeProviderProcessCustody implements
     return this.#open(input);
   }
 
-  public async reserve(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle> {
-    return this.#open(input, "sdk-delegated");
+  public async reserve(input: HostCustodyReservationInput): Promise<ContainedTurnCustodyHandle> {
+    const reservation = await bindPrivateHostCustodyReservation(input);
+    return this.#open(input, "sdk-delegated", reservation.launchPlans);
   }
 
   async #open(
-    input: Parameters<ProviderProcessCustodyPort["open"]>[0],
+    input: Parameters<ProviderProcessCustodyPort["open"]>[0] | HostCustodyReservationInput,
     requiredSpawnMode?: "sdk-delegated",
+    reservationLaunchPlans?: HostCustodyLaunchPlanResolver,
   ): Promise<ContainedTurnCustodyHandle> {
-    const identitySha256 = inputIdentity(input);
+    const baseIdentitySha256 = inputIdentity(input);
+    const identitySha256 = "workspaceAuthority" in input
+      ? sha256(canonicalJson([
+        baseIdentitySha256,
+        input.workspaceAuthority.canonicalPath,
+        input.workspaceAuthority.identity.dev.toString(),
+        input.workspaceAuthority.identity.ino.toString(),
+        input.workspaceAuthority.identity.mountId,
+      ]))
+      : baseIdentitySha256;
     const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
     const existing = this.#byAttempt.get(input.attemptId);
     if (tombstone !== undefined && requiredSpawnMode !== undefined) {
@@ -187,7 +203,10 @@ export class NodeProviderProcessCustody implements
       custodyRef,
       this.#hostLifecycleGenerationSha256,
       identitySha256,
-      opening,
+      {
+        opening,
+        ...("workspaceAuthority" in input ? { workspaceAuthority: input.workspaceAuthority } : {}),
+      },
     );
     this.#byAttempt.set(input.attemptId, live);
     this.#byRef.set(custodyRef, live);
@@ -195,7 +214,7 @@ export class NodeProviderProcessCustody implements
       contain: (reserved, reservedInput) => this.#containSingleFlight(reserved, reservedInput),
       containmentAfterMs: this.#containmentAfterMs,
       input,
-      launchPlans: this.#launchPlans,
+      launchPlans: reservationLaunchPlans ?? this.#launchPlans,
       live,
       opening,
       rejectOpening,
@@ -207,6 +226,7 @@ export class NodeProviderProcessCustody implements
       ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
       resolveOpening,
       spawn: (reserved, arguments_, environment) => {this.#spawn(reserved, arguments_, environment);},
+      ...(reservationLaunchPlans === undefined ? {} : { assertBoundReservation: assertReservedWorkspaceAuthority }),
     });
   }
 

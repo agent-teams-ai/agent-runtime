@@ -28,6 +28,7 @@ export interface PreparedCodexAppServerKernelAttempt {
    */
   createProcess(): Readonly<{
     custody: ContainedTurnCustodyHandle;
+    kernelCustodyId: KernelExecutionInput["custodyId"];
     provider: CodexAppServerContainedTurnProvider;
     workspaceRef: string;
   }>;
@@ -152,7 +153,8 @@ export class CodexAppServerCurrentKernelAdapter implements ContainedTurnKernelPr
     } catch {
       return indeterminate(input, "delegated-process-start-unknown");
     }
-    if (attempt.custody.custodyRef !== input.custodyId
+    if (attempt.kernelCustodyId !== input.custodyId ||
+      typeof attempt.custody.custodyRef !== "string" || attempt.custody.custodyRef.length === 0
       || !matchesExecutionAuthority(attempt.provider, input)) {
       return indeterminate(input, "prepared-attempt-identity-mismatch");
     }
