@@ -16,6 +16,7 @@ export class DockerCustodyControlWriter<Generation> {
   ) {this.#write = write; this.#fail = fail;}
 
   public clear(): void {this.#evidence.length = 0;}
+  public get busy(): boolean {return this.#flushing;}
 
   public enqueue(message: DockerCustodyInitMessage, generation: Generation | null, current: Generation | undefined, onAccepted?: () => void): void {
     this.#evidence.push(Object.freeze({generation, message, onAccepted})); this.flush(current);

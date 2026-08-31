@@ -348,7 +348,7 @@ export class DockerCustodyInitRuntime {
   }
 
   public tick(): void {
-    this.#retryContainment(); this.#retryContainmentEvidence(); this.#flushControl();
+    this.#retryContainment(); this.#flushControl();
     if (this.#phase === "failed" && this.#failureCleanupComplete) {return;}
     try {
       this.#observeRootExit();
@@ -466,10 +466,12 @@ export class DockerCustodyInitRuntime {
   }
   #retryContainment(): void {
     if (this.#containmentRequested || this.#request === undefined || this.#pendingContainmentReason === undefined) {return;}
-    if (this.#containmentEvidence !== undefined) {if (this.#integrityFailed) {this.#retryContainmentEvidence();} return;}
+    if (this.#containmentEvidence !== undefined) {
+      if (this.#integrityFailed && !this.#controlWriter.busy) {this.#retryContainmentEvidence();} return;
+    }
     const reason = this.#pendingContainmentReason;
     this.#containmentEvidence = Object.freeze({kind: "container-containment-request", reason, requestId: this.#request.requestId});
-    if (this.#integrityFailed) {this.#retryContainmentEvidence(); return;}
+    if (this.#integrityFailed) {if (!this.#controlWriter.busy) {this.#retryContainmentEvidence();} return;}
     const evidence = this.#containmentEvidence;
     this.#enqueueControl(evidence, this.#generation ?? null, () => {if (this.#containmentEvidence === evidence) {
       this.#containmentEvidence = undefined; this.#containmentRequested = true; this.#pendingContainmentReason = undefined;}});

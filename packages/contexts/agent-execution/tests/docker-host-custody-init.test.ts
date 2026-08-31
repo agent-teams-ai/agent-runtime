@@ -244,23 +244,23 @@ test("identity mismatch, wrong executable, disallowed environment, and expired r
 });
 
 test("a thrown provider-exec acknowledgement poisons the generation and cannot be followed by evidence", () => {
-  const messages: DockerCustodyInitMessage[] = [];
-  let loseAck = true;
+  const messages: DockerCustodyInitMessage[] = []; let depth = 0; let maximumDepth = 0; let loseAck = true;
   const current = fixture({
     writeControl(message) {
-      if (message.kind === "provider-exec-ack" && loseAck) {loseAck = false; throw new Error("synthetic lost ack");}
-      messages.push(message); return "accepted";
+      depth += 1; maximumDepth = Math.max(maximumDepth, depth);
+      try {if (message.kind === "provider-exec-ack" && loseAck) {loseAck = false; throw new Error("synthetic lost ack");}
+        messages.push(message); return "accepted";
+      } finally {depth -= 1;}
     },
   });
-  current.runtime.receive(handshake);
-  current.runtime.receive(request());
+  current.runtime.receive(handshake); current.runtime.receive(request());
   assert.equal(current.runtime.snapshot().acknowledgement, "lost");
   current.runtime.reportLostAcknowledgement(); current.runtime.reportLostAcknowledgement();
   assert.equal(current.syscalls.spawns.length, 1);
   assert.equal(messages.filter(message => message.kind === "provider-exec-ack").length, 0);
   assert.equal(messages.filter(message => message.kind === "provider-observation").length, 0);
-  assert.equal(current.runtime.snapshot().phase, "failed");
-  assert.deepEqual(containmentReasons(messages), ["init-failure"]);
+  assert.equal(current.runtime.snapshot().phase, "failed"); current.runtime.tick();
+  assert.deepEqual(containmentReasons(messages), ["init-failure"]); assert.equal(maximumDepth, 1);
 });
 
 test("init tracks only the exact provider root and never claims the descendant tree empty", () => {
