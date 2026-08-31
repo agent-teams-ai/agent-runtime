@@ -194,7 +194,23 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
       supportedModes: Object.freeze([...options.manifest.supportedModes]),
     });
     positiveTurnTimeout(options.turnTimeoutMs);
-    this.#options = Object.freeze({ ...options });
+    const clock = options.clock === undefined
+      ? undefined
+      : Object.freeze({
+        now: options.clock.now.bind(options.clock),
+        wait: options.clock.wait.bind(options.clock),
+      });
+    this.#options = Object.freeze({
+      ...options,
+      clock,
+      privateExecutions: Object.freeze({
+        consume: options.privateExecutions.consume.bind(options.privateExecutions),
+      }),
+      processes: Object.freeze({
+        get: options.processes.get.bind(options.processes),
+        start: options.processes.start.bind(options.processes),
+      }),
+    });
   }
 
   public async execute(
@@ -209,6 +225,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     }
 
     let callbackCount = 0;
+    let callbackViolated = false;
     let callbackResultPromise: Promise<ContainedTurnKernelProviderObservation> | undefined;
     let consumeSettled = false;
     try {
@@ -222,21 +239,30 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
       }, execution => {
         callbackCount += 1;
         if (consumeSettled || callbackCount !== 1) {
-          throw new TypeError("Claude private execution callback must be consumed exactly once");
+          callbackViolated = true;
+          return Promise.resolve(indeterminate(input, "private-projection-callback-conflict"));
         }
-        callbackResultPromise = this.#executeWithPrivateProjection(input, execution);
+        callbackResultPromise = this.#executeWithPrivateProjection(input, execution).catch(() =>
+          indeterminate(input, "private-projection-execution-unknown"),
+        );
         return callbackResultPromise;
       });
       consumeSettled = true;
-      if (callbackCount !== 1 || callbackResultPromise === undefined) {
+      if (callbackResultPromise === undefined) {
         return indeterminate(input, "private-projection-absent");
       }
       const callbackResult = await callbackResultPromise;
+      if (callbackCount !== 1 || callbackViolated) {
+        return indeterminate(input, "private-projection-callback-conflict");
+      }
       return resolverResult === callbackResult
         ? callbackResult
         : indeterminate(input, "private-projection-result-conflict");
     } catch {
       consumeSettled = true;
+      if (callbackResultPromise !== undefined) {
+        await callbackResultPromise;
+      }
       return indeterminate(input, "private-projection-unknown");
     }
   }

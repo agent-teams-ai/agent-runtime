@@ -990,13 +990,14 @@ test("current-kernel adapter rejects a resolver result produced without its priv
   assert.equal(guardianSpawns, 0);
 });
 
-test("current-kernel adapter rejects two private callback invocations even when the resolver substitutes the first result", async () => {
+test("current-kernel adapter makes a duplicate private callback effect-free and indeterminate", async () => {
   let guardianSpawns = 0;
   const adapter = kernelProvider(spawnedQuery([success("double-private-callback")]), {
     privateExecutions: {
       consume: async (_request, consume) => {
         const first = await consume({ privateProjection, workspaceRef });
-        try {await consume({ privateProjection, workspaceRef });} catch {}
+        const duplicate = await consume({ privateProjection, workspaceRef });
+        assert.equal(duplicate.kind, "indeterminate");
         return first;
       },
     },
@@ -1007,6 +1008,86 @@ test("current-kernel adapter rejects two private callback invocations even when 
   });
   assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
   assert.equal(guardianSpawns, 1);
+});
+
+test("current-kernel adapter drains a callback already started before its resolver rejects", async () => {
+  let iteratorStarted = false;
+  let releaseIterator: (() => void) | undefined;
+  const iteratorGate = new Promise<void>(resolve => {releaseIterator = resolve;});
+  const adapter = kernelProvider(queryInput => {
+    queryInput.options.spawnClaudeCodeProcess({
+      args: [...claudeAgentSdkArguments("analysis", workspaceRef)], command: executablePath,
+      cwd: workspaceRef, env: { ...privateProjection.environment }, signal: new AbortController().signal,
+    });
+    return {
+      close: () => {}, interrupt: async () => {},
+      async *[Symbol.asyncIterator]() {
+        iteratorStarted = true;
+        await iteratorGate;
+        yield success("callback-before-resolver-rejection");
+      },
+    };
+  }, {
+    privateExecutions: {
+      consume: async (_request, consume) => {
+        void consume({ privateProjection, workspaceRef });
+        throw new Error("synthetic resolver rejection after callback");
+      },
+    },
+  });
+  let settled = false;
+  const outcomePromise = adapter.execute(kernelInput() as never);
+  void outcomePromise.then(() => {settled = true;});
+  await waitFor(() => iteratorStarted);
+  await nextTurn();
+  assert.equal(settled, false);
+  releaseIterator?.();
+  assert.equal((await outcomePromise).kind, "indeterminate");
+});
+
+test("current-kernel adapter observes a callback rejection after resolver rejection", async t => {
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown): void => {unhandled.push(reason);};
+  process.on("unhandledRejection", onUnhandled);
+  t.after(() => {process.off("unhandledRejection", onUnhandled);});
+  const adapter = kernelProvider(() => {throw new Error("synthetic callback execution rejection");}, {
+    privateExecutions: {
+      consume: async (_request, consume) => {
+        void consume({ privateProjection, workspaceRef });
+        throw new Error("synthetic resolver rejection after callback rejection");
+      },
+    },
+  });
+  assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+  await nextTurn();
+  await nextTurn();
+  assert.deepEqual(unhandled, []);
+});
+
+test("current-kernel adapter makes a retained callback invoked after resolver settlement effect-free", async () => {
+  let retained: ((execution: { privateProjection: typeof privateProjection; workspaceRef: string }) => Promise<unknown>) | undefined;
+  let queryCalls = 0;
+  let guardianSpawns = 0;
+  const adapter = kernelProvider(() => {
+    queryCalls += 1;
+    throw new Error("late callback must not reach provider code");
+  }, {
+    privateExecutions: {
+      consume: async (_request, consume) => {
+        retained = consume;
+        return undefined;
+      },
+    },
+    processes: {
+      get: () => inertRegistryProcess(),
+      start: () => {guardianSpawns += 1; return inertProcess();},
+    },
+  });
+  assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+  assert.ok(retained);
+  const late = await retained({ privateProjection, workspaceRef });
+  assert.equal((late as { kind: string }).kind, "indeterminate");
+  assert.deepEqual([queryCalls, guardianSpawns], [0, 0]);
 });
 
 test("current-kernel adapter rejects a resolver substitute for the exactly-once callback result", async () => {
@@ -1148,23 +1229,66 @@ test("current-kernel adapter rejects a start observation delivered after the ori
 test("current-kernel adapter snapshots mutable constructor options before execution", async () => {
   let originalResolverCalls = 0;
   let replacementResolverCalls = 0;
+  let originalProcessStarts = 0;
+  let replacementProcessStarts = 0;
+  let originalClockReads = 0;
+  let originalClockWaits = 0;
+  let replacementClockCalls = 0;
+  const privateExecutions = {
+    ownerState: "original",
+    async consume(this: { ownerState: string }, _request: unknown, consume: (execution: { privateProjection: typeof privateProjection; workspaceRef: string }) => Promise<unknown>) {
+      assert.equal(this.ownerState, "original");
+      originalResolverCalls += 1;
+      return consume({ privateProjection, workspaceRef });
+    },
+  };
+  const processes = {
+    ownerState: "original",
+    get(this: { ownerState: string }) {
+      assert.equal(this.ownerState, "original");
+      return inertRegistryProcess();
+    },
+    start(this: { ownerState: string }) {
+      assert.equal(this.ownerState, "original");
+      originalProcessStarts += 1;
+      return inertProcess();
+    },
+  };
+  const clock = {
+    elapsed: 0,
+    now(this: { elapsed: number }) {
+      originalClockReads += 1;
+      return this.elapsed;
+    },
+    wait(this: { elapsed: number }, _milliseconds: number, signal: AbortSignal): Promise<void> {
+      originalClockWaits += 1;
+      return new Promise((_resolve, reject) => {
+        if (signal.aborted) {reject(new Error("aborted")); return;}
+        signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      });
+    },
+  };
   const mutableOptions = {
     adapterSnapshot: kernelAdapterSnapshot,
     cancellationPollMs: 1,
     executablePath,
     interruptGraceMs: 5,
     manifest: kernelManifest,
-    privateExecutions: {
-      consume: async (_request: unknown, consume: (execution: { privateProjection: typeof privateProjection; workspaceRef: string }) => Promise<unknown>) => {
-        originalResolverCalls += 1;
-        return consume({ privateProjection, workspaceRef });
-      },
-    },
-    processes: { get: () => inertRegistryProcess(), start: () => inertProcess() },
+    clock,
+    privateExecutions,
+    processes,
     queryFactory: spawnedQuery([success("snapshotted-options")]),
     turnTimeoutMs: 100,
   };
   const adapter = new ClaudeAgentSdkCurrentKernelAdapter(mutableOptions);
+  privateExecutions.consume = async () => {
+    replacementResolverCalls += 1;
+    return { kind: "completed", outcome: "succeeded" };
+  };
+  processes.get = () => inertRegistryProcess();
+  processes.start = () => {replacementProcessStarts += 1; return inertProcess();};
+  clock.now = () => {replacementClockCalls += 1; throw new Error("replacement clock now must not run");};
+  clock.wait = async () => {replacementClockCalls += 1; throw new Error("replacement clock wait must not run");};
   mutableOptions.privateExecutions = {
     consume: async () => {
       replacementResolverCalls += 1;
@@ -1174,4 +1298,8 @@ test("current-kernel adapter snapshots mutable constructor options before execut
   mutableOptions.queryFactory = () => {throw new Error("mutated query factory must not run");};
   assert.deepEqual(await adapter.execute(kernelInput() as never), { kind: "completed", outcome: "succeeded" });
   assert.deepEqual([originalResolverCalls, replacementResolverCalls], [1, 0]);
+  assert.deepEqual([originalProcessStarts, replacementProcessStarts], [1, 0]);
+  assert.ok(originalClockReads > 0);
+  assert.ok(originalClockWaits > 0);
+  assert.equal(replacementClockCalls, 0);
 });
