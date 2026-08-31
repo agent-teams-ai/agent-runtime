@@ -1,4 +1,4 @@
-import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
+import { digestContainedTurnCanonicalValue, parseContainedTurnCanonicalDigest } from "../domain/contained-turn-codecs.js";
 import { containedTurnDispatchClaimBindingDigest, type ContainedTurnConsumedGrantReceipt, type ContainedTurnDispatchGrantOwner, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
 import type { ContainedTurnOperationCutoffRevision } from "../domain/contained-turn-output-authority.js";
 
@@ -20,12 +20,27 @@ export const normalizeContainedTurnConsumedGrantReceipt = <Owner extends Contain
   owner: Owner,
   subject: ContainedTurnDispatchGrantSubject,
   outer: OuterContainedTurnConsumedGrantReceipt,
-): ContainedTurnConsumedGrantReceipt<Owner> => Object.freeze({
-  claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
-  grantRequestDigest: opaqueGrantFieldDigest(owner, "request", outer.grantRequestRef),
-  grantRequestId: `grant-request:${opaqueGrantFieldDigest(owner, "request", outer.grantRequestRef)}`,
-  owner,
-  ownerAuthorityDigest: opaqueGrantFieldDigest(owner, "authority", outer.ownerAuthorityRef),
-  ownerReceiptDigest: opaqueGrantFieldDigest(owner, "receipt", outer.ownerReceiptRef),
-  validThroughOperationCutoffRevision: outer.validThroughOperationCutoffRevision,
-});
+  expectedGrantRequestId?: string,
+): ContainedTurnConsumedGrantReceipt<Owner> => {
+  let grantRequestDigest = opaqueGrantFieldDigest(owner, "request", outer.grantRequestRef);
+  let grantRequestId = `grant-request:${grantRequestDigest}`;
+  if (expectedGrantRequestId !== undefined) {
+    if (outer.grantRequestRef !== expectedGrantRequestId ||
+        !expectedGrantRequestId.startsWith("grant-request:")) {
+      throw new TypeError(`${owner} consumed receipt substituted the grant request identity`);
+    }
+    grantRequestDigest = parseContainedTurnCanonicalDigest(
+      expectedGrantRequestId.slice("grant-request:".length),
+    );
+    grantRequestId = expectedGrantRequestId;
+  }
+  return Object.freeze({
+    claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
+    grantRequestDigest,
+    grantRequestId,
+    owner,
+    ownerAuthorityDigest: opaqueGrantFieldDigest(owner, "authority", outer.ownerAuthorityRef),
+    ownerReceiptDigest: opaqueGrantFieldDigest(owner, "receipt", outer.ownerReceiptRef),
+    validThroughOperationCutoffRevision: outer.validThroughOperationCutoffRevision,
+  });
+};

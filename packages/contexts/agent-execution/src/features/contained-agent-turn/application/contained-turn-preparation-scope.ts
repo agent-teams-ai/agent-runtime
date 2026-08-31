@@ -5,6 +5,7 @@ import type {
   ContainedTurnCleanupPermit,
   ContainedTurnDispatchPreparation,
 } from "../domain/contained-turn-dispatch-preparation.js";
+import { CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT } from "../domain/contained-turn-dispatch-preparation.js";
 import { validateContainedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "../domain/contained-turn-limits.js";
@@ -134,6 +135,9 @@ const snapshotCleanupPendingPreparation = (
     "runtimeSecurityConsumptionEvidenceId", "runtimeSecuritySettled",
   ]);
   const pending = preparation as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }>;
+  if (pending.cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
+    throw new TypeError("cleanup evidence limit exceeded");
+  }
   assertContainedTurnCanonicalArray(pending.cleanupEvidenceIds);
   const cleanupEvidenceIds = Object.freeze(pending.cleanupEvidenceIds.map(evidenceId =>
     validateContainedTurnIdentity("evidence", evidenceId)));
@@ -153,9 +157,8 @@ const snapshotCleanupPendingPreparation = (
       !pending.runtimeSecuritySettled)) {
     throw new TypeError("cleanup preparation cannot retain debt without grant identity evidence");
   }
-  if ((pending.providerAccessGrantRequestId !== null && providerAccessConsumptionEvidenceId !== null) ||
-      (pending.runtimeSecurityGrantRequestId !== null && runtimeSecurityConsumptionEvidenceId !== null)) {
-    throw new TypeError("cleanup preparation grant proof and indeterminate evidence are mutually exclusive");
+  if (pending.runtimeSecurityGrantRequestId !== null && runtimeSecurityConsumptionEvidenceId !== null) {
+    throw new TypeError("Runtime Security grant proof and indeterminate evidence are mutually exclusive");
   }
   if ((providerAccessConsumptionEvidenceId !== null &&
       !cleanupEvidenceIds.includes(providerAccessConsumptionEvidenceId)) ||
@@ -184,6 +187,9 @@ const snapshotCleanupClosedPreparation = (
     "providerAccessConsumptionEvidenceId", "runtimeSecurityConsumptionEvidenceId",
   ]);
   const closed = preparation as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_closed" }>;
+  if (closed.cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
+    throw new TypeError("cleanup evidence limit exceeded");
+  }
   assertContainedTurnCanonicalArray(closed.cleanupEvidenceIds);
   const cleanupEvidenceIds = Object.freeze(closed.cleanupEvidenceIds.map(evidenceId =>
     validateContainedTurnIdentity("evidence", evidenceId)));
@@ -291,6 +297,7 @@ export const isContainedTurnRetiredPreparation = (
   cleanupPermitMatchesPreparation(preparation.cleanupPermit, preparation);
 
 /** Exact permit and owner identities for each cleanup-store continuation. */
+// oxlint-disable-next-line complexity -- exact monotone cleanup continuation checks stay explicit.
 export const isContainedTurnPreparationCleanupContinuation = (
   expected: ContainedTurnDispatchPreparation,
   actual: ContainedTurnDispatchPreparation,

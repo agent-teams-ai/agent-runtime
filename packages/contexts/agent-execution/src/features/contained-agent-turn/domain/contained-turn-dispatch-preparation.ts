@@ -3,6 +3,7 @@ import { containedTurnIdentity, type ContainedTurnAttemptId, type ContainedTurnC
 import type { ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 
 export type ContainedTurnCleanupPermitId = ContainedTurnIdentity<"cleanup_permit">;
+export const CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT = 64;
 
 export interface ContainedTurnDispatchPreparationIdentity {
   readonly attemptId: ContainedTurnAttemptId;
@@ -158,9 +159,6 @@ export const retireContainedTurnDispatchPreparation = (
   const runtimeSecurityConsumptionEvidenceId = consumptionEvidenceIds.runtimeSecurityEvidenceId === undefined
     ? null
     : validateContainedTurnIdentity("evidence", consumptionEvidenceIds.runtimeSecurityEvidenceId);
-  if (bound.providerAccessGrantRequestId !== null && providerAccessConsumptionEvidenceId !== null) {
-    throw new TypeError("Provider Access consumption cannot be both proved and indeterminate");
-  }
   if (bound.runtimeSecurityGrantRequestId !== null && runtimeSecurityConsumptionEvidenceId !== null) {
     throw new TypeError("Runtime Security consumption cannot be both proved and indeterminate");
   }
@@ -210,17 +208,29 @@ export const recordContainedTurnPreparationCleanup = (
   if (preparation.kind !== "cleanup_pending" || !samePermit(preparation.cleanupPermit, input.permit)) {
     throw new TypeError("cleanup requires the exact retired preparation permit");
   }
+  if (preparation.cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
+    throw new TypeError("cleanup evidence limit exceeded");
+  }
+  const evidenceId = input.evidenceId === undefined
+    ? undefined
+    : validateContainedTurnIdentity("evidence", input.evidenceId);
+  if (evidenceId !== undefined) {
+    if (preparation.cleanupEvidenceIds.includes(evidenceId) ||
+        preparation.cleanupEvidenceIds.length === CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
+      return preparation;
+    }
+  }
   const candidate = {
     ...preparation,
-    cleanupEvidenceIds: input.evidenceId === undefined
+    cleanupEvidenceIds: evidenceId === undefined
       ? preparation.cleanupEvidenceIds
-      : Object.freeze([...new Set([...preparation.cleanupEvidenceIds, input.evidenceId])]),
+      : Object.freeze([...new Set([...preparation.cleanupEvidenceIds, evidenceId])]),
     custodyReleased: preparation.custodyReleased ||
-      (input.evidenceId === undefined && input.target === "custody"),
+      (evidenceId === undefined && input.target === "custody"),
     providerAccessSettled: preparation.providerAccessSettled ||
-      (input.evidenceId === undefined && input.target === "provider_access"),
+      (evidenceId === undefined && input.target === "provider_access"),
     runtimeSecuritySettled: preparation.runtimeSecuritySettled ||
-      (input.evidenceId === undefined && input.target === "runtime_security"),
+      (evidenceId === undefined && input.target === "runtime_security"),
   };
   if (candidate.custodyReleased && candidate.providerAccessSettled && candidate.runtimeSecuritySettled) {
     return Object.freeze({

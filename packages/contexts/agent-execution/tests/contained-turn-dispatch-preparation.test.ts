@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { decodeContainedTurnPreparation } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-preparation-codec.js";
+import {
+  ContainedTurnStateQuarantineError,
+  digestContainedTurnPostgresJson,
+} from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
 import { reconcileContainedTurnClaimPreparation } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 import { recoverContainedTurnDispatchPreparations } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
 import { claimContainedTurnWithConsumedGrants } from "../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
@@ -10,9 +15,11 @@ import { containedTurnScopeDigest } from "../dist/features/contained-agent-turn/
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
   containedTurnDispatchClaimBindingDigest,
+  containedTurnDispatchGrantRequestId,
   validateContainedTurnConsumedGrantReceipts,
 } from "../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import {
+  CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT,
   claimContainedTurnDispatchPreparation,
   recordContainedTurnPreparationCleanup,
   retireContainedTurnDispatchPreparation,
@@ -153,7 +160,11 @@ test("retirement durably preserves and reconciles every indeterminate grant cons
   const retired = retireContainedTurnDispatchPreparation(
     active,
     "retirement:indeterminate-consumption",
-    {},
+    {
+      providerAccessGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
+        owner: "provider_access", request: "indeterminate-consumption",
+      })}`,
+    },
     { providerAccessEvidenceId, runtimeSecurityEvidenceId },
   );
   assert.equal(retired.kind, "cleanup_pending");
@@ -164,6 +175,8 @@ test("retirement durably preserves and reconciles every indeterminate grant cons
   ]);
   assert.equal(retired.providerAccessSettled, false);
   assert.equal(retired.runtimeSecuritySettled, false);
+  assert.match(retired.providerAccessGrantRequestId ?? "", /^grant-request:sha256:[a-f0-9]{64}$/u);
+  assert.equal(retired.providerAccessConsumptionEvidenceId, providerAccessEvidenceId);
 
   const custodyReleased = recordContainedTurnPreparationCleanup(retired, {
     permit: retired.cleanupPermit,
@@ -198,6 +211,196 @@ test("retirement durably preserves and reconciles every indeterminate grant cons
     assert.equal(closed.providerAccessConsumptionEvidenceId, providerAccessEvidenceId);
     assert.equal(closed.runtimeSecurityConsumptionEvidenceId, runtimeSecurityEvidenceId);
   }
+});
+
+test("cleanup evidence stops growing at its explicit cap without settling ambiguity", () => {
+  const active = Object.freeze({
+    attemptId,
+    custodyId,
+    kind: "active" as const,
+    operationCutoffRevision: 0,
+    operationId,
+    preparationToken,
+    preparedOperationRevision: 1,
+    providerAccessGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
+      owner: "provider_access", request: "bounded-evidence",
+    })}`,
+    runtimeSecurityGrantRequestId: null,
+    workspaceId,
+  });
+  const initialEvidenceId = containedTurnIdentity("evidence", "evidence:bounded-cleanup-initial");
+  let pending = retireContainedTurnDispatchPreparation(
+    active,
+    "retirement:bounded-cleanup",
+    {},
+    { providerAccessEvidenceId: initialEvidenceId },
+  );
+  if (pending.kind !== "cleanup_pending") {assert.fail("bounded cleanup fixture did not retire");}
+  for (let index = pending.cleanupEvidenceIds.length;
+    index < CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT;
+    index += 1) {
+    const next = recordContainedTurnPreparationCleanup(pending, {
+      evidenceId: containedTurnIdentity("evidence", `evidence:bounded-cleanup:${String(index)}`),
+      permit: pending.cleanupPermit,
+      target: "provider_access",
+    });
+    if (next.kind !== "cleanup_pending") {assert.fail("indeterminate evidence cannot close cleanup");}
+    pending = next;
+  }
+  const historyAtCap = pending.cleanupEvidenceIds;
+  const overflow = recordContainedTurnPreparationCleanup(pending, {
+    evidenceId: containedTurnIdentity("evidence", "evidence:bounded-cleanup:overflow"),
+    permit: pending.cleanupPermit,
+    target: "provider_access",
+  });
+  assert.strictEqual(overflow, pending);
+  assert.strictEqual(overflow.cleanupEvidenceIds, historyAtCap);
+  assert.equal(overflow.providerAccessSettled, false);
+  assert.equal(overflow.cleanupEvidenceIds.length, CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT);
+  assert.equal(overflow.cleanupEvidenceIds.includes(initialEvidenceId), true);
+});
+
+test("persisted v2 cleanup debt upcasts for conservative recovery and oversized rows quarantine", async () => {
+  const providerAccessGrantRequestId = `grant-request:${digestContainedTurnCanonicalValue({
+    owner: "provider_access", request: "persisted-v2",
+  })}`;
+  const runtimeSecurityGrantRequestId = `grant-request:${digestContainedTurnCanonicalValue({
+    owner: "runtime_security", request: "persisted-v2",
+  })}`;
+  const active = Object.freeze({
+    attemptId,
+    custodyId,
+    kind: "active" as const,
+    operationCutoffRevision: 0,
+    operationId,
+    preparationToken,
+    preparedOperationRevision: 1,
+    providerAccessGrantRequestId,
+    runtimeSecurityGrantRequestId,
+    workspaceId,
+  });
+  const retired = retireContainedTurnDispatchPreparation(active, "retirement:persisted-v2");
+  if (retired.kind !== "cleanup_pending") {assert.fail("persisted v2 fixture did not retire");}
+  const historicalEvidenceId = containedTurnIdentity("evidence", "evidence:persisted-v2-history");
+  const {
+    providerAccessConsumptionEvidenceId: _providerEvidence,
+    runtimeSecurityConsumptionEvidenceId: _securityEvidence,
+    ...legacyPayload
+  } = retired;
+  const v2Payload = {
+    ...legacyPayload,
+    cleanupEvidenceIds: [historicalEvidenceId],
+    custodyReleased: true,
+    providerAccessSettled: true,
+    runtimeSecuritySettled: true,
+  };
+  const v2Row = { codecVersion: 2, payload: v2Payload };
+  const decoded = decodeContainedTurnPreparation(v2Row, digestContainedTurnPostgresJson(v2Row), 2);
+  assert.equal(decoded.kind, "cleanup_pending");
+  if (decoded.kind !== "cleanup_pending") {return;}
+  assert.deepEqual(decoded.cleanupEvidenceIds, [historicalEvidenceId]);
+  assert.equal(decoded.custodyReleased, false);
+  assert.equal(decoded.providerAccessSettled, false);
+  assert.equal(decoded.runtimeSecuritySettled, false);
+
+  let current = decoded;
+  const recoveryCalls: string[] = [];
+  const recoveryDependencies = {
+    custody: { releaseRetiredReservation: async () => {
+      recoveryCalls.push("custody"); return { kind: "released" as const };
+    } },
+    operationStore: {
+      listDispatchPreparations: async () => [{ operation: createOperation(), preparation: decoded }],
+      recordDispatchPreparationCleanup: async input => {
+        current = recordContainedTurnPreparationCleanup(current, input);
+        return current;
+      },
+    },
+    providerAccess: { settleConsumedGrant: async input => {
+      recoveryCalls.push(`provider_access:${input.grantRequestId ?? "missing"}`);
+      return { kind: "settled" as const };
+    } },
+    security: { settleConsumedGrant: async input => {
+      recoveryCalls.push(`runtime_security:${input.grantRequestId ?? "missing"}`);
+      return { kind: "settled" as const };
+    } },
+  } as unknown as ContainedTurnKernelDependencies;
+  assert.deepEqual(await recoverContainedTurnDispatchPreparations(recoveryDependencies, scope), {
+    discovered: 1,
+    retired: 0,
+  });
+  assert.deepEqual(recoveryCalls, [
+    "custody",
+    `provider_access:${providerAccessGrantRequestId}`,
+    `runtime_security:${runtimeSecurityGrantRequestId}`,
+  ]);
+  assert.equal(current.kind, "cleanup_closed");
+  assert.equal(current.cleanupEvidenceIds.includes(historicalEvidenceId), true);
+
+  const v1Retired = retireContainedTurnDispatchPreparation({
+    ...active,
+    providerAccessGrantRequestId: null,
+    runtimeSecurityGrantRequestId: null,
+  }, "retirement:persisted-v1");
+  if (v1Retired.kind !== "cleanup_pending") {assert.fail("persisted v1 fixture did not retire");}
+  const {
+    providerAccessConsumptionEvidenceId: _v1ProviderEvidence,
+    providerAccessGrantRequestId: _v1ProviderRequest,
+    runtimeSecurityConsumptionEvidenceId: _v1SecurityEvidence,
+    runtimeSecurityGrantRequestId: _v1SecurityRequest,
+    ...v1Base
+  } = v1Retired;
+  const v1Decoded = decodeContainedTurnPreparation({
+    ...v1Base,
+    cleanupEvidenceIds: [historicalEvidenceId],
+    custodyReleased: true,
+    providerAccessSettled: true,
+    runtimeSecuritySettled: true,
+  }, null, 1);
+  assert.equal(v1Decoded.kind, "cleanup_pending");
+  if (v1Decoded.kind === "cleanup_pending") {
+    assert.deepEqual(v1Decoded.cleanupEvidenceIds, [historicalEvidenceId]);
+    assert.equal(v1Decoded.custodyReleased, false);
+    assert.equal(v1Decoded.providerAccessSettled, true);
+    assert.equal(v1Decoded.runtimeSecuritySettled, true);
+  }
+
+  const oversizedRow = {
+    codecVersion: 3,
+    payload: {
+      ...decoded,
+      cleanupEvidenceIds: Array.from(
+        { length: CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT + 1 },
+        (_unused, index) => containedTurnIdentity("evidence", `evidence:persisted-over-limit:${String(index)}`),
+      ),
+    },
+  };
+  assert.throws(
+    () => decodeContainedTurnPreparation(
+      oversizedRow, digestContainedTurnPostgresJson(oversizedRow), 3,
+    ),
+    (error: unknown) => error instanceof ContainedTurnStateQuarantineError && error.reason === "malformed",
+  );
+  let oversizedElementReads = 0;
+  const oversizedEvidenceIds = Array.from(
+    { length: CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT + 1 },
+    (_unused, index) => containedTurnIdentity("evidence", `evidence:preflight-over-limit:${String(index)}`),
+  );
+  Object.defineProperty(oversizedEvidenceIds, 0, {
+    enumerable: true,
+    get: () => {
+      oversizedElementReads += 1;
+      return containedTurnIdentity("evidence", "evidence:preflight-over-limit:0");
+    },
+  });
+  assert.throws(
+    () => decodeContainedTurnPreparation({
+      codecVersion: 3,
+      payload: { ...decoded, cleanupEvidenceIds: oversizedEvidenceIds },
+    }, "digest-must-not-be-evaluated", 3),
+    (error: unknown) => error instanceof ContainedTurnStateQuarantineError && error.reason === "malformed",
+  );
+  assert.equal(oversizedElementReads, 0, "stored evidence is bounded before digest encoding");
 });
 
 test("restart recovery retires against the preparation revision rather than the advanced operation", async () => {
@@ -300,6 +503,10 @@ test("parallel grant consumption returns every indeterminate owner evidence", as
       providerAccessEvidenceId,
       runtimeSecurityEvidenceId,
     });
+    assert.equal(
+      outcome.consumedGrantRequestIds.providerAccessGrantRequestId,
+      containedTurnDispatchGrantRequestId("provider_access", subject),
+    );
   }
 
   const rejected = await claimContainedTurnWithConsumedGrants(
@@ -333,6 +540,10 @@ test("parallel grant consumption returns every indeterminate owner evidence", as
   assert.equal(
     rejected.consumptionEvidenceIds.runtimeSecurityEvidenceId,
     runtimeSecurityEvidenceId,
+  );
+  assert.equal(
+    rejected.consumedGrantRequestIds.providerAccessGrantRequestId,
+    containedTurnDispatchGrantRequestId("provider_access", subject),
   );
 });
 

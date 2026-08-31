@@ -1,4 +1,5 @@
 import type { ContainedTurnDispatchPreparation } from "../../../domain/contained-turn-dispatch-preparation.js";
+import { CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT } from "../../../domain/contained-turn-dispatch-preparation.js";
 import { snapshotContainedTurnDispatchPreparation } from "../../../application/contained-turn-preparation-scope.js";
 import {
   canonicalContainedTurnPostgresJson,
@@ -13,6 +14,19 @@ const record = (value: unknown): Record<string, unknown> => {
     throw new ContainedTurnStateQuarantineError(1, "malformed");
   }
   return value as Record<string, unknown>;
+};
+
+const rejectOversizedStoredEvidence = (state: unknown, codecVersion: number): void => {
+  if (state === null || typeof state !== "object" || Array.isArray(state)) {return;}
+  const outer = state as Record<string, unknown>;
+  const candidate = codecVersion === 1 ? outer : outer.payload;
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {return;}
+  const payload = candidate as Record<string, unknown>;
+  if ((payload.kind === "cleanup_pending" || payload.kind === "cleanup_closed") &&
+      Array.isArray(payload.cleanupEvidenceIds) &&
+      payload.cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
+    throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
+  }
 };
 
 const validatePreparation = (
@@ -49,17 +63,24 @@ const addConsumptionEvidenceFields = (legacy: Record<string, unknown>): Record<s
     : {}),
 });
 
-const upcastV1 = (state: unknown): ContainedTurnDispatchPreparation => {
-  const legacy = addConsumptionEvidenceFields(record(state));
-  const upcast = {
+const recoverLegacyCleanupDebt = (legacy: Record<string, unknown>): Record<string, unknown> => legacy.kind === "cleanup_pending"
+  ? {
     ...legacy,
+    custodyReleased: false,
+    providerAccessSettled: legacy.providerAccessGrantRequestId === null,
+    runtimeSecuritySettled: legacy.runtimeSecurityGrantRequestId === null,
+  }
+  : legacy;
+
+const upcastV1 = (state: unknown): ContainedTurnDispatchPreparation => {
+  const legacy = recoverLegacyCleanupDebt(addConsumptionEvidenceFields({
+    ...record(state),
     providerAccessGrantRequestId: null,
     runtimeSecurityGrantRequestId: null,
-    ...(legacy.kind === "cleanup_pending"
-      ? { providerAccessSettled: true, runtimeSecuritySettled: true }
-      : {}),
-  };
-  return validatePreparation(upcast, 1);
+  }));
+  return validatePreparation({
+    ...legacy,
+  }, 1);
 };
 
 const decodeEnvelope = (state: unknown, codecVersion: 2 | 3): ContainedTurnDispatchPreparation => {
@@ -69,7 +90,7 @@ const decodeEnvelope = (state: unknown, codecVersion: 2 | 3): ContainedTurnDispa
     throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
   }
   const payload = codecVersion === 2
-    ? addConsumptionEvidenceFields(record(envelope.payload))
+    ? recoverLegacyCleanupDebt(addConsumptionEvidenceFields(record(envelope.payload)))
     : envelope.payload;
   return validatePreparation(payload, codecVersion);
 };
@@ -100,6 +121,7 @@ export const decodeContainedTurnPreparation = (
   if (codecVersion > CONTAINED_TURN_PREPARATION_CODEC_VERSION) {
     throw new ContainedTurnStateQuarantineError(codecVersion, "unsupported_version");
   }
+  rejectOversizedStoredEvidence(state, codecVersion);
   if (expectedDigest !== null && digestContainedTurnPostgresJson(state) !== expectedDigest) {
     throw new Error("contained turn preparation digest mismatch");
   }

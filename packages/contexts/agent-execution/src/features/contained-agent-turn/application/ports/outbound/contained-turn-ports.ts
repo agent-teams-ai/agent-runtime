@@ -93,7 +93,7 @@ export type RevalidateContainedTurnProviderAccessOutcome =
   };
 
 export interface ContainedTurnProviderAccessPort {
-  consumeForDispatch(input: Readonly<{ subject: ContainedTurnDispatchGrantSubject }>): Promise<
+  consumeForDispatch(input: Readonly<{ grantRequestId: string; subject: ContainedTurnDispatchGrantSubject }>): Promise<
     | { readonly kind: "consumed"; readonly receipt: ContainedTurnConsumedGrantReceipt<"provider_access"> }
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }

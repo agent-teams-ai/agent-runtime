@@ -9,6 +9,7 @@ import { containedTurnScopeDigest } from "../dist/features/contained-agent-turn/
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnDispatchClaimBindingDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import {
+  CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT,
   recordContainedTurnPreparationCleanup,
   retireContainedTurnDispatchPreparation,
   type ContainedTurnDispatchPreparation,
@@ -564,6 +565,19 @@ test("cleanup permits reject extras, forged digest or ID, accessors, proxies, an
   const sparseEvidenceIds = ["evidence:scope-sanitization"];
   delete sparseEvidenceIds[0];
   attempts.push({ ...retiredPreparation, cleanupEvidenceIds: sparseEvidenceIds });
+  let oversizedEvidenceReads = 0;
+  const oversizedEvidenceIds = Array.from(
+    { length: CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT + 1 },
+    (_unused, index) => `evidence:oversized-scope-sanitization:${String(index)}`,
+  );
+  Object.defineProperty(oversizedEvidenceIds, 0, {
+    enumerable: true,
+    get: () => {
+      oversizedEvidenceReads += 1;
+      return "evidence:oversized-scope-sanitization:0";
+    },
+  });
+  attempts.push({ ...retiredPreparation, cleanupEvidenceIds: oversizedEvidenceIds });
 
   for (const preparation of attempts) {
     let calls = 0;
@@ -579,6 +593,7 @@ test("cleanup permits reject extras, forged digest or ID, accessors, proxies, an
     assert.deepEqual(outcome, { kind: "cleanup_pending", operation: initial });
     assert.equal(calls, 0);
   }
+  assert.equal(oversizedEvidenceReads, 0, "the evidence cap is checked before copying array elements");
 });
 
 test("cleanup snapshots once before owner calls and never forwards or returns owner-store aggregates", async () => {

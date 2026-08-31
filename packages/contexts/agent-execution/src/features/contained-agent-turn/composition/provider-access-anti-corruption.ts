@@ -7,6 +7,7 @@ import {
   type ContainedTurnScope,
 } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
+import { containedTurnDispatchGrantRequestId } from "../domain/contained-turn-dispatch-authority.js";
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import { normalizeContainedTurnConsumedGrantReceipt, type OuterContainedTurnConsumedGrantReceipt } from "./dispatch-grant-anti-corruption.js";
 
@@ -28,7 +29,10 @@ interface OuterBinding extends ContainedTurnScope {
 }
 
 export interface OuterContainedTurnProviderAccess {
-  readonly consumeDispatchGrant: { execute(input: Readonly<{ subject: Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0]["subject"] }>): Promise<
+  readonly consumeDispatchGrant: { execute(input: Readonly<{
+    grantRequestId: string;
+    subject: Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0]["subject"];
+  }>): Promise<
     | { readonly kind: "consumed"; readonly receipt: OuterContainedTurnConsumedGrantReceipt }
     | { readonly kind: "prevented"; readonly proofRef: string }
     | { readonly evidenceRef: string; readonly kind: "indeterminate" }
@@ -103,11 +107,17 @@ export const createContainedTurnProviderAccessPort = (
   outer: OuterContainedTurnProviderAccess,
 ): ContainedTurnProviderAccessPort => Object.freeze({
   async consumeForDispatch(input: Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0]) {
+    const expectedGrantRequestId = containedTurnDispatchGrantRequestId("provider_access", input.subject);
+    if (input.grantRequestId !== expectedGrantRequestId) {
+      throw new TypeError("Provider Access grant request identity does not bind the dispatch claim");
+    }
     const outcome = await outer.consumeDispatchGrant.execute(input);
     if (outcome.kind === "consumed") {
       return Object.freeze({
         kind: "consumed" as const,
-        receipt: normalizeContainedTurnConsumedGrantReceipt("provider_access", input.subject, outcome.receipt),
+        receipt: normalizeContainedTurnConsumedGrantReceipt(
+          "provider_access", input.subject, outcome.receipt, expectedGrantRequestId,
+        ),
       });
     }
     return outcome.kind === "prevented"

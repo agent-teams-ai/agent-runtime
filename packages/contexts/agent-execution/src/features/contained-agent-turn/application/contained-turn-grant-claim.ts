@@ -1,6 +1,11 @@
 import { containedTurnScopeDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
-import { validateContainedTurnConsumedGrantReceipts, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
+import {
+  containedTurnDispatchClaimBindingDigest,
+  containedTurnDispatchGrantRequestId,
+  validateContainedTurnConsumedGrantReceipts,
+  type ContainedTurnDispatchGrantSubject,
+} from "../domain/contained-turn-dispatch-authority.js";
 import type { ContainedTurnEvidenceId, ContainedTurnPreparationToken, ContainedTurnProofId } from "../domain/contained-turn-identities.js";
 import { containedTurnIdentity, validateContainedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
@@ -30,7 +35,11 @@ const unavailableGrantConsumptionEvidenceId = (
   subject: ContainedTurnDispatchGrantSubject,
 ): ContainedTurnEvidenceId => containedTurnIdentity(
   "evidence",
-  `evidence:grant-consumption-unavailable:${digestContainedTurnCanonicalValue({ owner, subject })}`,
+  `evidence:grant-consumption-unavailable:${digestContainedTurnCanonicalValue({
+    claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
+    owner,
+    purpose: "contained_turn_grant_consumption_unavailable_v1",
+  })}`,
 );
 
 export type ClaimContainedTurnWithConsumedGrantsOutcome =
@@ -56,8 +65,11 @@ export const claimContainedTurnWithConsumedGrants = async (
   const providerAccessConsume = dependencies.providerAccess.consumeForDispatch;
   const runtimeSecurityConsume = dependencies.security.consumeForDispatch;
   const claim = dependencies.operationStore.claimPreparedDispatch;
+  const providerAccessGrantRequestId = containedTurnDispatchGrantRequestId(
+    "provider_access", subject,
+  );
   const [providerAccessResult, runtimeSecurityResult] = await Promise.allSettled([
-    providerAccessConsume({ subject }),
+    providerAccessConsume({ grantRequestId: providerAccessGrantRequestId, subject }),
     runtimeSecurityConsume({ subject }),
   ]);
   const providerAccess = providerAccessResult.status === "fulfilled"
@@ -66,7 +78,10 @@ export const claimContainedTurnWithConsumedGrants = async (
     ? runtimeSecurityResult.value : undefined;
   const consumedGrantRequestIds: ConsumedGrantRequestIds = Object.freeze({
     ...(providerAccess?.kind === "consumed"
-      ? { providerAccessGrantRequestId: providerAccess.receipt.grantRequestId } : {}),
+      ? { providerAccessGrantRequestId: providerAccess.receipt.grantRequestId }
+      : providerAccessResult.status === "rejected" || providerAccess?.kind === "indeterminate"
+        ? { providerAccessGrantRequestId }
+        : {}),
     ...(runtimeSecurity?.kind === "consumed"
       ? { runtimeSecurityGrantRequestId: runtimeSecurity.receipt.grantRequestId } : {}),
   });

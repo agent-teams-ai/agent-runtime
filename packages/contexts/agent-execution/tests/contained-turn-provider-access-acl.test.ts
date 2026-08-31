@@ -4,6 +4,11 @@ import test from "node:test";
 
 import { createContainedTurnProviderAccessPort } from "../dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
 import { createContainedTurnProviderAccessFeature } from "../../provider-access/dist/features/contained-turn-access/composition/feature-module-factory.js";
+import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import {
+  containedTurnDispatchGrantRequestId,
+} from "../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
+import { containedTurnIdentity } from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 
 const scope = Object.freeze({ projectId: "project:kernel", tenantId: "tenant:kernel" });
 const binding = Object.freeze({
@@ -76,6 +81,66 @@ test("Provider Access ACL maps owner rejection evidence without exposing owner r
     assert.match(outcome.preventionProofId, /^proof:provider-access:acceptance:sha256:[0-9a-f]{64}$/u);
     assert.equal(outcome.reason, "access_denied");
   }
+});
+
+test("Provider Access ambiguous consumption and settlement share the owner-known request key", async () => {
+  const subject = Object.freeze({
+    attemptId: containedTurnIdentity("attempt", "attempt:provider-access-correlation"),
+    custodyId: containedTurnIdentity("custody", "custody:provider-access-correlation"),
+    effectId: containedTurnIdentity("effect", "effect:provider-access-correlation"),
+    executionGenerationId: containedTurnIdentity(
+      "execution_generation", "execution-generation:provider-access-correlation",
+    ),
+    hostBootId: containedTurnIdentity("host_boot", "host-boot:provider-access-correlation"),
+    hostInstanceId: containedTurnIdentity(
+      "host_instance", "host-instance:provider-access-correlation",
+    ),
+    operationCutoffRevision: 0,
+    operationId: containedTurnIdentity("operation", "operation:provider-access-correlation"),
+    preparationToken: containedTurnIdentity(
+      "preparation", "preparation:provider-access-correlation",
+    ),
+    purpose: "contained_turn_provider_start_v1" as const,
+    scopeDigest: digestContainedTurnCanonicalValue({ scope }),
+    workspaceId: containedTurnIdentity("workspace", "workspace:provider-access-correlation"),
+  });
+  const grantRequestId = containedTurnDispatchGrantRequestId("provider_access", subject);
+  const ownerRequests: string[] = [];
+  const port = createContainedTurnProviderAccessPort({
+    consumeDispatchGrant: { async execute(input) {
+      ownerRequests.push(input.grantRequestId);
+      return { evidenceRef: "pa-17", kind: "indeterminate" as const };
+    } },
+    resolve: { async execute() {throw new Error("unused resolve");} },
+    revalidate: { async execute() {throw new Error("unused revalidate");} },
+    settleDispatchGrant: { async execute(input) {
+      ownerRequests.push(input.grantRequestId);
+      return { kind: "settled" as const };
+    } },
+  });
+
+  const ambiguous = await port.consumeForDispatch({ grantRequestId, subject });
+  assert.equal(ambiguous.kind, "indeterminate");
+  if (ambiguous.kind === "indeterminate") {
+    assert.notEqual(ambiguous.evidenceId, "pa-17");
+    assert.match(ambiguous.evidenceId, /^evidence:provider-access:grant:sha256:[0-9a-f]{64}$/u);
+  }
+  const permitDigest = digestContainedTurnCanonicalValue({ grantRequestId, purpose: "cleanup" });
+  assert.deepEqual(await port.settleConsumedGrant({
+    cleanupPermit: {
+      attemptId: subject.attemptId,
+      custodyId: subject.custodyId,
+      operationCutoffRevision: subject.operationCutoffRevision,
+      operationId: subject.operationId,
+      permitDigest,
+      permitId: containedTurnIdentity("cleanup_permit", `cleanup-permit:${permitDigest}`),
+      preparationToken: subject.preparationToken,
+      preparedOperationRevision: 1,
+      workspaceId: subject.workspaceId,
+    },
+    grantRequestId,
+  }), { kind: "settled" });
+  assert.deepEqual(ownerRequests, [grantRequestId, grantRequestId]);
 });
 
 test("real Provider Access revalidation accepts unchanged evidence and fails closed on drift, revocation, and scope mismatch", async () => {

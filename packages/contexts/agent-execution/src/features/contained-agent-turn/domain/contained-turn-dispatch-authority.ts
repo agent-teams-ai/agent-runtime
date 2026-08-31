@@ -55,6 +55,16 @@ export const containedTurnDispatchClaimBindingDigest = (
   workspaceId: subject.workspaceId,
 });
 
+/** Stable owner-visible request key allocated before a grant-consumption call. */
+export const containedTurnDispatchGrantRequestId = (
+  owner: ContainedTurnDispatchGrantOwner,
+  subject: ContainedTurnDispatchGrantSubject,
+): string => `grant-request:${digestContainedTurnCanonicalValue({
+  claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
+  owner,
+  purpose: "contained_turn_dispatch_grant_request_v1",
+})}`;
+
 /**
  * The only owner grant representation admitted at the Kernel ACL. Owner
  * lifecycle details and opaque references are deliberately absent.
