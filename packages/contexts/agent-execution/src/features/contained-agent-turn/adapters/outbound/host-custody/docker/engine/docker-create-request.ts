@@ -144,17 +144,20 @@ export const labelsFor = (
   nonce: string,
   fingerprint: string,
   hostIdentity: string,
+  ownerIdentity: string,
 ): Readonly<Record<string, string>> => Object.freeze({
   "com.agent-runtime.contained-turn": "v1",
   "com.agent-runtime.host-identity-sha256": hostIdentity,
   "com.agent-runtime.launch-fingerprint-sha256": fingerprint,
   "com.agent-runtime.operation-nonce-sha256": nonce,
+  "com.agent-runtime.owner-identity-sha256": ownerIdentity,
 });
 
 const invalidCreateInput = (input: DockerContainerCreate, policy: DockerEnginePolicy): boolean => [
   !FULL_IMAGE.test(input.imageDigest),
   !SHA256.test(input.launchFingerprintSha256),
   !SHA256.test(input.operationNonceSha256),
+  !SHA256.test(input.ownerIdentitySha256),
   !isAbsolute(input.entrypoint),
   input.entrypoint.includes("\0"),
   input.arguments.length > 128,
@@ -176,6 +179,8 @@ export const encodeCreateRequest = (input: DockerContainerCreate, policy: Docker
     .map(([key, value]) => `${key}=${value}`);
   const request = {
     AttachStderr: false,
+    // Stdin is reserved for the one explicit pre-start hijack; Docker must not
+    // create an implicit attach while keeping that stdin endpoint available.
     AttachStdin: false,
     AttachStdout: false,
     Cmd: [...input.arguments],
@@ -212,10 +217,17 @@ export const encodeCreateRequest = (input: DockerContainerCreate, policy: Docker
       Tmpfs: { "/tmp": `rw,nosuid,nodev,noexec,size=${policy.tmpfsBytes},mode=1777` },
     },
     Image: input.imageDigest,
-    Labels: labelsFor(input.operationNonceSha256, input.launchFingerprintSha256, policy.hostIdentitySha256),
+    Labels: labelsFor(
+      input.operationNonceSha256,
+      input.launchFingerprintSha256,
+      policy.hostIdentitySha256,
+      input.ownerIdentitySha256,
+    ),
     NetworkDisabled: false,
-    OpenStdin: false,
-    StdinOnce: false,
+    OpenStdin: true,
+    // The sole custody attach is one-shot: losing it closes this generation's
+    // stdin instead of permitting a replacement attach.
+    StdinOnce: true,
     StopSignal: "SIGTERM",
     Tty: false,
     User: policy.user,

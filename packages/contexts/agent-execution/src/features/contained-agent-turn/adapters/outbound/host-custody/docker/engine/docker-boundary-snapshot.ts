@@ -20,12 +20,12 @@ const POLICY_KEYS = Object.freeze([
 const AUTHORITY_KEYS = Object.freeze([
   "containerId", "createSpecificationSha256", "daemonBootGenerationSha256", "daemonIdentitySha256",
   "hostBootGenerationSha256", "hostIdentitySha256", "imageDigest", "launchFingerprintSha256",
-  "operationNonceSha256",
+  "operationNonceSha256", "ownerIdentitySha256",
 ]);
 
 const CREATE_KEYS = Object.freeze([
   "arguments", "entrypoint", "environment", "imageDigest", "launchFingerprintSha256",
-  "operationNonceSha256", "privateRootSource", "workspaceSource", "workspaceWritable",
+  "operationNonceSha256", "ownerIdentitySha256", "privateRootSource", "workspaceSource", "workspaceWritable",
 ]);
 const POLICY_STRING_KEYS = Object.freeze([
   "allowedNetworkName", "appArmorProfile", "cgroupParent", "daemonPidFilePath", "hostIdentitySha256",
@@ -171,8 +171,8 @@ export const snapshotDockerContainerAuthority = (value: unknown): DockerContaine
 export const snapshotDockerContainerCreate = (value: unknown): DockerContainerCreate => {
   const input = dataValues(value, CREATE_KEYS, "invalid-create-request");
   if ([
-    "entrypoint", "imageDigest", "launchFingerprintSha256", "operationNonceSha256", "privateRootSource",
-    "workspaceSource",
+    "entrypoint", "imageDigest", "launchFingerprintSha256", "operationNonceSha256", "ownerIdentitySha256",
+    "privateRootSource", "workspaceSource",
   ].some(key => typeof input[key] !== "string") || typeof input.workspaceWritable !== "boolean") {
     return fail("invalid-create-request");
   }

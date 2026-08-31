@@ -1,12 +1,12 @@
+/* oxlint-disable max-lines -- this is the closed synthetic Docker Engine conformance suite. */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Socket } from "node:net";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { test } from "node:test";
 
 import {
@@ -20,67 +20,21 @@ import { BoundedUnixHttpClient } from "../dist/features/contained-agent-turn/ada
 import { assertDockerUnixPeerPlatformSupported } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-unix-peer.js";
 import { snapshotDockerEngineCall } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.js";
 import type { DockerEndpointObservation } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-http.js";
-import type {
-  DockerContainerCreate,
-  DockerEngineCall,
-  DockerEnginePolicy,
-  DockerLogFrame,
-} from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import type { DockerEngineCall, DockerLogFrame } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
 import { createSpecificationMutations } from "./fixtures/docker-create-specification-mutations.ts";
+import {
+  CONTAINER,
+  DAEMON_BOOT,
+  HOST_BOOT,
+  IMAGE,
+  NONCE,
+  SECCOMP_JSON,
+  call,
+  createInput,
+  disposable,
+  policy,
+} from "./fixtures/docker-engine-test-fixture.ts";
 import { verifyProductionUnixPeerBinding } from "./fixtures/docker-unix-peer-binding.ts";
-
-const HOST = "a".repeat(64);
-const NONCE = "b".repeat(64);
-const FINGERPRINT = "c".repeat(64);
-const CONTAINER = "d".repeat(64);
-const IMAGE = `registry.invalid:5443/runtime@sha256:${"e".repeat(64)}`;
-const SECCOMP_JSON = JSON.stringify({ defaultAction: "SCMP_ACT_ERRNO", syscalls: [] });
-const SECCOMP_SHA256 = createHash("sha256").update(SECCOMP_JSON).digest("hex");
-const HOST_BOOT = "1".repeat(64);
-const DAEMON_BOOT = "2".repeat(64);
-
-const call = (milliseconds = 10_000): DockerEngineCall => ({
-  deadlineEpochMs: Date.now() + milliseconds,
-  signal: new AbortController().signal,
-});
-
-const policy = (root: string): DockerEnginePolicy => ({
-  allowedEnvironmentKeys: ["AR_OPERATION"],
-  allowedNetworkName: "ar-operation-gateway",
-  appArmorProfile: "agent-runtime-contained-turn-v1",
-  cgroupParent: "system.slice/agent-runtime.slice",
-  cpuNanoCpus: 500_000_000,
-  daemonPidFileMode: 0o600,
-  daemonPidFileOwnerGid: process.getgid?.() ?? 0,
-  daemonPidFileOwnerUid: process.getuid?.() ?? 0,
-  daemonPidFilePath: join(root, "docker.pid"),
-  hostIdentitySha256: HOST,
-  memoryBytes: 100_663_296,
-  pidsLimit: 32,
-  privateRootSourceRoot: join(root, "private"),
-  seccompProfileJson: SECCOMP_JSON,
-  seccompProfileSha256: SECCOMP_SHA256,
-  socketMode: 0o600,
-  socketOwnerGid: process.getgid?.() ?? 0,
-  socketOwnerUid: process.getuid?.() ?? 0,
-  socketPath: join(root, "docker.sock"),
-  tmpfsBytes: 16_777_216,
-  user: "65532:65532",
-  workspaceSourceRoot: join(root, "workspaces"),
-  writableLayerBytes: 33_554_432,
-});
-
-const createInput = (root: string, nonce = NONCE): DockerContainerCreate => ({
-  arguments: ["serve", "--stdio"],
-  entrypoint: "/usr/local/bin/provider",
-  environment: { AR_OPERATION: "opaque-operation" },
-  imageDigest: IMAGE,
-  launchFingerprintSha256: FINGERPRINT,
-  operationNonceSha256: nonce,
-  privateRootSource: join(root, "private", "operation"),
-  workspaceSource: join(root, "workspaces", "operation"),
-  workspaceWritable: true,
-});
 
 const multiplex = (stream: 1 | 2, bytes: Uint8Array): Buffer => {
   const frame = Buffer.alloc(8 + bytes.byteLength);
@@ -140,19 +94,25 @@ interface MutationPlan {
 interface SyntheticDaemon {
   readonly bodies: unknown[];
   readonly client: {
-    buffered(input: { readonly body?: Uint8Array; readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: Uint8Array; readonly contentType: string; readonly statusCode: number }>;
+    buffered(input: { readonly beforeWrite?: () => void; readonly body?: Uint8Array; readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: Uint8Array; readonly contentType: string; readonly statusCode: number }>;
     endpointIdentity(): Promise<{ readonly canonicalSocketPath: string; readonly daemonBootGenerationSha256: string; readonly hostBootGenerationSha256: string }>;
+    hijack(input: {readonly call: DockerEngineCall; readonly path: string}): Promise<{
+      readonly input: PassThrough; readonly output: AsyncIterable<Uint8Array>; close(): Promise<void>;
+    }>;
     stream(input: { readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: AsyncIterable<Uint8Array>; readonly contentType: string; readonly statusCode: number }>;
   };
   daemonBoot: string;
   extraInfoField: boolean;
   infoCgroupVersion: unknown;
   inspectTransform: ((value: Record<string, unknown>) => void) | undefined;
+  readonly hijackCloseCount: number;
   logLeavesRunning: boolean;
   loseNextCreate: boolean;
   oversizeNextCreate: boolean;
   mutationPlan: MutationPlan | undefined;
   rawCreateBody: Uint8Array | undefined;
+  failHijack(): void;
+  pauseNextMutationWrite(at: "after" | "before"): { readonly reached: Promise<void>; release(): void };
   readonly routes: string[];
 }
 
@@ -173,6 +133,13 @@ const syntheticDaemon = (): SyntheticDaemon => {
     running: false,
     terminal: false,
   };
+  let hijackCloseCount = 0;
+  let hijackInput: PassThrough | undefined;
+  let mutationBarrier: {
+    readonly at: "after" | "before";
+    readonly reached: () => void;
+    readonly released: Promise<void>;
+  } | undefined;
   let created: Record<string, unknown> | undefined;
   const inspect = (): Record<string, unknown> => {
     const body = created ?? {};
@@ -256,7 +223,12 @@ const syntheticDaemon = (): SyntheticDaemon => {
     else if (path.includes("?force=")) {state.present = false;}
   };
   const client = {
-    async buffered(request: { readonly body?: Uint8Array; readonly method: string; readonly path: string }) {
+    async buffered(request: {
+      readonly beforeWrite?: () => void;
+      readonly body?: Uint8Array;
+      readonly method: string;
+      readonly path: string;
+    }) {
       routes.push(`${request.method} ${request.path}`);
       if (request.path === "/v1.47/info") {
         const value: Record<string, unknown> = {
@@ -274,6 +246,8 @@ const syntheticDaemon = (): SyntheticDaemon => {
         bodies.push(body);
         created = body;
         state.present = true;
+        state.running = false;
+        state.terminal = false;
         const plan = state.mutationPlan;
         if (plan !== undefined) {
           state.mutationPlan = undefined;
@@ -295,6 +269,11 @@ const syntheticDaemon = (): SyntheticDaemon => {
         return state.present ? jsonResponse(200, inspect()) : jsonResponse(404, { message: "gone" });
       }
       if (request.path.includes("/wait?")) {return jsonResponse(200, { StatusCode: 0 });}
+      const barrier = mutationBarrier;
+      mutationBarrier = undefined;
+      if (barrier?.at === "before") {barrier.reached(); await barrier.released;}
+      request.beforeWrite?.();
+      if (barrier?.at === "after") {barrier.reached(); await barrier.released;}
       const plan = state.mutationPlan ?? { effect: true, statusCode: 204 };
       state.mutationPlan = undefined;
       if (plan.effect) {applyMutation(request.path);}
@@ -308,6 +287,17 @@ const syntheticDaemon = (): SyntheticDaemon => {
         daemonBootGenerationSha256: state.daemonBoot,
         hostBootGenerationSha256: HOST_BOOT,
       };
+    },
+    async hijack(request: {readonly path: string}) {
+      routes.push(`POST ${request.path}`);
+      const input = new PassThrough();
+      hijackInput = input;
+      const output = new PassThrough();
+      let closed = false;
+      return {close: async () => {
+        if (closed) {return;}
+        closed = true; hijackCloseCount += 1; input.destroy(); output.destroy();
+      }, input, output};
     },
     async stream(request: { readonly method: string; readonly path: string }) {
       routes.push(`${request.method} ${request.path}`);
@@ -329,6 +319,7 @@ const syntheticDaemon = (): SyntheticDaemon => {
     set extraInfoField(value: boolean) {state.extraInfoField = value;},
     get infoCgroupVersion() {return state.infoCgroupVersion;},
     set infoCgroupVersion(value: unknown) {state.infoCgroupVersion = value;},
+    get hijackCloseCount() {return hijackCloseCount;},
     get inspectTransform() {return state.inspectTransform;},
     set inspectTransform(value: ((record: Record<string, unknown>) => void) | undefined) {state.inspectTransform = value;},
     get logLeavesRunning() {return state.logLeavesRunning;},
@@ -341,15 +332,17 @@ const syntheticDaemon = (): SyntheticDaemon => {
     set mutationPlan(value: MutationPlan | undefined) {state.mutationPlan = value;},
     get rawCreateBody() {return state.rawCreateBody;},
     set rawCreateBody(value: Uint8Array | undefined) {state.rawCreateBody = value;},
+    failHijack() {hijackInput?.destroy(new Error("synthetic hijack failure"));},
+    pauseNextMutationWrite(at: "after" | "before") {
+      let reached!: () => void;
+      let release!: () => void;
+      const reachedPromise = new Promise<void>(resolve => {reached = resolve;});
+      const released = new Promise<void>(resolve => {release = resolve;});
+      mutationBarrier = {at, reached, released};
+      return {reached: reachedPromise, release};
+    },
     routes,
   };
-};
-
-const disposable = async (): Promise<string> => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "ar-docker-engine-")));
-  await mkdir(join(root, "private", "operation"), { recursive: true });
-  await mkdir(join(root, "workspaces", "operation"), { recursive: true });
-  return root;
 };
 
 test("Node adapter emits the closed schema and completes lifecycle only by exact observations", async t => {
@@ -365,6 +358,12 @@ test("Node adapter emits the closed schema and completes lifecycle only by exact
     "AttachStderr", "AttachStdin", "AttachStdout", "Cmd", "Entrypoint", "Env", "HostConfig", "Image",
     "Labels", "NetworkDisabled", "OpenStdin", "StdinOnce", "StopSignal", "Tty", "User", "WorkingDir",
   ]);
+  assert.equal(body.AttachStdin, false);
+  assert.equal(body.OpenStdin, true);
+  assert.equal(body.StdinOnce, true);
+  assert.equal(body.Tty, false);
+  const custody = await engine.attachCustody(authority, call());
+  await custody.write(Buffer.from("init-control"));
   await engine.start(authority, call());
   const frames: DockerLogFrame[] = [];
   for await (const frame of engine.logs(authority, call())) {frames.push(frame);}
@@ -379,14 +378,22 @@ test("Node adapter emits the closed schema and completes lifecycle only by exact
     .every(route => route.includes(CONTAINER)));
 });
 
-test("API v1.47 decoders accept the retained redacted Docker Engine 29.6.1 fixture", async t => {
+test("API v1.47 decoders accept a synthetic owner-binding projection of the retained Engine 29.6.1 fixture", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
   const fixtureUrl = new URL("./fixtures/docker-engine-api-v1.47-engine-29.6.1-redacted.json", import.meta.url);
   const fixtureSource = (await readFile(fixtureUrl, "utf8"))
     .replaceAll("__WORKSPACE_SOURCE__", join(root, "workspaces", "operation"))
     .replaceAll("__PRIVATE_SOURCE__", join(root, "private", "operation"));
-  const fixture = JSON.parse(fixtureSource) as { readonly info: unknown; readonly inspect: unknown };
+  const fixture = JSON.parse(fixtureSource) as {
+    readonly info: unknown;
+    readonly inspect: { readonly Config: { readonly Labels: Record<string, string>; OpenStdin: boolean; StdinOnce: boolean } };
+  };
+  // The captured fixture predates owner binding. Project only this synthetic test
+  // response; preserve the historical capture bytes and their original evidence.
+  fixture.inspect.Config.Labels["com.agent-runtime.owner-identity-sha256"] = createInput(root).ownerIdentitySha256;
+  fixture.inspect.Config.OpenStdin = true;
+  fixture.inspect.Config.StdinOnce = true;
   let present = false;
   const client = {
     async buffered(request: { readonly method: string; readonly path: string }) {
@@ -559,6 +566,13 @@ test("persistent daemon identity is additionally fenced by daemon and host boot 
   const hostAuthority = await second.create(createInput(root), call());
   second.restartHost("replacement");
   await assert.rejects(second.inspect(hostAuthority, call()), { code: "daemon-identity-changed" });
+  const createFence = new FakeDockerEngine(policy(root));
+  const expectedIdentity = await createFence.identity(call());
+  createFence.restartDaemon("raced-before-create");
+  await assert.rejects(createFence.create(createInput(root, "7".repeat(64)), call(), expectedIdentity), {
+    code: "daemon-identity-changed",
+  });
+  assert.equal(createFence.events.some(event => event.startsWith("create:")), false);
 });
 
 test("ambiguous and 304 mutation acknowledgements require exact postconditions and 409 diagnostics are operation-specific", async t => {
@@ -567,19 +581,23 @@ test("ambiguous and 304 mutation acknowledgements require exact postconditions a
   const daemon = syntheticDaemon();
   const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
   const authority = await engine.create(createInput(root), call());
+  await engine.attachCustody(authority, call());
   daemon.mutationPlan = { body: { Unexpected: true }, effect: true, statusCode: 204 };
-  await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
+  await assert.rejects(engine.start(authority, call()), { code: "start-acknowledgement-unknown" });
   assert.ok(daemon.routes.filter(route => route === `GET /v1.47/containers/${CONTAINER}/json`).length >= 2);
-  daemon.mutationPlan = { body: { Unexpected: true }, effect: true, statusCode: 304 };
   await assert.rejects(engine.start(authority, call()), { code: "protocol-violation" });
-  daemon.mutationPlan = { effect: true, statusCode: 304 };
-  await engine.start(authority, call());
-  daemon.mutationPlan = { effect: false, statusCode: 304 };
-  await assert.rejects(engine.stop(authority, call()), { code: "mutation-acknowledgement-unknown" });
-  daemon.mutationPlan = { effect: true, failure: "disconnect", statusCode: 204 };
-  await engine.stop(authority, call());
-  daemon.mutationPlan = { effect: false, statusCode: 409 };
-  await assert.rejects(engine.remove(authority, call()), { code: "request-rejected", statusCode: 409 });
+  const successful = syntheticDaemon();
+  const successfulEngine = new NodeUnixSocketDockerEngine({client: successful.client, policy: policy(root)});
+  const successfulAuthority = await successfulEngine.create(createInput(root, "9".repeat(64)), call());
+  await successfulEngine.attachCustody(successfulAuthority, call());
+  successful.mutationPlan = { effect: true, statusCode: 304 };
+  await successfulEngine.start(successfulAuthority, call());
+  successful.mutationPlan = { effect: false, statusCode: 304 };
+  await assert.rejects(successfulEngine.stop(successfulAuthority, call()), { code: "mutation-acknowledgement-unknown" });
+  successful.mutationPlan = { effect: true, failure: "disconnect", statusCode: 204 };
+  await successfulEngine.stop(successfulAuthority, call());
+  successful.mutationPlan = { effect: false, statusCode: 409 };
+  await assert.rejects(successfulEngine.remove(successfulAuthority, call()), { code: "request-rejected", statusCode: 409 });
   const duplicate = syntheticDaemon();
   const duplicateEngine = new NodeUnixSocketDockerEngine({ client: duplicate.client, policy: policy(root) });
   await duplicateEngine.create(createInput(root), call());
@@ -590,6 +608,197 @@ test("ambiguous and 304 mutation acknowledgements require exact postconditions a
   });
 });
 
+test("attach invalidation fences start at the synchronous transport-write seam", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  for (const mode of ["close", "error", "abort"] as const) {
+    await t.test(mode, async () => {
+      const daemon = syntheticDaemon();
+      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+      const authority = await engine.create(createInput(root, createHash("sha256").update(mode).digest("hex")), call());
+      const controller = new AbortController();
+      const channel = await engine.attachCustody(authority, {
+        deadlineEpochMs: Date.now() + 10_000,
+        signal: controller.signal,
+      });
+      const barrier = daemon.pauseNextMutationWrite("before");
+      const starting = engine.start(authority, call());
+      await barrier.reached;
+      if (mode === "close") {await channel.close();}
+      if (mode === "error") {daemon.failHijack();}
+      if (mode === "abort") {controller.abort();}
+      await new Promise<void>(resolve => {setImmediate(resolve);});
+      barrier.release();
+      await assert.rejects(starting, {code: mode === "abort" ? "aborted" : "daemon-disconnected"});
+      const observation = await engine.inspect(authority, call());
+      assert.equal(observation.existence, "present");
+      if (observation.existence === "present") {assert.equal(observation.state.status, "created");}
+      await channel.close();
+      controller.abort();
+      assert.equal(daemon.hijackCloseCount, 1);
+      await assert.rejects(engine.attachCustody(authority, call()), {code: "protocol-violation"});
+    });
+  }
+});
+
+test("attach invokes a private-field-shaped hijack client with its receiver intact", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  class ReceiverSensitiveClient {
+    readonly #delegate = daemon.client;
+    public constructor() {
+      for (const name of ["buffered", "endpointIdentity", "hijack", "stream"] as const) {
+        Object.defineProperty(this, name, {
+          configurable: true, enumerable: true, value: ReceiverSensitiveClient.prototype[name], writable: true,
+        });
+      }
+      Object.setPrototypeOf(this, Object.prototype);
+    }
+    public buffered(...args: Parameters<typeof daemon.client.buffered>) {return this.#delegate.buffered(...args);}
+    public endpointIdentity(...args: Parameters<typeof daemon.client.endpointIdentity>) {
+      return this.#delegate.endpointIdentity(...args);
+    }
+    public hijack(...args: Parameters<typeof daemon.client.hijack>) {return this.#delegate.hijack(...args);}
+    public stream(...args: Parameters<typeof daemon.client.stream>) {return this.#delegate.stream(...args);}
+  }
+  const engine = new NodeUnixSocketDockerEngine({
+    client: new ReceiverSensitiveClient() as unknown as SyntheticDaemon["client"], policy: policy(root),
+  });
+  const authority = await engine.create(createInput(root), call());
+  const channel = await engine.attachCustody(authority, call());
+  await channel.close();
+  assert.equal(daemon.hijackCloseCount, 1);
+});
+
+test("attach awaits exact hijack closure when the socket dies during post-hijack identity verification", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  let hijackInput: PassThrough | undefined;
+  let closeFinished = false;
+  let identityReached!: () => void;
+  let releaseIdentity!: () => void;
+  const reached = new Promise<void>(resolve => {identityReached = resolve;});
+  const identityWait = new Promise<void>(resolve => {releaseIdentity = resolve;});
+  let hijacked = false;
+  const client = {
+    buffered: daemon.client.buffered,
+    async endpointIdentity() {
+      if (hijacked) {identityReached(); await identityWait;}
+      return daemon.client.endpointIdentity();
+    },
+    async hijack(input: Parameters<typeof daemon.client.hijack>[0]) {
+      const raw = await daemon.client.hijack(input);
+      hijacked = true;
+      hijackInput = raw.input;
+      return {...raw, close: async () => {await raw.close(); closeFinished = true;}};
+    },
+    stream: daemon.client.stream,
+  };
+  const engine = new NodeUnixSocketDockerEngine({client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  const opening = engine.attachCustody(authority, call());
+  await reached;
+  hijackInput?.destroy();
+  releaseIdentity();
+  await assert.rejects(opening, {code: "daemon-disconnected"});
+  assert.equal(closeFinished, true);
+  assert.equal(daemon.hijackCloseCount, 1);
+});
+
+test("attach rejects when post-hijack identity observation resolves after the hard deadline", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  let identityReached!: () => void;
+  let releaseIdentity!: () => void;
+  const reached = new Promise<void>(resolve => {identityReached = resolve;});
+  const identityWait = new Promise<void>(resolve => {releaseIdentity = resolve;});
+  let hijacked = false;
+  const client = {
+    buffered: daemon.client.buffered,
+    async endpointIdentity() {
+      if (hijacked) {identityReached(); await identityWait;}
+      return daemon.client.endpointIdentity();
+    },
+    async hijack(input: Parameters<typeof daemon.client.hijack>[0]) {
+      const raw = await daemon.client.hijack(input);
+      hijacked = true;
+      return raw;
+    },
+    stream: daemon.client.stream,
+  };
+  const engine = new NodeUnixSocketDockerEngine({client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  const now = Date.now();
+  t.mock.timers.enable({apis: ["Date", "setTimeout"], now});
+  try {
+    const opening = engine.attachCustody(authority, {
+      deadlineEpochMs: now + 1_000,
+      signal: new AbortController().signal,
+    });
+    await reached;
+    t.mock.timers.setTime(now + 1_001);
+    releaseIdentity();
+    await assert.rejects(opening, {code: "deadline-exceeded"});
+    assert.equal(daemon.hijackCloseCount, 1);
+  } finally {
+    releaseIdentity();
+    t.mock.timers.reset();
+  }
+});
+
+test("hijack loss after start bytes is acknowledgement-unknown and removal retires the generation", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  const daemon = syntheticDaemon();
+  const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  const channel = await engine.attachCustody(authority, call());
+  const barrier = daemon.pauseNextMutationWrite("after");
+  const starting = engine.start(authority, call());
+  await barrier.reached;
+  await channel.close();
+  barrier.release();
+  await assert.rejects(starting, {code: "start-acknowledgement-unknown"});
+  assert.equal(daemon.hijackCloseCount, 1);
+  await engine.stop(authority, call());
+  await engine.remove(authority, call());
+
+  const replacement = await engine.create(createInput(root, "8".repeat(64)), call());
+  const replacementChannel = await engine.attachCustody(replacement, call());
+  await channel.close();
+  await replacementChannel.write(Buffer.from("replacement-generation"));
+  await replacementChannel.close();
+  assert.equal(daemon.hijackCloseCount, 2);
+});
+
+test("error and abort after the start write never return clean started success", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, { force: true, recursive: true });});
+  for (const mode of ["error", "abort"] as const) {
+    await t.test(mode, async () => {
+      const daemon = syntheticDaemon();
+      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+      const authority = await engine.create(createInput(
+        root,
+        createHash("sha256").update(`after-${mode}`).digest("hex"),
+      ), call());
+      const controller = new AbortController();
+      await engine.attachCustody(authority, {deadlineEpochMs: Date.now() + 10_000, signal: controller.signal});
+      const barrier = daemon.pauseNextMutationWrite("after");
+      const starting = engine.start(authority, call());
+      await barrier.reached;
+      if (mode === "error") {daemon.failHijack();} else {controller.abort();}
+      await new Promise<void>(resolve => {setImmediate(resolve);});
+      barrier.release();
+      await assert.rejects(starting, {code: "start-acknowledgement-unknown"});
+      assert.equal(daemon.hijackCloseCount, 1);
+    });
+  }
+});
+
 test("log EOF is incomplete while running and wait requires an exact terminal observation", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
@@ -597,6 +806,7 @@ test("log EOF is incomplete while running and wait requires an exact terminal ob
   daemon.logLeavesRunning = true;
   const engine = new NodeUnixSocketDockerEngine({ client: daemon.client, policy: policy(root) });
   const authority = await engine.create(createInput(root), call());
+  await engine.attachCustody(authority, call());
   await engine.start(authority, call());
   await assert.rejects(drain(engine.logs(authority, call())), { code: "terminal-observation-unknown" });
   await assert.rejects(engine.wait(authority, call()), { code: "terminal-observation-unknown" });
@@ -793,6 +1003,7 @@ test("Fake parity covers canonical mounts, exact adoption, ambiguous effects, en
   const authority = await fake.create(createInput(root), call());
   fake.enqueueCreateOutcome("malformed-response");
   await fake.create(createInput(root, "7".repeat(64)), call());
+  await fake.attachCustody(authority, call());
   await fake.start(authority, call());
   let waitSettled = false;
   const waiting = fake.wait(authority, call()).then(observation => {waitSettled = true; return observation;});

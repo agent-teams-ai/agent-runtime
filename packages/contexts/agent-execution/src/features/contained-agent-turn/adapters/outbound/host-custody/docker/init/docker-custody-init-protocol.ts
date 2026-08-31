@@ -5,6 +5,7 @@ const MAX_IDENTITY_BYTES = 256;
 const MAX_ARGUMENTS = 128;
 const MAX_ENVIRONMENT = 128;
 const MAX_VALUE_BYTES = 8_192;
+export const DOCKER_CUSTODY_PROVIDER_IO_MAX_BYTES = 48_000;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const TOKEN = /^[A-Za-z0-9._:@+-]{1,256}$/u;
 
@@ -68,6 +69,30 @@ export interface DockerCustodyProviderExecAcknowledgement {
   readonly requestId: string;
 }
 
+export interface DockerCustodyProviderInput {
+  readonly bytesBase64: string;
+  readonly kind: "provider-input";
+  readonly requestId: string;
+}
+
+export interface DockerCustodyProviderInputEof {
+  readonly kind: "provider-input-eof";
+  readonly requestId: string;
+}
+
+export interface DockerCustodyHostSignalRequest {
+  readonly kind: "host-signal";
+  readonly requestId: string;
+  readonly signal: DockerCustodyHostSignal;
+}
+
+export interface DockerCustodyProviderOutput {
+  readonly bytesBase64: string;
+  readonly kind: "provider-output";
+  readonly requestId: string;
+  readonly stream: "stderr" | "stdout";
+}
+
 export interface DockerCustodyContainmentRequest {
   readonly kind: "container-containment-request";
   readonly reason: "cancelled" | "deadline" | "init-failure" | "input-limit" | "output-limit" | "shutdown-timeout";
@@ -91,7 +116,7 @@ export interface DockerCustodySignalObservation {
   readonly signal: DockerCustodyHostSignal | "SIGKILL";
 }
 
-/** PID1 proves only root reaping plus pipe EOF. The outer Docker adapter must add exact residue evidence. */
+/** Direct-child observation proves only provider exit plus pipe EOF. The outer Docker adapter adds exact residue evidence. */
 export interface DockerCustodyProviderDrainComplete {
   readonly kind: "provider-drain-complete";
   readonly outerContainmentClaim: "unproven";
@@ -115,10 +140,11 @@ export interface DockerCustodyInitClosureSubresult {
   readonly providerDrain: DockerCustodyProviderDrainResult;
 }
 
-export type DockerCustodyHostMessage = DockerCustodyHostHandshake | DockerCustodyProviderExecRequest;
+export type DockerCustodyHostMessage = DockerCustodyHostHandshake | DockerCustodyHostSignalRequest |
+  DockerCustodyProviderExecRequest | DockerCustodyProviderInput | DockerCustodyProviderInputEof;
 export type DockerCustodyInitMessage =
   | DockerCustodyContainmentRequest | DockerCustodyInitReady | DockerCustodyProviderDrainComplete | DockerCustodyProviderDrainFailed
-  | DockerCustodyProviderExecAcknowledgement | DockerCustodyProviderObservation | DockerCustodySignalObservation;
+  | DockerCustodyProviderExecAcknowledgement | DockerCustodyProviderObservation | DockerCustodyProviderOutput | DockerCustodySignalObservation;
 export type DockerCustodyProtocolMessage = DockerCustodyHostMessage | DockerCustodyInitMessage;
 
 export class DockerCustodyProtocolError extends Error {
@@ -211,6 +237,41 @@ const literal = <Value extends string>(value: unknown, allowed: readonly Value[]
   if (typeof value !== "string" || !allowed.includes(value as Value)) {return fail(`${label} is unsupported`);}
   return value as Value;
 };
+const providerBytes = (value: unknown, label: string): string => {
+  if (typeof value !== "string" || value.length === 0 || value.length > Math.ceil(DOCKER_CUSTODY_PROVIDER_IO_MAX_BYTES / 3) * 4 ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value)) {
+    return fail(`${label} must be bounded canonical base64`);
+  }
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.byteLength === 0 || decoded.byteLength > DOCKER_CUSTODY_PROVIDER_IO_MAX_BYTES || decoded.toString("base64") !== value) {
+    return fail(`${label} must be bounded canonical base64`);
+  }
+  return value;
+};
+
+export const decodeDockerCustodyProviderBytes = (value: string): Uint8Array =>
+  Uint8Array.from(Buffer.from(providerBytes(value, "bytesBase64"), "base64"));
+
+const parseProviderIoMessage = (value: JsonObject, kind: string): DockerCustodyProtocolMessage | undefined => {
+  switch (kind) {
+    case "provider-input":
+      exactKeys(value, ["bytesBase64", "kind", "requestId"], kind);
+      return Object.freeze({bytesBase64: providerBytes(value.bytesBase64, "bytesBase64"), kind,
+        requestId: token(value.requestId, "requestId")});
+    case "provider-input-eof":
+      exactKeys(value, ["kind", "requestId"], kind);
+      return Object.freeze({kind, requestId: token(value.requestId, "requestId")});
+    case "provider-output":
+      exactKeys(value, ["bytesBase64", "kind", "requestId", "stream"], kind);
+      return Object.freeze({bytesBase64: providerBytes(value.bytesBase64, "bytesBase64"), kind,
+        requestId: token(value.requestId, "requestId"), stream: literal(value.stream, ["stderr", "stdout"], "stream")});
+    case "host-signal":
+      exactKeys(value, ["kind", "requestId", "signal"], kind);
+      return Object.freeze({kind, requestId: token(value.requestId, "requestId"),
+        signal: literal(value.signal, DOCKER_CUSTODY_HOST_SIGNALS, "signal")});
+    default: return undefined;
+  }
+};
 
 export const parseDockerCustodyIdentity = (input: unknown, label = "identity"): DockerCustodyIdentity => {
   const value = object(input, label);
@@ -248,6 +309,8 @@ const argumentsList = (input: unknown): readonly string[] => {
 export const parseDockerCustodyProtocolMessage = (input: unknown): DockerCustodyProtocolMessage => {
   const value = object(input, "frame");
   const kind = string(ownValue(value, "kind", "frame.kind"), "frame.kind");
+  const providerIo = parseProviderIoMessage(value, kind);
+  if (providerIo !== undefined) {return providerIo;}
   switch (kind) {
     case "host-handshake":
       exactKeys(value, ["expectedIdentity", "kind", "launchFingerprintSha256", "nonce", "protocol"], kind);

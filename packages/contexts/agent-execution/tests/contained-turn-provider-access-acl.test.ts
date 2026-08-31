@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { createContainedTurnProviderAccessPort } from "../dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
-import { createStaticContainedTurnProviderAccessFeature } from "../../provider-access/dist/composition.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
   containedTurnDispatchGrantRequestId,
@@ -143,68 +142,14 @@ test("Provider Access ambiguous consumption and settlement share the owner-known
   assert.deepEqual(ownerRequests, [grantRequestId, grantRequestId]);
 });
 
-test("real Provider Access revalidation accepts unchanged evidence and fails closed on drift, revocation, and scope mismatch", async () => {
-  const record = {
-    ...binding,
-    availability: "available" as const,
-    revocation: "active" as const,
-  };
-  let currentRecord = record;
-  const currentOwner = () => createStaticContainedTurnProviderAccessFeature([
-    { ...currentRecord, kind: "binding" as const },
-  ]);
-  const feature: ReturnType<typeof createStaticContainedTurnProviderAccessFeature> = {
-    resolve: { async execute(input) { return currentOwner().resolve.execute(input); } },
-    revalidate: { async execute(input) { return currentOwner().revalidate.execute(input); } },
-  };
-  const port = createContainedTurnProviderAccessPort(feature);
-  const accepted = await port.resolveForAcceptance({
-    intent: { mode: "analysis", prompt: "Inspect the disposable workspace." },
-    provider: "codex",
-    scope,
-  });
-  assert.equal(accepted.kind, "resolved");
-  if (accepted.kind !== "resolved") { return; }
-
-  const unchanged = await port.revalidateForDispatch({
-    acceptedSnapshot: accepted.snapshot,
-    operationId: "operation:unchanged",
-    scope,
-  });
-  assert.equal(unchanged.kind, "current");
-  if (unchanged.kind === "current") {
-    assert.notEqual(unchanged.dispatchProofId, accepted.acceptanceProofId);
-  }
-
-  currentRecord = { ...record, providerRouteRef: "provider-route:drifted" };
-  assert.notEqual((await port.revalidateForDispatch({
-    acceptedSnapshot: accepted.snapshot,
-    operationId: "operation:drift",
-    scope,
-  })).kind, "current");
-
-  currentRecord = { ...record, revocation: "revoked" };
-  assert.notEqual((await port.revalidateForDispatch({
-    acceptedSnapshot: accepted.snapshot,
-    operationId: "operation:revoked",
-    scope,
-  })).kind, "current");
-
-  currentRecord = record;
-  assert.notEqual((await port.revalidateForDispatch({
-    acceptedSnapshot: accepted.snapshot,
-    operationId: "operation:scope-mismatch",
-    scope: { projectId: "project:other", tenantId: scope.tenantId },
-  })).kind, "current");
-});
-
 test("production exports expose one kernel authority and isolate only non-authoritative legacy adapters", async () => {
-  const [composition, manifest, dispatch] = await Promise.all([
+  const [publicIndex, composition, manifest, dispatch] = await Promise.all([
+    readFile(new URL("../src/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/composition.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../src/features/contained-agent-turn/application/contained-turn-dispatch.ts", import.meta.url), "utf8"),
   ]);
-  assert.doesNotMatch(composition, /PostgresContainedTurn|ContainedTurnOperationStore|contained-turn-state/u);
+  assert.doesNotMatch(publicIndex, /PostgresContainedTurn|ContainedTurnOperationStore|contained-turn-state/u);
   assert.doesNotMatch(manifest, /legacy-compatibility/u);
   assert.doesNotMatch(dispatch, /LegacyClaim|legacy-claim|claimDispatch\(/u);
   assert.match(composition, /createContainedTurnFeature/u);

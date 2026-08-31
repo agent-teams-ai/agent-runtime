@@ -32,6 +32,7 @@ const LABEL_KEYS = Object.freeze([
   "com.agent-runtime.host-identity-sha256",
   "com.agent-runtime.launch-fingerprint-sha256",
   "com.agent-runtime.operation-nonce-sha256",
+  "com.agent-runtime.owner-identity-sha256",
 ]);
 
 const object = (value: unknown): Record<string, unknown> => {
@@ -334,6 +335,7 @@ export const decodeInspection = (
     authority.operationNonceSha256,
     authority.launchFingerprintSha256,
     authority.hostIdentitySha256,
+    authority.ownerIdentitySha256,
   );
   const observedSpecification = observedCreateSpecificationSha256(inspect.Name, config, hostConfig);
   if (id !== authority.containerId || !SHA256.test(id) || config.Image !== authority.imageDigest ||
@@ -365,7 +367,8 @@ export const validateAuthorityShape = (value: DockerContainerAuthority): DockerC
       !SHA256.test(authority.daemonBootGenerationSha256) || !SHA256.test(authority.hostBootGenerationSha256) ||
       !SHA256.test(authority.createSpecificationSha256) ||
       !SHA256.test(authority.hostIdentitySha256) || !SHA256.test(authority.launchFingerprintSha256) ||
-      !SHA256.test(authority.operationNonceSha256) || !FULL_IMAGE.test(authority.imageDigest)) {
+      !SHA256.test(authority.operationNonceSha256) || !SHA256.test(authority.ownerIdentitySha256) ||
+      !FULL_IMAGE.test(authority.imageDigest)) {
     throw new DockerEngineError("invalid-authority");
   }
   return authority;

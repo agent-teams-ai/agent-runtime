@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type {
@@ -8,8 +9,15 @@ import type {
 } from "../legacy/legacy-contained-turn-ports.js";
 import {
   claudeAgentSdkTools,
-  createClaudeAgentSdkEnvironment,
+  isClaudeAgentSdkPrivateProjectionUsable,
+  type ClaudeAgentSdkPrivateProjection,
+  type ClaudeAgentSdkPrivateProjectionResolver,
 } from "./claude-agent-sdk-launch-plan.js";
+import {
+  claudeResultDiagnostic,
+  normalizeClaudeSdkMessage,
+  type ClaudeSdkResultMessage,
+} from "./claude-agent-sdk-messages.js";
 import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
@@ -18,7 +26,7 @@ import type {
 const DEFAULT_CANCELLATION_POLL_MS = 100;
 const DEFAULT_INTERRUPT_GRACE_MS = 5_000;
 const DEFAULT_TURN_TIMEOUT_MS = 1_200_000;
-const MAX_DIAGNOSTIC_BYTES = 2_000;
+const CLAUDE_AGENT_SDK_PACKAGE: string = "@anthropic-ai/claude-agent-sdk";
 
 interface ClaudeSdkSpawnOptions {
   readonly args: string[];
@@ -28,33 +36,6 @@ interface ClaudeSdkSpawnOptions {
   readonly signal: AbortSignal;
 }
 
-interface ClaudeSdkStreamMessage {
-  readonly event: {
-    readonly delta?: { readonly text?: string; readonly type?: string };
-    readonly type: string;
-  };
-  readonly parent_tool_use_id: string | null;
-  readonly type: "stream_event";
-}
-
-interface ClaudeSdkResultBase {
-  readonly is_error: boolean;
-  readonly session_id: string;
-  readonly type: "result";
-  readonly uuid: string;
-}
-
-interface ClaudeSdkResultSuccess extends ClaudeSdkResultBase {
-  readonly result: string;
-  readonly subtype: "success";
-}
-
-interface ClaudeSdkResultError extends ClaudeSdkResultBase {
-  readonly errors: string[];
-  readonly subtype: "error_during_execution" | "error_max_turns" | "error_max_budget_usd" | "error_max_structured_output_retries";
-}
-
-type ClaudeSdkResultMessage = ClaudeSdkResultSuccess | ClaudeSdkResultError;
 interface ClaudeSdkQuery extends AsyncIterable<unknown> {
   close(): void;
   interrupt(): Promise<unknown>;
@@ -90,8 +71,138 @@ interface ClaudeSdkQueryInput {
 
 type ClaudeQueryFactory = (input: ClaudeSdkQueryInput) => ClaudeSdkQuery;
 
+export interface ClaudeAgentSdkControlClock {
+  now(): number;
+  wait(milliseconds: number, signal: AbortSignal): Promise<void>;
+}
+
+const defaultClock: ClaudeAgentSdkControlClock = Object.freeze({
+  now: () => performance.now(),
+  async wait(milliseconds: number, signal: AbortSignal) {
+    await delay(milliseconds, undefined, { signal });
+  },
+});
+
+type ObservedSettlement<T> =
+  | { readonly kind: "fulfilled"; readonly value: T }
+  | { readonly error: unknown; readonly kind: "rejected" };
+
+type BoundedSettlement<T> =
+  | ObservedSettlement<T>
+  | { readonly kind: "abandoned" }
+  | { readonly kind: "timed_out" };
+
+const observeCall = <T>(call: () => T | PromiseLike<T>): Promise<ObservedSettlement<T>> => {
+  let started: T | PromiseLike<T>;
+  try {
+    started = call();
+  } catch (error) {
+    return Promise.resolve({ error, kind: "rejected" });
+  }
+  return Promise.resolve(started).then<ObservedSettlement<T>, ObservedSettlement<T>>(
+    value => ({ kind: "fulfilled", value }),
+    error => ({ error, kind: "rejected" }),
+  );
+};
+
+class OperationDeadlineClock {
+  readonly #clock: ClaudeAgentSdkControlClock;
+  #latest: number;
+
+  public constructor(clock: ClaudeAgentSdkControlClock) {
+    this.#clock = clock;
+    this.#latest = this.#read();
+  }
+
+  public add(deadline: number, milliseconds: number): number {
+    return Math.min(Number.MAX_SAFE_INTEGER, deadline + milliseconds);
+  }
+
+  public deadlineAfter(milliseconds: number): number {
+    return this.add(this.now(), milliseconds);
+  }
+
+  public now(): number {
+    this.#latest = Math.max(this.#latest, this.#read());
+    return this.#latest;
+  }
+
+  public async pauseUntil(deadline: number, signal: AbortSignal): Promise<"abandoned" | "elapsed"> {
+    if (signal.aborted) {return "abandoned";}
+    try {
+      await this.#waitUntil(deadline, signal);
+      return signal.aborted ? "abandoned" : "elapsed";
+    } catch {
+      return signal.aborted ? "abandoned" : "elapsed";
+    }
+  }
+
+  public async settle<T>(
+    observed: Promise<ObservedSettlement<T>>,
+    deadline: number,
+    abandonSignal?: AbortSignal,
+  ): Promise<BoundedSettlement<T>> {
+    const abandoned = (): boolean => abandonSignal?.aborted === true;
+    if (abandoned()) {return { kind: "abandoned" };}
+    if (this.now() >= deadline) {return { kind: "timed_out" };}
+    const timerAbort = new AbortController();
+    const timeout = this.#waitUntil(deadline, timerAbort.signal).then<BoundedSettlement<T>, BoundedSettlement<T>>(
+      () => ({ kind: "timed_out" }),
+      () => timerAbort.signal.aborted
+        ? new Promise<BoundedSettlement<T>>(() => {})
+        : { kind: "timed_out" },
+    );
+    let abandonListener: (() => void) | undefined;
+    const candidates: Promise<BoundedSettlement<T>>[] = [observed, timeout];
+    if (abandonSignal !== undefined) {
+      candidates.push(new Promise(resolve => {
+        abandonListener = () => resolve({ kind: "abandoned" });
+        abandonSignal.addEventListener("abort", abandonListener, { once: true });
+      }));
+    }
+    const outcome = await Promise.race(candidates);
+    timerAbort.abort();
+    if (abandonSignal !== undefined && abandonListener !== undefined) {
+      abandonSignal.removeEventListener("abort", abandonListener);
+    }
+    if (abandoned()) {return { kind: "abandoned" };}
+    if (outcome.kind === "fulfilled" && this.now() >= deadline) {return { kind: "timed_out" };}
+    return outcome;
+  }
+
+  public settleCall<T>(
+    call: () => T | PromiseLike<T>,
+    deadline: number,
+    abandonSignal?: AbortSignal,
+  ): Promise<BoundedSettlement<T>> {
+    if (abandonSignal?.aborted === true) {return Promise.resolve<BoundedSettlement<T>>({ kind: "abandoned" });}
+    if (this.now() >= deadline) {return Promise.resolve<BoundedSettlement<T>>({ kind: "timed_out" });}
+    return this.settle(observeCall(call), deadline, abandonSignal);
+  }
+
+  readonly #read = (): number => {
+    const observed = this.#clock.now();
+    if (!Number.isFinite(observed)) {throw new TypeError("Claude control clock must return a finite value");}
+    return observed;
+  };
+
+  async #waitUntil(deadline: number, signal: AbortSignal): Promise<void> {
+    const started = this.now();
+    const duration = Math.max(0, deadline - started);
+    try {
+      if (duration > 0) {await this.#clock.wait(duration, signal);}
+    } catch (error) {
+      if (!signal.aborted) {this.#latest = Math.max(this.#latest, deadline);}
+      throw error;
+    }
+    if (!signal.aborted) {
+      this.#latest = Math.max(this.#latest, started + duration, this.#read());
+    }
+  }
+}
+
 const loadClaudeQueryFactory = async (): Promise<ClaudeQueryFactory> => {
-  const loaded: unknown = await import("@anthropic-ai/claude-agent-sdk");
+  const loaded: unknown = await import(CLAUDE_AGENT_SDK_PACKAGE);
   if (typeof loaded !== "object" || loaded === null || !("query" in loaded) || typeof loaded.query !== "function") {
     throw new Error("Claude Agent SDK query export is unavailable");
   }
@@ -100,17 +211,19 @@ const loadClaudeQueryFactory = async (): Promise<ClaudeQueryFactory> => {
 
 export interface ClaudeAgentSdkContainedTurnProviderOptions {
   readonly cancellationPollMs?: number;
+  readonly clock?: ClaudeAgentSdkControlClock;
   readonly executablePath: string;
   readonly interruptGraceMs?: number;
   readonly manifest: ContainedTurnAdapterCapabilityManifest;
+  readonly privateProjections: ClaudeAgentSdkPrivateProjectionResolver;
   readonly processes: CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
   readonly queryFactory?: ClaudeQueryFactory;
   readonly turnTimeoutMs?: number;
 }
 
 interface ControlState {
-  interrupted: boolean;
   interruptionFailed: boolean;
+  interruptObserved: boolean;
   timedOut: boolean;
 }
 
@@ -123,13 +236,8 @@ const positiveInteger = (name: string, value: number | undefined, fallback: numb
 const receipt = (kind: string, values: readonly unknown[]): string =>
   `urn:agent-runtime:${kind}:${createHash("sha256").update(JSON.stringify(values)).digest("hex")}`;
 
-const notAccepted = (input: {
-  readonly attemptId: string;
-  readonly effectId: string;
-  readonly operationId: string;
-  readonly reason: string;
-}): ContainedTurnProviderExecutionOutcome => {
-  const identity = [input.operationId, input.effectId, input.attemptId, input.reason] as const;
+const notAccepted = (input: Parameters<ContainedTurnProviderPort["execute"]>[0], reason: string): ContainedTurnProviderExecutionOutcome => {
+  const identity = [input.operationId, input.effectId, input.attemptId, reason] as const;
   return {
     effectReceiptRef: receipt("claude-effect-not-committed", identity),
     executionReceiptRef: receipt("claude-execution-not-started", identity),
@@ -139,49 +247,10 @@ const notAccepted = (input: {
   };
 };
 
-const ambiguous = (input: {
-  readonly attemptId: string;
-  readonly effectId: string;
-  readonly operationId: string;
-  readonly reason: string;
-}): ContainedTurnProviderExecutionOutcome => ({
-  evidenceRef: receipt("claude-provider-ambiguous", [input.operationId, input.effectId, input.attemptId, input.reason]),
+const ambiguous = (input: Parameters<ContainedTurnProviderPort["execute"]>[0], reason: string): ContainedTurnProviderExecutionOutcome => ({
+  evidenceRef: receipt("claude-provider-ambiguous", [input.operationId, input.effectId, input.attemptId, reason]),
   kind: "ambiguous",
 });
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const isClaudeResult = (message: unknown): message is ClaudeSdkResultMessage => {
-  if (!isRecord(message) || message.type !== "result" || typeof message.subtype !== "string" ||
-      typeof message.is_error !== "boolean" || typeof message.session_id !== "string" || typeof message.uuid !== "string") {
-    return false;
-  }
-  return message.subtype === "success"
-    ? typeof message.result === "string"
-    : ["error_during_execution", "error_max_turns", "error_max_budget_usd", "error_max_structured_output_retries"].includes(message.subtype) &&
-      Array.isArray(message.errors) && message.errors.every(error => typeof error === "string");
-};
-
-const isClaudeStreamMessage = (message: unknown): message is ClaudeSdkStreamMessage =>
-  isRecord(message) && message.type === "stream_event" && "event" in message && isRecord(message.event) &&
-  typeof message.event.type === "string" && (message.parent_tool_use_id === null || typeof message.parent_tool_use_id === "string");
-
-const textDelta = (message: unknown): string | undefined => {
-  if (!isClaudeStreamMessage(message) || message.parent_tool_use_id !== null) {return undefined;}
-  const event = message.event;
-  return event.type === "content_block_delta" && event.delta?.type === "text_delta"
-    ? event.delta.text
-    : undefined;
-};
-
-const boundedDiagnostic = (result: ClaudeSdkResultMessage): string | undefined => {
-  const detail = result.subtype === "success"
-    ? result.is_error ? result.result : undefined
-    : result.errors.join("; ");
-  if (detail === undefined || detail.length === 0) {return undefined;}
-  return Buffer.from(detail, "utf8").subarray(0, MAX_DIAGNOSTIC_BYTES).toString("utf8");
-};
 
 const completed = (input: {
   readonly adapterRevision: string;
@@ -191,24 +260,14 @@ const completed = (input: {
   readonly cursor: number;
   readonly effectId: string;
   readonly operationId: string;
+  readonly projectionRef: string;
   readonly result: ClaudeSdkResultMessage;
 }): ContainedTurnProviderExecutionOutcome => {
-  const outcome = input.result.subtype === "success" && !input.result.is_error
-    ? "succeeded"
-    : input.control.interrupted && !input.control.timedOut ? "cancelled" : "failed";
+  const outcome = input.result.subtype === "success" && !input.result.is_error ? "succeeded" : "failed";
   const identity = [
-    input.operationId,
-    input.effectId,
-    input.attemptId,
-    input.result.session_id,
-    input.result.uuid,
-    input.result.subtype,
-    input.result.is_error,
-    input.cursor,
-    input.control.interrupted,
-    input.control.timedOut,
-    input.adapterRevision,
-    input.binaryRevision,
+    input.operationId, input.effectId, input.attemptId, input.result.session_id, input.result.uuid,
+    input.result.subtype, input.result.is_error, input.cursor, input.control.interruptObserved,
+    input.control.timedOut, input.adapterRevision, input.binaryRevision, input.projectionRef,
   ] as const;
   return {
     acceptanceReceiptRef: receipt("claude-provider-accepted", identity),
@@ -217,7 +276,9 @@ const completed = (input: {
     executionReceiptRef: receipt("claude-execution-closed", identity),
     kind: "completed",
     outcome,
-    outputDrainReceiptRef: receipt("claude-output-drained", identity),
+    // This evidence is deliberately limited to the SDK iterator. Host Custody
+    // must replace it with its provider-neutral stdout/stderr closure receipt.
+    outputDrainReceiptRef: receipt("claude-sdk-iterator-drained", identity),
   };
 };
 
@@ -230,17 +291,16 @@ const sdkSandbox = (mode: "analysis" | "workspace-write", workspaceRef: string):
   enabled: true,
   failIfUnavailable: true,
   allowUnsandboxedCommands: false,
-  filesystem: {
-    allowRead: [workspaceRef],
-    allowWrite: mode === "analysis" ? [] : [workspaceRef],
-  },
+  filesystem: { allowRead: [workspaceRef], allowWrite: mode === "analysis" ? [] : [workspaceRef] },
 });
 
 export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProviderPort {
   public readonly manifest: ContainedTurnAdapterCapabilityManifest;
   readonly #cancellationPollMs: number;
+  readonly #clock: ClaudeAgentSdkControlClock;
   readonly #executablePath: string;
   readonly #interruptGraceMs: number;
+  readonly #privateProjections: ClaudeAgentSdkPrivateProjectionResolver;
   readonly #processes: CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
   readonly #queryFactory: ClaudeQueryFactory | undefined;
   readonly #turnTimeoutMs: number;
@@ -255,24 +315,48 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
       supportedModes: Object.freeze([...options.manifest.supportedModes]),
     });
     this.#cancellationPollMs = positiveInteger("cancellationPollMs", options.cancellationPollMs, DEFAULT_CANCELLATION_POLL_MS);
+    this.#clock = options.clock ?? defaultClock;
     this.#executablePath = options.executablePath;
     this.#interruptGraceMs = positiveInteger("interruptGraceMs", options.interruptGraceMs, DEFAULT_INTERRUPT_GRACE_MS);
+    this.#privateProjections = options.privateProjections;
     this.#processes = options.processes;
     this.#queryFactory = options.queryFactory;
     this.#turnTimeoutMs = positiveInteger("turnTimeoutMs", options.turnTimeoutMs, DEFAULT_TURN_TIMEOUT_MS);
   }
 
   public async execute(input: Parameters<ContainedTurnProviderPort["execute"]>[0]): Promise<ContainedTurnProviderExecutionOutcome> {
-    if (!this.manifest.supportedModes.includes(input.intent.mode)) {
-      return notAccepted({ ...input, reason: "mode-unsupported" });
+    if (!this.manifest.supportedModes.includes(input.intent.mode)) {return notAccepted(input, "mode-unsupported");}
+    const deadlineClock = new OperationDeadlineClock(this.#clock);
+    const turnDeadline = deadlineClock.deadlineAfter(this.#turnTimeoutMs);
+    let resolvedPrivateProjection: ClaudeAgentSdkPrivateProjection | undefined;
+    try {
+      resolvedPrivateProjection = this.#privateProjections.resolve({
+        custodyRef: input.custody.custodyRef,
+        workspaceRef: input.workspaceRef,
+      });
+    } catch {
+      return notAccepted(input, "private-projection-unavailable");
     }
-    const environment = createClaudeAgentSdkEnvironment(input.workspaceRef);
+    if (resolvedPrivateProjection === undefined) {return notAccepted(input, "private-projection-unavailable");}
+    const privateProjection = resolvedPrivateProjection;
+    const projectionUsable = await deadlineClock.settleCall(
+      () => isClaudeAgentSdkPrivateProjectionUsable(privateProjection, input.workspaceRef),
+      turnDeadline,
+    );
+    if (projectionUsable.kind !== "fulfilled" || !projectionUsable.value) {
+      return notAccepted(input, "private-projection-unavailable");
+    }
     const abortController = new AbortController();
-    const control: ControlState = { interrupted: false, interruptionFailed: false, timedOut: false };
+    const control: ControlState = { interruptionFailed: false, interruptObserved: false, timedOut: false };
     const tools = [...claudeAgentSdkTools(input.intent.mode)];
     let queryHandle: ClaudeSdkQuery;
     try {
-      const queryFactory = this.#queryFactory ?? await loadClaudeQueryFactory();
+      let queryFactory = this.#queryFactory;
+      if (queryFactory === undefined) {
+        const loaded = await deadlineClock.settleCall(loadClaudeQueryFactory, turnDeadline);
+        if (loaded.kind !== "fulfilled") {return notAccepted(input, "sdk-query-unavailable");}
+        queryFactory = loaded.value;
+      }
       queryHandle = queryFactory({
         prompt: input.intent.prompt,
         options: {
@@ -280,7 +364,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
           allowedTools: tools,
           cwd: input.workspaceRef,
           disallowedTools: [...disallowedTools(input.intent.mode)],
-          env: environment,
+          env: privateProjection.environment,
           includePartialMessages: true,
           maxTurns: 1,
           mcpServers: {},
@@ -290,112 +374,187 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
           plugins: [],
           sandbox: sdkSandbox(input.intent.mode, input.workspaceRef),
           settingSources: [],
-          spawnClaudeCodeProcess: (options: ClaudeSdkSpawnOptions) => this.#processes.start(input.custody.custodyRef, {
-            arguments: options.args,
-            command: options.command,
-            cwd: options.cwd,
-            environment: options.env,
-            signal: options.signal,
+          spawnClaudeCodeProcess: options => this.#processes.start(input.custody.custodyRef, {
+            arguments: options.args, command: options.command, cwd: options.cwd,
+            environment: options.env, signal: options.signal,
           }),
           strictMcpConfig: true,
           tools,
         },
       });
     } catch {
-      return this.#processes.get(input.custody.custodyRef) === undefined
-        ? notAccepted({ ...input, reason: "sdk-query-not-started" })
-        : ambiguous({ ...input, reason: "sdk-query-start-ambiguous" });
+      // A missing registry entry is not exact proof that delegated spawn did
+      // not race. The provider-neutral observed-start seam belongs to custody.
+      return ambiguous(input, "sdk-query-start-ambiguous");
     }
 
     let cursor = 0;
     let result: ClaudeSdkResultMessage | undefined;
     let streamed = false;
     let streamSettled = false;
+    let streamSettledAt: number | undefined;
     let streamFailure: unknown;
-    const consume = async (): Promise<void> => {
+    let admissionOpen = true;
+    let outputWaitFailed = false;
+    const outputAbort = new AbortController();
+    const closeAdmission = (): void => {
+      admissionOpen = false;
+      outputAbort.abort();
+    };
+    const emit = async (kind: "assistant" | "diagnostic", text: string): Promise<void> => {
+      if (!admissionOpen) {throw new Error("CLAUDE_OUTPUT_ADMISSION_CLOSED");}
+      const admittedCursor = cursor;
+      const emitted = await deadlineClock.settleCall(
+        () => input.emit({ cursor: admittedCursor, kind, text }),
+        turnDeadline,
+        outputAbort.signal,
+      );
+      if (emitted.kind !== "fulfilled" || !admissionOpen || admittedCursor !== cursor) {
+        outputWaitFailed = true;
+        if (emitted.kind === "timed_out") {control.timedOut = true;}
+        closeAdmission();
+        throw new Error("CLAUDE_OUTPUT_ADMISSION_UNPROVEN");
+      }
+      cursor += 1;
+    };
+    const consumePromise = (async () => {
       try {
         for await (const message of queryHandle) {
-          const delta = textDelta(message);
-          if (delta !== undefined && delta.length > 0) {
+          if (result !== undefined) {throw new Error("CLAUDE_POST_RESULT_MESSAGE");}
+          const normalized = normalizeClaudeSdkMessage(message);
+          if (normalized.kind === "malformed") {throw new Error("CLAUDE_MALFORMED_SDK_MESSAGE");}
+          if (normalized.kind === "assistant_text" && normalized.text.length > 0) {
+            if (!admissionOpen) {throw new Error("CLAUDE_OUTPUT_ADMISSION_CLOSED");}
+            await emit("assistant", normalized.text);
             streamed = true;
-            cursor += 1;
-            await input.emit({ cursor, kind: "assistant", text: delta });
           }
-          if (isClaudeResult(message)) {
-            if (result !== undefined) {throw new Error("Claude SDK emitted more than one terminal result");}
-            result = message;
-          }
+          if (normalized.kind === "result") {result = normalized.result;}
         }
       } catch (error) {
         streamFailure = error;
       } finally {
         streamSettled = true;
+        streamSettledAt = deadlineClock.now();
       }
-    };
+    })();
 
-    const startedAt = Date.now();
-    const controlLoop = async (): Promise<"forced" | "settled"> => {
+    const controlAbort = new AbortController();
+    type ControlOutcome =
+      | { readonly kind: "dismissed" }
+      | { readonly kind: "stop"; readonly reason: "cancellation" | "lookup_failed" | "turn_timeout" };
+    const controlPromise = (async (): Promise<ControlOutcome> => {
       for (;;) {
-        if (streamSettled) {return "settled";}
-        await delay(this.#cancellationPollMs);
-        if (streamSettled) {return "settled";}
-        let cancellationRequested = false;
-        try {
-          cancellationRequested = await input.isCancellationRequested();
-        } catch {
-          control.interruptionFailed = true;
-          abortController.abort();
-          await delay(this.#interruptGraceMs);
-          return streamSettled ? "settled" : "forced";
+        if (streamSettled || controlAbort.signal.aborted) {return { kind: "dismissed" };}
+        if (deadlineClock.now() >= turnDeadline) {return { kind: "stop", reason: "turn_timeout" };}
+        const pollDeadline = Math.min(turnDeadline, deadlineClock.deadlineAfter(this.#cancellationPollMs));
+        if (await deadlineClock.pauseUntil(pollDeadline, controlAbort.signal) === "abandoned") {
+          return { kind: "dismissed" };
         }
-        const timedOut = Date.now() - startedAt >= this.#turnTimeoutMs;
-        if (!cancellationRequested && !timedOut) {continue;}
-        control.timedOut = timedOut;
-        try {
-          await Promise.race([
-            queryHandle.interrupt(),
-            delay(this.#interruptGraceMs).then(() => {throw new Error("Claude SDK interrupt timed out");}),
-          ]);
-          control.interrupted = true;
-        } catch {
-          control.interruptionFailed = true;
-          abortController.abort();
+        if (streamSettled || controlAbort.signal.aborted) {return { kind: "dismissed" };}
+        if (deadlineClock.now() >= turnDeadline) {return { kind: "stop", reason: "turn_timeout" };}
+        const cancellationRequested = await deadlineClock.settleCall(
+          input.isCancellationRequested,
+          turnDeadline,
+          controlAbort.signal,
+        );
+        if (cancellationRequested.kind === "abandoned") {return { kind: "dismissed" };}
+        if (cancellationRequested.kind === "timed_out" || deadlineClock.now() >= turnDeadline) {
+          return { kind: "stop", reason: "turn_timeout" };
         }
-        await delay(this.#interruptGraceMs);
-        if (!streamSettled) {abortController.abort();}
-        await delay(this.#interruptGraceMs);
-        return streamSettled ? "settled" : "forced";
+        if (cancellationRequested.kind === "rejected") {return { kind: "stop", reason: "lookup_failed" };}
+        if (cancellationRequested.value) {return { kind: "stop", reason: "cancellation" };}
       }
-    };
+    })();
 
-    const consumePromise = consume();
-    const controlPromise = controlLoop();
     const first = await Promise.race([
-      consumePromise.then(() => "settled" as const),
-      controlPromise,
+      consumePromise.then(() => ({ kind: "stream" as const })),
+      controlPromise.then(outcome => ({ kind: "control" as const, outcome })),
     ]);
-    if (first === "forced") {
-      queryHandle.close();
-      void consumePromise.catch(() => {});
-      return ambiguous({ ...input, reason: "sdk-stream-did-not-close" });
+    const streamMissedTurnDeadline = streamSettledAt === undefined || streamSettledAt >= turnDeadline;
+    const stopRequested = first.kind === "control" && first.outcome.kind === "stop";
+    let shutdownFailure = false;
+    if (stopRequested || streamMissedTurnDeadline) {
+      const stopReason = first.kind === "control" && first.outcome.kind === "stop"
+        ? first.outcome.reason
+        : "turn_timeout";
+      control.timedOut = stopReason === "turn_timeout" || control.timedOut;
+      control.interruptionFailed = stopReason === "lookup_failed" || control.interruptionFailed;
+      closeAdmission();
+      const escalationDeadline = deadlineClock.deadlineAfter(this.#interruptGraceMs);
+      const stopDeadline = deadlineClock.add(escalationDeadline, this.#interruptGraceMs);
+      const interruptObservation = deadlineClock.settleCall(
+        () => queryHandle.interrupt(),
+        escalationDeadline,
+      );
+      const stopPhaseAbort = new AbortController();
+      const stopPhase = await Promise.race([
+        interruptObservation.then(observation => ({ kind: "interrupt" as const, observation })),
+        consumePromise.then(() => ({ kind: "stream" as const })),
+        deadlineClock.pauseUntil(escalationDeadline, stopPhaseAbort.signal).then(() => ({ kind: "escalate" as const })),
+      ]);
+      stopPhaseAbort.abort();
+      if (stopPhase.kind === "interrupt") {
+        if (stopPhase.observation.kind === "fulfilled") {
+          control.interruptObserved = true;
+          if (!streamSettled) {await deadlineClock.settle(observeCall(() => consumePromise), escalationDeadline);}
+        } else {
+          control.interruptionFailed = true;
+        }
+      }
+      if (!streamSettled) {
+        if (stopPhase.kind !== "stream" && !control.interruptObserved) {control.interruptionFailed = true;}
+        abortController.abort();
+      }
+      const closeOutcomePromise = deadlineClock.settleCall(() => queryHandle.close(), stopDeadline);
+      controlAbort.abort();
+      const [closeOutcome, consumeOutcome, controlOutcome] = await Promise.all([
+        closeOutcomePromise,
+        streamSettled
+          ? Promise.resolve<BoundedSettlement<void>>({ kind: "fulfilled", value: undefined })
+          : deadlineClock.settle(observeCall(() => consumePromise), stopDeadline),
+        deadlineClock.settle(observeCall(() => controlPromise), stopDeadline),
+      ]);
+      shutdownFailure = closeOutcome.kind !== "fulfilled" || consumeOutcome.kind !== "fulfilled" || controlOutcome.kind !== "fulfilled";
+    } else {
+      const closeDeadline = deadlineClock.add(
+        deadlineClock.deadlineAfter(this.#interruptGraceMs),
+        this.#interruptGraceMs,
+      );
+      const closeOutcomePromise = deadlineClock.settleCall(() => queryHandle.close(), closeDeadline);
+      controlAbort.abort();
+      const [closeOutcome, controlOutcome] = await Promise.all([
+        closeOutcomePromise,
+        deadlineClock.settle(observeCall(() => controlPromise), closeDeadline),
+      ]);
+      shutdownFailure = closeOutcome.kind !== "fulfilled" || controlOutcome.kind !== "fulfilled";
     }
-    await consumePromise;
-    queryHandle.close();
-    if (streamFailure !== undefined || control.interruptionFailed) {
-      return ambiguous({ ...input, reason: "sdk-stream-failed" });
+
+    if (streamFailure !== undefined || outputWaitFailed || control.interruptionFailed || control.timedOut || shutdownFailure) {
+      closeAdmission();
+      return ambiguous(input, "sdk-stream-or-shutdown-unproven");
     }
     if (result === undefined) {
-      return ambiguous({ ...input, reason: "sdk-terminal-result-missing" });
+      closeAdmission();
+      return ambiguous(input, "sdk-terminal-result-missing");
     }
-    if (!streamed && result.subtype === "success" && result.result.length > 0) {
-      cursor += 1;
-      await input.emit({ cursor, kind: "assistant", text: result.result });
+    if (admissionOpen && !streamed && result.subtype === "success" && !result.is_error && result.result.length > 0) {
+      try {
+        await emit("assistant", result.result);
+      } catch {
+        closeAdmission();
+        return ambiguous(input, "sdk-output-admission-unproven");
+      }
     }
-    const diagnostic = boundedDiagnostic(result);
-    if (diagnostic !== undefined) {
-      cursor += 1;
-      await input.emit({ cursor, kind: "diagnostic", text: diagnostic });
+    const diagnostic = claudeResultDiagnostic(result);
+    if (admissionOpen && diagnostic !== undefined) {
+      try {
+        await emit("diagnostic", diagnostic);
+      } catch {
+        closeAdmission();
+        return ambiguous(input, "sdk-output-admission-unproven");
+      }
     }
+    closeAdmission();
     return completed({
       adapterRevision: this.manifest.providerBinding.adapterRevision,
       attemptId: input.attemptId,
@@ -404,8 +563,8 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
       cursor,
       effectId: input.effectId,
       operationId: input.operationId,
+      projectionRef: privateProjection.projectionRef,
       result,
     });
   }
-
 }

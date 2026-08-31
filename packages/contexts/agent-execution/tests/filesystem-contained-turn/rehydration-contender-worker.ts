@@ -2,7 +2,7 @@ import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { createNodeContainedTurnArtifacts } from "../../dist/production.js";
+import { createNodeContainedTurnArtifacts } from "../../dist/composition.js";
 
 interface ContenderInput {
   readonly artifactOptions: Parameters<typeof createNodeContainedTurnArtifacts>[0];

@@ -1,14 +1,13 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readlink, readdir, realpath } from "node:fs/promises";
-import { Agent, request } from "node:http";
-import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
+import { Agent, request, type ClientRequest, type IncomingMessage, type RequestOptions } from "node:http";
 import { isAbsolute, resolve as resolvePath } from "node:path";
 
 import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerEngineCall, DockerEnginePolicy } from "./docker-engine-port.js";
 import { snapshotDockerEngineCall, snapshotOwnDataObject } from "./docker-boundary-snapshot.js";
-import { assertDockerUnixPeerPlatformSupported, connectAuthenticatedUnixPeer } from "./docker-unix-peer.js";
-import type { DockerPeerConnector } from "./docker-unix-peer.js";
+import { assertDockerUnixPeerPlatformSupported, connectAuthenticatedUnixPeer, type DockerPeerConnector } from "./docker-unix-peer.js";
+import { openBoundedUnixHijack, type UnixHijackChannel } from "./bounded-unix-hijack.js";
 
 const HOST_BOOT_ID = "/proc/sys/kernel/random/boot_id";
 const MAX_CALL_MS = 120_000;
@@ -31,6 +30,8 @@ export interface UnixHttpResponse<T> {
 }
 
 interface RequestInput {
+  /** Internal start-session fence, invoked synchronously at the ClientRequest.end transport seam. */
+  readonly beforeWrite?: () => void;
   readonly body?: Uint8Array;
   readonly call: DockerEngineCall;
   readonly method: "GET" | "POST" | "DELETE";
@@ -193,6 +194,7 @@ const requestFailureFor = (
   call: DockerEngineCall,
   deadlineExpired: boolean,
 ): DockerEngineError => {
+  if (error instanceof DockerEngineError) {return error;}
   const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
   if (code === "HPE_HEADER_OVERFLOW") {return new DockerEngineError("response-too-large");}
   if (typeof code === "string" && code.startsWith("HPE_")) {return new DockerEngineError("protocol-violation");}
@@ -270,13 +272,10 @@ export class BoundedUnixHttpClient {
     endpointObserver: (policy: EndpointPolicy) => Promise<DockerEndpointObservation> = observeEndpoint,
     peerConnector: DockerPeerConnector = connectAuthenticatedUnixPeer,
   ) {
-    const snapshot = snapshotOwnDataObject(policy, [
-      "daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode",
-      "socketOwnerGid", "socketOwnerUid", "socketPath",
-    ], [
-      "daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode",
-      "socketOwnerGid", "socketOwnerUid", "socketPath",
-    ], "invalid-create-request") as EndpointPolicy;
+    const snapshot = snapshotOwnDataObject(policy,
+      ["daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode", "socketOwnerGid", "socketOwnerUid", "socketPath"],
+      ["daemonPidFileMode", "daemonPidFileOwnerGid", "daemonPidFileOwnerUid", "daemonPidFilePath", "socketMode", "socketOwnerGid", "socketOwnerUid", "socketPath"],
+      "invalid-create-request") as EndpointPolicy;
     if (typeof snapshot.daemonPidFilePath !== "string" || typeof snapshot.socketPath !== "string" || [
       snapshot.daemonPidFileMode, snapshot.daemonPidFileOwnerGid, snapshot.daemonPidFileOwnerUid,
       snapshot.socketMode, snapshot.socketOwnerGid, snapshot.socketOwnerUid,
@@ -290,8 +289,11 @@ export class BoundedUnixHttpClient {
   }
 
   public async endpointIdentity(call: DockerEngineCall): Promise<DockerEndpointIdentity> {
-    this.#checkCall(snapshotDockerEngineCall(call));
-    return (await this.#observeCustody()).identity;
+    const snapshot = snapshotDockerEngineCall(call);
+    this.#checkCall(snapshot);
+    const custody = await this.#observeCustody();
+    this.#checkCall(snapshot);
+    return custody.identity;
   }
 
   public async buffered(input: Omit<RequestInput, "stream">): Promise<UnixHttpResponse<Uint8Array>> {
@@ -313,6 +315,32 @@ export class BoundedUnixHttpClient {
 
   public stream(input: Omit<RequestInput, "stream">): Promise<UnixHttpResponse<AsyncIterable<Uint8Array>>> {
     return this.#open({ ...input, stream: true });
+  }
+
+  public async hijack(input: Pick<RequestInput, "call" | "path">): Promise<UnixHijackChannel> {
+    const call = snapshotDockerEngineCall(input.call);
+    this.#checkCall(call);
+    if (!input.path.startsWith("/") || input.path.length > 4096 || /[\0\r\n]/u.test(input.path)) {
+      throw new DockerEngineError("protocol-violation");
+    }
+    const custody = await this.#observeCustody();
+    this.#checkCall(call);
+    const connection = await this.#connectPeer(this.#policy, custody, call, async () => this.#observeCustody());
+    try {this.#checkCall(call);} catch (error) {
+      try {connection.socket.destroy();} catch {}
+      try {await connection.release();} catch {}
+      throw error;
+    }
+    const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
+    return openBoundedUnixHijack({
+      call, effectiveMs, path: input.path, release: connection.release, request: this.#request,
+      socket: connection.socket,
+      verifyCustody: async () => {
+        const current = await this.#observeCustody();
+        this.#checkCall(call);
+        if (current.token !== custody.token) {throw new DockerEngineError("endpoint-custody-lost");}
+      },
+    });
   }
 
   async #observeCustody(): Promise<SocketCustody> {
@@ -364,23 +392,26 @@ export class BoundedUnixHttpClient {
     if ((input.body?.byteLength ?? 0) > MAX_REQUEST_BYTES) {
       throw new DockerEngineError("invalid-create-request");
     }
-    if (!input.path.startsWith("/") || input.path.length > 4096 || input.path.includes("\0") ||
-        input.path.includes("\r") || input.path.includes("\n")) {
+    if (!input.path.startsWith("/") || input.path.length > 4096 || /[\0\r\n]/u.test(input.path)) {
       throw new DockerEngineError("protocol-violation");
     }
     const custody = await this.#observeCustody();
+    this.#checkCall(call);
     const connection = await this.#connectPeer(this.#policy, custody, call, async () => this.#observeCustody());
-    const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
-    if (effectiveMs <= 0) {
-      connection.socket.destroy();
-      await connection.release();
-      throw new DockerEngineError("deadline-exceeded");
+    try {this.#checkCall(call);} catch (error) {
+      try {connection.socket.destroy();} catch {}
+      try {await connection.release();} catch {}
+      throw error;
     }
+    const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
     const agent = new Agent({ keepAlive: false, maxSockets: 1 });
     agent.createConnection = () => connection.socket;
+    let released = false;
     const release = async (): Promise<void> => {
-      agent.destroy();
-      await connection.release();
+      if (released) {return;}
+      released = true;
+      try {agent.destroy();} catch {}
+      try {await connection.release();} catch {}
     };
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -402,25 +433,26 @@ export class BoundedUnixHttpClient {
           setHost: false,
         });
       } catch (error) {
-        void release();
         reject(requestFailureFor(error, call, deadlineExpired));
+        void release();
         return;
       }
       const cleanup = (): void => {
-        clearTimeout(timer);
-        call.signal.removeEventListener("abort", abort);
+        try {clearTimeout(timer);} catch {}
+        try {call.signal.removeEventListener("abort", abort);} catch {}
       };
       const finishFailure = (error: unknown): void => {
         if (settled) {return;}
+        const failure = requestFailureFor(error, call, deadlineExpired);
         settled = true;
+        reject(failure);
         cleanup();
         void release();
-        reject(requestFailureFor(error, call, deadlineExpired));
       };
-      const abort = (): void => {operation.destroy();};
+      const abort = (): void => {try {operation.destroy();} catch (error) {finishFailure(error);}};
       const timer = setTimeout(() => {
         deadlineExpired = true;
-        operation.destroy();
+        try {operation.destroy();} catch (error) {finishFailure(error);}
       }, effectiveMs);
       call.signal.addEventListener("abort", abort, { once: true });
       operation.once("error", finishFailure);
@@ -432,6 +464,7 @@ export class BoundedUnixHttpClient {
             if (!Number.isSafeInteger(response.statusCode) || (response.statusCode ?? 0) < 100 ||
                 (response.statusCode ?? 0) > 599) {throw new DockerEngineError("protocol-violation");}
             const current = await this.#observeCustody();
+            this.#checkCall(call);
             if (current.token !== custody.token) {throw new DockerEngineError("endpoint-custody-lost");}
             settled = true;
             resolve({
@@ -450,14 +483,25 @@ export class BoundedUnixHttpClient {
               statusCode: response.statusCode ?? 0,
             });
           } catch (error) {
-            response.destroy();
+            if (!settled) {
+              settled = true;
+              reject(error);
+            }
+            cleanup();
+            try {response.destroy();} catch {}
             await release();
-            if (!settled) {settled = true; cleanup(); reject(error);}
           }
         };
         void settle();
       });
-      operation.end(input.body);
+      try {
+        input.beforeWrite?.();
+        this.#checkCall(call);
+        operation.end(input.body);
+      } catch (error) {
+        finishFailure(error);
+        try {operation.destroy();} catch {}
+      }
     });
   }
 
@@ -469,6 +513,7 @@ export class BoundedUnixHttpClient {
         yield chunk as Uint8Array;
       }
       const custody = await this.#observeCustody();
+      this.#checkCall(input.call);
       if (!input.response.complete || custody.token !== input.custodyToken) {
         throw new DockerEngineError("endpoint-custody-lost");
       }
@@ -479,10 +524,10 @@ export class BoundedUnixHttpClient {
       if (error instanceof DockerEngineError) {throw error;}
       throw failureFor(input.call, Date.now() >= input.call.deadlineEpochMs);
     } finally {
-      clearTimeout(input.timer);
-      input.call.signal.removeEventListener("abort", input.abort);
-      await input.release();
-      if (!input.response.complete) {input.response.destroy();}
+      try {clearTimeout(input.timer);} catch {}
+      try {input.call.signal.removeEventListener("abort", input.abort);} catch {}
+      try {await input.release();} catch {}
+      if (!input.response.complete) {try {input.response.destroy();} catch {}}
     }
   }
 }

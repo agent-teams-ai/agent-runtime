@@ -93,7 +93,8 @@ class FakeSyscalls implements DockerCustodyInitSyscalls {
   public wall = 10_000;
 
   public assertNoNewPrivileges(): void {}
-  public assertPidOne(): void {}
+  public assertDirectChildOfContainerInit(): void {}
+  public closeProviderInput(): void {this.inputStatus = "closed";}
   public monotonicNowMs(): number {return this.monotonic;}
   public observeProviderRootExit(handle: DockerCustodyProviderRootHandle): {readonly exitCode: number | null; readonly signal: DockerCustodyChildSignal | null} | null {
     this.rootObservations.push(handle);
@@ -211,6 +212,7 @@ test("one attested handshake launches one exact non-root provider without custod
     clearSupplementaryGroups: true,
     environment: { HOME: "/private/home" },
     executablePath: "/immutable/provider",
+    executableSha256: digest("d"),
     gid: 10001,
     inheritedDescriptors: [0, 1, 2],
     noNewPrivileges: true,

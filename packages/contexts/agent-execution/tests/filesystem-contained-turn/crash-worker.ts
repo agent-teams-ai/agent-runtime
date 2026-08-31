@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
   createNodeContainedTurnArtifacts,
   createNodeContainedTurnWorkspace,
-} from "../../dist/production.js";
+} from "../../dist/composition.js";
 
 interface CrashInput {
   readonly action: "close" | "create" | "rehydrate" | "seal";

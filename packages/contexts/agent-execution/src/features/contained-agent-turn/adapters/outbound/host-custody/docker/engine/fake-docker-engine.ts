@@ -1,17 +1,14 @@
+/* oxlint-disable max-lines -- the fake mirrors the complete strict Docker Engine state surface. */
 import { createHash } from "node:crypto";
 
-import {
-  validateAuthorityShape,
-} from "./docker-engine-codec.js";
+import { validateAuthorityShape } from "./docker-engine-codec.js";
 import { canonicalizeCreateMounts, containerName, encodeCreateRequest } from "./docker-create-request.js";
 import { createSpecificationSha256 } from "./docker-create-specification.js";
-import {
-  snapshotDockerContainerCreate,
-  snapshotDockerEngineCall,
-  snapshotDockerEnginePolicy,
-} from "./docker-boundary-snapshot.js";
+import { snapshotDockerContainerCreate, snapshotDockerEngineCall, snapshotDockerEnginePolicy } from "./docker-boundary-snapshot.js";
 import { DockerEngineError } from "./docker-engine-error.js";
 import { isTerminalObservation, mutationPostconditionSatisfied } from "./docker-engine-semantics.js";
+import { authorityBelongsToFakeEngine, exitedFakeContainerState, initialFakeContainerState, sameFakeAuthority,
+  sameFakeEngine, startedFakeContainerState } from "./fake-docker-engine-state.js";
 import type {
   DockerContainerAuthority,
   DockerContainerCreate,
@@ -19,19 +16,16 @@ import type {
   DockerContainerResourceFacts,
   DockerContainerStateFacts,
   DockerEngineCall,
+  DockerCustodyDuplexChannel,
   DockerEngineIdentity,
   DockerEnginePolicy,
   DockerEnginePort,
   DockerLogFrame,
 } from "./docker-engine-port.js";
-import {
-  DOCKER_LOG_MAX_FRAME_BYTES,
-  DOCKER_LOG_MAX_FRAMES,
-  DOCKER_LOG_MAX_STREAM_BYTES,
-} from "./docker-engine-port.js";
+import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_FRAMES, DOCKER_LOG_MAX_STREAM_BYTES } from "./docker-engine-port.js";
 
 export type FakeCreateOutcome = "acknowledged" | "daemon-disconnect" | "lost-acknowledgement" | "malformed-response";
-export type FakeDockerOperation = "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop" | "wait";
+export type FakeDockerOperation = "attach" | "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop" | "wait";
 export type FakeMutationOperation = "kill" | "remove" | "start" | "stop";
 
 interface FakeContainer {
@@ -48,21 +42,12 @@ interface FakeLogPlan {
 
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 
-const initialState = (): DockerContainerStateFacts => ({
-  dead: false,
-  errorPresent: false,
-  exitCode: 0,
-  finishedAt: "0001-01-01T00:00:00Z",
-  hostPid: 0,
-  oomKilled: false,
-  paused: false,
-  restarting: false,
-  running: false,
-  startedAt: "0001-01-01T00:00:00Z",
-  status: "created",
-});
-
 export class FakeDockerEngine implements DockerEnginePort {
+  readonly #attachState = new Map<string, "invalid" | "opening" | "open" | "starting" | "started">();
+  readonly #attachCleanup = new Map<string, () => void>();
+  readonly #attachGeneration = new Map<string, symbol>();
+  readonly #attachRetire = new Map<string, () => void>();
+  readonly #custodyInput = new Map<string, Uint8Array[]>();
   readonly #containers = new Map<string, FakeContainer>();
   readonly #createOutcomes: FakeCreateOutcome[] = [];
   readonly #events: string[] = [];
@@ -93,6 +78,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       imageDigest: `validation@sha256:${"0".repeat(64)}`,
       launchFingerprintSha256: "0".repeat(64),
       operationNonceSha256: "0".repeat(64),
+      ownerIdentitySha256: "0".repeat(64),
       privateRootSource: `${this.#policy.privateRootSourceRoot}/validation`,
       workspaceSource: `${this.#policy.workspaceSourceRoot}/validation`,
       workspaceWritable: false,
@@ -100,6 +86,9 @@ export class FakeDockerEngine implements DockerEnginePort {
   }
 
   public get events(): readonly string[] {return [...this.#events];}
+  public custodyInput(authority: DockerContainerAuthority): Uint8Array {
+    return Uint8Array.from(Buffer.concat((this.#custodyInput.get(authority.containerId) ?? []).map(bytes => Buffer.from(bytes))));
+  }
 
   public enqueueCreateOutcome(outcome: FakeCreateOutcome): void {this.#createOutcomes.push(outcome);}
 
@@ -107,10 +96,8 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#malformed.set(operation, count);
   }
 
-  public enqueueMutationOutcome(
-    operation: FakeMutationOperation,
-    outcome: { readonly acknowledgement: "304" | "lost"; readonly effect: "applied" | "not-applied" },
-  ): void {
+  public enqueueMutationOutcome(operation: FakeMutationOperation,
+    outcome: { readonly acknowledgement: "304" | "lost"; readonly effect: "applied" | "not-applied" }): void {
     const outcomes = this.#mutationOutcomes.get(operation) ?? [];
     outcomes.push({ acknowledgement: outcome.acknowledgement, effect: outcome.effect === "applied" });
     this.#mutationOutcomes.set(operation, outcomes);
@@ -172,13 +159,24 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#logPlans.set(authority.containerId, { delayed: options.delayed === true, frames: [...frames] });
   }
 
-  public async create(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority> {
+  public async identity(call: DockerEngineCall): Promise<DockerEngineIdentity> {
+    const callSnapshot = snapshotDockerEngineCall(call);
+    this.#check("inspect", callSnapshot);
+    return Object.freeze({ ...this.#identity() });
+  }
+
+  public async create(
+    input: DockerContainerCreate,
+    call: DockerEngineCall,
+    expectedIdentity?: DockerEngineIdentity,
+  ): Promise<DockerContainerAuthority> {
     const callSnapshot = snapshotDockerEngineCall(call);
     const inputSnapshot = snapshotDockerContainerCreate(input);
     this.#check("create", callSnapshot);
     const canonicalInput = await canonicalizeCreateMounts(inputSnapshot, this.#policy);
     encodeCreateRequest(canonicalInput, this.#policy);
     const engine = this.#identity();
+    if (expectedIdentity !== undefined) {this.#assertSameEngine(expectedIdentity, engine);}
     const name = containerName(canonicalInput.operationNonceSha256);
     const named = this.#names.get(name);
     if (named !== undefined && this.#containers.get(named)?.removed !== true) {
@@ -189,7 +187,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       throw new DockerEngineError("create-acknowledgement-unknown");
     }
     const authority = this.#newAuthority(canonicalInput, engine);
-    const record = { authority, input: canonicalInput, removed: false, state: initialState() };
+    const record = { authority, input: canonicalInput, removed: false, state: initialFakeContainerState() };
     this.#containers.set(authority.containerId, record);
     this.#names.set(name, authority.containerId);
     this.#events.push(`create:${outcome}`);
@@ -200,7 +198,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       }
       const resolved = this.#names.get(name);
       const observed = resolved === undefined ? undefined : this.#containers.get(resolved);
-      if (observed === undefined || observed.removed || !this.#sameAuthority(observed.authority, authority)) {
+      if (observed === undefined || observed.removed || !sameFakeAuthority(observed.authority, authority)) {
         throw new DockerEngineError("create-acknowledgement-unknown");
       }
       this.#events.push(`create:${outcome}:resolved-by-name`);
@@ -208,10 +206,24 @@ export class FakeDockerEngine implements DockerEnginePort {
     return authority;
   }
 
-  public async inspect(
-    authority: DockerContainerAuthority,
-    call: DockerEngineCall,
-  ): Promise<DockerContainerObservation> {
+  public async reconcileCreate(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority> {
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const inputSnapshot = snapshotDockerContainerCreate(input);
+    this.#check("inspect", callSnapshot);
+    const canonicalInput = await canonicalizeCreateMounts(inputSnapshot, this.#policy);
+    encodeCreateRequest(canonicalInput, this.#policy);
+    const id = this.#names.get(containerName(canonicalInput.operationNonceSha256));
+    const record = id === undefined ? undefined : this.#containers.get(id);
+    if (record === undefined || record.removed || !sameFakeAuthority(
+      record.authority,
+      this.#newAuthorityForReconciliation(canonicalInput, this.#identity(), record.authority.containerId),
+    )) {
+      throw new DockerEngineError("create-acknowledgement-unknown");
+    }
+    return { ...record.authority };
+  }
+
+  public async inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation> {
     const callSnapshot = snapshotDockerEngineCall(call);
     const authoritySnapshot = validateAuthorityShape(authority);
     this.#check("inspect", callSnapshot);
@@ -219,9 +231,10 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#assertEngine(authoritySnapshot, engine);
     const record = this.#containers.get(authoritySnapshot.containerId);
     if (record === undefined || record.removed) {
+      this.#retireAttach(authoritySnapshot.containerId);
       return { authority: authoritySnapshot, cgroupTree: "unobserved", engine, existence: "absent" };
     }
-    if (!this.#sameAuthority(record.authority, authoritySnapshot) ||
+    if (!sameFakeAuthority(record.authority, authoritySnapshot) ||
         createSpecificationSha256(record.input, this.#policy) !== authoritySnapshot.createSpecificationSha256) {
       throw new DockerEngineError("authority-conflict");
     }
@@ -237,10 +250,88 @@ export class FakeDockerEngine implements DockerEnginePort {
 
   public async start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     const record = await this.#record("start", authority, call);
+    const id = record.authority.containerId;
+    if (this.#attachState.get(id) !== "open") {throw new DockerEngineError("protocol-violation");}
+    this.#attachState.set(id, "starting");
+    if (this.#attachState.get(id) !== "starting") {throw new DockerEngineError("daemon-disconnected");}
+    this.#attachState.set(id, "started");
     const outcome = this.#mutationOutcome("start");
     if (outcome?.effect !== false) {this.#start(record);}
     this.#events.push("start:id");
-    this.#assertMutationPostcondition("start", record, outcome);
+    try {
+      this.#assertMutationPostcondition("start", record, outcome);
+      if (outcome?.acknowledgement === "lost") {throw new DockerEngineError("start-acknowledgement-unknown");}
+    } catch (error) {
+      this.#invalidateAttach(id);
+      throw error instanceof DockerEngineError && error.code === "start-acknowledgement-unknown"
+        ? error : new DockerEngineError("start-acknowledgement-unknown");
+    }
+  }
+
+  public async attachCustody(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerCustodyDuplexChannel> {
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const id = authoritySnapshot.containerId;
+    if (this.#attachState.has(id)) {
+      throw new DockerEngineError("protocol-violation");
+    }
+    const generation = Symbol(id);
+    this.#attachState.set(id, "opening");
+    this.#attachGeneration.set(id, generation);
+    let closed = false;
+    let retired = false;
+    let valid = true;
+    let timer: NodeJS.Timeout | undefined;
+    const cleanup = (): void => {
+      if (timer !== undefined) {clearTimeout(timer);}
+      callSnapshot.signal.removeEventListener("abort", invalidate);
+    };
+    const invalidate = (): void => {
+      if (!valid || retired) {return;}
+      valid = false; cleanup();
+      if (this.#attachGeneration.get(id) === generation) {this.#attachState.set(id, "invalid");}
+    };
+    timer = setTimeout(invalidate, Math.max(0, callSnapshot.deadlineEpochMs - Date.now()));
+    timer.unref();
+    callSnapshot.signal.addEventListener("abort", invalidate, {once: true});
+    this.#attachCleanup.set(id, cleanup);
+    this.#attachRetire.set(id, () => {retired = true; closed = true; valid = false; cleanup();});
+    if (callSnapshot.signal.aborted || callSnapshot.deadlineEpochMs <= Date.now()) {invalidate();}
+    let record: FakeContainer;
+    try {record = await this.#record("attach", authoritySnapshot, callSnapshot);}
+    catch (error) {
+      if (this.#attachState.has(id)) {this.#attachState.set(id, "invalid");}
+      cleanup();
+      throw error;
+    }
+    try {
+      this.#checkContinuation(authoritySnapshot, callSnapshot);
+      if (this.#endpointCustodyLost) {throw new DockerEngineError("endpoint-custody-lost");}
+      if (!valid || retired || this.#attachGeneration.get(id) !== generation || this.#attachState.get(id) !== "opening") {
+        throw new DockerEngineError("protocol-violation");
+      }
+    } catch (error) {
+      invalidate();
+      throw error;
+    }
+    if (record.state.status !== "created" || record.state.running) {
+      this.#attachState.set(id, "invalid"); throw new DockerEngineError("protocol-violation");
+    }
+    this.#attachState.set(id, "open");
+    this.#custodyInput.set(id, []);
+    this.#events.push("attach:id");
+    return Object.freeze({
+      close: async () => {closed = true; invalidate();},
+      closeInput: async () => {closed = true; invalidate();},
+      output: (async function* () {try {yield* [];} finally {invalidate();}})(),
+      write: async (bytes: Uint8Array) => {
+        if (retired) {throw new DockerEngineError("protocol-violation");}
+        if (closed || bytes.byteLength === 0 || this.#attachState.get(id) === "invalid") {
+          this.#attachState.set(id, "invalid"); throw new DockerEngineError("protocol-violation");
+        }
+        this.#custodyInput.get(id)?.push(bytes.slice());
+      },
+    });
   }
 
   public logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame> {
@@ -270,6 +361,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     if (outcome?.effect !== false) {record.removed = true; this.#signalStateTransition();}
     this.#events.push("remove:id");
     this.#assertMutationPostcondition("remove", record, outcome);
+    if (record.removed) {this.#retireAttach(record.authority.containerId);}
   }
 
   public async wait(
@@ -375,6 +467,26 @@ export class FakeDockerEngine implements DockerEnginePort {
       imageDigest: input.imageDigest,
       launchFingerprintSha256: input.launchFingerprintSha256,
       operationNonceSha256: input.operationNonceSha256,
+      ownerIdentitySha256: input.ownerIdentitySha256,
+    });
+  }
+
+  #newAuthorityForReconciliation(
+    input: DockerContainerCreate,
+    engine: DockerEngineIdentity,
+    containerId: string,
+  ): DockerContainerAuthority {
+    return validateAuthorityShape({
+      containerId,
+      createSpecificationSha256: createSpecificationSha256(input, this.#policy),
+      daemonBootGenerationSha256: engine.daemonBootGenerationSha256,
+      daemonIdentitySha256: engine.daemonIdentitySha256,
+      hostBootGenerationSha256: engine.hostBootGenerationSha256,
+      hostIdentitySha256: engine.hostIdentitySha256,
+      imageDigest: input.imageDigest,
+      launchFingerprintSha256: input.launchFingerprintSha256,
+      operationNonceSha256: input.operationNonceSha256,
+      ownerIdentitySha256: input.ownerIdentitySha256,
     });
   }
 
@@ -409,26 +521,35 @@ export class FakeDockerEngine implements DockerEnginePort {
   }
 
   #assertEngine(authority: DockerContainerAuthority, engine: DockerEngineIdentity): void {
-    if (authority.daemonIdentitySha256 !== engine.daemonIdentitySha256 ||
-        authority.hostIdentitySha256 !== engine.hostIdentitySha256 ||
-        authority.daemonBootGenerationSha256 !== engine.daemonBootGenerationSha256 ||
-        authority.hostBootGenerationSha256 !== engine.hostBootGenerationSha256) {
+    if (!authorityBelongsToFakeEngine(authority, engine)) {
       throw new DockerEngineError("daemon-identity-changed");
     }
   }
 
-  #sameAuthority(left: DockerContainerAuthority, right: DockerContainerAuthority): boolean {
-    return left.containerId === right.containerId && left.daemonIdentitySha256 === right.daemonIdentitySha256 &&
-      left.createSpecificationSha256 === right.createSpecificationSha256 &&
-      left.daemonBootGenerationSha256 === right.daemonBootGenerationSha256 &&
-      left.hostBootGenerationSha256 === right.hostBootGenerationSha256 &&
-      left.hostIdentitySha256 === right.hostIdentitySha256 && left.imageDigest === right.imageDigest &&
-      left.launchFingerprintSha256 === right.launchFingerprintSha256 &&
-      left.operationNonceSha256 === right.operationNonceSha256;
+  #assertSameEngine(left: DockerEngineIdentity, right: DockerEngineIdentity): void {
+    if (!sameFakeEngine(left, right)) {
+      throw new DockerEngineError("daemon-identity-changed");
+    }
   }
 
   #mutationOutcome(operation: FakeMutationOperation): { acknowledgement: "304" | "lost"; effect: boolean } | undefined {
     return this.#mutationOutcomes.get(operation)?.shift();
+  }
+
+  #invalidateAttach(id: string): void {
+    this.#attachState.set(id, "invalid");
+    this.#attachCleanup.get(id)?.();
+    this.#attachCleanup.delete(id);
+  }
+
+  #retireAttach(id: string): void {
+    this.#attachRetire.get(id)?.();
+    this.#attachRetire.delete(id);
+    this.#attachCleanup.get(id)?.();
+    this.#attachCleanup.delete(id);
+    this.#attachState.delete(id);
+    this.#attachGeneration.delete(id);
+    this.#custodyInput.delete(id);
   }
 
   #assertMutationPostcondition(
@@ -455,29 +576,12 @@ export class FakeDockerEngine implements DockerEnginePort {
   }
 
   #start(record: FakeContainer): void {
-    record.state = {
-      ...record.state,
-      hostPid: 10_000 + this.#counter,
-      paused: false,
-      restarting: false,
-      running: true,
-      startedAt: "2026-01-01T00:00:00Z",
-      status: "running",
-    };
+    record.state = startedFakeContainerState(record.state, 10_000 + this.#counter);
     this.#signalStateTransition();
   }
 
   #exit(record: FakeContainer, exitCode: number): void {
-    record.state = {
-      ...record.state,
-      exitCode,
-      finishedAt: "2026-01-01T00:00:01Z",
-      hostPid: 0,
-      paused: false,
-      restarting: false,
-      running: false,
-      status: "exited",
-    };
+    record.state = exitedFakeContainerState(record.state, exitCode);
     this.#signalStateTransition();
   }
 

@@ -1,243 +1,213 @@
-import { createHash, randomUUID } from "node:crypto";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { lstat, realpath } from "node:fs/promises";
-import { isAbsolute, resolve as resolvePath } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
+/* oxlint-disable max-lines -- Host Custody remains within its reviewed 600-line adapter limit. */
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
-import { openStablePath } from "@agent-teams/filesystem-custody";
-
-import type {
-  ContainedTurnCustodyHandle,
-  ProviderProcessCustodyPort,
-} from "../legacy/legacy-contained-turn-ports.js";
-import type { ContainedTurnKernelCustodyPort } from "../../../application/ports/outbound/contained-turn-ports.js";
-import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
-import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import {
+  HostCustodyFingerprintConflictError,
+  HostCustodyLaunchRejectedError,
   HostCustodyUnsupportedError,
   type CustodiedProviderProcess,
-  type CustodiedProviderProcessExit,
+  type ContainedTurnCustodyHandle,
   type CustodiedProviderProcessRegistry,
   type CustodiedSdkProcess,
   type CustodiedSdkProcessLauncher,
-  type HostCustodyLaunchPlan,
+  type HostCustodyEvidenceRegistry,
+  type HostCustodyEvidence,
   type HostCustodyLaunchPlanResolver,
+  type HostCustodyProcessIdentityObserver,
+  type HostCustodyProcessIdentityProof,
+  type HostCustodySpawnAcknowledgement,
+  type ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
+import {
+  containCustody,
+  identityBase,
+  snapshotEvidence,
+  unprovenResult,
+  type ContainmentResult,
+} from "./host-custody-evidence.js";
+import {
+  assertDelegatedStartFingerprint,
+  assertDescriptorBoundLinuxProfile,
+  canonicalJson,
+  createFingerprint,
+  inputIdentity,
+  positiveInteger,
+  resolveLaunchCandidate,
+  sha256,
+} from "./host-custody-launch.js";
+import {
+  createPosixProcessIdentityObserver,
+  delegatedStartAbortError,
+  NodeCustodiedSdkProcess,
+  observeProcessIdentity,
+  type SpawnStatus,
+} from "./host-custody-process-tree.js";
+import { StableProcessGroupGuardian, type GuardianStartObservation } from "./host-custody-stable-guardian.js";
+import {
+  type OperationResidueAuthorityFactory,
+  unsupportedOperationResidueAuthorityFactory,
+} from "./host-custody-cgroup-v2.js";
+import { launchGuardedProvider } from "./node-provider-process-custody-launch.js";
+import {
+  assertHostCustodyReservationMode,
+  openHostCustodyReservation,
+} from "./node-provider-process-custody-open.js";
+import { replayCustody } from "./node-provider-process-custody-replay.js";
+import { releaseHostCustody } from "./host-custody-release.js";
+import { boundedPromise } from "./host-custody-stdio.js";
+import {
+  createLiveCustody,
+  HOST_CUSTODY_LIMITS,
+  type CustodyTombstone,
+  type LiveCustody,
+  type NodeProviderProcessCustodyOptions,
+} from "./node-provider-process-custody-state.js";
 
-export interface NodeProviderProcessCustodyOptions {
-  readonly forceKillAfterMs?: number;
-  readonly launchPlans: HostCustodyLaunchPlanResolver;
-  readonly terminateAfterMs?: number;
-}
+export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
 
-interface LiveCustody {
-  readonly attemptId: string;
-  readonly binaryDigest: string;
-  readonly custodyRef: string;
-  readonly operationId: string;
-  readonly plan: HostCustodyLaunchPlan;
-  readonly workspaceRef: string;
-  readonly authorityVectorDigest?: Parameters<ContainedTurnKernelCustodyPort["open"]>[0]["authorityVectorDigest"];
-  readonly effectId?: Parameters<ContainedTurnKernelCustodyPort["open"]>[0]["effectId"];
-  readonly hostBootId?: Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>["hostBootId"];
-  readonly hostInstanceId?: Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>["hostInstanceId"];
-  child?: ChildProcessWithoutNullStreams;
-  containment?: Promise<HostContainmentOutcome>;
-  exit?: Promise<CustodiedProviderProcessExit>;
-  process?: CustodiedProviderProcess;
-  sealed?: boolean;
-  sdkProcess?: CustodiedSdkProcess;
-}
 
-type HostContainmentOutcome =
-  | { readonly kind: "contained"; readonly receiptRef: string }
-  | { readonly evidenceRef: string; readonly kind: "unproven" };
-
-const processExit = (child: ChildProcessWithoutNullStreams): Promise<CustodiedProviderProcessExit> =>
-  new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code, signal) => resolve(Object.freeze({ code, signal })));
-  });
-
-const writeBytes = (child: ChildProcessWithoutNullStreams, bytes: Uint8Array): Promise<void> =>
-  new Promise((resolve, reject) => {
-    child.stdin.write(bytes, error => {
-      if (error) {reject(error);} else {resolve();}
-    });
-  });
-
-const closeInput = (child: ChildProcessWithoutNullStreams): Promise<void> =>
-  new Promise((resolve, reject) => {
-    child.stdin.end((error?: Error | null) => {
-      if (error) {reject(error);} else {resolve();}
-    });
-  });
-
-const verifyExecutable = async (plan: HostCustodyLaunchPlan): Promise<string> => {
-  if (!isAbsolute(plan.executablePath) || resolvePath(plan.executablePath) !== plan.executablePath) {
-    throw new Error("Host Custody executable must be a normalized absolute path");
-  }
-  const canonicalPath = await realpath(plan.executablePath);
-  if (canonicalPath !== plan.executablePath) {throw new Error("Host Custody executable path must be canonical");}
-  const observation = await lstat(canonicalPath, { bigint: true });
-  if (!observation.isFile() || observation.nlink !== 1n || (observation.mode & 0o111n) === 0n) {
-    throw new Error("Host Custody executable is not a single-link executable file");
-  }
-  const digest = await openStablePath(
-    canonicalPath,
-    canonicalPath,
-    async opened => createHash("sha256").update(await opened.handle.readFile()).digest("hex"),
-  );
-  if (digest !== plan.executableSha256) {throw new Error("Host Custody executable digest mismatch");}
-  return digest;
-};
-
-const signalProcessGroup = (pid: number, signal: NodeJS.Signals): boolean => {
-  try {
-    process.kill(-pid, signal);
-    return true;
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") {return false;}
-    throw error;
-  }
-};
-
-const processGroupExists = (pid: number): boolean => {
-  try {
-    process.kill(-pid, 0);
-    return true;
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") {return false;}
-    throw error;
-  }
-};
-
-const boundedExit = async (
-  exit: Promise<CustodiedProviderProcessExit>,
-  milliseconds: number,
-): Promise<CustodiedProviderProcessExit | void> => Promise.race([
-  exit,
-  delay(milliseconds),
-]);
-
-const abortError = (): Error => {
-  const error = new Error("Host Custody delegated process start was aborted");
-  error.name = "AbortError";
-  return error;
-};
-
-const compareRecordKeys = ([left]: [string, unknown], [right]: [string, unknown]): number =>
-  left < right ? -1 : left > right ? 1 : 0;
-
-const exactStringRecord = (
-  actual: Readonly<Record<string, string | undefined>>,
-  expected: Readonly<Record<string, string>>,
-): actual is Readonly<Record<string, string>> => {
-  const actualEntries = Object.entries(actual).toSorted(compareRecordKeys);
-  const expectedEntries = Object.entries(expected).toSorted(compareRecordKeys);
-  return actualEntries.length === expectedEntries.length && actualEntries.every(([key, value], index) => {
-    const expectedEntry = expectedEntries[index];
-    return value !== undefined && expectedEntry !== undefined && key === expectedEntry[0] && value === expectedEntry[1];
-  });
-};
-
-class NodeCustodiedSdkProcess implements CustodiedSdkProcess {
-  public constructor(private readonly child: ChildProcessWithoutNullStreams) {}
-
-  public get exitCode(): number | null {return this.child.exitCode;}
-  public get killed(): boolean {return this.child.killed;}
-  public get signalCode(): NodeJS.Signals | null {return this.child.signalCode;}
-  public get stdin() {return this.child.stdin;}
-  public get stdout() {return this.child.stdout;}
-
-  public kill(signal: NodeJS.Signals): boolean {
-    const pid = this.child.pid;
-    return pid === undefined ? false : signalProcessGroup(pid, signal);
-  }
-
-  public off(event: "error", listener: (error: Error) => void): void;
-  public off(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
-  public off(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
-    this.child.off(event, listener as never);
-  }
-
-  public on(event: "error", listener: (error: Error) => void): void;
-  public on(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
-  public on(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
-    this.child.on(event, listener as never);
-  }
-
-  public once(event: "error", listener: (error: Error) => void): void;
-  public once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
-  public once(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
-    this.child.once(event, listener as never);
-  }
-}
-
-export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, CustodiedProviderProcessRegistry, CustodiedSdkProcessLauncher {
+export class NodeProviderProcessCustody implements
+  ProviderProcessCustodyPort,
+  CustodiedProviderProcessRegistry,
+  CustodiedSdkProcessLauncher,
+  HostCustodyEvidenceRegistry
+{
   readonly #byAttempt = new Map<string, LiveCustody>();
   readonly #byRef = new Map<string, LiveCustody>();
+  readonly #containmentAfterMs: number;
+  readonly #drainAfterMs: number;
   readonly #forceKillAfterMs: number;
+  readonly #hostLifecycleGenerationSha256: string;
   readonly #launchPlans: HostCustodyLaunchPlanResolver;
+  readonly #maxDiagnosticBytes: number;
+  readonly #maxStderrBytes: number;
+  readonly #maxStdinBytes: number;
+  readonly #maxStdoutBytes: number;
+  readonly #maxTombstones: number;
+  readonly #monotonicNow: () => number;
+  readonly #processIdentityObserver: HostCustodyProcessIdentityObserver | undefined;
+  readonly #residueAuthorityFactory: OperationResidueAuthorityFactory;
+  readonly #identityObservationAfterMs: number;
+  readonly #spawnAcknowledgementAfterMs: number;
+  readonly #spawnAcknowledgementObserver: ((input: {
+    readonly child: ChildProcessWithoutNullStreams;
+    readonly childProcessInstanceSha256: string;
+  }) => Promise<HostCustodySpawnAcknowledgement>) | undefined;
+  readonly #stdoutHighWaterBytes: number;
   readonly #terminateAfterMs: number;
-  readonly #hostBootId = containedTurnIdentity("host_boot", `host-boot:node:${randomUUID()}`);
-  readonly #hostInstanceId = containedTurnIdentity("host_instance", `host-instance:node:${randomUUID()}`);
+  readonly #tombstonesByAttempt = new Map<string, CustodyTombstone>();
+  readonly #tombstonesByRef = new Map<string, CustodyTombstone>();
 
   public constructor(options: NodeProviderProcessCustodyOptions) {
-    if (process.platform === "win32") {
-      throw new HostCustodyUnsupportedError("Windows provider execution requires a qualified Job Object adapter");
-    }
+    assertDescriptorBoundLinuxProfile();
     this.#launchPlans = options.launchPlans;
-    this.#terminateAfterMs = options.terminateAfterMs ?? 2_000;
-    this.#forceKillAfterMs = options.forceKillAfterMs ?? 2_000;
+    this.#terminateAfterMs = positiveInteger("terminateAfterMs", options.terminateAfterMs, 2_000);
+    this.#forceKillAfterMs = positiveInteger("forceKillAfterMs", options.forceKillAfterMs, 2_000);
+    this.#drainAfterMs = positiveInteger("drainAfterMs", options.drainAfterMs, 2_000);
+    this.#containmentAfterMs = positiveInteger("containmentAfterMs", options.containmentAfterMs, 15_000);
+    this.#spawnAcknowledgementAfterMs = positiveInteger("spawnAcknowledgementAfterMs", options.spawnAcknowledgementAfterMs, 10_000);
+    this.#maxDiagnosticBytes = positiveInteger("maxDiagnosticBytes", options.maxDiagnosticBytes, HOST_CUSTODY_LIMITS.maxDiagnosticBytes);
+    this.#maxStderrBytes = positiveInteger("maxStderrBytes", options.maxStderrBytes, HOST_CUSTODY_LIMITS.maxStderrBytes);
+    this.#maxStdinBytes = positiveInteger("maxStdinBytes", options.maxStdinBytes, HOST_CUSTODY_LIMITS.maxStdinBytes);
+    this.#maxStdoutBytes = positiveInteger("maxStdoutBytes", options.maxStdoutBytes, HOST_CUSTODY_LIMITS.maxStdoutBytes);
+    this.#maxTombstones = positiveInteger("maxTombstones", options.maxTombstones, 10_000);
+    this.#stdoutHighWaterBytes = positiveInteger("stdoutHighWaterBytes", options.stdoutHighWaterBytes, HOST_CUSTODY_LIMITS.stdoutHighWaterBytes);
+    this.#monotonicNow = options.monotonicNow ?? (() => performance.now());
+    this.#identityObservationAfterMs = positiveInteger("identityObservationAfterMs", options.identityObservationAfterMs, 2_000);
+    this.#processIdentityObserver = options.processIdentityObserver ?? createPosixProcessIdentityObserver();
+    this.#residueAuthorityFactory = options.residueAuthorityFactory ?? unsupportedOperationResidueAuthorityFactory;
+    this.#spawnAcknowledgementObserver = options.spawnAcknowledgementObserver;
+    this.#hostLifecycleGenerationSha256 = sha256(options.hostLifecycleGeneration ?? randomUUID());
   }
 
   public get(custodyRef: string): CustodiedProviderProcess | undefined {
     return this.#byRef.get(custodyRef)?.process;
   }
 
-  #spawn(live: LiveCustody, input: {
-    readonly arguments: readonly string[];
-    readonly environment: Readonly<Record<string, string>>;
-    readonly signal?: AbortSignal;
-  }): CustodiedSdkProcess {
-    if (live.child !== undefined) {throw new Error("Host Custody process was already started");}
-    if (input.signal?.aborted === true) {throw abortError();}
-    const child = spawn(live.plan.executablePath, [...input.arguments], {
-      cwd: live.workspaceRef,
-      detached: true,
-      env: { ...input.environment },
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    if (child.pid === undefined) {throw new Error("Host Custody did not obtain a process identity");}
-    const exit = processExit(child);
-    const processAdapter: CustodiedProviderProcess = Object.freeze({
-      closeInput: () => closeInput(child),
-      custodyRef: live.custodyRef,
-      stderr: child.stderr,
-      stdout: child.stdout,
-      waitForExit: () => exit,
-      write: (bytes: Uint8Array) => writeBytes(child, bytes),
-    });
-    const sdkProcess = new NodeCustodiedSdkProcess(child);
-    if (input.signal !== undefined) {
-      const terminate = (): void => {
-        void this.requestContainment({
-          attemptId: live.attemptId,
-          custodyRef: live.custodyRef,
-          operationId: live.operationId,
-        }).catch(() => {});
-      };
-      input.signal.addEventListener("abort", terminate, { once: true });
-      void exit.finally(() => input.signal?.removeEventListener("abort", terminate)).catch(() => {});
+  public evidence(custodyRef: string): HostCustodyEvidence | undefined {
+    const tombstone = this.#tombstonesByRef.get(custodyRef);
+    if (tombstone !== undefined) {return tombstone.evidence;}
+    const live = this.#byRef.get(custodyRef);
+    if (live === undefined || live.fingerprint === undefined) {return undefined;}
+    return snapshotEvidence(live);
+  }
+
+  public async release(input: {
+    readonly attemptId: string;
+    readonly custodyRef?: string;
+    readonly operationId: string;
+    readonly receiptRef: string;
+  }): Promise<{ readonly kind: "released" } | { readonly evidenceRef: string; readonly kind: "unproven" }> {
+    return releaseHostCustody({
+      byAttempt: this.#byAttempt,
+      byRef: this.#byRef,
+      cleanupAfterMs: this.#containmentAfterMs,
+      maxTombstones: this.#maxTombstones,
+      monotonicNow: this.#monotonicNow,
+      tombstonesByAttempt: this.#tombstonesByAttempt,
+      tombstonesByRef: this.#tombstonesByRef,
+    }, input);
+  }
+
+  public async open(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle> {
+    return this.#open(input);
+  }
+
+  public async reserve(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle> {
+    return this.#open(input, "sdk-delegated");
+  }
+
+  async #open(
+    input: Parameters<ProviderProcessCustodyPort["open"]>[0],
+    requiredSpawnMode?: "sdk-delegated",
+  ): Promise<ContainedTurnCustodyHandle> {
+    const identitySha256 = inputIdentity(input);
+    const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
+    const existing = this.#byAttempt.get(input.attemptId);
+    if (tombstone !== undefined && requiredSpawnMode !== undefined) {
+      assertHostCustodyReservationMode(tombstone.evidence.fingerprint, requiredSpawnMode);
     }
-    live.child = child;
-    live.exit = exit;
-    live.process = processAdapter;
-    live.sdkProcess = sdkProcess;
-    return sdkProcess;
+    if (tombstone !== undefined || existing !== undefined) {
+      const replay = await replayCustody(
+        input, identitySha256, tombstone, existing,
+        () => this.#resolveCandidate(input, requiredSpawnMode),
+      );
+      if (replay !== undefined) {return replay;}
+    }
+    if (this.#tombstonesByAttempt.size + this.#byAttempt.size >= this.#maxTombstones) {
+      throw new HostCustodyUnsupportedError("retention-capacity-exhausted");
+    }
+    const custodyRef = `urn:agent-runtime:host-custody:${randomUUID()}`;
+    let resolveOpening: (() => void) | undefined;
+    let rejectOpening: ((error: unknown) => void) | undefined;
+    const opening = new Promise<void>((resolve, reject) => {resolveOpening = resolve; rejectOpening = reject;});
+    const live = createLiveCustody(
+      input,
+      custodyRef,
+      this.#hostLifecycleGenerationSha256,
+      identitySha256,
+      opening,
+    );
+    this.#byAttempt.set(input.attemptId, live);
+    this.#byRef.set(custodyRef, live);
+    return openHostCustodyReservation({
+      contain: (reserved, reservedInput) => this.#containSingleFlight(reserved, reservedInput),
+      containmentAfterMs: this.#containmentAfterMs,
+      input,
+      launchPlans: this.#launchPlans,
+      live,
+      opening,
+      rejectOpening,
+      removeUnfingerprintedReservation: () => {
+        this.#byAttempt.delete(live.attemptId);
+        this.#byRef.delete(live.custodyRef);
+      },
+      residueAuthorityFactory: this.#residueAuthorityFactory,
+      ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
+      resolveOpening,
+      spawn: (reserved, arguments_, environment) => {this.#spawn(reserved, arguments_, environment);},
+    });
   }
 
   public start(custodyRef: string, input: {
@@ -249,280 +219,334 @@ export class NodeProviderProcessCustody implements ProviderProcessCustodyPort, C
   }): CustodiedSdkProcess {
     const live = this.#byRef.get(custodyRef);
     if (live === undefined) {throw new Error("Host Custody reservation does not exist");}
-    if (live.sealed === true) {throw new Error("Host Custody reservation is sealed");}
-    if ((live.plan.spawnMode ?? "eager") !== "sdk-delegated") {
+    if (live.sealed) {throw new Error("Host Custody reservation is sealed");}
+    const plan = live.plan;
+    if (plan === undefined || (plan.spawnMode ?? "eager") !== "sdk-delegated") {
       throw new Error("Host Custody reservation does not permit delegated SDK start");
     }
-    if (input.command !== live.plan.executablePath || input.cwd !== live.workspaceRef) {
-      throw new Error("Host Custody delegated command or workspace mismatch");
-    }
-    const argumentVariants = live.plan.delegatedArgumentVariants ?? [live.plan.arguments];
-    if (!argumentVariants.some(variant => JSON.stringify(input.arguments) === JSON.stringify(variant))) {
-      throw new Error("Host Custody delegated arguments mismatch");
-    }
-    if (!exactStringRecord(input.environment, live.plan.environment)) {
-      throw new Error("Host Custody delegated environment mismatch");
-    }
-    return this.#spawn(live, { arguments: input.arguments, environment: input.environment, signal: input.signal });
-  }
-
-  #kernelHandle(
-    live: LiveCustody,
-    input: Parameters<ContainedTurnKernelCustodyPort["open"]>[0],
-  ): Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>> {
-    if (live.effectId === undefined || live.authorityVectorDigest === undefined ||
-        live.hostBootId === undefined || live.hostInstanceId === undefined) {
-      throw new TypeError("legacy custody reservation cannot be promoted into kernel authority");
-    }
-    return Object.freeze({
-      custodyId: input.custodyId,
-      hostBootId: live.hostBootId,
-      hostCustodyProof: Object.freeze({
-        binding: Object.freeze({
-          attemptId: input.attemptId,
-          authorityVectorDigest: input.authorityVectorDigest,
-          custodyId: input.custodyId,
-          effectId: input.effectId,
-          operationId: input.operationId,
-        }),
-        kind: "host_custody" as const,
-        proofId: containedTurnIdentity("proof", `proof:host-custody:${digestContainedTurnCanonicalValue({ attemptId: input.attemptId, custodyId: input.custodyId, hostBootId: live.hostBootId, hostInstanceId: live.hostInstanceId })}`),
-      }),
-      hostInstanceId: live.hostInstanceId,
-    });
-  }
-
-  public open(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle>;
-  public open(input: Parameters<ContainedTurnKernelCustodyPort["open"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["open"]>;
-  public async open(input: Parameters<ProviderProcessCustodyPort["open"]>[0] | Parameters<ContainedTurnKernelCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle | Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>> {
-    const kernelInput = "adapterSnapshot" in input ? input : undefined;
-    const legacyInput = kernelInput === undefined
-      ? input as Parameters<ProviderProcessCustodyPort["open"]>[0]
-      : undefined;
-    const workspaceRef = kernelInput === undefined
-      ? legacyInput!.workspaceRef
-      : kernelInput.workspaceId.slice("workspace:".length);
-    const providerBinding = kernelInput === undefined ? legacyInput!.providerBinding : {
-      adapterRevision: kernelInput.adapterSnapshot.adapterRevision,
-      binaryRevision: kernelInput.adapterSnapshot.binaryRevision,
-      capabilityManifestRevision: kernelInput.adapterSnapshot.capabilityManifestRevision,
-      credentialBindingDigest: kernelInput.providerAccessSnapshot.credentialBindingDigest,
-      provider: kernelInput.adapterSnapshot.provider,
-      providerRouteRef: kernelInput.providerAccessSnapshot.providerRouteRef,
+    const environment = assertDelegatedStartFingerprint(input, plan);
+    const startIdentitySha256 = sha256(canonicalJson([
+      live.fingerprint?.planSha256,
+      sha256(input.command),
+      input.cwd === undefined ? undefined : sha256(input.cwd),
+      input.arguments,
+      Object.keys(environment).toSorted(),
+    ]));
+    const requestAbort = (): void => {
+      live.abortRequested = true;
+      void this.#triggerAbortContainment(live);
     };
-    const existing = this.#byAttempt.get(input.attemptId);
-    if (existing !== undefined) {
-      if (existing.operationId !== input.operationId || existing.workspaceRef !== workspaceRef) {
-        throw new Error("Host Custody attempt identity conflict");
+    input.signal.addEventListener("abort", requestAbort, { once: true });
+    if (input.signal.aborted) {
+      requestAbort();
+      input.signal.removeEventListener("abort", requestAbort);
+      throw delegatedStartAbortError();
+    }
+    if (live.startIdentitySha256 !== undefined) {
+      if (live.startIdentitySha256 !== startIdentitySha256 || live.sdkProcess === undefined) {
+        input.signal.removeEventListener("abort", requestAbort);
+        throw new HostCustodyFingerprintConflictError("Host Custody delegated start fingerprint conflict");
       }
-      return kernelInput === undefined
-        ? Object.freeze({ custodyRef: existing.custodyRef })
-        : this.#kernelHandle(existing, kernelInput);
+      void live.exit?.finally(() => input.signal.removeEventListener("abort", requestAbort));
+      return live.sdkProcess;
     }
-    const plan = await this.#launchPlans.resolve({ providerBinding, workspaceRef });
-    if (plan === undefined) {throw new HostCustodyUnsupportedError("no exact Host Custody launch plan exists");}
-    if (plan.provider !== providerBinding.provider || plan.binaryRevision !== providerBinding.binaryRevision) {
-      throw new Error("Host Custody launch plan does not match the provider binding");
+    live.startIdentitySha256 = startIdentitySha256;
+    const startFingerprint = createFingerprint({
+      attemptId: live.attemptId,
+      intentMode: plan.intentMode,
+      operationId: live.operationId,
+      providerBinding: live.providerBinding,
+      workspaceRef: live.workspaceRef,
+    }, plan, live.workspaceRef, input.arguments);
+    if (live.fingerprint?.fingerprintSha256 !== startFingerprint.fingerprintSha256) {
+      throw new HostCustodyFingerprintConflictError("Host Custody delegated start fingerprint conflict");
     }
-    const binaryDigest = await verifyExecutable(plan);
-    const canonicalWorkspace = await realpath(workspaceRef);
-    if (canonicalWorkspace !== workspaceRef) {throw new Error("Host Custody workspace is not canonical");}
-    const custodyRef = kernelInput?.custodyId ?? `urn:agent-runtime:host-custody:${randomUUID()}`;
-    const live: LiveCustody = {
-      attemptId: input.attemptId,
-      binaryDigest,
-      custodyRef,
-      operationId: input.operationId,
-      plan,
-      workspaceRef: canonicalWorkspace,
-      ...(kernelInput === undefined ? {} : {
-        authorityVectorDigest: kernelInput.authorityVectorDigest,
-        effectId: kernelInput.effectId,
-        hostBootId: this.#hostBootId,
-        hostInstanceId: this.#hostInstanceId,
-      }),
-    };
-    if ((plan.spawnMode ?? "eager") === "eager") {
-      this.#spawn(live, { arguments: plan.arguments, environment: plan.environment });
+    let sdkProcess: NodeCustodiedSdkProcess;
+    try {
+      sdkProcess = this.#spawn(live, input.arguments, environment);
+    } catch (error) {
+      input.signal.removeEventListener("abort", requestAbort);
+      if (
+        error instanceof HostCustodyFingerprintConflictError ||
+        error instanceof HostCustodyUnsupportedError
+      ) {throw error;}
+      throw new HostCustodyLaunchRejectedError();
     }
-    this.#byAttempt.set(input.attemptId, live);
-    this.#byRef.set(custodyRef, live);
-    return kernelInput === undefined ? Object.freeze({ custodyRef }) : this.#kernelHandle(live, kernelInput);
+    if (input.signal.aborted) {requestAbort();}
+    void live.exit?.finally(() => input.signal.removeEventListener("abort", requestAbort));
+    return sdkProcess;
   }
 
-  public async requestContainment(input: {
+  public requestContainment(input: {
     readonly attemptId: string;
     readonly custodyRef?: string;
     readonly operationId: string;
-  }): Promise<HostContainmentOutcome> {
-    const live = input.custodyRef === undefined ? this.#byAttempt.get(input.attemptId) : this.#byRef.get(input.custodyRef);
+  }): Promise<ContainmentResult> {
+    const tombstone = input.custodyRef === undefined
+      ? this.#tombstonesByAttempt.get(input.attemptId)
+      : this.#tombstonesByRef.get(input.custodyRef);
+    if (tombstone?.attemptId === input.attemptId && tombstone.operationId === input.operationId) {
+      return Promise.resolve(Object.freeze({ kind: "contained", receiptRef: tombstone.receiptRef }));
+    }
+    const live = input.custodyRef === undefined
+      ? this.#byAttempt.get(input.attemptId)
+      : this.#byRef.get(input.custodyRef);
     if (live === undefined || live.attemptId !== input.attemptId || live.operationId !== input.operationId) {
-      return { evidenceRef: `host-custody-missing:${input.attemptId}`, kind: "unproven" };
+      return Promise.resolve(unprovenResult("missing", input));
     }
-    const containment = live.containment ?? this.#contain(live, input);
-    live.containment = containment;
+    return this.#containSingleFlight(live, input);
+  }
+
+  #spawn(
+    live: LiveCustody,
+    arguments_: readonly string[],
+    environment: Readonly<Record<string, string>>,
+  ): NodeCustodiedSdkProcess {
+    if (live.sealed) {throw new Error("Host Custody reservation is sealed");}
+    if (live.child !== undefined || live.spawnAcknowledgement !== undefined) {
+      if (live.sdkProcess !== undefined) {return live.sdkProcess;}
+      throw new Error("Host Custody process start is already in flight");
+    }
+    if (
+      live.plan === undefined ||
+      live.executable === undefined ||
+      live.privatePaths === undefined ||
+      live.workspace === undefined
+    ) {
+      throw new Error("Host Custody launch reservation is incomplete");
+    }
+    const launched = launchGuardedProvider({
+      arguments: arguments_,
+      environment,
+      live,
+      maxDiagnosticBytes: this.#maxDiagnosticBytes,
+      maxStderrBytes: this.#maxStderrBytes,
+      maxStdinBytes: this.#maxStdinBytes,
+      maxStdoutBytes: this.#maxStdoutBytes,
+      monotonicNow: this.#monotonicNow,
+      onAbort: () => {void this.#triggerAbortContainment(live);},
+      onOverflow: () => {void this.#triggerOverflowContainment(live);},
+      spawnAcknowledgementAfterMs: this.#spawnAcknowledgementAfterMs,
+      stdoutHighWaterBytes: this.#stdoutHighWaterBytes,
+      writeAfterMs: this.#spawnAcknowledgementAfterMs,
+    });
+    live.childProcessInstanceSha256 = sha256(randomUUID());
+    live.executable = launched.authority.executable;
+    live.launchAuthority = launched.authority;
+    live.spawnStatus = "ambiguous";
+    live.guardian = launched.guardian;
+    live.spawnAcknowledgement = this.#acknowledgeSpawn(live, launched.guardian);
+    live.child = launched.child;
+    live.exit = launched.exit;
+    live.process = launched.process;
+    live.sdkProcess = launched.sdkProcess;
+    live.stderr = launched.stderr;
+    live.stdout = launched.stdout;
+    return launched.sdkProcess;
+  }
+
+  async #observeSpawnAcknowledgement(
+    live: LiveCustody,
+    guardian: StableProcessGroupGuardian,
+    start: GuardianStartObservation,
+    acknowledgementDeadline: number,
+  ): Promise<SpawnStatus> {
+    if (start.status !== "acknowledged") {return start.status;}
+    live.providerPid = start.providerPid;
+    const pgid = guardian.child.pid;
+    const observer = this.#spawnAcknowledgementObserver;
+    if (pgid === undefined || observer === undefined) {return pgid === undefined ? "ambiguous" : "acknowledged";}
     try {
-      const outcome = await containment;
-      if (outcome.kind === "unproven" && live.containment === containment) {delete live.containment;}
-      return outcome;
-    } catch (error) {
-      if (live.containment === containment) {delete live.containment;}
-      throw error;
+      const remaining = acknowledgementDeadline - this.#monotonicNow();
+      if (remaining <= 0) {return "ambiguous";}
+      const observed = await boundedPromise(
+        observer({
+          child: guardian.child,
+          childProcessInstanceSha256: live.childProcessInstanceSha256 ?? sha256("missing-child-instance"),
+        }),
+        remaining,
+      );
+      if (observed === undefined || this.#monotonicNow() >= acknowledgementDeadline) {return "ambiguous";}
+      if (
+        observed.status === "acknowledged" &&
+        observed.child === guardian.child &&
+        observed.pid === start.providerPid &&
+        observed.pgid === pgid
+      ) {
+        return "acknowledged";
+      }
+      return observed.status === "error-before-start" ? "error-before-start" : "ambiguous";
+    } catch {return "ambiguous";}
+  }
+
+  async #acknowledgeSpawn(live: LiveCustody, guardian: StableProcessGroupGuardian): Promise<SpawnStatus> {
+    const acknowledgementDeadline = this.#monotonicNow() + this.#spawnAcknowledgementAfterMs;
+    const startRemaining = acknowledgementDeadline - this.#monotonicNow();
+    const start = startRemaining <= 0
+      ? undefined
+      : await boundedPromise(guardian.start, startRemaining);
+    if (start === undefined || this.#monotonicNow() >= acknowledgementDeadline) {
+      live.spawnStatus = "ambiguous";
+      live.signalAuthorized = false;
+      live.identity = Object.freeze({
+        ...identityBase(live, this.#hostLifecycleGenerationSha256),
+        status: "ambiguous",
+      });
+      setTimeout(() => {void this.#triggerStartFailureContainment(live);}, 0);
+      return "ambiguous";
     }
+    live.guardianNoStartAcknowledged = start.status === "error-before-start";
+    if (start.status === "error-before-start" && start.code !== undefined) {
+      live.guardianStartErrorCode = start.code;
+    }
+    let acknowledgement = await this.#observeSpawnAcknowledgement(live, guardian, start, acknowledgementDeadline);
+    live.spawnStatus = acknowledgement;
+    if (acknowledgement === "acknowledged") {
+      live.identityProof = this.#observeProcessIdentity(live, guardian.child, acknowledgementDeadline);
+      const remaining = acknowledgementDeadline - this.#monotonicNow();
+      const proof = remaining <= 0
+        ? undefined
+        : await boundedPromise(live.identityProof, remaining);
+      if (proof === undefined || this.#monotonicNow() >= acknowledgementDeadline) {
+        acknowledgement = "ambiguous";
+        live.spawnStatus = "ambiguous";
+        live.signalAuthorized = false;
+        if (live.identity.status === "not-started" || live.identity.status === "proved") {
+          const pgid = guardian.child.pid;
+          const pid = live.providerPid;
+          live.identity = Object.freeze({
+            ...identityBase(live, this.#hostLifecycleGenerationSha256),
+            ...(pid === undefined || pgid === undefined ? {} : { pgid, pid }),
+            status: "unproven",
+          });
+        }
+      }
+    } else {
+      live.signalAuthorized = false;
+      const pgid = guardian.child.pid;
+      const pid = live.providerPid;
+      live.identity = Object.freeze({
+        ...identityBase(live, this.#hostLifecycleGenerationSha256),
+        ...(pid === undefined || pgid === undefined ? {} : { pgid, pid }),
+        status: acknowledgement === "error-before-start" ? "not-started" : "ambiguous",
+      });
+    }
+    if (acknowledgement !== "acknowledged") {
+      setTimeout(() => {void this.#triggerStartFailureContainment(live);}, 0);
+    }
+    return acknowledgement;
+  }
+
+  async #observeProcessIdentity(
+    live: LiveCustody,
+    child: ChildProcessWithoutNullStreams,
+    acknowledgementDeadline: number,
+  ): Promise<HostCustodyProcessIdentityProof | undefined> {
+    if (live.fingerprint === undefined || live.executable === undefined || live.plan === undefined) {
+      live.signalAuthorized = false;
+      live.identity = Object.freeze({ ...identityBase(live, this.#hostLifecycleGenerationSha256), status: "ambiguous" });
+      return undefined;
+    }
+    const observation = await observeProcessIdentity({
+      child,
+      childProcessInstanceSha256: live.childProcessInstanceSha256 ?? sha256("missing-child-instance"),
+      executable: live.executable,
+      fingerprint: live.fingerprint,
+      hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
+      monotonicNow: this.#monotonicNow,
+      observer: this.#processIdentityObserver,
+      observationTimeoutMs: this.#identityObservationAfterMs,
+      providerPid: live.providerPid ?? -1,
+    });
+    if (
+      this.#monotonicNow() >= acknowledgementDeadline ||
+      live.sealed ||
+      live.spawnStatus !== "acknowledged"
+    ) {return undefined;}
+    live.identity = observation.evidence;
+    live.signalAuthorized = observation.proof !== undefined && observation.evidence.status === "proved";
+    return observation.proof;
+  }
+
+  #containSingleFlight(
+    live: LiveCustody,
+    input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },
+  ): Promise<ContainmentResult> {
+    if (live.containment !== undefined) {return live.containment;}
+    const containment = this.#contain(live, input);
+    live.containment = containment;
+    void containment.then(
+      result => {
+        if (result.kind === "unproven" && live.containment === containment) {
+          delete live.containment;
+        }
+        return null;
+      },
+      () => {
+        if (live.containment === containment) {delete live.containment;}
+        return null;
+      },
+    );
+    return containment;
   }
 
   async #contain(
     live: LiveCustody,
-    input: Readonly<{ attemptId: string; custodyRef?: string; operationId: string }>,
-  ): Promise<HostContainmentOutcome> {
+    input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },
+  ): Promise<ContainmentResult> {
     live.sealed = true;
-    if (live.child === undefined || live.exit === undefined) {
-      const receiptIdentity = JSON.stringify([
-        input.operationId,
-        input.attemptId,
-        live.custodyRef,
-        live.binaryDigest,
-        live.plan.binaryRevision,
-        live.plan.containmentProfile,
-        live.plan.spawnMode,
-        live.workspaceRef,
-        "never-started",
-      ]);
-      return {
-        kind: "contained",
-        receiptRef: `urn:agent-runtime:host-never-started:${createHash("sha256").update(receiptIdentity).digest("hex")}`,
-      };
-    }
-    const pid = live.child.pid;
-    if (pid === undefined) {return { evidenceRef: `host-custody-pid-missing:${input.attemptId}`, kind: "unproven" };}
+    live.containmentDeadline ??= this.#monotonicNow() + this.#containmentAfterMs;
+    return containCustody(live, input, {
+      containmentAfterMs: this.#containmentAfterMs,
+      drainAfterMs: this.#drainAfterMs,
+      forceKillAfterMs: this.#forceKillAfterMs,
+      hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
+      monotonicNow: this.#monotonicNow,
+      terminateAfterMs: this.#terminateAfterMs,
+    });
+  }
+
+  async #triggerOverflowContainment(live: LiveCustody): Promise<void> {
+    const containment = this.#containSingleFlight(live, {
+      attemptId: live.attemptId,
+      custodyRef: live.custodyRef,
+      operationId: live.operationId,
+    });
+    await containment.catch(() => {});
+  }
+
+  async #triggerAbortContainment(live: LiveCustody): Promise<void> {
+    live.abortRequested = true;
+    const containment = this.#containSingleFlight(live, {
+      attemptId: live.attemptId,
+      custodyRef: live.custodyRef,
+      operationId: live.operationId,
+    });
+    await containment.catch(() => {});
+  }
+
+  async #triggerStartFailureContainment(live: LiveCustody): Promise<void> {
+    const containment = this.#containSingleFlight(live, {
+      attemptId: live.attemptId,
+      custodyRef: live.custodyRef,
+      operationId: live.operationId,
+    });
+    await containment.catch(() => {});
+  }
+
+  async #resolveCandidate(
+    input: Parameters<ProviderProcessCustodyPort["open"]>[0],
+    requiredSpawnMode?: "sdk-delegated",
+  ) {
     try {
-      signalProcessGroup(pid, "SIGTERM");
-      let exit = await boundedExit(live.exit, this.#terminateAfterMs);
-      if (exit === undefined || processGroupExists(pid)) {
-        signalProcessGroup(pid, "SIGKILL");
-        exit = await boundedExit(live.exit, this.#forceKillAfterMs);
-      }
-      if (exit === undefined || processGroupExists(pid)) {
-        return { evidenceRef: `host-custody-termination-unproven:${input.attemptId}`, kind: "unproven" };
-      }
-      const receiptIdentity = JSON.stringify([
-        input.operationId,
-        input.attemptId,
-        live.custodyRef,
-        live.binaryDigest,
-        live.plan.binaryRevision,
-        live.plan.containmentProfile,
-        live.workspaceRef,
-        exit.code,
-        exit.signal,
-      ]);
-      return {
-        kind: "contained",
-        receiptRef: `urn:agent-runtime:host-contained:${createHash("sha256").update(receiptIdentity).digest("hex")}`,
-      };
-    } catch {
-      return { evidenceRef: `host-custody-signal-failed:${input.attemptId}`, kind: "unproven" };
+      const candidate = await resolveLaunchCandidate(this.#launchPlans, input);
+      assertHostCustodyReservationMode(candidate.plan, requiredSpawnMode);
+      return candidate;
+    }
+    catch (error) {
+      if (error instanceof HostCustodyUnsupportedError) {throw error;}
+      throw new HostCustodyLaunchRejectedError();
     }
   }
 
-  async #physicalClosure(
-    input: Parameters<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]>[0],
-    initiate: boolean,
-  ): ReturnType<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]> {
-    const live = this.#byRef.get(input.custodyId);
-    if (live === undefined || live.attemptId !== input.attemptId || live.operationId !== input.operationId ||
-        live.authorityVectorDigest !== input.authorityVectorDigest || live.effectId === undefined ||
-        live.hostBootId === undefined || live.hostInstanceId === undefined) {
-      return Object.freeze({
-        evidenceId: containedTurnIdentity("evidence", `evidence:host-custody-identity:${digestContainedTurnCanonicalValue({ attemptId: input.attemptId, custodyId: input.custodyId, operationId: input.operationId })}`),
-        kind: "identity_conflict" as const,
-      });
-    }
-    if (!initiate && live.sealed !== true) {
-      return Object.freeze({
-        evidenceId: containedTurnIdentity("evidence", `evidence:host-custody-not-contained:${input.requestDigest}`),
-        kind: "indeterminate" as const,
-      });
-    }
-    const outcome = await this.requestContainment({ attemptId: input.attemptId, custodyRef: input.custodyId, operationId: input.operationId });
-    if (outcome.kind !== "contained") {
-      return Object.freeze({
-        evidenceId: containedTurnIdentity("evidence", `evidence:host-custody-containment:${digestContainedTurnCanonicalValue({ evidenceRef: outcome.evidenceRef })}`),
-        kind: "indeterminate" as const,
-      });
-    }
-    return Object.freeze({
-      kind: "proved" as const,
-      proof: Object.freeze({
-        binding: Object.freeze({
-          attemptId: input.attemptId,
-          authorityVectorDigest: input.authorityVectorDigest,
-          custodyId: input.custodyId,
-          effectId: live.effectId,
-          hostBootId: live.hostBootId,
-          hostInstanceId: live.hostInstanceId,
-          operationId: input.operationId,
-        }),
-        kind: "physical_containment" as const,
-        proofId: containedTurnIdentity("proof", `proof:physical-containment:${digestContainedTurnCanonicalValue({ receiptRef: outcome.receiptRef, requestDigest: input.requestDigest })}`),
-      }),
-      requestDigest: input.requestDigest,
-      requestId: input.requestId,
-    });
-  }
-
-  public ensurePhysicalContainment(input: Parameters<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]> {
-    return this.#physicalClosure(input, true);
-  }
-
-  public queryPhysicalContainment(input: Parameters<ContainedTurnKernelCustodyPort["queryPhysicalContainment"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["queryPhysicalContainment"]> {
-    return this.#physicalClosure(input, false);
-  }
-
-  async #compositeClosure(
-    input: Parameters<ContainedTurnKernelCustodyPort["attestContainment"]>[0],
-    initiate: boolean,
-  ): ReturnType<ContainedTurnKernelCustodyPort["attestContainment"]> {
-    const physical = await this.#physicalClosure(input, initiate);
-    if (physical.kind !== "proved") {return physical;}
-    if (input.binding.operationId !== input.operationId || input.binding.attemptId !== input.attemptId ||
-        input.binding.custodyId !== input.custodyId || input.binding.authorityVectorDigest !== input.authorityVectorDigest ||
-        input.binding.physicalContainmentProofId !== physical.proof.proofId) {
-      return Object.freeze({
-        evidenceId: containedTurnIdentity("evidence", `evidence:containment-binding-conflict:${input.requestDigest}`),
-        kind: "identity_conflict" as const,
-      });
-    }
-    return Object.freeze({
-      kind: "proved" as const,
-      proof: Object.freeze({
-        binding: input.binding,
-        kind: "containment" as const,
-        proofId: containedTurnIdentity("proof", `proof:containment:${input.requestDigest}`),
-      }),
-      requestDigest: input.requestDigest,
-      requestId: input.requestId,
-    });
-  }
-
-  public attestContainment(input: Parameters<ContainedTurnKernelCustodyPort["attestContainment"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["attestContainment"]> {
-    return this.#compositeClosure(input, true);
-  }
-
-  public queryContainmentAttestation(input: Parameters<ContainedTurnKernelCustodyPort["queryContainmentAttestation"]>[0]): ReturnType<ContainedTurnKernelCustodyPort["queryContainmentAttestation"]> {
-    return this.#compositeClosure(input, false);
-  }
-
-  public async releaseRetiredReservation(input: Parameters<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]>[0]) {
-    const live = this.#byRef.get(input.cleanupPermit.custodyId);
-    if (live === undefined) {return Object.freeze({ kind: "already_released" as const });}
-    const outcome = await this.requestContainment({
-      attemptId: input.cleanupPermit.attemptId,
-      custodyRef: input.cleanupPermit.custodyId,
-      operationId: input.cleanupPermit.operationId,
-    });
-    return outcome.kind === "contained"
-      ? Object.freeze({ kind: "released" as const })
-      : Object.freeze({ evidenceId: containedTurnIdentity("evidence", `evidence:retired-custody:${digestContainedTurnCanonicalValue({ evidenceRef: outcome.evidenceRef })}`), kind: "indeterminate" as const });
-  }
 }

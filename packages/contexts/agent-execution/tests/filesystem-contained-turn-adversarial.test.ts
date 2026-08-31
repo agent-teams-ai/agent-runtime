@@ -19,7 +19,7 @@ import { promisify } from "node:util";
 import {
   createNodeContainedTurnArtifacts,
   createNodeContainedTurnWorkspace,
-} from "../dist/production.js";
+} from "../dist/composition.js";
 import { consumeWorkspaceLaunchAuthority } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-capability.js";
 import { bindContainedTurnRoot } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js";
 import { openBoundDirectories } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-handles.js";
@@ -120,7 +120,7 @@ test("current kernel declarations expose only opaque workspace identity", async 
       "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.d.ts",
       import.meta.url,
     ), "utf8"),
-    readFile(new URL("../dist/production.d.ts", import.meta.url), "utf8"),
+    readFile(new URL("../dist/composition.d.ts", import.meta.url), "utf8"),
   ])).join("\n");
   assert.match(declarations, /ContainedTurnWorkspaceId/u);
   assert.doesNotMatch(declarations, /descriptorPath|stable_directory|mountId|readonly dev:|readonly ino:/u);
