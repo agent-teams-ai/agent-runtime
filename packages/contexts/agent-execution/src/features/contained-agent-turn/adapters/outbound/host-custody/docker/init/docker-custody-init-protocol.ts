@@ -129,7 +129,7 @@ export interface DockerCustodyProviderDrainComplete {
 export interface DockerCustodyProviderDrainFailed {
   readonly kind: "provider-drain-failed";
   readonly outerContainmentClaim: "unproven";
-  readonly reason: "stderr-overflow" | "stdout-overflow";
+  readonly reason: "stderr-error" | "stderr-overflow" | "stderr-timeout" | "stdout-error" | "stdout-overflow" | "stdout-timeout";
   readonly requestId: string;
 }
 
@@ -361,7 +361,7 @@ export const parseDockerCustodyProtocolMessage = (input: unknown): DockerCustody
     case "provider-drain-failed":
       exactKeys(value, ["kind", "outerContainmentClaim", "reason", "requestId"], kind);
       return Object.freeze({kind, outerContainmentClaim: literal(value.outerContainmentClaim, ["unproven"], "outerContainmentClaim"),
-        reason: literal(value.reason, ["stderr-overflow", "stdout-overflow"], "reason"), requestId: token(value.requestId, "requestId")});
+        reason: literal(value.reason, ["stderr-error", "stderr-overflow", "stderr-timeout", "stdout-error", "stdout-overflow", "stdout-timeout"], "reason"), requestId: token(value.requestId, "requestId")});
     default: return fail("frame kind is unsupported");
   }
 };

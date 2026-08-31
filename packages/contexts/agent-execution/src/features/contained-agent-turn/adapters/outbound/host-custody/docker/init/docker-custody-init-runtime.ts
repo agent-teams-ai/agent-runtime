@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import {createHash} from "node:crypto";
 
 import {
   DOCKER_CUSTODY_CHILD_SIGNALS,
@@ -24,59 +24,37 @@ import type {
   DockerCustodyOutputWriteResult, DockerCustodyProviderOutputHandle, DockerCustodyProviderRootExit,
   DockerCustodyProviderRootHandle, DockerCustodyStreamEvidence,
 } from "./docker-custody-init-runtime-types.js";
+import {DockerCustodyControlWriter} from "./docker-custody-init-control-writer.js";
+import {DockerCustodyProviderInputWriter} from "./docker-custody-init-input.js";
+import {boundedInteger, identityEqual, monotonicNow, opaqueHandle, safeEqual, safeMonotonicDeadline} from "./docker-custody-init-guards.js";
 export type * from "./docker-custody-init-runtime-types.js";
 interface MutableStreamEvidence {
-  bytes: number; eof: boolean; eofPending: boolean; hash: ReturnType<typeof createHash>;
-  pendingBytes: Uint8Array | null; pendingCursor: number; status: DockerCustodyStreamEvidence["status"];
+  bytes: number; eof: boolean; eofPending: boolean; hash: ReturnType<typeof createHash>; pendingBytes: Uint8Array | null;
+  pendingCursor: number; status: DockerCustodyStreamEvidence["status"];
 }
 interface ProviderGeneration {
-  readonly rootHandle: DockerCustodyProviderRootHandle; readonly stderr: DockerCustodyProviderOutputHandle;
-  readonly stdout: DockerCustodyProviderOutputHandle;
+  readonly rootHandle: DockerCustodyProviderRootHandle; readonly stderr: DockerCustodyProviderOutputHandle; readonly stdout: DockerCustodyProviderOutputHandle;
 }
-interface PendingControlEvidence {
-  readonly generation: ProviderGeneration | null; readonly message: DockerCustodyInitMessage; readonly onAccepted: (() => void) | undefined;
-}
-
 const EMPTY_SHA256 = createHash("sha256").digest("hex");
 const newStreamEvidence = (): MutableStreamEvidence => ({
   bytes: 0, eof: false, eofPending: false, hash: createHash("sha256"), pendingBytes: null, pendingCursor: 0, status: "open",
 });
-const safeEqual = (left: string, right: string): boolean => {
-  const leftBytes = Buffer.from(left, "utf8"); const rightBytes = Buffer.from(right, "utf8");
-  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes);
-};
-const identityEqual = (left: DockerCustodyIdentity, right: DockerCustodyIdentity): boolean =>
-  left.protocol === right.protocol && safeEqual(left.containerImageSha256, right.containerImageSha256) &&
-  safeEqual(left.initBinarySha256, right.initBinarySha256) && safeEqual(left.privateRootIdentity, right.privateRootIdentity) &&
-  safeEqual(left.securityProfileIdentity, right.securityProfileIdentity) && safeEqual(left.workspaceIdentity, right.workspaceIdentity);
-const boundedInteger = (value: number, label: string): number => {
-  if (!Number.isSafeInteger(value) || value <= 0) {throw new Error(`${label} must be a positive safe integer`);} return value;
-};
-const monotonicNow = (value: number): number => {
-  if (!Number.isSafeInteger(value) || value < 0) {throw new Error("monotonic clock must return a non-negative safe integer");} return value;
-};
-const safeMonotonicDeadline = (now: number, durationMs: number): number =>
-  now + Math.min(durationMs, Number.MAX_SAFE_INTEGER - now);
-const opaqueHandle = (value: unknown): value is object =>
-  value !== null && (typeof value === "object" || typeof value === "function");
+const streamTerminal = (stream: MutableStreamEvidence): boolean =>
+  stream.eof || stream.status === "failed" || stream.status === "overflow";
 
 export class DockerCustodyInitRuntime {
   readonly #allowedEnvironmentNames: ReadonlySet<string>;
   #acknowledgement: DockerCustodyInitSnapshot["acknowledgement"] = "not-applicable";
-  #closure: DockerCustodyInitClosureSubresult | null = null;
-  #closurePending = false;
-  #containmentEvidence: DockerCustodyContainmentRequest | undefined;
-  #containmentRequested = false;
-  readonly #controlEvidence: PendingControlEvidence[] = [];
+  #closure: DockerCustodyInitClosureSubresult | null = null; #closurePending = false;
+  #containmentEvidence: DockerCustodyContainmentRequest | undefined; #containmentRequested = false;
+  readonly #controlWriter: DockerCustodyControlWriter<ProviderGeneration>;
   readonly #decoder = new DockerCustodyFrameDecoder();
-  #descendantsReaped = 0;
   readonly #executablePath: string;
   readonly #executableSha256: string;
-  #flushingControl = false;
   #generation: ProviderGeneration | undefined;
-  #handshake?: {readonly fingerprint: string; readonly nonce: string};
-  #handshakePending = false;
+  #handshake?: {readonly fingerprint: string; readonly nonce: string}; #handshakePending = false;
   #integrityFailed = false;
+  #failureKillDeadlineMonotonicMs: number | undefined; #failureCleanupComplete = false; #failureTerminalDeadlineMonotonicMs: number | undefined;
   #killEscalationCompleted = false;
   readonly #limits: Readonly<Record<DockerCustodyOutputStream, number>>;
   readonly #maximumProviderRuntimeMs: number;
@@ -86,17 +64,13 @@ export class DockerCustodyInitRuntime {
   #providerDeadlineMonotonicMs: number | undefined;
   #providerRootTracked = false;
   #request?: DockerCustodyProviderExecRequest;
-  #rootExitObserved = false;
-  #rootObservationPending = false;
-  #rootObservationWritten = false;
+  #rootExitObserved = false; #rootObservationPending = false; #rootObservationWritten = false;
   readonly #shutdownGraceMs: number;
   readonly #signalEvidence: DockerCustodySignalObservation[] = [];
   #startFenced = false;
   #stderr = newStreamEvidence();
-  #stdinBytes = 0;
-  #stdinStatus: DockerCustodyInitSnapshot["stdinStatus"] = "open";
-  #stopDeadlineMonotonicMs: number | undefined;
-  #stopReason: DockerCustodyContainmentRequest["reason"] | undefined;
+  readonly #stdin: DockerCustodyProviderInputWriter;
+  #stopDeadlineMonotonicMs: number | undefined; #stopReason: DockerCustodyContainmentRequest["reason"] | undefined;
   #stdout = newStreamEvidence();
   readonly #syscalls: DockerCustodyInitSyscalls;
   readonly #writeControl: (message: DockerCustodyInitMessage) => "accepted" | "blocked";
@@ -113,10 +87,12 @@ export class DockerCustodyInitRuntime {
     this.#executablePath = options.executablePath; this.#executableSha256 = options.executableSha256;
     this.#limits = Object.freeze({stderr: boundedInteger(options.maximumStderrBytes, "maximumStderrBytes"), stdout: boundedInteger(options.maximumStdoutBytes, "maximumStdoutBytes")});
     this.maximumStdinBytes = boundedInteger(options.maximumStdinBytes, "maximumStdinBytes");
+    this.#stdin = new DockerCustodyProviderInputWriter(this.maximumStdinBytes, bytes => this.#syscalls.writeProviderInput(bytes));
     this.#maximumProviderRuntimeMs = boundedInteger(options.maximumProviderRuntimeMs, "maximumProviderRuntimeMs");
     this.#observedIdentity = parseDockerCustodyIdentity(options.observedIdentity);
     this.#shutdownGraceMs = boundedInteger(options.shutdownGraceMs, "shutdownGraceMs");
     this.#syscalls = options.syscalls; this.#writeControl = options.writeControl;
+    this.#controlWriter = new DockerCustodyControlWriter(this.#writeControl, () => {this.#poison();});
     this.#syscalls.assertDirectChildOfContainerInit(); this.#syscalls.assertNoNewPrivileges();
     if (!identityEqual(this.#syscalls.observeIdentity(), this.#observedIdentity)) {throw new Error("custody-init configured identity does not match runtime identity");}
   }
@@ -138,6 +114,7 @@ export class DockerCustodyInitRuntime {
     try {
       if (this.#integrityFailed) {throw new Error("init control generation is poisoned");}
       for (const message of this.#decoder.push(bytes)) {
+        if (this.#stdin.status === "blocked") {throw new Error("control frame arrived while provider input was backpressured");}
         switch (message.kind) {
           case "host-handshake": case "host-signal": case "provider-exec": case "provider-input": case "provider-input-eof":
             this.receive(message); break;
@@ -202,7 +179,7 @@ export class DockerCustodyInitRuntime {
       !Number.isSafeInteger(wallNow) || wallNow < 0 || message.wallDeadlineUnixMs <= wallNow;
   }
   #rejectExec(): void {
-    this.#phase = "failed"; this.#startFenced = true; this.#acknowledge("not-started", null);
+    this.#phase = "failed"; this.#failureCleanupComplete = true; this.#startFenced = true; this.#acknowledge("not-started", null);
     this.#writeProviderObservation("spawn-failed", null, null, null);
   }
   #assertCurrentRequest(requestId: string): void {
@@ -212,14 +189,18 @@ export class DockerCustodyInitRuntime {
   }
   #receiveProviderInput(requestId: string, bytesBase64: string): void {
     this.#assertCurrentRequest(requestId);
-    if (this.writeProviderInput(decodeDockerCustodyProviderBytes(bytesBase64)) === "closed") {
+    if (this.#stdin.status === "blocked") {throw new Error("provider input frame arrived while provider input was backpressured");}
+    const status = this.writeProviderInput(decodeDockerCustodyProviderBytes(bytesBase64));
+    if (status === "closed") {
       throw new Error("provider input is closed");
     }
   }
   #receiveProviderInputEof(requestId: string): void {
     this.#assertCurrentRequest(requestId);
-    if (this.#phase !== "provider-running" || this.#stdinStatus === "closed") {throw new Error("provider input EOF is out of order");}
-    this.#syscalls.closeProviderInput(); this.#stdinStatus = "closed";
+    if (this.#phase !== "provider-running" || this.#stdin.status === "blocked" || this.#stdin.status === "closed") {
+      throw new Error("provider input EOF is out of order");
+    }
+    this.#syscalls.closeProviderInput(); this.#stdin.close();
   }
   #acknowledge(observation: "acceptance-unknown" | "not-started" | "started", generation: ProviderGeneration | null): void {
     if (this.#request === undefined || this.#acknowledgement !== "pending") {return;}
@@ -233,20 +214,23 @@ export class DockerCustodyInitRuntime {
   }
 
   public writeProviderInput(bytes: Uint8Array): "accepted" | "blocked" | "closed" {
-    if (this.#integrityFailed || this.#phase !== "provider-running" || this.#stdinStatus === "closed" || this.#stdinStatus === "overflow") {return "closed";}
-    if (this.#stdinStatus === "blocked") {return "blocked";}
-    if (this.#stdinBytes + bytes.byteLength > this.maximumStdinBytes) {this.#stdinStatus = "overflow"; this.requestStop("input-limit"); return "closed";}
-    try {
-      const status = this.#syscalls.writeProviderInput(bytes);
-      if (status !== "accepted" && status !== "blocked" && status !== "closed") {throw new Error("provider input write returned an invalid status");}
-      if (status === "accepted") {this.#stdinBytes += bytes.byteLength;}
-      this.#stdinStatus = status === "blocked" ? "blocked" : status === "closed" ? "closed" : "open"; return status;
-    } catch {this.#poison(); return "closed";}
+    if (this.#integrityFailed || this.#phase !== "provider-running") {return "closed";}
+    try {const result = this.#stdin.offer(bytes); if (this.#stdin.status === "overflow") {this.#poison("input-limit");} return result;}
+    catch {this.#poison(); return "closed";}
   }
   public stdinDrainReady(): void {
-    if (!this.#integrityFailed && this.#phase === "provider-running" && this.#stdinStatus === "blocked") {this.#stdinStatus = "open";}
+    if (!this.#integrityFailed && this.#phase === "provider-running") {try {this.#stdin.drain();} catch {this.#poison();}}
   }
+  public providerInputClosed(): void {if (!this.#integrityFailed && this.#stdin.status !== "closed") {this.#poison();}}
   public acceptProviderOutput(handle: DockerCustodyProviderOutputHandle, bytes: Uint8Array): "accepted" | "blocked" | "closed" | "overflow" {
+    if (this.#integrityFailed) {
+      const cleanup = this.#resolveStreamForCleanup(handle);
+      if (cleanup === undefined) {return "closed";}
+      const [stream, accounting] = cleanup;
+      if (accounting.eof || accounting.status === "failed" || accounting.status === "overflow") {return "closed";}
+      if (accounting.bytes + bytes.byteLength > this.#limits[stream]) {accounting.status = "overflow"; this.#maybeFinishFailure(); return "overflow";}
+      accounting.hash.update(bytes); accounting.bytes += bytes.byteLength; return "accepted";
+    }
     const resolved = this.#resolveStream(handle);
     if (resolved === undefined) {return "closed";}
     const [stream, accounting] = resolved;
@@ -255,7 +239,7 @@ export class DockerCustodyInitRuntime {
     if (accounting.status === "blocked") {return "blocked";}
     if (accounting.bytes + bytes.byteLength > this.#limits[stream]) {
       accounting.status = "overflow"; accounting.pendingBytes = null; accounting.pendingCursor = 0; accounting.eofPending = false;
-      this.#writeDrainFailed(stream); this.requestStop("output-limit"); return "overflow";
+      this.#writeDrainFailed(stream, "overflow"); this.#poison("output-limit"); return "overflow";
     }
     accounting.pendingBytes = Uint8Array.from(bytes); accounting.pendingCursor = 0;
     return this.#flushOutput(stream, accounting);
@@ -291,6 +275,12 @@ export class DockerCustodyInitRuntime {
     return "accepted";
   }
   public closeProviderOutput(handle: DockerCustodyProviderOutputHandle): "closed" | "deferred" | "failed" {
+    if (this.#integrityFailed) {
+      const cleanup = this.#resolveStreamForCleanup(handle);
+      if (cleanup === undefined) {return "failed";}
+      const [, accounting] = cleanup; accounting.pendingBytes = null; accounting.pendingCursor = 0; accounting.eofPending = false; accounting.eof = true;
+      this.#maybeFinishFailure(); return "closed";
+    }
     const resolved = this.#resolveStream(handle);
     if (resolved === undefined) {return "failed";}
     const [, accounting] = resolved;
@@ -298,6 +288,13 @@ export class DockerCustodyInitRuntime {
     if (accounting.status === "overflow" || this.#closurePending || this.#closure?.providerDrain.kind === "provider-drain-failed") {return "failed";}
     if (accounting.pendingBytes !== null) {accounting.eofPending = true; return "deferred";}
     accounting.eof = true; this.#maybeWriteDrainComplete(); return "closed";
+  }
+  public failProviderOutput(handle: DockerCustodyProviderOutputHandle): void {
+    const resolved = this.#resolveStreamForCleanup(handle);
+    if (resolved === undefined) {this.#poison(); return;}
+    const [stream, accounting] = resolved; accounting.status = "failed"; accounting.pendingBytes = null;
+    accounting.pendingCursor = 0; accounting.eofPending = false;
+    this.#writeDrainFailed(stream, "error"); this.#poison(); this.#maybeFinishFailure();
   }
   #resolveStream(handle: DockerCustodyProviderOutputHandle): readonly [DockerCustodyOutputStream, MutableStreamEvidence] | undefined {
     if (this.#integrityFailed || this.#phase === "failed" || this.#phase === "drained") {return undefined;}
@@ -307,6 +304,13 @@ export class DockerCustodyInitRuntime {
     if (handle === generation.stdout) {return ["stdout", this.#stdout];}
     if (handle === generation.stderr) {return ["stderr", this.#stderr];}
     this.#poison(); return undefined;
+  }
+  #resolveStreamForCleanup(handle: DockerCustodyProviderOutputHandle): readonly [DockerCustodyOutputStream, MutableStreamEvidence] | undefined {
+    const generation = this.#generation;
+    if (generation === undefined) {return undefined;}
+    if (handle === generation.stdout) {return ["stdout", this.#stdout];}
+    if (handle === generation.stderr) {return ["stderr", this.#stderr];}
+    return undefined;
   }
 
   public forwardHostSignal(signal: DockerCustodyHostSignal): void {
@@ -318,6 +322,7 @@ export class DockerCustodyInitRuntime {
   public requestStop(reason: DockerCustodyContainmentRequest["reason"] = "cancelled"): void {
     if (this.#integrityFailed || this.#phase === "failed" || this.#phase === "drained") {return;}
     if (this.#request === undefined) {this.#poison(); return;}
+    if (reason !== "cancelled") {this.#poison(reason); return;}
     if (this.#stopReason !== undefined) {return;}
     this.#stopReason = reason;
     if (!this.#providerRootTracked) {this.#requestContainment(reason); return;}
@@ -327,7 +332,7 @@ export class DockerCustodyInitRuntime {
     this.#performSignal("stop-term", "SIGTERM");
   }
   #performSignal(action: DockerCustodySignalObservation["action"], signal: DockerCustodyHostSignal | "SIGKILL"): void {
-    if (this.#integrityFailed || this.#request === undefined) {return;}
+    if (this.#request === undefined) {return;}
     let result: DockerCustodySignalObservation["result"] = "absent";
     const generation = this.#generation;
     if (generation !== undefined && this.#providerRootTracked) {
@@ -338,24 +343,18 @@ export class DockerCustodyInitRuntime {
       } catch {result = "failed";}
     }
     const evidence = Object.freeze({action, kind: "provider-signal-observation", requestId: this.#request.requestId, result, signal} as const);
-    this.#signalEvidence.push(evidence); this.#enqueueControl(evidence, generation ?? null);
+    this.#signalEvidence.push(evidence);
+    if (!this.#integrityFailed) {this.#enqueueControl(evidence, generation ?? null);}
   }
 
   public tick(): void {
-    this.#retryContainment(); this.#retryContainmentEvidence(); this.#flushControl();
-    if (this.#integrityFailed || this.#phase === "failed") {return;}
+    this.#retryContainment(); this.#flushControl();
+    if (this.#phase === "failed" && this.#failureCleanupComplete) {return;}
     try {
-      if (!this.#reapDescendants()) {return;}
       this.#observeRootExit();
-      if (!this.#integrityFailed) {this.#enforceDeadlines();}
+      if (this.#integrityFailed) {this.#enforceFailureDeadlines(); this.#maybeFinishFailure();}
+      else {this.#enforceDeadlines();}
     } catch {this.#poison();}
-  }
-  #reapDescendants(): boolean {
-    for (const descendant of this.#syscalls.reapExitedDescendants()) {
-      if (!Number.isSafeInteger(descendant.pid) || descendant.pid <= 1 || !this.#validExit(descendant)) {this.#poison(); return false;}
-      this.#descendantsReaped += 1;
-    }
-    return true;
   }
   #observeRootExit(): void {
     const generation = this.#generation;
@@ -365,7 +364,12 @@ export class DockerCustodyInitRuntime {
     if (!this.#validExit(rootExit)) {this.#poison(); return;}
     this.#providerRootTracked = false; this.#rootExitObserved = true; this.#rootObservationPending = true;
     this.#stopDeadlineMonotonicMs = undefined; this.#killEscalationCompleted = true;
-    this.#phase = "provider-exited"; this.#stdinStatus = "closed";
+    this.#phase = this.#integrityFailed ? "failed" : "provider-exited"; this.#stdin.close();
+    if (this.#integrityFailed) {
+      this.#rootObservationPending = false; this.#failureTerminalDeadlineMonotonicMs ??= safeMonotonicDeadline(
+        monotonicNow(this.#syscalls.monotonicNowMs()), this.#shutdownGraceMs);
+      this.#maybeFinishFailure(); return;
+    }
     this.#writeProviderObservation("root-exited", rootExit.exitCode, rootExit.signal, generation, () => {
       this.#rootObservationPending = false; this.#rootObservationWritten = true; this.#maybeWriteDrainComplete();
     });
@@ -379,9 +383,9 @@ export class DockerCustodyInitRuntime {
     const wallNow = this.#syscalls.wallNowUnixMs();
     if (!Number.isSafeInteger(wallNow) || wallNow < 0) {this.#poison(); return;}
     if (this.#request !== undefined && deadlineActive && (wallNow >= this.#request.wallDeadlineUnixMs ||
-      this.#providerDeadlineMonotonicMs !== undefined && nowMonotonicMs >= this.#providerDeadlineMonotonicMs)) {this.requestStop("deadline");}
+      this.#providerDeadlineMonotonicMs !== undefined && nowMonotonicMs >= this.#providerDeadlineMonotonicMs)) {this.#poison("deadline"); return;}
     if (this.#providerRootTracked && this.#stopDeadlineMonotonicMs !== undefined && nowMonotonicMs >= this.#stopDeadlineMonotonicMs && !this.#killEscalationCompleted) {
-      this.#killEscalationCompleted = true; this.#performSignal("stop-kill", "SIGKILL"); this.#requestContainment("shutdown-timeout");
+      this.#poison("shutdown-timeout", false);
     }
   }
   #validExit(exit: DockerCustodyProviderRootExit): boolean {
@@ -402,75 +406,89 @@ export class DockerCustodyInitRuntime {
       this.#phase = "drained"; this.#stopDeadlineMonotonicMs = undefined; this.#killEscalationCompleted = true;
     });
   }
-  #writeDrainFailed(stream: DockerCustodyOutputStream): void {
+  #writeDrainFailed(stream: DockerCustodyOutputStream, failure: "error" | "overflow" | "timeout"): void {
     if (this.#closure !== null || this.#closurePending || this.#request === undefined || this.#generation === undefined || this.#integrityFailed) {return;}
     const providerDrain = Object.freeze({kind: "provider-drain-failed", outerContainmentClaim: "unproven",
-      reason: `${stream}-overflow`, requestId: this.#request.requestId} as const);
+      reason: `${stream}-${failure}`, requestId: this.#request.requestId} as const);
     this.#closurePending = true;
-    this.#enqueueControl(providerDrain, this.#generation, () => {
-      if (this.#integrityFailed) {return;}
-      this.#closurePending = false; this.#closure = Object.freeze({outerContainmentClaim: "unproven", providerDrain});
-    });
+    this.#enqueueControl(providerDrain, this.#generation, () => {if (!this.#integrityFailed) {
+      this.#closurePending = false; this.#closure = Object.freeze({outerContainmentClaim: "unproven", providerDrain});}});
   }
   public failInit(): void {this.#poison();}
-  #poison(): void {
+  #poison(reason: DockerCustodyContainmentRequest["reason"] = "init-failure", termFirst = true): void {
     if (this.#integrityFailed) {this.#retryContainment(); return;}
-    this.#integrityFailed = true; this.#phase = "failed"; this.#startFenced = true; this.#stdinStatus = "closed";
-    this.#stopDeadlineMonotonicMs = undefined; this.#providerDeadlineMonotonicMs = undefined;
-    this.#closurePending = false; this.#rootObservationPending = false; this.#controlEvidence.length = 0;
+    const inheritedTermDeadline = this.#stopDeadlineMonotonicMs;
+    this.#integrityFailed = true; this.#phase = "failed"; this.#startFenced = true; this.#stdin.close();
+    try {this.#syscalls.closeProviderInput();} catch {/* containment still proceeds */}
+    this.#stopDeadlineMonotonicMs = undefined; this.#providerDeadlineMonotonicMs = undefined; this.#closurePending = false;
+    this.#rootObservationPending = false; this.#controlWriter.clear();
     if (this.#acknowledgement === "pending") {this.#acknowledgement = "lost";}
-    if (this.#request !== undefined) {this.#pendingContainmentReason = "init-failure"; this.#retryContainment(); this.#retryContainmentEvidence();}
+    if (this.#request !== undefined) {this.#pendingContainmentReason = reason; this.#retryContainment();
+      if (this.#providerRootTracked) {
+        const now = monotonicNow(this.#syscalls.monotonicNowMs());
+        if (termFirst && inheritedTermDeadline !== undefined) {this.#failureKillDeadlineMonotonicMs = inheritedTermDeadline;}
+        else if (termFirst) {this.#failureKillDeadlineMonotonicMs = safeMonotonicDeadline(now, this.#shutdownGraceMs);
+          this.#performSignal("stop-term", "SIGTERM");}
+        else {this.#killEscalationCompleted = true; this.#performSignal("stop-kill", "SIGKILL");
+          this.#failureTerminalDeadlineMonotonicMs = safeMonotonicDeadline(now, this.#shutdownGraceMs);}
+        return;
+      }
+      if (this.#generation !== undefined) {this.#failureTerminalDeadlineMonotonicMs = safeMonotonicDeadline(
+        monotonicNow(this.#syscalls.monotonicNowMs()), this.#shutdownGraceMs); this.#maybeFinishFailure(); return;}
+    }
+    this.#failureCleanupComplete = true;
+  }
+  #enforceFailureDeadlines(): void {
+    const now = monotonicNow(this.#syscalls.monotonicNowMs());
+    if (this.#providerRootTracked && this.#failureKillDeadlineMonotonicMs !== undefined && now >= this.#failureKillDeadlineMonotonicMs &&
+      !this.#killEscalationCompleted) {
+      this.#killEscalationCompleted = true; this.#performSignal("stop-kill", "SIGKILL");
+      this.#failureTerminalDeadlineMonotonicMs = safeMonotonicDeadline(now, this.#shutdownGraceMs);
+    }
+    if (this.#failureTerminalDeadlineMonotonicMs !== undefined && now >= this.#failureTerminalDeadlineMonotonicMs) {
+      for (const [stream, accounting] of [["stdout", this.#stdout], ["stderr", this.#stderr]] as const) {if (!accounting.eof &&
+        accounting.status !== "failed" && accounting.status !== "overflow") {accounting.status = "failed"; this.#writeDrainFailed(stream, "timeout");}}
+      this.#failureCleanupComplete = true;
+    }
+  }
+  #maybeFinishFailure(): void {
+    if (!this.#integrityFailed || !this.#rootExitObserved) {return;}
+    if (streamTerminal(this.#stdout) && streamTerminal(this.#stderr)) {this.#failureCleanupComplete = true;}
   }
   #enqueueControl(message: DockerCustodyInitMessage, generation: ProviderGeneration | null, onAccepted?: () => void): void {
     if (this.#integrityFailed) {return;}
-    this.#controlEvidence.push(Object.freeze({generation, message, onAccepted})); this.#flushControl();
+    this.#controlWriter.enqueue(message, generation, this.#generation, onAccepted);
   }
-  #flushControl(): void {
-    if (this.#flushingControl || this.#integrityFailed) {return;}
-    this.#flushingControl = true;
-    try {
-      while (this.#controlEvidence.length > 0 && !this.#integrityFailed) {
-        const pending = this.#controlEvidence[0];
-        if (pending === undefined) {break;}
-        if (pending.generation !== null && pending.generation !== this.#generation) {this.#poison(); break;}
-        let result: "accepted" | "blocked";
-        try {result = this.#writeControl(pending.message);} catch {this.#poison(); break;}
-        if (result === "blocked") {break;}
-        if (result !== "accepted") {this.#poison(); break;}
-        this.#controlEvidence.shift(); pending.onAccepted?.();
-      }
-    } finally {this.#flushingControl = false;}
-  }
+  #flushControl(): void {if (!this.#integrityFailed) {this.#controlWriter.flush(this.#generation);}}
   #requestContainment(reason: DockerCustodyContainmentRequest["reason"]): void {
     if (this.#containmentRequested || this.#request === undefined) {return;}
     this.#pendingContainmentReason ??= reason; this.#retryContainment();
   }
   #retryContainment(): void {
     if (this.#containmentRequested || this.#request === undefined || this.#pendingContainmentReason === undefined) {return;}
+    if (this.#containmentEvidence !== undefined) {
+      if (this.#integrityFailed && !this.#controlWriter.busy) {this.#retryContainmentEvidence();} return;
+    }
     const reason = this.#pendingContainmentReason;
-    let result: "accepted" | "failed" = "failed";
-    try {result = this.#syscalls.requestContainerContainment(reason);} catch {return;}
-    if (result !== "accepted") {return;}
-    this.#containmentRequested = true; this.#pendingContainmentReason = undefined;
     this.#containmentEvidence = Object.freeze({kind: "container-containment-request", reason, requestId: this.#request.requestId});
-    if (this.#integrityFailed) {this.#retryContainmentEvidence(); return;}
+    if (this.#integrityFailed) {if (!this.#controlWriter.busy) {this.#retryContainmentEvidence();} return;}
     const evidence = this.#containmentEvidence;
-    this.#enqueueControl(evidence, this.#generation ?? null, () => {if (this.#containmentEvidence === evidence) {this.#containmentEvidence = undefined;}});
+    this.#enqueueControl(evidence, this.#generation ?? null, () => {if (this.#containmentEvidence === evidence) {
+      this.#containmentEvidence = undefined; this.#containmentRequested = true; this.#pendingContainmentReason = undefined;}});
   }
   #retryContainmentEvidence(): void {
     const evidence = this.#containmentEvidence;
     if (evidence === undefined || !this.#integrityFailed) {return;}
     try {
       const result = this.#writeControl(evidence);
-      if (result === "accepted") {this.#containmentEvidence = undefined; return;}
+      if (result === "accepted") {this.#containmentEvidence = undefined; this.#containmentRequested = true;
+        this.#pendingContainmentReason = undefined; return;}
       if (result === "blocked") {return;}
     } catch {this.#containmentEvidence = undefined; if (!this.#integrityFailed) {this.#poison();} return;}
     this.#containmentEvidence = undefined; if (!this.#integrityFailed) {this.#poison();}
   }
   #writeProviderObservation(
-    observation: DockerCustodyProviderObservation["observation"],
-    exitCode: number | null,
-    signal: DockerCustodyChildSignal | null,
+    observation: DockerCustodyProviderObservation["observation"], exitCode: number | null, signal: DockerCustodyChildSignal | null,
     generation: ProviderGeneration | null,
     onAccepted?: () => void,
   ): void {
@@ -482,8 +500,9 @@ export class DockerCustodyInitRuntime {
     const stream = (value: MutableStreamEvidence): DockerCustodyStreamEvidence => Object.freeze({bytes: value.bytes, eof: value.eof,
       sha256: value.bytes === 0 ? EMPTY_SHA256 : value.hash.copy().digest("hex"), status: value.status});
     return Object.freeze({acknowledgement: this.#acknowledgement, closure: this.#closure, containmentRequested: this.#containmentRequested,
-      descendantsReaped: this.#descendantsReaped, phase: this.#phase, providerRootTracked: this.#providerRootTracked,
+      failureCleanupComplete: this.#failureCleanupComplete,
+      phase: this.#phase, providerRootTracked: this.#providerRootTracked,
       requestId: this.#request?.requestId ?? null, signalEvidence: Object.freeze([...this.#signalEvidence]), startFenced: this.#startFenced,
-      stderr: stream(this.#stderr), stdinBytes: this.#stdinBytes, stdinStatus: this.#stdinStatus, stdout: stream(this.#stdout)});
+      stderr: stream(this.#stderr), stdinBytes: this.#stdin.bytes, stdinStatus: this.#stdin.status, stdout: stream(this.#stdout)});
   }
 }

@@ -36,6 +36,7 @@ interface ProviderGeneration {
 }
 
 const MAX_EXECUTABLE_PATH_BYTES = 4_096;
+const MAX_EXECUTABLE_BYTES = 256 * 1_024 * 1_024;
 const PROVIDER_EXECUTABLE_SLOT = "provider-entrypoint";
 
 export interface HeldDockerCustodyProviderExecutable {
@@ -64,7 +65,8 @@ export const holdDockerCustodyProviderExecutable = (
   const close = (): void => {if (!closed) {closed = true; closeSync(descriptor);}};
   try {
     const before = fstatSync(descriptor, {bigint: true});
-    if (!before.isFile() || before.nlink !== 1n || (before.mode & 0o111n) === 0n || (before.mode & 0o222n) !== 0n) {
+    if (!before.isFile() || before.size > BigInt(MAX_EXECUTABLE_BYTES) || before.nlink !== 1n ||
+      (before.mode & 0o111n) === 0n || (before.mode & 0o222n) !== 0n) {
       throw new Error("provider executable slot is not one private executable regular file");
     }
     const digest = createHash("sha256");
@@ -173,9 +175,6 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
   public monotonicNowMs(): number {return Math.floor(performance.now());}
   public wallNowUnixMs(): number {return Date.now();}
   public observeIdentity(): DockerCustodyIdentity {return this.#identity;}
-  public reapExitedDescendants(): readonly [] {return Object.freeze([]);}
-  public requestContainerContainment(): "accepted" {return "accepted";}
-
   public spawnProvider(specification: DockerCustodyProviderSpawn): ReturnType<DockerCustodyInitSyscalls["spawnProvider"]> {
     const identity = this.#observeRestrictedIdentity();
     if (this.#generation !== undefined || identity.uid !== specification.uid || identity.gid !== specification.gid) {
@@ -210,6 +209,7 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     this.#bindOutput(generation, "stderr", generation.stderr, child.stderr);
     child.stdin.on("drain", () => {this.runtime?.stdinDrainReady();});
     child.stdin.once("error", () => {this.runtime?.failInit();});
+    child.stdin.once("close", () => {this.runtime?.tick(); this.runtime?.providerInputClosed();});
     return {handle: generation.root, kind: "started", pid: child.pid, stderr: generation.stderr, stdout: generation.stdout};
   }
 
@@ -224,7 +224,7 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
       if (result === "blocked") {source.pause();}
     });
     source.once("end", () => {this.runtime?.closeProviderOutput(handle);});
-    source.once("error", () => {this.runtime?.failInit();});
+    source.once("error", () => {this.runtime?.failProviderOutput(handle);});
     generation.child.once("close", () => {this.runtime?.tick();});
     void stream;
   }
@@ -244,11 +244,10 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     return writeDockerCustodyProviderOutputFragments(this.#writeOutput, requestId, stream, bytes);
   }
 
-  public writeProviderInput(bytes: Uint8Array): "accepted" | "closed" {
+  public writeProviderInput(bytes: Uint8Array): {readonly committedBytes: number; readonly status: "accepted" | "blocked" | "closed"} {
     const child = this.#generation?.child;
-    if (child === undefined || child.stdin.destroyed || child.stdin.writableEnded) {return "closed";}
-    child.stdin.write(Uint8Array.from(bytes));
-    return "accepted";
+    if (child === undefined || child.stdin.destroyed || child.stdin.writableEnded) {return {committedBytes: 0, status: "closed"};}
+    return writeDockerCustodyProviderInput(child.stdin, bytes);
   }
   public closeProviderInput(): void {this.#generation?.child.stdin.end();}
 
@@ -281,12 +280,22 @@ export const writeDockerCustodyProviderOutputFragments = (
   return {committedBytes, status: "accepted"};
 };
 
+export const writeDockerCustodyProviderInput = (
+  input: Writable,
+  bytes: Uint8Array,
+): {readonly committedBytes: number; readonly status: "accepted" | "blocked" | "closed"} => {
+  if (input.destroyed || input.writableEnded) {return {committedBytes: 0, status: "closed"};}
+  const accepted = input.write(Uint8Array.from(bytes));
+  return {committedBytes: bytes.byteLength, status: accepted ? "accepted" : "blocked"};
+};
+
 export class NodeDockerCustodyInitDriver {
   readonly #input: Readable;
   readonly #output: Writable;
   readonly #runtime: DockerCustodyInitRuntime;
   readonly #syscalls: NodeInitSyscalls;
   #outputBlocked = false;
+  #inputBlocked = false;
   readonly #tickIntervalMs: number;
 
   public constructor(options: NodeDockerCustodyInitDriverOptions, internals: NodeDockerCustodyInitDriverInternals = {}) {
@@ -319,30 +328,34 @@ export class NodeDockerCustodyInitDriver {
   public run(): Promise<0 | 1> {
     return new Promise(resolve => {
       let settled = false;
+      const settle = (code: 0 | 1): void => {resolve(code);};
       const finish = (code: 0 | 1): void => {
         if (settled) {return;}
         settled = true; clearInterval(timer); this.#input.removeAllListeners(); this.#output.removeAllListeners("drain");
         this.#input.destroy();
         for (const signal of DOCKER_CUSTODY_HOST_SIGNALS) {process.removeListener(signal, handlers[signal]);}
-        this.#output.end(() => {resolve(code);});
+        if (this.#output.destroyed) {settle(code);} else {this.#output.end(() => {settle(code);});}
       };
       const inspect = (): void => {
         this.#runtime.tick();
-        const phase = this.#runtime.snapshot().phase;
-        if (phase === "drained") {finish(0);} else if (phase === "failed") {finish(1);}
+        const snapshot = this.#runtime.snapshot();
+        const phase = snapshot.phase;
+        if (snapshot.stdinStatus === "blocked" && !this.#inputBlocked) {this.#inputBlocked = true; this.#input.pause();}
+        else if (snapshot.stdinStatus !== "blocked" && this.#inputBlocked) {this.#inputBlocked = false; this.#input.resume();}
+        if (phase === "drained") {finish(0);} else if (phase === "failed" && snapshot.failureCleanupComplete) {finish(1);}
       };
       const handlers = Object.fromEntries(DOCKER_CUSTODY_HOST_SIGNALS.map(signal => [signal, () => {
         this.#runtime.forwardHostSignal(signal); inspect();
       }])) as Record<DockerCustodyHostSignal, () => void>;
       for (const signal of DOCKER_CUSTODY_HOST_SIGNALS) {process.on(signal, handlers[signal]);}
       this.#input.on("data", (chunk: Buffer) => {
-        try {this.#runtime.receiveControlBytes(chunk); inspect();} catch {finish(1);}
+        try {this.#runtime.receiveControlBytes(chunk);} catch {this.#runtime.failInit();} inspect();
       });
-      this.#input.once("end", () => {try {this.#runtime.controlChannelClosed();} catch {finish(1);} inspect();});
-      this.#input.once("error", () => {this.#runtime.failInit(); finish(1);});
+      this.#input.once("end", () => {try {this.#runtime.controlChannelClosed();} catch {this.#runtime.failInit();} inspect();});
+      this.#input.once("error", () => {this.#runtime.failInit(); inspect();});
+      this.#output.once("error", () => {this.#runtime.failInit(); inspect();});
       this.#output.on("drain", () => {this.#outputBlocked = false; this.#syscalls.outputDrainReady(); inspect();});
       const timer = setInterval(inspect, this.#tickIntervalMs);
-      timer.unref();
     });
   }
 }
