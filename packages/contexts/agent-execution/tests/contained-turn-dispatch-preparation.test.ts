@@ -428,7 +428,8 @@ test("restart recovery retires against the preparation revision rather than the 
     },
     operationStore: {
       listDispatchPreparations: async () => [{ operation: winner, preparation: active }],
-      recordDispatchPreparationCleanup: async input => {
+      async recordDispatchPreparationCleanup(input) {
+        assert.equal(this, dependencies.operationStore, "recovery preserves the owner method receiver");
         preparation = recordContainedTurnPreparationCleanup(preparation, input);
         return preparation;
       },
@@ -446,6 +447,7 @@ test("restart recovery retires against the preparation revision rather than the 
   });
   assert.equal(retirementInputs[0]?.expectedOperationRevision, active.preparedOperationRevision);
   assert.equal(custodyReleases, 1);
+  assert.equal(preparation.kind, "cleanup_closed", "a confirmed cleanup must actually persist through the owner method");
 });
 
 test("parallel grant consumption returns every indeterminate owner evidence", async () => {

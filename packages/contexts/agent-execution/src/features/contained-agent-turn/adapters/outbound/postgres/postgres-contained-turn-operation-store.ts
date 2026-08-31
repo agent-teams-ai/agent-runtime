@@ -365,8 +365,8 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
             AND q.observed_state_digest IS NOT DISTINCT FROM p.state_digest` : ""}
           WHERE o.tenant_id = $1 AND o.project_id = $2
             ${quarantine ? "AND q.operation_id IS NULL" : ""}
-            AND ((((p.state_codec_version = 2 OR p.state_codec_version = $4) AND p.state #>> '{payload,kind}') = ANY($3::text[]))
-                 OR ((p.state_codec_version = 1 AND p.state #>> '{kind}') = ANY($3::text[]))
+            AND (((p.state_codec_version = 2 OR p.state_codec_version = $4) AND (p.state #>> '{payload,kind}') = ANY($3::text[]))
+                 OR (p.state_codec_version = 1 AND (p.state #>> '{kind}') = ANY($3::text[]))
                  OR p.state_codec_version NOT IN (1, 2, $4))
           ORDER BY p.operation_id,p.preparation_token
           LIMIT $5`,

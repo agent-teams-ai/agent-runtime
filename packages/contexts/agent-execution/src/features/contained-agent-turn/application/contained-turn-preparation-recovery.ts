@@ -46,7 +46,7 @@ const completeTarget = async (
     .includes(outcome.kind);
   if (!succeeded && outcome.evidenceId === undefined) {return;}
   try {
-    await record({
+    await record.call(dependencies.operationStore, {
       authority: containedTurnOwnerStoreAuthority(operation, operation.scope),
       ...(succeeded ? {} : { evidenceId: outcome.evidenceId }),
       permit: preparation.cleanupPermit,

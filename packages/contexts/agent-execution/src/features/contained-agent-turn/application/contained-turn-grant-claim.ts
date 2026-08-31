@@ -69,8 +69,8 @@ export const claimContainedTurnWithConsumedGrants = async (
     "provider_access", subject,
   );
   const [providerAccessResult, runtimeSecurityResult] = await Promise.allSettled([
-    providerAccessConsume({ grantRequestId: providerAccessGrantRequestId, subject }),
-    runtimeSecurityConsume({ subject }),
+    providerAccessConsume.call(dependencies.providerAccess, { grantRequestId: providerAccessGrantRequestId, subject }),
+    runtimeSecurityConsume.call(dependencies.security, { subject }),
   ]);
   const providerAccess = providerAccessResult.status === "fulfilled"
     ? providerAccessResult.value : undefined;
@@ -119,7 +119,7 @@ export const claimContainedTurnWithConsumedGrants = async (
   ]);
   try {
     const authority = containedTurnOwnerStoreAuthority(operation, trustedScope);
-    const outcome = await claim({
+    const outcome = await claim.call(dependencies.operationStore, {
       authority,
       consumedGrantReceipts: receipts,
       expectedOperationRevision: operation.revision,
