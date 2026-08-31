@@ -49,7 +49,10 @@ import {
   unsupportedOperationResidueAuthorityFactory,
 } from "./host-custody-cgroup-v2.js";
 import { launchGuardedProvider } from "./node-provider-process-custody-launch.js";
-import { openHostCustodyReservation } from "./node-provider-process-custody-open.js";
+import {
+  assertHostCustodyReservationMode,
+  openHostCustodyReservation,
+} from "./node-provider-process-custody-open.js";
 import { replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
 import { boundedPromise } from "./host-custody-stdio.js";
@@ -148,12 +151,27 @@ export class NodeProviderProcessCustody implements
   }
 
   public async open(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle> {
+    return this.#open(input);
+  }
+
+  public async reserve(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle> {
+    return this.#open(input, "sdk-delegated");
+  }
+
+  async #open(
+    input: Parameters<ProviderProcessCustodyPort["open"]>[0],
+    requiredSpawnMode?: "sdk-delegated",
+  ): Promise<ContainedTurnCustodyHandle> {
     const identitySha256 = inputIdentity(input);
     const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
     const existing = this.#byAttempt.get(input.attemptId);
+    if (tombstone !== undefined && requiredSpawnMode !== undefined) {
+      assertHostCustodyReservationMode(tombstone.evidence.fingerprint, requiredSpawnMode);
+    }
     if (tombstone !== undefined || existing !== undefined) {
       const replay = await replayCustody(
-        input, identitySha256, tombstone, existing, () => this.#resolveCandidate(input),
+        input, identitySha256, tombstone, existing,
+        () => this.#resolveCandidate(input, requiredSpawnMode),
       );
       if (replay !== undefined) {return replay;}
     }
@@ -186,6 +204,7 @@ export class NodeProviderProcessCustody implements
         this.#byRef.delete(live.custodyRef);
       },
       residueAuthorityFactory: this.#residueAuthorityFactory,
+      ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
       resolveOpening,
       spawn: (reserved, arguments_, environment) => {this.#spawn(reserved, arguments_, environment);},
     });
@@ -515,8 +534,15 @@ export class NodeProviderProcessCustody implements
     await containment.catch(() => {});
   }
 
-  async #resolveCandidate(input: Parameters<ProviderProcessCustodyPort["open"]>[0]) {
-    try {return await resolveLaunchCandidate(this.#launchPlans, input);}
+  async #resolveCandidate(
+    input: Parameters<ProviderProcessCustodyPort["open"]>[0],
+    requiredSpawnMode?: "sdk-delegated",
+  ) {
+    try {
+      const candidate = await resolveLaunchCandidate(this.#launchPlans, input);
+      assertHostCustodyReservationMode(candidate.plan, requiredSpawnMode);
+      return candidate;
+    }
     catch (error) {
       if (error instanceof HostCustodyUnsupportedError) {throw error;}
       throw new HostCustodyLaunchRejectedError();
