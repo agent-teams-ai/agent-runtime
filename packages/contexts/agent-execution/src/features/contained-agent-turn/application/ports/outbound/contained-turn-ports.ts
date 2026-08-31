@@ -425,7 +425,7 @@ export interface ContainedTurnKernelCustodyPort {
     attemptId: ContainedTurnAttemptId;
     authorityVectorDigest: ContainedTurnCanonicalDigest;
     custodyId: ContainedTurnCustodyId;
-    effectId: ContainedTurnEffectId;
+    effectId: ContainedTurnEffectId; intentMode: "analysis" | "workspace-write";
     operationId: ContainedTurnOperationId;
     providerAccessSnapshot: ContainedTurnProviderAccessSnapshot;
     workspaceId: ContainedTurnWorkspaceId;

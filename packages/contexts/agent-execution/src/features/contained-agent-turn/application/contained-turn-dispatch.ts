@@ -155,6 +155,7 @@ const claimContainedTurnDispatch = async (
       authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
       custodyId: prepared.custodyId,
       effectId: initial.effectId,
+      intentMode: initial.intent.mode,
       operationId: initial.operationId,
       providerAccessSnapshot: initial.providerAccessSnapshot,
       workspaceId,

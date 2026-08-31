@@ -21,6 +21,9 @@ import {
 } from "../../../domain/contained-turn-identities.js";
 import type {
   ContainedTurnProviderExecutionOutcome,
+} from "../legacy/legacy-contained-turn-ports.js";
+import type { ContainedTurnProviderBinding } from "../../../contracts/contained-agent-turn.js";
+import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
 } from "../provider-delegation-ports/contained-turn-provider-delegation-port.js";
@@ -34,6 +37,7 @@ import type {
 import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 
 export interface ClaudeAgentSdkKernelPrivateExecution {
+  readonly custodyRef: string;
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
   readonly workspaceRef: string;
 }
@@ -50,6 +54,7 @@ export interface ClaudeAgentSdkKernelPrivateExecutionResolver {
     custodyId: ContainedTurnCustodyId;
     effectId: ContainedTurnEffectId;
     operationId: ContainedTurnOperationId;
+    providerBinding: ContainedTurnProviderBinding;
     workspaceId: ContainedTurnWorkspaceId;
   }>, execute: (execution: ClaudeAgentSdkKernelPrivateExecution) => Promise<Result>): Promise<Result | undefined>;
 }
@@ -236,6 +241,11 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
         custodyId: input.custodyId,
         effectId: input.effectId,
         operationId: input.operationId,
+        providerBinding: Object.freeze({
+          ...input.adapterSnapshot,
+          credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
+          providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
+        }),
         workspaceId: input.workspaceId,
       }, execution => {
         callbackCount += 1;
@@ -321,7 +331,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     });
     const outcome = await provider.execute({
       attemptId: input.attemptId,
-      custody: { custodyRef: input.custodyId },
+      custody: { custodyRef: execution.custodyRef },
       effectId: input.effectId,
       emit: input.emit,
       intent: input.intent,
