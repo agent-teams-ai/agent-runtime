@@ -15,6 +15,8 @@ import {
   delta,
   executablePath,
   input,
+  kernelInput,
+  kernelProvider,
   privateProjection,
   privateDirectoryCustody,
   privateRoot,
@@ -24,6 +26,79 @@ import {
   workspaceRef,
   type QueryFactory,
 } from "./claude-agent-sdk-contained-turn-provider.support.ts";
+
+test("provider construction binds the original private-directory verifier method", async () => {
+  let originalCalls = 0;
+  let replacementCalls = 0;
+  const custody = {
+    async assertPrivateDirectory(this: object) {
+      assert.equal(this, custody);
+      originalCalls += 1;
+      throw new Error("synthetic private-directory rejection");
+    },
+  };
+  let queryCalls = 0;
+  const adapter = provider(() => {
+    queryCalls += 1;
+    throw new Error("query must remain unavailable");
+  }, { privateDirectoryCustody: custody });
+
+  assert.equal(Reflect.set(custody, "assertPrivateDirectory", async () => { replacementCalls += 1; }), false);
+  assert.equal((await adapter.execute(input())).kind, "not_accepted");
+  assert.ok(originalCalls > 0);
+  assert.equal(replacementCalls, 0);
+  assert.equal(queryCalls, 0);
+});
+
+test("current-kernel construction closes receiver-state and options aliases", async () => {
+  const custody = {
+    acceptsPrivateDirectories: false,
+    async assertPrivateDirectory(this: { acceptsPrivateDirectories: boolean }) {
+      if (!this.acceptsPrivateDirectories) {
+        throw new Error("synthetic private-directory rejection");
+      }
+    },
+  };
+  const options: { privateDirectoryCustody: typeof custody } = { privateDirectoryCustody: custody };
+  let queryCalls = 0;
+  const adapter = kernelProvider(() => {
+    queryCalls += 1;
+    throw new Error("query must remain unavailable");
+  }, options);
+
+  assert.equal(Reflect.set(custody, "acceptsPrivateDirectories", true), false);
+  options.privateDirectoryCustody = {
+    acceptsPrivateDirectories: true,
+    async assertPrivateDirectory() {},
+  };
+  assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+  assert.equal(queryCalls, 0);
+});
+
+test("launch capture cannot be bypassed by verifier or receiver mutation", async () => {
+  const custody = {
+    acceptsPrivateDirectories: false,
+    async assertPrivateDirectory(this: { acceptsPrivateDirectories: boolean }) {
+      if (!this.acceptsPrivateDirectories) {
+        throw new Error("synthetic private-directory rejection");
+      }
+    },
+  };
+  const launch = createClaudeAgentSdkLaunchPlan({
+    binaryRevision: binding.binaryRevision,
+    executablePath,
+    executableSha256: "0".repeat(64),
+    intentMode: "analysis",
+    privateProjection,
+    privateDirectoryCustody: custody,
+    privateRootPath: privateRoot,
+    workspaceRef,
+  });
+
+  assert.equal(Reflect.set(custody, "acceptsPrivateDirectories", true), false);
+  assert.equal(Reflect.set(custody, "assertPrivateDirectory", async () => {}), false);
+  await assert.rejects(launch, /frozen private projection/u);
+});
 
 test("uses only an external frozen private projection while tools remain workspace-bound", async () => {
   let captured: Parameters<Parameters<QueryFactory>[0]["options"]["spawnClaudeCodeProcess"]>[0] | undefined;

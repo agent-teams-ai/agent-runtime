@@ -3,8 +3,10 @@ import { createHash } from "node:crypto";
 import type {
   ContainedTurnProviderExecutionOutcome,
   ContainedTurnProviderPort,
-} from "../legacy/legacy-contained-turn-ports.js";
-import type { PrivateDirectoryCustodyPort } from "../host-custody/custodied-provider-process.js";
+} from "../provider-delegation-ports/contained-turn-provider-delegation-port.js";
+import type {
+  PrivateDirectoryCustodyPort,
+} from "../provider-delegation-ports/private-directory-custody-port.js";
 import {
   claudeResultDiagnostic,
   normalizeClaudeSdkMessage,
@@ -18,6 +20,7 @@ import type {
   ClaudeQueryFactory,
   ClaudeSdkQuery,
 } from "./claude-agent-sdk-query-contracts.js";
+import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 export interface ClaudeAgentSdkControlClock {
   now(): number;
   wait(milliseconds: number, signal: AbortSignal): Promise<void>;
@@ -223,7 +226,10 @@ export class ClaudeAgentSdkTurnExecution {
   #streamSettledAt: number | undefined;
 
   public constructor(options: TurnExecutionOptions) {
-    this.#options = options;
+    this.#options = Object.freeze({
+      ...options,
+      privateDirectoryCustody: captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody),
+    });
     this.#input = options.input;
     this.#clock = new OperationDeadlineClock(options.clock);
     this.#turnDeadline = this.#clock.deadlineAfter(options.turnTimeoutMs);

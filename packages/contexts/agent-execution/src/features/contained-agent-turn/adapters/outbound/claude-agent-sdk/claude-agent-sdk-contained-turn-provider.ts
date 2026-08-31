@@ -5,12 +5,12 @@ import type {
   ContainedTurnAdapterCapabilityManifest,
   ContainedTurnProviderExecutionOutcome,
   ContainedTurnProviderPort,
-} from "../legacy/legacy-contained-turn-ports.js";
-import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
+} from "../provider-delegation-ports/contained-turn-provider-delegation-port.js";
+import type {
   PrivateDirectoryCustodyPort,
-} from "../host-custody/custodied-provider-process.js";
+} from "../provider-delegation-ports/private-directory-custody-port.js";
 import {
   claudeAgentSdkTools,
   type ClaudeAgentSdkPrivateProjection,
@@ -25,6 +25,7 @@ import type {
   ClaudeQueryFactory,
   ClaudeSdkQueryInput,
 } from "./claude-agent-sdk-query-contracts.js";
+import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 
 const DEFAULT_CANCELLATION_POLL_MS = 100;
 const DEFAULT_INTERRUPT_GRACE_MS = 5_000;
@@ -124,7 +125,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
         DEFAULT_INTERRUPT_GRACE_MS,
       ),
       privateProjections: options.privateProjections,
-      privateDirectoryCustody: options.privateDirectoryCustody,
+      privateDirectoryCustody: captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody),
       processes: options.processes,
       queryFactory: options.queryFactory,
       turnTimeoutMs: positiveInteger("turnTimeoutMs", options.turnTimeoutMs, DEFAULT_TURN_TIMEOUT_MS),

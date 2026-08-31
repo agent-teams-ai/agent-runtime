@@ -23,7 +23,11 @@ const paths = {
   dockerFake: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/fake-docker-engine.ts",
   dockerNode: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/node-unix-socket-docker-engine.ts",
   dockerPort: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts",
+  host: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+  hostNode: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
   legacy: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts",
+  providerDelegation: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/contained-turn-provider-delegation-port.ts",
+  privateDirectoryCustody: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/private-directory-custody-port.ts",
 };
 
 const writeFixtureFile = async (root, path, source = "export {};\n") => {
@@ -101,9 +105,10 @@ test("contained-turn domain and application remain dependency-free core", async 
   })).includes("architecture.source-dependencies.forbidden-package-dependency"));
 });
 
-test("transitional legacy boundary and adapter permissions remain exact", () => {
+test("transitional boundaries and adapter permissions remain exact", () => {
   const legacy = boundariesById.get("adapter.agent-execution.legacy-contained-turn-ports");
   const claude = boundariesById.get("adapter.agent-execution.claude-agent-sdk");
+  const delegation = boundariesById.get("adapter.agent-execution.provider-delegation-ports");
   const production = boundariesById.get("production.agent-execution");
 
   assert.deepEqual(legacy.roots, [dirname(paths.legacy)]);
@@ -113,10 +118,19 @@ test("transitional legacy boundary and adapter permissions remain exact", () => 
   assert.deepEqual(legacy.allowedBuiltins, []);
   assert.deepEqual(legacy.allowedRuntimeReferences, []);
   assert.deepEqual(claude.allowedBoundaries, [
-    "adapter.agent-execution.host-custody",
-    "adapter.agent-execution.legacy-contained-turn-ports",
+    "adapter.agent-execution.provider-delegation-ports",
     "core.agent-execution.contained-turn",
   ]);
+  assert.deepEqual(delegation.entrypoints, [paths.providerDelegation, paths.privateDirectoryCustody]);
+  assert.deepEqual(delegation.allowedBoundaries, [
+    "adapter.agent-execution.host-custody",
+    "adapter.agent-execution.legacy-contained-turn-ports",
+  ]);
+  assert.deepEqual(delegation.allowedPackages, []);
+  assert.deepEqual(delegation.allowedBuiltins, []);
+  assert.deepEqual(delegation.allowedRuntimeReferences, []);
+  assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.host-custody"));
+  assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.legacy-contained-turn-ports"));
   assert.ok(!claude.allowedBoundaries.includes("production.agent-execution"));
   assert.deepEqual(production.allowedBoundaries, [
     "adapter.agent-execution.host-custody",
@@ -172,11 +186,29 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   }), []);
 });
 
-test("Claude may import only the legacy port, not production composition", async () => {
+test("Claude may import only narrow provider-delegation and private-directory ports", async () => {
   assert.deepEqual(await analyzeFixture({
-    [paths.claude]: "import type {} from '../legacy/legacy-contained-turn-ports.js';\n",
-    [paths.legacy]: "export {};\n",
+    [paths.claude]: [
+      "import type {} from '../provider-delegation-ports/contained-turn-provider-delegation-port.js';",
+      "import type {} from '../provider-delegation-ports/private-directory-custody-port.js';",
+    ].join("\n"),
   }), []);
+
+  for (const [targetPath, specifier] of [
+    [paths.legacy, "../legacy/legacy-contained-turn-ports.js"],
+    [paths.host, "../host-custody/custodied-provider-process.js"],
+    [paths.hostNode, "../host-custody/node-provider-process-custody.js"],
+  ]) {
+    const diagnostics = await analyzeFixture({
+      [paths.claude]: `import type {} from '${specifier}';\n`,
+      [targetPath]: "export {};\n",
+    });
+    assert.deepEqual(
+      rules(diagnostics),
+      ["architecture.source-dependencies.forbidden-boundary-dependency"],
+      specifier,
+    );
+  }
 
   const diagnostics = await analyzeFixture({
     [paths.claude]: "import '../../../../../composition.js';\n",

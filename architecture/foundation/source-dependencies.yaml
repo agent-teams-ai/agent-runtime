@@ -107,8 +107,7 @@ boundaries:
     entrypoints: []
     allow:
       boundaries:
-        - adapter.agent-execution.host-custody
-        - adapter.agent-execution.legacy-contained-turn-ports
+        - adapter.agent-execution.provider-delegation-ports
         - core.agent-execution.contained-turn
       packages:
         - "@anthropic-ai/claude-agent-sdk"
@@ -117,6 +116,20 @@ boundaries:
         - node:path
         - node:perf_hooks
         - node:timers/promises
+      runtimeReferences: []
+  - id: adapter.agent-execution.provider-delegation-ports
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/contained-turn-provider-delegation-port.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/private-directory-custody-port.ts
+    allow:
+      boundaries:
+        - adapter.agent-execution.host-custody
+        - adapter.agent-execution.legacy-contained-turn-ports
+      packages: []
+      builtins: []
       runtimeReferences: []
   - id: adapter.agent-execution.legacy-contained-turn-ports
     dependencyMode: runtime

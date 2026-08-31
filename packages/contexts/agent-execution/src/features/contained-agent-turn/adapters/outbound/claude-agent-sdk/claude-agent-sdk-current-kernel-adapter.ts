@@ -21,11 +21,9 @@ import {
 } from "../../../domain/contained-turn-identities.js";
 import type {
   ContainedTurnProviderExecutionOutcome,
-} from "../legacy/legacy-contained-turn-ports.js";
-import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
-} from "../host-custody/custodied-provider-process.js";
+} from "../provider-delegation-ports/contained-turn-provider-delegation-port.js";
 import {
   ClaudeAgentSdkContainedTurnProvider,
   type ClaudeAgentSdkContainedTurnProviderOptions,
@@ -33,6 +31,7 @@ import {
 import type {
   ClaudeAgentSdkPrivateProjection,
 } from "./claude-agent-sdk-launch-plan.js";
+import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 
 export interface ClaudeAgentSdkKernelPrivateExecution {
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
@@ -204,6 +203,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     this.#options = Object.freeze({
       ...options,
       clock,
+      privateDirectoryCustody: captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody),
       privateExecutions: Object.freeze({
         consume: options.privateExecutions.consume.bind(options.privateExecutions),
       }),
