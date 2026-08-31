@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { types as utilTypes } from "node:util";
 
 import type { ContainedTurnAdapterCapabilityManifest } from "../legacy/legacy-contained-turn-ports.js";
 import type { CustodiedProviderProcessRegistry } from "../host-custody/custodied-provider-process.js";
@@ -28,6 +27,12 @@ interface CodexProviderOptionsInput {
 }
 
 type DataSnapshot = Readonly<Record<string, unknown>>;
+
+interface RuntimeTypes {
+  readonly isProxy: (value: unknown) => boolean;
+}
+
+const utilTypes = (process.getBuiltinModule("node:util") as { readonly types: RuntimeTypes }).types;
 
 const snapshotRecord = (
   value: unknown,
