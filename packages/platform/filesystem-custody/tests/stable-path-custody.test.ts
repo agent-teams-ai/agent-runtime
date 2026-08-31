@@ -39,7 +39,7 @@ const publicationCrashWorker = fileURLToPath(new URL(
   import.meta.url,
 ));
 
-test("reports macOS destructive descriptor custody as explicitly unsupported", () => {
+test("classifies macOS destructive descriptor custody as explicitly unsupported", () => {
   assert.deepEqual(resolveStableDirectoryMutationCapability({
     hasDirectoryOpen: true,
     hasNoFollowOpen: true,
@@ -50,6 +50,33 @@ test("reports macOS destructive descriptor custody as explicitly unsupported", (
     reason: "identity-stable descriptor-relative directory mutation is unavailable through current Node APIs",
     version: 1,
   });
+});
+
+test("classifies the complete Linux descriptor capability as supported", () => {
+  assert.deepEqual(resolveStableDirectoryMutationCapability({
+    hasDirectoryOpen: true,
+    hasNoFollowOpen: true,
+    platform: "linux",
+  }), {
+    descriptorRoot: "/proc/self/fd",
+    kind: "supported",
+    platform: "linux",
+    version: 1,
+  });
+});
+
+test("classifies incomplete descriptor primitives as unsupported without platform I/O", () => {
+  for (const input of [
+    { hasDirectoryOpen: false, hasNoFollowOpen: true, platform: "linux" as const },
+    { hasDirectoryOpen: true, hasNoFollowOpen: false, platform: "linux" as const },
+  ]) {
+    assert.deepEqual(resolveStableDirectoryMutationCapability(input), {
+      kind: "unsupported",
+      platform: "linux",
+      reason: "identity-stable descriptor-relative directory mutation is unavailable through current Node APIs",
+      version: 1,
+    });
+  }
 });
 
 test("reads a bounded stable Linux mount identity without exposing a path", async t => {

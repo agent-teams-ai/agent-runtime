@@ -14,7 +14,7 @@ import {
 } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { after, test } from "node:test";
+import { after, test, type TestContext } from "node:test";
 
 import {
   createNodeContainedTurnArtifacts,
@@ -43,6 +43,15 @@ const SMALL_LIMITS = Object.freeze({
   maxFileBytes: 1_024,
   maxTotalBytes: 16 * 1_024,
 });
+const LINUX_DURABLE_DIRECTORY_REASON =
+  "requires qualified Linux /proc descriptor custody, process locks, and renameat2 publication";
+
+const linuxDurableDirectoryTest = (
+  name: string,
+  body: (context: TestContext) => Promise<void> | void,
+) => test(name, {
+  skip: process.platform === "linux" ? false : LINUX_DURABLE_DIRECTORY_REASON,
+}, body);
 
 after(cleanupTrackedFilesystemLayouts);
 
@@ -102,7 +111,7 @@ const runKilledFilesystemWorker = async (input: object): Promise<void> => {
   assert.equal(outcome.signal, "SIGKILL");
 };
 
-test("seals, verifies, reconstructs, and durably cleans one canonical tree", async () => {
+linuxDurableDirectoryTest("seals, verifies, reconstructs, and durably cleans one canonical tree", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const [workspace, artifacts] = await createAdapters(layout);
   const operationId = "operation:reconstructible-tree";
@@ -150,7 +159,7 @@ test("seals, verifies, reconstructs, and durably cleans one canonical tree", asy
   await layout.cleanup();
 });
 
-test("materializes canonical content and binds replay and lookup to scope and inode", async () => {
+linuxDurableDirectoryTest("materializes canonical content and binds replay and lookup to scope and inode", async () => {
   const layout = await createSyntheticFilesystemLayout();
   await mkdir(join(layout.canonicalProjectRoot, "source"), { mode: 0o750 });
   const canonicalFile = join(layout.canonicalProjectRoot, "source", "input.txt");
@@ -190,7 +199,7 @@ test("materializes canonical content and binds replay and lookup to scope and in
   await layout.cleanup();
 });
 
-test("empty creation and sealing are deterministic and idempotent under callers racing", async () => {
+linuxDurableDirectoryTest("empty creation and sealing are deterministic and idempotent under callers racing", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const [workspace, artifacts] = await createAdapters(layout);
   const operationId = "operation:empty-race";
@@ -216,7 +225,7 @@ test("empty creation and sealing are deterministic and idempotent under callers 
   await layout.cleanup();
 });
 
-test("rejects workspace pathname substitution on replay and dispatch lookup", async () => {
+linuxDurableDirectoryTest("rejects workspace pathname substitution on replay and dispatch lookup", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const [workspace] = await createAdapters(layout);
   const operationId = "operation:substituted-root";
@@ -232,7 +241,7 @@ test("rejects workspace pathname substitution on replay and dispatch lookup", as
   await layout.cleanup();
 });
 
-test("rejects overlapping roots, symlink aliases, and symlink ancestors", async () => {
+linuxDurableDirectoryTest("rejects overlapping roots, symlink aliases, and symlink ancestors", async () => {
   const layout = await createSyntheticFilesystemLayout();
   await assert.rejects(
     createNodeContainedTurnWorkspace({
@@ -264,7 +273,7 @@ test("rejects overlapping roots, symlink aliases, and symlink ancestors", async 
   await layout.cleanup();
 });
 
-test("descriptor traversal rejects root replacement, leaf symlinks, and hard links", async () => {
+linuxDurableDirectoryTest("descriptor traversal rejects root replacement, leaf symlinks, and hard links", async () => {
   const layout = await createSyntheticFilesystemLayout();
   let movedRoot = "";
   const rootSwapFault = {
@@ -310,7 +319,7 @@ test("descriptor traversal rejects root replacement, leaf symlinks, and hard lin
   await Promise.all([layout.cleanup(), secondLayout.cleanup()]);
 });
 
-test("rejects path escape and portable case or Unicode collisions", async () => {
+linuxDurableDirectoryTest("rejects path escape and portable case or Unicode collisions", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const [workspace, artifacts] = await createAdapters(layout);
   await assert.rejects(
@@ -348,7 +357,7 @@ test("rejects path escape and portable case or Unicode collisions", async () => 
   await layout.cleanup();
 });
 
-test("enforces bounded entries, files, total bytes, and canonical output", async () => {
+linuxDurableDirectoryTest("enforces bounded entries, files, total bytes, and canonical output", async () => {
   const cases = [
     {
       limits: { maxDepth: 2, maxEntries: 1, maxFileBytes: 128, maxTotalBytes: 2_048 },
@@ -402,7 +411,7 @@ test("enforces bounded entries, files, total bytes, and canonical output", async
   await layout.cleanup();
 });
 
-test("detects digest collision and corrupt manifest without publishing false truth", async () => {
+linuxDurableDirectoryTest("detects digest collision and corrupt manifest without publishing false truth", async () => {
   const collisionLayout = await createSyntheticFilesystemLayout();
   const [collisionWorkspace, collisionArtifacts] = await createAdapters(collisionLayout, {
     artifact: { testDigest: createDomainSelectiveFakeDigest("blob") },
@@ -429,7 +438,7 @@ test("detects digest collision and corrupt manifest without publishing false tru
   await Promise.all([collisionLayout.cleanup(), corruptLayout.cleanup()]);
 });
 
-test("fails closed when retained seal or canonical result publication is missing or corrupt", async () => {
+linuxDurableDirectoryTest("fails closed when retained seal or canonical result publication is missing or corrupt", async () => {
   const missingSealLayout = await createSyntheticFilesystemLayout();
   const [missingSealWorkspace, missingSealArtifacts] = await createAdapters(missingSealLayout);
   const missingSealOperation = "operation:missing-seal";
@@ -487,7 +496,7 @@ test("fails closed when retained seal or canonical result publication is missing
   await Promise.all([missingSealLayout.cleanup(), corruptResultLayout.cleanup()]);
 });
 
-test("recovers durable seal and closure transitions after injected failures", async () => {
+linuxDurableDirectoryTest("recovers durable seal and closure transitions after injected failures", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const sealFaults = createDeterministicFaultInjector();
   sealFaults.arm("artifact.seal-record.metadata.published", new Error("injected seal interruption"));
@@ -529,7 +538,7 @@ test("recovers durable seal and closure transitions after injected failures", as
   await layout.cleanup();
 });
 
-test("recovers replay-safe workspace creation across subprocess kill boundaries", async () => {
+linuxDurableDirectoryTest("recovers replay-safe workspace creation across subprocess kill boundaries", async () => {
   const points = [
     "workspace.create.directory-created",
     "workspace.creation.metadata.written",
@@ -567,7 +576,7 @@ test("recovers replay-safe workspace creation across subprocess kill boundaries"
   }
 });
 
-test("recovers CAS, seal, result and receipt publication across SIGKILL boundaries", async () => {
+linuxDurableDirectoryTest("recovers CAS, seal, result and receipt publication across SIGKILL boundaries", async () => {
   const sealPoints = [
     "artifact.blob.cas.written",
     "artifact.blob.cas.synced",
@@ -644,7 +653,7 @@ test("recovers CAS, seal, result and receipt publication across SIGKILL boundari
   }
 });
 
-test("cleans partial immutable writes and partial reconstruction", async () => {
+linuxDurableDirectoryTest("cleans partial immutable writes and partial reconstruction", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const writeFaults = createDeterministicFaultInjector();
   writeFaults.arm("artifact.blob.cas.written", new Error("injected blob write failure"));
@@ -680,7 +689,7 @@ test("cleans partial immutable writes and partial reconstruction", async () => {
   await layout.cleanup();
 });
 
-test("refuses rehydration replacement and preserves unknown destination content", async () => {
+linuxDurableDirectoryTest("refuses rehydration replacement and preserves unknown destination content", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const [workspace, artifacts] = await createAdapters(layout);
   const operationId = "operation:rehydration-replacement";
@@ -714,7 +723,7 @@ test("refuses rehydration replacement and preserves unknown destination content"
   await layout.cleanup();
 });
 
-test("rejects special modes and closure or quarantine replacement residue", async () => {
+linuxDurableDirectoryTest("rejects special modes and closure or quarantine replacement residue", async () => {
   const modeLayout = await createSyntheticFilesystemLayout();
   const [modeWorkspace, modeArtifacts] = await createAdapters(modeLayout);
   const modeOperation = "operation:special-mode";
@@ -770,7 +779,7 @@ test("rejects special modes and closure or quarantine replacement residue", asyn
   await Promise.all([modeLayout.cleanup(), closeLayout.cleanup(), quarantineLayout.cleanup()]);
 });
 
-test("quarantine and cleanup report exact custody outcomes", async () => {
+linuxDurableDirectoryTest("quarantine and cleanup report exact custody outcomes", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const [workspace] = await createAdapters(layout);
   const created = await createWorkspace(workspace, "operation:quarantine");
@@ -794,7 +803,7 @@ test("quarantine and cleanup report exact custody outcomes", async () => {
   await layout.cleanup();
 });
 
-test("current kernel closure proofs survive adapter restart without path evidence", async () => {
+linuxDurableDirectoryTest("current kernel closure proofs survive adapter restart without path evidence", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const operationId = containedTurnIdentity("operation", "operation:kernel-filesystem-restart");
   const workspace = await createNodeContainedTurnWorkspace({
@@ -843,7 +852,7 @@ test("current kernel closure proofs survive adapter restart without path evidenc
   await layout.cleanup();
 });
 
-test("current seven-port composition closes through durable filesystem adapters", async () => {
+linuxDurableDirectoryTest("current seven-port composition closes through durable filesystem adapters", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const workspace = await createNodeContainedTurnWorkspace({
     ...layout.workspaceOptions, limits: SMALL_LIMITS,

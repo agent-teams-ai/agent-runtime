@@ -13,7 +13,7 @@ import {
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { promisify } from "node:util";
 
 import {
@@ -27,6 +27,7 @@ import {
   assertNoTemporaryResidue,
   cleanupTrackedFilesystemLayouts,
   createSyntheticFilesystemLayout,
+  listRelativeResidue,
 } from "./filesystem-contained-turn/fixture.ts";
 
 const execFile = promisify(execFileCallback);
@@ -34,6 +35,17 @@ const SCOPE = Object.freeze({ projectId: "project:test", tenantId: "tenant:test"
 const LIMITS = Object.freeze({
   maxDepth: 4, maxEntries: 16, maxFileBytes: 1_024, maxTotalBytes: 16 * 1_024,
 });
+const LINUX_DURABLE_DIRECTORY_REASON =
+  "requires qualified Linux /proc descriptor custody, process locks, and renameat2 publication";
+const NON_LINUX_REFUSAL_REASON =
+  "exercises the typed refusal boundary only on platforms without qualified durable directory custody";
+
+const linuxDurableDirectoryTest = (
+  name: string,
+  body: (context: TestContext) => Promise<void> | void,
+) => test(name, {
+  skip: process.platform === "linux" ? false : LINUX_DURABLE_DIRECTORY_REASON,
+}, body);
 const crashWorker = fileURLToPath(new URL(
   "./filesystem-contained-turn/crash-worker.ts",
   import.meta.url,
@@ -114,7 +126,47 @@ test("current kernel declarations expose only opaque workspace identity", async 
   assert.doesNotMatch(declarations, /descriptorPath|stable_directory|mountId|readonly dev:|readonly ino:/u);
 });
 
-test("opaque workspace launch authority is scope-bound, stale-aware, and one-use", async () => {
+const assertTypedFilesystemUnsupported = (error: unknown): boolean => {
+  assert.ok(error instanceof Error && "code" in error);
+  assert.equal(error.name, "ContainedTurnFilesystemUnsupportedError");
+  assert.equal(error.code, "ERR_CONTAINED_TURN_FILESYSTEM_UNSUPPORTED");
+  assert.match(error.message, /filesystem custody is unsupported/u);
+  return true;
+};
+
+test("non-Linux workspace factory refuses typed unsupported before filesystem mutation", {
+  skip: process.platform === "linux" ? NON_LINUX_REFUSAL_REASON : false,
+}, async () => {
+  const layout = await createSyntheticFilesystemLayout();
+  try {
+    const before = await listRelativeResidue(layout.campaignRoot);
+    await assert.rejects(
+      createNodeContainedTurnWorkspace({ ...layout.workspaceOptions, limits: LIMITS }),
+      assertTypedFilesystemUnsupported,
+    );
+    assert.deepEqual(await listRelativeResidue(layout.campaignRoot), before);
+  } finally {
+    await layout.cleanup();
+  }
+});
+
+test("non-Linux artifact factory refuses typed unsupported before filesystem mutation", {
+  skip: process.platform === "linux" ? NON_LINUX_REFUSAL_REASON : false,
+}, async () => {
+  const layout = await createSyntheticFilesystemLayout();
+  try {
+    const before = await listRelativeResidue(layout.campaignRoot);
+    await assert.rejects(
+      createNodeContainedTurnArtifacts({ ...layout.artifactOptions, limits: LIMITS }),
+      assertTypedFilesystemUnsupported,
+    );
+    assert.deepEqual(await listRelativeResidue(layout.campaignRoot), before);
+  } finally {
+    await layout.cleanup();
+  }
+});
+
+linuxDurableDirectoryTest("opaque workspace launch authority is scope-bound, stale-aware, and one-use", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const workspace = await createNodeContainedTurnWorkspace({ ...layout.workspaceOptions, limits: LIMITS });
   const operationId = "operation:retained-capability";
@@ -166,7 +218,7 @@ test("opaque workspace launch authority is scope-bound, stale-aware, and one-use
   await layout.cleanup();
 });
 
-test("unknown empty rehydration destination is quarantined instead of promoted", async () => {
+linuxDurableDirectoryTest("unknown empty rehydration destination is quarantined instead of promoted", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const workspace = await createNodeContainedTurnWorkspace({ ...layout.workspaceOptions, limits: LIMITS });
   const artifacts = await createNodeContainedTurnArtifacts({ ...layout.artifactOptions, limits: LIMITS });
@@ -186,7 +238,7 @@ test("unknown empty rehydration destination is quarantined instead of promoted",
   await layout.cleanup();
 });
 
-test("same-UID staging residue is retained in stable no-replace quarantine", async () => {
+linuxDurableDirectoryTest("same-UID staging residue is retained in stable no-replace quarantine", async () => {
   const layout = await createSyntheticFilesystemLayout();
   await createNodeContainedTurnArtifacts({ ...layout.artifactOptions, limits: LIMITS });
   const residueName = ".ar-stage-v1-cas-00000000-0000-4000-8000-000000000000.tmp";
@@ -199,7 +251,7 @@ test("same-UID staging residue is retained in stable no-replace quarantine", asy
   await layout.cleanup();
 });
 
-test("artifact startup scavenging cannot move an active CAS staging file", async () => {
+linuxDurableDirectoryTest("artifact startup scavenging cannot move an active CAS staging file", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const workspace = await createNodeContainedTurnWorkspace({
     ...layout.workspaceOptions, limits: LIMITS,
@@ -244,7 +296,7 @@ test("artifact startup scavenging cannot move an active CAS staging file", async
   await layout.cleanup();
 });
 
-test("workspace startup scavenging cannot move an active metadata staging file", async () => {
+linuxDurableDirectoryTest("workspace startup scavenging cannot move an active metadata staging file", async () => {
   const layout = await createSyntheticFilesystemLayout();
   await createNodeContainedTurnWorkspace({ ...layout.workspaceOptions, limits: LIMITS });
   const operationId = "operation:active-workspace-metadata";
@@ -283,7 +335,7 @@ test("workspace startup scavenging cannot move an active metadata staging file",
   await layout.cleanup();
 });
 
-test("rehydration recovers every new durable intent and publication crash boundary", async () => {
+linuxDurableDirectoryTest("rehydration recovers every new durable intent and publication crash boundary", async () => {
   const points = [
     "artifact.rehydrate.created",
     "artifact.rehydrate.verified",
@@ -323,7 +375,7 @@ test("rehydration recovers every new durable intent and publication crash bounda
   }
 });
 
-test("cross-process rehydration contenders converge through shared staging exclusion", async () => {
+linuxDurableDirectoryTest("cross-process rehydration contenders converge through shared staging exclusion", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const workspace = await createNodeContainedTurnWorkspace({
     ...layout.workspaceOptions, limits: LIMITS,
@@ -360,7 +412,7 @@ test("cross-process rehydration contenders converge through shared staging exclu
   await layout.cleanup();
 });
 
-test("startup scavenging waits for staging-to-intent publication in another process", async () => {
+linuxDurableDirectoryTest("startup scavenging waits for staging-to-intent publication in another process", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const workspace = await createNodeContainedTurnWorkspace({
     ...layout.workspaceOptions, limits: LIMITS,
@@ -402,7 +454,7 @@ test("startup scavenging waits for staging-to-intent publication in another proc
   await layout.cleanup();
 });
 
-test("rehydration staging exclusion remains held through final publication verification", async () => {
+linuxDurableDirectoryTest("rehydration staging exclusion remains held through final publication verification", async () => {
   const layout = await createSyntheticFilesystemLayout();
   const workspace = await createNodeContainedTurnWorkspace({
     ...layout.workspaceOptions, limits: LIMITS,
@@ -446,7 +498,7 @@ test("rehydration staging exclusion remains held through final publication verif
   await layout.cleanup();
 });
 
-test("partial parallel bound-directory acquisition closes every successful descriptor", async () => {
+linuxDurableDirectoryTest("partial parallel bound-directory acquisition closes every successful descriptor", async () => {
   const layout = await createSyntheticFilesystemLayout();
   await createNodeContainedTurnArtifacts({ ...layout.artifactOptions, limits: LIMITS });
   const staging = await bindContainedTurnRoot(join(layout.artifactRoot, "staging"), {
@@ -475,7 +527,7 @@ test("partial parallel bound-directory acquisition closes every successful descr
   await layout.cleanup();
 });
 
-test("filesystem fault port fails closed for permission and capacity write denials", async t => {
+linuxDurableDirectoryTest("filesystem fault port fails closed for permission and capacity write denials", async t => {
   for (const code of ["EACCES", "ENOSPC", "EDQUOT"] as const) {
     await t.test(code, async () => {
       const layout = await createSyntheticFilesystemLayout();
@@ -517,7 +569,7 @@ test("filesystem fault port fails closed for permission and capacity write denia
   }
 });
 
-test("no-replace workspace publication preserves inserted destination and detects source replacement", async () => {
+linuxDurableDirectoryTest("no-replace workspace publication preserves inserted destination and detects source replacement", async () => {
   const destinationLayout = await createSyntheticFilesystemLayout();
   let insertedPath = "";
   const destinationWorkspace = await createNodeContainedTurnWorkspace({
@@ -565,7 +617,7 @@ test("no-replace workspace publication preserves inserted destination and detect
   await Promise.all([destinationLayout.cleanup(), sourceLayout.cleanup()]);
 });
 
-test("workspace traversal rejects FIFO, socket, and device nodes", async t => {
+linuxDurableDirectoryTest("workspace traversal rejects FIFO, socket, and device nodes", async t => {
   const cases = ["fifo", "socket", "device"] as const;
   for (const kind of cases) {
     await t.test(kind, async child => {
