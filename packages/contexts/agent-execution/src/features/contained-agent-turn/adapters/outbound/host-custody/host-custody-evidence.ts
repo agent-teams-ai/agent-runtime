@@ -194,9 +194,11 @@ interface ContainmentOptions {
 }
 
 const DEADLINE_EXCEEDED = Symbol("host-custody-deadline-exceeded");
+const FINALITY_FAILED = Symbol("host-custody-finality-failed");
 const PHASE_TIMEOUT = Symbol("host-custody-phase-timeout");
 
 type DeadlineAwait<Value> = Value | typeof DEADLINE_EXCEEDED | typeof PHASE_TIMEOUT;
+type FinalityAwait<Value> = DeadlineAwait<Value> | typeof FINALITY_FAILED;
 
 const deadlineOpen = (deadline: number, options: ContainmentOptions): boolean =>
   deadline - options.monotonicNow() > 0;
@@ -233,15 +235,21 @@ const invokeFinalityWithDeadline = async <Value>(
   deadline: number,
   options: ContainmentOptions,
   phaseMaximumMs = Number.POSITIVE_INFINITY,
-): Promise<DeadlineAwait<Value>> => {
-  const invoked = promise();
+): Promise<FinalityAwait<Value>> => {
+  let invoked: Promise<Value>;
+  try {
+    invoked = promise();
+  } catch {
+    return FINALITY_FAILED;
+  }
+  const observed = invoked.then<Value, typeof FINALITY_FAILED>(
+    value => value,
+    () => FINALITY_FAILED,
+  );
   if (!deadlineOpen(deadline, options)) {
-    void invoked.catch(() => null);
     return DEADLINE_EXCEEDED;
   }
-  const result = await awaitWithDeadline(() => invoked, deadline, options, phaseMaximumMs);
-  if (result === DEADLINE_EXCEEDED) {void invoked.catch(() => null);}
-  return result;
+  return awaitWithDeadline(() => observed, deadline, options, phaseMaximumMs);
 };
 
 type ClosureAttempt =
@@ -361,15 +369,20 @@ const terminateStableGuardianGroup = async (
     options,
     options.forceKillAfterMs,
   );
-  const killed = killedResult === DEADLINE_EXCEEDED || killedResult === PHASE_TIMEOUT
+  const killed = killedResult === DEADLINE_EXCEEDED ||
+      killedResult === FINALITY_FAILED ||
+      killedResult === PHASE_TIMEOUT
     ? undefined
     : killedResult;
+  const killInvocationFailed = killedResult === FINALITY_FAILED || killedResult === PHASE_TIMEOUT;
   const guardianClosed = guardian === undefined
     ? PHASE_TIMEOUT
     : await awaitWithDeadline(
       () => guardian.guardianExit.then(() => true), containmentDeadline, options, options.forceKillAfterMs,
     );
-  const residueFailure = await residueClosureFailure(live, killed, containmentDeadline, options);
+  const residueFailure = await residueClosureFailure(
+    live, killed, killInvocationFailed, containmentDeadline, options,
+  );
   if (!deadlineOpen(containmentDeadline, options)) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
   if (termination.kind === "unproven") {return termination;}
   if (killedResult === DEADLINE_EXCEEDED || guardianClosed === DEADLINE_EXCEEDED) {
@@ -434,6 +447,7 @@ const terminateGuardian = async (
 const residueClosureFailure = async (
   live: ContainmentState,
   killed: boolean | undefined,
+  killInvocationFailed: boolean,
   containmentDeadline: number,
   options: ContainmentOptions,
 ): Promise<HostCustodyUnprovenReason | undefined> => {
@@ -443,7 +457,8 @@ const residueClosureFailure = async (
     options,
   );
   if (residue === DEADLINE_EXCEEDED) {return "owner-deadline-exceeded";}
-  if (residue === PHASE_TIMEOUT) {return "operation-residue-unproven";}
+  if (killInvocationFailed) {return "operation-cgroup-kill-unproven";}
+  if (residue === FINALITY_FAILED || residue === PHASE_TIMEOUT) {return "operation-residue-unproven";}
   if (residue === "empty") {return undefined;}
   if (killed !== true) {return "operation-cgroup-kill-unproven";}
   return residue === "residue" ? "operation-residue-remains" : "operation-residue-unproven";

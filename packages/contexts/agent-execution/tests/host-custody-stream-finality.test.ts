@@ -46,6 +46,62 @@ class HeldWriteSink extends Writable {
   }
 }
 
+const completedIngress = async () => {
+  const stdoutSource = new PassThrough();
+  const stderrSource = new PassThrough();
+  const stdout = new HostStdoutIngress(64, 1_024, () => {assert.fail("stdout must remain bounded");});
+  const stderr = new HostStderrIngress(1_024, 1_024, () => {assert.fail("stderr must remain bounded");});
+  stdout.attach(stdoutSource, Promise.resolve("complete"));
+  stderr.attach(stderrSource, Promise.resolve("complete"));
+  stdoutSource.end();
+  stderrSource.end();
+  await Promise.all([stdout.done, stderr.done]);
+  return { stderr, stdout };
+};
+
+const finalityFailureLive = async (identity: string, killAll: () => Promise<boolean>,
+  proveEmpty: () => Promise<"empty" | "residue" | "unproven">,
+  guardianExit?: Promise<{ readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }>,
+) => {
+  const ingress = await completedIngress();
+  const observedGuardianExit = Object.freeze({ code: null, signal: "SIGKILL" as const, status: "observed" as const });
+  const providerExit = Object.freeze({ code: 0, signal: null });
+  return {
+    attemptId: `attempt:${identity}`,
+    closureEvidence: strictClosure("unproven"),
+    containmentDeadline: performance.now() + 1_000,
+    custodyRef: `custody:${identity}`,
+    evidenceSealed: false,
+    exit: Promise.resolve(providerExit),
+    fingerprint: { fingerprintSha256: `fingerprint:${identity}` },
+    guardian: {
+      guardianExit: guardianExit ?? Promise.resolve(observedGuardianExit),
+      guardianExitObservation: guardianExit === undefined ? observedGuardianExit : undefined,
+      providerExit,
+      async signalGroup() {return "sent" as const;},
+      async signalProvider() {return "unproven" as const;},
+    } as never,
+    identity: { status: "proved" },
+    opening: Promise.resolve(),
+    operationId: `operation:${identity}`,
+    privateRootClosure: { identitySha256: `private-root:${identity}`, status: "active" as const },
+    residueAuthority: {
+      async attachGuardian() {return true;},
+      async close() {return true;},
+      killAll,
+      proveEmpty,
+    },
+    sealed: true,
+    signalAuthorized: false,
+    spawnStatus: "acknowledged" as const,
+    ...ingress,
+  };
+};
+
+const finalityOptions = (forceKillAfterMs = 100) => ({ containmentAfterMs: 1_000, drainAfterMs: 100,
+  forceKillAfterMs, hostLifecycleGenerationSha256: "host-generation:finality-failure",
+  monotonicNow: () => performance.now(), terminateAfterMs: 100 });
+
 test("containment before guardian dispatch proves empty streams without raw EOF inference", async () => {
   const workspaceRef = await disposableRoot();
   const deferred = await createCustody({ binding: claudeBinding, spawnMode: "sdk-delegated", workspaceRef });
@@ -235,6 +291,104 @@ test("provider exit preserves delayed stream truth before the final residue swee
   assert.deepEqual(order, ["provider-exit", "stream-final", "kill-all", "prove-empty"]);
   assert.equal(stdout.snapshot().status, "complete");
   assert.equal(stderr.snapshot().status, "complete");
+});
+
+test("synchronous cgroup kill failure remains unproven and does not skip the final proof", async () => {
+  let killCalls = 0;
+  let proveCalls = 0;
+  const live = await finalityFailureLive(
+    "synchronous-kill-failure",
+    () => {killCalls += 1; throw new Error("synchronous kill failure");},
+    async () => {proveCalls += 1; return "empty";},
+  );
+
+  const outcome = await containCustody(live, live, finalityOptions());
+  assert.equal(outcome.kind, "unproven");
+  assert.match(outcome.kind === "unproven" ? outcome.evidenceRef : "", /operation-cgroup-kill-unproven/u);
+  assert.deepEqual([killCalls, proveCalls, live.evidenceSealed], [1, 1, false]);
+});
+
+test("asynchronous cgroup kill rejection is observed and does not skip the final proof", async () => {
+  let killCalls = 0;
+  let proveCalls = 0;
+  const live = await finalityFailureLive(
+    "asynchronous-kill-failure",
+    () => {killCalls += 1; return Promise.reject(new Error("asynchronous kill failure"));},
+    async () => {proveCalls += 1; return "empty";},
+  );
+
+  const outcome = await containCustody(live, live, finalityOptions());
+  await new Promise(resolve => {setImmediate(resolve);});
+  assert.equal(outcome.kind, "unproven");
+  assert.match(outcome.kind === "unproven" ? outcome.evidenceRef : "", /operation-cgroup-kill-unproven/u);
+  assert.deepEqual([killCalls, proveCalls, live.evidenceSealed], [1, 1, false]);
+});
+
+test("cgroup kill phase timeout survives later guardian exit and an empty final proof", async () => {
+  let settleGuardianExit: ((exit: { readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }) => void) | undefined;
+  const guardianExit = new Promise<{ readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }>(
+    resolve => {settleGuardianExit = resolve;},
+  );
+  let killCalls = 0;
+  let proveCalls = 0;
+  const live = await finalityFailureLive(
+    "kill-timeout-then-empty",
+    () => {
+      killCalls += 1;
+      setTimeout(() => {settleGuardianExit?.({ code: null, signal: "SIGKILL", status: "observed" });}, 10);
+      return new Promise<boolean>(() => {});
+    },
+    async () => {proveCalls += 1; return "empty";},
+    guardianExit,
+  );
+
+  const outcome = await containCustody(live, live, finalityOptions(5));
+  assert.equal(outcome.kind, "unproven");
+  assert.match(outcome.kind === "unproven" ? outcome.evidenceRef : "", /operation-cgroup-kill-unproven/u);
+  assert.deepEqual([killCalls, proveCalls, live.evidenceSealed], [1, 1, false]);
+});
+
+test("owner deadline exhaustion remains authoritative after the mandatory failed-kill sweep", async () => {
+  let monotonicNow = 0;
+  let killCalls = 0;
+  let proveCalls = 0;
+  const live = await finalityFailureLive(
+    "failed-kill-owner-deadline",
+    () => {killCalls += 1; throw new Error("synchronous kill failure");},
+    async () => {proveCalls += 1; monotonicNow = 101; return "empty";},
+  );
+  live.containmentDeadline = 100;
+
+  const outcome = await containCustody(live, live, {
+    ...finalityOptions(),
+    monotonicNow: () => monotonicNow,
+  });
+  assert.equal(outcome.kind, "unproven");
+  assert.match(outcome.kind === "unproven" ? outcome.evidenceRef : "", /owner-deadline-exceeded/u);
+  assert.deepEqual([killCalls, proveCalls, live.evidenceSealed], [1, 1, false]);
+});
+
+test("synchronous and asynchronous empty-proof failures remain observed and unproven", async t => {
+  for (const [identity, proveEmpty] of [
+    ["synchronous-proof-failure", () => {throw new Error("synchronous proof failure");}],
+    ["asynchronous-proof-failure", () => Promise.reject(new Error("asynchronous proof failure"))],
+  ] as const) {
+    await t.test(identity, async () => {
+      let killCalls = 0;
+      let proveCalls = 0;
+      const live = await finalityFailureLive(
+        identity,
+        async () => {killCalls += 1; return true;},
+        () => {proveCalls += 1; return proveEmpty();},
+      );
+
+      const outcome = await containCustody(live, live, finalityOptions());
+      await new Promise(resolve => {setImmediate(resolve);});
+      assert.equal(outcome.kind, "unproven");
+      assert.match(outcome.kind === "unproven" ? outcome.evidenceRef : "", /operation-residue-unproven/u);
+      assert.deepEqual([killCalls, proveCalls, live.evidenceSealed], [1, 1, false]);
+    });
+  }
 });
 
 test("escaped residue stays fail closed after preserved stream finality", async () => {
