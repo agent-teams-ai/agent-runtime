@@ -7,7 +7,7 @@
     "build": "tsc --project tsconfig.json --pretty false",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
-    "test": "node --test --test-concurrency=1 tests/capability-bundle-contract.test.ts tests/codex-setup.e2e.test.ts tests/claude-code-setup.e2e.test.ts tests/claude-code-semantic-correction.e2e.test.ts tests/contained-turn.e2e.test.ts tests/contained-turn-disposal-races.e2e.test.ts tests/contained-turn-malformed-custody.e2e.test.ts tests/contained-turn-nonterminal-custody.e2e.test.ts tests/runtime-access-boundaries.e2e.test.ts tests/trusted-runtime-access-scope.unit.test.ts tests/public-api.test.ts tests/claude-code-contract.test.ts",
+    "test": "node --test --test-concurrency=1 tests/capability-bundle-contract.test.ts tests/codex-setup.e2e.test.ts tests/claude-code-setup.e2e.test.ts tests/claude-code-semantic-correction.e2e.test.ts tests/contained-turn.e2e.test.ts tests/contained-turn-provider-access-integration.test.ts tests/contained-turn-disposal-races.e2e.test.ts tests/contained-turn-malformed-custody.e2e.test.ts tests/contained-turn-nonterminal-custody.e2e.test.ts tests/runtime-access-boundaries.e2e.test.ts tests/trusted-runtime-access-scope.unit.test.ts tests/public-api.test.ts tests/claude-code-contract.test.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
   },
   "agentTeamsArchitecture": {
@@ -18,6 +18,9 @@
     "@agent-teams/agent-execution": "workspace:*",
     "@agent-teams/runtime-configuration": "workspace:*",
     "@agent-teams/runtime-security": "workspace:*"
+  },
+  "devDependencies": {
+    "@agent-teams/provider-access": "workspace:*"
   },
   "files": ["dist"],
   "exports": {
