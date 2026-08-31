@@ -358,23 +358,60 @@ test("provider stdin accounts committed bytes exactly and fences a second frame 
   assert.deepEqual(containmentReasons(current.control), ["init-failure"]);
 });
 
+test("provider stdin close while blocked fails through containment, but requested EOF close does not", () => {
+  const blocked = fixture(); blocked.runtime.receive(handshake); blocked.runtime.receive(request());
+  blocked.syscalls.inputStatus = "blocked"; assert.equal(blocked.runtime.writeProviderInput(Buffer.from("x")), "blocked");
+  blocked.runtime.providerInputClosed();
+  assert.equal(blocked.runtime.snapshot().phase, "failed"); assert.deepEqual(blocked.syscalls.signals.map(item => item.signal), ["SIGTERM"]);
+  assert.deepEqual(containmentReasons(blocked.control), ["init-failure"]);
+
+  const eof = fixture(); eof.runtime.receive(handshake); eof.runtime.receive(request());
+  eof.runtime.receive({kind: "provider-input-eof", requestId: request().requestId}); eof.runtime.providerInputClosed();
+  assert.equal(eof.runtime.snapshot().phase, "provider-running");
+});
+
 test("control corruption TERM/KILL containment waits for root exit and output terminalization", () => {
-  const current = fixture(); current.runtime.receive(handshake); current.runtime.receive(request());
-  current.runtime.malformedControlFrame();
+  const current = fixture(); current.runtime.receive(handshake); current.runtime.receive(request()); current.runtime.malformedControlFrame();
   assert.equal(current.runtime.snapshot().failureCleanupComplete, false);
   assert.deepEqual(current.syscalls.signals.map(item => item.signal), ["SIGTERM"]);
   assert.deepEqual(containmentReasons(current.control), ["init-failure"]);
   assert.equal(current.control.some(message => message.kind === "provider-drain-complete"), false);
 
-  current.syscalls.monotonic += 50; current.runtime.tick();
-  assert.deepEqual(current.syscalls.signals.map(item => item.signal), ["SIGTERM", "SIGKILL"]);
-  current.runtime.closeProviderOutput(current.syscalls.stdoutHandle);
-  current.runtime.closeProviderOutput(current.syscalls.stderrHandle);
+  current.syscalls.monotonic += 50; current.runtime.tick(); assert.deepEqual(current.syscalls.signals.map(item => item.signal), ["SIGTERM", "SIGKILL"]);
+  current.runtime.closeProviderOutput(current.syscalls.stdoutHandle); current.runtime.closeProviderOutput(current.syscalls.stderrHandle);
   assert.equal(current.runtime.snapshot().failureCleanupComplete, false);
-  current.syscalls.rootExits.push({exitCode: null, handle: current.syscalls.providerRootHandle, signal: "SIGKILL"});
-  current.runtime.tick();
+  current.syscalls.rootExits.push({exitCode: null, handle: current.syscalls.providerRootHandle, signal: "SIGKILL"}); current.runtime.tick();
   assert.equal(current.runtime.snapshot().failureCleanupComplete, true);
-  assert.equal(current.runtime.snapshot().providerRootTracked, false);
+  assert.equal(current.runtime.snapshot().providerRootTracked, false); assert.equal(current.control.some(message => message.kind === "provider-drain-complete"), false);
+});
+
+test("control failure in stopping and exited phases preserves exact cleanup ordering", () => {
+  const stopping = fixture(); stopping.runtime.receive(handshake); stopping.runtime.receive(request()); stopping.runtime.requestStop(); stopping.runtime.controlChannelClosed();
+  assert.deepEqual(stopping.syscalls.signals.map(item => item.signal), ["SIGTERM"]);
+  stopping.syscalls.monotonic += 50; stopping.runtime.tick(); assert.deepEqual(stopping.syscalls.signals.map(item => item.signal), ["SIGTERM", "SIGKILL"]);
+  assert.deepEqual(containmentReasons(stopping.control), ["init-failure"]);
+
+  const exited = fixture(); exited.runtime.receive(handshake); exited.runtime.receive(request());
+  exited.syscalls.rootExits.push({exitCode: 0, handle: exited.syscalls.providerRootHandle, signal: null}); exited.runtime.tick();
+  exited.runtime.malformedControlFrame(); assert.deepEqual(exited.syscalls.signals, []);
+  assert.equal(exited.runtime.snapshot().failureCleanupComplete, false);
+  exited.runtime.closeProviderOutput(exited.syscalls.stdoutHandle); exited.runtime.closeProviderOutput(exited.syscalls.stderrHandle);
+  assert.equal(exited.runtime.snapshot().failureCleanupComplete, true); assert.deepEqual(containmentReasons(exited.control), ["init-failure"]);
+});
+
+test("an explicit deadline stop enters failed cleanup rather than successful drain", () => {
+  const current = fixture(); current.runtime.receive(handshake); current.runtime.receive(request()); current.runtime.requestStop("deadline");
+  assert.equal(current.runtime.snapshot().phase, "failed"); assert.deepEqual(current.syscalls.signals.map(item => item.signal), ["SIGTERM"]);
+  assert.deepEqual(containmentReasons(current.control), ["deadline"]);
+});
+
+test("failed cleanup has explicit TERM, KILL, and terminal observation bounds", () => {
+  const current = fixture(); current.runtime.receive(handshake); current.runtime.receive(request()); current.runtime.failInit();
+  current.syscalls.monotonic += 50; current.runtime.tick(); assert.deepEqual(current.syscalls.signals.map(item => item.signal), ["SIGTERM", "SIGKILL"]);
+  assert.equal(current.runtime.snapshot().failureCleanupComplete, false);
+  current.syscalls.monotonic += 50; current.runtime.tick(); assert.equal(current.runtime.snapshot().failureCleanupComplete, true);
+  assert.equal(current.runtime.snapshot().providerRootTracked, true);
+  assert.deepEqual(containmentReasons(current.control), ["init-failure"]);
   assert.equal(current.control.some(message => message.kind === "provider-drain-complete"), false);
 });
 
@@ -458,8 +495,10 @@ test("cancellation and a forward wall-clock jump TERM the root then request oute
     assert.deepEqual(current.syscalls.signals.map(item => item.signal), ["SIGTERM"]);
     current.syscalls.monotonic += 50;
     current.runtime.tick();
-    assert.deepEqual(containmentReasons(current.control), ["shutdown-timeout"]);
+    assert.deepEqual(current.syscalls.signals.map(item => item.signal), ["SIGTERM", "SIGKILL"]);
+    assert.deepEqual(containmentReasons(current.control), [cause === "deadline" ? "deadline" : "shutdown-timeout"]);
     assert(current.control.some(message => message.kind === "container-containment-request"));
+    assert.equal(current.runtime.snapshot().phase, "failed");
   }
 });
 
@@ -496,6 +535,8 @@ test("root exit does not close a blocked drain or evade the absolute deadline", 
   current.syscalls.monotonic += 50;
   current.runtime.tick();
   assert.deepEqual(containmentReasons(current.control), ["deadline"]);
+  assert.equal(current.runtime.snapshot().failureCleanupComplete, true);
+  assert.equal(current.runtime.snapshot().stdout.status, "failed");
 });
 
 test("known no-start, ambiguous spawn failure, and init crash remain distinct", () => {

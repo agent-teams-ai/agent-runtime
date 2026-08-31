@@ -209,6 +209,7 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     this.#bindOutput(generation, "stderr", generation.stderr, child.stderr);
     child.stdin.on("drain", () => {this.runtime?.stdinDrainReady();});
     child.stdin.once("error", () => {this.runtime?.failInit();});
+    child.stdin.once("close", () => {this.runtime?.tick(); this.runtime?.providerInputClosed();});
     return {handle: generation.root, kind: "started", pid: child.pid, stderr: generation.stderr, stdout: generation.stdout};
   }
 

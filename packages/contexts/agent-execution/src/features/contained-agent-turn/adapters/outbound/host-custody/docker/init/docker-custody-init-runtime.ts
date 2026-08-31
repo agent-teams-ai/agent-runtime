@@ -24,6 +24,7 @@ import type {
   DockerCustodyOutputWriteResult, DockerCustodyProviderOutputHandle, DockerCustodyProviderRootExit,
   DockerCustodyProviderRootHandle, DockerCustodyStreamEvidence,
 } from "./docker-custody-init-runtime-types.js";
+import {DockerCustodyControlWriter} from "./docker-custody-init-control-writer.js";
 import {DockerCustodyProviderInputWriter} from "./docker-custody-init-input.js";
 import {boundedInteger, identityEqual, monotonicNow, opaqueHandle, safeEqual, safeMonotonicDeadline} from "./docker-custody-init-guards.js";
 export type * from "./docker-custody-init-runtime-types.js";
@@ -34,10 +35,6 @@ interface MutableStreamEvidence {
 interface ProviderGeneration {
   readonly rootHandle: DockerCustodyProviderRootHandle; readonly stderr: DockerCustodyProviderOutputHandle; readonly stdout: DockerCustodyProviderOutputHandle;
 }
-interface PendingControlEvidence {
-  readonly generation: ProviderGeneration | null; readonly message: DockerCustodyInitMessage; readonly onAccepted: (() => void) | undefined;
-}
-
 const EMPTY_SHA256 = createHash("sha256").digest("hex");
 const newStreamEvidence = (): MutableStreamEvidence => ({
   bytes: 0, eof: false, eofPending: false, hash: createHash("sha256"), pendingBytes: null, pendingCursor: 0, status: "open",
@@ -50,11 +47,10 @@ export class DockerCustodyInitRuntime {
   #acknowledgement: DockerCustodyInitSnapshot["acknowledgement"] = "not-applicable";
   #closure: DockerCustodyInitClosureSubresult | null = null; #closurePending = false;
   #containmentEvidence: DockerCustodyContainmentRequest | undefined; #containmentRequested = false;
-  readonly #controlEvidence: PendingControlEvidence[] = [];
+  readonly #controlWriter: DockerCustodyControlWriter<ProviderGeneration>;
   readonly #decoder = new DockerCustodyFrameDecoder();
   readonly #executablePath: string;
   readonly #executableSha256: string;
-  #flushingControl = false;
   #generation: ProviderGeneration | undefined;
   #handshake?: {readonly fingerprint: string; readonly nonce: string}; #handshakePending = false;
   #integrityFailed = false;
@@ -96,6 +92,7 @@ export class DockerCustodyInitRuntime {
     this.#observedIdentity = parseDockerCustodyIdentity(options.observedIdentity);
     this.#shutdownGraceMs = boundedInteger(options.shutdownGraceMs, "shutdownGraceMs");
     this.#syscalls = options.syscalls; this.#writeControl = options.writeControl;
+    this.#controlWriter = new DockerCustodyControlWriter(this.#writeControl, () => {this.#poison();});
     this.#syscalls.assertDirectChildOfContainerInit(); this.#syscalls.assertNoNewPrivileges();
     if (!identityEqual(this.#syscalls.observeIdentity(), this.#observedIdentity)) {throw new Error("custody-init configured identity does not match runtime identity");}
   }
@@ -224,6 +221,7 @@ export class DockerCustodyInitRuntime {
   public stdinDrainReady(): void {
     if (!this.#integrityFailed && this.#phase === "provider-running") {try {this.#stdin.drain();} catch {this.#poison();}}
   }
+  public providerInputClosed(): void {if (!this.#integrityFailed && this.#stdin.status !== "closed") {this.#poison();}}
   public acceptProviderOutput(handle: DockerCustodyProviderOutputHandle, bytes: Uint8Array): "accepted" | "blocked" | "closed" | "overflow" {
     if (this.#integrityFailed) {
       const cleanup = this.#resolveStreamForCleanup(handle);
@@ -324,6 +322,7 @@ export class DockerCustodyInitRuntime {
   public requestStop(reason: DockerCustodyContainmentRequest["reason"] = "cancelled"): void {
     if (this.#integrityFailed || this.#phase === "failed" || this.#phase === "drained") {return;}
     if (this.#request === undefined) {this.#poison(); return;}
+    if (reason !== "cancelled") {this.#poison(reason); return;}
     if (this.#stopReason !== undefined) {return;}
     this.#stopReason = reason;
     if (!this.#providerRootTracked) {this.#requestContainment(reason); return;}
@@ -366,7 +365,11 @@ export class DockerCustodyInitRuntime {
     this.#providerRootTracked = false; this.#rootExitObserved = true; this.#rootObservationPending = true;
     this.#stopDeadlineMonotonicMs = undefined; this.#killEscalationCompleted = true;
     this.#phase = this.#integrityFailed ? "failed" : "provider-exited"; this.#stdin.close();
-    if (this.#integrityFailed) {this.#rootObservationPending = false; this.#maybeFinishFailure(); return;}
+    if (this.#integrityFailed) {
+      this.#rootObservationPending = false; this.#failureTerminalDeadlineMonotonicMs ??= safeMonotonicDeadline(
+        monotonicNow(this.#syscalls.monotonicNowMs()), this.#shutdownGraceMs);
+      this.#maybeFinishFailure(); return;
+    }
     this.#writeProviderObservation("root-exited", rootExit.exitCode, rootExit.signal, generation, () => {
       this.#rootObservationPending = false; this.#rootObservationWritten = true; this.#maybeWriteDrainComplete();
     });
@@ -380,9 +383,9 @@ export class DockerCustodyInitRuntime {
     const wallNow = this.#syscalls.wallNowUnixMs();
     if (!Number.isSafeInteger(wallNow) || wallNow < 0) {this.#poison(); return;}
     if (this.#request !== undefined && deadlineActive && (wallNow >= this.#request.wallDeadlineUnixMs ||
-      this.#providerDeadlineMonotonicMs !== undefined && nowMonotonicMs >= this.#providerDeadlineMonotonicMs)) {this.requestStop("deadline");}
+      this.#providerDeadlineMonotonicMs !== undefined && nowMonotonicMs >= this.#providerDeadlineMonotonicMs)) {this.#poison("deadline"); return;}
     if (this.#providerRootTracked && this.#stopDeadlineMonotonicMs !== undefined && nowMonotonicMs >= this.#stopDeadlineMonotonicMs && !this.#killEscalationCompleted) {
-      this.#killEscalationCompleted = true; this.#performSignal("stop-kill", "SIGKILL"); this.#requestContainment("shutdown-timeout");
+      this.#poison("shutdown-timeout", false);
     }
   }
   #validExit(exit: DockerCustodyProviderRootExit): boolean {
@@ -408,25 +411,30 @@ export class DockerCustodyInitRuntime {
     const providerDrain = Object.freeze({kind: "provider-drain-failed", outerContainmentClaim: "unproven",
       reason: `${stream}-${failure}`, requestId: this.#request.requestId} as const);
     this.#closurePending = true;
-    this.#enqueueControl(providerDrain, this.#generation, () => {
-      if (this.#integrityFailed) {return;}
-      this.#closurePending = false; this.#closure = Object.freeze({outerContainmentClaim: "unproven", providerDrain});
-    });
+    this.#enqueueControl(providerDrain, this.#generation, () => {if (!this.#integrityFailed) {
+      this.#closurePending = false; this.#closure = Object.freeze({outerContainmentClaim: "unproven", providerDrain});}});
   }
   public failInit(): void {this.#poison();}
-  #poison(reason: DockerCustodyContainmentRequest["reason"] = "init-failure"): void {
+  #poison(reason: DockerCustodyContainmentRequest["reason"] = "init-failure", termFirst = true): void {
     if (this.#integrityFailed) {this.#retryContainment(); return;}
+    const inheritedTermDeadline = this.#stopDeadlineMonotonicMs;
     this.#integrityFailed = true; this.#phase = "failed"; this.#startFenced = true; this.#stdin.close();
     try {this.#syscalls.closeProviderInput();} catch {/* containment still proceeds */}
     this.#stopDeadlineMonotonicMs = undefined; this.#providerDeadlineMonotonicMs = undefined; this.#closurePending = false;
-    this.#rootObservationPending = false; this.#controlEvidence.length = 0;
+    this.#rootObservationPending = false; this.#controlWriter.clear();
     if (this.#acknowledgement === "pending") {this.#acknowledgement = "lost";}
-    if (this.#request !== undefined) {this.#pendingContainmentReason = reason; this.#retryContainment(); this.#retryContainmentEvidence();
+    if (this.#request !== undefined) {this.#pendingContainmentReason = reason; this.#retryContainment();
       if (this.#providerRootTracked) {
-        const now = monotonicNow(this.#syscalls.monotonicNowMs()); this.#failureKillDeadlineMonotonicMs = safeMonotonicDeadline(now, this.#shutdownGraceMs);
-        this.#performSignal("stop-term", "SIGTERM"); return;
+        const now = monotonicNow(this.#syscalls.monotonicNowMs());
+        if (termFirst && inheritedTermDeadline !== undefined) {this.#failureKillDeadlineMonotonicMs = inheritedTermDeadline;}
+        else if (termFirst) {this.#failureKillDeadlineMonotonicMs = safeMonotonicDeadline(now, this.#shutdownGraceMs);
+          this.#performSignal("stop-term", "SIGTERM");}
+        else {this.#killEscalationCompleted = true; this.#performSignal("stop-kill", "SIGKILL");
+          this.#failureTerminalDeadlineMonotonicMs = safeMonotonicDeadline(now, this.#shutdownGraceMs);}
+        return;
       }
-      if (this.#generation !== undefined) {this.#maybeFinishFailure(); return;}
+      if (this.#generation !== undefined) {this.#failureTerminalDeadlineMonotonicMs = safeMonotonicDeadline(
+        monotonicNow(this.#syscalls.monotonicNowMs()), this.#shutdownGraceMs); this.#maybeFinishFailure(); return;}
     }
     this.#failureCleanupComplete = true;
   }
@@ -449,24 +457,9 @@ export class DockerCustodyInitRuntime {
   }
   #enqueueControl(message: DockerCustodyInitMessage, generation: ProviderGeneration | null, onAccepted?: () => void): void {
     if (this.#integrityFailed) {return;}
-    this.#controlEvidence.push(Object.freeze({generation, message, onAccepted})); this.#flushControl();
+    this.#controlWriter.enqueue(message, generation, this.#generation, onAccepted);
   }
-  #flushControl(): void {
-    if (this.#flushingControl || this.#integrityFailed) {return;}
-    this.#flushingControl = true;
-    try {
-      while (this.#controlEvidence.length > 0 && !this.#integrityFailed) {
-        const pending = this.#controlEvidence[0];
-        if (pending === undefined) {break;}
-        if (pending.generation !== null && pending.generation !== this.#generation) {this.#poison(); break;}
-        let result: "accepted" | "blocked";
-        try {result = this.#writeControl(pending.message);} catch {this.#poison(); break;}
-        if (result === "blocked") {break;}
-        if (result !== "accepted") {this.#poison(); break;}
-        this.#controlEvidence.shift(); pending.onAccepted?.();
-      }
-    } finally {this.#flushingControl = false;}
-  }
+  #flushControl(): void {if (!this.#integrityFailed) {this.#controlWriter.flush(this.#generation);}}
   #requestContainment(reason: DockerCustodyContainmentRequest["reason"]): void {
     if (this.#containmentRequested || this.#request === undefined) {return;}
     this.#pendingContainmentReason ??= reason; this.#retryContainment();
@@ -486,7 +479,8 @@ export class DockerCustodyInitRuntime {
     if (evidence === undefined || !this.#integrityFailed) {return;}
     try {
       const result = this.#writeControl(evidence);
-      if (result === "accepted") {this.#containmentEvidence = undefined; this.#containmentRequested = true; this.#pendingContainmentReason = undefined; return;}
+      if (result === "accepted") {this.#containmentEvidence = undefined; this.#containmentRequested = true;
+        this.#pendingContainmentReason = undefined; return;}
       if (result === "blocked") {return;}
     } catch {this.#containmentEvidence = undefined; if (!this.#integrityFailed) {this.#poison();} return;}
     this.#containmentEvidence = undefined; if (!this.#integrityFailed) {this.#poison();}
