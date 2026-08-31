@@ -33,7 +33,7 @@ import type {
 const custodyRoot = await mkdtemp(join(tmpdir(), "ar-claude-provider-test-"));
 after(async () => {await rm(custodyRoot, { recursive: true, force: true });});
 const workspaceRef = join(custodyRoot, "workspace");
-const privateRoot = join(custodyRoot, "private");
+const privateRoot = `${workspaceRef}-host-private`;
 await Promise.all([
   mkdir(workspaceRef, { mode: 0o700 }),
   mkdir(join(privateRoot, "config"), { mode: 0o700, recursive: true }),
@@ -125,10 +125,10 @@ test("uses only an external frozen private projection while tools remain workspa
 
   const plan = await createClaudeAgentSdkLaunchPlan({
     binaryRevision: binding.binaryRevision, executablePath, executableSha256: "0".repeat(64),
-    privateProjection, workspaceRef,
+    intentMode: "analysis", privateProjection, privateRootPath: privateRoot, workspaceRef,
   });
   assert.equal(plan.environment, privateProjection.environment);
-  assert.ok(plan.delegatedArgumentVariants?.some(value => JSON.stringify(value) === JSON.stringify(captured?.args)));
+  assert.deepEqual(plan.arguments, captured?.args);
   assert.throws(() => createClaudeAgentSdkPrivateProjection({
     configRoot: `${workspaceRef}/config`, homeRoot: "/tmp/private/home", projectionRef: "bad",
     tempRoot: "/tmp/private/tmp", workspaceRef,
@@ -161,7 +161,9 @@ test("rejects forward and reverse symlink aliases between private roots and the 
     binaryRevision: binding.binaryRevision,
     executablePath,
     executableSha256: "0".repeat(64),
+    intentMode: "analysis",
     privateProjection: forwardProjection,
+    privateRootPath: projection,
     workspaceRef: workspace,
   }), /disjoint/u);
 
@@ -179,7 +181,9 @@ test("rejects forward and reverse symlink aliases between private roots and the 
     binaryRevision: binding.binaryRevision,
     executablePath,
     executableSha256: "0".repeat(64),
+    intentMode: "analysis",
     privateProjection: reverseProjection,
+    privateRootPath: projection,
     workspaceRef: reverseAlias,
   }), /disjoint/u);
 });
