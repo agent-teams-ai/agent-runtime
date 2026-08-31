@@ -146,6 +146,244 @@ test("containment releases unconsumed stdout backpressure before guarded finalit
   });
 });
 
+test("provider exit preserves delayed stream truth before the final residue sweep", async () => {
+  const stdoutSource = new PassThrough();
+  const stderrSource = new PassThrough();
+  let settleStdoutFinal: ((status: "complete") => void) | undefined;
+  let settleStderrFinal: ((status: "complete") => void) | undefined;
+  let settleProviderExit: ((exit: { readonly code: number; readonly signal: null }) => void) | undefined;
+  let settleGuardianExit: ((exit: { readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }) => void) | undefined;
+  let observeProviderSignal: (() => void) | undefined;
+  const providerSignal = new Promise<void>(resolve => {observeProviderSignal = resolve;});
+  const stdout = new HostStdoutIngress(64, 1_024, () => {assert.fail("stdout must remain bounded");});
+  const stderr = new HostStderrIngress(1_024, 1_024, () => {assert.fail("stderr must remain bounded");});
+  stdout.attach(stdoutSource, new Promise<"complete">(resolve => {settleStdoutFinal = resolve;}));
+  stderr.attach(stderrSource, new Promise<"complete">(resolve => {settleStderrFinal = resolve;}));
+  stdoutSource.end("delayed-stream-truth");
+  stderrSource.end();
+  const providerExit = new Promise<{ readonly code: number; readonly signal: null }>(resolve => {settleProviderExit = resolve;});
+  const guardianExit = new Promise<{ readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }>(
+    resolve => {settleGuardianExit = resolve;},
+  );
+  const order: string[] = [];
+  let killCalls = 0;
+  let proveCalls = 0;
+  const live = {
+    attemptId: "attempt:delayed-stream-final-before-residue-kill",
+    closureEvidence: strictClosure("unproven"),
+    containmentDeadline: performance.now() + 1_000,
+    custodyRef: "custody:delayed-stream-final-before-residue-kill",
+    evidenceSealed: false,
+    exit: providerExit,
+    fingerprint: { fingerprintSha256: "fingerprint:delayed-stream-final-before-residue-kill" },
+    guardian: {
+      guardianExit,
+      guardianExitObservation: undefined,
+      providerExit: undefined,
+      async signalGroup() {
+        order.push("provider-exit");
+        settleProviderExit?.({ code: 0, signal: null });
+        observeProviderSignal?.();
+        return "sent" as const;
+      },
+      async signalProvider() {return "unproven" as const;},
+    } as never,
+    identity: { status: "proved" },
+    opening: Promise.resolve(),
+    operationId: "operation:delayed-stream-final-before-residue-kill",
+    privateRootClosure: { identitySha256: "private-root:delayed-stream-final-before-residue-kill", status: "active" as const },
+    residueAuthority: {
+      async attachGuardian() {return true;},
+      async close() {return true;},
+      async killAll() {
+        killCalls += 1;
+        order.push("kill-all");
+        assert.equal(stdout.settled, true);
+        assert.equal(stderr.settled, true);
+        settleGuardianExit?.({ code: null, signal: "SIGKILL", status: "observed" });
+        return true;
+      },
+      async proveEmpty() {proveCalls += 1; order.push("prove-empty"); return "empty" as const;},
+    },
+    sealed: true,
+    signalAuthorized: false,
+    spawnStatus: "acknowledged" as const,
+    stderr,
+    stdout,
+  };
+  const request = {attemptId: live.attemptId, custodyRef: live.custodyRef, operationId: live.operationId};
+  const outcomePromise = containCustody(live, request, {
+    containmentAfterMs: 1_000,
+    drainAfterMs: 100,
+    forceKillAfterMs: 100,
+    hostLifecycleGenerationSha256: "host-generation:delayed-stream-final-before-residue-kill",
+    monotonicNow: () => performance.now(),
+    terminateAfterMs: 100,
+  });
+
+  await providerSignal;
+  await new Promise(resolve => {setImmediate(resolve);});
+  assert.equal(killCalls, 0);
+  order.push("stream-final");
+  settleStdoutFinal?.("complete");
+  settleStderrFinal?.("complete");
+  const outcome = await outcomePromise;
+
+  assert.equal(outcome.kind, "contained", JSON.stringify(outcome));
+  assert.equal(killCalls, 1);
+  assert.equal(proveCalls, 1);
+  assert.deepEqual(order, ["provider-exit", "stream-final", "kill-all", "prove-empty"]);
+  assert.equal(stdout.snapshot().status, "complete");
+  assert.equal(stderr.snapshot().status, "complete");
+});
+
+test("escaped residue stays fail closed after preserved stream finality", async () => {
+  const stdoutSource = new PassThrough();
+  const stderrSource = new PassThrough();
+  const stdout = new HostStdoutIngress(64, 1_024, () => {assert.fail("stdout must remain bounded");});
+  const stderr = new HostStderrIngress(1_024, 1_024, () => {assert.fail("stderr must remain bounded");});
+  stdout.attach(stdoutSource, Promise.resolve("complete"));
+  stderr.attach(stderrSource, Promise.resolve("complete"));
+  stdoutSource.end("complete-before-residue-proof");
+  stderrSource.end();
+  await Promise.all([stdout.done, stderr.done]);
+  let settleGuardianExit: ((exit: { readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }) => void) | undefined;
+  const guardianExit = new Promise<{ readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }>(
+    resolve => {settleGuardianExit = resolve;},
+  );
+  let killCalls = 0;
+  let proveCalls = 0;
+  const providerExit = Object.freeze({ code: 0, signal: null });
+  const live = {
+    attemptId: "attempt:escaped-residue-after-stream-final",
+    closureEvidence: strictClosure("unproven"),
+    containmentDeadline: performance.now() + 1_000,
+    custodyRef: "custody:escaped-residue-after-stream-final",
+    evidenceSealed: false,
+    exit: Promise.resolve(providerExit),
+    fingerprint: { fingerprintSha256: "fingerprint:escaped-residue-after-stream-final" },
+    guardian: {
+      guardianExit,
+      guardianExitObservation: undefined,
+      providerExit,
+      async signalGroup() {return "sent" as const;},
+      async signalProvider() {return "unproven" as const;},
+    } as never,
+    identity: { status: "proved" },
+    opening: Promise.resolve(),
+    operationId: "operation:escaped-residue-after-stream-final",
+    privateRootClosure: { identitySha256: "private-root:escaped-residue-after-stream-final", status: "active" as const },
+    residueAuthority: {
+      async attachGuardian() {return true;},
+      async close() {return true;},
+      async killAll() {
+        killCalls += 1;
+        settleGuardianExit?.({ code: null, signal: "SIGKILL", status: "observed" });
+        return true;
+      },
+      async proveEmpty() {proveCalls += 1; return "residue" as const;},
+    },
+    sealed: true,
+    signalAuthorized: false,
+    spawnStatus: "acknowledged" as const,
+    stderr,
+    stdout,
+  };
+
+  const outcome = await containCustody(live, {
+    attemptId: live.attemptId,
+    custodyRef: live.custodyRef,
+    operationId: live.operationId,
+  }, {
+    containmentAfterMs: 1_000,
+    drainAfterMs: 100,
+    forceKillAfterMs: 100,
+    hostLifecycleGenerationSha256: "host-generation:escaped-residue-after-stream-final",
+    monotonicNow: () => performance.now(),
+    terminateAfterMs: 100,
+  });
+
+  assert.equal(killCalls, 1);
+  assert.equal(proveCalls, 1);
+  assert.equal(outcome.kind, "unproven");
+  assert.match(outcome.kind === "unproven" ? outcome.evidenceRef : "", /operation-residue-remains/u);
+});
+
+test("a never-final stream remains unproven at the configured drain bound", async () => {
+  const stdoutSource = new PassThrough();
+  const stderrSource = new PassThrough();
+  const neverFinal = new Promise<"complete">(() => {});
+  const stdout = new HostStdoutIngress(64, 1_024, () => {assert.fail("stdout must remain bounded");});
+  const stderr = new HostStderrIngress(1_024, 1_024, () => {assert.fail("stderr must remain bounded");});
+  stdout.attach(stdoutSource, neverFinal);
+  stderr.attach(stderrSource, neverFinal);
+  stdoutSource.end("transport-eof-is-not-stream-final");
+  stderrSource.end();
+  let settleGuardianExit: ((exit: { readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }) => void) | undefined;
+  const guardianExit = new Promise<{ readonly code: null; readonly signal: "SIGKILL"; readonly status: "observed" }>(
+    resolve => {settleGuardianExit = resolve;},
+  );
+  let killCalls = 0;
+  let proveCalls = 0;
+  const providerExit = Object.freeze({ code: 0, signal: null });
+  const live = {
+    attemptId: "attempt:never-final-stream-bound",
+    closureEvidence: strictClosure("unproven"),
+    containmentDeadline: performance.now() + 1_000,
+    custodyRef: "custody:never-final-stream-bound",
+    evidenceSealed: false,
+    exit: Promise.resolve(providerExit),
+    fingerprint: { fingerprintSha256: "fingerprint:never-final-stream-bound" },
+    guardian: {
+      guardianExit,
+      guardianExitObservation: undefined,
+      providerExit,
+      async signalGroup() {return "sent" as const;},
+      async signalProvider() {return "unproven" as const;},
+    } as never,
+    identity: { status: "proved" },
+    opening: Promise.resolve(),
+    operationId: "operation:never-final-stream-bound",
+    privateRootClosure: { identitySha256: "private-root:never-final-stream-bound", status: "active" as const },
+    residueAuthority: {
+      async attachGuardian() {return true;},
+      async close() {return true;},
+      async killAll() {
+        killCalls += 1;
+        settleGuardianExit?.({ code: null, signal: "SIGKILL", status: "observed" });
+        return true;
+      },
+      async proveEmpty() {proveCalls += 1; return "empty" as const;},
+    },
+    sealed: true,
+    signalAuthorized: false,
+    spawnStatus: "acknowledged" as const,
+    stderr,
+    stdout,
+  };
+  const started = performance.now();
+  const outcome = await containCustody(live, {
+    attemptId: live.attemptId,
+    custodyRef: live.custodyRef,
+    operationId: live.operationId,
+  }, {
+    containmentAfterMs: 1_000,
+    drainAfterMs: 20,
+    forceKillAfterMs: 20,
+    hostLifecycleGenerationSha256: "host-generation:never-final-stream-bound",
+    monotonicNow: () => performance.now(),
+    terminateAfterMs: 20,
+  });
+
+  assert.equal(killCalls, 1);
+  assert.equal(proveCalls, 1);
+  assert.ok(performance.now() - started < 500);
+  assert.equal(outcome.kind, "unproven");
+  assert.match(outcome.kind === "unproven" ? outcome.evidenceRef : "", /ingress-incomplete/u);
+  assert.equal(stdout.snapshot().status, "incomplete");
+  assert.equal(stderr.snapshot().status, "incomplete");
+});
+
 test("real guardian containment drains an actually backpressured stdout path", { timeout: 30_000 }, async () => {
   const workspaceRef = await disposableRoot();
   const outputBytes = 1_048_576;

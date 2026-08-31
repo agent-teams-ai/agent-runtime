@@ -228,6 +228,22 @@ const awaitWithDeadline = async <Value>(
   return result === timeout ? PHASE_TIMEOUT : result.value;
 };
 
+const invokeFinalityWithDeadline = async <Value>(
+  promise: () => Promise<Value>,
+  deadline: number,
+  options: ContainmentOptions,
+  phaseMaximumMs = Number.POSITIVE_INFINITY,
+): Promise<DeadlineAwait<Value>> => {
+  const invoked = promise();
+  if (!deadlineOpen(deadline, options)) {
+    void invoked.catch(() => null);
+    return DEADLINE_EXCEEDED;
+  }
+  const result = await awaitWithDeadline(() => invoked, deadline, options, phaseMaximumMs);
+  if (result === DEADLINE_EXCEEDED) {void invoked.catch(() => null);}
+  return result;
+};
+
 type ClosureAttempt =
   | { readonly kind: "closed"; readonly observation: "never-started" | "strict-linux-cgroup-v2" }
   | { readonly kind: "unproven"; readonly reason: HostCustodyUnprovenReason }
@@ -332,15 +348,34 @@ const terminateStableGuardianGroup = async (
   | { readonly kind: "unproven"; readonly reason: HostCustodyUnprovenReason }
 > => {
   const guardian = live.guardian;
-  if (guardian === undefined) {return { kind: "unproven", reason: "stable-guardian-unavailable" };}
   const containmentDeadline = live.containmentDeadline;
   if (containmentDeadline === undefined) {return { kind: "unproven", reason: "containment-deadline-unavailable" };}
   if (!deadlineOpen(containmentDeadline, options)) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
   live.stdout?.releaseBackpressureForClosure();
-  const termination = await terminateGuardian(live, guardian, containmentDeadline, options);
+  const termination = guardian === undefined
+    ? { kind: "unproven" as const, reason: "stable-guardian-unavailable" as const }
+    : await terminateGuardian(live, guardian, containmentDeadline, options);
+  const killedResult = await invokeFinalityWithDeadline(
+    () => live.residueAuthority?.killAll() ?? Promise.resolve(false),
+    containmentDeadline,
+    options,
+    options.forceKillAfterMs,
+  );
+  const killed = killedResult === DEADLINE_EXCEEDED || killedResult === PHASE_TIMEOUT
+    ? undefined
+    : killedResult;
+  const guardianClosed = guardian === undefined
+    ? PHASE_TIMEOUT
+    : await awaitWithDeadline(
+      () => guardian.guardianExit.then(() => true), containmentDeadline, options, options.forceKillAfterMs,
+    );
+  const residueFailure = await residueClosureFailure(live, killed, containmentDeadline, options);
   if (!deadlineOpen(containmentDeadline, options)) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
   if (termination.kind === "unproven") {return termination;}
-  const residueFailure = await residueClosureFailure(live, termination.killed, containmentDeadline, options);
+  if (killedResult === DEADLINE_EXCEEDED || guardianClosed === DEADLINE_EXCEEDED) {
+    return { kind: "unproven", reason: "owner-deadline-exceeded" };
+  }
+  if (guardianClosed !== true) {return { kind: "unproven", reason: "stable-guardian-exit-unproven" };}
   if (!deadlineOpen(containmentDeadline, options)) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
   if (residueFailure !== undefined) {return { kind: "unproven", reason: residueFailure };}
   const ingressFailure = await ingressClosureFailure(live, containmentDeadline, options);
@@ -355,7 +390,7 @@ const terminateGuardian = async (
   containmentDeadline: number,
   options: ContainmentOptions,
 ): Promise<
-  | { readonly killed: boolean | undefined; readonly kind: "terminated" }
+  | { readonly kind: "terminated" }
   | { readonly kind: "unproven"; readonly reason: HostCustodyUnprovenReason }
 > => {
   const signaled = await awaitWithDeadline(
@@ -382,22 +417,18 @@ const terminateGuardian = async (
       if (providerExit === DEADLINE_EXCEEDED) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
     }
   }
-  const killedResult = await awaitWithDeadline(
-    () => live.residueAuthority?.killAll() ?? Promise.resolve(false),
-    containmentDeadline,
-    options,
-    options.forceKillAfterMs,
-  );
-  if (killedResult === DEADLINE_EXCEEDED) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
-  const guardianClosed = await awaitWithDeadline(
-    () => guardian.guardianExit.then(() => true), containmentDeadline, options, options.forceKillAfterMs,
-  );
-  if (guardianClosed === DEADLINE_EXCEEDED) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
-  if (guardianClosed !== true) {return { kind: "unproven", reason: "stable-guardian-exit-unproven" };}
-  return {
-    killed: killedResult === PHASE_TIMEOUT ? undefined : killedResult,
-    kind: "terminated",
-  };
+  if (
+    providerExit !== PHASE_TIMEOUT &&
+    live.guardianNoStartAcknowledged !== true
+  ) {
+    await awaitWithDeadline(
+      maximumMs => waitForIngressFinal(live, maximumMs, options.monotonicNow),
+      containmentDeadline,
+      options,
+      options.drainAfterMs,
+    );
+  }
+  return { kind: "terminated" };
 };
 
 const residueClosureFailure = async (
@@ -406,7 +437,7 @@ const residueClosureFailure = async (
   containmentDeadline: number,
   options: ContainmentOptions,
 ): Promise<HostCustodyUnprovenReason | undefined> => {
-  const residue = await awaitWithDeadline(
+  const residue = await invokeFinalityWithDeadline(
     () => live.residueAuthority?.proveEmpty(containmentDeadline, options.monotonicNow) ?? Promise.resolve("unproven" as const),
     containmentDeadline,
     options,
