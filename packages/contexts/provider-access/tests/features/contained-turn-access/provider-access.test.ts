@@ -6,13 +6,13 @@ import type {
   ContainedTurnProviderAccessBinding,
   ProviderAccessProvider,
   RevalidateContainedTurnProviderAccessRejection,
-} from "../dist/index.js";
+} from "../../../dist/index.js";
 import {
   createStaticContainedTurnProviderAccessFeature,
   type StaticAvailableProviderAccessAuthority,
   type StaticProviderAccessAuthority,
-} from "../dist/composition.js";
-import { createContainedTurnProviderAccessFeature } from "../dist/features/contained-turn-access/composition/feature-module-factory.js";
+} from "../../../dist/composition.js";
+import { createContainedTurnProviderAccessFeature } from "../../../dist/features/contained-turn-access/internal.js";
 
 const binding = (
   overrides: Partial<StaticAvailableProviderAccessAuthority> = {},
@@ -675,14 +675,14 @@ const sourceFiles = async (directory: URL): Promise<readonly URL[]> => {
 };
 
 test("domain and application point inward and curated declarations leak no feature internals", async () => {
-  const featureRoot = new URL("../src/features/contained-turn-access/", import.meta.url);
+  const featureRoot = new URL("../../../src/features/contained-turn-access/", import.meta.url);
   for (const layer of ["domain/", "application/"]) {
     for (const file of await sourceFiles(new URL(layer, featureRoot))) {
       assert.doesNotMatch(await readFile(file, "utf8"), /\/contracts\//u);
     }
   }
-  const index = await readFile(new URL("../dist/index.d.ts", import.meta.url), "utf8");
-  const composition = await readFile(new URL("../dist/composition.d.ts", import.meta.url), "utf8");
+  const index = await readFile(new URL("../../../dist/index.d.ts", import.meta.url), "utf8");
+  const composition = await readFile(new URL("../../../dist/composition.d.ts", import.meta.url), "utf8");
   for (const declaration of [index, composition]) {
     assert.doesNotMatch(
       declaration,
@@ -692,7 +692,7 @@ test("domain and application point inward and curated declarations leak no featu
 });
 
 test("package sources, contracts, diagnostics, and fixtures contain no credential or private-path material", async () => {
-  const allText = await Promise.all((await sourceFiles(new URL("../", import.meta.url))).map(file => readFile(file, "utf8")));
+  const allText = await Promise.all((await sourceFiles(new URL("../../../", import.meta.url))).map(file => readFile(file, "utf8")));
   const forbidden = [
     ["raw", "Credential"].join(""),
     ["secret", "Value"].join(""),

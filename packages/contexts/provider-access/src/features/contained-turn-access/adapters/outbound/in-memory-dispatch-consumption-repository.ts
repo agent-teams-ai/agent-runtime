@@ -6,7 +6,7 @@ import {
   canonicalJson, snapshotDispatchBindingHead, snapshotDispatchConsumedReceipt, snapshotDispatchSettlementOutcome,
   type DispatchBindingHead, type DispatchConsumedReceipt, type DispatchDisposition, type DispatchScopeValue, type DispatchSettlementOutcome,
 } from "../../domain/dispatch-consumption.js";
-import { canonicalDispatchJournalEntry, detachedDispatchData } from "../../boundary/exact-dispatch-consumption-data.js";
+import { canonicalDispatchJournalEntry, detachedDispatchData } from "../dispatch-consumption-data.js";
 
 type OwnerState = "absent" | "consumed_pending" | "claim_committed" | "abandoned_without_claim";
 interface BindingSlot { head: DispatchBindingHead; consumption?: DispatchConsumedReceipt; state: OwnerState }
@@ -38,7 +38,7 @@ const putCanonicalHead = (state: State, head: DispatchBindingHead): void => {
   scoped.set(head.provider, { head, state: "absent" });
 };
 const putHead = (state: State, raw: DispatchBindingHead): void => {
-  putCanonicalHead(state, snapshotDispatchBindingHead(detachedDispatchData("binding head", raw) as never));
+  putCanonicalHead(state, snapshotDispatchBindingHead(detachedDispatchData("binding head", raw)));
 };
 
 interface PendingWrites {

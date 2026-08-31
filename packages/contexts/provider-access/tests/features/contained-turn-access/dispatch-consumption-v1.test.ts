@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ConsumeForDispatchInput } from "../dist/index.js";
+import type { ConsumeForDispatchInput } from "../../../dist/index.js";
 import {
   createDispatchConsumptionRequestDigests,
   createInMemoryContainedTurnDispatchConsumptionV1,
-} from "../dist/composition.js";
-import { createContainedTurnDispatchConsumptionV1 } from "../dist/features/contained-turn-access/composition/dispatch-consumption-v1-factory.js";
-import { createSha256DispatchConsumptionDigest } from "../dist/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.js";
-import { createInMemoryDispatchConsumptionRepository } from "../dist/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
+} from "../../../dist/composition.js";
+import { createContainedTurnDispatchConsumptionV1 } from "../../../dist/features/contained-turn-access/composition/dispatch-consumption-v1-factory.js";
+import { createSha256DispatchConsumptionDigest } from "../../../dist/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.js";
+import { createInMemoryDispatchConsumptionRepository } from "../../../dist/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
 import type {
   DispatchConsumptionRepository, DispatchConsumptionTransaction, DispatchConsumptionTransactionSelector,
-} from "../dist/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.js";
-import { claimBindingDigestPayload, requestDigestPayload } from "../dist/features/contained-turn-access/domain/dispatch-consumption.js";
+} from "../../../dist/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.js";
+import { claimBindingDigestPayload, requestDigestPayload } from "../../../dist/features/contained-turn-access/domain/dispatch-consumption.js";
 import { inputFor, repositoryHarness, repositoryReadOverride, seed, settlementFor, unsignedInput } from "./dispatch-consumption-test-fixture.ts";
 
 const transactionBarrier = (base: DispatchConsumptionRepository) => {

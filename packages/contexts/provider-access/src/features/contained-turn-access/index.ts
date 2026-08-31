@@ -12,7 +12,7 @@ export type {
   ResolveContainedTurnProviderAccess,
   ResolveContainedTurnProviderAccessInput,
   ResolveContainedTurnProviderAccessOutcome,
-} from "./features/contained-turn-access/index.js";
+} from "./contracts/contained-turn-provider-access.js";
 export {
   CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE,
   type ContainedTurnDispatchConsumptionV1,
@@ -29,4 +29,4 @@ export {
   type ObserveDispatchConsumptionOutcome,
   type SettleDispatchConsumptionInput,
   type SettleDispatchConsumptionOutcome,
-} from "./features/contained-turn-access/index.js";
+} from "./contracts/dispatch-consumption-v1.js";

@@ -1,9 +1,9 @@
-import type { ConsumeForDispatchInput, DispatchConsumptionReceipt, SettleDispatchConsumptionInput } from "../dist/index.js";
-import { createDispatchConsumptionRequestDigests, type InMemoryDispatchBindingSeed } from "../dist/composition.js";
-import { createInMemoryDispatchConsumptionRepository } from "../dist/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
+import type { ConsumeForDispatchInput, DispatchConsumptionReceipt, SettleDispatchConsumptionInput } from "../../../dist/index.js";
+import { createDispatchConsumptionRequestDigests, type InMemoryDispatchBindingSeed } from "../../../dist/composition.js";
+import { createInMemoryDispatchConsumptionRepository } from "../../../dist/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
 import type {
   DispatchConsumptionRepository, DispatchConsumptionTransaction,
-} from "../dist/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.js";
+} from "../../../dist/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.js";
 
 export const seed = (overrides: Partial<InMemoryDispatchBindingSeed> = {}): InMemoryDispatchBindingSeed => ({
   acceptedAuthorityDigest: "authority:accepted:1", accessRef: "access:1", authorityHeadDigest: "authority:head:1",

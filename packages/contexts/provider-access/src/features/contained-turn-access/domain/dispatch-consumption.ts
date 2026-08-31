@@ -113,14 +113,14 @@ export const exactDispatchDataRecord = (name: string, value: unknown, keys: read
   return Object.fromEntries(keys.map(key => [key, descriptors[key]?.value]));
 };
 const record = exactDispatchDataRecord;
-export const snapshotDispatchScope = (value: DispatchScopeValue): DispatchScopeValue => {
+export const snapshotDispatchScope = (value: unknown): DispatchScopeValue => {
   const data = record("scope", value, ["projectId", "scopeDigest", "tenantId"]);
   return Object.freeze({
     projectId: primitive("projectId", data.projectId), scopeDigest: primitive("scopeDigest", data.scopeDigest, true),
     tenantId: primitive("tenantId", data.tenantId),
   });
 };
-export const snapshotDispatchBindingHead = (value: DispatchBindingHead): DispatchBindingHead => {
+export const snapshotDispatchBindingHead = (value: unknown): DispatchBindingHead => {
   const data = record("binding head", value, [
     "acceptedAuthorityDigest", "accessRef", "authorityHeadDigest", "availability", "bindingDigest", "bindingRevision",
     "claimBeforeControlTime", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "expiresAtControlTime",
@@ -146,7 +146,7 @@ export const snapshotDispatchBindingHead = (value: DispatchBindingHead): Dispatc
     ...snapshotDispatchScope({ projectId: data.projectId, scopeDigest: data.scopeDigest, tenantId: data.tenantId } as DispatchScopeValue),
   });
 };
-export const snapshotDispatchExpectation = (value: DispatchExpectationValue): DispatchExpectationValue => {
+export const snapshotDispatchExpectation = (value: unknown): DispatchExpectationValue => {
   const data = record("binding expectation", value, [
     "acceptedAuthorityDigest", "accessRef", "authorityHeadDigest", "bindingDigest", "bindingRevision",
     "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "providerAccountRef", "providerRouteRef",

@@ -1,3 +1,5 @@
+export { createContainedTurnDispatchConsumptionV1 } from "./composition/dispatch-consumption-v1-factory.js";
+export { createContainedTurnProviderAccessFeature } from "./composition/feature-module-factory.js";
 export {
   createDispatchConsumptionRequestDigests,
   createInMemoryContainedTurnDispatchConsumptionV1,
@@ -7,4 +9,4 @@ export {
   type StaticAvailableProviderAccessAuthority,
   type StaticIndeterminateProviderAccessAuthority,
   type StaticProviderAccessAuthority,
-} from "./features/contained-turn-access/internal.js";
+} from "./composition/package-composition.js";

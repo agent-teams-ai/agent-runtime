@@ -14,7 +14,7 @@ import {
   canonicalProviderAccessScope,
   exactProviderAccessDataRecord,
   isRuntimeProxy,
-} from "../../boundary/exact-provider-access-data.js";
+} from "../provider-access-data.js";
 
 interface StaticAvailableProviderAccessAuthority {
   readonly accessRef: string;

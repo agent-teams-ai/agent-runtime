@@ -1,19 +1,14 @@
-import type {
-  ContainedTurnDispatchConsumptionV1, ConsumeForDispatchInput, ConsumeForDispatchOutcome,
-  ObserveDispatchConsumptionInput, SettleDispatchConsumptionInput, SettleDispatchConsumptionOutcome,
-} from "../contracts/dispatch-consumption-v1.js";
+import type { ContainedTurnDispatchConsumptionV1 } from "../contracts/dispatch-consumption-v1.js";
 import { createDispatchConsumptionUseCases } from "../application/dispatch-consumption-v1.js";
 import type { DispatchConsumptionDigest } from "../application/ports/outbound/dispatch-consumption-digest.js";
 import type {
   DispatchConsumptionJournalEntry, DispatchConsumptionRepository, DispatchConsumptionTransaction,
 } from "../application/ports/outbound/dispatch-consumption-repository.js";
-import {
-  consumeCommandFromContract, observeInputFromContract, settlementInputFromContract,
-} from "../contracts/dispatch-consumption-input.js";
+import { createDispatchConsumptionAdapter } from "../adapters/inbound/dispatch-consumption-mapper.js";
 import {
   canonicalDispatchJournalEntry, detachedDispatchData,
-} from "../boundary/exact-dispatch-consumption-data.js";
-import { isNativePromise, isRuntimeProxy } from "../boundary/exact-provider-access-data.js";
+} from "../adapters/dispatch-consumption-data.js";
+import { isNativePromise, isRuntimeProxy } from "../adapters/provider-access-data.js";
 import {
   snapshotDispatchBindingHead, snapshotDispatchConsumedReceipt, snapshotDispatchSettlementOutcome,
   type DispatchConsumedReceipt, type DispatchSettlementOutcome,
@@ -93,7 +88,7 @@ const transactionFacade = (value: unknown): DispatchConsumptionTransaction => {
   };
   return Object.freeze({
     async controlTime() { return await invoke("controlTime") as number; },
-    async findBindingHead() { return optionalProjection("findBindingHead", found => snapshotDispatchBindingHead(found as never)); },
+    async findBindingHead() { return optionalProjection("findBindingHead", snapshotDispatchBindingHead); },
     async findConsumption() { return optionalProjection("findConsumption", snapshotDispatchConsumedReceipt); },
     async findGrantRequest() { return optionalProjection("findGrantRequest", canonicalDispatchJournalEntry); },
     async findSettlement() { return optionalProjection("findSettlement", snapshotDispatchSettlementOutcome); },
@@ -192,27 +187,5 @@ export const createContainedTurnDispatchConsumptionV1 = (
   dependencies: DispatchConsumptionV1Dependencies,
 ): ContainedTurnDispatchConsumptionV1 => {
   const useCases = createDispatchConsumptionUseCases(snapshotDependencies(dependencies));
-  return Object.freeze({
-    async consumeForDispatch(input: ConsumeForDispatchInput): Promise<ConsumeForDispatchOutcome> {
-      let command;
-      try { command = consumeCommandFromContract(input); }
-      catch { return Object.freeze({ kind: "invalid" as const, reason: "invalid_request" as const }); }
-      try { return await useCases.consume(command); }
-      catch { return Object.freeze({ kind: "indeterminate" }); }
-    },
-    async observeDispatchConsumption(input: ObserveDispatchConsumptionInput) {
-      let snapshot;
-      try { snapshot = observeInputFromContract(input); }
-      catch { return Object.freeze({ kind: "invalid" as const, reason: "invalid_request" as const }); }
-      try { return await useCases.observe(snapshot); }
-      catch { return Object.freeze({ kind: "indeterminate" as const }); }
-    },
-    async settleDispatchConsumption(input: SettleDispatchConsumptionInput): Promise<SettleDispatchConsumptionOutcome> {
-      let snapshot;
-      try { snapshot = settlementInputFromContract(input); }
-      catch { return Object.freeze({ kind: "invalid" as const, reason: "invalid_request" as const }); }
-      try { return await useCases.settle(snapshot); }
-      catch { return Object.freeze({ kind: "indeterminate" }); }
-    },
-  });
+  return createDispatchConsumptionAdapter(useCases);
 };

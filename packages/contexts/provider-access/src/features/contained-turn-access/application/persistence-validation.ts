@@ -61,7 +61,7 @@ export const verifiedJournalEntry = async (
   if (provider !== "claude" && provider !== "codex") {throw new TypeError("journal provider is invalid");}
   if (data.purpose !== "contained-turn.provider-dispatch/v1") {throw new TypeError("journal purpose is invalid");}
   const entry = Object.freeze({
-    binding: snapshotDispatchExpectation(data.binding as never), claimBindingDigest: snapshotDispatchDigest("claimBindingDigest", data.claimBindingDigest),
+    binding: snapshotDispatchExpectation(data.binding), claimBindingDigest: snapshotDispatchDigest("claimBindingDigest", data.claimBindingDigest),
     grantRequestId: snapshotDispatchId("grantRequestId", data.grantRequestId), journalDigest: snapshotDispatchDigest("journalDigest", data.journalDigest),
     operationId: snapshotDispatchId("operationId", data.operationId),
     outcome: snapshotDispatchConsumeOutcome(data.outcome), provider, purpose: data.purpose,

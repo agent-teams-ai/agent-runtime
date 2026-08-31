@@ -1,4 +1,4 @@
-import { isRuntimeProxy } from "./exact-provider-access-data.js";
+import { isRuntimeProxy } from "./provider-access-data.js";
 import type { DispatchConsumptionJournalEntry } from "../application/ports/outbound/dispatch-consumption-repository.js";
 import {
   snapshotDispatchConsumeOutcome, snapshotDispatchDigest, snapshotDispatchExpectation, snapshotDispatchId,
@@ -85,7 +85,7 @@ export const canonicalDispatchJournalEntry = (value: unknown): DispatchConsumpti
   if (data.provider !== "claude" && data.provider !== "codex") { throw new TypeError("journal provider is invalid"); }
   if (data.purpose !== "contained-turn.provider-dispatch/v1") { throw new TypeError("journal purpose is invalid"); }
   return Object.freeze({
-    binding: snapshotDispatchExpectation(data.binding as never),
+    binding: snapshotDispatchExpectation(data.binding),
     claimBindingDigest: snapshotDispatchDigest("claimBindingDigest", data.claimBindingDigest),
     grantRequestId: snapshotDispatchId("grantRequestId", data.grantRequestId),
     journalDigest: snapshotDispatchDigest("journalDigest", data.journalDigest),
@@ -94,6 +94,6 @@ export const canonicalDispatchJournalEntry = (value: unknown): DispatchConsumpti
     provider: data.provider,
     purpose: data.purpose,
     requestDigest: snapshotDispatchDigest("requestDigest", data.requestDigest),
-    scope: snapshotDispatchScope(data.scope as never),
+    scope: snapshotDispatchScope(data.scope),
   });
 };

@@ -1,24 +1,27 @@
 import type {
   ContainedTurnProviderAccessBinding,
+  ContainedTurnProviderAccessFeatureApi,
   ProviderAccessProvider,
   ProviderAccessScope,
+  RevalidateContainedTurnProviderAccessInput,
   RevalidateContainedTurnProviderAccessOutcome,
+  ResolveContainedTurnProviderAccessInput,
   ResolveContainedTurnProviderAccessOutcome,
-} from "./contained-turn-provider-access.js";
+} from "../../contracts/contained-turn-provider-access.js";
 import type {
   RevalidateProviderAccessCommand,
   RevalidateProviderAccessResult,
-} from "../application/revalidate-contained-turn-provider-access.js";
+} from "../../application/revalidate-contained-turn-provider-access.js";
 import type {
   ResolveProviderAccessCommand,
   ResolveProviderAccessResult,
-} from "../application/resolve-contained-turn-provider-access.js";
+} from "../../application/resolve-contained-turn-provider-access.js";
 import {
   snapshotProviderAccessBinding,
   snapshotProviderAccessProvider,
   snapshotProviderAccessScope,
-} from "../domain/provider-access-binding.js";
-import { exactProviderAccessDataRecord } from "../boundary/exact-provider-access-data.js";
+} from "../../domain/provider-access-binding.js";
+import { exactProviderAccessDataRecord } from "../provider-access-data.js";
 
 const CONTRACT_BINDING_KEYS = [
   "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "projectId", "provider",
@@ -162,3 +165,44 @@ export const revalidateResultToContract = (
   const binding = bindingToContract(data.binding as never);
   return Object.freeze({ binding, evidence: bindingEvidence(binding, "dispatch"), kind: "valid" });
 };
+
+interface ContainedTurnProviderAccessUseCases {
+  readonly resolve: Readonly<{ execute(command: ResolveProviderAccessCommand): Promise<ResolveProviderAccessResult> }>;
+  readonly revalidate: Readonly<{ execute(command: RevalidateProviderAccessCommand): Promise<RevalidateProviderAccessResult> }>;
+}
+
+const unavailable = (): ResolveContainedTurnProviderAccessOutcome => Object.freeze({
+  evidence: rejectionEvidence("indeterminate", "acceptance"),
+  kind: "unavailable",
+  reason: "indeterminate",
+});
+
+const rejected = (): RevalidateContainedTurnProviderAccessOutcome => Object.freeze({
+  evidence: rejectionEvidence("indeterminate", "dispatch"),
+  kind: "rejected",
+  reason: "indeterminate",
+});
+
+/** Maps the public DTO boundary to and from the application-owned command model. */
+export const createContainedTurnProviderAccessAdapter = (
+  useCases: ContainedTurnProviderAccessUseCases,
+): ContainedTurnProviderAccessFeatureApi => Object.freeze({
+  resolve: Object.freeze({
+    async execute(input: ResolveContainedTurnProviderAccessInput) {
+      try {
+        return resolveResultToContract(await useCases.resolve.execute(resolveCommandFromContract(input)));
+      } catch {
+        return unavailable();
+      }
+    },
+  }),
+  revalidate: Object.freeze({
+    async execute(input: RevalidateContainedTurnProviderAccessInput) {
+      try {
+        return revalidateResultToContract(await useCases.revalidate.execute(revalidateCommandFromContract(input)));
+      } catch {
+        return rejected();
+      }
+    },
+  }),
+});
