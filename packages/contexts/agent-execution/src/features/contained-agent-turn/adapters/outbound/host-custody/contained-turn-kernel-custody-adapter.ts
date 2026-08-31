@@ -29,7 +29,7 @@ import {
   reservationIdentity,
   type SealedProviderCompletion,
 } from "./contained-turn-kernel-custody-projections.js";
-export interface ContainedTurnHostCustodyPort extends ProviderProcessCustodyPort, HostCustodyEvidenceRegistry {}
+export interface ContainedTurnHostCustodyPort extends ProviderProcessCustodyPort, HostCustodyEvidenceRegistry { reserve(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): ReturnType<ProviderProcessCustodyPort["open"]>; }
 type KernelOpenInput = Parameters<ContainedTurnKernelCustodyPort["open"]>[0];
 export interface ContainedTurnKernelCustodyLaunchAuthority { readonly intentMode: "analysis" | "workspace-write"; readonly workspaceRef: string; }
 export interface ContainedTurnKernelCustodyAdapterOptions {
@@ -132,7 +132,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       }
       return this.#openOutcome(existing);
     }
-    const opened = await this.#hostCustody.open({
+    const opened = await this.#hostCustody.reserve({
       attemptId: input.attemptId,
       intentMode: authority.intentMode,
       operationId: input.operationId,

@@ -3,6 +3,7 @@ import {
   HostCustodyLaunchRejectedError,
   HostCustodyStartError,
   HostCustodyUnsupportedError,
+  type HostCustodyLaunchPlan,
   type HostCustodyLaunchPlanResolver,
   type ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
@@ -27,6 +28,7 @@ export interface HostCustodyOpenReservation {
   readonly opening: Promise<void>;
   readonly rejectOpening: ((error: unknown) => void) | undefined;
   readonly residueAuthorityFactory: OperationResidueAuthorityFactory;
+  readonly requiredSpawnMode?: "sdk-delegated";
   readonly resolveOpening: (() => void) | undefined;
   readonly removeUnfingerprintedReservation: () => void;
   readonly contain: (live: LiveCustody, input: OpenInput) => Promise<ContainmentResult>;
@@ -37,6 +39,15 @@ export interface HostCustodyOpenReservation {
   ) => void;
 }
 
+export const assertHostCustodyReservationMode = (
+  plan: Pick<HostCustodyLaunchPlan, "spawnMode">,
+  requiredSpawnMode: HostCustodyOpenReservation["requiredSpawnMode"],
+): void => {
+  if (requiredSpawnMode !== undefined && plan.spawnMode !== requiredSpawnMode) {
+    throw new HostCustodyLaunchRejectedError("authority-verification-failed");
+  }
+};
+
 const settleOpening = (reservation: HostCustodyOpenReservation): void => {
   reservation.resolveOpening?.();
 };
@@ -44,6 +55,7 @@ const settleOpening = (reservation: HostCustodyOpenReservation): void => {
 const bindLaunchCandidate = async (reservation: HostCustodyOpenReservation): Promise<void> => {
   const { input, launchPlans, live } = reservation;
   const candidate = await resolveLaunchCandidate(launchPlans, input);
+  assertHostCustodyReservationMode(candidate.plan, reservation.requiredSpawnMode);
   live.fingerprint = candidate.fingerprint;
   live.plan = candidate.plan;
   live.privatePaths = candidate.privatePaths;

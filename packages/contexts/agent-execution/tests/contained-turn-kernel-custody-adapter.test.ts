@@ -134,7 +134,7 @@ const createHarness = (options: HarnessOptions = {}) => {
     evidence(custodyRef: string) {
       return custodyRef === "host-custody:synthetic" ? evidence : undefined;
     },
-    async open(input: Parameters<ContainedTurnHostCustodyPort["open"]>[0]) {
+    async reserve(input: Parameters<ContainedTurnHostCustodyPort["reserve"]>[0]) {
       openCalls += 1;
       assert.equal(input.attemptId, attemptId);
       assert.equal(input.intentMode, "analysis");
@@ -142,6 +142,7 @@ const createHarness = (options: HarnessOptions = {}) => {
       assert.equal(input.workspaceRef, "/synthetic/current-kernel-workspace");
       return Object.freeze({ custodyRef: "host-custody:synthetic" });
     },
+    open: async () => {throw new Error("generic Host open must not serve kernel reservation");},
     async release() {
       releaseCalls += 1;
       return releaseCalls <= (options.releaseFailures ?? 0)
@@ -312,10 +313,11 @@ test("exact seven-port composition dispatches once through the dedicated Host ma
   let hostContainmentCalls = 0;
   const hostCustody: ContainedTurnHostCustodyPort = Object.freeze({
     evidence: (custodyRef: string) => custodyRef === "host-custody:composition" ? evidence : undefined,
-    open: async () => {
+    reserve: async () => {
       hostOpenCalls += 1;
       return Object.freeze({ custodyRef: "host-custody:composition" });
     },
+    open: async () => {throw new Error("generic Host open must not serve kernel reservation");},
     release: async () => Object.freeze({ kind: "released" as const }),
     requestContainment: async () => {
       hostContainmentCalls += 1;
@@ -371,7 +373,8 @@ test("current seven-port composition closes true failed and cancelled observatio
       let evidence = runningEvidence();
       const hostCustody: ContainedTurnHostCustodyPort = Object.freeze({
         evidence: () => evidence,
-        open: async () => Object.freeze({ custodyRef: `host-custody:composition:${row.outcome}` }),
+        reserve: async () => Object.freeze({ custodyRef: `host-custody:composition:${row.outcome}` }),
+        open: async () => {throw new Error("generic Host open must not serve kernel reservation");},
         release: async () => Object.freeze({ kind: "released" as const }),
         requestContainment: async () => {
           evidence = Object.freeze({
@@ -489,6 +492,33 @@ test("cancellation before delegated spawn proves no start without another attemp
     harness.custody.start(startInput(harness, "cancelled")),
     /already consumed/u,
   );
+});
+
+test("kernel reservation defers process creation to its one-use start callback", async () => {
+  const harness = createHarness();
+  await harness.custody.open(openInput);
+  assert.deepEqual(harness.counts, {
+    containments: 0, executions: 0, opens: 1, processes: 0, releases: 0,
+  });
+  const started = await harness.custody.start(Object.freeze({
+    ...startInput(harness, "succeeded"),
+    execute: async delegated => {
+      harness.incrementExecution();
+      delegated.createProcess(() => {
+        harness.incrementProcess();
+        return Object.freeze({ syntheticProcess: true });
+      });
+      assert.throws(
+        () => delegated.createProcess(() => Object.freeze({ impossibleSecondProcess: true })),
+        /one-use/u,
+      );
+      return Object.freeze({ kind: "completed" as const, outcome: "succeeded" as const });
+    },
+  }));
+  assert.equal(started.kind, "execution_started");
+  assert.deepEqual(harness.counts, {
+    containments: 0, executions: 1, opens: 1, processes: 1, releases: 0,
+  });
 });
 
 test("provider completion arriving after execution cutoff cannot be sealed", async () => {
