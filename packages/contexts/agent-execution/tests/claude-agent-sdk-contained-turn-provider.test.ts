@@ -1094,6 +1094,46 @@ test("current-kernel adapter makes a retained callback invoked after resolver se
   assert.deepEqual([queryCalls, guardianSpawns], [0, 0]);
 });
 
+test("current-kernel adapter makes callbacks queued on an already-settled resolver effect-free", async t => {
+  for (const settlement of ["fulfilled", "rejected"] as const) {
+    await t.test(settlement, async () => {
+      let queryCalls = 0;
+      let hostDelegations = 0;
+      let guardianSpawns = 0;
+      const adapter = kernelProvider(() => {
+        queryCalls += 1;
+        throw new Error("settled resolver callback must not reach provider code");
+      }, {
+        privateExecutions: {
+          consume(_request, consume) {
+            if (settlement === "fulfilled") {
+              const settled = Promise.resolve(undefined);
+              settled.then(() => {void consume({ privateProjection, workspaceRef });});
+              return settled;
+            }
+            const settled = Promise.reject<undefined>(new Error("synthetic resolver rejection"));
+            settled.catch(() => {void consume({ privateProjection, workspaceRef });});
+            return settled;
+          },
+        },
+        processes: {
+          get: () => inertRegistryProcess(),
+          start: () => {guardianSpawns += 1; return inertProcess();},
+        },
+      });
+      const outcome = await adapter.execute(kernelInput({}, {
+        createProcess: <Process>(create: () => Process): Process => {
+          hostDelegations += 1;
+          return create();
+        },
+      }) as never);
+      await nextTurn();
+      assert.equal(outcome.kind, "indeterminate");
+      assert.deepEqual([queryCalls, hostDelegations, guardianSpawns], [0, 0, 0]);
+    });
+  }
+});
+
 test("current-kernel adapter rejects a resolver substitute for the exactly-once callback result", async () => {
   const adapter = kernelProvider(spawnedQuery([success("substituted-private-result")]), {
     privateExecutions: {

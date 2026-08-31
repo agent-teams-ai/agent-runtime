@@ -242,9 +242,13 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
           callbackViolated = true;
           return Promise.resolve(indeterminate(input, "private-projection-callback-conflict"));
         }
-        callbackResultPromise = this.#executeWithPrivateProjection(input, execution).catch(() =>
-          indeterminate(input, "private-projection-execution-unknown"),
-        );
+        callbackResultPromise = Promise.resolve().then(() => {
+          if (consumeSettled || callbackCount !== 1 || callbackViolated) {
+            callbackViolated = true;
+            return indeterminate(input, "private-projection-callback-conflict");
+          }
+          return this.#executeWithPrivateProjection(input, execution);
+        }).catch(() => indeterminate(input, "private-projection-execution-unknown"));
         return callbackResultPromise;
       });
       consumeSettled = true;
