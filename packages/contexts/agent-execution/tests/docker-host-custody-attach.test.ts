@@ -157,6 +157,23 @@ test("a validated hijack outlives the 120-second establishment cap without wall-
   } finally {await current.close();}
 });
 
+test("abort is contained between accepted upgrade and custody-channel listener installation", async () => {
+  const current = await fixture(socket => {socket.write(upgrade);});
+  const controller = new AbortController();
+  try {
+    const raw = await current.client.hijack({
+      call: call(controller.signal),
+      path: "/v1.47/containers/id/attach?stream=1&stdin=1&stdout=1&stderr=1",
+    });
+    controller.abort();
+    await assert.rejects(async () => {
+      for await (const bytes of raw.output) {void bytes;}
+    }, {code: "aborted"});
+    await raw.close();
+    await raw.close();
+  } finally {await current.close();}
+});
+
 test("attach rejects malformed status, stderr, oversized frames, abort, and deadline", async t => {
   const cases = [
     {name: "status", response: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", code: "protocol-violation"},

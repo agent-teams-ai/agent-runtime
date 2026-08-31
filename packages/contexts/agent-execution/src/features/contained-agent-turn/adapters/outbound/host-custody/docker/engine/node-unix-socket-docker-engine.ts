@@ -216,6 +216,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     const confirmedEngine = await this.#identity(callSnapshot);
     this.#assertEngine(authoritySnapshot, confirmedEngine);
     if (response.statusCode === 404) {
+      await this.#retireSession(authoritySnapshot.containerId);
       return { authority: authoritySnapshot, cgroupTree: "unobserved", engine: confirmedEngine, existence: "absent" };
     }
     if (response.statusCode !== 200) {throw statusFailure("inspect", response.statusCode);}
@@ -316,12 +317,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     const authoritySnapshot = validateAuthorityShape(authority);
     await this.#mutate("remove", "DELETE", authoritySnapshot, call);
     const id = authoritySnapshot.containerId;
-    const session = this.#custodySessions.get(id);
-    if (session !== undefined) {
-      this.#invalidateSession(session, new DockerEngineError("daemon-disconnected"));
-      await session.closePromise;
-      this.#custodySessions.delete(id);
-    }
+    await this.#retireSession(id);
   }
 
   public async wait(
@@ -410,7 +406,15 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     session.failure = error;
     session.cleanup?.();
     delete session.cleanup;
-    session.closePromise ??= session.hijack?.close() ?? Promise.resolve();
+    session.closePromise ??= (session.hijack?.close() ?? Promise.resolve()).catch(() => {});
+  }
+
+  async #retireSession(id: string): Promise<void> {
+    const session = this.#custodySessions.get(id);
+    if (session === undefined) {return;}
+    this.#invalidateSession(session, new DockerEngineError("daemon-disconnected"));
+    await session.closePromise;
+    if (this.#custodySessions.get(id) === session) {this.#custodySessions.delete(id);}
   }
 
   async #reconcileMutation(

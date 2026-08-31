@@ -230,6 +230,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#assertEngine(authoritySnapshot, engine);
     const record = this.#containers.get(authoritySnapshot.containerId);
     if (record === undefined || record.removed) {
+      this.#retireAttach(authoritySnapshot.containerId);
       return { authority: authoritySnapshot, cgroupTree: "unobserved", engine, existence: "absent" };
     }
     if (!sameFakeAuthority(record.authority, authoritySnapshot) ||
@@ -276,7 +277,10 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#attachState.set(id, "opening");
     let record: FakeContainer;
     try {record = await this.#record("attach", authoritySnapshot, callSnapshot);}
-    catch (error) {this.#attachState.set(id, "invalid"); throw error;}
+    catch (error) {
+      if (this.#attachState.has(id)) {this.#attachState.set(id, "invalid");}
+      throw error;
+    }
     if (record.state.status !== "created" || record.state.running) {
       this.#attachState.set(id, "invalid"); throw new DockerEngineError("protocol-violation");
     }
@@ -338,15 +342,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     if (outcome?.effect !== false) {record.removed = true; this.#signalStateTransition();}
     this.#events.push("remove:id");
     this.#assertMutationPostcondition("remove", record, outcome);
-    if (record.removed) {
-      const id = record.authority.containerId;
-      this.#attachRetire.get(id)?.();
-      this.#attachRetire.delete(id);
-      this.#attachCleanup.get(id)?.();
-      this.#attachCleanup.delete(id);
-      this.#attachState.delete(id);
-      this.#custodyInput.delete(id);
-    }
+    if (record.removed) {this.#retireAttach(record.authority.containerId);}
   }
 
   public async wait(
@@ -525,6 +521,15 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#attachState.set(id, "invalid");
     this.#attachCleanup.get(id)?.();
     this.#attachCleanup.delete(id);
+  }
+
+  #retireAttach(id: string): void {
+    this.#attachRetire.get(id)?.();
+    this.#attachRetire.delete(id);
+    this.#attachCleanup.get(id)?.();
+    this.#attachCleanup.delete(id);
+    this.#attachState.delete(id);
+    this.#custodyInput.delete(id);
   }
 
   #assertMutationPostcondition(

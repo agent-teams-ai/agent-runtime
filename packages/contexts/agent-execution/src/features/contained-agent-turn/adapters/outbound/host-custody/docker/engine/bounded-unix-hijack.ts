@@ -7,6 +7,7 @@ import type { DockerEngineCall } from "./docker-engine-port.js";
 
 const MAX_HEADER_BYTES = 16_384;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
+const ignoreSocketError = (): void => {};
 
 export interface UnixHijackChannel {
   readonly input: Duplex;
@@ -109,11 +110,15 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
         sessionTimer = setTimeout(() => {sessionExpired = true; abort();}, remaining);
         sessionTimer.unref();
         settled = true; cleanupOpening();
+        // Upgrade detaches the socket from ClientRequest error handling. Keep an
+        // error sink installed before exposing the hijack so abort cannot race
+        // the custody-channel listener installation.
+        socket.on("error", ignoreSocketError);
         const close = async (): Promise<void> => {
           clearTimeout(establishmentTimer); if (sessionTimer !== undefined) {clearTimeout(sessionTimer);}
           input.call.signal.removeEventListener("abort", abort);
           if (!socket.destroyed) {socket.destroy();}
-          await release();
+          try {await release();} finally {socket.removeListener("error", ignoreSocketError);}
         };
         const output = async function* (): AsyncIterable<Uint8Array> {
           for await (const chunk of socket) {yield chunk as Uint8Array;}
