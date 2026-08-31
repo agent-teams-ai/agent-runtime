@@ -42,7 +42,7 @@ import {
 } from "./contained-turn-kernel-fixtures.ts";
 import {
   createDependencies,
-} from "../dist/testing/contained-agent-turn-fixture.js";
+} from "./features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 const EMPTY_SHA256 = "0".repeat(64);
 const drain = Object.freeze({ bytes: 0, sha256: EMPTY_SHA256, status: "complete" as const });
@@ -62,6 +62,38 @@ const fingerprint = Object.freeze({
   providerBindingSha256: "7".repeat(64),
   spawnMode: "sdk-delegated" as const,
   workspaceSha256: "8".repeat(64),
+});
+
+const syntheticAttemptOwner = Object.freeze({
+  prepare: async () => Object.freeze({
+    arguments: Object.freeze([]),
+    binaryRevision: adapterSnapshot.binaryRevision,
+    containmentProfile: "strict-linux-cgroup-v2" as const,
+    environment: Object.freeze({}),
+    executablePath: "/synthetic/provider",
+    executableSha256: "3".repeat(64),
+    intentMode: "analysis" as const,
+    privateRootPath: "/synthetic/private",
+    provider: "codex" as const,
+    spawnMode: "sdk-delegated" as const,
+  }),
+  retain: () => {},
+  retire: () => {},
+});
+
+const syntheticWorkspaceOwner = (workspaceRef: string) => Object.freeze({
+  withLaunchAuthority: async <Result>(input: Readonly<{workspaceId: string}>, consume: (target: Readonly<{
+    canonicalPath: string;
+    descriptorPath: string;
+    identity: Readonly<{dev: bigint; ino: bigint; mountId: string}>;
+  }>) => Promise<Result>): Promise<Result> => {
+    assert.ok(input.workspaceId.length > 0);
+    return consume(Object.freeze({
+      canonicalPath: workspaceRef,
+      descriptorPath: "/proc/self/fd/99",
+      identity: Object.freeze({dev: 1n, ino: 2n, mountId: "mount:synthetic"}),
+    }));
+  },
 });
 
 const runningEvidence = (): HostCustodyEvidence => Object.freeze({
@@ -193,17 +225,12 @@ const createHarness = (options: HarnessOptions = {}) => {
     },
   });
   const custody = new ContainedTurnKernelCustodyAdapter(hostCustody, {
+    attemptOwner: syntheticAttemptOwner,
     completionAfterMs: 15,
     hostBootId,
     hostInstanceId,
-    launchAuthorityFor: input => {
-      assert.equal(input.workspaceId, workspaceId);
-      return Object.freeze({
-        intentMode: "analysis" as const,
-        workspaceRef: "/synthetic/current-kernel-workspace",
-      });
-    },
     startObservationAfterMs: 100,
+    workspaceOwner: syntheticWorkspaceOwner("/synthetic/current-kernel-workspace"),
   });
   return {
     custody,
@@ -226,6 +253,7 @@ const openInput: Parameters<ContainedTurnKernelCustodyPort["open"]>[0] = Object.
   authorityVectorDigest: authorityDigest,
   custodyId,
   effectId,
+  intentMode: "analysis",
   operationId,
   providerAccessSnapshot,
   workspaceId,
@@ -339,18 +367,17 @@ test("exact seven-port composition dispatches once through the dedicated Host ma
   });
   const fixture = createDependencies();
   const { custody: _fixtureCustody, ...otherOwners } = fixture.dependencies;
+  const mappedCustody = new ContainedTurnKernelCustodyAdapter(hostCustody, {
+    attemptOwner: syntheticAttemptOwner,
+    completionAfterMs: 100,
+    hostBootId: "host-boot:one",
+    hostInstanceId: "host-instance:one",
+    startObservationAfterMs: 100,
+    workspaceOwner: syntheticWorkspaceOwner("/synthetic/composed-workspace"),
+  });
   const feature = createContainedTurnFeature(Object.freeze({
     ...otherOwners,
-    custody: new ContainedTurnKernelCustodyAdapter(hostCustody, {
-      completionAfterMs: 100,
-      hostBootId: "host-boot:one",
-      hostInstanceId: "host-instance:one",
-      launchAuthorityFor: () => Object.freeze({
-        intentMode: "analysis" as const,
-        workspaceRef: "/synthetic/composed-workspace",
-      }),
-      startObservationAfterMs: 100,
-    }),
+    custody: mappedCustody,
   }));
   const result = await feature.submit.execute({
     commandId: "command:one",
@@ -394,14 +421,12 @@ test("current seven-port composition closes true failed and cancelled observatio
       const feature = createContainedTurnFeature(Object.freeze({
         ...otherOwners,
         custody: new ContainedTurnKernelCustodyAdapter(hostCustody, {
+          attemptOwner: syntheticAttemptOwner,
           completionAfterMs: 100,
           hostBootId: "host-boot:matrix",
           hostInstanceId: "host-instance:matrix",
-          launchAuthorityFor: () => Object.freeze({
-            intentMode: "analysis" as const,
-            workspaceRef: "/synthetic/composed-workspace",
-          }),
           startObservationAfterMs: 100,
+          workspaceOwner: syntheticWorkspaceOwner("/synthetic/composed-workspace"),
         }),
         provider: Object.freeze({
           ...fixtureProvider,

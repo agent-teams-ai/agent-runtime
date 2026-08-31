@@ -310,12 +310,21 @@ export const acquireVerifiedLaunchDescriptors = (
   plan: HostCustodyLaunchPlan,
   executable: ExecutableObservation,
   workspaceRef: string,
-  workspace: WorkspaceObservation,
+  workspace: WorkspaceObservation | Readonly<{
+    observation: WorkspaceObservation;
+    retainedDescriptorPath: string;
+  }>,
   privatePaths: PrivateLaunchPathObservations,
 ): VerifiedLaunchDescriptors => {
+  const workspaceObservation = "observation" in workspace ? workspace.observation : workspace;
+  const retainedWorkspaceDescriptorPath = "observation" in workspace
+    ? workspace.retainedDescriptorPath
+    : undefined;
   assertDescriptorBoundLinuxProfile();
   verifyExecutableImmediatelyBeforeSpawn(plan, executable);
-  verifyDirectoryImmediatelyBeforeSpawn(workspaceRef, workspace, "workspace");
+  if (retainedWorkspaceDescriptorPath === undefined) {
+    verifyDirectoryImmediatelyBeforeSpawn(workspaceRef, workspaceObservation, "workspace");
+  }
   verifyDirectoryImmediatelyBeforeSpawn(privatePaths.root.path, privatePaths.root, "private root");
   assertQualifiedPrivateDescriptorAliases(plan, privatePaths);
   for (const [key, observation] of Object.entries(privatePaths.byEnvironmentKey)) {
@@ -332,7 +341,11 @@ export const acquireVerifiedLaunchDescriptors = (
     const sealed = sealExecutableDescriptor(executable, sourceDescriptor, sealedPath);
     executableDescriptor = sealed.descriptor;
     sealedExecutable = sealed.observation;
-    workspaceDescriptor = openSync(workspaceRef, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0));
+    workspaceDescriptor = openSync(
+      retainedWorkspaceDescriptorPath ?? workspaceRef,
+      constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) |
+        (retainedWorkspaceDescriptorPath === undefined ? (constants.O_NOFOLLOW ?? 0) : 0),
+    );
     privateRootDescriptor = openSync(
       privatePaths.root.path,
       constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
@@ -342,7 +355,7 @@ export const acquireVerifiedLaunchDescriptors = (
       throw new Error("Host Custody executable identity changed while acquiring launch authority");
     }
     const acquiredWorkspace = fstatSync(workspaceDescriptor, { bigint: true });
-    if (!directoryIdentityMatches(acquiredWorkspace, workspace)) {
+    if (!directoryIdentityMatches(acquiredWorkspace, workspaceObservation)) {
       throw new Error("Host Custody workspace identity changed while acquiring launch authority");
     }
     const acquiredPrivateRoot = fstatSync(privateRootDescriptor, { bigint: true });

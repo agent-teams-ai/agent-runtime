@@ -17,6 +17,10 @@ import {
 import type { OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import { boundedPromise } from "./host-custody-stdio.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
+import {
+  assertRetainedWorkspaceAuthority,
+  closeRetainedWorkspaceAuthority,
+} from "./private-host-custody-reservation.js";
 
 type OpenInput = Parameters<ProviderProcessCustodyPort["open"]>[0];
 
@@ -55,6 +59,7 @@ const settleOpening = (reservation: HostCustodyOpenReservation): void => {
 
 const bindLaunchCandidate = async (reservation: HostCustodyOpenReservation): Promise<void> => {
   const { input, launchPlans, live } = reservation;
+  if (live.retainedWorkspaceAuthority !== undefined) {assertRetainedWorkspaceAuthority(live);}
   const candidate = await resolveLaunchCandidate(launchPlans, input);
   assertHostCustodyReservationMode(candidate.plan, reservation.requiredSpawnMode);
   live.fingerprint = candidate.fingerprint;
@@ -109,6 +114,7 @@ const cleanupRejectedReservation = async (reservation: HostCustodyOpenReservatio
   const { live } = reservation;
   if (live.spawnStatus !== "never-started" || live.guardian !== undefined) {return;}
   live.launchAuthority?.close();
+  closeRetainedWorkspaceAuthority(live);
   if (live.residueAuthority !== undefined) {
     await boundedPromise(
       live.residueAuthority.close().catch(() => false),

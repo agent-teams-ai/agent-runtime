@@ -58,8 +58,11 @@ import { replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
 import { boundedPromise } from "./host-custody-stdio.js";
 import {
+  assertRetainedWorkspaceAuthority,
   assertReservedWorkspaceAuthority,
   bindPrivateHostCustodyReservation,
+  closeRetainedWorkspaceAuthority,
+  observeHostCustodyMountIdentity,
 } from "./private-host-custody-reservation.js";
 import {
   createLiveCustody,
@@ -91,6 +94,7 @@ export class NodeProviderProcessCustody implements
   readonly #maxStdoutBytes: number;
   readonly #maxTombstones: number;
   readonly #monotonicNow: () => number;
+  readonly #mountIdentityObserver: NonNullable<NodeProviderProcessCustodyOptions["mountIdentityObserver"]>;
   readonly #processIdentityObserver: HostCustodyProcessIdentityObserver | undefined;
   readonly #residueAuthorityFactory: OperationResidueAuthorityFactory;
   readonly #identityObservationAfterMs: number;
@@ -119,6 +123,7 @@ export class NodeProviderProcessCustody implements
     this.#maxTombstones = positiveInteger("maxTombstones", options.maxTombstones, 10_000);
     this.#stdoutHighWaterBytes = positiveInteger("stdoutHighWaterBytes", options.stdoutHighWaterBytes, HOST_CUSTODY_LIMITS.stdoutHighWaterBytes);
     this.#monotonicNow = options.monotonicNow ?? (() => performance.now());
+    this.#mountIdentityObserver = options.mountIdentityObserver ?? observeHostCustodyMountIdentity;
     this.#identityObservationAfterMs = positiveInteger("identityObservationAfterMs", options.identityObservationAfterMs, 2_000);
     this.#processIdentityObserver = options.processIdentityObserver ?? createPosixProcessIdentityObserver();
     this.#residueAuthorityFactory = options.residueAuthorityFactory ?? unsupportedOperationResidueAuthorityFactory;
@@ -144,7 +149,10 @@ export class NodeProviderProcessCustody implements
     readonly operationId: string;
     readonly receiptRef: string;
   }): Promise<{ readonly kind: "released" } | { readonly evidenceRef: string; readonly kind: "unproven" }> {
-    return releaseHostCustody({
+    const live = input.custodyRef === undefined
+      ? this.#byAttempt.get(input.attemptId)
+      : this.#byRef.get(input.custodyRef);
+    const outcome = await releaseHostCustody({
       byAttempt: this.#byAttempt,
       byRef: this.#byRef,
       cleanupAfterMs: this.#containmentAfterMs,
@@ -153,6 +161,8 @@ export class NodeProviderProcessCustody implements
       tombstonesByAttempt: this.#tombstonesByAttempt,
       tombstonesByRef: this.#tombstonesByRef,
     }, input);
+    if (outcome.kind === "released" && live !== undefined) {closeRetainedWorkspaceAuthority(live);}
+    return outcome;
   }
 
   public async open(input: Parameters<ProviderProcessCustodyPort["open"]>[0]): Promise<ContainedTurnCustodyHandle> {
@@ -160,14 +170,24 @@ export class NodeProviderProcessCustody implements
   }
 
   public async reserve(input: HostCustodyReservationInput): Promise<ContainedTurnCustodyHandle> {
-    const reservation = await bindPrivateHostCustodyReservation(input);
-    return this.#open(input, "sdk-delegated", reservation.launchPlans);
+    const reservation = await bindPrivateHostCustodyReservation(input, this.#mountIdentityObserver);
+    try {
+      const opened = await this.#open(
+        input, "sdk-delegated", reservation.launchPlans, reservation.retainedWorkspaceAuthority,
+      );
+      if (this.#byAttempt.get(input.attemptId)?.retainedWorkspaceAuthority !==
+          reservation.retainedWorkspaceAuthority) {
+        reservation.retainedWorkspaceAuthority.close();
+      }
+      return opened;
+    } catch (error) {reservation.retainedWorkspaceAuthority.close(); throw error;}
   }
 
   async #open(
     input: Parameters<ProviderProcessCustodyPort["open"]>[0] | HostCustodyReservationInput,
     requiredSpawnMode?: "sdk-delegated",
     reservationLaunchPlans?: HostCustodyLaunchPlanResolver,
+    retainedWorkspaceAuthority?: import("./private-host-custody-reservation.js").RetainedHostCustodyWorkspaceAuthority,
   ): Promise<ContainedTurnCustodyHandle> {
     const baseIdentitySha256 = inputIdentity(input);
     const identitySha256 = "workspaceAuthority" in input
@@ -204,8 +224,10 @@ export class NodeProviderProcessCustody implements
       this.#hostLifecycleGenerationSha256,
       identitySha256,
       {
+        mountIdentityObserver: this.#mountIdentityObserver,
         opening,
         ...("workspaceAuthority" in input ? { workspaceAuthority: input.workspaceAuthority } : {}),
+        ...(retainedWorkspaceAuthority === undefined ? {} : { retainedWorkspaceAuthority }),
       },
     );
     this.#byAttempt.set(input.attemptId, live);
@@ -335,21 +357,30 @@ export class NodeProviderProcessCustody implements
     ) {
       throw new Error("Host Custody launch reservation is incomplete");
     }
-    const launched = launchGuardedProvider({
-      arguments: arguments_,
-      environment,
-      live,
-      maxDiagnosticBytes: this.#maxDiagnosticBytes,
-      maxStderrBytes: this.#maxStderrBytes,
-      maxStdinBytes: this.#maxStdinBytes,
-      maxStdoutBytes: this.#maxStdoutBytes,
-      monotonicNow: this.#monotonicNow,
-      onAbort: () => {void this.#triggerAbortContainment(live);},
-      onOverflow: () => {void this.#triggerOverflowContainment(live);},
-      spawnAcknowledgementAfterMs: this.#spawnAcknowledgementAfterMs,
-      stdoutHighWaterBytes: this.#stdoutHighWaterBytes,
-      writeAfterMs: this.#spawnAcknowledgementAfterMs,
-    });
+    if (live.retainedWorkspaceAuthority !== undefined) {assertRetainedWorkspaceAuthority(live);}
+    let launched: ReturnType<typeof launchGuardedProvider>;
+    try {
+      launched = launchGuardedProvider({
+        arguments: arguments_,
+        environment,
+        live,
+        maxDiagnosticBytes: this.#maxDiagnosticBytes,
+        maxStderrBytes: this.#maxStderrBytes,
+        maxStdinBytes: this.#maxStdinBytes,
+        maxStdoutBytes: this.#maxStdoutBytes,
+        monotonicNow: this.#monotonicNow,
+        onAbort: () => {void this.#triggerAbortContainment(live);},
+        onOverflow: () => {void this.#triggerOverflowContainment(live);},
+        spawnAcknowledgementAfterMs: this.#spawnAcknowledgementAfterMs,
+        stdoutHighWaterBytes: this.#stdoutHighWaterBytes,
+        writeAfterMs: this.#spawnAcknowledgementAfterMs,
+        ...(live.retainedWorkspaceAuthority === undefined ? {} : {
+          workspaceDescriptorPath: live.retainedWorkspaceAuthority.descriptorPath,
+        }),
+      });
+    } finally {
+      closeRetainedWorkspaceAuthority(live);
+    }
     live.childProcessInstanceSha256 = sha256(randomUUID());
     live.executable = launched.authority.executable;
     live.launchAuthority = launched.authority;

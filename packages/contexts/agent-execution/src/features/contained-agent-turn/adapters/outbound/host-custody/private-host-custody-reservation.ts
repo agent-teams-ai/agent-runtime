@@ -1,5 +1,4 @@
-import { constants } from "node:fs";
-import { open } from "node:fs/promises";
+import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 
 import type {
   HostCustodyLaunchPlan,
@@ -17,22 +16,66 @@ const snapshotPlan = (plan: HostCustodyLaunchPlan): HostCustodyLaunchPlan => Obj
   }),
 });
 
+export interface RetainedHostCustodyWorkspaceAuthority {
+  readonly descriptor: number;
+  readonly descriptorPath: string;
+  readonly identity: HostCustodyReservationInput["workspaceAuthority"]["identity"];
+  close(): void;
+}
+
+export type HostCustodyMountIdentityObserver = (descriptor: number) => string;
+
+export const observeHostCustodyMountIdentity: HostCustodyMountIdentityObserver = descriptor => {
+  const fdinfo = openSync(`/proc/self/fdinfo/${descriptor}`, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const buffer = Buffer.allocUnsafe(4_097);
+    const bytesRead = readSync(fdinfo, buffer, 0, buffer.length, 0);
+    if (bytesRead > 4_096) {throw new TypeError("Host Custody workspace mount identity is unavailable");}
+    const matches = [...buffer.subarray(0, bytesRead).toString("utf8").matchAll(/^mnt_id:\s*(\d+)$/gmu)];
+    if (matches.length !== 1 || matches[0]?.[1] === undefined) {
+      throw new TypeError("Host Custody workspace mount identity is unavailable");
+    }
+    return matches[0][1];
+  } finally {closeSync(fdinfo);}
+};
+
+export const closeRetainedWorkspaceAuthority = (live: LiveCustody): void => {
+  live.retainedWorkspaceAuthority?.close();
+};
+
+export const assertRetainedWorkspaceAuthority = (live: LiveCustody): void => {
+  const retained = live.retainedWorkspaceAuthority;
+  const expected = live.workspaceAuthority;
+  if (retained === undefined || expected === undefined) {
+    throw new TypeError("Host Custody retained workspace authority is unavailable");
+  }
+  const observed = fstatSync(retained.descriptor, { bigint: true });
+  if (!observed.isDirectory() || observed.dev !== expected.identity.dev || observed.ino !== expected.identity.ino ||
+      live.mountIdentityObserver(retained.descriptor) !== expected.identity.mountId) {
+    throw new TypeError("Host Custody retained workspace identity mismatch");
+  }
+};
+
 export const bindPrivateHostCustodyReservation = async (
   input: HostCustodyReservationInput,
-): Promise<Readonly<{ readonly launchPlans: HostCustodyLaunchPlanResolver; readonly plan: HostCustodyLaunchPlan }>> => {
+  mountIdentityObserver: HostCustodyMountIdentityObserver = observeHostCustodyMountIdentity,
+): Promise<Readonly<{
+  readonly launchPlans: HostCustodyLaunchPlanResolver;
+  readonly plan: HostCustodyLaunchPlan;
+  readonly retainedWorkspaceAuthority: RetainedHostCustodyWorkspaceAuthority;
+}>> => {
   const authority = input.workspaceAuthority;
   if (authority.canonicalPath !== input.workspaceRef || authority.identity.mountId.length === 0) {
     throw new TypeError("Host Custody workspace authority path mismatch");
   }
-  const descriptor = await open(authority.descriptorPath, constants.O_RDONLY | constants.O_DIRECTORY);
+  const descriptor = openSync(authority.descriptorPath, constants.O_RDONLY | constants.O_DIRECTORY);
   try {
-    const observed = await descriptor.stat({ bigint: true });
-    if (!observed.isDirectory() || observed.dev !== authority.identity.dev || observed.ino !== authority.identity.ino) {
+    const observed = fstatSync(descriptor, { bigint: true });
+    if (!observed.isDirectory() || observed.dev !== authority.identity.dev || observed.ino !== authority.identity.ino ||
+        mountIdentityObserver(descriptor) !== authority.identity.mountId) {
       throw new TypeError("Host Custody workspace descriptor identity mismatch");
     }
-  } finally {
-    await descriptor.close();
-  }
+  } catch (error) {closeSync(descriptor); throw error;}
   const plan = snapshotPlan(input.launchPlan);
   let consumed = false;
   const launchPlans: HostCustodyLaunchPlanResolver = Object.freeze({
@@ -50,7 +93,14 @@ export const bindPrivateHostCustodyReservation = async (
       return Promise.resolve(plan);
     },
   });
-  return Object.freeze({ launchPlans, plan });
+  let closed = false;
+  const retainedWorkspaceAuthority: RetainedHostCustodyWorkspaceAuthority = Object.freeze({
+    close() {if (!closed) {closed = true; closeSync(descriptor);}},
+    descriptor,
+    descriptorPath: `/proc/self/fd/${descriptor}`,
+    identity: authority.identity,
+  });
+  return Object.freeze({ launchPlans, plan, retainedWorkspaceAuthority });
 };
 
 export const assertReservedWorkspaceAuthority = (live: LiveCustody): void => {
@@ -60,4 +110,5 @@ export const assertReservedWorkspaceAuthority = (live: LiveCustody): void => {
       observed.ino !== expected.identity.ino) {
     throw new TypeError("Host Custody reservation observed a replacement workspace");
   }
+  assertRetainedWorkspaceAuthority(live);
 };
