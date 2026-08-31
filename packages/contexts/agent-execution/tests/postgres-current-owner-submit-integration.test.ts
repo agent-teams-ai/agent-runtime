@@ -22,6 +22,12 @@ import { createDependencies } from "./features/contained-agent-turn/support/cont
 
 const databaseUrl = process.env.POSTGRES_DURABILITY_URL;
 
+type PersistedOperation = NonNullable<Awaited<ReturnType<PostgresContainedTurnOperationStore["read"]>>>;
+
+const hasDurableFinality = (operation: PersistedOperation): boolean =>
+  operation.terminal.kind === "final" || operation.reconciliation.kind === "required" ||
+  operation.closureRecovery.kind === "required";
+
 class FakeHost {
   readonly plans: any[] = [];
   readonly refs = new Set<string>();
@@ -269,6 +275,7 @@ test("PostgreSQL current owners durably claim once through real Codex and Claude
           assert.ok(result.status === "observed" && ["reconcile_required", "succeeded"].includes(result.turn.status));
           const completed = await durable.read({operationId: result.turn.operationId, scope: request.scope});
           assert.ok(completed);
+          assert.ok(hasDurableFinality(completed), "completion requires final closure or durable recovery debt");
           if (result.turn.status === "succeeded") {
             assert.equal(completed.providerExecution.kind, "closed");
             assert.equal(completed.terminal.kind, "final");
@@ -295,7 +302,8 @@ test("PostgreSQL current owners durably claim once through real Codex and Claude
           assert.ok(operationId);
           const persisted = await reconstructed.read({operationId: operationId as never, scope: request.scope});
           assert.equal(persisted?.dispatch.kind, "claimed");
-          assert.ok(persisted?.terminal.kind === "final" || persisted?.reconciliation.kind === "required");
+          assert.ok(persisted && hasDurableFinality(persisted),
+            "reconstructed completion requires final closure or durable recovery debt");
           const replayFixture = createDependencies();
           const replaySelected = forProvider(replayFixture, provider);
           const replay = await createContainedTurnFeature({...replaySelected, custody: owner.custody,
