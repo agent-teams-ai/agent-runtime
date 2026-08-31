@@ -11,15 +11,19 @@ import {
   createContainedTurnFeature,
   createClaudeCurrentKernelOwner,
   createCodexCurrentKernelOwner,
+  createNodeContainedTurnArtifacts,
+  createNodeContainedTurnWorkspace,
 } from "../dist/composition.js";
 import type { ContainedTurnKernelOperationStore } from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { createCodexAppServerPermissionBoundary } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import { createClaudeAgentSdkPrivateProjection } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
+import { consumeWorkspaceLaunchAuthority } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-capability.js";
 import { applyContainedTurnPostgresSchema } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 import { PostgresContainedTurnOperationStore } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
 import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { DeterministicCurrentOwnerHost, successfulClaudeQuery } from "./current-owner-success-fixture.ts";
 import { createDependencies } from "./features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { createSyntheticFilesystemLayout } from "./filesystem-contained-turn/fixture.ts";
 
 const databaseUrl = process.env.POSTGRES_DURABILITY_URL;
 
@@ -172,21 +176,33 @@ const createOwner = async (
   root: string,
   host: FakeHost | DeterministicCurrentOwnerHost,
   deterministicSuccess = false,
+  durableWorkspaceOwner?: Readonly<{
+    withLaunchAuthority<Result>(input: Readonly<{
+      operationId: string;
+      workspaceId: string;
+      attemptId: string;
+    }>, consume: (authority: any) => Promise<Result>): Promise<Result>;
+  }>,
 ) => {
   const workspaceRef = join(root, "workspace");
   const privateRootPath = join(root, "private");
-  await mkdir(workspaceRef, {recursive: true, mode: 0o700});
-  const workspaceOwner = {async withLaunchAuthority<Result>(_input: unknown, consume: (authority: any) => Promise<Result>) {
-    return consume({canonicalPath: workspaceRef, descriptorPath: "/proc/self/fd/99",
-      identity: {dev: 1n, ino: 2n, mountId: `mount:pg:${provider}`}});
-  }};
+  if (durableWorkspaceOwner === undefined) {
+    await mkdir(workspaceRef, {recursive: true, mode: 0o700});
+  }
+  const workspaceOwner = durableWorkspaceOwner ?? {
+    async withLaunchAuthority<Result>(_input: unknown, consume: (authority: any) => Promise<Result>) {
+      return consume({canonicalPath: workspaceRef, descriptorPath: "/proc/self/fd/99",
+        identity: {dev: 1n, ino: 2n, mountId: `mount:pg:${provider}`}});
+    },
+  };
   if (provider === "codex") {
     const codexHome = join(privateRootPath, "home");
     const temp = join(privateRootPath, "temp");
     await Promise.all([mkdir(codexHome, {recursive: true, mode: 0o700}), mkdir(temp, {recursive: true, mode: 0o700})]);
     return createCodexCurrentKernelOwner({
       hostBootId: "host-boot:pg-codex", hostCustody: host as never, hostInstanceId: "host-instance:pg-codex",
-      launchRecords: {resolve: async () => ({boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+      launchRecords: {resolve: async input => ({boundary: createCodexAppServerPermissionBoundary({codexHome,
+        workspaceRef: input.workspaceAuthority.canonicalPath}),
         executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp})}, workspaceOwner,
     });
   }
@@ -199,8 +215,9 @@ const createOwner = async (
   return createClaudeCurrentKernelOwner({
     adapterSnapshot, executablePath: "/synthetic/claude", executableSha256: "a".repeat(64),
     hostBootId: "host-boot:pg-claude", hostCustody: host as never, hostInstanceId: "host-instance:pg-claude",
-    launchRecords: {resolve: async () => ({privateProjection: createClaudeAgentSdkPrivateProjection({
-      configRoot, homeRoot, projectionRef: "projection:pg-claude", tempRoot, workspaceRef,
+    launchRecords: {resolve: async input => ({privateProjection: createClaudeAgentSdkPrivateProjection({
+      configRoot, homeRoot, projectionRef: "projection:pg-claude", tempRoot,
+      workspaceRef: input.workspaceAuthority.canonicalPath,
     }), privateRootPath})},
     manifest: {effectCardinality: "one_coarse_effect_per_operation", effectClass: "contained_unmediated_effect",
       manifestRevision: adapterSnapshot.capabilityManifestRevision, manifestVersion: 1, provider: "claude",
@@ -216,6 +233,52 @@ const createOwner = async (
       }};
     }, workspaceOwner,
   });
+};
+
+const durableWorkspaceComposition = async () => {
+  const layout = await createSyntheticFilesystemLayout();
+  const [workspace, artifacts] = await Promise.all([
+    createNodeContainedTurnWorkspace(layout.workspaceOptions),
+    createNodeContainedTurnArtifacts(layout.artifactOptions),
+  ]);
+  const records = new Map<string, Readonly<{
+    operationId: string;
+    scope: Readonly<{projectId: string; tenantId: string}>;
+    workspaceRef: string;
+  }>>();
+  const kernelWorkspace = Object.freeze({...workspace, create: async (input: Parameters<typeof workspace.create>[0]) => {
+    const created = await workspace.create(input);
+    records.set(created.workspaceId, Object.freeze({
+      operationId: input.operationId,
+      scope: Object.freeze({...input.scope}),
+      workspaceRef: created.workspaceRef,
+    }));
+    return created;
+  }});
+  const workspaceOwner = Object.freeze({
+    async withLaunchAuthority<Result>(input: Readonly<{
+      operationId: string;
+      workspaceId: string;
+      attemptId: string;
+    }>, consume: (authority: any) => Promise<Result>): Promise<Result> {
+      const record = records.get(input.workspaceId);
+      if (record === undefined || record.operationId !== input.operationId) {
+        throw new TypeError("durable workspace launch identity mismatch");
+      }
+      const authority = await workspace.verify({
+        operationId: record.operationId,
+        scope: record.scope,
+        workspaceRef: record.workspaceRef,
+      });
+      return consumeWorkspaceLaunchAuthority({
+        authority,
+        operationId: record.operationId,
+        scope: record.scope,
+        workspaceRef: record.workspaceRef,
+      }, consume);
+    },
+  });
+  return Object.freeze({artifacts, cleanup: layout.cleanup, workspace: kernelWorkspace, workspaceOwner});
 };
 
 test("PostgreSQL current owners durably claim once through real Codex and Claude submit paths", {
@@ -344,9 +407,10 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
         await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
         await applyContainedTurnPostgresSchema(pool);
         const root = await mkdtemp(join(tmpdir(), `pg-current-owner-success-${provider}-`));
+        const durableFilesystem = await durableWorkspaceComposition();
         try {
           const host = new DeterministicCurrentOwnerHost();
-          const owner = await createOwner(provider, root, host, true);
+          const owner = await createOwner(provider, root, host, true, durableFilesystem.workspaceOwner);
           const fixture = createDependencies();
           const selected = forProvider(fixture, provider);
           const identities = createIdentities(`${testRunId}:${provider}:success`);
@@ -355,8 +419,10 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
           let reportClaim!: () => void;
           const wait = new Promise<void>(resolve => {releaseClaim = resolve;});
           const reached = new Promise<void>(resolve => {reportClaim = resolve;});
-          const feature = createContainedTurnFeature({...selected, custody: owner.custody,
-            operationStore: delegatingStore(durable, {reached: reportClaim, wait}), provider: owner.provider});
+          const feature = createContainedTurnFeature({...selected,
+            artifacts: durableFilesystem.artifacts, custody: owner.custody,
+            operationStore: delegatingStore(durable, {reached: reportClaim, wait}), provider: owner.provider,
+            workspace: durableFilesystem.workspace});
           const request = {commandId: `command:pg-success:${provider}:${testRunId}`, expectedProvider: provider,
             intent: {mode: "analysis" as const, prompt: "Complete the deterministic protocol fixture."},
             scope: {projectId: `project:pg:${testRunId}`, tenantId: `tenant:pg:${testRunId}`}};
@@ -387,8 +453,10 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
           assert.equal(persisted?.terminal.kind, "final");
           const replayFixture = createDependencies();
           const replaySelected = forProvider(replayFixture, provider);
-          const replay = await createContainedTurnFeature({...replaySelected, custody: owner.custody,
-            operationStore: delegatingStore(reconstructed), provider: owner.provider}).submit.execute(request);
+          const replay = await createContainedTurnFeature({...replaySelected,
+            artifacts: durableFilesystem.artifacts, custody: owner.custody,
+            operationStore: delegatingStore(reconstructed), provider: owner.provider,
+            workspace: durableFilesystem.workspace}).submit.execute(request);
           assert.equal(replay.status, "observed");
           assert.equal(replay.turn.status, "succeeded");
           assert.equal(host.starts, 1, "reconstruction replay cannot start the provider again");
@@ -397,6 +465,85 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
           owner.dispose();
         } finally {
           await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
+          await durableFilesystem.cleanup();
+          await rm(root, {recursive: true, force: true});
+        }
+      });
+    }
+  } finally {
+    await pool.end();
+  }
+});
+
+test("PostgreSQL current owners resume proved durable closure without replaying either provider", {
+  skip: databaseUrl === undefined
+    ? "coordinator rerun pending: POSTGRES_DURABILITY_URL is not available in this test-only worker"
+    : false,
+}, async t => {
+  assert.ok(databaseUrl);
+  const pool = new Pool({connectionString: databaseUrl, max: 12});
+  const testRunId = randomUUID();
+  try {
+    for (const provider of ["codex", "claude"] as const) {
+      await t.test(provider, async () => {
+        await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
+        await applyContainedTurnPostgresSchema(pool);
+        const root = await mkdtemp(join(tmpdir(), `pg-current-owner-recovery-${provider}-`));
+        const durableFilesystem = await durableWorkspaceComposition();
+        try {
+          const host = new DeterministicCurrentOwnerHost();
+          const owner = await createOwner(provider, root, host, true, durableFilesystem.workspaceOwner);
+          const fixture = createDependencies();
+          const selected = forProvider(fixture, provider);
+          const identities = createIdentities(`${testRunId}:${provider}:recovery`);
+          const durable = new PostgresContainedTurnOperationStore({identities, pool});
+          let withholdAcknowledgement = true;
+          const artifacts = Object.freeze({...durableFilesystem.artifacts,
+            ensureSealed: async (input: Parameters<typeof durableFilesystem.artifacts.ensureSealed>[0]) => {
+              const outcome = await durableFilesystem.artifacts.ensureSealed(input);
+              if (withholdAcknowledgement && outcome.kind === "proved") {
+                withholdAcknowledgement = false;
+                return {evidenceId: "evidence:artifact-seal-acknowledgement-lost" as never,
+                  kind: "indeterminate" as const};
+              }
+              return outcome;
+            },
+          });
+          const dependencies = {...selected, artifacts, custody: owner.custody,
+            operationStore: delegatingStore(durable), provider: owner.provider,
+            workspace: durableFilesystem.workspace};
+          const feature = createContainedTurnFeature(dependencies);
+          const request = {commandId: `command:pg-recovery:${provider}:${testRunId}`, expectedProvider: provider,
+            intent: {mode: "analysis" as const, prompt: "Recover only durable closure."},
+            scope: {projectId: `project:pg:${testRunId}`, tenantId: `tenant:pg:${testRunId}`}};
+
+          const first = await feature.submit.execute(request);
+          assert.equal(first.status, "observed");
+          assert.equal(first.turn.status, "reconcile_required");
+          assert.deepEqual([host.starts, host.containments, host.finalities], [1, 1, 1]);
+
+          const duplicate = await feature.submit.execute(request);
+          assert.equal(duplicate.status, "observed");
+          assert.equal(duplicate.turn.status, "succeeded");
+          assert.deepEqual([host.starts, host.containments, host.finalities], [1, 1, 1],
+            "closure recovery cannot re-enter provider execution or Host finality");
+          const completed = await durable.read({operationId: duplicate.turn.operationId, scope: request.scope});
+          assert.equal(completed?.terminal.kind, "final");
+
+          const reconstructed = new PostgresContainedTurnOperationStore({identities, pool});
+          const replayFixture = createDependencies();
+          const replaySelected = forProvider(replayFixture, provider);
+          const replay = await createContainedTurnFeature({...replaySelected,
+            artifacts: durableFilesystem.artifacts, custody: owner.custody,
+            operationStore: delegatingStore(reconstructed), provider: owner.provider,
+            workspace: durableFilesystem.workspace}).submit.execute(request);
+          assert.equal(replay.status, "observed");
+          assert.equal(replay.turn.status, "succeeded");
+          assert.deepEqual([host.starts, host.containments, host.finalities], [1, 1, 1]);
+          owner.dispose();
+        } finally {
+          await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
+          await durableFilesystem.cleanup();
           await rm(root, {recursive: true, force: true});
         }
       });

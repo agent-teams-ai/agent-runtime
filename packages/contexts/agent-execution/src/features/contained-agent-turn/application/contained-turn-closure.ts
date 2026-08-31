@@ -361,8 +361,6 @@ export const closeContainedTurnExecution = async (
       initial.providerProcessStart.kind !== "execution_started") {
     return initial;
   }
-  const attemptId = initial.dispatch.attemptId;
-  const custodyId = initial.custodyId;
   let current = await readContainedTurnOwnedOperation(
     dependencies, initial.operationId, trustedScope,
   ) ?? initial;
@@ -423,6 +421,30 @@ export const closeContainedTurnExecution = async (
   current = await closeContainedTurnPhysicalContainment(dependencies, current, trustedScope);
   if (outcome.kind === "indeterminate" || current.physicalContainment.kind !== "contained" ||
       current.reconciliation.kind === "required") {
+    return current;
+  }
+  return resumeContainedTurnTerminalization(dependencies, current, trustedScope);
+};
+
+/**
+ * Resumes only durable owner-side closure after provider execution is closed.
+ * This path cannot dispatch or execute the provider again.
+ */
+export const resumeContainedTurnTerminalization = async (
+  dependencies: ContainedTurnKernelDependencies,
+  initial: ContainedTurnKernelOperation,
+  trustedScope: ContainedTurnScope,
+): Promise<ContainedTurnKernelOperation> => {
+  if (initial.terminal.kind === "final" || initial.reconciliation.kind === "required" ||
+      initial.dispatch.kind !== "claimed" || initial.custodyId === undefined ||
+      initial.providerProcessStart.kind !== "execution_started" ||
+      initial.providerExecution.kind !== "closed") {
+    return initial;
+  }
+  const attemptId = initial.dispatch.attemptId;
+  const custodyId = initial.custodyId;
+  let current = await closeContainedTurnPhysicalContainment(dependencies, initial, trustedScope);
+  if (current.physicalContainment.kind !== "contained" || current.reconciliation.kind === "required") {
     return current;
   }
   const staged = await sealArtifactsAndWorkspace(dependencies, current, trustedScope);

@@ -15,6 +15,7 @@ import { createContainedTurnOperation } from "../domain/contained-turn-creation.
 import {
   readContainedTurnOwnedOperation,
   recordContainedTurnRejectedDebt,
+  resumeContainedTurnTerminalization,
 } from "./contained-turn-closure.js";
 import {
   advanceContainedTurn,
@@ -37,6 +38,24 @@ import type { ContainedTurnKernelDependencies } from "./ports/outbound/contained
 type SubmitOptions = Readonly<{
   onAccepted?: (operation: ContainedTurnKernelOperation) => void;
 }>;
+
+const resumeReplayedTerminalization = async (
+  dependencies: ContainedTurnKernelDependencies,
+  operation: ContainedTurnKernelOperation,
+  trustedScope: ContainedTurnApplicationSubmitInput["scope"],
+): Promise<ContainedTurnKernelOperation> => {
+  if (operation.terminal.kind === "final" || operation.reconciliation.kind === "required" ||
+      operation.providerExecution.kind !== "closed") {
+    return operation;
+  }
+  try {
+    return await resumeContainedTurnTerminalization(dependencies, operation, trustedScope);
+  } catch {
+    return await readContainedTurnOwnedOperation(
+      dependencies, operation.operationId, trustedScope,
+    ) ?? operation;
+  }
+};
 
 const continueAfterAcceptance = async (
   dependencies: ContainedTurnKernelDependencies,
@@ -139,7 +158,10 @@ export const submitContainedTurn = async (
   }
   if (identity.kind === "replayed") {
     try {options?.onAccepted?.(identity.operation);} catch {}
-    return { operation: identity.operation, status: "observed" };
+    return {
+      operation: await resumeReplayedTerminalization(dependencies, identity.operation, input.scope),
+      status: "observed",
+    };
   }
   const [access, security] = await Promise.all([
     dependencies.providerAccess.resolveForAcceptance({
@@ -215,7 +237,10 @@ export const submitContainedTurn = async (
   }
   if (accepted.kind === "replayed") {
     try {options?.onAccepted?.(accepted.operation);} catch {}
-    return { operation: accepted.operation, status: "observed" };
+    return {
+      operation: await resumeReplayedTerminalization(dependencies, accepted.operation, input.scope),
+      status: "observed",
+    };
   }
   try {options?.onAccepted?.(accepted.operation);} catch {}
   return continueAfterAcceptance(dependencies, accepted.operation, input.scope);
