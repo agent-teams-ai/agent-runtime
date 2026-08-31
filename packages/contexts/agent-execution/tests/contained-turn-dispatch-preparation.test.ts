@@ -131,6 +131,75 @@ test("retirement closes the cleanup TOCTOU and exact permit replay is monotone",
   assert.throws(() => claimContainedTurnDispatchPreparation(closed), /never be claimed/u);
 });
 
+test("retirement durably preserves and reconciles every indeterminate grant consumption", () => {
+  const providerAccessEvidenceId = containedTurnIdentity(
+    "evidence", "evidence:provider-access-consumption-indeterminate",
+  );
+  const runtimeSecurityEvidenceId = containedTurnIdentity(
+    "evidence", "evidence:runtime-security-consumption-indeterminate",
+  );
+  const active = Object.freeze({
+    attemptId,
+    custodyId,
+    kind: "active" as const,
+    operationCutoffRevision: 0,
+    operationId,
+    preparationToken,
+    preparedOperationRevision: 1,
+    providerAccessGrantRequestId: null,
+    runtimeSecurityGrantRequestId: null,
+    workspaceId,
+  });
+  const retired = retireContainedTurnDispatchPreparation(
+    active,
+    "retirement:indeterminate-consumption",
+    {},
+    { providerAccessEvidenceId, runtimeSecurityEvidenceId },
+  );
+  assert.equal(retired.kind, "cleanup_pending");
+  if (retired.kind !== "cleanup_pending") {return;}
+  assert.deepEqual(retired.cleanupEvidenceIds, [
+    providerAccessEvidenceId,
+    runtimeSecurityEvidenceId,
+  ]);
+  assert.equal(retired.providerAccessSettled, false);
+  assert.equal(retired.runtimeSecuritySettled, false);
+
+  const custodyReleased = recordContainedTurnPreparationCleanup(retired, {
+    permit: retired.cleanupPermit,
+    target: "custody",
+  });
+  const settlementEvidenceId = containedTurnIdentity(
+    "evidence", "evidence:provider-access-settlement-still-indeterminate",
+  );
+  const stillIndeterminate = recordContainedTurnPreparationCleanup(custodyReleased, {
+    evidenceId: settlementEvidenceId,
+    permit: retired.cleanupPermit,
+    target: "provider_access",
+  });
+  assert.equal(stillIndeterminate.kind, "cleanup_pending");
+  if (stillIndeterminate.kind !== "cleanup_pending") {return;}
+  assert.equal(stillIndeterminate.providerAccessSettled, false);
+  const providerReconciled = recordContainedTurnPreparationCleanup(stillIndeterminate, {
+    permit: retired.cleanupPermit,
+    target: "provider_access",
+  });
+  const closed = recordContainedTurnPreparationCleanup(providerReconciled, {
+    permit: retired.cleanupPermit,
+    target: "runtime_security",
+  });
+  assert.equal(closed.kind, "cleanup_closed");
+  if (closed.kind === "cleanup_closed") {
+    assert.deepEqual(closed.cleanupEvidenceIds, [
+      providerAccessEvidenceId,
+      runtimeSecurityEvidenceId,
+      settlementEvidenceId,
+    ]);
+    assert.equal(closed.providerAccessConsumptionEvidenceId, providerAccessEvidenceId);
+    assert.equal(closed.runtimeSecurityConsumptionEvidenceId, runtimeSecurityEvidenceId);
+  }
+});
+
 test("restart recovery retires against the preparation revision rather than the advanced operation", async () => {
   const winner = createReservedOperation();
   const active = Object.freeze({
@@ -174,6 +243,97 @@ test("restart recovery retires against the preparation revision rather than the 
   });
   assert.equal(retirementInputs[0]?.expectedOperationRevision, active.preparedOperationRevision);
   assert.equal(custodyReleases, 1);
+});
+
+test("parallel grant consumption returns every indeterminate owner evidence", async () => {
+  const operation = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
+  const subject = Object.freeze({
+    attemptId,
+    custodyId,
+    effectId,
+    executionGenerationId,
+    hostBootId,
+    hostInstanceId,
+    operationCutoffRevision: operation.operationCutoff.revision,
+    operationId,
+    preparationToken,
+    purpose: "contained_turn_provider_start_v1" as const,
+    scopeDigest: containedTurnScopeDigest(scope),
+    workspaceId,
+  });
+  const providerAccessEvidenceId = containedTurnIdentity(
+    "evidence", "evidence:provider-access-parallel-indeterminate",
+  );
+  const runtimeSecurityEvidenceId = containedTurnIdentity(
+    "evidence", "evidence:runtime-security-parallel-indeterminate",
+  );
+  const dependencies = {
+    operationStore: { claimPreparedDispatch: unusedMandatoryDependency },
+    providerAccess: {
+      consumeForDispatch: async () => ({ evidenceId: providerAccessEvidenceId, kind: "indeterminate" as const }),
+    },
+    security: {
+      consumeForDispatch: async () => ({ evidenceId: runtimeSecurityEvidenceId, kind: "indeterminate" as const }),
+    },
+  } as unknown as ContainedTurnKernelDependencies;
+  const outcome = await claimContainedTurnWithConsumedGrants(
+    dependencies,
+    operation,
+    scope,
+    subject,
+    {
+      binding: {
+        attemptId,
+        authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
+        custodyId,
+        effectId,
+        operationId,
+      },
+      kind: "host_custody",
+      proofId: containedTurnIdentity("proof", "proof:parallel-indeterminate-host-custody"),
+    },
+  );
+  assert.equal(outcome.kind, "indeterminate");
+  if (outcome.kind === "indeterminate") {
+    assert.equal(outcome.evidenceId, providerAccessEvidenceId);
+    assert.deepEqual(outcome.consumptionEvidenceIds, {
+      providerAccessEvidenceId,
+      runtimeSecurityEvidenceId,
+    });
+  }
+
+  const rejected = await claimContainedTurnWithConsumedGrants(
+    {
+      ...dependencies,
+      providerAccess: {
+        consumeForDispatch: async () => {throw new Error("lost Provider Access acknowledgement");},
+      },
+    } as unknown as ContainedTurnKernelDependencies,
+    operation,
+    scope,
+    subject,
+    {
+      binding: {
+        attemptId,
+        authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
+        custodyId,
+        effectId,
+        operationId,
+      },
+      kind: "host_custody",
+      proofId: containedTurnIdentity("proof", "proof:rejected-consumption-host-custody"),
+    },
+  );
+  assert.equal(rejected.kind, "unavailable");
+  if (rejected.kind !== "unavailable") {assert.fail("rejected owner call must remain unavailable");}
+  assert.match(
+    rejected.consumptionEvidenceIds.providerAccessEvidenceId ?? "",
+    /^evidence:grant-consumption-unavailable:sha256:[a-f0-9]{64}$/u,
+  );
+  assert.equal(
+    rejected.consumptionEvidenceIds.runtimeSecurityEvidenceId,
+    runtimeSecurityEvidenceId,
+  );
 });
 
 test("normalized consumed receipts bind the exact final claim and reject replay conflicts", () => {
@@ -328,7 +488,20 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
     provider: {},
   } as unknown as ContainedTurnKernelDependencies);
   const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
-  const claimed = await claimContainedTurnWithConsumedGrants(dependencies, initial, scope, subject);
+  const hostCustodyProof = Object.freeze({
+    binding: Object.freeze({
+      attemptId,
+      authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
+      custodyId,
+      effectId,
+      operationId,
+    }),
+    kind: "host_custody" as const,
+    proofId: containedTurnIdentity("proof", "proof:dispatch-grant-host-custody"),
+  });
+  const claimed = await claimContainedTurnWithConsumedGrants(
+    dependencies, initial, scope, subject, hostCustodyProof,
+  );
   assert.equal(claimed.kind, "claimed");
   if (claimed.kind === "claimed") {assert.equal(claimed.startAuthority, "host-start-once:1");}
   assert.deepEqual(events, [
@@ -339,7 +512,9 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
 
   observed = true;
   events.length = 0;
-  const replay = await claimContainedTurnWithConsumedGrants(dependencies, initial, scope, subject);
+  const replay = await claimContainedTurnWithConsumedGrants(
+    dependencies, initial, scope, subject, hostCustodyProof,
+  );
   assert.equal(replay.kind, "observed_claim");
   assert.equal("startAuthority" in replay, false, "a replay cannot manufacture one-use start authority");
 });

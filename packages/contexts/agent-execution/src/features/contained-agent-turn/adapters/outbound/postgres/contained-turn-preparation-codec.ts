@@ -6,7 +6,7 @@ import {
   ContainedTurnStateQuarantineError,
 } from "./contained-turn-state-codec.js";
 
-export const CONTAINED_TURN_PREPARATION_CODEC_VERSION = 2;
+export const CONTAINED_TURN_PREPARATION_CODEC_VERSION = 3;
 
 const record = (value: unknown): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -38,8 +38,19 @@ const validatePreparation = (
   }
 };
 
+const addConsumptionEvidenceFields = (legacy: Record<string, unknown>): Record<string, unknown> => ({
+  ...legacy,
+  ...(legacy.kind === "cleanup_pending" || legacy.kind === "cleanup_closed"
+    ? {
+      ...(legacy.kind === "cleanup_closed" ? { cleanupEvidenceIds: [] } : {}),
+      providerAccessConsumptionEvidenceId: null,
+      runtimeSecurityConsumptionEvidenceId: null,
+    }
+    : {}),
+});
+
 const upcastV1 = (state: unknown): ContainedTurnDispatchPreparation => {
-  const legacy = record(state);
+  const legacy = addConsumptionEvidenceFields(record(state));
   const upcast = {
     ...legacy,
     providerAccessGrantRequestId: null,
@@ -51,9 +62,21 @@ const upcastV1 = (state: unknown): ContainedTurnDispatchPreparation => {
   return validatePreparation(upcast, 1);
 };
 
+const decodeEnvelope = (state: unknown, codecVersion: 2 | 3): ContainedTurnDispatchPreparation => {
+  const envelope = record(state);
+  if (Object.keys(envelope).toSorted().join(",") !== "codecVersion,payload" ||
+      envelope.codecVersion !== codecVersion) {
+    throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
+  }
+  const payload = codecVersion === 2
+    ? addConsumptionEvidenceFields(record(envelope.payload))
+    : envelope.payload;
+  return validatePreparation(payload, codecVersion);
+};
+
 export const encodeContainedTurnPreparation = (
   preparation: ContainedTurnDispatchPreparation,
-): Readonly<{ codecVersion: 2; digest: string; json: string }> => {
+): Readonly<{ codecVersion: 3; digest: string; json: string }> => {
   const validated = validatePreparation(preparation, CONTAINED_TURN_PREPARATION_CODEC_VERSION);
   const envelope = Object.freeze({
     codecVersion: CONTAINED_TURN_PREPARATION_CODEC_VERSION,
@@ -86,10 +109,5 @@ export const decodeContainedTurnPreparation = (
   if (expectedDigest === null) {
     throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
   }
-  const envelope = record(state);
-  if (Object.keys(envelope).toSorted().join(",") !== "codecVersion,payload" ||
-      envelope.codecVersion !== CONTAINED_TURN_PREPARATION_CODEC_VERSION) {
-    throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
-  }
-  return validatePreparation(envelope.payload, codecVersion);
+  return decodeEnvelope(state, codecVersion as 2 | 3);
 };

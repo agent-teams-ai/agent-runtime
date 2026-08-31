@@ -72,8 +72,12 @@ const operationBinding = (operation: ContainedTurnKernelOperation) => ({
   operationId: operation.operationId,
 });
 const attemptBinding = (operation: ContainedTurnKernelOperation) => {
-  assert.equal(operation.dispatch.kind, "claimed");
-  return { ...operationBinding(operation), attemptId, effectId: operation.effectId };
+  if (operation.dispatch.kind !== "claimed") {throw new TypeError("fixture attempt binding requires claim");}
+  return {
+    ...operationBinding(operation),
+    attemptId: operation.dispatch.attemptId,
+    effectId: operation.effectId,
+  };
 };
 
 const assertOwnerAuthority = (
@@ -112,6 +116,7 @@ const createDependencies = (options: Readonly<{
   neverExecution?: boolean;
   neverStart?: boolean;
   providerGate?: Promise<void>;
+  providerSettlementIndeterminateOnce?: boolean;
   providerStarted?: () => void;
   revalidationThrows?: boolean;
   staleClaimAuthority?: boolean;
@@ -136,7 +141,8 @@ const createDependencies = (options: Readonly<{
   let current: ContainedTurnKernelOperation | undefined;
   let commitCount = 0;
   let workspaceCreateCount = 0;
-  let preparation: ContainedTurnDispatchPreparation | undefined;
+  let preparationCount = 0;
+  const preparations = new Map<string, ContainedTurnDispatchPreparation>();
   const claimAuthorities: ClaimAuthorityObservation[] = [];
   const containmentCalls = { value: 0 };
   const completionBoundaryReleases = { value: 0 };
@@ -144,6 +150,7 @@ const createDependencies = (options: Readonly<{
   const custodyReleases: Array<Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]> = [];
   const openedCustodies: typeof custodyId[] = [];
   const providerCalls = { value: 0 };
+  let providerSettlementCount = 0;
   const workspaceQuarantines: Array<Parameters<ContainedTurnKernelDependencies["workspace"]["quarantine"]>[0]> = [];
   const operationStore: ContainedTurnKernelDependencies["operationStore"] = {
     accept: async (candidate, authority) => {
@@ -165,6 +172,7 @@ const createDependencies = (options: Readonly<{
       commitCount += 1;
       if (options.indeterminateFirstCommit === true && commitCount === 1) {
         const evidenceId = identity("evidence", "lost-store-ack");
+        current = input.candidate;
         current = mutateContainedTurnOperation(current, { evidenceId, kind: "record_reconciliation_debt", source: "store_commit" });
         return { debtOperation: current, evidenceId, kind: "indeterminate" };
       }
@@ -177,11 +185,20 @@ const createDependencies = (options: Readonly<{
       );
       if (current === undefined) {return { kind: "not_found" };}
       assertOwnerAuthority(input.authority, current);
+      if (current.dispatch.kind === "claimed" &&
+          current.dispatch.preparationToken === input.subject.preparationToken) {
+        return { kind: "observed_claim", operation: current };
+      }
+      let preparation = preparations.get(input.subject.preparationToken);
       if (preparation === undefined || preparation.kind !== "active" ||
+          preparation.operationId !== current.operationId ||
+          preparation.operationId !== input.subject.operationId ||
           preparation.preparationToken !== input.subject.preparationToken ||
           preparation.attemptId !== input.subject.attemptId ||
           preparation.custodyId !== input.subject.custodyId ||
+          preparation.workspaceId !== current.workspaceId ||
           preparation.workspaceId !== input.subject.workspaceId ||
+          preparation.operationCutoffRevision !== input.subject.operationCutoffRevision ||
           preparation.preparedOperationRevision !== input.expectedOperationRevision) {
         return { current, kind: "stale" };
       }
@@ -189,7 +206,13 @@ const createDependencies = (options: Readonly<{
         providerAccessGrantRequestId: receipts[0].grantRequestId,
         runtimeSecurityGrantRequestId: receipts[1].grantRequestId,
       });
+      preparations.set(preparation.preparationToken, preparation);
       if (current.revision !== input.expectedOperationRevision || options.staleClaimAuthority === true) {
+        return { current, kind: "stale" };
+      }
+      if (current.effectId !== input.subject.effectId ||
+          containedTurnDispatchClaimBindingDigest(input.subject) !== receipts[0].claimBindingDigest ||
+          current.acceptedAuthorityVector.scopeDigest !== input.subject.scopeDigest) {
         return { current, kind: "stale" };
       }
       const subject = input.subject;
@@ -250,6 +273,7 @@ const createDependencies = (options: Readonly<{
         writerFence,
       });
       preparation = claimContainedTurnDispatchPreparation(preparation);
+      preparations.set(preparation.preparationToken, preparation);
       if (options.claimCommitThenThrow === true) {throw new Error("claim committed; acknowledgement lost");}
       if (options.staleOwnerAfterClaim === true) {return { current, kind: "stale" };}
       return { kind: "claimed", operation: current, startAuthority: "test-start-authority:one" };
@@ -278,36 +302,95 @@ const createDependencies = (options: Readonly<{
         proof: { binding: { ...operationBinding(operation), cancellationCommandId, cancellationFingerprint: command.fingerprint }, kind: "cancellation", proofId: proofId("cancellation") },
       };
     },
+    listDispatchPreparations: async input => {
+      if (current === undefined || input.scope.tenantId !== current.scope.tenantId ||
+          input.scope.projectId !== current.scope.projectId) {return [];}
+      const kinds = input.kinds ?? ["active", "cleanup_pending"];
+      const limit = input.limit ?? 100;
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000 ||
+          kinds.length === 0 || kinds.some(kind => kind !== "active" && kind !== "cleanup_pending")) {
+        throw new TypeError("invalid fixture dispatch preparation recovery query");
+      }
+      const rows = [];
+      const orderedPreparations = [...preparations.entries()].toSorted(([left], [right]) =>
+        left.localeCompare(right));
+      for (const [preparationToken, preparation] of orderedPreparations) {
+        if (preparationToken !== preparation.preparationToken ||
+            preparation.operationId !== current.operationId) {
+          throw new Error("fixture preparation recovery identity fence rejected a corrupt row");
+        }
+        if ((preparation.kind === "active" || preparation.kind === "cleanup_pending") &&
+            kinds.includes(preparation.kind)) {
+          rows.push(Object.freeze({ operation: current, preparation }));
+        }
+        if (rows.length === limit) {break;}
+      }
+      return Object.freeze(rows);
+    },
     prepareDispatch: async ({ authority, operation }) => {
       assertOwnerAuthority(authority, operation);
-      preparation = {
-        attemptId, custodyId, kind: "active", operationCutoffRevision: operation.operationCutoff.revision,
-        operationId, preparationToken: containedTurnPreparationToken({ attemptId, custodyId, operationId }), preparedOperationRevision: operation.revision,
+      if (operation.workspaceId === undefined) {
+        throw new TypeError("fixture dispatch preparation requires workspace custody");
+      }
+      if (current === undefined || current.revision !== operation.revision) {
+        throw new Error("fixture preparation lost its operation revision fence");
+      }
+      assertOwnerAuthority(authority, current);
+      const ordinal = preparationCount;
+      preparationCount += 1;
+      const preparedAttemptId = ordinal === 0 ? attemptId : identity("attempt", `one-${String(ordinal)}`);
+      const preparedCustodyId = ordinal === 0 ? custodyId : identity("custody", `one-${String(ordinal)}`);
+      const preparationToken = containedTurnPreparationToken({
+        attemptId: preparedAttemptId, custodyId: preparedCustodyId, operationId: operation.operationId,
+      });
+      const preparation: ContainedTurnDispatchPreparation = {
+        attemptId: preparedAttemptId, custodyId: preparedCustodyId, kind: "active", operationCutoffRevision: operation.operationCutoff.revision,
+        operationId: operation.operationId, preparationToken, preparedOperationRevision: operation.revision,
         providerAccessGrantRequestId: null, runtimeSecurityGrantRequestId: null,
-        workspaceId: operation.workspaceId as typeof workspaceId,
+        workspaceId: operation.workspaceId,
       };
-      return { attemptId, claimProofId: proofId("claim"), custodyId, cutoffProofId: proofId("cutoff"), executionGenerationId, writerFence };
+      preparations.set(preparationToken, preparation);
+      return {
+        attemptId: preparedAttemptId,
+        claimProofId: proofId(`claim-${String(ordinal)}`),
+        custodyId: preparedCustodyId,
+        cutoffProofId: proofId(`cutoff-${String(ordinal)}`),
+        executionGenerationId: ordinal === 0 ? executionGenerationId : identity("execution_generation", `one-${String(ordinal)}`),
+        writerFence: ordinal === 0 ? writerFence : identity("writer_fence", `one-${String(ordinal)}`),
+      };
     },
     recordDispatchPreparationCleanup: async input => {
+      if (current === undefined) {throw new Error("missing test operation");}
+      assertOwnerAuthority(input.authority, current);
+      let preparation = preparations.get(input.permit.preparationToken);
       if (preparation === undefined) {throw new Error("missing test preparation");}
       preparation = recordContainedTurnPreparationCleanup(preparation, input);
+      preparations.set(preparation.preparationToken, preparation);
       return preparation;
     },
     retireDispatchPreparation: async input => {
       if (current === undefined) {return { evidenceId: identity("evidence", "retire-missing"), kind: "indeterminate" };}
+      assertOwnerAuthority(input.authority, current);
       if (current.dispatch.kind === "claimed" && current.dispatch.preparationToken === input.preparationToken) {
         return { kind: "claimed", operation: current };
       }
+      let preparation = preparations.get(input.preparationToken);
       if (preparation === undefined || preparation.kind !== "active") {
         return { current, kind: "stale" };
       }
-      if (preparation.preparedOperationRevision !== input.expectedOperationRevision ||
+      if (preparation.operationId !== current.operationId ||
+          preparation.preparationToken !== input.preparationToken ||
+          preparation.workspaceId !== current.workspaceId ||
+          preparation.operationCutoffRevision !== current.operationCutoff.revision ||
+          preparation.preparedOperationRevision !== input.expectedOperationRevision ||
           preparation.operationCutoffRevision !== input.expectedOperationCutoffRevision) {
         return { current, kind: "stale" };
       }
       preparation = retireContainedTurnDispatchPreparation(
         preparation, "test-retirement", input.consumedGrantRequestIds,
+        input.consumptionEvidenceIds,
       );
+      preparations.set(preparation.preparationToken, preparation);
       return { kind: "retired", preparation: preparation as Extract<ContainedTurnDispatchPreparation, { kind: "cleanup_pending" }> };
     },
     proofsForAcceptedEffect: async ({ authority, operation }) => {
@@ -434,7 +517,12 @@ const createDependencies = (options: Readonly<{
               snapshot: providerAccessSnapshot,
             }),
       }),
-      settleConsumedGrant: async () => ({ kind: "settled" }),
+      settleConsumedGrant: async () => {
+        providerSettlementCount += 1;
+        return options.providerSettlementIndeterminateOnce === true && providerSettlementCount === 1
+          ? { evidenceId: identity("evidence", "provider-grant-settlement-indeterminate"), kind: "indeterminate" }
+          : { kind: "settled" };
+      },
     },
     workspace: {
       ensureClosed: async input => {
@@ -490,8 +578,11 @@ const createDependencies = (options: Readonly<{
       },
       attestExecutionClosure: async input => {
         const operation = current as ContainedTurnKernelOperation;
-        assert.equal(input.attemptId, attemptId);
-        assert.equal(input.custodyId, custodyId);
+        if (operation.dispatch.kind !== "claimed" || operation.custodyId === undefined) {
+          throw new TypeError("fixture execution closure requires claimed custody");
+        }
+        assert.equal(input.attemptId, operation.dispatch.attemptId);
+        assert.equal(input.custodyId, operation.custodyId);
         assert.equal(input.finalCursor, operation.output.chunks.length);
         assert.equal(input.operationId, operationId);
         const binding = attemptBinding(operation);
@@ -523,13 +614,30 @@ const createDependencies = (options: Readonly<{
           : outcome;
       },
       open: async () => {
-        openedCustodies.push(custodyId);
+        const active = [...preparations.values()].findLast(candidate => candidate.kind === "active");
+        if (active === undefined) {throw new Error("fixture custody requires an active preparation");}
+        const selectedHostBootId = active.attemptId === attemptId
+          ? hostBootId
+          : identity("host_boot", `one-${active.attemptId}`);
+        const selectedHostInstanceId = active.attemptId === attemptId
+          ? hostInstanceId
+          : identity("host_instance", `one-${active.attemptId}`);
+        openedCustodies.push(active.custodyId);
         if (options.custodyOpenThrows === true) {throw new Error("custody failed after reserving identity");}
         return {
-          custodyId,
-          hostBootId,
-          hostCustodyProof: { binding: { ...operationBinding(current as ContainedTurnKernelOperation), attemptId, effectId, custodyId }, kind: "host_custody", proofId: proofId("host-custody") },
-          hostInstanceId,
+          custodyId: active.custodyId,
+          hostBootId: selectedHostBootId,
+          hostCustodyProof: {
+            binding: {
+              ...operationBinding(current as ContainedTurnKernelOperation),
+              attemptId: active.attemptId,
+              custodyId: active.custodyId,
+              effectId,
+            },
+            kind: "host_custody",
+            proofId: proofId(`host-custody-${active.attemptId}`),
+          },
+          hostInstanceId: selectedHostInstanceId,
         };
       },
       releaseReservation: async input => {custodyReleases.push(input);},
@@ -548,6 +656,11 @@ const createDependencies = (options: Readonly<{
       requestContainment: async () => {
         containmentCalls.value += 1;
         const operation = current as ContainedTurnKernelOperation;
+        if (operation.dispatch.kind !== "claimed" || operation.custodyId === undefined ||
+            operation.hostBootId === undefined || operation.hostInstanceId === undefined ||
+            operation.workspaceId === undefined) {
+          throw new TypeError("fixture containment requires exact claimed identities");
+        }
         if (operation.output.fence.kind === "open") {
           return { evidenceId: identity("evidence", "containment-pending"), kind: "indeterminate" };
         }
@@ -563,20 +676,20 @@ const createDependencies = (options: Readonly<{
               capabilityManifestRevision: operation.capabilityManifest.manifestRevision,
               containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
               credentialBindingDigest: operation.providerAccessSnapshot.credentialBindingDigest,
-              custodyId,
+              custodyId: operation.custodyId,
                cutoffProofId: operation.operationCutoff.kind === "closed" && "proofId" in operation.operationCutoff
                  ? operation.operationCutoff.proofId
                  : operation.admissionFence.kind === "fenced" ? operation.admissionFence.proofId : proof("cutoff"),
               executionClosureProofId: proof("execution_closure"),
               finalCursor: operation.output.chunks.length,
-              hostBootId,
-              hostInstanceId,
+              hostBootId: operation.hostBootId,
+              hostInstanceId: operation.hostInstanceId,
               immutableScopeDigest: operation.acceptedAuthorityVector.scopeDigest,
               outputDrainProofId: proof("output_drain"),
               physicalContainmentProofId: proof("physical_containment"),
               providerRouteRef: operation.providerAccessSnapshot.providerRouteRef,
               terminalObservationProofId: proof("provider_terminal_observation"),
-               workspaceId: operation.workspaceId as typeof workspaceId,
+               workspaceId: operation.workspaceId,
             },
             kind: "containment",
             proofId: proofId("containment"),
@@ -585,14 +698,24 @@ const createDependencies = (options: Readonly<{
       },
       requestPhysicalContainment: async () => {
         containmentCalls.value += 1;
+        const operation = current as ContainedTurnKernelOperation;
+        if (operation.custodyId === undefined || operation.hostBootId === undefined ||
+            operation.hostInstanceId === undefined) {
+          throw new TypeError("fixture physical containment requires exact claimed identities");
+        }
         return {
           kind: "contained",
-          proof: { binding: { ...attemptBinding(current as ContainedTurnKernelOperation), custodyId, hostBootId, hostInstanceId }, kind: "physical_containment", proofId: proofId("physical-containment") },
+          proof: { binding: { ...attemptBinding(operation), custodyId: operation.custodyId, hostBootId: operation.hostBootId, hostInstanceId: operation.hostInstanceId }, kind: "physical_containment", proofId: proofId("physical-containment") },
         };
       },
       start: async input => {
         if (options.neverStart === true) {return new Promise(() => {});}
-        const proof = { binding: { ...attemptBinding(current as ContainedTurnKernelOperation), custodyId, hostBootId, hostInstanceId }, kind: "provider_process_start" as const, proofId: proofId("process-start") };
+        const operation = current as ContainedTurnKernelOperation;
+        if (operation.custodyId === undefined || operation.hostBootId === undefined ||
+            operation.hostInstanceId === undefined) {
+          throw new TypeError("fixture process start requires exact claimed identities");
+        }
+        const proof = { binding: { ...attemptBinding(operation), custodyId: operation.custodyId, hostBootId: operation.hostBootId, hostInstanceId: operation.hostInstanceId }, kind: "provider_process_start" as const, proofId: proofId("process-start") };
         let reportStart!: () => void;
         const observation = new Promise<import("../features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js").ContainedTurnKernelProcessStartObservation>(resolve => {
           reportStart = () => {resolve({ kind: "execution_started", proof });};

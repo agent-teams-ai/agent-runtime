@@ -1,5 +1,5 @@
 import { digestContainedTurnCanonicalValue, type ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
-import { containedTurnIdentity, type ContainedTurnAttemptId, type ContainedTurnCustodyId, type ContainedTurnIdentity, type ContainedTurnOperationId, type ContainedTurnPreparationToken, type ContainedTurnWorkspaceId } from "./contained-turn-identities.js";
+import { containedTurnIdentity, type ContainedTurnAttemptId, type ContainedTurnCustodyId, type ContainedTurnEvidenceId, type ContainedTurnIdentity, type ContainedTurnOperationId, type ContainedTurnPreparationToken, type ContainedTurnWorkspaceId, validateContainedTurnIdentity } from "./contained-turn-identities.js";
 import type { ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 
 export type ContainedTurnCleanupPermitId = ContainedTurnIdentity<"cleanup_permit">;
@@ -32,13 +32,23 @@ export type ContainedTurnDispatchPreparation =
     readonly cleanupPermit: ContainedTurnCleanupPermit;
     readonly custodyReleased: boolean;
     readonly kind: "cleanup_pending";
+    readonly providerAccessConsumptionEvidenceId: ContainedTurnEvidenceId | null;
     readonly providerAccessSettled: boolean;
+    readonly runtimeSecurityConsumptionEvidenceId: ContainedTurnEvidenceId | null;
     readonly runtimeSecuritySettled: boolean;
   })
   | (PreparationBase & {
+    readonly cleanupEvidenceIds: readonly string[];
     readonly cleanupPermitId: ContainedTurnCleanupPermitId;
     readonly kind: "cleanup_closed";
+    readonly providerAccessConsumptionEvidenceId: ContainedTurnEvidenceId | null;
+    readonly runtimeSecurityConsumptionEvidenceId: ContainedTurnEvidenceId | null;
   });
+
+export interface ContainedTurnGrantConsumptionEvidenceIds {
+  readonly providerAccessEvidenceId?: ContainedTurnEvidenceId;
+  readonly runtimeSecurityEvidenceId?: ContainedTurnEvidenceId;
+}
 
 export const containedTurnCleanupPermit = (
   preparation: Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" }>,
@@ -125,6 +135,7 @@ export const retireContainedTurnDispatchPreparation = (
     providerAccessGrantRequestId?: string;
     runtimeSecurityGrantRequestId?: string;
   }> = {},
+  consumptionEvidenceIds: ContainedTurnGrantConsumptionEvidenceIds = {},
 ): ContainedTurnDispatchPreparation => {
   if (preparation.kind === "claimed") {
     throw new TypeError("claimed dispatch preparation can never mint a cleanup permit");
@@ -141,14 +152,36 @@ export const retireContainedTurnDispatchPreparation = (
   }
   if (preparation.kind !== "active") {return preparation;}
   const bound = bindContainedTurnPreparationGrantRequests(preparation, consumedGrantRequestIds);
+  const providerAccessConsumptionEvidenceId = consumptionEvidenceIds.providerAccessEvidenceId === undefined
+    ? null
+    : validateContainedTurnIdentity("evidence", consumptionEvidenceIds.providerAccessEvidenceId);
+  const runtimeSecurityConsumptionEvidenceId = consumptionEvidenceIds.runtimeSecurityEvidenceId === undefined
+    ? null
+    : validateContainedTurnIdentity("evidence", consumptionEvidenceIds.runtimeSecurityEvidenceId);
+  if (bound.providerAccessGrantRequestId !== null && providerAccessConsumptionEvidenceId !== null) {
+    throw new TypeError("Provider Access consumption cannot be both proved and indeterminate");
+  }
+  if (bound.runtimeSecurityGrantRequestId !== null && runtimeSecurityConsumptionEvidenceId !== null) {
+    throw new TypeError("Runtime Security consumption cannot be both proved and indeterminate");
+  }
+  const cleanupEvidenceIds = Object.freeze([
+    ...new Set([
+      providerAccessConsumptionEvidenceId,
+      runtimeSecurityConsumptionEvidenceId,
+    ].filter((evidenceId): evidenceId is ContainedTurnEvidenceId => evidenceId !== null)),
+  ]);
   return Object.freeze({
     ...bound,
-    cleanupEvidenceIds: Object.freeze([]),
+    cleanupEvidenceIds,
     cleanupPermit: containedTurnCleanupPermit(bound, nonce),
     custodyReleased: false,
     kind: "cleanup_pending",
-    providerAccessSettled: bound.providerAccessGrantRequestId === null,
-    runtimeSecuritySettled: bound.runtimeSecurityGrantRequestId === null,
+    providerAccessConsumptionEvidenceId,
+    providerAccessSettled: bound.providerAccessGrantRequestId === null &&
+      providerAccessConsumptionEvidenceId === null,
+    runtimeSecurityConsumptionEvidenceId,
+    runtimeSecuritySettled: bound.runtimeSecurityGrantRequestId === null &&
+      runtimeSecurityConsumptionEvidenceId === null,
   });
 };
 
@@ -182,14 +215,17 @@ export const recordContainedTurnPreparationCleanup = (
     cleanupEvidenceIds: input.evidenceId === undefined
       ? preparation.cleanupEvidenceIds
       : Object.freeze([...new Set([...preparation.cleanupEvidenceIds, input.evidenceId])]),
-    custodyReleased: preparation.custodyReleased || input.target === "custody",
-    providerAccessSettled: preparation.providerAccessSettled || input.target === "provider_access",
-    runtimeSecuritySettled: preparation.runtimeSecuritySettled || input.target === "runtime_security",
+    custodyReleased: preparation.custodyReleased ||
+      (input.evidenceId === undefined && input.target === "custody"),
+    providerAccessSettled: preparation.providerAccessSettled ||
+      (input.evidenceId === undefined && input.target === "provider_access"),
+    runtimeSecuritySettled: preparation.runtimeSecuritySettled ||
+      (input.evidenceId === undefined && input.target === "runtime_security"),
   };
-  if (candidate.cleanupEvidenceIds.length === 0 && candidate.custodyReleased &&
-      candidate.providerAccessSettled && candidate.runtimeSecuritySettled) {
+  if (candidate.custodyReleased && candidate.providerAccessSettled && candidate.runtimeSecuritySettled) {
     return Object.freeze({
       attemptId: preparation.attemptId,
+      cleanupEvidenceIds: candidate.cleanupEvidenceIds,
       cleanupPermitId: preparation.cleanupPermit.permitId,
       custodyId: preparation.custodyId,
       kind: "cleanup_closed",
@@ -197,7 +233,9 @@ export const recordContainedTurnPreparationCleanup = (
       operationId: preparation.operationId,
       preparationToken: preparation.preparationToken,
       preparedOperationRevision: preparation.preparedOperationRevision,
+      providerAccessConsumptionEvidenceId: preparation.providerAccessConsumptionEvidenceId,
       providerAccessGrantRequestId: preparation.providerAccessGrantRequestId,
+      runtimeSecurityConsumptionEvidenceId: preparation.runtimeSecurityConsumptionEvidenceId,
       runtimeSecurityGrantRequestId: preparation.runtimeSecurityGrantRequestId,
       workspaceId: preparation.workspaceId,
     });

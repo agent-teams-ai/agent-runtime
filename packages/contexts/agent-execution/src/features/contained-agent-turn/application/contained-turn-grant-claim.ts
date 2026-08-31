@@ -1,7 +1,8 @@
 import { containedTurnScopeDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { validateContainedTurnConsumedGrantReceipts, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
 import type { ContainedTurnEvidenceId, ContainedTurnPreparationToken, ContainedTurnProofId } from "../domain/contained-turn-identities.js";
-import { validateContainedTurnIdentity } from "../domain/contained-turn-identities.js";
+import { containedTurnIdentity, validateContainedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import { containedTurnOwnerStoreAuthority } from "./contained-turn-store-authority.js";
 import { isContainedTurnPreparedClaimOperation } from "./contained-turn-preparation-scope.js";
@@ -14,14 +15,30 @@ type ConsumedGrantRequestIds = Readonly<{
   runtimeSecurityGrantRequestId?: string;
 }>;
 
+type ConsumptionEvidenceIds = Readonly<{
+  providerAccessEvidenceId?: ContainedTurnEvidenceId;
+  runtimeSecurityEvidenceId?: ContainedTurnEvidenceId;
+}>;
+
+type UnclaimedGrantOutcomeEvidence = Readonly<{
+  consumedGrantRequestIds: ConsumedGrantRequestIds;
+  consumptionEvidenceIds: ConsumptionEvidenceIds;
+}>;
+
+const unavailableGrantConsumptionEvidenceId = (
+  owner: "provider_access" | "runtime_security",
+  subject: ContainedTurnDispatchGrantSubject,
+): ContainedTurnEvidenceId => containedTurnIdentity(
+  "evidence",
+  `evidence:grant-consumption-unavailable:${digestContainedTurnCanonicalValue({ owner, subject })}`,
+);
+
 export type ClaimContainedTurnWithConsumedGrantsOutcome =
   | { readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation; readonly startAuthority: string }
-  | { readonly consumedGrantRequestIds: ConsumedGrantRequestIds; readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation }
-  | ({ readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" } &
-    { readonly consumedGrantRequestIds: ConsumedGrantRequestIds })
-  | ({ readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId } &
-    { readonly consumedGrantRequestIds: ConsumedGrantRequestIds })
-  | { readonly consumedGrantRequestIds: ConsumedGrantRequestIds; readonly kind: "unavailable" };
+  | (UnclaimedGrantOutcomeEvidence & { readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation })
+  | (UnclaimedGrantOutcomeEvidence & { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" })
+  | (UnclaimedGrantOutcomeEvidence & { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId })
+  | (UnclaimedGrantOutcomeEvidence & { readonly kind: "unavailable" });
 
 /**
  * Consumes one grant per owner and submits the exact pair to the final local
@@ -53,20 +70,33 @@ export const claimContainedTurnWithConsumedGrants = async (
     ...(runtimeSecurity?.kind === "consumed"
       ? { runtimeSecurityGrantRequestId: runtimeSecurity.receipt.grantRequestId } : {}),
   });
+  const consumptionEvidenceIds: ConsumptionEvidenceIds = Object.freeze({
+    ...(providerAccessResult.status === "rejected"
+      ? { providerAccessEvidenceId: unavailableGrantConsumptionEvidenceId("provider_access", subject) }
+      : providerAccess?.kind === "indeterminate"
+        ? { providerAccessEvidenceId: validateContainedTurnIdentity("evidence", providerAccess.evidenceId) }
+        : {}),
+    ...(runtimeSecurityResult.status === "rejected"
+      ? { runtimeSecurityEvidenceId: unavailableGrantConsumptionEvidenceId("runtime_security", subject) }
+      : runtimeSecurity?.kind === "indeterminate"
+        ? { runtimeSecurityEvidenceId: validateContainedTurnIdentity("evidence", runtimeSecurity.evidenceId) }
+        : {}),
+  });
+  const unclaimedEvidence = Object.freeze({ consumedGrantRequestIds, consumptionEvidenceIds });
   if (providerAccess === undefined || runtimeSecurity === undefined) {
-    return { consumedGrantRequestIds, kind: "unavailable" };
+    return { ...unclaimedEvidence, kind: "unavailable" };
   }
   if (providerAccess.kind === "prevented") {
-    return { ...providerAccess, consumedGrantRequestIds };
+    return { ...providerAccess, ...unclaimedEvidence };
   }
   if (runtimeSecurity.kind === "prevented") {
-    return { ...runtimeSecurity, consumedGrantRequestIds };
+    return { ...runtimeSecurity, ...unclaimedEvidence };
   }
   if (providerAccess.kind === "indeterminate") {
-    return { ...providerAccess, consumedGrantRequestIds };
+    return { ...providerAccess, ...unclaimedEvidence };
   }
   if (runtimeSecurity.kind === "indeterminate") {
-    return { ...runtimeSecurity, consumedGrantRequestIds };
+    return { ...runtimeSecurity, ...unclaimedEvidence };
   }
   const receipts = validateContainedTurnConsumedGrantReceipts(subject, [
     providerAccess.receipt,
@@ -83,7 +113,7 @@ export const claimContainedTurnWithConsumedGrants = async (
     });
     if (outcome.kind === "claimed" || outcome.kind === "observed_claim") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.operation)) {
-        return Object.freeze({ consumedGrantRequestIds, kind: "unavailable" });
+        return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
       }
       if (outcome.kind === "claimed") {
         return Object.freeze({
@@ -92,25 +122,25 @@ export const claimContainedTurnWithConsumedGrants = async (
           startAuthority: outcome.startAuthority,
         });
       }
-      return Object.freeze({ consumedGrantRequestIds, kind: "observed_claim", operation: outcome.operation });
+      return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.operation });
     }
     if (outcome.kind === "stale") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
-        return Object.freeze({ consumedGrantRequestIds, kind: "unavailable" });
+        return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
       }
-      return Object.freeze({ consumedGrantRequestIds, kind: "observed_claim", operation: outcome.current });
+      return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.current });
     }
     if (outcome.kind === "indeterminate") {
       return Object.freeze({
-        consumedGrantRequestIds,
+        ...unclaimedEvidence,
         evidenceId: validateContainedTurnIdentity("evidence", outcome.evidenceId),
         kind: "indeterminate",
       });
     }
-    return Object.freeze({ consumedGrantRequestIds, kind: "unavailable" });
+    return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
   } catch {
     // A lost claim acknowledgement is deliberately not recoverable into start.
-    return { consumedGrantRequestIds, kind: "unavailable" };
+    return { ...unclaimedEvidence, kind: "unavailable" };
   }
 };
 
@@ -152,6 +182,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
   if (claim.kind === "observed_claim") {
     const cleanup = await retireAndCleanupContainedTurnPreparation(
       dependencies, operation, trustedScope, subject, "claim_lost", claim.consumedGrantRequestIds,
+      claim.consumptionEvidenceIds,
     );
     return { kind: "observed", operation: cleanup.kind === "claimed" ? cleanup.operation : claim.operation };
   }
@@ -159,6 +190,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     dependencies, operation, trustedScope, subject,
     claim.kind === "prevented" ? "prevention" : "reconciliation",
     claim.consumedGrantRequestIds,
+    claim.consumptionEvidenceIds,
   );
   if (cleanup.kind === "claimed") {return { kind: "observed", operation: cleanup.operation };}
   if (claim.kind === "prevented") {

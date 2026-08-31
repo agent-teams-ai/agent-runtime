@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { ContainedTurnKernelDependencies } from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
+import { recoverContainedTurnDispatchPreparations } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
 import { createContainedTurnFeature } from "../dist/features/contained-agent-turn/composition/feature-module-factory.js";
 import {
   awaitFixtureGate,
@@ -303,7 +304,10 @@ for (const [name, options] of [
 }
 
 test("indeterminate dispatch claim retires preparation into durable debt without provider retry", async () => {
-  const { current, dependencies, providerCalls } = createDependencies({ claimIndeterminate: true });
+  const { current, dependencies, providerCalls } = createDependencies({
+    claimIndeterminate: true,
+    providerSettlementIndeterminateOnce: true,
+  });
   const outcome = await createContainedTurnFeature(dependencies).submit.execute({
     commandId: "command:one",
     expectedProvider: "codex",
@@ -316,6 +320,15 @@ test("indeterminate dispatch claim retires preparation into durable debt without
   assert.equal(current()?.dispatch.kind, "unclaimed");
   assert.equal(current()?.reconciliation.kind, "required");
   assert.equal(current()?.terminal.kind, "open");
+  const scope = { projectId: "project:one", tenantId: "tenant:one" };
+  const pending = await dependencies.operationStore.listDispatchPreparations?.({ scope });
+  assert.equal(pending?.length, 1);
+  assert.equal(pending?.[0]?.preparation.kind, "cleanup_pending");
+  assert.deepEqual(await recoverContainedTurnDispatchPreparations(dependencies, scope), {
+    discovered: 1,
+    retired: 0,
+  });
+  assert.equal((await dependencies.operationStore.listDispatchPreparations?.({ scope }))?.length, 0);
 });
 
 test("cancellation racing the first workspace creation reaches proved-no-start terminal closure", async () => {

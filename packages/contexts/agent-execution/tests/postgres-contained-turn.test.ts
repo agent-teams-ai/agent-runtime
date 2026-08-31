@@ -6,6 +6,7 @@ import { Pool, type PoolClient } from "pg";
 import {
   applyContainedTurnPostgresSchema,
   CONTAINED_TURN_POSTGRES_MIGRATIONS,
+  CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
   rollbackContainedTurnPostgresSchemaV4,
 } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 import {
@@ -64,15 +65,40 @@ const operationForProject = (projectId: string, suffix: string) => {
   });
 };
 
-const resetSchema = async (pool: Pool, targetVersion: 1 | 2 | 3 | 4 = 4): Promise<void> => {
+const resetSchema = async (pool: Pool, targetVersion: 1 | 2 | 3 | 4 | 5 = 5): Promise<void> => {
   await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
-  await applyContainedTurnPostgresSchema(pool, { targetVersion });
+  await applyContainedTurnPostgresSchema(pool, {
+    ...(targetVersion === 4 ? { allowUnfencedV4ForTest: true as const } : {}),
+    targetVersion,
+  });
 };
 
 const withPool = async (run: (pool: Pool) => Promise<void>): Promise<void> => {
   assert.ok(databaseUrl);
   const pool = new Pool({ connectionString: databaseUrl, max: 12 });
   try {await run(pool);} finally {await pool.end();}
+};
+
+const runtimeQuery = async <Row extends import("pg").QueryResultRow = import("pg").QueryResultRow>(
+  pool: Pool,
+  text: string,
+  values: readonly unknown[] = [],
+): Promise<import("pg").QueryResult<Row>> => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "SELECT set_config('agent_execution.contained_turn_schema_version', '5', true)",
+    );
+    const result = await client.query<Row>(text, [...values]);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 test("versioned state and preparation codecs upcast, round-trip, and quarantine corruption", () => {
@@ -108,13 +134,25 @@ test("versioned state and preparation codecs upcast, round-trip, and quarantine 
     workspaceId: containedTurnIdentity("workspace", "workspace:codec"),
   });
   const encodedPreparation = encodeContainedTurnPreparation(preparation);
+  assert.equal(encodedPreparation.codecVersion, 3);
   assert.deepEqual(
-    decodeContainedTurnPreparation(JSON.parse(encodedPreparation.json), encodedPreparation.digest, 2),
+    decodeContainedTurnPreparation(
+      JSON.parse(encodedPreparation.json), encodedPreparation.digest, encodedPreparation.codecVersion,
+    ),
     preparation,
   );
   assert.throws(
-    () => decodeContainedTurnPreparation(JSON.parse(encodedPreparation.json), "f".repeat(64), 2),
+    () => decodeContainedTurnPreparation(
+      JSON.parse(encodedPreparation.json), "f".repeat(64), encodedPreparation.codecVersion,
+    ),
     /preparation digest mismatch/u,
+  );
+  const v2Preparation = { codecVersion: 2, payload: preparation };
+  assert.deepEqual(
+    decodeContainedTurnPreparation(
+      v2Preparation, digestContainedTurnPostgresJson(v2Preparation), 2,
+    ),
+    preparation,
   );
   const legacyPreparation = {
     ...preparation,
@@ -134,19 +172,27 @@ postgresTest("migration chain is exact, serialized, drift-detecting, no-op safe,
     assert.deepEqual(current.rows[0], { version: 1, migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[0]?.digest });
 
     await applyContainedTurnPostgresSchema(pool, { targetVersion: 2 });
-    await applyContainedTurnPostgresSchema(pool);
+    await assert.rejects(
+      applyContainedTurnPostgresSchema(pool, { targetVersion: 4 }),
+      /explicit disposable-test fence bypass/u,
+    );
+    await applyContainedTurnPostgresSchema(pool, {
+      allowUnfencedV4ForTest: true, targetVersion: 4,
+    });
     const history = await pool.query(
       "SELECT version,migration_digest,predecessor_digest,applied_at::text FROM agent_execution.schema_migration_history ORDER BY version",
     );
     assert.equal(history.rowCount, 4);
-    for (const expected of CONTAINED_TURN_POSTGRES_MIGRATIONS) {
+    for (const expected of CONTAINED_TURN_POSTGRES_MIGRATIONS.slice(0, 4)) {
       const actual = history.rows[expected.version - 1];
       assert.equal(actual.version, expected.version);
       assert.equal(actual.migration_digest, expected.digest);
       assert.equal(actual.predecessor_digest, expected.predecessorDigest ?? null);
     }
     const timestamps = history.rows.map(row => row.applied_at);
-    await applyContainedTurnPostgresSchema(pool);
+    await applyContainedTurnPostgresSchema(pool, {
+      allowUnfencedV4ForTest: true, targetVersion: 4,
+    });
     const noOp = await pool.query(
       "SELECT applied_at::text FROM agent_execution.schema_migration_history ORDER BY version",
     );
@@ -159,6 +205,9 @@ postgresTest("migration chain is exact, serialized, drift-detecting, no-op safe,
     await rollbackContainedTurnPostgresSchemaV4(pool);
     current = await pool.query("SELECT version, migration_digest FROM agent_execution.schema_migration");
     assert.equal(current.rows[0]?.version, 3);
+    await applyContainedTurnPostgresSchema(pool, {
+      allowUnfencedV4ForTest: true, targetVersion: 4,
+    });
     await applyContainedTurnPostgresSchema(pool);
 
     await pool.query("DROP INDEX agent_execution.contained_turn_operation_v1_scoped_effect_key");
@@ -171,7 +220,7 @@ postgresTest("migration chain is exact, serialized, drift-detecting, no-op safe,
       applyContainedTurnPostgresSchema(pool),
     ]);
     current = await pool.query("SELECT version, migration_digest FROM agent_execution.schema_migration");
-    assert.equal(current.rows[0]?.version, 4);
+    assert.equal(current.rows[0]?.version, 5);
 
     await pool.query("UPDATE agent_execution.schema_migration SET migration_digest = repeat('1', 64)");
     await assert.rejects(applyContainedTurnPostgresSchema(pool), /schema identity mismatch/u);
@@ -181,10 +230,10 @@ postgresTest("migration chain is exact, serialized, drift-detecting, no-op safe,
     await pool.query("DROP FUNCTION agent_execution.reject_schema_migration_history_mutation() CASCADE");
     await applyContainedTurnPostgresSchema(pool);
     current = await pool.query("SELECT version, migration_digest FROM agent_execution.schema_migration");
-    assert.equal(current.rows[0]?.version, 4);
+    assert.equal(current.rows[0]?.version, 5);
     assert.equal((await pool.query(
       "SELECT 1 FROM agent_execution.schema_migration_history ORDER BY version",
-    )).rowCount, 4);
+    )).rowCount, 5);
   });
 });
 
@@ -226,23 +275,82 @@ postgresTest("expand migration accepts legacy writes before the contract migrati
        VALUES ($1,$2,$3::jsonb)`,
       [operation.operationId, legacyPreparation.preparationToken, JSON.stringify(legacyPreparation)],
     );
-    const stored = await new PostgresContainedTurnOperationStore({ pool }).read({
+    const stored = await new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 3 }).read({
       operationId: operation.operationId,
       scope: operation.scope,
     });
     assert.equal(stored?.schemaVersion, 2);
     assert.equal(stored?.scope.projectId, operation.scope.projectId);
-    const recoveries = await new PostgresContainedTurnOperationStore({ pool })
+    const recoveries = await new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 3 })
       .listDispatchPreparations({ scope: operation.scope });
     assert.equal(recoveries[0]?.preparation.providerAccessGrantRequestId, null);
     assert.equal(recoveries[0]?.preparation.runtimeSecurityGrantRequestId, null);
     await applyContainedTurnPostgresSchema(pool);
-    const digestColumn = await pool.query(
+    const digestColumn = await runtimeQuery(pool,
       `SELECT state_digest FROM agent_execution.contained_turn_dispatch_preparation_v1
         WHERE operation_id=$1 AND preparation_token=$2`,
       [operation.operationId, legacyPreparation.preparationToken],
     );
     assert.match(digestColumn.rows[0]?.state_digest, /^[a-f0-9]{64}$/u);
+  });
+});
+
+postgresTest("contract migration waits for old transactions and durably excludes the old binary", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool, 4);
+    const oldStore = new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 4 });
+    const operation = operationForProject("project:mixed-version", "mixed-version");
+    assert.equal((await oldStore.accept(operation, operationAuthority(operation))).kind, "accepted");
+
+    const oldTransaction = await pool.connect();
+    await oldTransaction.query("BEGIN");
+    await oldTransaction.query("SELECT pg_advisory_xact_lock_shared($1)", [
+      CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.advisoryLockId,
+    ]);
+    const migration = applyContainedTurnPostgresSchema(pool);
+    let beforeRelease: "migrated" | "waiting";
+    try {
+      beforeRelease = await Promise.race([
+        migration.then(() => "migrated" as const),
+        new Promise<"waiting">(resolve => {setImmediate(() => {resolve("waiting");});}),
+      ]);
+    } finally {
+      await oldTransaction.query("ROLLBACK");
+      oldTransaction.release();
+    }
+    assert.equal(beforeRelease, "waiting");
+    await migration;
+
+    await assert.rejects(
+      oldStore.read({ operationId: operation.operationId, scope: operation.scope }),
+      /runtime schema fence rejected this binary/u,
+    );
+    const currentStore = new PostgresContainedTurnOperationStore({ pool });
+    assert.equal(
+      (await currentStore.read({ operationId: operation.operationId, scope: operation.scope }))?.operationId,
+      operation.operationId,
+    );
+  });
+});
+
+postgresTest("tenant identity trigger fences tenant_id-only updates", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const operation = operationForProject("project:tenant-trigger", "tenant-trigger");
+    const store = new PostgresContainedTurnOperationStore({ pool });
+    assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
+    await assert.rejects(
+      runtimeQuery(
+        pool,
+        "UPDATE agent_execution.contained_turn_operation_v1 SET tenant_id=$2 WHERE operation_id=$1",
+        [operation.operationId, "tenant:substituted"],
+      ),
+      /tenant identity mismatch/u,
+    );
+    assert.equal(
+      (await store.read({ operationId: operation.operationId, scope: operation.scope }))?.scope.tenantId,
+      operation.scope.tenantId,
+    );
   });
 });
 
@@ -272,7 +380,7 @@ postgresTest("acceptance replay is isolated by tenant and project and projection
       "fingerprint_conflict",
     );
 
-    await pool.query(
+    await runtimeQuery(pool,
       "DELETE FROM agent_execution.contained_turn_receipt_v1 WHERE operation_id=$1",
       [first.operationId],
     );
@@ -283,7 +391,7 @@ postgresTest("acceptance replay is isolated by tenant and project and projection
     await store.rebuildProjections({ operationId: first.operationId, scope: first.scope });
     assert.equal((await store.read({ operationId: first.operationId, scope: first.scope }))?.operationId, first.operationId);
 
-    await pool.query(
+    await runtimeQuery(pool,
       "UPDATE agent_execution.contained_turn_operation_v1 SET state_digest=repeat('0',64) WHERE operation_id=$1",
       [second.operationId],
     );
@@ -455,5 +563,93 @@ postgresTest("two claimers persist exact loser grants and restart-safe cleanup s
       assert.equal(retired.preparation.providerAccessGrantRequestId, loser.receipts[0].grantRequestId);
       assert.equal(retired.preparation.runtimeSecurityGrantRequestId, loser.receipts[1].grantRequestId);
     }
+  });
+});
+
+postgresTest("unsupported preparation codecs quarantine independently and recovery keeps progressing", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const store = new PostgresContainedTurnOperationStore({ pool });
+    const initial = operationForProject("project:poison-preparation", "poison-preparation");
+    assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
+    const workspaceId = containedTurnIdentity("workspace", "workspace:poison-preparation");
+    const bound = mutateContainedTurnOperation(initial, { kind: "bind_workspace", workspaceId });
+    assert.equal((await store.commit({
+      authority: operationAuthority(initial),
+      candidate: bound,
+      expectedRevision: initial.revision,
+    })).kind, "applied");
+    await store.prepareDispatch({ authority: operationAuthority(bound), operation: bound });
+
+    const poisonToken = "preparation:000-unsupported-codec";
+    const poisonState = { codecVersion: 99, payload: { kind: "active" } };
+    await runtimeQuery(
+      pool,
+      `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+         (operation_id,preparation_token,state_codec_version,state,state_digest)
+       VALUES ($1,$2,99,$3::jsonb,$4)`,
+      [bound.operationId, poisonToken, JSON.stringify(poisonState),
+        digestContainedTurnPostgresJson(poisonState)],
+    );
+
+    const recovered = await store.listDispatchPreparations({ limit: 1, scope: bound.scope });
+    assert.equal(recovered.length, 1);
+    assert.notEqual(recovered[0]?.preparation.preparationToken, poisonToken);
+    const quarantine = await runtimeQuery<{
+      observation_count: string;
+      reason: string;
+  }>(
+      pool,
+      `SELECT observation_count::text,reason
+         FROM agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+        WHERE operation_id=$1 AND preparation_token=$2`,
+      [bound.operationId, poisonToken],
+    );
+    assert.deepEqual(quarantine.rows[0], {
+      observation_count: "1",
+      reason: "unsupported_version",
+    });
+    assert.equal((await store.listDispatchPreparations({ limit: 1, scope: bound.scope })).length, 1);
+  });
+});
+
+postgresTest("retirement rejects a payload token that disagrees with its row key", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const store = new PostgresContainedTurnOperationStore({ pool });
+    const initial = operationForProject("project:retirement-token", "retirement-token");
+    assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
+    const workspaceId = containedTurnIdentity("workspace", "workspace:retirement-token");
+    const bound = mutateContainedTurnOperation(initial, { kind: "bind_workspace", workspaceId });
+    assert.equal((await store.commit({
+      authority: operationAuthority(initial),
+      candidate: bound,
+      expectedRevision: initial.revision,
+    })).kind, "applied");
+    await store.prepareDispatch({ authority: operationAuthority(bound), operation: bound });
+    const recovery = (await store.listDispatchPreparations({ scope: bound.scope }))[0];
+    assert.ok(recovery);
+    const rowToken = recovery.preparation.preparationToken;
+    const payloadToken = containedTurnIdentity("preparation", "preparation:substituted-payload-token");
+    const forged = encodeContainedTurnPreparation({
+      ...recovery.preparation,
+      preparationToken: payloadToken,
+    });
+    await runtimeQuery(
+      pool,
+      `UPDATE agent_execution.contained_turn_dispatch_preparation_v1
+          SET state=$3::jsonb,state_codec_version=$4,state_digest=$5
+        WHERE operation_id=$1 AND preparation_token=$2`,
+      [bound.operationId, rowToken, forged.json, forged.codecVersion, forged.digest],
+    );
+
+    const retired = await store.retireDispatchPreparation({
+      authority: operationAuthority(bound),
+      expectedOperationCutoffRevision: bound.operationCutoff.revision,
+      expectedOperationRevision: bound.revision,
+      preparationToken: rowToken,
+      reason: "reconciliation",
+    });
+    assert.equal(retired.kind, "stale");
   });
 });

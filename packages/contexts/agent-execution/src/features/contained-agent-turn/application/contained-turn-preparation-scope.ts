@@ -130,19 +130,38 @@ const snapshotCleanupPendingPreparation = (
 ): ContainedTurnDispatchPreparation => {
   requireOrdinaryRecord("dispatch preparation", preparation, [
     ...PREPARATION_IDENTITY_KEYS, "cleanupEvidenceIds", "cleanupPermit", "custodyReleased", "kind",
-    "providerAccessSettled", "runtimeSecuritySettled",
+    "providerAccessConsumptionEvidenceId", "providerAccessSettled",
+    "runtimeSecurityConsumptionEvidenceId", "runtimeSecuritySettled",
   ]);
   const pending = preparation as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }>;
   assertContainedTurnCanonicalArray(pending.cleanupEvidenceIds);
   const cleanupEvidenceIds = Object.freeze(pending.cleanupEvidenceIds.map(evidenceId =>
     validateContainedTurnIdentity("evidence", evidenceId)));
+  const providerAccessConsumptionEvidenceId = pending.providerAccessConsumptionEvidenceId === null
+    ? null
+    : validateContainedTurnIdentity("evidence", pending.providerAccessConsumptionEvidenceId);
+  const runtimeSecurityConsumptionEvidenceId = pending.runtimeSecurityConsumptionEvidenceId === null
+    ? null
+    : validateContainedTurnIdentity("evidence", pending.runtimeSecurityConsumptionEvidenceId);
   if (typeof pending.custodyReleased !== "boolean" || typeof pending.providerAccessSettled !== "boolean" ||
       typeof pending.runtimeSecuritySettled !== "boolean") {
     throw new TypeError("cleanup preparation flags must be primitive booleans");
   }
-  if ((pending.providerAccessGrantRequestId === null && !pending.providerAccessSettled) ||
-      (pending.runtimeSecurityGrantRequestId === null && !pending.runtimeSecuritySettled)) {
-    throw new TypeError("cleanup preparation cannot retain debt without a consumed grant identity");
+  if ((pending.providerAccessGrantRequestId === null && providerAccessConsumptionEvidenceId === null &&
+      !pending.providerAccessSettled) ||
+      (pending.runtimeSecurityGrantRequestId === null && runtimeSecurityConsumptionEvidenceId === null &&
+      !pending.runtimeSecuritySettled)) {
+    throw new TypeError("cleanup preparation cannot retain debt without grant identity evidence");
+  }
+  if ((pending.providerAccessGrantRequestId !== null && providerAccessConsumptionEvidenceId !== null) ||
+      (pending.runtimeSecurityGrantRequestId !== null && runtimeSecurityConsumptionEvidenceId !== null)) {
+    throw new TypeError("cleanup preparation grant proof and indeterminate evidence are mutually exclusive");
+  }
+  if ((providerAccessConsumptionEvidenceId !== null &&
+      !cleanupEvidenceIds.includes(providerAccessConsumptionEvidenceId)) ||
+      (runtimeSecurityConsumptionEvidenceId !== null &&
+      !cleanupEvidenceIds.includes(runtimeSecurityConsumptionEvidenceId))) {
+    throw new TypeError("cleanup preparation dropped grant consumption evidence");
   }
   return Object.freeze({
     ...preparationBase(preparation),
@@ -150,7 +169,9 @@ const snapshotCleanupPendingPreparation = (
     cleanupPermit: snapshotContainedTurnCleanupPermit(pending.cleanupPermit),
     custodyReleased: pending.custodyReleased,
     kind: "cleanup_pending",
+    providerAccessConsumptionEvidenceId,
     providerAccessSettled: pending.providerAccessSettled,
+    runtimeSecurityConsumptionEvidenceId,
     runtimeSecuritySettled: pending.runtimeSecuritySettled,
   });
 };
@@ -159,11 +180,30 @@ const snapshotCleanupClosedPreparation = (
   preparation: ContainedTurnDispatchPreparation,
 ): ContainedTurnDispatchPreparation => {
   requireOrdinaryRecord("dispatch preparation", preparation, [
-    ...PREPARATION_IDENTITY_KEYS, "cleanupPermitId", "kind",
+    ...PREPARATION_IDENTITY_KEYS, "cleanupEvidenceIds", "cleanupPermitId", "kind",
+    "providerAccessConsumptionEvidenceId", "runtimeSecurityConsumptionEvidenceId",
   ]);
   const closed = preparation as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_closed" }>;
+  assertContainedTurnCanonicalArray(closed.cleanupEvidenceIds);
+  const cleanupEvidenceIds = Object.freeze(closed.cleanupEvidenceIds.map(evidenceId =>
+    validateContainedTurnIdentity("evidence", evidenceId)));
   const cleanupPermitId = validateContainedTurnIdentity("cleanup_permit", closed.cleanupPermitId);
-  return Object.freeze({ ...preparationBase(preparation), cleanupPermitId, kind: "cleanup_closed" });
+  const providerAccessConsumptionEvidenceId = closed.providerAccessConsumptionEvidenceId === null
+    ? null
+    : validateContainedTurnIdentity("evidence", closed.providerAccessConsumptionEvidenceId);
+  const runtimeSecurityConsumptionEvidenceId = closed.runtimeSecurityConsumptionEvidenceId === null
+    ? null
+    : validateContainedTurnIdentity("evidence", closed.runtimeSecurityConsumptionEvidenceId);
+  if ((providerAccessConsumptionEvidenceId !== null &&
+      !cleanupEvidenceIds.includes(providerAccessConsumptionEvidenceId)) ||
+      (runtimeSecurityConsumptionEvidenceId !== null &&
+      !cleanupEvidenceIds.includes(runtimeSecurityConsumptionEvidenceId))) {
+    throw new TypeError("closed cleanup preparation dropped grant consumption evidence");
+  }
+  return Object.freeze({
+    ...preparationBase(preparation), cleanupEvidenceIds, cleanupPermitId, kind: "cleanup_closed",
+    providerAccessConsumptionEvidenceId, runtimeSecurityConsumptionEvidenceId,
+  });
 };
 
 /** Variant-specific Kernel projection; no owner-store preparation aggregate escapes. */
@@ -263,6 +303,9 @@ export const isContainedTurnPreparationCleanupContinuation = (
   actual.operationCutoffRevision === expected.operationCutoffRevision &&
   actual.providerAccessGrantRequestId === expected.providerAccessGrantRequestId &&
   actual.runtimeSecurityGrantRequestId === expected.runtimeSecurityGrantRequestId &&
+  actual.providerAccessConsumptionEvidenceId === expected.providerAccessConsumptionEvidenceId &&
+  actual.runtimeSecurityConsumptionEvidenceId === expected.runtimeSecurityConsumptionEvidenceId &&
+  expected.cleanupEvidenceIds.every(evidenceId => actual.cleanupEvidenceIds.includes(evidenceId)) &&
   (expected.kind === "cleanup_closed"
     ? actual.kind === "cleanup_closed" && actual.cleanupPermitId === expected.cleanupPermitId
     : actual.kind === "cleanup_pending"

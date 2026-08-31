@@ -49,6 +49,13 @@ export type EnsureContainedTurnClosureOutcome<Proof> =
   | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "identity_conflict" };
 
+export type SettleContainedTurnConsumedGrantInput = Readonly<{
+  cleanupPermit: ContainedTurnCleanupPermit;
+} & (
+  | { readonly grantRequestId: string; readonly consumptionEvidenceId?: never }
+  | { readonly consumptionEvidenceId: ContainedTurnEvidenceId; readonly grantRequestId?: never }
+)>;
+
 export type ResolveContainedTurnProviderAccessOutcome =
   | {
     readonly acceptanceResolutionDigest: ContainedTurnCanonicalDigest;
@@ -91,7 +98,7 @@ export interface ContainedTurnProviderAccessPort {
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
-  settleConsumedGrant(input: Readonly<{ cleanupPermit: ContainedTurnCleanupPermit; grantRequestId: string }>): Promise<
+  settleConsumedGrant(input: SettleContainedTurnConsumedGrantInput): Promise<
     | { readonly kind: "settled" }
     | { readonly kind: "already_settled" }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
@@ -158,6 +165,10 @@ export interface ContainedTurnKernelOperationStore {
     consumedGrantRequestIds?: Readonly<{
       providerAccessGrantRequestId?: string;
       runtimeSecurityGrantRequestId?: string;
+    }>;
+    consumptionEvidenceIds?: Readonly<{
+      providerAccessEvidenceId?: ContainedTurnEvidenceId;
+      runtimeSecurityEvidenceId?: ContainedTurnEvidenceId;
     }>;
     expectedOperationCutoffRevision: number;
     expectedOperationRevision: number;
@@ -278,7 +289,7 @@ export interface ContainedTurnKernelSecurityPort {
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
-  settleConsumedGrant(input: Readonly<{ cleanupPermit: ContainedTurnCleanupPermit; grantRequestId: string }>): Promise<
+  settleConsumedGrant(input: SettleContainedTurnConsumedGrantInput): Promise<
     | { readonly kind: "settled" }
     | { readonly kind: "already_settled" }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }

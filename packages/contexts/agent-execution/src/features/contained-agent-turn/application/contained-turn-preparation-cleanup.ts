@@ -66,6 +66,10 @@ export const retireAndCleanupContainedTurnPreparation = async (
     providerAccessGrantRequestId?: string;
     runtimeSecurityGrantRequestId?: string;
   }> = {},
+  consumptionEvidenceIds: Readonly<{
+    providerAccessEvidenceId?: ContainedTurnEvidenceId;
+    runtimeSecurityEvidenceId?: ContainedTurnEvidenceId;
+  }> = {},
 ): Promise<RetireContainedTurnPreparationOutcome> => {
   const retire = dependencies.operationStore.retireDispatchPreparation;
   const record = dependencies.operationStore.recordDispatchPreparationCleanup;
@@ -75,6 +79,7 @@ export const retireAndCleanupContainedTurnPreparation = async (
     retirement = await retire({
       authority,
       consumedGrantRequestIds,
+      consumptionEvidenceIds,
       expectedOperationCutoffRevision: operation.operationCutoff.revision,
       expectedOperationRevision: operation.revision,
       preparationToken: owner.preparationToken,
@@ -126,15 +131,23 @@ export const retireAndCleanupContainedTurnPreparation = async (
   };
   await cleanup("custody", () => dependencies.custody.releaseRetiredReservation({ cleanupPermit: permit }));
   const providerAccessGrantRequestId = pending.providerAccessGrantRequestId;
-  if (providerAccessGrantRequestId !== null) {
+  const providerAccessConsumptionEvidenceId = pending.providerAccessConsumptionEvidenceId;
+  if (providerAccessGrantRequestId !== null || providerAccessConsumptionEvidenceId !== null) {
     await cleanup("provider_access", () => dependencies.providerAccess.settleConsumedGrant({
-      cleanupPermit: permit, grantRequestId: providerAccessGrantRequestId,
+      cleanupPermit: permit,
+      ...(providerAccessGrantRequestId === null
+        ? { consumptionEvidenceId: providerAccessConsumptionEvidenceId as ContainedTurnEvidenceId }
+        : { grantRequestId: providerAccessGrantRequestId }),
     }));
   }
   const runtimeSecurityGrantRequestId = pending.runtimeSecurityGrantRequestId;
-  if (runtimeSecurityGrantRequestId !== null) {
+  const runtimeSecurityConsumptionEvidenceId = pending.runtimeSecurityConsumptionEvidenceId;
+  if (runtimeSecurityGrantRequestId !== null || runtimeSecurityConsumptionEvidenceId !== null) {
     await cleanup("runtime_security", () => dependencies.security.settleConsumedGrant({
-      cleanupPermit: permit, grantRequestId: runtimeSecurityGrantRequestId,
+      cleanupPermit: permit,
+      ...(runtimeSecurityGrantRequestId === null
+        ? { consumptionEvidenceId: runtimeSecurityConsumptionEvidenceId as ContainedTurnEvidenceId }
+        : { grantRequestId: runtimeSecurityGrantRequestId }),
     }));
   }
   const finalPreparation = current as ContainedTurnDispatchPreparation;

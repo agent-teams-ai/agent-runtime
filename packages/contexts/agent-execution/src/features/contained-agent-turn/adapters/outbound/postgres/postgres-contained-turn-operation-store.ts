@@ -34,13 +34,21 @@ import {
   decodeContainedTurnPreparation,
   encodeContainedTurnPreparation,
 } from "./contained-turn-preparation-codec.js";
+import {
+  ContainedTurnStateQuarantineError,
+  encodeContainedTurnState,
+} from "./contained-turn-state-codec.js";
 import { ContainedTurnPostgresOperationRepository } from "./contained-turn-postgres-operation-repository.js";
+import {
+  CONTAINED_TURN_POSTGRES_MIGRATIONS,
+  CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
+  CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
+} from "./contained-turn-postgres-schema.js";
 import {
   ContainedTurnPostgresTransactions,
   PostgresCommitIndeterminateError,
   type ContainedTurnPostgresTimeouts,
 } from "./contained-turn-postgres-transactions.js";
-import { encodeContainedTurnState } from "./contained-turn-state-codec.js";
 export { applyContainedTurnPostgresSchema } from "./contained-turn-postgres-schema.js";
 export {
   CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS,
@@ -55,6 +63,7 @@ interface PreparationRow {
 
 interface PreparationRecoveryRow extends PreparationRow {
   readonly operation_id: string;
+  readonly preparation_token: string;
 }
 
 export interface ContainedTurnPostgresIdentitySource {
@@ -66,6 +75,8 @@ export interface ContainedTurnPostgresIdentitySource {
 export interface PostgresContainedTurnOperationStoreOptions {
   readonly identities?: ContainedTurnPostgresIdentitySource;
   readonly pool: Pool;
+  /** Used only for deterministic mixed-version migration tests and staged drains. */
+  readonly runtimeSchemaVersion?: 1 | 2 | 3 | 4 | 5;
   readonly timeouts?: Partial<ContainedTurnPostgresTimeouts>;
 }
 
@@ -105,11 +116,23 @@ const attemptBinding = (operation: ContainedTurnKernelOperation) => {
 export class PostgresContainedTurnOperationStore implements ContainedTurnKernelOperationStore {
   readonly #identities: ContainedTurnPostgresIdentitySource;
   readonly #operations = new ContainedTurnPostgresOperationRepository();
+  readonly #runtimeSchemaVersion: number;
   readonly #transactions: ContainedTurnPostgresTransactions;
 
   public constructor(options: PostgresContainedTurnOperationStoreOptions) {
     this.#identities = options.identities ?? defaultIdentities;
-    this.#transactions = new ContainedTurnPostgresTransactions(options.pool, options.timeouts);
+    const schemaVersion = options.runtimeSchemaVersion ?? CONTAINED_TURN_POSTGRES_SCHEMA_VERSION;
+    const migration = CONTAINED_TURN_POSTGRES_MIGRATIONS[schemaVersion - 1];
+    if (migration === undefined) {
+      throw new RangeError(`unsupported contained turn PostgreSQL runtime schema ${String(schemaVersion)}`);
+    }
+    this.#runtimeSchemaVersion = schemaVersion;
+    this.#transactions = new ContainedTurnPostgresTransactions(options.pool, {
+      advisoryLockId: CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.advisoryLockId,
+      component: CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component,
+      migrationDigest: migration.digest,
+      schemaVersion,
+    }, options.timeouts);
   }
 
   async #transaction<Result>(work: (client: import("pg").PoolClient) => Promise<Result>): Promise<Result> {
@@ -159,15 +182,16 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
           assertAuthority(authority, current);
           const observedDigest = encodeContainedTurnState(current).digest;
           const candidateDigest = encodeContainedTurnState(candidate).digest;
-          if (current.revision === candidate.revision && observedDigest === candidateDigest) {
-            return { kind: "applied" as const, operation: current };
-          }
+          const observedCandidate = current.revision === candidate.revision &&
+            observedDigest === candidateDigest;
           if (current.reconciliation.kind === "required" &&
               current.reconciliation.evidenceIds.includes(evidenceId)) {
             return { debtOperation: current, evidenceId, kind: "indeterminate" as const };
           }
           if (current.terminal.kind === "final") {
-            return { current, kind: "stale" as const };
+            return observedCandidate
+              ? { kind: "applied" as const, operation: current }
+              : { current, kind: "stale" as const };
           }
           const debtOperation = mutateContainedTurnOperation(current, {
             evidenceId,
@@ -328,35 +352,73 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
         kinds.length === 0 || kinds.some(kind => kind !== "active" && kind !== "cleanup_pending")) {
       throw new TypeError("invalid dispatch preparation recovery query");
     }
-    return this.#readTransaction(async client => {
+    const recover = async (client: import("pg").PoolClient, quarantine: boolean) => {
       const rows = await client.query<PreparationRecoveryRow>(
-        `SELECT p.operation_id,p.state,p.state_codec_version,p.state_digest
+        `SELECT p.operation_id,p.preparation_token,p.state,p.state_codec_version,p.state_digest
            FROM agent_execution.contained_turn_dispatch_preparation_v1 AS p
            JOIN agent_execution.contained_turn_operation_v1 AS o
              ON o.operation_id = p.operation_id
+           ${quarantine ? `LEFT JOIN agent_execution.contained_turn_dispatch_preparation_quarantine_v1 AS q
+             ON q.operation_id = p.operation_id
+            AND q.preparation_token = p.preparation_token
+            AND q.observed_codec_version = p.state_codec_version
+            AND q.observed_state_digest IS NOT DISTINCT FROM p.state_digest` : ""}
           WHERE o.tenant_id = $1 AND o.project_id = $2
-            AND (((p.state_codec_version = $4 AND p.state #>> '{payload,kind}') = ANY($3::text[]))
+            ${quarantine ? "AND q.operation_id IS NULL" : ""}
+            AND ((((p.state_codec_version = 2 OR p.state_codec_version = $4) AND p.state #>> '{payload,kind}') = ANY($3::text[]))
                  OR ((p.state_codec_version = 1 AND p.state #>> '{kind}') = ANY($3::text[]))
-                 OR p.state_codec_version NOT IN (1, $4))
+                 OR p.state_codec_version NOT IN (1, 2, $4))
           ORDER BY p.operation_id,p.preparation_token
           LIMIT $5`,
         [input.scope.tenantId, input.scope.projectId, kinds,
-          CONTAINED_TURN_PREPARATION_CODEC_VERSION, limit],
+          CONTAINED_TURN_PREPARATION_CODEC_VERSION, quarantine ? 1_000 : limit],
       );
-      const recoveries = [];
+      const recoveries: Array<Readonly<{
+        operation: ContainedTurnKernelOperation;
+        preparation: ContainedTurnDispatchPreparation;
+      }>> = [];
       for (const row of rows.rows) {
-        const preparation = decodeContainedTurnPreparation(
-          row.state, row.state_digest, row.state_codec_version,
-        );
+        let preparation: ContainedTurnDispatchPreparation;
+        try {
+          preparation = decodeContainedTurnPreparation(
+            row.state, row.state_digest, row.state_codec_version,
+          );
+        } catch (error) {
+          if (!quarantine || !(error instanceof ContainedTurnStateQuarantineError)) {throw error;}
+          await client.query(
+            `INSERT INTO agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+               (operation_id,preparation_token,observed_codec_version,observed_state_digest,
+                quarantined_state,reason)
+             VALUES ($1,$2,$3,$4,$5::jsonb,$6)
+             ON CONFLICT (operation_id,preparation_token) DO UPDATE
+               SET observed_codec_version=EXCLUDED.observed_codec_version,
+                   observed_state_digest=EXCLUDED.observed_state_digest,
+                   quarantined_state=EXCLUDED.quarantined_state,
+                   reason=EXCLUDED.reason,
+                   last_observed_at=transaction_timestamp(),
+                   observation_count=agent_execution.contained_turn_dispatch_preparation_quarantine_v1.observation_count + 1`,
+            [row.operation_id, row.preparation_token, row.state_codec_version,
+              row.state_digest, row.state, error.reason],
+          );
+          continue;
+        }
         if (preparation.kind !== "active" && preparation.kind !== "cleanup_pending") {continue;}
+        if (preparation.operationId !== row.operation_id ||
+            preparation.preparationToken !== row.preparation_token) {
+          throw new Error("dispatch preparation recovery row identity mismatch");
+        }
         const operation = await this.#load(client, row.operation_id, false, input.scope);
         if (operation === undefined) {
           throw new Error("dispatch preparation recovery operation disappeared");
         }
         recoveries.push(Object.freeze({ operation, preparation }));
+        if (recoveries.length === limit) {break;}
       }
       return Object.freeze(recoveries);
-    });
+    };
+    return this.#runtimeSchemaVersion >= 5
+      ? this.#transaction(client => recover(client, true))
+      : this.#readTransaction(client => recover(client, false));
   }
 
   public async prepareDispatch(input: Parameters<ContainedTurnKernelOperationStore["prepareDispatch"]>[0]) {
@@ -517,6 +579,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       if (preparation === undefined) {return { current, kind: "stale" as const };}
       if (preparation.kind === "claimed") {return { current, kind: "stale" as const };}
       if (preparation.operationId !== current.operationId ||
+          preparation.preparationToken !== input.preparationToken ||
           preparation.workspaceId !== current.workspaceId ||
           preparation.operationCutoffRevision !== current.operationCutoff.revision ||
           preparation.preparedOperationRevision !== input.expectedOperationRevision ||
@@ -531,6 +594,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
           reason: input.reason,
         })}`),
         input.consumedGrantRequestIds,
+        input.consumptionEvidenceIds,
       );
       const encoded = encodeContainedTurnPreparation(retired);
       await client.query(

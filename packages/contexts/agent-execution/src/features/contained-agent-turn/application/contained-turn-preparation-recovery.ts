@@ -24,13 +24,19 @@ const completeTarget = async (
       const grantRequestId = target === "provider_access"
         ? preparation.providerAccessGrantRequestId
         : preparation.runtimeSecurityGrantRequestId;
-      if (grantRequestId === null) {return;}
+      const consumptionEvidenceId = target === "provider_access"
+        ? preparation.providerAccessConsumptionEvidenceId
+        : preparation.runtimeSecurityConsumptionEvidenceId;
+      if (grantRequestId === null && consumptionEvidenceId === null) {return;}
+      const settlementIdentity = grantRequestId === null
+        ? { consumptionEvidenceId: consumptionEvidenceId as ContainedTurnEvidenceId }
+        : { grantRequestId };
       outcome = target === "provider_access"
         ? await dependencies.providerAccess.settleConsumedGrant({
-          cleanupPermit: preparation.cleanupPermit, grantRequestId,
+          cleanupPermit: preparation.cleanupPermit, ...settlementIdentity,
         })
         : await dependencies.security.settleConsumedGrant({
-          cleanupPermit: preparation.cleanupPermit, grantRequestId,
+          cleanupPermit: preparation.cleanupPermit, ...settlementIdentity,
         });
     }
   } catch {

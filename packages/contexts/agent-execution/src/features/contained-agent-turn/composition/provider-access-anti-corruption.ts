@@ -41,7 +41,13 @@ export interface OuterContainedTurnProviderAccess {
     | { readonly binding: OuterBinding; readonly evidence: OuterEvidence; readonly kind: "valid" }
     | { readonly evidence: OuterEvidence; readonly kind: "rejected"; readonly reason: string }
   > };
-  readonly settleDispatchGrant: { execute(input: Readonly<{ grantRequestId: string; permitDigest: string; permitId: string }>): Promise<
+  readonly settleDispatchGrant: { execute(input: Readonly<{
+    permitDigest: string;
+    permitId: string;
+  } & (
+    | { readonly grantRequestId: string; readonly consumptionEvidenceId?: never }
+    | { readonly consumptionEvidenceId: string; readonly grantRequestId?: never }
+  )>): Promise<
     | { readonly kind: "already_settled" | "settled" }
     | { readonly evidenceRef: string; readonly kind: "indeterminate" }
   > };
@@ -152,7 +158,9 @@ export const createContainedTurnProviderAccessPort = (
   },
   async settleConsumedGrant(input: Parameters<ContainedTurnProviderAccessPort["settleConsumedGrant"]>[0]) {
     const outcome = await outer.settleDispatchGrant.execute({
-      grantRequestId: input.grantRequestId,
+      ...("grantRequestId" in input
+        ? { grantRequestId: input.grantRequestId }
+        : { consumptionEvidenceId: input.consumptionEvidenceId }),
       permitDigest: input.cleanupPermit.permitDigest,
       permitId: input.cleanupPermit.permitId,
     });

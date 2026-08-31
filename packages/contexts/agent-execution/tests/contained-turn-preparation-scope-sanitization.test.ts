@@ -47,6 +47,17 @@ const subject = Object.freeze({
   scopeDigest: containedTurnScopeDigest(scope),
   workspaceId,
 });
+const hostCustodyProof = Object.freeze({
+  binding: Object.freeze({
+    attemptId,
+    authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
+    custodyId,
+    effectId,
+    operationId,
+  }),
+  kind: "host_custody" as const,
+  proofId: containedTurnIdentity("proof", "proof:scope-sanitization-host-custody"),
+});
 
 const consumedReceipt = (owner: "provider_access" | "runtime_security") => {
   const grantRequestDigest = digestContainedTurnCanonicalValue({ owner, request: "scope-sanitization" });
@@ -66,6 +77,7 @@ const unavailableAfterConsumed = Object.freeze({
     providerAccessGrantRequestId: consumedReceipt("provider_access").grantRequestId,
     runtimeSecurityGrantRequestId: consumedReceipt("runtime_security").grantRequestId,
   }),
+  consumptionEvidenceIds: Object.freeze({}),
   kind: "unavailable" as const,
 });
 
@@ -144,7 +156,7 @@ test("prepared claim claimed, observed, and stale outcomes collapse foreign owne
       { current: foreign, kind: "stale" as const },
     ]) {
       const result = await claimContainedTurnWithConsumedGrants(
-        claimDependencies(outcome), initial, scope, subject,
+        claimDependencies(outcome), initial, scope, subject, hostCustodyProof,
       );
       assert.deepEqual(result, unavailableAfterConsumed);
       assert.equal(JSON.stringify(result).includes("must-not-leak"), false);
@@ -156,13 +168,13 @@ test("prepared claim rejects same-owner extras and returns only a detached froze
   const withExtra = { ...winner, foreignAggregate: "must-not-leak" } as ContainedTurnKernelOperation;
   const rejected = await claimContainedTurnWithConsumedGrants(
     claimDependencies({ kind: "claimed", operation: withExtra, startAuthority: "start:scope-sanitization" }),
-    initial, scope, subject,
+    initial, scope, subject, hostCustodyProof,
   );
   assert.deepEqual(rejected, unavailableAfterConsumed);
 
   const accepted = await claimContainedTurnWithConsumedGrants(
     claimDependencies({ kind: "claimed", operation: winner, startAuthority: "start:scope-sanitization" }),
-    initial, scope, subject,
+    initial, scope, subject, hostCustodyProof,
   );
   assert.equal(accepted.kind, "claimed");
   if (accepted.kind === "claimed") {
@@ -199,6 +211,7 @@ test("prepared claim rejects proxies, accessors, sparse or augmented arrays with
   for (const operation of operations) {
     const result = await claimContainedTurnWithConsumedGrants(
       claimDependencies({ kind: "observed_claim", operation }), initial, scope, subject,
+      hostCustodyProof,
     );
     assert.deepEqual(result, unavailableAfterConsumed);
   }
@@ -221,7 +234,7 @@ test("prepared claim rejects proxies, accessors, sparse or augmented arrays with
       security: {
         consumeForDispatch: async () => ({ kind: "consumed", receipt: consumedReceipt("runtime_security") }),
       },
-    }), initial, scope, subject),
+    }), initial, scope, subject, hostCustodyProof),
     unavailableAfterConsumed,
   );
   assert.equal(thenGets, 0, "the trusted outer adapter rejects before Promise assimilation");
@@ -233,6 +246,7 @@ test("prepared claim snapshots mutable aliases and rejects owner outcome extras"
   const mutableWinner = structuredClone(winner);
   const accepted = await claimContainedTurnWithConsumedGrants(
     claimDependencies({ kind: "observed_claim", operation: mutableWinner }), initial, scope, subject,
+    hostCustodyProof,
   );
   assert.equal(accepted.kind, "observed_claim");
   if (accepted.kind === "observed_claim") {
@@ -247,7 +261,9 @@ test("prepared claim snapshots mutable aliases and rejects owner outcome extras"
     rawOwnerPayload: "must-not-leak",
   };
   assert.deepEqual(
-    await claimContainedTurnWithConsumedGrants(claimDependencies(outcomeWithExtra), initial, scope, subject),
+    await claimContainedTurnWithConsumedGrants(
+      claimDependencies(outcomeWithExtra), initial, scope, subject, hostCustodyProof,
+    ),
     unavailableAfterConsumed,
   );
 });

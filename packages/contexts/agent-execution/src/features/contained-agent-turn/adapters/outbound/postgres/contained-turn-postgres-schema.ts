@@ -10,7 +10,7 @@ import {
 } from "./contained-turn-state-codec.js";
 import { decodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
 
-export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 4;
+export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 5;
 const MIGRATION_ADVISORY_NAMESPACE = 730;
 const MIGRATION_ADVISORY_COMPONENT = 251_001;
 export const CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE = Object.freeze({
@@ -223,6 +223,111 @@ ALTER TABLE agent_execution.contained_turn_operation_v1
   DROP CONSTRAINT contained_turn_operation_v1_tenant_id_effect_id_key;
 `;
 
+const V5_SQL = `
+DROP TRIGGER contained_turn_fill_project_id
+ON agent_execution.contained_turn_operation_v1;
+CREATE TRIGGER contained_turn_fill_project_id
+BEFORE INSERT OR UPDATE OF state, project_id, tenant_id
+ON agent_execution.contained_turn_operation_v1
+FOR EACH ROW EXECUTE FUNCTION agent_execution.contained_turn_fill_project_id();
+
+CREATE TABLE agent_execution.contained_turn_dispatch_preparation_quarantine_v1 (
+  operation_id text NOT NULL,
+  preparation_token text NOT NULL,
+  observed_codec_version integer NOT NULL,
+  observed_state_digest text,
+  quarantined_state jsonb NOT NULL,
+  reason text NOT NULL CHECK (reason IN ('malformed', 'unsupported_version')),
+  first_observed_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
+  last_observed_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
+  observation_count bigint NOT NULL DEFAULT 1 CHECK (observation_count > 0),
+  PRIMARY KEY (operation_id, preparation_token)
+);
+
+CREATE FUNCTION agent_execution.contained_turn_runtime_schema_compatible()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, agent_execution
+AS $$
+  SELECT CASE
+    WHEN current_setting('agent_execution.contained_turn_schema_version', true) ~ '^[1-9][0-9]*$'
+      THEN current_setting('agent_execution.contained_turn_schema_version', true)::integer = (
+        SELECT version
+          FROM agent_execution.schema_migration
+         WHERE component = 'contained-agent-turn'
+      )
+    ELSE false
+  END
+$$;
+
+CREATE FUNCTION agent_execution.reject_incompatible_contained_turn_runtime_write()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NOT agent_execution.contained_turn_runtime_schema_compatible() THEN
+    RAISE EXCEPTION 'contained turn runtime schema fence rejected this binary';
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+ALTER TABLE agent_execution.contained_turn_operation_v1 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_execution.contained_turn_operation_v1 FORCE ROW LEVEL SECURITY;
+CREATE POLICY contained_turn_runtime_schema_fence
+ON agent_execution.contained_turn_operation_v1
+USING (agent_execution.contained_turn_runtime_schema_compatible())
+WITH CHECK (agent_execution.contained_turn_runtime_schema_compatible());
+CREATE TRIGGER contained_turn_runtime_schema_write_fence
+BEFORE INSERT OR UPDATE OR DELETE ON agent_execution.contained_turn_operation_v1
+FOR EACH ROW EXECUTE FUNCTION agent_execution.reject_incompatible_contained_turn_runtime_write();
+
+ALTER TABLE agent_execution.contained_turn_output_v1 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_execution.contained_turn_output_v1 FORCE ROW LEVEL SECURITY;
+CREATE POLICY contained_turn_runtime_schema_fence
+ON agent_execution.contained_turn_output_v1
+USING (agent_execution.contained_turn_runtime_schema_compatible())
+WITH CHECK (agent_execution.contained_turn_runtime_schema_compatible());
+CREATE TRIGGER contained_turn_runtime_schema_write_fence
+BEFORE INSERT OR UPDATE OR DELETE ON agent_execution.contained_turn_output_v1
+FOR EACH ROW EXECUTE FUNCTION agent_execution.reject_incompatible_contained_turn_runtime_write();
+
+ALTER TABLE agent_execution.contained_turn_receipt_v1 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_execution.contained_turn_receipt_v1 FORCE ROW LEVEL SECURITY;
+CREATE POLICY contained_turn_runtime_schema_fence
+ON agent_execution.contained_turn_receipt_v1
+USING (agent_execution.contained_turn_runtime_schema_compatible())
+WITH CHECK (agent_execution.contained_turn_runtime_schema_compatible());
+CREATE TRIGGER contained_turn_runtime_schema_write_fence
+BEFORE INSERT OR UPDATE OR DELETE ON agent_execution.contained_turn_receipt_v1
+FOR EACH ROW EXECUTE FUNCTION agent_execution.reject_incompatible_contained_turn_runtime_write();
+
+ALTER TABLE agent_execution.contained_turn_dispatch_preparation_v1 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_execution.contained_turn_dispatch_preparation_v1 FORCE ROW LEVEL SECURITY;
+CREATE POLICY contained_turn_runtime_schema_fence
+ON agent_execution.contained_turn_dispatch_preparation_v1
+USING (agent_execution.contained_turn_runtime_schema_compatible())
+WITH CHECK (agent_execution.contained_turn_runtime_schema_compatible());
+CREATE TRIGGER contained_turn_runtime_schema_write_fence
+BEFORE INSERT OR UPDATE OR DELETE ON agent_execution.contained_turn_dispatch_preparation_v1
+FOR EACH ROW EXECUTE FUNCTION agent_execution.reject_incompatible_contained_turn_runtime_write();
+
+ALTER TABLE agent_execution.contained_turn_dispatch_preparation_quarantine_v1 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_execution.contained_turn_dispatch_preparation_quarantine_v1 FORCE ROW LEVEL SECURITY;
+CREATE POLICY contained_turn_runtime_schema_fence
+ON agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+USING (agent_execution.contained_turn_runtime_schema_compatible())
+WITH CHECK (agent_execution.contained_turn_runtime_schema_compatible());
+CREATE TRIGGER contained_turn_runtime_schema_write_fence
+BEFORE INSERT OR UPDATE OR DELETE ON agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+FOR EACH ROW EXECUTE FUNCTION agent_execution.reject_incompatible_contained_turn_runtime_write();
+`;
+
 const V4_DOWN_SQL = `
 DO $$
 BEGIN
@@ -252,6 +357,7 @@ const V1_DIGEST = digest(V1_SQL);
 const V2_DIGEST = digest(V2_SQL);
 const V3_DIGEST = digest(V3_SQL);
 const V4_DIGEST = digest(`${V4_PREPARATION_DIGEST_BACKFILL_REVISION}\n${V4_SQL}`);
+const V5_DIGEST = digest(V5_SQL);
 
 export interface ContainedTurnPostgresMigrationIdentity {
   readonly digest: string;
@@ -265,9 +371,10 @@ export const CONTAINED_TURN_POSTGRES_MIGRATIONS: readonly ContainedTurnPostgresM
     Object.freeze({ digest: V2_DIGEST, predecessorDigest: V1_DIGEST, version: 2 }),
     Object.freeze({ digest: V3_DIGEST, predecessorDigest: V2_DIGEST, version: 3 }),
     Object.freeze({ digest: V4_DIGEST, predecessorDigest: V3_DIGEST, version: 4 }),
+    Object.freeze({ digest: V5_DIGEST, predecessorDigest: V4_DIGEST, version: 5 }),
   ]);
 
-export const CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST = V4_DIGEST;
+export const CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST = V5_DIGEST;
 
 interface MigrationRow {
   readonly migration_digest: string;
@@ -281,7 +388,7 @@ interface MigrationHistoryRow extends MigrationRow {
 const migrationFor = (version: number): ContainedTurnPostgresMigrationIdentity & { readonly sql: string } => {
   const identity = CONTAINED_TURN_POSTGRES_MIGRATIONS[version - 1];
   const sql = version === 1 ? V1_SQL : version === 2 ? V2_SQL :
-    version === 3 ? V3_SQL : version === 4 ? V4_SQL : undefined;
+    version === 3 ? V3_SQL : version === 4 ? V4_SQL : version === 5 ? V5_SQL : undefined;
   if (identity === undefined || sql === undefined) {
     throw new RangeError(`unsupported contained turn PostgreSQL migration target ${String(version)}`);
   }
@@ -412,8 +519,8 @@ const validateCurrentCatalog = async (client: PoolClient, version: number): Prom
         AND tablename = 'contained_turn_operation_v1'
         AND indexname IN ('contained_turn_operation_v1_scoped_command_key', 'contained_turn_operation_v1_scoped_effect_key')`,
   );
-  const triggers = await client.query<{ tgname: string }>(
-    `SELECT tgname FROM pg_trigger
+  const triggers = await client.query<{ definition: string; tgname: string }>(
+    `SELECT tgname, pg_get_triggerdef(oid) AS definition FROM pg_trigger
       WHERE tgrelid = 'agent_execution.contained_turn_operation_v1'::regclass
         AND NOT tgisinternal AND tgname = 'contained_turn_fill_project_id'`,
   );
@@ -443,6 +550,46 @@ const validateCurrentCatalog = async (client: PoolClient, version: number): Prom
   );
   if (legacy.rowCount !== (version < 4 ? 2 : 0)) {
     throw new Error("contained turn PostgreSQL contract migration drift detected");
+  }
+  if (version >= 5) {
+    const triggerDefinition = triggers.rows[0]?.definition;
+    const quarantine = await client.query<{ relforcerowsecurity: boolean; relrowsecurity: boolean }>(
+      `SELECT relforcerowsecurity, relrowsecurity
+         FROM pg_class
+        WHERE oid = 'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass`,
+    );
+    const fencedTables = await client.query(
+      `SELECT policyname
+         FROM pg_policies
+        WHERE schemaname = 'agent_execution'
+          AND policyname = 'contained_turn_runtime_schema_fence'
+          AND tablename IN (
+            'contained_turn_operation_v1',
+            'contained_turn_output_v1',
+            'contained_turn_receipt_v1',
+            'contained_turn_dispatch_preparation_v1',
+            'contained_turn_dispatch_preparation_quarantine_v1'
+          )`,
+    );
+    const writeFences = await client.query(
+      `SELECT tgname
+         FROM pg_trigger
+        WHERE NOT tgisinternal
+          AND tgname = 'contained_turn_runtime_schema_write_fence'
+          AND tgrelid IN (
+            'agent_execution.contained_turn_operation_v1'::regclass,
+            'agent_execution.contained_turn_output_v1'::regclass,
+            'agent_execution.contained_turn_receipt_v1'::regclass,
+            'agent_execution.contained_turn_dispatch_preparation_v1'::regclass,
+            'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass
+          )`,
+    );
+    if (triggerDefinition === undefined || !triggerDefinition.includes("tenant_id") ||
+        quarantine.rows[0]?.relrowsecurity !== true ||
+        quarantine.rows[0]?.relforcerowsecurity !== true || fencedTables.rowCount !== 5 ||
+        writeFences.rowCount !== 5) {
+      throw new Error("contained turn PostgreSQL v5 runtime fence drift detected");
+    }
   }
 };
 
@@ -530,8 +677,10 @@ const applyMigration = async (
 };
 
 export interface ApplyContainedTurnPostgresSchemaOptions {
+  /** V4 is an internal rollback fixture only; production contract migration must commit V4 and V5 atomically. */
+  readonly allowUnfencedV4ForTest?: true;
   /** Used only by migration/rolling-binary tests and staged deploys. */
-  readonly targetVersion?: 1 | 2 | 3 | 4;
+  readonly targetVersion?: 1 | 2 | 3 | 4 | 5;
 }
 
 export const applyContainedTurnPostgresSchema = async (
@@ -542,6 +691,9 @@ export const applyContainedTurnPostgresSchema = async (
   if (!Number.isSafeInteger(targetVersion) || targetVersion < 1 ||
       targetVersion > CONTAINED_TURN_POSTGRES_SCHEMA_VERSION) {
     throw new RangeError(`unsupported contained turn PostgreSQL migration target ${String(targetVersion)}`);
+  }
+  if ((targetVersion === 4) !== (options.allowUnfencedV4ForTest === true)) {
+    throw new TypeError("contained turn PostgreSQL v4 requires the explicit disposable-test fence bypass");
   }
   const client = await connectForMigration(pool);
   let discardClient = false;
