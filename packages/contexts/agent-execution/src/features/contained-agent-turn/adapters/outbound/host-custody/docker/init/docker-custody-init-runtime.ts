@@ -212,9 +212,7 @@ export class DockerCustodyInitRuntime {
     if (this.#startFenced || this.#phase !== "awaiting-request" || this.#request !== undefined) {throw new Error("provider exec is duplicate, fenced, or out of order and will not be launched");}
     this.#request = message; this.#acknowledgement = "pending";
     const wallNow = this.#syscalls.wallNowUnixMs();
-    if (this.#handshake === undefined || !safeEqual(message.handshakeNonce, this.#handshake.nonce) ||
-      !safeEqual(message.launchFingerprintSha256, this.#handshake.fingerprint) || !safeEqual(message.executableSha256, this.#executableSha256) ||
-      !Number.isSafeInteger(wallNow) || wallNow < 0 || message.wallDeadlineUnixMs <= wallNow) {this.#rejectExec(); return;}
+    if (this.#execRequestInvalid(message, wallNow)) {this.#rejectExec(); return;}
     const environment: Record<string, string> = {};
     for (const entry of message.environment) {if (!this.#allowedEnvironmentNames.has(entry.name)) {this.#rejectExec(); return;} environment[entry.name] = entry.value;}
     const remainingWallBudgetMs = message.wallDeadlineUnixMs - wallNow;
@@ -237,6 +235,13 @@ export class DockerCustodyInitRuntime {
       this.#writeProviderObservation("acceptance-unknown", null, null, null);
       this.#poison();
     }
+  }
+  #execRequestInvalid(message: DockerCustodyProviderExecRequest, wallNow: number): boolean {
+    return this.#handshake === undefined ||
+      !safeEqual(message.handshakeNonce, this.#handshake.nonce) ||
+      !safeEqual(message.launchFingerprintSha256, this.#handshake.fingerprint) ||
+      !safeEqual(message.executableSha256, this.#executableSha256) ||
+      !Number.isSafeInteger(wallNow) || wallNow < 0 || message.wallDeadlineUnixMs <= wallNow;
   }
   #rejectExec(): void {
     this.#phase = "failed"; this.#startFenced = true; this.#acknowledge("not-started", null);

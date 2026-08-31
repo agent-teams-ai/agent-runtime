@@ -21,6 +21,11 @@ const FILE_SUFFIX = ".journal";
 const RETIREMENT_SUFFIX = ".retired";
 const LOCK_NAME = ".docker-custody-v1.lock";
 
+const isRetirementEntry = (name: string): boolean => {
+  const locator = name.slice(FILE_PREFIX.length, -RETIREMENT_SUFFIX.length);
+  return name.startsWith(FILE_PREFIX) && name.endsWith(RETIREMENT_SUFFIX) && LOCATOR.test(locator);
+};
+
 export interface DockerCustodyLinuxFileSystemPort {
   readonly platform: string;
   lstat(path: string): Promise<BigIntStats>;
@@ -366,10 +371,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
       for (;;) {
         const entry = await directory.read();
         if (entry === null) {break;}
-        const retirementLocator = entry.name.slice(FILE_PREFIX.length, -RETIREMENT_SUFFIX.length);
-        if (entry.name === LOCK_NAME || (
-          entry.name.startsWith(FILE_PREFIX) && entry.name.endsWith(RETIREMENT_SUFFIX) && LOCATOR.test(retirementLocator)
-        )) {continue;}
+        if (entry.name === LOCK_NAME || isRetirementEntry(entry.name)) {continue;}
         if (names.length >= maxFiles) {throw new DockerCustodyJournalCapacityError("restart journal file bound exceeded");}
         names.push(entry.name);
       }

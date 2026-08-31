@@ -12,6 +12,14 @@ import {
 } from "./docker-boundary-snapshot.js";
 import { DockerEngineError } from "./docker-engine-error.js";
 import { isTerminalObservation, mutationPostconditionSatisfied } from "./docker-engine-semantics.js";
+import {
+  authorityBelongsToFakeEngine,
+  exitedFakeContainerState,
+  initialFakeContainerState,
+  sameFakeAuthority,
+  sameFakeEngine,
+  startedFakeContainerState,
+} from "./fake-docker-engine-state.js";
 import type {
   DockerContainerAuthority,
   DockerContainerCreate,
@@ -47,20 +55,6 @@ interface FakeLogPlan {
 }
 
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
-
-const initialState = (): DockerContainerStateFacts => ({
-  dead: false,
-  errorPresent: false,
-  exitCode: 0,
-  finishedAt: "0001-01-01T00:00:00Z",
-  hostPid: 0,
-  oomKilled: false,
-  paused: false,
-  restarting: false,
-  running: false,
-  startedAt: "0001-01-01T00:00:00Z",
-  status: "created",
-});
 
 export class FakeDockerEngine implements DockerEnginePort {
   readonly #containers = new Map<string, FakeContainer>();
@@ -201,7 +195,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       throw new DockerEngineError("create-acknowledgement-unknown");
     }
     const authority = this.#newAuthority(canonicalInput, engine);
-    const record = { authority, input: canonicalInput, removed: false, state: initialState() };
+    const record = { authority, input: canonicalInput, removed: false, state: initialFakeContainerState() };
     this.#containers.set(authority.containerId, record);
     this.#names.set(name, authority.containerId);
     this.#events.push(`create:${outcome}`);
@@ -212,7 +206,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       }
       const resolved = this.#names.get(name);
       const observed = resolved === undefined ? undefined : this.#containers.get(resolved);
-      if (observed === undefined || observed.removed || !this.#sameAuthority(observed.authority, authority)) {
+      if (observed === undefined || observed.removed || !sameFakeAuthority(observed.authority, authority)) {
         throw new DockerEngineError("create-acknowledgement-unknown");
       }
       this.#events.push(`create:${outcome}:resolved-by-name`);
@@ -231,7 +225,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     encodeCreateRequest(canonicalInput, this.#policy);
     const id = this.#names.get(containerName(canonicalInput.operationNonceSha256));
     const record = id === undefined ? undefined : this.#containers.get(id);
-    if (record === undefined || record.removed || !this.#sameAuthority(
+    if (record === undefined || record.removed || !sameFakeAuthority(
       record.authority,
       this.#newAuthorityForReconciliation(canonicalInput, this.#identity(), record.authority.containerId),
     )) {
@@ -253,7 +247,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     if (record === undefined || record.removed) {
       return { authority: authoritySnapshot, cgroupTree: "unobserved", engine, existence: "absent" };
     }
-    if (!this.#sameAuthority(record.authority, authoritySnapshot) ||
+    if (!sameFakeAuthority(record.authority, authoritySnapshot) ||
         createSpecificationSha256(record.input, this.#policy) !== authoritySnapshot.createSpecificationSha256) {
       throw new DockerEngineError("authority-conflict");
     }
@@ -461,32 +455,15 @@ export class FakeDockerEngine implements DockerEnginePort {
   }
 
   #assertEngine(authority: DockerContainerAuthority, engine: DockerEngineIdentity): void {
-    if (authority.daemonIdentitySha256 !== engine.daemonIdentitySha256 ||
-        authority.hostIdentitySha256 !== engine.hostIdentitySha256 ||
-        authority.daemonBootGenerationSha256 !== engine.daemonBootGenerationSha256 ||
-        authority.hostBootGenerationSha256 !== engine.hostBootGenerationSha256) {
+    if (!authorityBelongsToFakeEngine(authority, engine)) {
       throw new DockerEngineError("daemon-identity-changed");
     }
   }
 
   #assertSameEngine(left: DockerEngineIdentity, right: DockerEngineIdentity): void {
-    if (left.daemonIdentitySha256 !== right.daemonIdentitySha256 ||
-        left.hostIdentitySha256 !== right.hostIdentitySha256 ||
-        left.daemonBootGenerationSha256 !== right.daemonBootGenerationSha256 ||
-        left.hostBootGenerationSha256 !== right.hostBootGenerationSha256) {
+    if (!sameFakeEngine(left, right)) {
       throw new DockerEngineError("daemon-identity-changed");
     }
-  }
-
-  #sameAuthority(left: DockerContainerAuthority, right: DockerContainerAuthority): boolean {
-    return left.containerId === right.containerId && left.daemonIdentitySha256 === right.daemonIdentitySha256 &&
-      left.createSpecificationSha256 === right.createSpecificationSha256 &&
-      left.daemonBootGenerationSha256 === right.daemonBootGenerationSha256 &&
-      left.hostBootGenerationSha256 === right.hostBootGenerationSha256 &&
-      left.hostIdentitySha256 === right.hostIdentitySha256 && left.imageDigest === right.imageDigest &&
-      left.launchFingerprintSha256 === right.launchFingerprintSha256 &&
-      left.operationNonceSha256 === right.operationNonceSha256 &&
-      left.ownerIdentitySha256 === right.ownerIdentitySha256;
   }
 
   #mutationOutcome(operation: FakeMutationOperation): { acknowledgement: "304" | "lost"; effect: boolean } | undefined {
@@ -517,29 +494,12 @@ export class FakeDockerEngine implements DockerEnginePort {
   }
 
   #start(record: FakeContainer): void {
-    record.state = {
-      ...record.state,
-      hostPid: 10_000 + this.#counter,
-      paused: false,
-      restarting: false,
-      running: true,
-      startedAt: "2026-01-01T00:00:00Z",
-      status: "running",
-    };
+    record.state = startedFakeContainerState(record.state, 10_000 + this.#counter);
     this.#signalStateTransition();
   }
 
   #exit(record: FakeContainer, exitCode: number): void {
-    record.state = {
-      ...record.state,
-      exitCode,
-      finishedAt: "2026-01-01T00:00:01Z",
-      hostPid: 0,
-      paused: false,
-      restarting: false,
-      running: false,
-      status: "exited",
-    };
+    record.state = exitedFakeContainerState(record.state, exitCode);
     this.#signalStateTransition();
   }
 

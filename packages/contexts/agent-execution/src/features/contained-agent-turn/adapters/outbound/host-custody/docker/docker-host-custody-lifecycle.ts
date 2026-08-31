@@ -1,9 +1,7 @@
 import type {
   DockerContainerAuthority,
-  DockerContainerCreate,
   DockerContainerObservation,
   DockerEngineCall,
-  DockerEngineIdentity,
   DockerEnginePort,
 } from "./engine/docker-engine-port.js";
 import {
@@ -11,18 +9,23 @@ import {
   type DockerCustodyJournalRecoveryReader,
   type DockerCustodyJournalWriter,
 } from "./journal/docker-custody-journal.js";
-import {
-  bindDockerCustodyAttemptKey,
-  dockerCustodyAttemptLocator,
-  dockerCustodyAuthoritySha256,
-  dockerCustodyOwnerIdentitySha256,
-} from "./journal/docker-custody-journal-codec.js";
+import { dockerCustodyAttemptLocator, dockerCustodyAuthoritySha256 } from "./journal/docker-custody-journal-codec.js";
 import {
   DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS,
   DockerCustodyJournalConflictError,
   DockerCustodyJournalCorruptionError,
   DockerCustodyJournalUnavailableError,
 } from "./journal/docker-custody-journal-types.js";
+import {
+  assertDockerAuthorityBinding,
+  assertDockerEngineBinding,
+  bindDockerHostCustodyCreate,
+  dockerHostCustodyAttemptKey,
+  isInactiveDockerObservation,
+  isRunningDockerObservation,
+  sameDockerAuthority,
+  type DockerHostCustodyContainerCreateInput,
+} from "./docker-host-custody-lifecycle-guards.js";
 import type {
   DockerCustodyAttemptKey,
   DockerCustodyJournalEvidence,
@@ -41,7 +44,7 @@ export interface DockerHostCustodyResiduePort {
 }
 
 /** Outer composition supplies launch facts only; the lifecycle derives and seals ownerIdentitySha256. */
-export type DockerHostCustodyContainerCreate = Omit<DockerContainerCreate, "ownerIdentitySha256">;
+export type DockerHostCustodyContainerCreate = DockerHostCustodyContainerCreateInput;
 
 export interface DockerHostCustodyRecoveryResolver {
   resolve(key: DockerCustodyAttemptKey): Promise<Readonly<{
@@ -92,77 +95,8 @@ type DockerHostCustodyContainmentInput = Readonly<{
 
 const proved = Object.freeze({ status: "proved" as const });
 
-const boundCreate = (
-  key: DockerCustodyAttemptKey,
-  create: DockerHostCustodyContainerCreate,
-): DockerContainerCreate => {
-  if (key.launchFingerprintSha256 !== create.launchFingerprintSha256 ||
-      key.operationNonceSha256 !== create.operationNonceSha256) {
-    throw new TypeError("Docker Host Custody launch facts conflict with their canonical owner identity");
-  }
-  return Object.freeze({
-    ...create,
-    ownerIdentitySha256: dockerCustodyOwnerIdentitySha256(key),
-  });
-};
-
-const assertEngineBinding = (key: DockerCustodyAttemptKey, engine: DockerEngineIdentity): void => {
-  if (key.daemonIdentitySha256 !== engine.daemonIdentitySha256 ||
-      key.daemonBootGenerationSha256 !== engine.daemonBootGenerationSha256 ||
-      key.hostIdentitySha256 !== engine.hostIdentitySha256 ||
-      key.hostBootGenerationSha256 !== engine.hostBootGenerationSha256) {
-    throw new TypeError("Docker Host Custody engine generation conflicts with its canonical owner identity");
-  }
-};
-
-const assertAuthorityBinding = (key: DockerCustodyAttemptKey, authority: DockerContainerAuthority): void => {
-  if (key.daemonIdentitySha256 !== authority.daemonIdentitySha256 ||
-      key.daemonBootGenerationSha256 !== authority.daemonBootGenerationSha256 ||
-      key.hostIdentitySha256 !== authority.hostIdentitySha256 ||
-      key.hostBootGenerationSha256 !== authority.hostBootGenerationSha256 ||
-      key.launchFingerprintSha256 !== authority.launchFingerprintSha256 ||
-      key.operationNonceSha256 !== authority.operationNonceSha256 ||
-      authority.ownerIdentitySha256 !== dockerCustodyOwnerIdentitySha256(key)) {
-    throw new TypeError("Docker Host Custody authority conflicts with its canonical owner identity");
-  }
-};
-
-const sameAuthority = (left: DockerContainerAuthority, right: DockerContainerAuthority): boolean =>
-  left.containerId === right.containerId &&
-  left.createSpecificationSha256 === right.createSpecificationSha256 &&
-  left.daemonBootGenerationSha256 === right.daemonBootGenerationSha256 &&
-  left.daemonIdentitySha256 === right.daemonIdentitySha256 &&
-  left.hostBootGenerationSha256 === right.hostBootGenerationSha256 &&
-  left.hostIdentitySha256 === right.hostIdentitySha256 &&
-  left.imageDigest === right.imageDigest &&
-  left.launchFingerprintSha256 === right.launchFingerprintSha256 &&
-  left.operationNonceSha256 === right.operationNonceSha256 &&
-  left.ownerIdentitySha256 === right.ownerIdentitySha256;
-
 const journalUnavailable = (error: unknown): boolean =>
   error instanceof DockerCustodyJournalUnavailableError || error instanceof DockerCustodyJournalCorruptionError;
-
-const runningObservation = (observation: DockerContainerObservation): boolean =>
-  observation.existence === "present" && observation.state.running && observation.state.status === "running";
-
-const inactiveObservation = (observation: DockerContainerObservation): boolean => observation.existence === "absent" || (
-  !observation.state.running && !observation.state.paused && !observation.state.restarting &&
-  observation.state.hostPid === 0 && ["created", "dead", "exited"].includes(observation.state.status)
-);
-
-const attemptKey = (
-  owner: DockerCustodyOwnerIdentity,
-  create: DockerHostCustodyContainerCreate,
-  engine: DockerEngineIdentity,
-): DockerCustodyAttemptKey => bindDockerCustodyAttemptKey({
-  daemonBootGenerationSha256: engine.daemonBootGenerationSha256,
-  daemonIdentitySha256: engine.daemonIdentitySha256,
-  hostBootGenerationSha256: engine.hostBootGenerationSha256,
-  hostIdentitySha256: engine.hostIdentitySha256,
-  launchFingerprintSha256: create.launchFingerprintSha256,
-  operationNonceSha256: create.operationNonceSha256,
-  owner,
-});
 
 /** Coordinates Docker effects only after their exact journal authority is durable. */
 export class DockerHostCustodyLifecycle {
@@ -198,17 +132,17 @@ export class DockerHostCustodyLifecycle {
     kind: "launched";
   }>> {
     const engineIdentity = await this.engine.identity(input.call);
-    const key = attemptKey(input.owner, input.create, engineIdentity);
-    const create = boundCreate(key, input.create);
+    const key = dockerHostCustodyAttemptKey(input.owner, input.create, engineIdentity);
+    const create = bindDockerHostCustodyCreate(key, input.create);
     const prepared = await this.journal.prepare(key);
     if (prepared.state !== "prepared" || prepared.sequence !== 0) {
       throw new TypeError("Docker Host Custody launch requires fresh prepared authority");
     }
     const confirmedEngineIdentity = await this.engine.identity(input.call);
-    assertEngineBinding(key, confirmedEngineIdentity);
+    assertDockerEngineBinding(key, confirmedEngineIdentity);
     await this.journal.beforeAction({ key, expectedSequence: prepared.sequence, state: "create_requested" });
     const authority = await this.engine.create(create, input.call, confirmedEngineIdentity);
-    assertAuthorityBinding(key, authority);
+    assertDockerAuthorityBinding(key, authority);
     const authoritySha256 = this.holdAuthority(key, authority);
     const created = await this.journal.observe({
       authoritySha256, key, expectedSequence: 1, state: "created", evidence: proved,
@@ -220,11 +154,11 @@ export class DockerHostCustodyLifecycle {
       key,
       expectedSequence: 3,
       state: "init_ready",
-      evidence: runningObservation(observation)
+      evidence: isRunningDockerObservation(observation)
         ? proved
         : { status: "unproven", reason: "docker_observation_unavailable" },
     });
-    if (!runningObservation(observation)) {
+    if (!isRunningDockerObservation(observation)) {
       throw new TypeError("Docker Host Custody init readiness is unproven");
     }
     return Object.freeze({ authority, journal, key, kind: "launched" as const });
@@ -236,13 +170,13 @@ export class DockerHostCustodyLifecycle {
     execute(): Promise<"proved" | "unproven">;
     key: DockerCustodyAttemptKey;
   }>): Promise<DockerCustodyJournalRecord> {
-    assertAuthorityBinding(input.key, input.authority);
+    assertDockerAuthorityBinding(input.key, input.authority);
     const current = await this.journal.lookup(input.key);
     if (this.authorityMatch(input.key, input.authority, current) !== "match") {
       throw new TypeError("Docker Host Custody provider execution requires exact created authority");
     }
     if (current.state !== "init_ready" || current.evidence.status !== "proved" ||
-        !runningObservation(await this.engine.inspect(input.authority, input.call))) {
+        !isRunningDockerObservation(await this.engine.inspect(input.authority, input.call))) {
       throw new TypeError("Docker Host Custody provider execution requires exact live init authority");
     }
     const requested = await this.journal.beforeAction({
@@ -267,7 +201,7 @@ export class DockerHostCustodyLifecycle {
   }
 
   public async contain(input: DockerHostCustodyContainmentInput): Promise<DockerHostCustodyContainment> {
-    assertAuthorityBinding(input.key, input.authority);
+    assertDockerAuthorityBinding(input.key, input.authority);
     for (let transition = 0; transition < 16; transition += 1) {
       let current: DockerCustodyJournalRecord;
       try {current = await this.journal.lookup(input.key);} catch (error) {
@@ -431,7 +365,7 @@ export class DockerHostCustodyLifecycle {
       }
       observation = await this.engine.inspect(authority, call).catch(() => null);
     }
-    if (observation === null || !inactiveObservation(observation)) {return "unknown";}
+    if (observation === null || !isInactiveDockerObservation(observation)) {return "unknown";}
     return this.residue.proveEmpty(authority, call).catch(() => "unknown" as const);
   }
 
@@ -450,9 +384,9 @@ export class DockerHostCustodyLifecycle {
     journal?: DockerCustodyJournalRecord,
   ): Promise<DockerContainerAuthority | undefined> {
     if (resolved === undefined) {return undefined;}
-    const create = boundCreate(key, resolved.create);
+    const create = bindDockerHostCustodyCreate(key, resolved.create);
     if (resolved.authority !== undefined) {
-      assertAuthorityBinding(key, resolved.authority);
+      assertDockerAuthorityBinding(key, resolved.authority);
       let canonical: DockerContainerAuthority;
       try {canonical = await this.engine.reconcileCreate(create, resolved.call);} catch {
         if (this.authorityMatch(key, resolved.authority, journal) !== "match") {return undefined;}
@@ -462,13 +396,13 @@ export class DockerHostCustodyLifecycle {
             : undefined;
         } catch {return undefined;}
       }
-      if (!sameAuthority(canonical, resolved.authority)) {return undefined;}
+      if (!sameDockerAuthority(canonical, resolved.authority)) {return undefined;}
       this.holdAuthority(key, resolved.authority);
       return resolved.authority;
     }
     try {
       const authority = await this.engine.reconcileCreate(create, resolved.call);
-      assertAuthorityBinding(key, authority);
+      assertDockerAuthorityBinding(key, authority);
       this.holdAuthority(key, authority);
       return authority;
     } catch {
