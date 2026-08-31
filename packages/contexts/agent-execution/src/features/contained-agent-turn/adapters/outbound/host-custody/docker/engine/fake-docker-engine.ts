@@ -93,6 +93,7 @@ export class FakeDockerEngine implements DockerEnginePort {
       imageDigest: `validation@sha256:${"0".repeat(64)}`,
       launchFingerprintSha256: "0".repeat(64),
       operationNonceSha256: "0".repeat(64),
+      ownerIdentitySha256: "0".repeat(64),
       privateRootSource: `${this.#policy.privateRootSourceRoot}/validation`,
       workspaceSource: `${this.#policy.workspaceSourceRoot}/validation`,
       workspaceWritable: false,
@@ -172,13 +173,24 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#logPlans.set(authority.containerId, { delayed: options.delayed === true, frames: [...frames] });
   }
 
-  public async create(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority> {
+  public async identity(call: DockerEngineCall): Promise<DockerEngineIdentity> {
+    const callSnapshot = snapshotDockerEngineCall(call);
+    this.#check("inspect", callSnapshot);
+    return Object.freeze({ ...this.#identity() });
+  }
+
+  public async create(
+    input: DockerContainerCreate,
+    call: DockerEngineCall,
+    expectedIdentity?: DockerEngineIdentity,
+  ): Promise<DockerContainerAuthority> {
     const callSnapshot = snapshotDockerEngineCall(call);
     const inputSnapshot = snapshotDockerContainerCreate(input);
     this.#check("create", callSnapshot);
     const canonicalInput = await canonicalizeCreateMounts(inputSnapshot, this.#policy);
     encodeCreateRequest(canonicalInput, this.#policy);
     const engine = this.#identity();
+    if (expectedIdentity !== undefined) {this.#assertSameEngine(expectedIdentity, engine);}
     const name = containerName(canonicalInput.operationNonceSha256);
     const named = this.#names.get(name);
     if (named !== undefined && this.#containers.get(named)?.removed !== true) {
@@ -206,6 +218,26 @@ export class FakeDockerEngine implements DockerEnginePort {
       this.#events.push(`create:${outcome}:resolved-by-name`);
     }
     return authority;
+  }
+
+  public async reconcileCreate(
+    input: DockerContainerCreate,
+    call: DockerEngineCall,
+  ): Promise<DockerContainerAuthority> {
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const inputSnapshot = snapshotDockerContainerCreate(input);
+    this.#check("inspect", callSnapshot);
+    const canonicalInput = await canonicalizeCreateMounts(inputSnapshot, this.#policy);
+    encodeCreateRequest(canonicalInput, this.#policy);
+    const id = this.#names.get(containerName(canonicalInput.operationNonceSha256));
+    const record = id === undefined ? undefined : this.#containers.get(id);
+    if (record === undefined || record.removed || !this.#sameAuthority(
+      record.authority,
+      this.#newAuthorityForReconciliation(canonicalInput, this.#identity(), record.authority.containerId),
+    )) {
+      throw new DockerEngineError("create-acknowledgement-unknown");
+    }
+    return { ...record.authority };
   }
 
   public async inspect(
@@ -375,6 +407,26 @@ export class FakeDockerEngine implements DockerEnginePort {
       imageDigest: input.imageDigest,
       launchFingerprintSha256: input.launchFingerprintSha256,
       operationNonceSha256: input.operationNonceSha256,
+      ownerIdentitySha256: input.ownerIdentitySha256,
+    });
+  }
+
+  #newAuthorityForReconciliation(
+    input: DockerContainerCreate,
+    engine: DockerEngineIdentity,
+    containerId: string,
+  ): DockerContainerAuthority {
+    return validateAuthorityShape({
+      containerId,
+      createSpecificationSha256: createSpecificationSha256(input, this.#policy),
+      daemonBootGenerationSha256: engine.daemonBootGenerationSha256,
+      daemonIdentitySha256: engine.daemonIdentitySha256,
+      hostBootGenerationSha256: engine.hostBootGenerationSha256,
+      hostIdentitySha256: engine.hostIdentitySha256,
+      imageDigest: input.imageDigest,
+      launchFingerprintSha256: input.launchFingerprintSha256,
+      operationNonceSha256: input.operationNonceSha256,
+      ownerIdentitySha256: input.ownerIdentitySha256,
     });
   }
 
@@ -417,6 +469,15 @@ export class FakeDockerEngine implements DockerEnginePort {
     }
   }
 
+  #assertSameEngine(left: DockerEngineIdentity, right: DockerEngineIdentity): void {
+    if (left.daemonIdentitySha256 !== right.daemonIdentitySha256 ||
+        left.hostIdentitySha256 !== right.hostIdentitySha256 ||
+        left.daemonBootGenerationSha256 !== right.daemonBootGenerationSha256 ||
+        left.hostBootGenerationSha256 !== right.hostBootGenerationSha256) {
+      throw new DockerEngineError("daemon-identity-changed");
+    }
+  }
+
   #sameAuthority(left: DockerContainerAuthority, right: DockerContainerAuthority): boolean {
     return left.containerId === right.containerId && left.daemonIdentitySha256 === right.daemonIdentitySha256 &&
       left.createSpecificationSha256 === right.createSpecificationSha256 &&
@@ -424,7 +485,8 @@ export class FakeDockerEngine implements DockerEnginePort {
       left.hostBootGenerationSha256 === right.hostBootGenerationSha256 &&
       left.hostIdentitySha256 === right.hostIdentitySha256 && left.imageDigest === right.imageDigest &&
       left.launchFingerprintSha256 === right.launchFingerprintSha256 &&
-      left.operationNonceSha256 === right.operationNonceSha256;
+      left.operationNonceSha256 === right.operationNonceSha256 &&
+      left.ownerIdentitySha256 === right.ownerIdentitySha256;
   }
 
   #mutationOutcome(operation: FakeMutationOperation): { acknowledgement: "304" | "lost"; effect: boolean } | undefined {

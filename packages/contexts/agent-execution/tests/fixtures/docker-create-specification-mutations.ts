@@ -24,6 +24,7 @@ export const createSpecificationMutations = (root: string): ReadonlyArray<(value
   value => {const config = value.Config as Record<string, unknown>; const labels = config.Labels as Record<string, unknown>; labels["com.agent-runtime.host-identity-sha256"] = "f".repeat(64);},
   value => {const config = value.Config as Record<string, unknown>; const labels = config.Labels as Record<string, unknown>; labels["com.agent-runtime.launch-fingerprint-sha256"] = "f".repeat(64);},
   value => {const config = value.Config as Record<string, unknown>; const labels = config.Labels as Record<string, unknown>; labels["com.agent-runtime.operation-nonce-sha256"] = "f".repeat(64);},
+  value => {const config = value.Config as Record<string, unknown>; const labels = config.Labels as Record<string, unknown>; labels["com.agent-runtime.owner-identity-sha256"] = "e".repeat(64);},
   value => {const host = value.HostConfig as Record<string, unknown>; host.AutoRemove = true;},
   value => {const host = value.HostConfig as Record<string, unknown>; host.CapDrop = ["NET_RAW"];},
   value => {const host = value.HostConfig as Record<string, unknown>; host.CgroupParent = "foreign.slice";},

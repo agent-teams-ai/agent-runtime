@@ -124,18 +124,28 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       imageDigest: `validation@sha256:${"0".repeat(64)}`,
       launchFingerprintSha256: "0".repeat(64),
       operationNonceSha256: "0".repeat(64),
+      ownerIdentitySha256: "0".repeat(64),
       privateRootSource: `${policy.privateRootSourceRoot}/validation`,
       workspaceSource: `${policy.workspaceSourceRoot}/validation`,
       workspaceWritable: false,
     }, this.#policy);
   }
 
-  public async create(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority> {
+  public identity(call: DockerEngineCall): Promise<DockerEngineIdentity> {
+    return this.#identity(snapshotDockerEngineCall(call));
+  }
+
+  public async create(
+    input: DockerContainerCreate,
+    call: DockerEngineCall,
+    expectedIdentity?: DockerEngineIdentity,
+  ): Promise<DockerContainerAuthority> {
     const inputSnapshot = snapshotDockerContainerCreate(input);
     const callSnapshot = snapshotDockerEngineCall(call);
     const canonicalInput = await boundedPreflight(canonicalizeCreateMounts(inputSnapshot, this.#policy), callSnapshot);
     const requestBody = encodeCreateRequest(canonicalInput, this.#policy);
     const engine = await this.#identity(callSnapshot);
+    if (expectedIdentity !== undefined) {this.#assertSameEngine(expectedIdentity, engine);}
     const name = containerName(canonicalInput.operationNonceSha256);
     let id: string;
     try {
@@ -155,6 +165,23 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     const observation = await this.inspect(authority, callSnapshot);
     if (observation.existence !== "present") {throw new DockerEngineError("authority-conflict");}
     return authority;
+  }
+
+  public async reconcileCreate(
+    input: DockerContainerCreate,
+    call: DockerEngineCall,
+  ): Promise<DockerContainerAuthority> {
+    const inputSnapshot = snapshotDockerContainerCreate(input);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const canonicalInput = await boundedPreflight(canonicalizeCreateMounts(inputSnapshot, this.#policy), callSnapshot);
+    encodeCreateRequest(canonicalInput, this.#policy);
+    const engine = await this.#identity(callSnapshot);
+    return this.#resolveLostAcknowledgement(
+      canonicalInput,
+      engine,
+      containerName(canonicalInput.operationNonceSha256),
+      callSnapshot,
+    );
   }
 
   public async inspect(
@@ -318,6 +345,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       imageDigest: input.imageDigest,
       launchFingerprintSha256: input.launchFingerprintSha256,
       operationNonceSha256: input.operationNonceSha256,
+      ownerIdentitySha256: input.ownerIdentitySha256,
     };
     return validateAuthorityShape(authority);
   }

@@ -28,6 +28,7 @@ export interface DockerContainerAuthority {
   readonly imageDigest: string;
   readonly launchFingerprintSha256: string;
   readonly operationNonceSha256: string;
+  readonly ownerIdentitySha256: string;
 }
 
 export interface DockerContainerCreate {
@@ -37,6 +38,8 @@ export interface DockerContainerCreate {
   readonly imageDigest: string;
   readonly launchFingerprintSha256: string;
   readonly operationNonceSha256: string;
+  /** Lifecycle-derived canonical owner binding; never accepted from outer composition. */
+  readonly ownerIdentitySha256: string;
   readonly privateRootSource: string;
   readonly workspaceSource: string;
   readonly workspaceWritable: boolean;
@@ -106,7 +109,16 @@ export interface DockerLogFrame {
 }
 
 export interface DockerEnginePort {
-  create(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority>;
+  /** Read-only, generation-stable engine identity used before journal/resource binding. */
+  identity(call: DockerEngineCall): Promise<DockerEngineIdentity>;
+  create(
+    input: DockerContainerCreate,
+    call: DockerEngineCall,
+    /** When supplied, the adapter must reject generation drift before sending create bytes. */
+    expectedIdentity?: DockerEngineIdentity,
+  ): Promise<DockerContainerAuthority>;
+  /** Read-only exact-name/spec reconciliation after a journaled create request. */
+  reconcileCreate(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority>;
   inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation>;
   kill(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void>;
   logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame>;

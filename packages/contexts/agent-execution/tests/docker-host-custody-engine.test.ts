@@ -32,6 +32,7 @@ import { verifyProductionUnixPeerBinding } from "./fixtures/docker-unix-peer-bin
 const HOST = "a".repeat(64);
 const NONCE = "b".repeat(64);
 const FINGERPRINT = "c".repeat(64);
+const OWNER_IDENTITY = "f".repeat(64);
 const CONTAINER = "d".repeat(64);
 const IMAGE = `registry.invalid:5443/runtime@sha256:${"e".repeat(64)}`;
 const SECCOMP_JSON = JSON.stringify({ defaultAction: "SCMP_ACT_ERRNO", syscalls: [] });
@@ -77,6 +78,7 @@ const createInput = (root: string, nonce = NONCE): DockerContainerCreate => ({
   imageDigest: IMAGE,
   launchFingerprintSha256: FINGERPRINT,
   operationNonceSha256: nonce,
+  ownerIdentitySha256: OWNER_IDENTITY,
   privateRootSource: join(root, "private", "operation"),
   workspaceSource: join(root, "workspaces", "operation"),
   workspaceWritable: true,
@@ -379,14 +381,20 @@ test("Node adapter emits the closed schema and completes lifecycle only by exact
     .every(route => route.includes(CONTAINER)));
 });
 
-test("API v1.47 decoders accept the retained redacted Docker Engine 29.6.1 fixture", async t => {
+test("API v1.47 decoders accept a synthetic owner-binding projection of the retained Engine 29.6.1 fixture", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
   const fixtureUrl = new URL("./fixtures/docker-engine-api-v1.47-engine-29.6.1-redacted.json", import.meta.url);
   const fixtureSource = (await readFile(fixtureUrl, "utf8"))
     .replaceAll("__WORKSPACE_SOURCE__", join(root, "workspaces", "operation"))
     .replaceAll("__PRIVATE_SOURCE__", join(root, "private", "operation"));
-  const fixture = JSON.parse(fixtureSource) as { readonly info: unknown; readonly inspect: unknown };
+  const fixture = JSON.parse(fixtureSource) as {
+    readonly info: unknown;
+    readonly inspect: { readonly Config: { readonly Labels: Record<string, string> } };
+  };
+  // The captured fixture predates owner binding. Project only this synthetic test
+  // response; preserve the historical capture bytes and their original evidence.
+  fixture.inspect.Config.Labels["com.agent-runtime.owner-identity-sha256"] = createInput(root).ownerIdentitySha256;
   let present = false;
   const client = {
     async buffered(request: { readonly method: string; readonly path: string }) {
@@ -559,6 +567,13 @@ test("persistent daemon identity is additionally fenced by daemon and host boot 
   const hostAuthority = await second.create(createInput(root), call());
   second.restartHost("replacement");
   await assert.rejects(second.inspect(hostAuthority, call()), { code: "daemon-identity-changed" });
+  const createFence = new FakeDockerEngine(policy(root));
+  const expectedIdentity = await createFence.identity(call());
+  createFence.restartDaemon("raced-before-create");
+  await assert.rejects(createFence.create(createInput(root, "7".repeat(64)), call(), expectedIdentity), {
+    code: "daemon-identity-changed",
+  });
+  assert.equal(createFence.events.some(event => event.startsWith("create:")), false);
 });
 
 test("ambiguous and 304 mutation acknowledgements require exact postconditions and 409 diagnostics are operation-specific", async t => {
