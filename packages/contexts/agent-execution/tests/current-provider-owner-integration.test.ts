@@ -211,20 +211,25 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
 };
 
 const dependenciesForProvider = (fixture: ReturnType<typeof createDependencies>, provider: "claude" | "codex") => {
-  if (provider === "codex") {return fixture.dependencies;}
   const providerAccess = fixture.dependencies.providerAccess;
-  return Object.freeze({
-    ...fixture.dependencies,
-    providerAccess: Object.freeze({
-      ...providerAccess,
-      resolveForAcceptance: async (...args: Parameters<typeof providerAccess.resolveForAcceptance>) => {
-        const outcome = await providerAccess.resolveForAcceptance(...args);
-        return outcome.kind === "resolved" ? Object.freeze({
-          ...outcome, snapshot: Object.freeze({...outcome.snapshot, provider: "claude" as const}),
-        }) : outcome;
-      },
-    }),
-  });
+  const bindSnapshot = (
+    snapshot: Extract<Awaited<ReturnType<typeof providerAccess.resolveForAcceptance>>, {kind: "resolved"}>["snapshot"],
+    scope: Parameters<typeof providerAccess.resolveForAcceptance>[0]["scope"],
+  ) => Object.freeze({...snapshot, projectId: scope.projectId, provider, tenantId: scope.tenantId});
+  return Object.freeze({...fixture.dependencies, providerAccess: Object.freeze({...providerAccess,
+    resolveForAcceptance: async (input: Parameters<typeof providerAccess.resolveForAcceptance>[0]) => {
+      const outcome = await providerAccess.resolveForAcceptance(input);
+      return outcome.kind === "resolved"
+        ? Object.freeze({...outcome, snapshot: bindSnapshot(outcome.snapshot, input.scope)})
+        : outcome;
+    },
+    revalidateForDispatch: async (input: Parameters<typeof providerAccess.revalidateForDispatch>[0]) => {
+      const outcome = await providerAccess.revalidateForDispatch(input);
+      return outcome.kind === "current"
+        ? Object.freeze({...outcome, snapshot: bindSnapshot(outcome.snapshot, input.scope)})
+        : outcome;
+    },
+  })});
 };
 
 test("provider owners keep stable kernel and random Host identities distinct and start only post-claim", async () => {
