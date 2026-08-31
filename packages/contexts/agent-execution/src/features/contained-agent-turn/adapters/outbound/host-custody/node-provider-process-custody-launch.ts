@@ -38,6 +38,7 @@ interface GuardedProviderLaunchOptions {
   readonly onOverflow: () => void;
   readonly spawnAcknowledgementAfterMs: number;
   readonly stdoutHighWaterBytes: number;
+  readonly workspaceDescriptorPath?: string;
 }
 
 export interface GuardedProviderLaunch {
@@ -70,7 +71,11 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
   let authority: VerifiedLaunchDescriptors;
   try {
     authority = acquireVerifiedLaunchDescriptors(
-      live.plan!, live.executable!, live.workspaceRef, live.workspace!, live.privatePaths!,
+      live.plan!, live.executable!, live.workspaceRef,
+      options.workspaceDescriptorPath === undefined
+        ? live.workspace!
+        : Object.freeze({observation: live.workspace!, retainedDescriptorPath: options.workspaceDescriptorPath}),
+      live.privatePaths!,
     );
   } catch (error) {
     const failure = new DescriptorAuthorityAcquisitionError();

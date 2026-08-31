@@ -5,17 +5,20 @@ import { tmpdir } from "node:os";
 import { test } from "node:test";
 
 import {
+  createContainedTurnFeature,
   createClaudeCurrentKernelOwner,
   createCodexCurrentKernelOwner,
   NodeProviderProcessCustody,
 } from "../dist/composition.js";
 import { createCodexAppServerPermissionBoundary } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
+import { createCodexAppServerLaunchPlan } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import { createClaudeAgentSdkPrivateProjection } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import { ClaudeAgentSdkCurrentKernelAdapter } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-current-kernel-adapter.js";
 import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { createDependencies } from "./features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 const ids = (provider: "claude" | "codex", suffix: string) => Object.freeze({
   attemptId: containedTurnIdentity("attempt", `attempt:${provider}:${suffix}`),
@@ -38,7 +41,10 @@ class FakeHost {
   readonly plans: unknown[] = [];
   readonly refs = new Map<string, string>();
   reserves = 0;
+  releases = 0;
   starts = 0;
+  contained = false;
+  containments = 0;
   async reserve(input: any) {
     this.reserves += 1;
     const custodyRef = `urn:agent-runtime:host-custody:random-${this.reserves}`;
@@ -63,9 +69,44 @@ class FakeHost {
       workspaceAuthorityPath: "/proc/self/fd/4" as const, write: async () => {},
     });
   }
-  evidence() {return null;}
-  async requestContainment() {return Object.freeze({ kind: "contained" as const, receiptRef: "receipt:test" });}
-  async release() {return Object.freeze({ kind: "released" as const });}
+  evidence(custodyRef: string) {
+    if (![...this.refs.values()].includes(custodyRef)) {return null;}
+    const started = this.starts > 0;
+    const provedNoStart = !started && this.contained;
+    return Object.freeze({
+      closure: Object.freeze({
+        limitations: Object.freeze([]), profile: "strict-linux-cgroup-v2",
+        status: started ? "closed" : provedNoStart ? "not-started" : "unproven",
+      }),
+      fingerprint: Object.freeze({
+        argumentsSha256: "1".repeat(64), binaryRevision: "binary:test", containmentProfile: "strict-linux-cgroup-v2",
+        environmentKeys: Object.freeze([]), executablePathSha256: "2".repeat(64), executableSha256: "3".repeat(64),
+        fingerprintSha256: "4".repeat(64), intentMode: "analysis", planSha256: "5".repeat(64),
+        privatePathEnvironmentKeys: Object.freeze([]), privateRootPathSha256: "6".repeat(64),
+        providerBindingSha256: "7".repeat(64), spawnMode: "sdk-delegated", workspaceSha256: "8".repeat(64),
+      }),
+      guardianExit: started ? Object.freeze({code: 0, signal: null, status: "observed"}) : Object.freeze({status: "unobserved"}),
+      identity: started ? Object.freeze({
+        binarySha256: "3".repeat(64), childProcessInstanceSha256: "9".repeat(64),
+        hostLifecycleGenerationSha256: "a".repeat(64), pgid: 101, pid: 102,
+        planSha256: "5".repeat(64), proofRef: "process-proof:test", status: "proved",
+      }) : Object.freeze({
+        binarySha256: "0".repeat(64), childProcessInstanceSha256: "0".repeat(64),
+        hostLifecycleGenerationSha256: "a".repeat(64), planSha256: "0".repeat(64), status: "not-started",
+      }),
+      privateRoot: Object.freeze({identitySha256: "b".repeat(64), status: started ? "deleted" : "active"}),
+      providerExit: started ? Object.freeze({code: 0, signal: null, status: "observed"}) : Object.freeze({status: "not-started"}),
+      sealed: started || provedNoStart, spawn: started ? "acknowledged" : "never-started",
+      stderr: Object.freeze({bytes: 0, sha256: "0".repeat(64), status: started ? "complete" : provedNoStart ? "not-started" : "incomplete"}),
+      stdout: Object.freeze({bytes: 0, sha256: "0".repeat(64), status: started ? "complete" : provedNoStart ? "not-started" : "incomplete"}),
+    });
+  }
+  async requestContainment() {
+    this.contained = true;
+    this.containments += 1;
+    return Object.freeze({ kind: "contained" as const, receiptRef: "receipt:test" });
+  }
+  async release() {this.releases += 1; return Object.freeze({ kind: "released" as const });}
 }
 async function* emptyBytes(): AsyncIterable<Uint8Array> {}
 
@@ -96,6 +137,91 @@ const executeInput = (identity: ReturnType<typeof ids>, provider: "claude" | "co
     })),
   }),
 });
+
+const claudeSnapshot = Object.freeze({
+  adapterRevision: "claude:test", binaryRevision: "claude-binary:test",
+  capabilityManifestRevision: "claude-manifest:test", provider: "claude" as const,
+});
+
+const claudeManifest = Object.freeze({
+  effectCardinality: "one_coarse_effect_per_operation", effectClass: "contained_unmediated_effect",
+  manifestRevision: claudeSnapshot.capabilityManifestRevision, manifestVersion: 1, provider: "claude" as const,
+  providerAttemptCardinality: "at_most_one", requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
+  resourceScopeRevision: "contained-workspace-network-credential:1",
+  supportedModes: Object.freeze(["analysis", "workspace-write"] as const), unknownCapabilityPolicy: "fail_closed",
+});
+
+const createClaimPathOwner = async (provider: "claude" | "codex", root: string, host: FakeHost) => {
+  const workspaceRef = join(root, `${provider}-claim-workspace`);
+  const privateRootPath = `${workspaceRef}-host-private`;
+  await mkdir(workspaceRef, {recursive: true, mode: 0o700});
+  const ownerWorkspace = Object.freeze({
+    async withLaunchAuthority<Result>(_input: unknown, consume: (authority: any) => Promise<Result>): Promise<Result> {
+      return consume(Object.freeze({
+        canonicalPath: workspaceRef, descriptorPath: "/proc/self/fd/99",
+        identity: Object.freeze({dev: 1n, ino: 2n, mountId: `mount:${provider}:claim`}),
+      }));
+    },
+  });
+  if (provider === "codex") {
+    const codexHome = join(privateRootPath, "home");
+    const temp = join(privateRootPath, "temp");
+    await Promise.all([mkdir(codexHome, {recursive: true, mode: 0o700}), mkdir(temp, {recursive: true, mode: 0o700})]);
+    return createCodexCurrentKernelOwner({
+      hostBootId: "host-boot:claim-codex", hostCustody: host as any,
+      hostInstanceId: "host-instance:claim-codex",
+      launchRecords: {resolve: async () => {
+        return ({
+        boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+        executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp,
+        });
+      }},
+      workspaceOwner: ownerWorkspace,
+    });
+  }
+  const [configRoot, homeRoot, tempRoot] = ["config", "home", "temp"].map(name => join(privateRootPath, name));
+  await Promise.all([configRoot, homeRoot, tempRoot].map(path => mkdir(path, {recursive: true, mode: 0o700})));
+  return createClaudeCurrentKernelOwner({
+    adapterSnapshot: claudeSnapshot, executablePath: "/synthetic/claude", executableSha256: "a".repeat(64),
+    hostBootId: "host-boot:claim-claude", hostCustody: host as any,
+    hostInstanceId: "host-instance:claim-claude",
+    launchRecords: {resolve: async () => {
+      const privateProjection = createClaudeAgentSdkPrivateProjection({
+        configRoot, homeRoot, projectionRef: "projection:claude:claim", tempRoot, workspaceRef,
+      });
+      return ({privateProjection, privateRootPath});
+    }},
+    manifest: claudeManifest,
+    queryFactory: input => {
+      const plan = host.plans.at(-1) as any;
+      input.options.spawnClaudeCodeProcess({
+        args: [...plan.arguments], command: "/synthetic/claude", cwd: workspaceRef,
+        env: {...plan.environment}, signal: new AbortController().signal,
+      });
+      return {close: () => {}, interrupt: async () => {}, async *[Symbol.asyncIterator]() {
+        yield Promise.reject(new Error("synthetic Claude reconciliation boundary"));
+      }};
+    },
+    workspaceOwner: ownerWorkspace,
+  });
+};
+
+const dependenciesForProvider = (fixture: ReturnType<typeof createDependencies>, provider: "claude" | "codex") => {
+  if (provider === "codex") {return fixture.dependencies;}
+  const providerAccess = fixture.dependencies.providerAccess;
+  return Object.freeze({
+    ...fixture.dependencies,
+    providerAccess: Object.freeze({
+      ...providerAccess,
+      resolveForAcceptance: async (...args: Parameters<typeof providerAccess.resolveForAcceptance>) => {
+        const outcome = await providerAccess.resolveForAcceptance(...args);
+        return outcome.kind === "resolved" ? Object.freeze({
+          ...outcome, snapshot: Object.freeze({...outcome.snapshot, provider: "claude" as const}),
+        }) : outcome;
+      },
+    }),
+  });
+};
 
 test("provider owners keep stable kernel and random Host identities distinct and start only post-claim", async () => {
   const root = await mkdtemp(join(tmpdir(), "current-provider-owner-"));
@@ -134,10 +260,6 @@ test("provider owners keep stable kernel and random Host identities distinct and
       .map(path => mkdir(path, { recursive: true, mode: 0o700 }))]);
     const claudeIds = ids("claude", "one");
     const claudeHost = new FakeHost();
-    const claudeSnapshot = Object.freeze({
-      adapterRevision: "claude:test", binaryRevision: "claude-binary:test",
-      capabilityManifestRevision: "claude-manifest:test", provider: "claude" as const,
-    });
     const claude = createClaudeCurrentKernelOwner({
       adapterSnapshot: claudeSnapshot, executablePath: "/synthetic/claude", executableSha256: "a".repeat(64),
       hostBootId: "host-boot:current-owner", hostCustody: claudeHost as any,
@@ -175,6 +297,81 @@ test("provider owners keep stable kernel and random Host identities distinct and
   } finally {await rm(root, { recursive: true, force: true });}
 });
 
+test("Codex and Claude current owners start only after the real atomic claim and cannot replay", async t => {
+  for (const provider of ["codex", "claude"] as const) {
+    await t.test(provider, async () => {
+      const root = await mkdtemp(join(tmpdir(), `current-owner-real-claim-${provider}-`));
+      try {
+        const host = new FakeHost();
+        const owner = await createClaimPathOwner(provider, root, host);
+        const fixture = createDependencies();
+        const selected = dependenciesForProvider(fixture, provider);
+        const originalStore = selected.operationStore;
+        let capturedClaim: Parameters<typeof originalStore.claimPreparedDispatch>[0] | undefined;
+        let releaseClaim!: () => void;
+        let reportClaimReached!: () => void;
+        const claimGate = new Promise<void>(resolve => {releaseClaim = resolve;});
+        const claimReached = new Promise<void>(resolve => {reportClaimReached = resolve;});
+        const dependencies = Object.freeze({
+          ...selected,
+          custody: owner.custody,
+          operationStore: Object.freeze({
+            ...originalStore,
+            claimPreparedDispatch: async (input: Parameters<typeof originalStore.claimPreparedDispatch>[0]) => {
+              capturedClaim = input;
+              reportClaimReached();
+              await claimGate;
+              return originalStore.claimPreparedDispatch(input);
+            },
+          }),
+          provider: owner.provider,
+        });
+        const feature = createContainedTurnFeature(dependencies);
+        const submission = feature.submit.execute({
+          commandId: `command:real-claim:${provider}`,
+          expectedProvider: provider,
+          intent: {mode: "analysis", prompt: "Inspect this disposable claim fixture."},
+          scope: {projectId: "project:one", tenantId: "tenant:one"},
+        });
+        await claimReached;
+        assert.equal(host.reserves, 1);
+        assert.equal(host.starts, 0, "neither Host nor provider may start before atomic claim");
+        releaseClaim();
+        const result = await submission;
+        assert.equal(host.starts, 1, "the winning atomic claim permits exactly one start");
+        assert.equal(result.status, "observed");
+        assert.ok(result.status === "observed" && ["reconcile_required", "succeeded"].includes(result.turn.status));
+        assert.ok(host.containments > 0, "started execution must reach containment before closure or reconciliation");
+        assert.ok(capturedClaim);
+        const replay = await originalStore.claimPreparedDispatch(capturedClaim);
+        assert.equal(replay.kind, "observed_claim");
+        assert.equal(host.starts, 1, "a second claim observation cannot start again");
+        assert.ok(host.releases > 0 || result.status === "observed" && result.turn.status === "reconcile_required");
+        owner.dispose();
+
+        const preventedHost = new FakeHost();
+        const preventedOwner = await createClaimPathOwner(provider, join(root, "prevented"), preventedHost);
+        const preventedFixture = createDependencies({dispatchPrevented: true});
+        const preventedSelected = dependenciesForProvider(preventedFixture, provider);
+        const preventedFeature = createContainedTurnFeature(Object.freeze({
+          ...preventedSelected, custody: preventedOwner.custody, provider: preventedOwner.provider,
+        }));
+        const prevented = await preventedFeature.submit.execute({
+          commandId: `command:prevented:${provider}`,
+          expectedProvider: provider,
+          intent: {mode: "analysis", prompt: "This dispatch must be prevented."},
+          scope: {projectId: "project:one", tenantId: "tenant:one"},
+        });
+        assert.equal(prevented.status, "observed");
+        assert.equal(preventedHost.starts, 0);
+        assert.equal(preventedHost.reserves, 1);
+        assert.equal(preventedHost.releases, 1);
+        preventedOwner.dispose();
+      } finally {await rm(root, {recursive: true, force: true});}
+    });
+  }
+});
+
 test("raw Host reservation rejects a replaced filesystem descriptor before launch effects", async () => {
   const root = await mkdtemp(join(tmpdir(), "current-owner-handoff-"));
   try {
@@ -206,6 +403,53 @@ test("raw Host reservation rejects a replaced filesystem descriptor before launc
         workspaceRef: expected,
       }), /workspace descriptor identity mismatch/u);
     } finally {await replacementHandle.close();}
+  } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test("raw Host reservation rejects exact path, device and inode on a substituted mount before provider effect", async () => {
+  const root = await mkdtemp(join(tmpdir(), "current-owner-mount-identity-"));
+  try {
+    const workspaceRef = join(root, "workspace");
+    const privateRootPath = `${workspaceRef}-host-private`;
+    const codexHome = join(privateRootPath, "home");
+    const temp = join(privateRootPath, "temp");
+    await Promise.all([mkdir(workspaceRef, {mode: 0o700}), mkdir(privateRootPath, {mode: 0o700})]);
+    await Promise.all([mkdir(codexHome, {mode: 0o700}), mkdir(temp, {mode: 0o700})]);
+    const authorityHandle = await open(workspaceRef, "r");
+    try {
+      const identity = await authorityHandle.stat({bigint: true});
+      let observations = 0;
+      let retainedDescriptor = -1;
+      const host = new NodeProviderProcessCustody({
+        launchPlans: {resolve: async () => {}},
+        mountIdentityObserver: descriptor => {
+          retainedDescriptor = descriptor;
+          return ++observations === 1 ? "mount:expected" : "mount:substituted";
+        },
+      });
+      const boundary = createCodexAppServerPermissionBoundary({codexHome, workspaceRef});
+      await assert.rejects(host.reserve({
+        attemptId: "attempt:mount-substitution", intentMode: "analysis",
+        launchPlan: createCodexAppServerLaunchPlan({
+          boundary, executablePath: "/invalid-before-provider-effect", intentMode: "analysis",
+          privateRootPath, tmpDir: temp,
+        }),
+        operationId: "operation:mount-substitution",
+        providerBinding: Object.freeze({
+          adapterRevision: "adapter:test", binaryRevision: "@openai/codex:0.150.1+linux-x64",
+          capabilityManifestRevision: "manifest:test", credentialBindingDigest: "credential:test",
+          provider: "codex", providerRouteRef: "route:test",
+        }),
+        workspaceAuthority: Object.freeze({
+          canonicalPath: workspaceRef, descriptorPath: `/proc/self/fd/${authorityHandle.fd}`,
+          identity: Object.freeze({dev: identity.dev, ino: identity.ino, mountId: "mount:expected"}),
+        }),
+        workspaceRef,
+      }), /Host Custody launch precondition rejected/u);
+      assert.equal(observations, 2);
+      await assert.rejects(stat(`/proc/self/fd/${retainedDescriptor}`));
+      assert.equal(host.get("urn:never-started"), undefined);
+    } finally {await authorityHandle.close();}
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
