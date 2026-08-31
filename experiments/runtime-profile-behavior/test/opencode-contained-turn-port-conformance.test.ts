@@ -10,7 +10,7 @@ import {
   createContainedTurnFeature,
   type ContainedTurnFeatureDependencies,
 } from "@agent-teams/agent-execution/composition";
-import { createDependencies } from "@agent-teams/agent-execution/testing";
+import { createDependencies } from "../../../packages/contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 type TerminalStopReason = "cancelled" | "end_turn" | "max_tokens" | "max_turn_requests" | "refusal";
 type ProviderAcceptance = boolean | "unknown";
