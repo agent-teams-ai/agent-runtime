@@ -317,6 +317,62 @@ const observedCapabilityStatus = (
   }
 };
 
+interface ProjectionExpectation {
+  readonly ambiguousClass?: string;
+  readonly observation: CurrentProviderObservation;
+  readonly outputKinds: readonly OutputKind[];
+}
+
+const independentProjectionExpectations: Readonly<Record<string, ProjectionExpectation>> =
+  Object.freeze({
+    "completed-cancelled": {
+      observation: completed("cancelled"),
+      outputKinds: [],
+    },
+    "completed-failed": {
+      observation: completed("failed"),
+      outputKinds: ["diagnostic"],
+    },
+    "completed-succeeded": {
+      observation: completed("succeeded"),
+      outputKinds: ["assistant"],
+    },
+    "late-rejection-after-timeout": {
+      ambiguousClass: "late_request_rejected_after_timeout",
+      observation: indeterminate("late-rejection-after-timeout"),
+      outputKinds: [],
+    },
+    "request-rejection-without-no-start-proof": {
+      ambiguousClass: "request_rejected_without_no_start_proof",
+      observation: indeterminate("request-rejection-without-no-start-proof"),
+      outputKinds: [],
+    },
+    "request-timeout-after-dispatch": {
+      ambiguousClass: "request_timeout_ambiguity",
+      observation: indeterminate("request-timeout-after-dispatch"),
+      outputKinds: [],
+    },
+  });
+
+const expectedObservationKeys: Readonly<Record<CurrentProviderObservation["kind"], readonly string[]>> = {
+  completed: ["kind", "outcome"],
+  indeterminate: ["evidenceId", "kind"],
+};
+
+const assertCurrentProviderObservation = (
+  observation: CurrentProviderObservation,
+  maximumCharacters: number,
+): void => {
+  assert.deepEqual(
+    Object.keys(observation).toSorted(),
+    [...expectedObservationKeys[observation.kind]].toSorted(),
+  );
+  if (observation.kind === "indeterminate") {
+    assert.ok(observation.evidenceId.length <= maximumCharacters, observation.evidenceId);
+    assert.match(observation.evidenceId, /^evidence:opencode-provider-indeterminate:[a-f0-9]{64}$/u);
+  }
+};
+
 test("pins a fully synthetic, no-launch OpenCode semantic fixture", async () => {
   const bytes = await readFile(fixtureUrl);
   const fixture = JSON.parse(bytes.toString()) as ConformanceFixture;
@@ -522,6 +578,85 @@ test("classifies every official ACP terminal reason without a refusal fallback",
       `${deferredReason} has no accepted distinct neutral mapping`,
     );
   }
+});
+
+test("projects every current neutral ACP case without an Agent Execution kernel harness", async () => {
+  const fixture = await loadFixture();
+  const exercisedCases = fixture.outcomeCases.filter(
+    value => value.evidenceClassification === "current_neutral_projection_kernel_exercised",
+  );
+  assert.deepEqual(
+    exercisedCases.map(value => value.id).toSorted(),
+    Object.keys(independentProjectionExpectations).toSorted(),
+  );
+  assert.deepEqual(
+    Object.values(independentProjectionExpectations)
+      .flatMap(value => value.ambiguousClass === undefined ? [] : [value.ambiguousClass])
+      .toSorted(),
+    [...fixture.characterizationBoundary.anomalyDetail.requiredSyntheticClasses].toSorted(),
+  );
+
+  let projectionCalls = 0;
+  for (const outcomeCase of exercisedCases) {
+    const expectation = independentProjectionExpectations[outcomeCase.id];
+    assert.ok(expectation, outcomeCase.id);
+    const projectedOutput: Array<Readonly<{
+      readonly cursor: number;
+      readonly kind: OutputKind;
+      readonly text: string;
+    }>> = [];
+    const projection = new SyntheticAcpOutcomeProjection(outcomeCase.id, {
+      ...outcomeCase.sdkSemanticObservation,
+      providerOutput: "raw-provider-output-canary credential=raw-credential-canary token=raw-token-canary",
+      sessionId: "raw-session-canary",
+      toolCallId: "raw-tool-canary",
+      workspacePath: "/synthetic/raw-workspace-canary",
+    });
+
+    projectionCalls += 1;
+    const observation = await projection.execute(async chunk => {
+      projectedOutput.push(Object.freeze({ ...chunk }));
+    });
+
+    assert.deepEqual(observation, expectation.observation, outcomeCase.id);
+    assertCurrentProviderObservation(observation, fixture.evidencePolicy.maxIdentifierCharacters);
+    assert.deepEqual(
+      projectedOutput.map(chunk => chunk.kind),
+      expectation.outputKinds,
+      outcomeCase.id,
+    );
+    for (const chunk of projectedOutput) {
+      assert.deepEqual(Object.keys(chunk).toSorted(), ["cursor", "kind", "text"]);
+      assert.equal(chunk.cursor, 0, outcomeCase.id);
+      assert.ok(
+        Buffer.byteLength(chunk.text) <= fixture.evidencePolicy.maxRetainedTextBytes,
+        `${outcomeCase.id} projected ${Buffer.byteLength(chunk.text)} bytes`,
+      );
+      assertNoCredentialOrTokenMaterial(chunk.text);
+    }
+    if (outcomeCase.id === "completed-succeeded") {
+      assert.equal(projectedOutput.length, 1);
+      assert.equal(Buffer.byteLength(projectedOutput[0]?.text ?? ""), MAX_PROJECTED_TEXT_BYTES);
+    }
+    if (outcomeCase.id === "completed-failed") {
+      assert.equal(projectedOutput.length, 1);
+      assert.equal(projectedOutput[0]?.text, "synthetic ACP refusal");
+    }
+
+    const retained = JSON.stringify({ observation, projectedOutput });
+    for (const canary of [
+      "raw-workspace-canary",
+      "raw-session-canary",
+      "raw-tool-canary",
+      "raw-provider-output-canary",
+      "raw-credential-canary",
+      "raw-token-canary",
+    ]) {
+      assert.ok(!retained.includes(canary), `${outcomeCase.id} retained ${canary}`);
+    }
+  }
+  assert.equal(projectionCalls, exercisedCases.length);
+  assert.equal(projectionCalls, 6);
 });
 
 test("enforces the exact 256-byte projected text boundary without splitting code points", () => {
