@@ -87,6 +87,36 @@ test("fragmented ready and coalesced acknowledgement/output/exit/drain produce e
   assert.deepEqual(Object.keys(channel.writes[0] ?? {}).toSorted(), ["expectedIdentity", "kind", "launchFingerprintSha256", "nonce", "protocol"]);
 });
 
+test("late frames are rejected independently of transport chunking", async () => {
+  const {channel, session} = create();
+  channel.pushBytes(encodeDockerCustodyFrame(ready)); await tick();
+  channel.pushBytes(encodeDockerCustodyFrame(ack));
+  channel.pushBytes(encodeDockerCustodyFrame(root));
+  channel.pushBytes(encodeDockerCustodyFrame(drain));
+  channel.pushBytes(encodeDockerCustodyFrame({bytesBase64: Buffer.from("late").toString("base64"),
+    kind: "provider-output", requestId: "request:g1", stream: "stdout"}));
+  assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+});
+
+test("fragmented input retains one acknowledgement deadline and cancellation wakes the read loop", async t => {
+  await t.test("deadline", async () => {
+    const {channel, session} = create(new FakeChannel(), {acknowledgementTimeoutMs: 15});
+    channel.push(ready); await tick();
+    const frame = encodeDockerCustodyFrame(ack);
+    channel.pushBytes(frame.subarray(0, 2));
+    setTimeout(() => {channel.pushBytes(frame.subarray(2, 4));}, 10);
+    setTimeout(() => {channel.pushBytes(frame.subarray(4));}, 20);
+    assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "unknown", reason: "acknowledgement-lost"});
+  });
+  await t.test("cancel", async () => {
+    const {channel, session} = create();
+    const frame = encodeDockerCustodyFrame(ready); channel.pushBytes(frame.subarray(0, 2)); await tick();
+    const cancelled = await session.cancel();
+    assert.strictEqual(await session.completion, cancelled);
+    assert.deepEqual(cancelled, {generation: "generation:g1", kind: "failed", reason: "cancelled"});
+  });
+});
+
 test("wrong identity and a stale generation poison before provider exec", async t => {
   for (const variant of ["identity", "generation"] as const) {await t.test(variant, async () => {
     let current = true; const channel = new FakeChannel(); const {session} = create(channel,
@@ -97,6 +127,30 @@ test("wrong identity and a stale generation poison before provider exec", async 
     assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
     assert.equal(channel.writes.some(message => message.kind === "provider-exec"), false);
   });}
+});
+
+test("generation drift fences runtime callbacks and closed evidence", async t => {
+  for (const event of ["output", "root", "drain"] as const) {await t.test(event, async () => {
+    let current = true; const callbacks: string[] = [];
+    const {channel, session} = create(new FakeChannel(), {isCurrentGeneration: () => current,
+      onDrainComplete: () => {callbacks.push("drain"); if (event === "drain") {current = false;}},
+      onOutput: () => {callbacks.push("output"); if (event === "output") {current = false;}},
+      onRootExit: () => {callbacks.push("root"); if (event === "root") {current = false;}}});
+    channel.push(ready); await tick();
+    channel.push(ack, {bytesBase64: Buffer.from("out").toString("base64"), kind: "provider-output",
+      requestId: "request:g1", stream: "stdout"}, root, drain);
+    assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+    assert.deepEqual(callbacks, event === "output" ? ["output"] : event === "root" ? ["output", "root"] : ["output", "root", "drain"]);
+  });}
+  await t.test("before event", async () => {
+    let current = true; let outputCalls = 0; const {channel, session} = create(new FakeChannel(),
+      {isCurrentGeneration: () => current, onOutput: () => {outputCalls += 1;}});
+    channel.push(ready); await tick(); channel.push(ack); await tick(); current = false;
+    channel.push({bytesBase64: Buffer.from("stale").toString("base64"), kind: "provider-output",
+      requestId: "request:g1", stream: "stdout"});
+    assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+    assert.equal(outputCalls, 0);
+  });
 });
 
 test("duplicate and out-of-order ready or acknowledgement frames poison permanently", async t => {
@@ -195,4 +249,14 @@ test("cancel and close are idempotent, terminal, and clean abort listeners/chann
   const first = await session.cancel(); abort.abort(); const second = await session.close();
   assert.strictEqual(first, second); assert.deepEqual(first, {generation: "generation:g1", kind: "failed", reason: "cancelled"});
   assert.equal(channel.closeCalls, 1); assert.deepEqual(await session.writeInput(Buffer.from("late")), {committedBytes: 0, kind: "closed"});
+});
+
+test("cancel settles completion while a runtime callback remains backpressured", async () => {
+  const blocked = new Promise<void>(() => {}); const {channel, session} = create(new FakeChannel(), {onOutput: () => blocked});
+  channel.push(ready); await tick(); channel.push(ack); await tick();
+  channel.push({bytesBase64: Buffer.from("held").toString("base64"), kind: "provider-output",
+    requestId: "request:g1", stream: "stdout"}); await tick();
+  const cancelled = await session.cancel();
+  assert.strictEqual(await session.completion, cancelled);
+  assert.deepEqual(cancelled, {generation: "generation:g1", kind: "failed", reason: "cancelled"});
 });
