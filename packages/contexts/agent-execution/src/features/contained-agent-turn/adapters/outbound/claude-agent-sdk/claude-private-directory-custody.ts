@@ -13,5 +13,12 @@ export const captureClaudePrivateDirectoryCustody = (
   if (typeof verifier !== "function") {
     throw new TypeError("Claude private-directory custody requires a verifier");
   }
-  return Object.freeze({ assertPrivateDirectory: verifier });
+  const receiver = Object.create(null) as PrivateDirectoryCustodyPort;
+  Object.defineProperty(receiver, "assertPrivateDirectory", {
+    configurable: false,
+    enumerable: true,
+    value: verifier,
+    writable: false,
+  });
+  return Object.freeze(receiver);
 };

@@ -11,6 +11,9 @@ import {
   isClaudeAgentSdkPrivateProjectionUsable,
 } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import {
+  captureClaudePrivateDirectoryCustody,
+} from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-private-directory-custody.js";
+import {
   binding,
   delta,
   executablePath,
@@ -33,6 +36,7 @@ test("provider construction captures the verifier on a frozen receiver", async (
   const custody = {
     async assertPrivateDirectory(this: object) {
       assert.equal(Object.isFrozen(this), true);
+      assert.equal(Object.getPrototypeOf(this), null);
       assert.notEqual(this, custody);
       originalCalls += 1;
       throw new Error("synthetic private-directory rejection");
@@ -77,21 +81,38 @@ test("current-kernel construction cannot be redirected through private verifier 
   assert.equal(queryCalls, 0);
 });
 
-test("launch capture cannot be redirected through prototype or nested receiver state", async t => {
+test("captured verifier cannot be redirected through prototype or nested receiver state", async t => {
   const scenarios = [
     {
       name: "prototype method",
       create() {
+        let originalCalls = 0;
+        let replacementCalls = 0;
+        const authorityName = "__claudePrivateDirectoryAuthority";
         const prototype = {
-          async assertPrivateDirectory(): Promise<void> {
-            throw new Error("synthetic private-directory rejection");
+          async assertPrivateDirectory(this: Record<string, unknown>): Promise<void> {
+            originalCalls += 1;
+            const authority = this[authorityName];
+            if (typeof authority !== "function") {
+              throw new Error("synthetic private-directory rejection");
+            }
+            await authority();
           },
         };
         const custody = Object.create(prototype) as typeof prototype;
         return {
           custody,
+          expected: () => ({ originalCalls, replacementCalls }),
           redirect: () => {
-            prototype.assertPrivateDirectory = async () => {};
+            prototype.assertPrivateDirectory = async () => { replacementCalls += 1; };
+            // oxlint-disable-next-line no-extend-native -- Exercise the reviewed prototype-pollution attack.
+            Object.defineProperty(Object.prototype, authorityName, {
+              configurable: true,
+              value: async () => { replacementCalls += 1; },
+            });
+          },
+          restore: () => {
+            Reflect.deleteProperty(Object.prototype, authorityName);
           },
         };
       },
@@ -99,19 +120,25 @@ test("launch capture cannot be redirected through prototype or nested receiver s
     {
       name: "nested receiver state",
       create() {
+        let originalCalls = 0;
+        let replacementCalls = 0;
         const custody = {
-          policy: { accept: false },
-          async assertPrivateDirectory(this: { policy?: { accept: boolean } }): Promise<void> {
-            if (this.policy?.accept !== true) {
+          policy: { verify: async () => { throw new Error("synthetic private-directory rejection"); } },
+          async assertPrivateDirectory(this: { policy?: { verify: () => Promise<void> } }): Promise<void> {
+            originalCalls += 1;
+            if (this.policy === undefined) {
               throw new Error("synthetic private-directory rejection");
             }
+            await this.policy.verify();
           },
         };
         return {
           custody,
+          expected: () => ({ originalCalls, replacementCalls }),
           redirect: () => {
-            custody.policy.accept = true;
+            custody.policy.verify = async () => { replacementCalls += 1; };
           },
+          restore: () => {},
         };
       },
     },
@@ -119,20 +146,18 @@ test("launch capture cannot be redirected through prototype or nested receiver s
 
   for (const scenario of scenarios) {
     await t.test(scenario.name, async () => {
-      const { custody, redirect } = scenario.create();
-      const launch = createClaudeAgentSdkLaunchPlan({
-        binaryRevision: binding.binaryRevision,
-        executablePath,
-        executableSha256: "0".repeat(64),
-        intentMode: "analysis",
-        privateProjection,
-        privateDirectoryCustody: custody,
-        privateRootPath: privateRoot,
-        workspaceRef,
-      });
-
-      redirect();
-      await assert.rejects(launch, /frozen private projection/u);
+      const { custody, expected, redirect, restore } = scenario.create();
+      const captured = captureClaudePrivateDirectoryCustody(custody);
+      try {
+        redirect();
+        await assert.rejects(
+          captured.assertPrivateDirectory(privateRoot),
+          /synthetic private-directory rejection/u,
+        );
+        assert.deepEqual(expected(), { originalCalls: 1, replacementCalls: 0 });
+      } finally {
+        restore();
+      }
     });
   }
 });
