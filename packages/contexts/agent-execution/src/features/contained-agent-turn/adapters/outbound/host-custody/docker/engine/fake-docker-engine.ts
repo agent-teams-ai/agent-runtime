@@ -45,6 +45,7 @@ const hash = (value: string): string => createHash("sha256").update(value).diges
 export class FakeDockerEngine implements DockerEnginePort {
   readonly #attachState = new Map<string, "invalid" | "opening" | "open" | "starting" | "started">();
   readonly #attachCleanup = new Map<string, () => void>();
+  readonly #attachGeneration = new Map<string, symbol>();
   readonly #attachRetire = new Map<string, () => void>();
   readonly #custodyInput = new Map<string, Uint8Array[]>();
   readonly #containers = new Map<string, FakeContainer>();
@@ -274,11 +275,43 @@ export class FakeDockerEngine implements DockerEnginePort {
     if (this.#attachState.has(id)) {
       throw new DockerEngineError("protocol-violation");
     }
+    const generation = Symbol(id);
     this.#attachState.set(id, "opening");
+    this.#attachGeneration.set(id, generation);
+    let closed = false;
+    let retired = false;
+    let valid = true;
+    let timer: NodeJS.Timeout | undefined;
+    const cleanup = (): void => {
+      if (timer !== undefined) {clearTimeout(timer);}
+      callSnapshot.signal.removeEventListener("abort", invalidate);
+    };
+    const invalidate = (): void => {
+      if (!valid || retired) {return;}
+      valid = false; cleanup();
+      if (this.#attachGeneration.get(id) === generation) {this.#attachState.set(id, "invalid");}
+    };
+    timer = setTimeout(invalidate, Math.max(0, callSnapshot.deadlineEpochMs - Date.now()));
+    timer.unref();
+    callSnapshot.signal.addEventListener("abort", invalidate, {once: true});
+    this.#attachCleanup.set(id, cleanup);
+    this.#attachRetire.set(id, () => {retired = true; closed = true; valid = false; cleanup();});
+    if (callSnapshot.signal.aborted || callSnapshot.deadlineEpochMs <= Date.now()) {invalidate();}
     let record: FakeContainer;
     try {record = await this.#record("attach", authoritySnapshot, callSnapshot);}
     catch (error) {
       if (this.#attachState.has(id)) {this.#attachState.set(id, "invalid");}
+      cleanup();
+      throw error;
+    }
+    try {
+      this.#checkContinuation(authoritySnapshot, callSnapshot);
+      if (this.#endpointCustodyLost) {throw new DockerEngineError("endpoint-custody-lost");}
+      if (!valid || retired || this.#attachGeneration.get(id) !== generation || this.#attachState.get(id) !== "opening") {
+        throw new DockerEngineError("protocol-violation");
+      }
+    } catch (error) {
+      invalidate();
       throw error;
     }
     if (record.state.status !== "created" || record.state.running) {
@@ -287,20 +320,6 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#attachState.set(id, "open");
     this.#custodyInput.set(id, []);
     this.#events.push("attach:id");
-    let closed = false;
-    let retired = false;
-    let valid = true;
-    const cleanup = (): void => {clearTimeout(timer); callSnapshot.signal.removeEventListener("abort", invalidate);};
-    const invalidate = (): void => {
-      if (!valid || retired) {return;}
-      valid = false; cleanup();
-      this.#attachState.set(id, "invalid");
-    };
-    const timer = setTimeout(invalidate, Math.max(0, callSnapshot.deadlineEpochMs - Date.now()));
-    timer.unref();
-    callSnapshot.signal.addEventListener("abort", invalidate, {once: true});
-    this.#attachCleanup.set(id, cleanup);
-    this.#attachRetire.set(id, () => {retired = true; closed = true; valid = false; cleanup();});
     return Object.freeze({
       close: async () => {closed = true; invalidate();},
       closeInput: async () => {closed = true; invalidate();},
@@ -529,6 +548,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#attachCleanup.get(id)?.();
     this.#attachCleanup.delete(id);
     this.#attachState.delete(id);
+    this.#attachGeneration.delete(id);
     this.#custodyInput.delete(id);
   }
 

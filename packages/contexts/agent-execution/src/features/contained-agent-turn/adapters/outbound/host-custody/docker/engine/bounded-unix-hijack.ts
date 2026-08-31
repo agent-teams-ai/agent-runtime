@@ -65,36 +65,48 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
   let sessionExpired = false;
   let settled = false;
   let released = false;
+  let operation: ClientRequest | undefined;
+  let establishmentSocketClose: (() => void) | undefined;
+  let establishmentSocketError: ((error: Error) => void) | undefined;
+  let establishmentTimer: NodeJS.Timeout | undefined;
   let sessionTimer: NodeJS.Timeout | undefined;
   const release = async (): Promise<void> => {
     if (released) {return;}
     released = true; agent.destroy(); await input.release();
   };
-  const operation = input.request({
-    agent,
-    headers: {connection: "Upgrade", host: "docker", upgrade: "tcp"},
-    maxHeaderSize: MAX_HEADER_BYTES,
-    method: "POST",
-    path: input.path,
-    setHost: false,
-  });
-  const abort = (): void => {
-    const error = failure(input.call, expired || sessionExpired);
-    if (!settled) {operation.destroy(error);}
-    input.socket.destroy(error);
-  };
-  const establishmentTimer = setTimeout(() => {expired = true; abort();}, input.effectiveMs);
-  const cleanupOpening = (): void => {
-    operation.removeAllListeners();
+  const cleanupOpening = (removeAbort = true): void => {
+    if (establishmentTimer !== undefined) {clearTimeout(establishmentTimer);}
+    if (removeAbort) {input.call.signal.removeEventListener("abort", abort);}
+    operation?.removeAllListeners();
+    if (establishmentSocketError !== undefined) {input.socket.removeListener("error", establishmentSocketError);}
+    if (establishmentSocketClose !== undefined) {input.socket.removeListener("close", establishmentSocketClose);}
   };
   const fail = (error?: unknown): void => {
     if (settled) {return;}
-    settled = true; clearTimeout(establishmentTimer); if (sessionTimer !== undefined) {clearTimeout(sessionTimer);}
-    input.call.signal.removeEventListener("abort", abort);
+    settled = true; cleanupOpening(); if (sessionTimer !== undefined) {clearTimeout(sessionTimer);}
+    operation?.once("error", ignoreSocketError);
+    operation?.destroy();
     input.socket.destroy(); void release();
     reject(error instanceof DockerEngineError ? error : failure(input.call, expired));
   };
+  const abort = (): void => {
+    const error = failure(input.call, expired || sessionExpired);
+    if (!settled) {fail(error); return;}
+    input.socket.destroy(error);
+  };
+  establishmentTimer = setTimeout(() => {expired = true; abort();}, input.effectiveMs);
   input.call.signal.addEventListener("abort", abort, {once: true});
+  try {
+    operation = input.request({
+      agent,
+      headers: {connection: "Upgrade", host: "docker", upgrade: "tcp"},
+      maxHeaderSize: MAX_HEADER_BYTES,
+      method: "POST",
+      path: input.path,
+      setHost: false,
+    });
+  } catch (error) {fail(error); return;}
+  if (settled) {operation.destroy(); return;}
   operation.once("error", fail);
   operation.once("response", response => {response.destroy(); fail(new DockerEngineError("protocol-violation"));});
   operation.once("upgrade", (response, socket, head) => {
@@ -102,33 +114,48 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
       try {
         validateUpgrade(response);
         if (socket !== input.socket) {throw new DockerEngineError("endpoint-custody-lost");}
+        establishmentSocketError = error => {fail(error);};
+        establishmentSocketClose = () => {fail(failure(input.call, expired || sessionExpired));};
+        socket.once("error", establishmentSocketError);
+        socket.once("close", establishmentSocketClose);
         await input.verifyCustody();
-        if (head.byteLength > 0) {socket.unshift(head);}
-        clearTimeout(establishmentTimer);
+        if (settled) {return;}
         const remaining = input.call.deadlineEpochMs - Date.now();
-        if (remaining <= 0) {sessionExpired = true; throw new DockerEngineError("deadline-exceeded");}
+        if (input.call.signal.aborted) {throw new DockerEngineError("aborted");}
+        if (expired || remaining <= 0) {sessionExpired = true; throw new DockerEngineError("deadline-exceeded");}
+        if (socket.destroyed || !socket.readable || !socket.writable) {
+          throw new DockerEngineError("daemon-disconnected");
+        }
+        if (head.byteLength > 0) {socket.unshift(head);}
         sessionTimer = setTimeout(() => {sessionExpired = true; abort();}, remaining);
         sessionTimer.unref();
-        settled = true; cleanupOpening();
         // Upgrade detaches the socket from ClientRequest error handling. Keep an
         // error sink installed before exposing the hijack so abort cannot race
         // the custody-channel listener installation.
         socket.on("error", ignoreSocketError);
         const close = async (): Promise<void> => {
-          clearTimeout(establishmentTimer); if (sessionTimer !== undefined) {clearTimeout(sessionTimer);}
+          if (establishmentTimer !== undefined) {clearTimeout(establishmentTimer);}
+          if (sessionTimer !== undefined) {clearTimeout(sessionTimer);}
           input.call.signal.removeEventListener("abort", abort);
           if (!socket.destroyed) {socket.destroy();}
-          try {await release();} finally {socket.removeListener("error", ignoreSocketError);}
+          try {await release();} finally {
+            socket.removeListener("error", ignoreSocketError);
+            socket.removeListener("close", lifetimeClose);
+          }
         };
+        const lifetimeClose = (): void => {void close();};
+        socket.once("close", lifetimeClose);
+        if (establishmentSocketError !== undefined) {socket.removeListener("error", establishmentSocketError);}
+        if (establishmentSocketClose !== undefined) {socket.removeListener("close", establishmentSocketClose);}
+        settled = true; cleanupOpening(false);
         const output = async function* (): AsyncIterable<Uint8Array> {
           for await (const chunk of socket) {yield chunk as Uint8Array;}
           await input.verifyCustody();
         };
-        socket.once("close", () => {void close();});
         resolve({close, input: socket, output: output()});
       } catch (error) {fail(error);}
     };
     void accept();
   });
-  operation.end();
+  try {operation.end();} catch (error) {fail(error);}
 });

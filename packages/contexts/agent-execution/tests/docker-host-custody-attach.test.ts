@@ -4,6 +4,7 @@ import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
+import { request as httpRequest, type ClientRequest, type RequestOptions } from "node:http";
 import { test } from "node:test";
 
 import {
@@ -11,6 +12,7 @@ import {
   type DockerEndpointObservation,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-http.js";
 import { createDockerCustodyChannel } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-custody-channel.js";
+import { DockerEngineError } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-error.js";
 import { FakeDockerEngine } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
 import { call as engineCall, createInput, disposable, policy } from "./fixtures/docker-engine-test-fixture.ts";
 
@@ -24,19 +26,25 @@ const multiplex = (stream: 1 | 2, payload: Uint8Array): Buffer => {
   return Buffer.concat([header, payload]);
 };
 
-const fixture = async (serve: (socket: Socket, request: Buffer) => void) => {
+const fixture = async (
+  serve: (socket: Socket, request: Buffer) => void,
+  options: {
+    readonly observe?: (observation: DockerEndpointObservation) => Promise<DockerEndpointObservation>;
+    readonly requestFactory?: (options: RequestOptions) => ClientRequest;
+  } = {},
+) => {
   const root = await mkdtemp(join(tmpdir(), "ar-docker-attach-"));
   const socketPath = join(root, "engine.sock");
   const server = createServer(socket => {
     socket.on("error", () => {});
-    let request = Buffer.alloc(0);
+    let requestBytes = Buffer.alloc(0);
     socket.on("data", chunk => {
-      request = Buffer.concat([request, chunk]);
-      const boundary = request.indexOf("\r\n\r\n");
+      requestBytes = Buffer.concat([requestBytes, chunk]);
+      const boundary = requestBytes.indexOf("\r\n\r\n");
       if (boundary >= 0) {
         socket.removeAllListeners("data");
-        const headers = request.subarray(0, boundary + 4);
-        const extra = request.subarray(boundary + 4);
+        const headers = requestBytes.subarray(0, boundary + 4);
+        const extra = requestBytes.subarray(boundary + 4);
         if (extra.byteLength > 0) {socket.unshift(extra);}
         serve(socket, headers);
       }
@@ -50,19 +58,24 @@ const fixture = async (serve: (socket: Socket, request: Buffer) => void) => {
     gid: 42n, hostBootId: "12345678-1234-4123-8123-123456789abc", inode: 2n, mode: 0o600,
     socket: true, symbolicLink: false, uid: 41n,
   };
+  let exactSocket: Socket | undefined;
+  let releaseCount = 0;
   const connector = async () => {
     const socket = createConnection(socketPath);
     await once(socket, "connect");
-    return {release: async () => {socket.destroy();}, socket};
+    exactSocket = socket;
+    return {release: async () => {releaseCount += 1; socket.destroy();}, socket};
   };
   const client = new BoundedUnixHttpClient({
     daemonPidFileMode: 0o600, daemonPidFileOwnerGid: 42, daemonPidFileOwnerUid: 41,
     daemonPidFilePath: join(root, "docker.pid"), socketMode: 0o600, socketOwnerGid: 42,
     socketOwnerUid: 41, socketPath,
-  }, undefined, async () => observation, connector);
+  }, options.requestFactory, async () => options.observe?.(observation) ?? observation, connector);
   return {
     client,
     close: async () => {server.close(); await once(server, "close"); await rm(root, {force: true, recursive: true});},
+    get exactSocket() {return exactSocket;},
+    get releaseCount() {return releaseCount;},
   };
 };
 
@@ -94,14 +107,17 @@ test("close, EOF, abort, and deadline poison the sole pre-start attach generatio
     const engine = new FakeDockerEngine(policy(root));
     const authority = await engine.create(createInput(root, `${mode.charCodeAt(0)}`.repeat(64).slice(0, 64)), engineCall());
     const controller = new AbortController();
-    const channel = await engine.attachCustody(authority, call(controller.signal, mode === "deadline" ? 2 : 2_000));
+    const now = Date.now();
+    if (mode === "deadline") {t.mock.timers.enable({apis: ["Date", "setTimeout"], now});}
+    const channel = await engine.attachCustody(authority, call(controller.signal, mode === "deadline" ? 1_000 : 2_000));
     if (mode === "close") {await channel.close();}
     if (mode === "input-eof") {await channel.closeInput();}
     if (mode === "output-eof") {for await (const bytes of channel.output) {void bytes;}}
     if (mode === "abort") {controller.abort();}
-    if (mode === "deadline") {await new Promise<void>(resolve => {setTimeout(resolve, 5);});}
+    if (mode === "deadline") {t.mock.timers.tick(1_001);}
     await assert.rejects(engine.start(authority, engineCall()), {code: "protocol-violation"}, mode);
     await assert.rejects(engine.attachCustody(authority, engineCall()), {code: "protocol-violation"}, mode);
+    t.mock.timers.reset();
   }
 });
 
@@ -116,11 +132,24 @@ test("the fake shares start ambiguity and fail-closed generation semantics", asy
   await assert.rejects(engine.attachCustody(authority, engineCall()), {code: "protocol-violation"});
 });
 
+test("the fake arms opening abort before its first awaited record continuation", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const engine = new FakeDockerEngine(policy(root));
+  const authority = await engine.create(createInput(root), engineCall());
+  const controller = new AbortController();
+  const opening = engine.attachCustody(authority, call(controller.signal));
+  controller.abort();
+  await assert.rejects(opening, {code: "aborted"});
+  await assert.rejects(engine.start(authority, engineCall()), {code: "protocol-violation"});
+  await assert.rejects(engine.attachCustody(authority, engineCall()), {code: "protocol-violation"});
+});
+
 test("v1.47 pre-start attach survives fragmented upgrade and coalesced Docker frames", async () => {
-  let request = "";
+  let receivedRequest = "";
   let input = Buffer.alloc(0);
   const current = await fixture((socket, headers) => {
-    request = headers.toString("ascii");
+    receivedRequest = headers.toString("ascii");
     socket.on("data", chunk => {input = Buffer.concat([input, chunk]); socket.end();});
     const frames = Buffer.concat([multiplex(1, Buffer.from("one")), multiplex(1, Buffer.from("two"))]);
     socket.write(upgrade.slice(0, 17));
@@ -136,8 +165,8 @@ test("v1.47 pre-start attach survives fragmented upgrade and coalesced Docker fr
     const output: string[] = [];
     for await (const bytes of channel.output) {output.push(Buffer.from(bytes).toString());}
     assert.deepEqual(output, ["one", "two"]);
-    assert.match(request, /^POST \/v1\.47\/containers\/owner-bound-id\/attach\?stream=1&stdin=1&stdout=1&stderr=1 HTTP\/1\.1\r\n/u);
-    assert.match(request.toLowerCase(), /connection: upgrade\r\n/u);
+    assert.match(receivedRequest, /^POST \/v1\.47\/containers\/owner-bound-id\/attach\?stream=1&stdin=1&stdout=1&stderr=1 HTTP\/1\.1\r\n/u);
+    assert.match(receivedRequest.toLowerCase(), /connection: upgrade\r\n/u);
     assert.equal(input.toString(), "typed-control");
   } finally {await current.close();}
 });
@@ -171,6 +200,100 @@ test("abort is contained between accepted upgrade and custody-channel listener i
     }, {code: "aborted"});
     await raw.close();
     await raw.close();
+  } finally {await current.close();}
+});
+
+test("hijack establishment fails closed while custody verification is pending", async t => {
+  for (const mode of ["socket-error", "socket-close", "abort", "deadline"] as const) {
+    await t.test(mode, async context => {
+      let releaseVerification: (() => void) | undefined;
+      let verificationReached: (() => void) | undefined;
+      const reached = new Promise<void>(resolve => {verificationReached = resolve;});
+      const verification = new Promise<void>(resolve => {releaseVerification = resolve;});
+      let observations = 0;
+      const current = await fixture(socket => {socket.write(upgrade);}, {
+        observe: async observation => {
+          observations += 1;
+          if (observations === 2) {verificationReached?.(); await verification;}
+          return observation;
+        },
+      });
+      const controller = new AbortController();
+      try {
+        const now = Date.now();
+        if (mode === "deadline") {context.mock.timers.enable({apis: ["Date", "setTimeout"], now});}
+        const opening = current.client.hijack({
+          call: {deadlineEpochMs: now + 1_000, signal: controller.signal},
+          path: "/v1.47/containers/id/attach?stream=1&stdin=1&stdout=1&stderr=1",
+        });
+        await reached;
+        if (mode === "socket-error") {
+          current.exactSocket?.destroy(new DockerEngineError("endpoint-custody-lost"));
+        } else if (mode === "socket-close") {
+          current.exactSocket?.destroy();
+        } else if (mode === "abort") {
+          controller.abort();
+        } else {
+          context.mock.timers.tick(1_001);
+        }
+        await assert.rejects(opening, {
+          code: mode === "socket-error" ? "endpoint-custody-lost" : mode === "abort" ? "aborted" :
+            mode === "deadline" ? "deadline-exceeded" : "daemon-disconnected",
+        });
+        assert.equal(current.exactSocket?.destroyed, true);
+        assert.equal(current.releaseCount, 1);
+        releaseVerification?.();
+        await new Promise<void>(resolve => {setImmediate(resolve);});
+        assert.equal(current.releaseCount, 1);
+      } finally {
+        releaseVerification?.();
+        context.mock.timers.reset();
+        await current.close();
+      }
+    });
+  }
+});
+
+test("synchronous hijack construction failures preserve typed errors and release exact resources", async t => {
+  for (const seam of ["request", "end"] as const) {
+    await t.test(seam, async () => {
+      const cause = new DockerEngineError("protocol-violation");
+      const current = await fixture(() => {assert.fail("failed construction must not write request bytes");}, {
+        requestFactory: options => {
+          if (seam === "request") {throw cause;}
+          const operation = httpRequest(options);
+          operation.end = (() => {throw cause;}) as typeof operation.end;
+          return operation;
+        },
+      });
+      try {
+        let rejected: unknown;
+        try {
+          await current.client.hijack({call: call(), path: "/v1.47/containers/id/attach?stream=1&stdin=1&stdout=1&stderr=1"});
+        } catch (error) {rejected = error;}
+        assert.strictEqual(rejected, cause);
+        assert.equal(current.exactSocket?.destroyed, true);
+        assert.equal(current.releaseCount, 1);
+      } finally {await current.close();}
+    });
+  }
+});
+
+test("the real Unix transport honors abort at the final synchronous pre-write seam", async () => {
+  let requestObserved = false;
+  const current = await fixture(() => {requestObserved = true;});
+  const controller = new AbortController();
+  try {
+    await assert.rejects(current.client.buffered({
+      beforeWrite: () => {controller.abort();},
+      call: call(controller.signal),
+      method: "POST",
+      path: "/v1.47/containers/id/start",
+    }), {code: "aborted"});
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    assert.equal(requestObserved, false);
+    assert.equal(current.releaseCount, 1);
+    assert.equal(current.exactSocket?.destroyed, true);
   } finally {await current.close();}
 });
 
