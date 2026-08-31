@@ -1,25 +1,13 @@
 import { createHash } from "node:crypto";
 
-import {
-  validateAuthorityShape,
-} from "./docker-engine-codec.js";
+import { validateAuthorityShape } from "./docker-engine-codec.js";
 import { canonicalizeCreateMounts, containerName, encodeCreateRequest } from "./docker-create-request.js";
 import { createSpecificationSha256 } from "./docker-create-specification.js";
-import {
-  snapshotDockerContainerCreate,
-  snapshotDockerEngineCall,
-  snapshotDockerEnginePolicy,
-} from "./docker-boundary-snapshot.js";
+import { snapshotDockerContainerCreate, snapshotDockerEngineCall, snapshotDockerEnginePolicy } from "./docker-boundary-snapshot.js";
 import { DockerEngineError } from "./docker-engine-error.js";
 import { isTerminalObservation, mutationPostconditionSatisfied } from "./docker-engine-semantics.js";
-import {
-  authorityBelongsToFakeEngine,
-  exitedFakeContainerState,
-  initialFakeContainerState,
-  sameFakeAuthority,
-  sameFakeEngine,
-  startedFakeContainerState,
-} from "./fake-docker-engine-state.js";
+import { authorityBelongsToFakeEngine, exitedFakeContainerState, initialFakeContainerState, sameFakeAuthority,
+  sameFakeEngine, startedFakeContainerState } from "./fake-docker-engine-state.js";
 import type {
   DockerContainerAuthority,
   DockerContainerCreate,
@@ -27,19 +15,16 @@ import type {
   DockerContainerResourceFacts,
   DockerContainerStateFacts,
   DockerEngineCall,
+  DockerCustodyDuplexChannel,
   DockerEngineIdentity,
   DockerEnginePolicy,
   DockerEnginePort,
   DockerLogFrame,
 } from "./docker-engine-port.js";
-import {
-  DOCKER_LOG_MAX_FRAME_BYTES,
-  DOCKER_LOG_MAX_FRAMES,
-  DOCKER_LOG_MAX_STREAM_BYTES,
-} from "./docker-engine-port.js";
+import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_FRAMES, DOCKER_LOG_MAX_STREAM_BYTES } from "./docker-engine-port.js";
 
 export type FakeCreateOutcome = "acknowledged" | "daemon-disconnect" | "lost-acknowledgement" | "malformed-response";
-export type FakeDockerOperation = "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop" | "wait";
+export type FakeDockerOperation = "attach" | "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop" | "wait";
 export type FakeMutationOperation = "kill" | "remove" | "start" | "stop";
 
 interface FakeContainer {
@@ -57,6 +42,7 @@ interface FakeLogPlan {
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 export class FakeDockerEngine implements DockerEnginePort {
+  readonly #attached = new Set<string>();
   readonly #containers = new Map<string, FakeContainer>();
   readonly #createOutcomes: FakeCreateOutcome[] = [];
   readonly #events: string[] = [];
@@ -102,10 +88,8 @@ export class FakeDockerEngine implements DockerEnginePort {
     this.#malformed.set(operation, count);
   }
 
-  public enqueueMutationOutcome(
-    operation: FakeMutationOperation,
-    outcome: { readonly acknowledgement: "304" | "lost"; readonly effect: "applied" | "not-applied" },
-  ): void {
+  public enqueueMutationOutcome(operation: FakeMutationOperation,
+    outcome: { readonly acknowledgement: "304" | "lost"; readonly effect: "applied" | "not-applied" }): void {
     const outcomes = this.#mutationOutcomes.get(operation) ?? [];
     outcomes.push({ acknowledgement: outcome.acknowledgement, effect: outcome.effect === "applied" });
     this.#mutationOutcomes.set(operation, outcomes);
@@ -214,10 +198,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     return authority;
   }
 
-  public async reconcileCreate(
-    input: DockerContainerCreate,
-    call: DockerEngineCall,
-  ): Promise<DockerContainerAuthority> {
+  public async reconcileCreate(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority> {
     const callSnapshot = snapshotDockerEngineCall(call);
     const inputSnapshot = snapshotDockerContainerCreate(input);
     this.#check("inspect", callSnapshot);
@@ -234,10 +215,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     return { ...record.authority };
   }
 
-  public async inspect(
-    authority: DockerContainerAuthority,
-    call: DockerEngineCall,
-  ): Promise<DockerContainerObservation> {
+  public async inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation> {
     const callSnapshot = snapshotDockerEngineCall(call);
     const authoritySnapshot = validateAuthorityShape(authority);
     this.#check("inspect", callSnapshot);
@@ -267,6 +245,24 @@ export class FakeDockerEngine implements DockerEnginePort {
     if (outcome?.effect !== false) {this.#start(record);}
     this.#events.push("start:id");
     this.#assertMutationPostcondition("start", record, outcome);
+  }
+
+  public async attachCustody(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerCustodyDuplexChannel> {
+    const record = await this.#record("attach", authority, call);
+    if (record.state.status !== "created" || record.state.running || this.#attached.has(record.authority.containerId)) {
+      throw new DockerEngineError("protocol-violation");
+    }
+    this.#attached.add(record.authority.containerId);
+    this.#events.push("attach:id");
+    let closed = false;
+    return Object.freeze({
+      close: async () => {closed = true;},
+      closeInput: async () => {closed = true;},
+      output: (async function* () {yield* [];})(),
+      write: async (bytes: Uint8Array) => {
+        if (closed || bytes.byteLength === 0) {throw new DockerEngineError("protocol-violation");}
+      },
+    });
   }
 
   public logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame> {

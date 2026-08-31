@@ -5,6 +5,7 @@ import {
   DOCKER_CUSTODY_HOST_SIGNALS,
   DOCKER_CUSTODY_INIT_PROTOCOL,
   DockerCustodyFrameDecoder,
+  decodeDockerCustodyProviderBytes,
   type DockerCustodyChildSignal,
   type DockerCustodyContainmentRequest,
   type DockerCustodyHostMessage,
@@ -18,61 +19,12 @@ import {
   parseDockerCustodyIdentity,
   parseDockerCustodyProtocolMessage,
 } from "./docker-custody-init-protocol.js";
-
-export type DockerCustodyOutputStream = "stderr" | "stdout";
-export interface DockerCustodyProviderRootExit {readonly exitCode: number | null; readonly signal: DockerCustodyChildSignal | null;}
-declare const dockerCustodyProviderRootHandle: unique symbol;
-/** Nominal process capability. Syscalls must bind it to pidfd/waitid or an equivalent generation fence. */
-export interface DockerCustodyProviderRootHandle {readonly [dockerCustodyProviderRootHandle]: never;}
-declare const dockerCustodyProviderOutputHandle: unique symbol;
-/** Nominal stream capability returned by the same spawn that created the provider generation. */
-export interface DockerCustodyProviderOutputHandle {readonly [dockerCustodyProviderOutputHandle]: never;}
-export interface DockerCustodyProviderSpawn {
-  readonly argv: readonly string[]; readonly clearSupplementaryGroups: true;
-  readonly environment: Readonly<Record<string, string>>; readonly executablePath: string;
-  readonly gid: number; readonly inheritedDescriptors: readonly [0, 1, 2]; readonly noNewPrivileges: true;
-  readonly shell: false; readonly uid: number;
-}
-/** A reaped descendant record is never root-exit evidence, even when its numeric PID matches a former root PID. */
-export interface DockerCustodyReapedDescendant extends DockerCustodyProviderRootExit {readonly pid: number;}
-export interface DockerCustodyOutputWriteResult {readonly committedBytes: number; readonly status: "accepted" | "blocked";}
-export interface DockerCustodyInitSyscalls {
-  readonly assertNoNewPrivileges: () => void;
-  readonly assertPidOne: () => void;
-  readonly monotonicNowMs: () => number;
-  readonly observeProviderRootExit: (handle: DockerCustodyProviderRootHandle) => DockerCustodyProviderRootExit | null;
-  readonly observeIdentity: () => DockerCustodyIdentity;
-  readonly reapExitedDescendants: () => readonly DockerCustodyReapedDescendant[];
-  readonly requestContainerContainment: (reason: DockerCustodyContainmentRequest["reason"]) => "accepted" | "failed";
-  readonly signalProviderRoot: (handle: DockerCustodyProviderRootHandle, signal: DockerCustodyHostSignal | "SIGKILL") => "absent" | "sent";
-  readonly spawnProvider: (spawn: DockerCustodyProviderSpawn) =>
-    | {readonly kind: "not-started"}
-    | {
-      readonly handle: DockerCustodyProviderRootHandle; readonly kind: "started"; readonly pid: number;
-      readonly stderr: DockerCustodyProviderOutputHandle; readonly stdout: DockerCustodyProviderOutputHandle;
-    };
-  readonly wallNowUnixMs: () => number;
-  readonly writeProviderInput: (bytes: Uint8Array) => "accepted" | "blocked" | "closed";
-  readonly writeProviderOutput: (stream: DockerCustodyOutputStream, bytes: Uint8Array) => DockerCustodyOutputWriteResult;
-}
-export interface DockerCustodyInitRuntimeOptions {
-  readonly allowedEnvironmentNames: readonly string[]; readonly executablePath: string; readonly executableSha256: string;
-  readonly maximumStderrBytes: number; readonly maximumStdinBytes: number; readonly maximumStdoutBytes: number;
-  readonly maximumProviderRuntimeMs: number; readonly observedIdentity: DockerCustodyIdentity; readonly shutdownGraceMs: number;
-  readonly syscalls: DockerCustodyInitSyscalls;
-  readonly writeControl: (message: DockerCustodyInitMessage) => "accepted" | "blocked";
-}
-export interface DockerCustodyStreamEvidence {
-  readonly bytes: number; readonly eof: boolean; readonly sha256: string; readonly status: "blocked" | "open" | "overflow";
-}
-export interface DockerCustodyInitSnapshot {
-  readonly acknowledgement: "delivered" | "lost" | "not-applicable" | "pending"; readonly closure: DockerCustodyInitClosureSubresult | null;
-  readonly containmentRequested: boolean; readonly descendantsReaped: number;
-  readonly phase: "awaiting-handshake" | "awaiting-request" | "drained" | "failed" | "provider-exited" | "provider-running" | "stopping";
-  readonly providerRootTracked: boolean; readonly requestId: string | null; readonly signalEvidence: readonly DockerCustodySignalObservation[];
-  readonly startFenced: boolean; readonly stderr: DockerCustodyStreamEvidence; readonly stdinBytes: number;
-  readonly stdinStatus: "blocked" | "closed" | "open" | "overflow"; readonly stdout: DockerCustodyStreamEvidence;
-}
+import type {
+  DockerCustodyInitRuntimeOptions, DockerCustodyInitSnapshot, DockerCustodyInitSyscalls, DockerCustodyOutputStream,
+  DockerCustodyOutputWriteResult, DockerCustodyProviderOutputHandle, DockerCustodyProviderRootExit,
+  DockerCustodyProviderRootHandle, DockerCustodyStreamEvidence,
+} from "./docker-custody-init-runtime-types.js";
+export type * from "./docker-custody-init-runtime-types.js";
 interface MutableStreamEvidence {
   bytes: number; eof: boolean; eofPending: boolean; hash: ReturnType<typeof createHash>;
   pendingBytes: Uint8Array | null; pendingCursor: number; status: DockerCustodyStreamEvidence["status"];
@@ -165,7 +117,7 @@ export class DockerCustodyInitRuntime {
     this.#observedIdentity = parseDockerCustodyIdentity(options.observedIdentity);
     this.#shutdownGraceMs = boundedInteger(options.shutdownGraceMs, "shutdownGraceMs");
     this.#syscalls = options.syscalls; this.#writeControl = options.writeControl;
-    this.#syscalls.assertPidOne(); this.#syscalls.assertNoNewPrivileges();
+    this.#syscalls.assertDirectChildOfContainerInit(); this.#syscalls.assertNoNewPrivileges();
     if (!identityEqual(this.#syscalls.observeIdentity(), this.#observedIdentity)) {throw new Error("custody-init configured identity does not match runtime identity");}
   }
 
@@ -175,6 +127,9 @@ export class DockerCustodyInitRuntime {
       const detached = parseDockerCustodyProtocolMessage(message);
       if (detached.kind === "host-handshake") {this.#receiveHandshake(detached); return;}
       if (detached.kind === "provider-exec") {this.#receiveExec(detached); return;}
+      if (detached.kind === "provider-input") {this.#receiveProviderInput(detached.requestId, detached.bytesBase64); return;}
+      if (detached.kind === "provider-input-eof") {this.#receiveProviderInputEof(detached.requestId); return;}
+      if (detached.kind === "host-signal") {this.#assertCurrentRequest(detached.requestId); this.forwardHostSignal(detached.signal); return;}
       throw new Error("init received a message reserved for Host observation");
     } catch (error) {this.#poison(); throw error;}
   }
@@ -183,15 +138,18 @@ export class DockerCustodyInitRuntime {
     try {
       if (this.#integrityFailed) {throw new Error("init control generation is poisoned");}
       for (const message of this.#decoder.push(bytes)) {
-        if (message.kind !== "host-handshake" && message.kind !== "provider-exec") {throw new Error("Host control channel carried an init-only message");}
-        this.receive(message);
+        switch (message.kind) {
+          case "host-handshake": case "host-signal": case "provider-exec": case "provider-input": case "provider-input-eof":
+            this.receive(message); break;
+          default: throw new Error("Host control channel carried an init-only message");
+        }
       }
     } catch (error) {this.#poison(); throw error;}
   }
 
   public controlChannelClosed(): void {
     try {this.#decoder.finish();} catch (error) {this.#poison(); throw error;}
-    this.#poison();
+    if (this.#phase !== "drained") {this.#poison();}
   }
   public malformedControlFrame(): void {this.#poison();}
 
@@ -246,6 +204,22 @@ export class DockerCustodyInitRuntime {
   #rejectExec(): void {
     this.#phase = "failed"; this.#startFenced = true; this.#acknowledge("not-started", null);
     this.#writeProviderObservation("spawn-failed", null, null, null);
+  }
+  #assertCurrentRequest(requestId: string): void {
+    if (this.#request === undefined || !safeEqual(requestId, this.#request.requestId)) {
+      throw new Error("provider stream frame does not match the active request");
+    }
+  }
+  #receiveProviderInput(requestId: string, bytesBase64: string): void {
+    this.#assertCurrentRequest(requestId);
+    if (this.writeProviderInput(decodeDockerCustodyProviderBytes(bytesBase64)) === "closed") {
+      throw new Error("provider input is closed");
+    }
+  }
+  #receiveProviderInputEof(requestId: string): void {
+    this.#assertCurrentRequest(requestId);
+    if (this.#phase !== "provider-running" || this.#stdinStatus === "closed") {throw new Error("provider input EOF is out of order");}
+    this.#syscalls.closeProviderInput(); this.#stdinStatus = "closed";
   }
   #acknowledge(observation: "acceptance-unknown" | "not-started" | "started", generation: ProviderGeneration | null): void {
     if (this.#request === undefined || this.#acknowledgement !== "pending") {return;}

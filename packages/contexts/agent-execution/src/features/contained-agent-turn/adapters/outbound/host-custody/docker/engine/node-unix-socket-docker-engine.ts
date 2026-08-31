@@ -22,12 +22,15 @@ import type {
   DockerEngineIdentity,
   DockerEnginePolicy,
   DockerEnginePort,
+  DockerCustodyDuplexChannel,
   DockerLogFrame,
 } from "./docker-engine-port.js";
 import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_STREAM_BYTES } from "./docker-engine-port.js";
 import { parseDockerMultiplexedStream } from "./docker-multiplexed-stream.js";
 import { BoundedUnixHttpClient } from "./bounded-unix-http.js";
 import type { DockerEndpointIdentity, UnixHttpResponse } from "./bounded-unix-http.js";
+import type { UnixHijackChannel } from "./bounded-unix-hijack.js";
+import { createDockerCustodyChannel } from "./docker-custody-channel.js";
 import { parseStrictJson } from "./strict-json.js";
 
 const API = "/v1.47";
@@ -46,6 +49,10 @@ type EngineClient = {
     readonly path: string;
   }): Promise<UnixHttpResponse<Uint8Array>>;
   endpointIdentity(call: DockerEngineCall): Promise<DockerEndpointIdentity>;
+  hijack?(input: {
+    readonly call: DockerEngineCall;
+    readonly path: string;
+  }): Promise<UnixHijackChannel>;
   stream(input: {
     readonly call: DockerEngineCall;
     readonly method: "DELETE" | "GET" | "POST";
@@ -83,7 +90,9 @@ const statusFailure = (operation: string, statusCode: number): DockerEngineError
 
 export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   readonly #client: EngineClient;
+  readonly #custodyAttachState = new Map<string, "open" | "opening" | "unknown">();
   readonly #policy: DockerEnginePolicy;
+  readonly #startingContainers = new Set<string>();
 
   public constructor(input: {
     /** Internal protocol-test seam. It must supply the same boot-generation observations as production. */
@@ -106,7 +115,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     } else {
       const client = snapshotOwnDataObject(
         construction.client,
-        ["buffered", "endpointIdentity", "stream"],
+        ["buffered", "endpointIdentity", "hijack", "stream"],
         ["buffered", "endpointIdentity", "stream"],
         "invalid-create-request",
       );
@@ -203,7 +212,48 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   }
 
   public async start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
-    await this.#mutate("start", "POST", authority, call);
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const id = authoritySnapshot.containerId;
+    const attachState = this.#custodyAttachState.get(id);
+    if (this.#startingContainers.has(id) || attachState === "opening" || attachState === "unknown") {
+      throw new DockerEngineError("protocol-violation");
+    }
+    this.#startingContainers.add(id);
+    try {await this.#mutate("start", "POST", authoritySnapshot, call);}
+    finally {this.#startingContainers.delete(id);}
+  }
+
+  public async attachCustody(
+    authority: DockerContainerAuthority,
+    call: DockerEngineCall,
+  ): Promise<DockerCustodyDuplexChannel> {
+    const authoritySnapshot = validateAuthorityShape(authority);
+    const callSnapshot = snapshotDockerEngineCall(call);
+    const id = authoritySnapshot.containerId;
+    if (this.#startingContainers.has(id) || this.#custodyAttachState.has(id)) {
+      throw new DockerEngineError("protocol-violation");
+    }
+    this.#custodyAttachState.set(id, "opening");
+    let hijack: UnixHijackChannel | undefined;
+    try {
+      const observation = await this.inspect(authoritySnapshot, callSnapshot);
+      if (observation.existence !== "present" || observation.state.status !== "created" || observation.state.running) {
+        throw new DockerEngineError("protocol-violation");
+      }
+      const hijackClient = this.#client.hijack;
+      if (hijackClient === undefined) {throw new DockerEngineError("protocol-violation");}
+      hijack = await hijackClient({
+        call: callSnapshot,
+        path: `${API}/containers/${authoritySnapshot.containerId}/attach?stream=1&stdin=1&stdout=1&stderr=1`,
+      });
+      this.#assertEngine(authoritySnapshot, await this.#identity(callSnapshot));
+      this.#custodyAttachState.set(id, "open");
+      return createDockerCustodyChannel(hijack);
+    } catch (error) {
+      this.#custodyAttachState.set(id, "unknown");
+      await hijack?.close();
+      throw error;
+    }
   }
 
   public logs(authority: DockerContainerAuthority, call: DockerEngineCall): AsyncIterable<DockerLogFrame> {

@@ -108,6 +108,14 @@ export interface DockerLogFrame {
   readonly stream: "stderr" | "stdout";
 }
 
+/** One pre-start, owner-bound Engine hijack. Docker stream framing is removed here. */
+export interface DockerCustodyDuplexChannel {
+  readonly output: AsyncIterable<Uint8Array>;
+  close(): Promise<void>;
+  closeInput(): Promise<void>;
+  write(bytes: Uint8Array): Promise<void>;
+}
+
 export interface DockerEnginePort {
   /** Read-only, generation-stable engine identity used before journal/resource binding. */
   identity(call: DockerEngineCall): Promise<DockerEngineIdentity>;
@@ -117,6 +125,11 @@ export interface DockerEnginePort {
     /** When supplied, the adapter must reject generation drift before sending create bytes. */
     expectedIdentity?: DockerEngineIdentity,
   ): Promise<DockerContainerAuthority>;
+  /** Opens the sole stdin/stdout custody channel while the exact container is still created, never running. */
+  attachCustody(
+    authority: DockerContainerAuthority,
+    call: DockerEngineCall,
+  ): Promise<DockerCustodyDuplexChannel>;
   /** Read-only exact-name/spec reconciliation after a journaled create request. */
   reconcileCreate(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority>;
   inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation>;

@@ -9,6 +9,7 @@ import type { DockerEngineCall, DockerEnginePolicy } from "./docker-engine-port.
 import { snapshotDockerEngineCall, snapshotOwnDataObject } from "./docker-boundary-snapshot.js";
 import { assertDockerUnixPeerPlatformSupported, connectAuthenticatedUnixPeer } from "./docker-unix-peer.js";
 import type { DockerPeerConnector } from "./docker-unix-peer.js";
+import { openBoundedUnixHijack, type UnixHijackChannel } from "./bounded-unix-hijack.js";
 
 const HOST_BOOT_ID = "/proc/sys/kernel/random/boot_id";
 const MAX_CALL_MS = 120_000;
@@ -313,6 +314,25 @@ export class BoundedUnixHttpClient {
 
   public stream(input: Omit<RequestInput, "stream">): Promise<UnixHttpResponse<AsyncIterable<Uint8Array>>> {
     return this.#open({ ...input, stream: true });
+  }
+
+  public async hijack(input: Pick<RequestInput, "call" | "path">): Promise<UnixHijackChannel> {
+    const call = snapshotDockerEngineCall(input.call);
+    this.#checkCall(call);
+    if (!input.path.startsWith("/") || input.path.length > 4096 || /[\0\r\n]/u.test(input.path)) {
+      throw new DockerEngineError("protocol-violation");
+    }
+    const custody = await this.#observeCustody();
+    const connection = await this.#connectPeer(this.#policy, custody, call, async () => this.#observeCustody());
+    const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
+    if (effectiveMs <= 0) {connection.socket.destroy(); await connection.release(); throw new DockerEngineError("deadline-exceeded");}
+    return openBoundedUnixHijack({
+      call, effectiveMs, path: input.path, release: connection.release, request: this.#request,
+      socket: connection.socket,
+      verifyCustody: async () => {
+        if ((await this.#observeCustody()).token !== custody.token) {throw new DockerEngineError("endpoint-custody-lost");}
+      },
+    });
   }
 
   async #observeCustody(): Promise<SocketCustody> {

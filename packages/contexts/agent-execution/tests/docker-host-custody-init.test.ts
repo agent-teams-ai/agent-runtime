@@ -93,7 +93,8 @@ class FakeSyscalls implements DockerCustodyInitSyscalls {
   public wall = 10_000;
 
   public assertNoNewPrivileges(): void {}
-  public assertPidOne(): void {}
+  public assertDirectChildOfContainerInit(): void {}
+  public closeProviderInput(): void {this.inputStatus = "closed";}
   public monotonicNowMs(): number {return this.monotonic;}
   public observeProviderRootExit(handle: DockerCustodyProviderRootHandle): {readonly exitCode: number | null; readonly signal: DockerCustodyChildSignal | null} | null {
     this.rootObservations.push(handle);
