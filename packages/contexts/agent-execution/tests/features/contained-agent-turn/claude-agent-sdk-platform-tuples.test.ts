@@ -49,7 +49,7 @@ const delegatedLaunch = (plan: Awaited<ReturnType<typeof planFor>>, cwd: string)
   environment: plan.environment,
 });
 
-test("selects only the exact qualified Claude Linux and Darwin tuples", () => {
+test("selects only the exact supported Claude Linux and Darwin candidate tuples", () => {
   assert.equal(selectClaudeAgentSdkPlatformTuple("linux", "x64"), CLAUDE_AGENT_SDK_LINUX_X64_TUPLE);
   assert.equal(selectClaudeAgentSdkPlatformTuple("darwin", "arm64"), CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE);
   assert.deepEqual(CLAUDE_AGENT_SDK_LINUX_X64_TUPLE, {
@@ -72,7 +72,7 @@ test("selects only the exact qualified Claude Linux and Darwin tuples", () => {
   assert.equal(Object.isFrozen(CLAUDE_AGENT_SDK_LINUX_X64_TUPLE), true);
   assert.equal(Object.isFrozen(CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE), true);
   for (const target of [["win32", "x64"], ["linux", "arm64"], ["darwin", "x64"]] as const) {
-    assert.throws(() => selectClaudeAgentSdkPlatformTuple(...target), /no qualified tuple/u);
+    assert.throws(() => selectClaudeAgentSdkPlatformTuple(...target), /no supported tuple/u);
   }
 });
 
@@ -114,7 +114,7 @@ test("fails closed on tuple, profile, binary, and cwd mismatch", async () => {
   }), /tuple/u);
 });
 
-test("outer current-kernel composition rejects a forged tuple or executable digest before acquiring authority", () => {
+test("outer composition accepts a structural target and rejects unsupported targets or digest drift", () => {
   const adapterSnapshot = Object.freeze({
     adapterRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.adapterRevision,
     binaryRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.binaryRevision,
@@ -138,17 +138,18 @@ test("outer current-kernel composition rejects a forged tuple or executable dige
     executablePath,
     executableSha256: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.executableSha256,
     hostBootId: "host-boot:tuple",
-    hostCustody: {} as never,
+    hostCustody: {get() {return;}, start() {return {} as never;}} as never,
     hostInstanceId: "host-instance:tuple",
     launchRecords: {} as never,
     manifest,
-    platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
+    platformTarget: Object.freeze({architecture: "x64" as const, platform: "linux" as const}),
     privateDirectoryCustody,
     workspaceOwner: {} as never,
   };
-  const forged = Object.freeze({...CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
-    containmentProfile: "cooperative-darwin-posix-process-group" as const});
-  assert.throws(() => createClaudeCurrentKernelOwner({...options, platformTuple: forged}), /tuple/u);
+  assert.doesNotThrow(() => createClaudeCurrentKernelOwner({...options,
+    platformTarget: {architecture: "x64", platform: "linux"}}));
+  assert.throws(() => createClaudeCurrentKernelOwner({...options,
+    platformTarget: {architecture: "x64", platform: "darwin"}} as never), /supported tuple/u);
   assert.throws(() => createClaudeCurrentKernelOwner({...options,
     executableSha256: CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE.executableSha256}), /tuple/u);
 });

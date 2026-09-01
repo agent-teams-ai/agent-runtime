@@ -380,8 +380,17 @@ Contained Agent Turn V1 implementation present; qualification remains open:
   binary-SHA, and initialize candidate authority, plus synthetic cooperative
   composition coverage, but no registered exact-SHA local macOS canary and no
   qualification-registry target. Claude SDK `0.3.251` adapter/custody
-  conformance is green, while the hosted
-  live canary is blocked at authentication by an expired test OAuth session;
+  conformance is green for explicit tuples: Linux x64 binds bundled CLI
+  `2.1.251` SHA
+  `fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7`
+  to strict descriptor-bound cgroup-v2 custody, while Darwin arm64 binds the
+  same SDK and CLI versions with SHA
+  `625869b01e0050f260b2980fac248fd9cef9e462612bded4ec9d3d49ff8969a5`
+  to canonical-path cooperative POSIX process-group custody. The Darwin tuple
+  remains an unqualified candidate until an exact-SHA disposable local macOS
+  canary is registered; the hosted Linux live canary remains blocked at
+  authentication by an expired test OAuth session. None of this is production
+  or deployment qualification;
 - OpenCode remains contract-only and no production ACP adapter is claimed.
 
 Scoped qualified:
@@ -409,10 +418,14 @@ Remaining:
 - contained-unmediated scope, containment-receipt, required-receipt-set, and
   terminal-barrier implementation tests for the exact V1 manifests and target
   platforms;
-- Claude hosted and macOS disposable live canaries with a valid isolated test
-  credential binding, the exact-SHA Codex Darwin arm64 local canary and
-  qualification-registry promotion, plus OpenCode ACP fixture qualification.
-  Codex live canaries are implementation evidence, not deployment qualification;
+- Claude hosted and exact-SHA local macOS arm64 disposable live canaries with a
+  valid isolated test credential binding; the macOS canary must record SDK
+  `0.3.251`, bundled CLI `2.1.251`, and binary SHA
+  `625869b01e0050f260b2980fac248fd9cef9e462612bded4ec9d3d49ff8969a5` before
+  the cooperative candidate can be promoted; OpenCode ACP fixture qualification
+  also remains open. The exact-SHA Codex Darwin arm64 local canary and
+  qualification-registry promotion remain open. Codex and Claude live canaries
+  are implementation evidence, not production or deployment qualification;
 - adversarial private-handle, Host-shutdown, durable cancellation, immutable
   identity, and persistence fault campaigns beyond the focused V1 suite;
 - spoofed/corrupted provider owner IDs proving adapters cannot replace trusted

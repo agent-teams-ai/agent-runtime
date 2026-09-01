@@ -17,7 +17,6 @@ import {
   type ClaudeAgentSdkContainedTurnProviderOptions,
   type ClaudeAgentSdkKernelPrivateExecution,
   type ClaudeAgentSdkKernelPrivateExecutionResolver,
-  type ClaudeAgentSdkPlatformTuple,
   type ClaudeAgentSdkPrivateProjection,
 } from "../adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.js";
 import type { PrivateDirectoryCustodyPort } from "../adapters/outbound/provider-delegation-ports/private-directory-custody-port.js";
@@ -65,11 +64,14 @@ export interface CreateClaudeCurrentKernelOwnerOptions {
   readonly hostInstanceId: string;
   readonly launchRecords: ClaudeCurrentKernelLaunchRecordResolver;
   readonly manifest: ContainedTurnCapabilityManifest;
-  readonly platformTuple: ClaudeAgentSdkPlatformTuple;
+  readonly platformTarget: ClaudeCurrentKernelPlatformTarget;
   readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly queryFactory?: ClaudeAgentSdkContainedTurnProviderOptions["queryFactory"];
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
 }
+export type ClaudeCurrentKernelPlatformTarget =
+  | Readonly<{ readonly architecture: "x64"; readonly platform: "linux" }>
+  | Readonly<{ readonly architecture: "arm64"; readonly platform: "darwin" }>;
 export interface ClaudeCurrentKernelOwner {
   readonly custody: ContainedTurnKernelCustodyAdapter;
   readonly provider: ContainedTurnKernelProviderPort;
@@ -99,14 +101,13 @@ const exactExecution = (record: PreparedRecord, input: PrivateExecutionInput): b
 const exactStringArray = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
-const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions): void => {
+const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions) => {
   const tuple = selectClaudeAgentSdkPlatformTuple(
-    options.platformTuple.platform, options.platformTuple.architecture,
+    options.platformTarget.platform, options.platformTarget.architecture,
   );
   const snapshot = options.adapterSnapshot;
   const manifest = options.manifest;
   if (
-    options.platformTuple !== tuple ||
     snapshot.provider !== "claude" ||
     snapshot.adapterRevision !== tuple.adapterRevision ||
     snapshot.binaryRevision !== tuple.binaryRevision ||
@@ -127,12 +128,13 @@ const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions): 
       `Claude production composition requires SDK ${tuple.sdkVersion}, bundled CLI ${tuple.bundledCliVersion}, and its exact ADR-0010 tuple`,
     );
   }
+  return tuple;
 };
 
 export const createClaudeCurrentKernelOwner = (
   options: CreateClaudeCurrentKernelOwnerOptions,
 ): ClaudeCurrentKernelOwner => {
-  assertProductionTuple(options);
+  const platformTuple = assertProductionTuple(options);
   const records = new Map<string, PreparedRecord>();
   const privateDirectoryCustody = captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody);
   const processes: Processes = Object.freeze({
@@ -173,7 +175,7 @@ export const createClaudeCurrentKernelOwner = (
         binaryRevision: options.adapterSnapshot.binaryRevision,
         executablePath: options.executablePath, executableSha256: options.executableSha256,
         intentMode: input.kernel.intentMode, privateProjection: launch.privateProjection,
-        platformTuple: options.platformTuple,
+        platformTuple,
         privateDirectoryCustody, privateRootPath: launch.privateRootPath,
         workspaceRef: input.workspaceAuthority.canonicalPath,
       });
@@ -201,7 +203,7 @@ export const createClaudeCurrentKernelOwner = (
   const provider = new ClaudeAgentSdkCurrentKernelAdapter({
     adapterSnapshot: options.adapterSnapshot, executablePath: options.executablePath,
     manifest: options.manifest, privateDirectoryCustody, privateExecutions, processes,
-    platformTuple: options.platformTuple,
+    platformTuple,
     ...(options.queryFactory === undefined ? {} : { queryFactory: options.queryFactory }),
   });
   return Object.freeze({custody, dispose() {disposed = true; records.clear();}, provider});

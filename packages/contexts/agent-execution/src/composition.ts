@@ -33,6 +33,7 @@ export {
   type ClaudeCurrentKernelLaunchRecord,
   type ClaudeCurrentKernelLaunchRecordResolver,
   type ClaudeCurrentKernelOwner,
+  type ClaudeCurrentKernelPlatformTarget,
   type CodexCurrentKernelLaunchRecord,
   type CodexCurrentKernelLaunchRecordResolver,
   type CodexCurrentKernelOwner,

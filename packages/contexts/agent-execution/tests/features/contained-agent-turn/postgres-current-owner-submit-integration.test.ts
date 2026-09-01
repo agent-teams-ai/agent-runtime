@@ -233,6 +233,7 @@ const createOwner = async (
       resourceScopeRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.resourceScopeRevision, supportedModes: ["analysis", "workspace-write"],
       unknownCapabilityPolicy: "fail_closed"},
     privateDirectoryCustody,
+    platformTarget: Object.freeze({architecture: "x64", platform: "linux"}),
     queryFactory: deterministicSuccess ? successfulClaudeQuery(host as DeterministicCurrentOwnerHost, workspaceRef) : input => {
       const plan = host.plans.at(-1)!;
       input.options.spawnClaudeCodeProcess({args: [...plan.arguments], command: "/synthetic/claude", cwd: input.options.cwd,

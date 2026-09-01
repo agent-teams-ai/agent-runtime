@@ -71,7 +71,7 @@ export const selectClaudeAgentSdkPlatformTuple = (
 ): ClaudeAgentSdkPlatformTuple => {
   if (platform === "linux" && architecture === "x64") {return CLAUDE_AGENT_SDK_LINUX_X64_TUPLE;}
   if (platform === "darwin" && architecture === "arm64") {return CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE;}
-  throw new TypeError("Claude Agent SDK has no qualified tuple for the selected platform and architecture");
+  throw new TypeError("Claude Agent SDK has no supported tuple for the selected platform and architecture");
 };
 
 export const claudeAgentSdkWorkspaceAuthorityPath = (

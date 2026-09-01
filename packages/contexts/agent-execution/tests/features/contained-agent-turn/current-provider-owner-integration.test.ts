@@ -15,7 +15,6 @@ import { createCodexAppServerPermissionBoundary } from "../../../dist/features/c
 import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {
   CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
-  createClaudeAgentSdkLaunchPlan,
   createClaudeAgentSdkPrivateProjection,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import { ClaudeAgentSdkCurrentKernelAdapter } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-current-kernel-adapter.js";
@@ -212,6 +211,7 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
       return ({privateProjection, privateRootPath});
     }},
     manifest: claudeManifest, privateDirectoryCustody,
+    platformTarget: Object.freeze({architecture: "x64", platform: "linux"}),
     queryFactory: input => {
       const plan = host.plans.at(-1) as any;
       input.options.spawnClaudeCodeProcess({
@@ -315,6 +315,7 @@ test("provider owners keep stable kernel and random Host identities distinct and
         supportedModes: Object.freeze(["analysis", "workspace-write"] as const), unknownCapabilityPolicy: "fail_closed",
       }),
       privateDirectoryCustody: mutablePrivateDirectoryCustody,
+      platformTarget: Object.freeze({architecture: "x64", platform: "linux"}),
       queryFactory: input => {
         input.options.spawnClaudeCodeProcess({
           args: [...(claudeHost.plans[0] as any).arguments], command: "/synthetic/claude",
@@ -513,11 +514,13 @@ test("raw Host reservation rejects exact path, device and inode on a substituted
       const projection = createClaudeAgentSdkPrivateProjection({
         configRoot, homeRoot, projectionRef: "projection:mount-substitution", tempRoot: temp, workspaceRef,
       });
-      const plan = await createClaudeAgentSdkLaunchPlan({
-        binaryRevision: claudeSnapshot.binaryRevision,
+      const plan = Object.freeze({
+        arguments: Object.freeze([]), binaryRevision: "binary:synthetic-host-mount-test",
+        containmentProfile: "strict-linux-cgroup-v2" as const, environment: projection.environment,
         executablePath: process.execPath,
         executableSha256: createHash("sha256").update(await readFile(process.execPath)).digest("hex"),
-        intentMode: "analysis", privateDirectoryCustody, privateProjection: projection, privateRootPath, workspaceRef,
+        intentMode: "analysis" as const, privateRootPath,
+        provider: "claude" as const, spawnMode: "sdk-delegated" as const,
       });
       const effects = {descriptorCloses: 0, guardianAuthorizations: 0, providerStarts: 0};
       const host = new NodeProviderProcessCustody({
@@ -538,7 +541,7 @@ test("raw Host reservation rejects exact path, device and inode on a substituted
         launchPlan: plan,
         operationId: "operation:mount-substitution",
         providerBinding: Object.freeze({
-          adapterRevision: claudeSnapshot.adapterRevision, binaryRevision: claudeSnapshot.binaryRevision,
+          adapterRevision: "adapter:synthetic-host-mount-test", binaryRevision: plan.binaryRevision,
           capabilityManifestRevision: "manifest:test", credentialBindingDigest: "credential:test",
           provider: "claude", providerRouteRef: "route:test",
         }),
@@ -696,17 +699,8 @@ test("same-provider attempts retain distinct exact plans and reject crossed work
 });
 
 test("duplicate and late Claude private callbacks remain effect-free", async () => {
-  const snapshot = Object.freeze({
-    adapterRevision: "claude:test", binaryRevision: "claude-binary:test",
-    capabilityManifestRevision: "claude-manifest:test", provider: "claude" as const,
-  });
-  const manifest = Object.freeze({
-    effectCardinality: "one_coarse_effect_per_operation", effectClass: "contained_unmediated_effect",
-    manifestRevision: snapshot.capabilityManifestRevision, manifestVersion: 1, provider: "claude" as const,
-    providerAttemptCardinality: "at_most_one", requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
-    resourceScopeRevision: "contained-workspace-network-credential:1",
-    supportedModes: Object.freeze(["analysis", "workspace-write"] as const), unknownCapabilityPolicy: "fail_closed",
-  });
+  const snapshot = claudeSnapshot;
+  const manifest = claudeManifest;
   const identity = ids("claude", "callback");
   const execution = Object.freeze({
     custodyRef: "urn:agent-runtime:host-custody:random-callback",
@@ -717,6 +711,7 @@ test("duplicate and late Claude private callbacks remain effect-free", async () 
   const duplicate = new ClaudeAgentSdkCurrentKernelAdapter({
     adapterSnapshot: snapshot, executablePath: "/synthetic/claude", manifest,
     privateDirectoryCustody,
+    platformTuple: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
     privateExecutions: {async consume(input, callback) {
       const first = callback(execution); void callback(execution); return first;
     }},
@@ -728,6 +723,7 @@ test("duplicate and late Claude private callbacks remain effect-free", async () 
   const lateAdapter = new ClaudeAgentSdkCurrentKernelAdapter({
     adapterSnapshot: snapshot, executablePath: "/synthetic/claude", manifest,
     privateDirectoryCustody,
+    platformTuple: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
     privateExecutions: {async consume(input, callback) {late = callback; return null as never;}},
     processes: host as any,
   });

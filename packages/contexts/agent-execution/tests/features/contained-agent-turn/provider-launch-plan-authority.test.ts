@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
+  CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
   claudeAgentSdkArguments,
   createClaudeAgentSdkLaunchPlan,
   createClaudeAgentSdkPrivateProjection,
@@ -64,11 +65,12 @@ test("provider launch plans bind exact caller-owned root and requested mode with
     assert.equal(Object.isFrozen(codex), true);
 
     const claude = await createClaudeAgentSdkLaunchPlan({
-      binaryRevision: "@anthropic-ai/claude-agent-sdk:0.3.251+synthetic",
+      binaryRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.binaryRevision,
       executablePath: "/synthetic/claude",
-      executableSha256: "0".repeat(64),
+      executableSha256: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.executableSha256,
       intentMode,
       privateProjection: value.privateProjection,
+      platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
       privateDirectoryCustody,
       privateRootPath: value.privateRootPath,
       workspaceRef: value.workspaceRef,
@@ -106,11 +108,12 @@ test("provider launch plan factories fail closed for missing or invalid trusted 
   assert.throws(() => createCodexAppServerLaunchPlan({ ...codexBase, privateRootPath: value.workspaceRef }), /disjoint/u);
 
   const claudeBase = {
-    binaryRevision: "@anthropic-ai/claude-agent-sdk:0.3.251+synthetic",
+    binaryRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.binaryRevision,
     executablePath: "/synthetic/claude",
-    executableSha256: "0".repeat(64),
+    executableSha256: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.executableSha256,
     intentMode: "analysis" as const,
     privateDirectoryCustody,
+    platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
     privateProjection: value.privateProjection,
     privateRootPath: value.privateRootPath,
     workspaceRef: value.workspaceRef,

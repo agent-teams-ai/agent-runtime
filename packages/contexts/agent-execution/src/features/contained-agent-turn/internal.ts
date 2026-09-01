@@ -63,6 +63,7 @@ export {
   type ClaudeCurrentKernelLaunchRecord,
   type ClaudeCurrentKernelLaunchRecordResolver,
   type ClaudeCurrentKernelOwner,
+  type ClaudeCurrentKernelPlatformTarget,
   type CreateClaudeCurrentKernelOwnerOptions,
 } from "./composition/claude-current-kernel-owner.js";
 export type {
