@@ -62,6 +62,7 @@ import {
 import {
   createLiveCustody,
   HOST_CUSTODY_LIMITS,
+  isCompleteProvedNoStart,
   type CustodyTombstone,
   type LiveCustody,
   type NodeProviderProcessCustodyOptions,
@@ -553,7 +554,7 @@ export class NodeProviderProcessCustodyCore implements
       });
     } finally {
       if (live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group" &&
-          live.spawnStatus !== "never-started" && live.spawnStatus !== "error-before-start") {
+          !isCompleteProvedNoStart(live)) {
         quarantinePrivateRootForReconciliation(live);
       }
     }

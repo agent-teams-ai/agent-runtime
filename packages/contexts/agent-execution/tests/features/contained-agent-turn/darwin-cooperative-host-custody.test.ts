@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { open, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -172,7 +172,7 @@ test("Darwin delegated custody preserves exact one-start replay and conflicting 
   await custody.requestContainment({ ...request, custodyRef: opened.custodyRef });
 });
 
-test("Darwin delegated reservation proves no-start and releases idempotently", async () => {
+test("Darwin delegated reservation proves no-start but retains its root for reconciliation", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await cooperativeEntry(workspaceRef, "sdk-delegated");
   const custody = createDarwinCooperativeProcessCustodyTestSupport({
@@ -215,13 +215,14 @@ test("Darwin delegated reservation proves no-start and releases idempotently", a
     custodyRef: opened.custodyRef,
     receiptRef: contained.receiptRef,
   };
-  assert.deepEqual(await custody.release(releaseInput), { kind: "released" });
-  assert.deepEqual(await custody.release(releaseInput), { kind: "released" });
-  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "deleted");
-  assert.equal(existsSync(entry.plan.privateRootPath), false);
+  const released = await custody.release(releaseInput);
+  assert.equal(released.kind, "unproven");
+  assert.match(released.kind === "unproven" ? released.evidenceRef : "", /private-root-quarantine-unproven/u);
+  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "active");
+  assert.equal(existsSync(entry.plan.privateRootPath), true);
 });
 
-test("Darwin delegated error-before-start releases only after complete no-start evidence", async () => {
+test("Darwin delegated error-before-start retains its proved-unused root for reconciliation", async () => {
   const workspaceRef = await disposableRoot();
   const badExecutable = join(workspaceRef, "bad-interpreter");
   await writeFile(badExecutable, "#!/no/such/synthetic/interpreter\nexit 0\n", { mode: 0o500 });
@@ -275,10 +276,147 @@ test("Darwin delegated error-before-start releases only after complete no-start 
   assert.equal(contained.kind, "contained");
   if (contained.kind !== "contained") {return;}
   const releaseInput = { ...request, custodyRef: opened.custodyRef, receiptRef: contained.receiptRef };
-  assert.deepEqual(await custody.release(releaseInput), { kind: "released" });
-  assert.deepEqual(await custody.release(releaseInput), { kind: "released" });
-  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "deleted");
+  const quarantinePath = `${entry.plan.privateRootPath}.quarantine-${sha256(opened.custodyRef)}`;
+  roots.push(quarantinePath);
+  const released = await custody.release(releaseInput);
+  assert.equal(released.kind, "unproven");
+  assert.match(released.kind === "unproven" ? released.evidenceRef : "", /darwin-cooperative-reconciliation-required/u);
+  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "quarantined");
   assert.equal(existsSync(entry.plan.privateRootPath), false);
+  assert.equal(existsSync(quarantinePath), true);
+});
+
+test("Darwin observer no-start contradiction quarantines while an escaped descendant remains", async () => {
+  const workspaceRef = await disposableRoot();
+  const escapedPidPath = join(workspaceRef, "escaped-pid");
+  const entry = await cooperativeEntry(workspaceRef, "eager", String.raw`
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+const detached = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+  detached: true,
+  stdio: "ignore",
+});
+writeFileSync(${JSON.stringify(escapedPidPath)}, String(detached.pid));
+setInterval(() => {}, 1000);
+`);
+  const custody = createDarwinCooperativeProcessCustodyTestSupport({
+    launchPlans: createStaticHostCustodyLaunchPlanResolver([entry]),
+    processGroupObserver: groupObserver,
+    processIdentityObserver: qualifiedIdentityObserver,
+    spawnAcknowledgementObserver: async input => {
+      for (let attempt = 0; attempt < 100 && !existsSync(escapedPidPath); attempt += 1) {
+        await new Promise(resolve => {setTimeout(resolve, 5);});
+      }
+      return {
+        child: input.child,
+        childProcessInstanceSha256: input.childProcessInstanceSha256,
+        status: "error-before-start",
+      };
+    },
+  });
+  const request = Object.freeze({
+    attemptId: "attempt:darwin-contradictory-no-start",
+    intentMode: "analysis" as const,
+    operationId: "operation:darwin-contradictory-no-start",
+    providerBinding: binding,
+    workspaceRef,
+  });
+  let failure: unknown;
+  let escapedPid: number | undefined;
+  try {
+    try {await custody.open(request);} catch (error) {failure = error;}
+    assert.ok(failure instanceof Error);
+    const custodyRef = String(Reflect.get(failure, "custodyRef"));
+    escapedPid = Number(await readFile(escapedPidPath, "utf8"));
+    trackSyntheticProcessGroup(escapedPid);
+    const quarantinePath = `${entry.plan.privateRootPath}.quarantine-${sha256(custodyRef)}`;
+    roots.push(quarantinePath);
+    const contained = await custody.requestContainment({ ...request, custodyRef });
+    assert.equal(contained.kind, "unproven");
+    assert.match(contained.kind === "unproven" ? contained.evidenceRef : "", /darwin-cooperative-reconciliation-required/u);
+    assert.doesNotThrow(() => {process.kill(escapedPid as number, 0);});
+    const evidence = custody.evidence(custodyRef);
+    assert.equal(evidence?.spawn, "error-before-start");
+    assert.notEqual(evidence?.closure.status, "not-started");
+    assert.equal(evidence?.privateRoot.status, "quarantined");
+    assert.equal(existsSync(quarantinePath), true);
+  } finally {
+    if (escapedPid !== undefined) {
+      try {process.kill(-escapedPid, "SIGKILL");} catch {}
+      try {process.kill(escapedPid, "SIGKILL");} catch {}
+    }
+  }
+});
+
+test("Darwin no-start release never deletes swapped roots or child replacements", async () => {
+  const reserveNoStart = async (suffix: string) => {
+    const workspaceRef = await disposableRoot();
+    const entry = await cooperativeEntry(workspaceRef, "sdk-delegated");
+    const custody = createDarwinCooperativeProcessCustodyTestSupport({
+      launchPlans: createStaticHostCustodyLaunchPlanResolver([entry]),
+    });
+    const request = Object.freeze({
+      attemptId: `attempt:darwin-swap-${suffix}`,
+      intentMode: "analysis" as const,
+      operationId: `operation:darwin-swap-${suffix}`,
+      providerBinding: binding,
+      workspaceRef,
+    });
+    const workspaceHandle = await open(workspaceRef, "r");
+    const workspaceStats = await workspaceHandle.stat({ bigint: true });
+    const opened = await custody.reserve({
+      ...request,
+      launchPlan: entry.plan,
+      workspaceAuthority: Object.freeze({
+        canonicalPath: workspaceRef,
+        descriptorPath: `/proc/self/fd/${workspaceHandle.fd}`,
+        identity: Object.freeze({
+          dev: workspaceStats.dev,
+          ino: workspaceStats.ino,
+          mountId: `darwin-statfs:synthetic-swap-${suffix}`,
+        }),
+      }),
+    });
+    await workspaceHandle.close();
+    const contained = await custody.requestContainment({ ...request, custodyRef: opened.custodyRef });
+    assert.equal(contained.kind, "contained");
+    assert.ok(contained.kind === "contained");
+    return { contained, custody, entry, opened, request };
+  };
+
+  const rootSwap = await reserveNoStart("root");
+  const capturedRoot = `${rootSwap.entry.plan.privateRootPath}.captured`;
+  roots.push(capturedRoot);
+  await rename(rootSwap.entry.plan.privateRootPath, capturedRoot);
+  await mkdir(rootSwap.entry.plan.privateRootPath, { mode: 0o700 });
+  await writeFile(join(rootSwap.entry.plan.privateRootPath, "replacement-marker"), "replacement");
+  const rootOutcome = await rootSwap.custody.release({
+    ...rootSwap.request,
+    custodyRef: rootSwap.opened.custodyRef,
+    receiptRef: rootSwap.contained.receiptRef,
+  });
+  assert.equal(rootOutcome.kind, "unproven");
+  assert.match(rootOutcome.kind === "unproven" ? rootOutcome.evidenceRef : "", /private-root-quarantine-unproven/u);
+  assert.equal(existsSync(capturedRoot), true);
+  assert.equal(existsSync(join(rootSwap.entry.plan.privateRootPath, "replacement-marker")), true);
+  assert.notEqual(rootSwap.custody.evidence(rootSwap.opened.custodyRef)?.privateRoot.status, "deleted");
+
+  const childSwap = await reserveNoStart("child");
+  const capturedHome = `${childSwap.entry.plan.privateRootPath}.captured-home`;
+  roots.push(capturedHome);
+  await rename(join(childSwap.entry.plan.privateRootPath, "home"), capturedHome);
+  await mkdir(join(childSwap.entry.plan.privateRootPath, "home"), { mode: 0o700 });
+  await writeFile(join(childSwap.entry.plan.privateRootPath, "home", "replacement-marker"), "replacement");
+  const childOutcome = await childSwap.custody.release({
+    ...childSwap.request,
+    custodyRef: childSwap.opened.custodyRef,
+    receiptRef: childSwap.contained.receiptRef,
+  });
+  assert.equal(childOutcome.kind, "unproven");
+  assert.match(childOutcome.kind === "unproven" ? childOutcome.evidenceRef : "", /private-root-quarantine-unproven/u);
+  assert.equal(existsSync(capturedHome), true);
+  assert.equal(existsSync(join(childSwap.entry.plan.privateRootPath, "home", "replacement-marker")), true);
+  assert.notEqual(childSwap.custody.evidence(childSwap.opened.custodyRef)?.privateRoot.status, "deleted");
 });
 
 test("Darwin custody escalates TERM to KILL and fails closed on ambiguous group closure", async () => {

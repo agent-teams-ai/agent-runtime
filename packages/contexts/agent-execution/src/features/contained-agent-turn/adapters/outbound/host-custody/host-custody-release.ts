@@ -1,10 +1,13 @@
 import { snapshotEvidence, unprovenResult } from "./host-custody-evidence.js";
 import {
-  deletePrivateRootAfterProvedNoStart,
   quarantinePrivateRoot,
   quarantinePrivateRootForReconciliation,
 } from "./host-custody-private-root.js";
-import type { CustodyTombstone, LiveCustody } from "./node-provider-process-custody-state.js";
+import {
+  isCompleteProvedNoStart,
+  type CustodyTombstone,
+  type LiveCustody,
+} from "./node-provider-process-custody-state.js";
 import { boundedPromise } from "./host-custody-stdio.js";
 
 export interface HostCustodyReleaseInput {
@@ -70,19 +73,24 @@ const closeLiveCustody = async (
   input: HostCustodyReleaseInput,
 ): Promise<HostCustodyReleaseOutcome> => {
   const cooperativeDarwin = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group";
-  const provedNoStart = (live.spawnStatus === "never-started" || live.spawnStatus === "error-before-start") &&
-    live.closureEvidence.status === "not-started" && live.identity.status === "not-started" &&
-    live.evidenceSealed && (live.spawnStatus === "never-started" || live.guardianNoStartAcknowledged === true);
+  const provedNoStart = isCompleteProvedNoStart(live);
   if (cooperativeDarwin && !provedNoStart) {
     if (!quarantinePrivateRootForReconciliation(live)) {
       return unprovenResult("private-root-quarantine-unproven", input, live);
     }
     return unprovenResult("darwin-cooperative-reconciliation-required", input, live);
   }
+  if (cooperativeDarwin) {
+    if (!quarantinePrivateRootForReconciliation(live)) {
+      return unprovenResult("private-root-quarantine-unproven", input, live);
+    }
+    // Qualified Node/macOS APIs cannot remove the captured root's directory entry
+    // descriptor-relatively. Retain it for reconciliation instead of making a
+    // pathname-based deletion claim, even when process no-start is complete.
+    return unprovenResult("darwin-cooperative-reconciliation-required", input, live);
+  }
   live.cleanupDeadline ??= state.monotonicNow() + state.cleanupAfterMs;
-  const privateRootClosed = cooperativeDarwin
-    ? deletePrivateRootAfterProvedNoStart(live)
-    : quarantinePrivateRoot(live);
+  const privateRootClosed = quarantinePrivateRoot(live);
   if (state.monotonicNow() >= live.cleanupDeadline || !privateRootClosed) {
     delete live.cleanupDeadline;
     return unprovenResult("private-root-quarantine-unproven", input, live);
@@ -94,9 +102,7 @@ const closeLiveCustody = async (
   if (cgroupClosed !== true || state.monotonicNow() >= live.cleanupDeadline) {
     delete live.cleanupDeadline;
     return unprovenResult(
-      cooperativeDarwin
-        ? "posix-process-group-release-unproven"
-        : "operation-cgroup-release-unproven",
+      "operation-cgroup-release-unproven",
       input,
       live,
     );

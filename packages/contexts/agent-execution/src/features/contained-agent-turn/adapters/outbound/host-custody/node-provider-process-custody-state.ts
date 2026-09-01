@@ -84,6 +84,14 @@ export interface LiveCustody {
   workspace?: WorkspaceObservation;
 }
 
+/** True only when every sealed observer needed to prove that no provider process started agrees. */
+export const isCompleteProvedNoStart = (live: LiveCustody): boolean =>
+  (live.spawnStatus === "never-started" ||
+    live.spawnStatus === "error-before-start" && live.guardianNoStartAcknowledged === true) &&
+  live.closureEvidence.status === "not-started" &&
+  live.identity.status === "not-started" &&
+  live.evidenceSealed;
+
 export const createLiveCustody = (
   input: Parameters<ProviderProcessCustodyPort["open"]>[0],
   custodyRef: string,
