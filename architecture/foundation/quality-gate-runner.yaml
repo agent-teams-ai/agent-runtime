@@ -1,0 +1,10 @@
+schemaVersion: 1
+packageManager: pnpm
+profiles:
+  - id: ci-diagnostics
+    concurrency: 2
+    tasks:
+      - id: lint
+        timeoutMs: 120000
+      - id: typecheck
+        timeoutMs: 120000
