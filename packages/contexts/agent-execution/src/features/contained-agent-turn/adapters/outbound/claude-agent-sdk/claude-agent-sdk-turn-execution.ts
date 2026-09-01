@@ -20,6 +20,10 @@ import type {
   ClaudeQueryFactory,
   ClaudeSdkQuery,
 } from "./claude-agent-sdk-query-contracts.js";
+import {
+  ClaudeCanonicalOutputRedactor,
+  redactClaudeCanonicalText,
+} from "./claude-agent-sdk-output-redaction.js";
 import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 export interface ClaudeAgentSdkControlClock {
   now(): number;
@@ -214,6 +218,7 @@ export class ClaudeAgentSdkTurnExecution {
   readonly #input: ProviderInput;
   readonly #options: TurnExecutionOptions;
   readonly #outputAbort = new AbortController();
+  readonly #outputRedactor = new ClaudeCanonicalOutputRedactor();
   readonly #turnDeadline: number;
   #admissionOpen = true;
   #cursor = 0;
@@ -281,12 +286,19 @@ export class ClaudeAgentSdkTurnExecution {
           throw new Error("CLAUDE_MALFORMED_SDK_MESSAGE");
         }
         if (normalized.kind === "assistant_text" && normalized.text.length > 0) {
-          await this.#emit("assistant", normalized.text);
+          const redacted = this.#outputRedactor.push(normalized.text);
+          if (redacted.length > 0) {await this.#emit("assistant", redacted);}
           this.#streamed = true;
         }
         if (normalized.kind === "result") {
+          const redacted = this.#outputRedactor.finish();
+          if (redacted.length > 0) {await this.#emit("assistant", redacted);}
           this.#result = normalized.result;
         }
+      }
+      if (this.#result === undefined) {
+        const redacted = this.#outputRedactor.finish();
+        if (redacted.length > 0) {await this.#emit("assistant", redacted);}
       }
     } catch (error) {
       this.#streamFailure = error;
@@ -465,7 +477,7 @@ export class ClaudeAgentSdkTurnExecution {
     }
     if (this.#admissionOpen && !this.#streamed && this.#result.subtype === "success"
       && !this.#result.is_error && this.#result.result.length > 0
-      && !await this.#tryEmit("assistant", this.#result.result)) {
+      && !await this.#tryEmit("assistant", redactClaudeCanonicalText(this.#result.result))) {
       return ambiguous(this.#input, "sdk-output-admission-unproven");
     }
     const diagnostic = claudeResultDiagnostic(this.#result);

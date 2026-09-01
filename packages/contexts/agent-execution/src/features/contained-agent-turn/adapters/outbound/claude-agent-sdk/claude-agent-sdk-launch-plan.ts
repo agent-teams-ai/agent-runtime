@@ -9,6 +9,22 @@ import type {
 import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 
 export const CLAUDE_AGENT_SDK_VERSION = "0.3.251";
+export const CLAUDE_AGENT_SDK_BUNDLED_CLI_VERSION = "2.1.251";
+export const CLAUDE_AGENT_SDK_EXECUTABLE_SHA256 = "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7";
+export const CLAUDE_AGENT_SDK_BINARY_REVISION = `sha256:${CLAUDE_AGENT_SDK_EXECUTABLE_SHA256}`;
+export const CLAUDE_AGENT_SDK_ADAPTER_REVISION = "claude-agent-sdk-contained-turn:0.3.251";
+export const CLAUDE_AGENT_SDK_MANIFEST_REVISION = "claude-contained-turn-v1@1";
+export const CLAUDE_AGENT_SDK_RESOURCE_SCOPE_REVISION = "contained-turn-v1-worst-case-scope@1";
+export const CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD = "/proc/self/fd/4" as const;
+export const CLAUDE_AGENT_SDK_PRODUCTION_TUPLE = Object.freeze({
+  adapterRevision: CLAUDE_AGENT_SDK_ADAPTER_REVISION,
+  binaryRevision: CLAUDE_AGENT_SDK_BINARY_REVISION,
+  bundledCliVersion: CLAUDE_AGENT_SDK_BUNDLED_CLI_VERSION,
+  executableSha256: CLAUDE_AGENT_SDK_EXECUTABLE_SHA256,
+  manifestRevision: CLAUDE_AGENT_SDK_MANIFEST_REVISION,
+  resourceScopeRevision: CLAUDE_AGENT_SDK_RESOURCE_SCOPE_REVISION,
+  sdkVersion: CLAUDE_AGENT_SDK_VERSION,
+});
 export const CLAUDE_AGENT_SDK_READ_TOOLS = Object.freeze(["Read", "Glob", "Grep"] as const);
 export const CLAUDE_AGENT_SDK_WRITE_TOOLS = Object.freeze([...CLAUDE_AGENT_SDK_READ_TOOLS, "Edit", "Write"] as const);
 
@@ -196,7 +212,7 @@ export const createClaudeAgentSdkLaunchPlan = async (
   }
   const privateRootPath = acceptedPrivateRoot(input.privateRootPath, input.workspaceRef, environment);
   return Object.freeze({
-    arguments: claudeAgentSdkArguments(intentMode, input.workspaceRef),
+    arguments: claudeAgentSdkArguments(intentMode, CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD),
     binaryRevision: input.binaryRevision,
     containmentProfile: "strict-linux-cgroup-v2",
     environment,

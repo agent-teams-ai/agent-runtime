@@ -299,7 +299,7 @@ export class DeterministicCurrentOwnerHost {
 export const successfulClaudeQuery = (host: DeterministicCurrentOwnerHost, workspaceRef: string) => (input: Message) => {
   const plan = host.plans.at(-1)!;
   input.options.spawnClaudeCodeProcess({
-    args: [...plan.arguments], command: "/synthetic/claude", cwd: workspaceRef,
+    args: [...plan.arguments], command: "/synthetic/claude", cwd: input.options.cwd,
     env: {...plan.environment}, signal: new AbortController().signal,
   });
   return {close: () => {host.closeClaudeInput();}, interrupt: async () => {}, async *[Symbol.asyncIterator]() {

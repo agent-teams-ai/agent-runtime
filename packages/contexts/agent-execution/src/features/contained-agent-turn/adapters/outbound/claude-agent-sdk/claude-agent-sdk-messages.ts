@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { redactClaudeCanonicalText } from "./claude-agent-sdk-output-redaction.js";
+
 interface ClaudeSdkResultBase {
   readonly is_error: boolean;
   readonly session_id: string;
@@ -77,18 +79,13 @@ const diagnosticCode = (result: ClaudeSdkResultMessage): string | undefined => {
   }
 };
 
-const redact = (value: string): string => value
-  .replaceAll(/(?:[A-Za-z]:\\|\/)[^\s;,'"<>]+/gu, "<path>")
-  .replaceAll(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/gu, "<account>")
-  .replaceAll(/\b(?:sk-ant-|Bearer\s+)[A-Za-z0-9._-]+/giu, "<credential>")
-  .replaceAll(/\b[A-Za-z0-9_-]{32,}\b/gu, "<opaque>");
 
 export const claudeResultDiagnostic = (result: ClaudeSdkResultMessage): string | undefined => {
   const code = diagnosticCode(result);
   if (code === undefined) {return undefined;}
   const raw = result.subtype === "success" ? result.result : result.errors.join("\n");
   const bounded = raw.slice(0, 4_096);
-  const redacted = redact(bounded);
+  const redacted = redactClaudeCanonicalText(bounded);
   const digest = createHash("sha256").update(redacted).digest("hex");
   return JSON.stringify({ code, diagnosticDigest: `sha256:${digest}`, truncated: bounded.length < raw.length });
 };

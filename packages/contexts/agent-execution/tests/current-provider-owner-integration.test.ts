@@ -153,15 +153,16 @@ const executeInput = (identity: ReturnType<typeof ids>, provider: "claude" | "co
 });
 
 const claudeSnapshot = Object.freeze({
-  adapterRevision: "claude:test", binaryRevision: "claude-binary:test",
-  capabilityManifestRevision: "claude-manifest:test", provider: "claude" as const,
+  adapterRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.adapterRevision,
+  binaryRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.binaryRevision,
+  capabilityManifestRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.manifestRevision, provider: "claude" as const,
 });
 
 const claudeManifest = Object.freeze({
   effectCardinality: "one_coarse_effect_per_operation", effectClass: "contained_unmediated_effect",
   manifestRevision: claudeSnapshot.capabilityManifestRevision, manifestVersion: 1, provider: "claude" as const,
   providerAttemptCardinality: "at_most_one", requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
-  resourceScopeRevision: "contained-workspace-network-credential:1",
+  resourceScopeRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.resourceScopeRevision,
   supportedModes: Object.freeze(["analysis", "workspace-write"] as const), unknownCapabilityPolicy: "fail_closed",
 });
 
@@ -197,7 +198,7 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
   const [configRoot, homeRoot, tempRoot] = ["config", "home", "temp"].map(name => join(privateRootPath, name));
   await Promise.all([configRoot, homeRoot, tempRoot].map(path => mkdir(path, {recursive: true, mode: 0o700})));
   return createClaudeCurrentKernelOwner({
-    adapterSnapshot: claudeSnapshot, executablePath: "/synthetic/claude", executableSha256: "a".repeat(64),
+    adapterSnapshot: claudeSnapshot, executablePath: "/synthetic/claude", executableSha256: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.executableSha256,
     hostBootId: "host-boot:claim-claude", hostCustody: host as any,
     hostInstanceId: "host-instance:claim-claude",
     launchRecords: {resolve: async () => {
@@ -210,7 +211,7 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
     queryFactory: input => {
       const plan = host.plans.at(-1) as any;
       input.options.spawnClaudeCodeProcess({
-        args: [...plan.arguments], command: "/synthetic/claude", cwd: workspaceRef,
+        args: [...plan.arguments], command: "/synthetic/claude", cwd: input.options.cwd,
         env: {...plan.environment}, signal: new AbortController().signal,
       });
       return {close: () => {}, interrupt: async () => {}, async *[Symbol.asyncIterator]() {
@@ -292,7 +293,7 @@ test("provider owners keep stable kernel and random Host identities distinct and
       },
     };
     const claude = createClaudeCurrentKernelOwner({
-      adapterSnapshot: claudeSnapshot, executablePath: "/synthetic/claude", executableSha256: "a".repeat(64),
+      adapterSnapshot: claudeSnapshot, executablePath: "/synthetic/claude", executableSha256: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.executableSha256,
       hostBootId: "host-boot:current-owner", hostCustody: claudeHost as any,
       hostInstanceId: "host-instance:current-owner",
       launchRecords: {resolve: async () => ({
@@ -304,14 +305,14 @@ test("provider owners keep stable kernel and random Host identities distinct and
         effectCardinality: "one_coarse_effect_per_operation", effectClass: "contained_unmediated_effect",
         manifestRevision: claudeSnapshot.capabilityManifestRevision, manifestVersion: 1, provider: "claude" as const,
         providerAttemptCardinality: "at_most_one", requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
-        resourceScopeRevision: "contained-workspace-network-credential:1",
+        resourceScopeRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.resourceScopeRevision,
         supportedModes: Object.freeze(["analysis", "workspace-write"] as const), unknownCapabilityPolicy: "fail_closed",
       }),
       privateDirectoryCustody: mutablePrivateDirectoryCustody,
       queryFactory: input => {
         input.options.spawnClaudeCodeProcess({
           args: [...(claudeHost.plans[0] as any).arguments], command: "/synthetic/claude",
-          cwd: claudeWorkspace, env: {...(claudeHost.plans[0] as any).environment}, signal: new AbortController().signal,
+          cwd: input.options.cwd, env: {...(claudeHost.plans[0] as any).environment}, signal: new AbortController().signal,
         });
         return {close: () => {}, interrupt: async () => {}, async *[Symbol.asyncIterator]() {
           yield Promise.reject(new Error("stop"));

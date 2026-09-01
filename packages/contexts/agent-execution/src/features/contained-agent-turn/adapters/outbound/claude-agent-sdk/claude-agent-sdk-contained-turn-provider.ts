@@ -12,6 +12,7 @@ import type {
   PrivateDirectoryCustodyPort,
 } from "../provider-delegation-ports/private-directory-custody-port.js";
 import {
+  CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
   claudeAgentSdkTools,
   type ClaudeAgentSdkPrivateProjection,
   type ClaudeAgentSdkPrivateProjectionResolver,
@@ -175,7 +176,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
       options: {
         abortController,
         allowedTools: tools,
-        cwd: input.workspaceRef,
+        cwd: CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
         disallowedTools: [...disallowedTools(input.intent.mode)],
         env: projection.environment,
         includePartialMessages: true,
@@ -185,7 +186,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
         permissionMode: "dontAsk",
         persistSession: false,
         plugins: [],
-        sandbox: sdkSandbox(input.intent.mode, input.workspaceRef),
+        sandbox: sdkSandbox(input.intent.mode, CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD),
         settingSources: [],
         spawnClaudeCodeProcess: options => this.#snapshot.processes.start(input.custody.custodyRef, {
           arguments: options.args,

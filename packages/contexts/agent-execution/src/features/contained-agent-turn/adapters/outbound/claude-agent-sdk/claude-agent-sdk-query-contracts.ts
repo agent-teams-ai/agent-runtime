@@ -1,10 +1,10 @@
-export interface ClaudeSdkSpawnOptions {
-  readonly args: string[];
-  readonly command: string;
-  readonly cwd?: string;
-  readonly env: Record<string, string | undefined>;
-  readonly signal: AbortSignal;
-}
+type OfficialClaudeQueryFactory = typeof import("@anthropic-ai/claude-agent-sdk")["query"];
+type OfficialClaudeQueryInput = Parameters<OfficialClaudeQueryFactory>[0];
+type OfficialClaudeQueryOptions = NonNullable<OfficialClaudeQueryInput["options"]>;
+type OfficialClaudeSpawnCallback = NonNullable<OfficialClaudeQueryOptions["spawnClaudeCodeProcess"]>;
+
+export type ClaudeSdkSpawnOptions = Parameters<OfficialClaudeSpawnCallback>[0];
+
 
 export interface ClaudeSdkQuery extends AsyncIterable<unknown> {
   close(): void;
@@ -32,7 +32,7 @@ export interface ClaudeSdkQueryInput {
       readonly filesystem: { readonly allowRead: string[]; readonly allowWrite: string[] };
     };
     readonly settingSources: readonly never[];
-    readonly spawnClaudeCodeProcess: (options: ClaudeSdkSpawnOptions) => unknown;
+    readonly spawnClaudeCodeProcess: OfficialClaudeSpawnCallback;
     readonly strictMcpConfig: true;
     readonly tools: string[];
   };
@@ -40,3 +40,8 @@ export interface ClaudeSdkQueryInput {
 }
 
 export type ClaudeQueryFactory = (input: ClaudeSdkQueryInput) => ClaudeSdkQuery;
+
+type AssertAssignable<Value extends true> = Value;
+export type ClaudeSdkOfficialQueryInputAssignability = AssertAssignable<
+  ClaudeSdkQueryInput extends OfficialClaudeQueryInput ? true : false
+>;

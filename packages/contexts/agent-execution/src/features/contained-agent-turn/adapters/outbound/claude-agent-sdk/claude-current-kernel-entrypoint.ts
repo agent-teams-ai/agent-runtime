@@ -7,6 +7,7 @@ export {
   type ClaudeAgentSdkKernelPrivateExecutionResolver,
 } from "./claude-agent-sdk-current-kernel-adapter.js";
 export {
+  CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
   createClaudeAgentSdkLaunchPlan,
   type ClaudeAgentSdkPrivateProjection,
 } from "./claude-agent-sdk-launch-plan.js";

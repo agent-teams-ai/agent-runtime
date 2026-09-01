@@ -2,11 +2,13 @@ import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-
 import type {
   ContainedTurnKernelProviderPort,
 } from "../application/ports/outbound/contained-turn-ports.js";
-import type {
+import {
+  CONTAINED_TURN_REQUIRED_PROOF_KINDS,
   ContainedTurnCapabilityManifest,
   ContainedTurnProviderAdapterSnapshot,
 } from "../domain/contained-turn-authority.js";
 import {
+  CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
   ClaudeAgentSdkCurrentKernelAdapter,
   captureClaudePrivateDirectoryCustody,
   createClaudeAgentSdkLaunchPlan,
@@ -90,9 +92,40 @@ const exactExecution = (record: PreparedRecord, input: PrivateExecutionInput): b
   record.binding.credentialBindingDigest === input.providerBinding.credentialBindingDigest &&
   record.binding.providerRouteRef === input.providerBinding.providerRouteRef;
 
+const exactStringArray = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions): void => {
+  const tuple = CLAUDE_AGENT_SDK_PRODUCTION_TUPLE;
+  const snapshot = options.adapterSnapshot;
+  const manifest = options.manifest;
+  if (
+    snapshot.provider !== "claude" ||
+    snapshot.adapterRevision !== tuple.adapterRevision ||
+    snapshot.binaryRevision !== tuple.binaryRevision ||
+    snapshot.capabilityManifestRevision !== tuple.manifestRevision ||
+    options.executableSha256 !== tuple.executableSha256 ||
+    manifest.provider !== "claude" ||
+    manifest.manifestVersion !== 1 ||
+    manifest.manifestRevision !== tuple.manifestRevision ||
+    manifest.resourceScopeRevision !== tuple.resourceScopeRevision ||
+    manifest.effectClass !== "contained_unmediated_effect" ||
+    manifest.effectCardinality !== "one_coarse_effect_per_operation" ||
+    manifest.providerAttemptCardinality !== "at_most_one" ||
+    manifest.unknownCapabilityPolicy !== "fail_closed" ||
+    !exactStringArray(manifest.supportedModes, ["analysis", "workspace-write"]) ||
+    !exactStringArray(manifest.requiredProofKinds, CONTAINED_TURN_REQUIRED_PROOF_KINDS)
+  ) {
+    throw new TypeError(
+      `Claude production composition requires SDK ${tuple.sdkVersion}, bundled CLI ${tuple.bundledCliVersion}, and its exact ADR-0010 tuple`,
+    );
+  }
+};
+
 export const createClaudeCurrentKernelOwner = (
   options: CreateClaudeCurrentKernelOwnerOptions,
 ): ClaudeCurrentKernelOwner => {
+  assertProductionTuple(options);
   const records = new Map<string, PreparedRecord>();
   const privateDirectoryCustody = captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody);
   const processes: Processes = Object.freeze({

@@ -16,7 +16,10 @@ import {
 } from "../dist/composition.js";
 import type { ContainedTurnKernelOperationStore } from "../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { createCodexAppServerPermissionBoundary } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
-import { createClaudeAgentSdkPrivateProjection } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
+import {
+  CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
+  createClaudeAgentSdkPrivateProjection,
+} from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import { consumeWorkspaceLaunchAuthority } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-capability.js";
 import { applyContainedTurnPostgresSchema } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 import { PostgresContainedTurnOperationStore } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
@@ -212,10 +215,12 @@ const createOwner = async (
   const homeRoot = join(privateRootPath, "home");
   const tempRoot = join(privateRootPath, "temp");
   await Promise.all([configRoot, homeRoot, tempRoot].map(path => mkdir(path, {recursive: true, mode: 0o700})));
-  const adapterSnapshot = {adapterRevision: "claude:test", binaryRevision: "claude-binary:test",
-    capabilityManifestRevision: "claude-manifest:test", provider: "claude" as const};
+  const adapterSnapshot = {
+    adapterRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.adapterRevision,
+    binaryRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.binaryRevision,
+    capabilityManifestRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.manifestRevision, provider: "claude" as const};
   return createClaudeCurrentKernelOwner({
-    adapterSnapshot, executablePath: "/synthetic/claude", executableSha256: "a".repeat(64),
+    adapterSnapshot, executablePath: "/synthetic/claude", executableSha256: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.executableSha256,
     hostBootId: "host-boot:pg-claude", hostCustody: host as never, hostInstanceId: "host-instance:pg-claude",
     launchRecords: {resolve: async input => ({privateProjection: createClaudeAgentSdkPrivateProjection({
       configRoot, homeRoot, projectionRef: "projection:pg-claude", tempRoot,
@@ -224,12 +229,12 @@ const createOwner = async (
     manifest: {effectCardinality: "one_coarse_effect_per_operation", effectClass: "contained_unmediated_effect",
       manifestRevision: adapterSnapshot.capabilityManifestRevision, manifestVersion: 1, provider: "claude",
       providerAttemptCardinality: "at_most_one", requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
-      resourceScopeRevision: "contained-workspace-network-credential:1", supportedModes: ["analysis", "workspace-write"],
+      resourceScopeRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.resourceScopeRevision, supportedModes: ["analysis", "workspace-write"],
       unknownCapabilityPolicy: "fail_closed"},
     privateDirectoryCustody,
     queryFactory: deterministicSuccess ? successfulClaudeQuery(host as DeterministicCurrentOwnerHost, workspaceRef) : input => {
       const plan = host.plans.at(-1)!;
-      input.options.spawnClaudeCodeProcess({args: [...plan.arguments], command: "/synthetic/claude", cwd: workspaceRef,
+      input.options.spawnClaudeCodeProcess({args: [...plan.arguments], command: "/synthetic/claude", cwd: input.options.cwd,
         env: {...plan.environment}, signal: new AbortController().signal});
       return {close: () => {}, interrupt: async () => {}, async *[Symbol.asyncIterator]() {
         yield Promise.reject(new Error("synthetic Claude reconciliation boundary"));
