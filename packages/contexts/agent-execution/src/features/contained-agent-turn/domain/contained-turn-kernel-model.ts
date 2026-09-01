@@ -7,6 +7,7 @@ import type {
   ContainedTurnProviderAdapterSnapshot,
   ContainedTurnScope,
 } from "./contained-turn-authority.js";
+import type { ContainedTurnConsumedGrantReceipts } from "./contained-turn-dispatch-authority.js";
 import type {
   ContainedTurnCanonicalDigest,
   ContainedTurnCommandFingerprint,
@@ -68,6 +69,7 @@ export interface ContainedTurnKernelOperation {
       readonly attemptId: ContainedTurnAttemptId;
       readonly claimProofId: ContainedTurnProofId;
       readonly executionGenerationId: ContainedTurnExecutionGenerationId;
+      readonly grantReceipts: ContainedTurnConsumedGrantReceipts;
       readonly kind: "claimed";
       readonly operationCutoffRevision: ContainedTurnOperationCutoffRevision;
       readonly preparationToken: ContainedTurnPreparationToken;

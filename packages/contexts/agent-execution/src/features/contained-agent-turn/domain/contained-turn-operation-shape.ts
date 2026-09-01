@@ -69,7 +69,7 @@ export const validateContainedTurnOperationShape = (operation: ContainedTurnKern
   switch (operation.dispatch.kind) {
     case "unclaimed": exactKeys("dispatch state", operation.dispatch, ["kind"]); break;
     case "claimed": exactKeys("dispatch state", operation.dispatch, [
-      "attemptId", "claimProofId", "executionGenerationId", "kind", "operationCutoffRevision",
+      "attemptId", "claimProofId", "executionGenerationId", "grantReceipts", "kind", "operationCutoffRevision",
       "preparationToken", "providerAccessDispatchProofId", "runtimeSecurityDispatchProofId", "writerFence",
     ]); break;
     case "prevented": exactKeys("dispatch state", operation.dispatch, ["kind", "noDispatchProofId"]); break;

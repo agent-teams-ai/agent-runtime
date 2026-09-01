@@ -1,4 +1,5 @@
 import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import { containedTurnGrantSettlementRequestId } from "../domain/contained-turn-dispatch-authority.js";
 import type {
   ContainedTurnDispatchPreparation,
 } from "../domain/contained-turn-dispatch-preparation.js";
@@ -21,22 +22,18 @@ const completeTarget = async (
         cleanupPermit: preparation.cleanupPermit,
       });
     } else {
-      const grantRequestId = target === "provider_access"
-        ? preparation.providerAccessGrantRequestId
-        : preparation.runtimeSecurityGrantRequestId;
-      const consumptionEvidenceId = target === "provider_access"
-        ? preparation.providerAccessConsumptionEvidenceId
-        : preparation.runtimeSecurityConsumptionEvidenceId;
-      if (grantRequestId === null && consumptionEvidenceId === null) {return;}
-      const settlementIdentity = grantRequestId === null
-        ? { consumptionEvidenceId: consumptionEvidenceId as ContainedTurnEvidenceId }
-        : { grantRequestId };
+      const receipt = target === "provider_access"
+        ? preparation.providerAccessConsumptionReceipt
+        : preparation.runtimeSecurityConsumptionReceipt;
+      if (receipt === undefined) {return;}
       outcome = target === "provider_access"
         ? await dependencies.providerAccess.settleConsumedGrant({
-          cleanupPermit: preparation.cleanupPermit, ...settlementIdentity,
+          disposition: "abandoned_without_claim", receipt: preparation.providerAccessConsumptionReceipt as NonNullable<typeof preparation.providerAccessConsumptionReceipt>,
+          settlementRequestId: containedTurnGrantSettlementRequestId(receipt, "abandoned_without_claim"),
         })
         : await dependencies.security.settleConsumedGrant({
-          cleanupPermit: preparation.cleanupPermit, ...settlementIdentity,
+          disposition: "abandoned_without_claim", receipt: preparation.runtimeSecurityConsumptionReceipt as NonNullable<typeof preparation.runtimeSecurityConsumptionReceipt>,
+          settlementRequestId: containedTurnGrantSettlementRequestId(receipt, "abandoned_without_claim"),
         });
     }
   } catch {
@@ -91,4 +88,30 @@ export const recoverContainedTurnDispatchPreparations = async (
     }
   }
   return Object.freeze({ discovered: rows.length, retired });
+};
+
+/** Replays idempotent owner settlements from complete durable claim receipts. */
+export const recoverContainedTurnCommittedGrantSettlements = async (
+  dependencies: ContainedTurnKernelDependencies,
+  operation: ContainedTurnKernelOperation,
+): Promise<Readonly<{ attempted: 0 | 2 }>> => {
+  if (operation.dispatch.kind !== "claimed") {return Object.freeze({ attempted: 0 });}
+  const [providerAccessReceipt, runtimeSecurityReceipt] = operation.dispatch.grantReceipts;
+  await Promise.allSettled([
+    dependencies.providerAccess.settleConsumedGrant({
+      disposition: "claim_committed",
+      receipt: providerAccessReceipt,
+      settlementRequestId: containedTurnGrantSettlementRequestId(
+        providerAccessReceipt, "claim_committed",
+      ),
+    }),
+    dependencies.security.settleConsumedGrant({
+      disposition: "claim_committed",
+      receipt: runtimeSecurityReceipt,
+      settlementRequestId: containedTurnGrantSettlementRequestId(
+        runtimeSecurityReceipt, "claim_committed",
+      ),
+    }),
+  ]);
+  return Object.freeze({ attempted: 2 });
 };

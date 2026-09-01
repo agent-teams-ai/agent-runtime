@@ -7,13 +7,14 @@ import {
   digestContainedTurnPostgresJson,
 } from "../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
 import { reconcileContainedTurnClaimPreparation } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
-import { recoverContainedTurnDispatchPreparations } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
+import { recoverContainedTurnCommittedGrantSettlements, recoverContainedTurnDispatchPreparations } from "../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
 import { claimContainedTurnWithConsumedGrants } from "../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "../dist/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.js";
 import { createContainedTurnPreparationScopeDependencies } from "../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
-import { containedTurnScopeDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
+  completeContainedTurnDispatchGrantSubject,
   containedTurnDispatchClaimBindingDigest,
   containedTurnDispatchGrantRequestId,
   validateContainedTurnConsumedGrantReceipts,
@@ -45,6 +46,50 @@ import {
 
 const unusedMandatoryDependency = async (): Promise<never> => {
   throw new Error("unused mandatory dependency");
+};
+
+const grantSubject = (operation: ContainedTurnKernelOperation = createOperation()) => {
+  const providerAccess = operation.providerAccessSnapshot;
+  const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
+  return completeContainedTurnDispatchGrantSubject({
+    attemptId, custodyId, effectId, executionGenerationId, hostBootId, hostInstanceId,
+    operationCutoffRevision: operation.operationCutoff.revision, operationId, preparationToken,
+    provider: operation.adapterSnapshot.provider,
+    providerAccessExpectation: {
+      acceptedAuthorityDigest: operation.acceptedAuthorityVectorDigest, accessRef: providerAccess.accessRef,
+      authorityHeadDigest: providerAccess.ownerAuthorityDigest, bindingDigest: providerBindingDigest,
+      bindingRevision: providerAccess.revision, credentialBindingDigest: providerAccess.credentialBindingDigest,
+      credentialBindingRef: providerAccess.credentialBindingRef, credentialGeneration: providerAccess.credentialGeneration,
+      providerAccountRef: providerAccess.providerAccountRef, providerRouteRef: providerAccess.providerRouteRef,
+    },
+    purpose: "contained_turn_provider_start_v1",
+    runtimeSecurityExpectation: {
+      acceptedAuthorityDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
+      authorityGeneration: operation.acceptedAuthorityVector.operationAuthorityRevision,
+      authorityHeadDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
+      authorityRevision: operation.acceptedAuthorityVector.securityAuthorityRevision,
+      constraintsDigest: digestContainedTurnCanonicalValue({
+        adapterSnapshot: operation.adapterSnapshot, capabilityManifest: operation.capabilityManifest, intentMode: operation.intent.mode,
+      } as never),
+      containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
+      providerBindingDigest, providerId: operation.adapterSnapshot.provider,
+    },
+    scope, scopeDigest: containedTurnScopeDigest(scope), workspaceId,
+  });
+};
+
+const consumedReceipt = (owner: "provider_access" | "runtime_security", subject: ReturnType<typeof grantSubject>) => {
+  const request = owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
+  return Object.freeze({
+    authorityFacts: owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation,
+    claimBeforeControlTime: 100, claimBindingDigest: request.claimBindingDigest, consumedAtControlTime: 50,
+    consumptionDigest: `${owner}-consumption:one`, grantRequestDigest: request.grantRequestId.slice("grant-request:".length) as never,
+    grantRequestId: request.grantRequestId, operationId: subject.operationId, owner,
+    ownerEvidenceRef: `${owner}-evidence:v1:one`, provider: subject.provider,
+    purpose: "contained-turn.provider-dispatch/v1" as const, requestDigest: request.requestDigest,
+    scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
+    validThroughOperationCutoffRevision: subject.operationCutoffRevision,
+  });
 };
 
 test("dispatch preparation cleanup retains possible winners and releases only proved losers", async () => {
@@ -329,12 +374,8 @@ test("persisted v2 cleanup debt upcasts for conservative recovery and oversized 
     discovered: 1,
     retired: 0,
   });
-  assert.deepEqual(recoveryCalls, [
-    "custody",
-    `provider_access:${providerAccessGrantRequestId}`,
-    `runtime_security:${runtimeSecurityGrantRequestId}`,
-  ]);
-  assert.equal(current.kind, "cleanup_closed");
+  assert.deepEqual(recoveryCalls, ["custody"]);
+  assert.equal(current.kind, "cleanup_pending");
   assert.equal(current.cleanupEvidenceIds.includes(historicalEvidenceId), true);
 
   const v1Retired = retireContainedTurnDispatchPreparation({
@@ -452,20 +493,7 @@ test("restart recovery retires against the preparation revision rather than the 
 
 test("parallel grant consumption returns every indeterminate owner evidence", async () => {
   const operation = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
-  const subject = Object.freeze({
-    attemptId,
-    custodyId,
-    effectId,
-    executionGenerationId,
-    hostBootId,
-    hostInstanceId,
-    operationCutoffRevision: operation.operationCutoff.revision,
-    operationId,
-    preparationToken,
-    purpose: "contained_turn_provider_start_v1" as const,
-    scopeDigest: containedTurnScopeDigest(scope),
-    workspaceId,
-  });
+  const subject = grantSubject();
   const providerAccessEvidenceId = containedTurnIdentity(
     "evidence", "evidence:provider-access-parallel-indeterminate",
   );
@@ -550,35 +578,9 @@ test("parallel grant consumption returns every indeterminate owner evidence", as
 });
 
 test("normalized consumed receipts bind the exact final claim and reject replay conflicts", () => {
-  const subject = Object.freeze({
-    attemptId,
-    custodyId,
-    effectId,
-    executionGenerationId,
-    hostBootId,
-    hostInstanceId,
-    operationCutoffRevision: 0,
-    operationId,
-    preparationToken,
-    purpose: "contained_turn_provider_start_v1" as const,
-    scopeDigest: containedTurnScopeDigest(scope),
-    workspaceId,
-  });
-  const claimBindingDigest = containedTurnDispatchClaimBindingDigest(subject);
-  const receipt = (owner: "provider_access" | "runtime_security") => {
-    const grantRequestDigest = digestContainedTurnCanonicalValue({ owner, request: 1 });
-    return Object.freeze({
-      claimBindingDigest,
-      grantRequestDigest,
-      grantRequestId: `grant-request:${grantRequestDigest}`,
-      owner,
-      ownerAuthorityDigest: digestContainedTurnCanonicalValue({ authority: owner }),
-      ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner, receipt: 1 }),
-      validThroughOperationCutoffRevision: 0,
-    });
-  };
-  const providerAccess = receipt("provider_access");
-  const runtimeSecurity = receipt("runtime_security");
+  const subject = grantSubject();
+  const providerAccess = consumedReceipt("provider_access", subject);
+  const runtimeSecurity = consumedReceipt("runtime_security", subject);
   const exact = validateContainedTurnConsumedGrantReceipts(subject, [providerAccess, runtimeSecurity]);
   const resanitized = validateContainedTurnConsumedGrantReceipts(subject, exact);
   assert.notStrictEqual(resanitized, exact);
@@ -604,7 +606,7 @@ test("normalized consumed receipts bind the exact final claim and reject replay 
     /exact closed record/u,
   );
   for (const field of [
-    "claimBindingDigest", "grantRequestDigest", "ownerAuthorityDigest", "ownerReceiptDigest",
+    "claimBindingDigest", "grantRequestDigest", "requestDigest",
   ] as const) {
     assert.throws(
       () => validateContainedTurnConsumedGrantReceipts(subject, [
@@ -620,7 +622,7 @@ test("normalized consumed receipts bind the exact final claim and reject replay 
       () => validateContainedTurnConsumedGrantReceipts(subject, [
         { ...providerAccess, grantRequestId }, runtimeSecurity,
       ]),
-      /canonical digest-bound ID/u,
+      /exact final claim request|durable owner facts|digest/u,
     );
   }
   for (const cutoff of [-1, Number.MAX_SAFE_INTEGER + 1, Number.NaN]) {
@@ -634,43 +636,28 @@ test("normalized consumed receipts bind the exact final claim and reject replay 
 });
 
 test("final claim follows both owner consumptions and only a fresh CAS exposes start authority", async () => {
-  const subject = Object.freeze({
-    attemptId,
-    custodyId,
-    effectId,
-    executionGenerationId,
-    hostBootId,
-    hostInstanceId,
-    operationCutoffRevision: 0,
-    operationId,
-    preparationToken,
-    purpose: "contained_turn_provider_start_v1" as const,
-    scopeDigest: containedTurnScopeDigest(scope),
-    workspaceId,
-  });
-  const claimBindingDigest = containedTurnDispatchClaimBindingDigest(subject);
-  const normalizedReceipt = (owner: "provider_access" | "runtime_security") => {
-    const grantRequestDigest = digestContainedTurnCanonicalValue({ owner, request: "exact" });
-    return {
-      claimBindingDigest,
-      grantRequestDigest,
-      grantRequestId: `grant-request:${grantRequestDigest}`,
-      owner,
-      ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner, revision: 1 }),
-      ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner, state: "consumed_pending" }),
-      validThroughOperationCutoffRevision: 0,
-    };
-  };
+  const subject = grantSubject();
+  const normalizedReceipt = (owner: "provider_access" | "runtime_security") => consumedReceipt(owner, subject);
   const events: string[] = [];
   let observed = false;
   const winner = createReservedOperation();
+  if (winner.dispatch.kind !== "claimed") {assert.fail("winner fixture is not claimed");}
+  const durableWinner = Object.freeze({
+    ...winner,
+    dispatch: Object.freeze({
+      ...winner.dispatch,
+      grantReceipts: Object.freeze([
+        normalizedReceipt("provider_access"), normalizedReceipt("runtime_security"),
+      ]),
+    }),
+  });
   const dependencies = createContainedTurnPreparationScopeDependencies({
     operationStore: {
       claimPreparedDispatch: async () => {
         events.push("agent-execution:final-claim");
         return observed
-          ? { kind: "observed_claim" as const, operation: winner }
-          : { kind: "claimed" as const, operation: winner, startAuthority: "host-start-once:1" };
+          ? { kind: "observed_claim" as const, operation: durableWinner }
+          : { kind: "claimed" as const, operation: durableWinner, startAuthority: "host-start-once:1" };
       },
       recordDispatchPreparationCleanup: unusedMandatoryDependency,
       retireDispatchPreparation: unusedMandatoryDependency,
@@ -680,14 +667,14 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
         events.push("provider-access:consumed");
         return { kind: "consumed" as const, receipt: normalizedReceipt("provider_access") };
       },
-      settleConsumedGrant: unusedMandatoryDependency,
+      settleConsumedGrant: async input => {events.push("provider-access:" + input.disposition); return { kind: "settled" as const };},
     },
     security: {
       consumeForDispatch: async () => {
         events.push("runtime-security:consumed");
         return { kind: "consumed" as const, receipt: normalizedReceipt("runtime_security") };
       },
-      settleConsumedGrant: unusedMandatoryDependency,
+      settleConsumedGrant: async input => {events.push("runtime-security:" + input.disposition); return { kind: "settled" as const };},
     },
     workspace: { ensureClosed: unusedMandatoryDependency, queryClosure: unusedMandatoryDependency },
     artifacts: { ensureSealed: unusedMandatoryDependency, querySeal: unusedMandatoryDependency },
@@ -721,7 +708,19 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
     "provider-access:consumed",
     "runtime-security:consumed",
     "agent-execution:final-claim",
+    "provider-access:claim_committed",
+    "runtime-security:claim_committed",
   ]);
+
+  events.length = 0;
+  assert.deepEqual(
+    await recoverContainedTurnCommittedGrantSettlements(dependencies, durableWinner),
+    { attempted: 2 },
+  );
+  assert.deepEqual(events, [
+    "provider-access:claim_committed",
+    "runtime-security:claim_committed",
+  ], "lost settlement acknowledgements replay from receipts without consumption or claim");
 
   observed = true;
   events.length = 0;
@@ -732,20 +731,14 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
   assert.equal("startAuthority" in replay, false, "a replay cannot manufacture one-use start authority");
 });
 
-test("dispatch grant ACL hashes every owner-local reference before it reaches Kernel", () => {
-  const subject = {
-    attemptId, custodyId, effectId, executionGenerationId, hostBootId, hostInstanceId,
-    operationCutoffRevision: 0, operationId, preparationToken,
-    purpose: "contained_turn_provider_start_v1" as const,
-    scopeDigest: containedTurnScopeDigest(scope), workspaceId,
-  };
-  const raw = {
-    grantRequestRef: "provider-secret-request-ref",
-    ownerAuthorityRef: "provider-secret-authority-ref",
-    ownerReceiptRef: "provider-secret-receipt-ref",
-    validThroughOperationCutoffRevision: 0,
-  };
-  const normalized = normalizeContainedTurnConsumedGrantReceipt("provider_access", subject, raw);
-  assert.equal(JSON.stringify(normalized).includes("provider-secret"), false);
-  assert.match(normalized.grantRequestId, /^grant-request:sha256:/u);
+test("dispatch grant ACL preserves explicit owner facts without accepting opaque proof digests", () => {
+  const subject = grantSubject();
+  const raw = consumedReceipt("provider_access", subject);
+  const { grantRequestDigest: _requestDigest, owner: _owner, validThroughOperationCutoffRevision: _cutoff, ...outer } = raw;
+  const normalized = normalizeContainedTurnConsumedGrantReceipt("provider_access", subject, outer);
+  assert.deepEqual(normalized.authorityFacts, subject.providerAccessExpectation);
+  assert.equal(normalized.ownerEvidenceRef, raw.ownerEvidenceRef);
+  assert.throws(() => normalizeContainedTurnConsumedGrantReceipt("provider_access", subject, {
+    ...outer, grantRequestId: subject.runtimeSecurityRequest.grantRequestId,
+  }), /substituted/u);
 });

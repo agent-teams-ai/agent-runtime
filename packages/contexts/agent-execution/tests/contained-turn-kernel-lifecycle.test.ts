@@ -366,6 +366,7 @@ test("the sole V1 dispatch rejects a second claimant or successor generation", (
   expectInvariant(
     () => mutateContainedTurnOperation(claimed, {
       attemptId: claimed.dispatch.attemptId,
+      consumedGrantReceipts: claimed.dispatch.grantReceipts,
       claimProof: proof("dispatch_claim"),
       custodyId,
       cutoffProof: proof("cutoff"),

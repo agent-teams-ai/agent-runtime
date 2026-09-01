@@ -1,3 +1,4 @@
+import type { ContainedTurnConsumedGrantReceipt } from "./contained-turn-dispatch-authority.js";
 import { digestContainedTurnCanonicalValue, type ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import { containedTurnIdentity, type ContainedTurnAttemptId, type ContainedTurnCustodyId, type ContainedTurnEvidenceId, type ContainedTurnIdentity, type ContainedTurnOperationId, type ContainedTurnPreparationToken, type ContainedTurnWorkspaceId, validateContainedTurnIdentity } from "./contained-turn-identities.js";
 import type { ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
@@ -21,7 +22,9 @@ export interface ContainedTurnCleanupPermit extends ContainedTurnDispatchPrepara
 }
 
 interface PreparationBase extends ContainedTurnDispatchPreparationIdentity {
+  readonly providerAccessConsumptionReceipt?: ContainedTurnConsumedGrantReceipt<"provider_access">;
   readonly providerAccessGrantRequestId: string | null;
+  readonly runtimeSecurityConsumptionReceipt?: ContainedTurnConsumedGrantReceipt<"runtime_security">;
   readonly runtimeSecurityGrantRequestId: string | null;
 }
 
@@ -63,11 +66,13 @@ export const containedTurnCleanupPermit = (
     operationId: preparation.operationId,
     preparationToken: preparation.preparationToken,
     preparedOperationRevision: preparation.preparedOperationRevision,
+    providerAccessConsumptionReceipt: preparation.providerAccessConsumptionReceipt ?? null,
     providerAccessGrantRequestId: preparation.providerAccessGrantRequestId,
     purpose: "contained_turn_preparation_cleanup_v1",
+    runtimeSecurityConsumptionReceipt: preparation.runtimeSecurityConsumptionReceipt ?? null,
     runtimeSecurityGrantRequestId: preparation.runtimeSecurityGrantRequestId,
     workspaceId: preparation.workspaceId,
-  });
+  } as never);
   return Object.freeze({
     attemptId: preparation.attemptId,
     custodyId: preparation.custodyId,
@@ -91,7 +96,9 @@ export const claimContainedTurnDispatchPreparation = (
 };
 
 export interface ContainedTurnConsumedGrantRequestIds {
+  readonly providerAccessConsumptionReceipt?: ContainedTurnConsumedGrantReceipt<"provider_access">;
   readonly providerAccessGrantRequestId?: string;
+  readonly runtimeSecurityConsumptionReceipt?: ContainedTurnConsumedGrantReceipt<"runtime_security">;
   readonly runtimeSecurityGrantRequestId?: string;
 }
 
@@ -109,9 +116,9 @@ export const bindContainedTurnPreparationGrantRequests = (
     throw new TypeError("only an active dispatch preparation can bind consumed grants");
   }
   const providerAccessGrantRequestId =
-    consumedGrantRequestIds.providerAccessGrantRequestId ?? preparation.providerAccessGrantRequestId;
+    consumedGrantRequestIds.providerAccessConsumptionReceipt?.grantRequestId ?? consumedGrantRequestIds.providerAccessGrantRequestId ?? preparation.providerAccessGrantRequestId;
   const runtimeSecurityGrantRequestId =
-    consumedGrantRequestIds.runtimeSecurityGrantRequestId ?? preparation.runtimeSecurityGrantRequestId;
+    consumedGrantRequestIds.runtimeSecurityConsumptionReceipt?.grantRequestId ?? consumedGrantRequestIds.runtimeSecurityGrantRequestId ?? preparation.runtimeSecurityGrantRequestId;
   validateGrantRequestId("Provider Access", providerAccessGrantRequestId);
   validateGrantRequestId("Runtime Security", runtimeSecurityGrantRequestId);
   if (preparation.providerAccessGrantRequestId !== null &&
@@ -124,7 +131,9 @@ export const bindContainedTurnPreparationGrantRequests = (
   }
   return Object.freeze({
     ...preparation,
+    ...(consumedGrantRequestIds.providerAccessConsumptionReceipt === undefined ? {} : { providerAccessConsumptionReceipt: consumedGrantRequestIds.providerAccessConsumptionReceipt }),
     providerAccessGrantRequestId,
+    ...(consumedGrantRequestIds.runtimeSecurityConsumptionReceipt === undefined ? {} : { runtimeSecurityConsumptionReceipt: consumedGrantRequestIds.runtimeSecurityConsumptionReceipt }),
     runtimeSecurityGrantRequestId,
   });
 };
@@ -132,10 +141,7 @@ export const bindContainedTurnPreparationGrantRequests = (
 export const retireContainedTurnDispatchPreparation = (
   preparation: ContainedTurnDispatchPreparation,
   nonce: string,
-  consumedGrantRequestIds: Readonly<{
-    providerAccessGrantRequestId?: string;
-    runtimeSecurityGrantRequestId?: string;
-  }> = {},
+  consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds = {},
   consumptionEvidenceIds: ContainedTurnGrantConsumptionEvidenceIds = {},
 ): ContainedTurnDispatchPreparation => {
   if (preparation.kind === "claimed") {
@@ -243,8 +249,10 @@ export const recordContainedTurnPreparationCleanup = (
       operationId: preparation.operationId,
       preparationToken: preparation.preparationToken,
       preparedOperationRevision: preparation.preparedOperationRevision,
+      ...(preparation.providerAccessConsumptionReceipt === undefined ? {} : { providerAccessConsumptionReceipt: preparation.providerAccessConsumptionReceipt }),
       providerAccessConsumptionEvidenceId: preparation.providerAccessConsumptionEvidenceId,
       providerAccessGrantRequestId: preparation.providerAccessGrantRequestId,
+      ...(preparation.runtimeSecurityConsumptionReceipt === undefined ? {} : { runtimeSecurityConsumptionReceipt: preparation.runtimeSecurityConsumptionReceipt }),
       runtimeSecurityConsumptionEvidenceId: preparation.runtimeSecurityConsumptionEvidenceId,
       runtimeSecurityGrantRequestId: preparation.runtimeSecurityGrantRequestId,
       workspaceId: preparation.workspaceId,

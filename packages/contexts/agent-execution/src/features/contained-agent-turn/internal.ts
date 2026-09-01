@@ -24,7 +24,10 @@ export {
   type PostgresContainedTurnOperationStoreOptions,
 } from "./adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
 export type { ContainedTurnProviderAccessPort } from "./application/ports/outbound/contained-turn-ports.js";
-export { recoverContainedTurnDispatchPreparations } from "./application/contained-turn-preparation-recovery.js";
+export {
+  recoverContainedTurnCommittedGrantSettlements,
+  recoverContainedTurnDispatchPreparations,
+} from "./application/contained-turn-preparation-recovery.js";
 export {
   createContainedTurnFeature,
   type ContainedTurnFeatureDependencies,
@@ -33,6 +36,10 @@ export {
   createContainedTurnProviderAccessPort,
   type OuterContainedTurnProviderAccess,
 } from "./composition/provider-access-anti-corruption.js";
+export {
+  createContainedTurnRuntimeSecurityPort,
+  type OuterContainedTurnRuntimeSecurityAuthority,
+} from "./composition/runtime-security-anti-corruption.js";
 export {
   createCodexCurrentKernelOwner,
   type CodexCurrentKernelLaunchRecord,

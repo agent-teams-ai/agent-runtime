@@ -118,6 +118,7 @@ export const mutateContainedTurnOperation = (
           attemptId: mutation.attemptId,
           claimProofId: mutation.claimProof.proofId,
           executionGenerationId: mutation.executionGenerationId,
+          grantReceipts: mutation.consumedGrantReceipts,
           kind: "claimed",
           operationCutoffRevision: operation.operationCutoff.revision,
           preparationToken: mutation.preparationToken,

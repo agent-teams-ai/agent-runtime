@@ -28,6 +28,14 @@ const PREPARATION_IDENTITY_KEYS = Object.freeze([
   "attemptId", "custodyId", "operationCutoffRevision", "operationId", "preparationToken",
   "preparedOperationRevision", "providerAccessGrantRequestId", "runtimeSecurityGrantRequestId", "workspaceId",
 ]);
+const preparationIdentityKeys = (preparation: ContainedTurnDispatchPreparation): readonly string[] => {
+  const descriptors = Object.getOwnPropertyDescriptors(preparation);
+  return Object.freeze([
+    ...PREPARATION_IDENTITY_KEYS,
+    ...(descriptors.providerAccessConsumptionReceipt === undefined ? [] : ["providerAccessConsumptionReceipt"]),
+    ...(descriptors.runtimeSecurityConsumptionReceipt === undefined ? [] : ["runtimeSecurityConsumptionReceipt"]),
+  ]);
+};
 
 const requireOrdinaryRecord = (name: string, value: object, keys: readonly string[]): void => {
   assertContainedTurnExactRecord(name, value, keys);
@@ -110,7 +118,9 @@ const preparationBase = (
     operationId: descriptors.operationId?.value as ContainedTurnDispatchPreparation["operationId"],
     preparationToken: descriptors.preparationToken?.value as ContainedTurnDispatchPreparation["preparationToken"],
     preparedOperationRevision: descriptors.preparedOperationRevision?.value as ContainedTurnDispatchPreparation["preparedOperationRevision"],
+    ...(descriptors.providerAccessConsumptionReceipt === undefined ? {} : { providerAccessConsumptionReceipt: detachAndFreezeContainedTurnValue(descriptors.providerAccessConsumptionReceipt.value) }),
     providerAccessGrantRequestId: descriptors.providerAccessGrantRequestId?.value as string | null,
+    ...(descriptors.runtimeSecurityConsumptionReceipt === undefined ? {} : { runtimeSecurityConsumptionReceipt: detachAndFreezeContainedTurnValue(descriptors.runtimeSecurityConsumptionReceipt.value) }),
     runtimeSecurityGrantRequestId: descriptors.runtimeSecurityGrantRequestId?.value as string | null,
     workspaceId: descriptors.workspaceId?.value as ContainedTurnDispatchPreparation["workspaceId"],
   };
@@ -122,7 +132,7 @@ const snapshotSimplePreparation = (
   preparation: ContainedTurnDispatchPreparation,
   kind: "active" | "claimed",
 ): ContainedTurnDispatchPreparation => {
-  requireOrdinaryRecord("dispatch preparation", preparation, [...PREPARATION_IDENTITY_KEYS, "kind"]);
+  requireOrdinaryRecord("dispatch preparation", preparation, [...preparationIdentityKeys(preparation), "kind"]);
   return Object.freeze({ ...preparationBase(preparation), kind });
 };
 
@@ -130,7 +140,7 @@ const snapshotCleanupPendingPreparation = (
   preparation: ContainedTurnDispatchPreparation,
 ): ContainedTurnDispatchPreparation => {
   requireOrdinaryRecord("dispatch preparation", preparation, [
-    ...PREPARATION_IDENTITY_KEYS, "cleanupEvidenceIds", "cleanupPermit", "custodyReleased", "kind",
+    ...preparationIdentityKeys(preparation), "cleanupEvidenceIds", "cleanupPermit", "custodyReleased", "kind",
     "providerAccessConsumptionEvidenceId", "providerAccessSettled",
     "runtimeSecurityConsumptionEvidenceId", "runtimeSecuritySettled",
   ]);
@@ -183,7 +193,7 @@ const snapshotCleanupClosedPreparation = (
   preparation: ContainedTurnDispatchPreparation,
 ): ContainedTurnDispatchPreparation => {
   requireOrdinaryRecord("dispatch preparation", preparation, [
-    ...PREPARATION_IDENTITY_KEYS, "cleanupEvidenceIds", "cleanupPermitId", "kind",
+    ...preparationIdentityKeys(preparation), "cleanupEvidenceIds", "cleanupPermitId", "kind",
     "providerAccessConsumptionEvidenceId", "runtimeSecurityConsumptionEvidenceId",
   ]);
   const closed = preparation as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_closed" }>;

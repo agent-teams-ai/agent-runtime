@@ -1,4 +1,5 @@
 import type { ContainedTurnCancellationCommand } from "./contained-turn-authority.js";
+import type { ContainedTurnConsumedGrantReceipts } from "./contained-turn-dispatch-authority.js";
 import type {
   ContainedTurnClosureRecovery,
   ContainedTurnClosureStage,
@@ -32,6 +33,7 @@ export type ContainedTurnKernelMutation =
     readonly attemptId: ContainedTurnAttemptId; readonly custodyId: ContainedTurnCustodyId;
     readonly claimProof: Extract<ContainedTurnProof, { readonly kind: "dispatch_claim" }>;
     readonly cutoffProof: Extract<ContainedTurnProof, { readonly kind: "cutoff" }>;
+    readonly consumedGrantReceipts: ContainedTurnConsumedGrantReceipts;
     readonly executionGenerationId: ContainedTurnExecutionGenerationId; readonly hostBootId: ContainedTurnHostBootId;
     readonly hostCustodyProof: Extract<ContainedTurnProof, { readonly kind: "host_custody" }>; readonly hostInstanceId: ContainedTurnHostInstanceId;
     readonly kind: "claim_dispatch";
@@ -86,7 +88,7 @@ export const validateContainedTurnKernelMutationShape = (mutation: ContainedTurn
     complete_artifact_seal: ["artifactManifestRef", "artifactProof", "kind", "request", "resultProof", "resultRef"],
     complete_workspace_close: ["kind", "proof", "request"],
     complete_containment_attestation: ["kind", "proof", "request"],
-    claim_dispatch: ["attemptId", "claimProof", "custodyId", "cutoffProof", "executionGenerationId", "hostBootId", "hostCustodyProof", "hostInstanceId", "kind", "preparationToken", "providerAccessDispatchProof", "runtimeSecurityDispatchProof", "writerFence"],
+    claim_dispatch: ["attemptId", "consumedGrantReceipts", "claimProof", "custodyId", "cutoffProof", "executionGenerationId", "hostBootId", "hostCustodyProof", "hostInstanceId", "kind", "preparationToken", "providerAccessDispatchProof", "runtimeSecurityDispatchProof", "writerFence"],
     close_process_no_start: ["containmentProof", "effectProof", "executionProof", "kind", "outputProof", "providerProof"],
     close_provider_execution: ["executionProof", "kind", "terminalObservationProof"],
     close_workspace: ["kind", "proof"],

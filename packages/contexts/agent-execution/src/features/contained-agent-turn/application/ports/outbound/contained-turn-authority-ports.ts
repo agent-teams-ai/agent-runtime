@@ -7,21 +7,20 @@ import type {
 import type { ContainedTurnCanonicalDigest } from "../../../domain/contained-turn-codecs.js";
 import type {
   ContainedTurnConsumedGrantReceipt,
+  ContainedTurnDispatchGrantOwner,
   ContainedTurnDispatchGrantSubject,
 } from "../../../domain/contained-turn-dispatch-authority.js";
-import type { ContainedTurnCleanupPermit } from "../../../domain/contained-turn-dispatch-preparation.js";
 import type {
   ContainedTurnEvidenceId,
   ContainedTurnOperationId,
   ContainedTurnProofId,
 } from "../../../domain/contained-turn-identities.js";
 
-export type SettleContainedTurnConsumedGrantInput = Readonly<{
-  cleanupPermit: ContainedTurnCleanupPermit;
-} & (
-  | { readonly grantRequestId: string; readonly consumptionEvidenceId?: never }
-  | { readonly consumptionEvidenceId: ContainedTurnEvidenceId; readonly grantRequestId?: never }
-)>;
+export type SettleContainedTurnConsumedGrantInput<Owner extends ContainedTurnDispatchGrantOwner> = Readonly<{
+  disposition: "abandoned_without_claim" | "claim_committed";
+  receipt: ContainedTurnConsumedGrantReceipt<Owner>;
+  settlementRequestId: string;
+}>;
 
 export type ResolveContainedTurnProviderAccessOutcome =
   | {
@@ -65,7 +64,7 @@ export interface ContainedTurnProviderAccessPort {
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
-  settleConsumedGrant(input: SettleContainedTurnConsumedGrantInput): Promise<
+  settleConsumedGrant(input: SettleContainedTurnConsumedGrantInput<"provider_access">): Promise<
     | { readonly kind: "settled" }
     | { readonly kind: "already_settled" }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
@@ -88,7 +87,7 @@ export interface ContainedTurnKernelSecurityPort {
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
-  settleConsumedGrant(input: SettleContainedTurnConsumedGrantInput): Promise<
+  settleConsumedGrant(input: SettleContainedTurnConsumedGrantInput<"runtime_security">): Promise<
     | { readonly kind: "settled" }
     | { readonly kind: "already_settled" }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }

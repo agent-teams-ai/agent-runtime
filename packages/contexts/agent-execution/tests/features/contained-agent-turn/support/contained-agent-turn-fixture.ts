@@ -214,7 +214,9 @@ const createDependencies = (options: Readonly<{
         return { current, kind: "stale" };
       }
       preparation = bindContainedTurnPreparationGrantRequests(preparation, {
+        providerAccessConsumptionReceipt: receipts[0],
         providerAccessGrantRequestId: receipts[0].grantRequestId,
+        runtimeSecurityConsumptionReceipt: receipts[1],
         runtimeSecurityGrantRequestId: receipts[1].grantRequestId,
       });
       preparations.set(preparation.preparationToken, preparation);
@@ -276,6 +278,7 @@ const createDependencies = (options: Readonly<{
         executionGenerationId: subject.executionGenerationId,
         hostBootId: subject.hostBootId,
         hostCustodyProof: input.hostCustodyProof,
+        consumedGrantReceipts: input.consumedGrantReceipts,
         hostInstanceId: subject.hostInstanceId,
         kind: "claim_dispatch",
         preparationToken: subject.preparationToken,
@@ -474,12 +477,15 @@ const createDependencies = (options: Readonly<{
       consumeForDispatch: async ({ subject }) => ({
         kind: "consumed",
         receipt: {
-          claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
-          grantRequestDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", request: "one" }),
-          grantRequestId: `grant-request:${digestContainedTurnCanonicalValue({ owner: "runtime_security", request: "one" })}`,
-          owner: "runtime_security",
-          ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", authority: "one" }),
-          ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner: "runtime_security", receipt: "one" }),
+          authorityFacts: subject.runtimeSecurityExpectation, claimBeforeControlTime: 100,
+          claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject), consumedAtControlTime: 50,
+          consumptionDigest: "runtime-security-consumption:one",
+          grantRequestDigest: subject.runtimeSecurityRequest.grantRequestId.slice("grant-request:".length) as never,
+          grantRequestId: subject.runtimeSecurityRequest.grantRequestId, operationId: subject.operationId,
+          owner: "runtime_security", ownerEvidenceRef: "runtime-security-evidence:v1:one",
+          provider: subject.provider, purpose: "contained-turn.provider-dispatch/v1",
+          requestDigest: subject.runtimeSecurityRequest.requestDigest,
+          scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
           validThroughOperationCutoffRevision: subject.operationCutoffRevision,
         },
       }),
@@ -501,12 +507,15 @@ const createDependencies = (options: Readonly<{
           : ({
             kind: "consumed" as const,
             receipt: {
-              claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
-              grantRequestDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", request: "one" }),
-              grantRequestId: `grant-request:${digestContainedTurnCanonicalValue({ owner: "provider_access", request: "one" })}`,
-              owner: "provider_access" as const,
-              ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", authority: "one" }),
-              ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner: "provider_access", receipt: "one" }),
+              authorityFacts: subject.providerAccessExpectation, claimBeforeControlTime: 100,
+              claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject), consumedAtControlTime: 50,
+              consumptionDigest: "provider-access-consumption:one",
+              grantRequestDigest: subject.providerAccessRequest.grantRequestId.slice("grant-request:".length) as never,
+              grantRequestId: subject.providerAccessRequest.grantRequestId, operationId: subject.operationId,
+              owner: "provider_access" as const, ownerEvidenceRef: "provider-access-evidence:v1:one",
+              provider: subject.provider, purpose: "contained-turn.provider-dispatch/v1" as const,
+              requestDigest: subject.providerAccessRequest.requestDigest,
+              scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
               validThroughOperationCutoffRevision: subject.operationCutoffRevision,
             },
           }),

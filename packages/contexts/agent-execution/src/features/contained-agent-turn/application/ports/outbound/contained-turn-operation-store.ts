@@ -7,6 +7,7 @@ import type {
   ContainedTurnCommandFingerprint,
 } from "../../../domain/contained-turn-codecs.js";
 import type {
+  ContainedTurnConsumedGrantReceipt,
   ContainedTurnConsumedGrantReceipts,
   ContainedTurnDispatchGrantSubject,
 } from "../../../domain/contained-turn-dispatch-authority.js";
@@ -82,7 +83,9 @@ export interface ContainedTurnKernelOperationStore {
   retireDispatchPreparation(input: Readonly<{
     authority: ContainedTurnOwnerStoreAuthority;
     consumedGrantRequestIds?: Readonly<{
+      providerAccessConsumptionReceipt?: ContainedTurnConsumedGrantReceipt<"provider_access">;
       providerAccessGrantRequestId?: string;
+      runtimeSecurityConsumptionReceipt?: ContainedTurnConsumedGrantReceipt<"runtime_security">;
       runtimeSecurityGrantRequestId?: string;
     }>;
     consumptionEvidenceIds?: Readonly<{

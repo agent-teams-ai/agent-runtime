@@ -1,46 +1,33 @@
-import { digestContainedTurnCanonicalValue, parseContainedTurnCanonicalDigest } from "../domain/contained-turn-codecs.js";
-import { containedTurnDispatchClaimBindingDigest, type ContainedTurnConsumedGrantReceipt, type ContainedTurnDispatchGrantOwner, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
-import type { ContainedTurnOperationCutoffRevision } from "../domain/contained-turn-output-authority.js";
+import { parseContainedTurnCanonicalDigest } from "../domain/contained-turn-codecs.js";
+import type {
+  ContainedTurnConsumedGrantReceipt,
+  ContainedTurnDispatchGrantOwner,
+  ContainedTurnDispatchGrantSubject,
+} from "../domain/contained-turn-dispatch-authority.js";
+import { detachAndFreezeContainedTurnValue } from "../domain/contained-turn-record.js";
 
-export interface OuterContainedTurnConsumedGrantReceipt {
-  readonly grantRequestRef: string;
-  readonly ownerAuthorityRef: string;
-  readonly ownerReceiptRef: string;
-  readonly validThroughOperationCutoffRevision: ContainedTurnOperationCutoffRevision;
-}
+export type OuterContainedTurnConsumedGrantReceipt<Owner extends ContainedTurnDispatchGrantOwner> = Omit<
+  ContainedTurnConsumedGrantReceipt<Owner>,
+  "grantRequestDigest" | "owner" | "validThroughOperationCutoffRevision"
+>;
 
-const opaqueGrantFieldDigest = (
-  owner: ContainedTurnDispatchGrantOwner,
-  field: "authority" | "request" | "receipt",
-  ref: string,
-) => digestContainedTurnCanonicalValue({ field, owner, ref });
-
-/** Maps either owner's published receipt without importing its domain model. */
+/** Explicit ACL projection. Every owner fact remains inspectable and is verified at the local CAS. */
 export const normalizeContainedTurnConsumedGrantReceipt = <Owner extends ContainedTurnDispatchGrantOwner>(
   owner: Owner,
   subject: ContainedTurnDispatchGrantSubject,
-  outer: OuterContainedTurnConsumedGrantReceipt,
-  expectedGrantRequestId?: string,
+  outer: OuterContainedTurnConsumedGrantReceipt<Owner>,
 ): ContainedTurnConsumedGrantReceipt<Owner> => {
-  let grantRequestDigest = opaqueGrantFieldDigest(owner, "request", outer.grantRequestRef);
-  let grantRequestId = `grant-request:${grantRequestDigest}`;
-  if (expectedGrantRequestId !== undefined) {
-    if (outer.grantRequestRef !== expectedGrantRequestId ||
-        !expectedGrantRequestId.startsWith("grant-request:")) {
-      throw new TypeError(`${owner} consumed receipt substituted the grant request identity`);
-    }
-    grantRequestDigest = parseContainedTurnCanonicalDigest(
-      expectedGrantRequestId.slice("grant-request:".length),
-    );
-    grantRequestId = expectedGrantRequestId;
+  const request = owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
+  if (outer.grantRequestId !== request.grantRequestId || !outer.grantRequestId.startsWith("grant-request:")) {
+    throw new TypeError(`${owner} consumed receipt substituted the grant request identity`);
   }
-  return Object.freeze({
-    claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
+  const grantRequestDigest = parseContainedTurnCanonicalDigest(
+    outer.grantRequestId.slice("grant-request:".length),
+  );
+  return detachAndFreezeContainedTurnValue({
+    ...outer,
     grantRequestDigest,
-    grantRequestId,
     owner,
-    ownerAuthorityDigest: opaqueGrantFieldDigest(owner, "authority", outer.ownerAuthorityRef),
-    ownerReceiptDigest: opaqueGrantFieldDigest(owner, "receipt", outer.ownerReceiptRef),
-    validThroughOperationCutoffRevision: outer.validThroughOperationCutoffRevision,
+    validThroughOperationCutoffRevision: subject.operationCutoffRevision,
   });
 };

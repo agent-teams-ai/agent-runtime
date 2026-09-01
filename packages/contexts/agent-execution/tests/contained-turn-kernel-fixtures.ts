@@ -229,6 +229,7 @@ export const createReservedOperation = (): ContainedTurnKernelOperation => {
   };
   return mutateContainedTurnOperation(operation, {
     attemptId,
+    consumedGrantReceipts: Object.freeze([]) as never,
     claimProof: claimProof as Extract<ContainedTurnProof, { kind: "dispatch_claim" }>,
     custodyId,
     cutoffProof: cutoffProof as Extract<ContainedTurnProof, { kind: "cutoff" }>,

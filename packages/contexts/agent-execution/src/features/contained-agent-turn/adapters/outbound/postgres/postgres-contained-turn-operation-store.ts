@@ -472,7 +472,9 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       const providerAccessReceipt = consumedReceipts[0];
       const runtimeSecurityReceipt = consumedReceipts[1];
       const bound = bindContainedTurnPreparationGrantRequests(preparation, {
+        providerAccessConsumptionReceipt: providerAccessReceipt,
         providerAccessGrantRequestId: providerAccessReceipt.grantRequestId,
+        runtimeSecurityConsumptionReceipt: runtimeSecurityReceipt,
         runtimeSecurityGrantRequestId: runtimeSecurityReceipt.grantRequestId,
       });
       const encodedBound = encodeContainedTurnPreparation(bound);
@@ -483,19 +485,19 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       );
       if (current.revision !== input.expectedOperationRevision) {return { current, kind: "stale" as const };}
       const providerAccessProof: Extract<ContainedTurnProof, { kind: "provider_access_dispatch" }> = {
-        binding: { ...operationBinding(current), acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(current.providerAccessSnapshot), resolutionDigest: providerAccessReceipt.ownerReceiptDigest },
-        kind: "provider_access_dispatch", proofId: containedTurnIdentity("proof", `proof:provider-access-grant:${providerAccessReceipt.ownerReceiptDigest}`),
+        binding: { ...operationBinding(current), acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(current.providerAccessSnapshot), resolutionDigest: digestContainedTurnCanonicalValue(providerAccessReceipt as never) },
+        kind: "provider_access_dispatch", proofId: containedTurnIdentity("proof", `proof:provider-access-grant:${digestContainedTurnCanonicalValue(providerAccessReceipt as never)}`),
       };
       const runtimeSecurityProof: Extract<ContainedTurnProof, { kind: "runtime_security_dispatch" }> = {
-        binding: { ...operationBinding(current), acceptedSecurityDecisionDigest: current.acceptedAuthorityVector.securityDecisionDigest, currentSecurityDecisionDigest: runtimeSecurityReceipt.ownerReceiptDigest, securityAuthorityRevision: current.acceptedAuthorityVector.securityAuthorityRevision },
-        kind: "runtime_security_dispatch", proofId: containedTurnIdentity("proof", `proof:runtime-security-grant:${runtimeSecurityReceipt.ownerReceiptDigest}`),
+        binding: { ...operationBinding(current), acceptedSecurityDecisionDigest: current.acceptedAuthorityVector.securityDecisionDigest, currentSecurityDecisionDigest: digestContainedTurnCanonicalValue(runtimeSecurityReceipt as never), securityAuthorityRevision: current.acceptedAuthorityVector.securityAuthorityRevision },
+        kind: "runtime_security_dispatch", proofId: containedTurnIdentity("proof", `proof:runtime-security-grant:${digestContainedTurnCanonicalValue(runtimeSecurityReceipt as never)}`),
       };
       const claimProof: Extract<ContainedTurnProof, { kind: "dispatch_claim" }> = {
         binding: { ...operationBinding(current), attemptId: input.subject.attemptId, effectId: current.effectId, preparationToken: input.subject.preparationToken, providerAccessDispatchProofId: providerAccessProof.proofId, runtimeSecurityDispatchProofId: runtimeSecurityProof.proofId },
         kind: "dispatch_claim", proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `claim:${claimSeed}:dispatch`)),
       };
       const next = mutateContainedTurnOperation(current, {
-        attemptId: input.subject.attemptId, claimProof, custodyId: input.subject.custodyId,
+        attemptId: input.subject.attemptId, consumedGrantReceipts: consumedReceipts, claimProof, custodyId: input.subject.custodyId,
         cutoffProof: { binding: operationBinding(current), kind: "cutoff", proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `claim:${claimSeed}:cutoff`)) },
         executionGenerationId: input.subject.executionGenerationId, hostBootId: input.subject.hostBootId,
         hostCustodyProof: input.hostCustodyProof, hostInstanceId: input.subject.hostInstanceId, kind: "claim_dispatch",

@@ -5,7 +5,9 @@ import test from "node:test";
 import { createContainedTurnProviderAccessPort } from "../dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
+  completeContainedTurnDispatchGrantSubject,
   containedTurnDispatchGrantRequestId,
+  containedTurnGrantSettlementRequestId,
 } from "../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import { containedTurnIdentity } from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 
@@ -82,64 +84,60 @@ test("Provider Access ACL maps owner rejection evidence without exposing owner r
   }
 });
 
-test("Provider Access ambiguous consumption and settlement share the owner-known request key", async () => {
-  const subject = Object.freeze({
+test("Provider Access ambiguous consumption is observed once and settled without a second consumption", async () => {
+  const scopeDigest = digestContainedTurnCanonicalValue({ scope });
+  const subject = completeContainedTurnDispatchGrantSubject({
     attemptId: containedTurnIdentity("attempt", "attempt:provider-access-correlation"),
     custodyId: containedTurnIdentity("custody", "custody:provider-access-correlation"),
     effectId: containedTurnIdentity("effect", "effect:provider-access-correlation"),
-    executionGenerationId: containedTurnIdentity(
-      "execution_generation", "execution-generation:provider-access-correlation",
-    ),
+    executionGenerationId: containedTurnIdentity("execution_generation", "execution-generation:provider-access-correlation"),
     hostBootId: containedTurnIdentity("host_boot", "host-boot:provider-access-correlation"),
-    hostInstanceId: containedTurnIdentity(
-      "host_instance", "host-instance:provider-access-correlation",
-    ),
-    operationCutoffRevision: 0,
-    operationId: containedTurnIdentity("operation", "operation:provider-access-correlation"),
-    preparationToken: containedTurnIdentity(
-      "preparation", "preparation:provider-access-correlation",
-    ),
-    purpose: "contained_turn_provider_start_v1" as const,
-    scopeDigest: digestContainedTurnCanonicalValue({ scope }),
-    workspaceId: containedTurnIdentity("workspace", "workspace:provider-access-correlation"),
+    hostInstanceId: containedTurnIdentity("host_instance", "host-instance:provider-access-correlation"),
+    operationCutoffRevision: 0, operationId: containedTurnIdentity("operation", "operation:provider-access-correlation"),
+    preparationToken: containedTurnIdentity("preparation", "preparation:provider-access-correlation"),
+    provider: "codex",
+    providerAccessExpectation: {
+      acceptedAuthorityDigest: "accepted-authority:one", accessRef: binding.accessRef, authorityHeadDigest: "authority-head:one",
+      bindingDigest: "binding-digest:one", bindingRevision: binding.revision, credentialBindingDigest: "credential-digest:one",
+      credentialBindingRef: binding.credentialBindingRef, credentialGeneration: binding.credentialGeneration,
+      providerAccountRef: binding.providerAccountRef, providerRouteRef: binding.providerRouteRef,
+    },
+    purpose: "contained_turn_provider_start_v1",
+    runtimeSecurityExpectation: {
+      acceptedAuthorityDigest: "security-accepted:one", authorityGeneration: "security-generation:one",
+      authorityHeadDigest: "security-head:one", authorityRevision: "security-revision:one",
+      constraintsDigest: "constraints:one", containmentPolicyDigest: "containment:one",
+      providerBindingDigest: "provider-binding:one", providerId: "codex",
+    },
+    scope, scopeDigest, workspaceId: containedTurnIdentity("workspace", "workspace:provider-access-correlation"),
   });
-  const grantRequestId = containedTurnDispatchGrantRequestId("provider_access", subject);
-  const ownerRequests: string[] = [];
+  const calls: string[] = [];
+  const ownerReceipt = {
+    ...subject.providerAccessExpectation, authorityHeadDigestAtConsumption: subject.providerAccessExpectation.authorityHeadDigest,
+    claimBeforeControlTime: 100, claimBindingDigest: subject.providerAccessRequest.claimBindingDigest,
+    consumedAtControlTime: 50, consumptionDigest: "provider-consumption:one",
+    grantRequestId: subject.providerAccessRequest.grantRequestId, opaqueOwnerEvidenceRef: "provider-evidence:one",
+    operationId: subject.operationId, provider: subject.provider, purpose: "contained-turn.provider-dispatch/v1" as const,
+    requestDigest: subject.providerAccessRequest.requestDigest, scope: { ...scope, scopeDigest },
+  };
   const port = createContainedTurnProviderAccessPort({
-    consumeDispatchGrant: { async execute(input) {
-      ownerRequests.push(input.grantRequestId);
-      return { evidenceRef: "pa-17", kind: "indeterminate" as const };
-    } },
+    dispatchConsumptionV1: {
+      async consumeForDispatch() {calls.push("consume"); return { kind: "indeterminate" as const };},
+      async observeDispatchConsumption() {calls.push("observe"); return { kind: "consumed" as const, receipt: ownerReceipt };},
+      async settleDispatchConsumption(input) {calls.push(`settle:${input.disposition}`); return { kind: "settled" as const, receipt: {} };},
+    },
     resolve: { async execute() {throw new Error("unused resolve");} },
     revalidate: { async execute() {throw new Error("unused revalidate");} },
-    settleDispatchGrant: { async execute(input) {
-      ownerRequests.push(input.grantRequestId);
-      return { kind: "settled" as const };
-    } },
   });
-
-  const ambiguous = await port.consumeForDispatch({ grantRequestId, subject });
-  assert.equal(ambiguous.kind, "indeterminate");
-  if (ambiguous.kind === "indeterminate") {
-    assert.notEqual(ambiguous.evidenceId, "pa-17");
-    assert.match(ambiguous.evidenceId, /^evidence:provider-access:grant:sha256:[0-9a-f]{64}$/u);
-  }
-  const permitDigest = digestContainedTurnCanonicalValue({ grantRequestId, purpose: "cleanup" });
+  const consumed = await port.consumeForDispatch({ grantRequestId: subject.providerAccessRequest.grantRequestId, subject });
+  assert.equal(consumed.kind, "consumed");
+  if (consumed.kind !== "consumed") {return;}
+  assert.deepEqual(consumed.receipt.authorityFacts, subject.providerAccessExpectation);
   assert.deepEqual(await port.settleConsumedGrant({
-    cleanupPermit: {
-      attemptId: subject.attemptId,
-      custodyId: subject.custodyId,
-      operationCutoffRevision: subject.operationCutoffRevision,
-      operationId: subject.operationId,
-      permitDigest,
-      permitId: containedTurnIdentity("cleanup_permit", `cleanup-permit:${permitDigest}`),
-      preparationToken: subject.preparationToken,
-      preparedOperationRevision: 1,
-      workspaceId: subject.workspaceId,
-    },
-    grantRequestId,
+    disposition: "claim_committed", receipt: consumed.receipt,
+    settlementRequestId: containedTurnGrantSettlementRequestId(consumed.receipt, "claim_committed"),
   }), { kind: "settled" });
-  assert.deepEqual(ownerRequests, [grantRequestId, grantRequestId]);
+  assert.deepEqual(calls, ["consume", "observe", "settle:claim_committed"]);
 });
 
 test("production exports expose one kernel authority and isolate only non-authoritative legacy adapters", async () => {

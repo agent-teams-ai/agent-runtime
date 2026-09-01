@@ -1,8 +1,10 @@
-import { containedTurnScopeDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import {
+  completeContainedTurnDispatchGrantSubject,
   containedTurnDispatchClaimBindingDigest,
   containedTurnDispatchGrantRequestId,
+  containedTurnGrantSettlementRequestId,
   validateContainedTurnConsumedGrantReceipts,
   type ContainedTurnDispatchGrantSubject,
 } from "../domain/contained-turn-dispatch-authority.js";
@@ -16,7 +18,9 @@ import { recordContainedTurnRejectedDebt } from "./contained-turn-closure.js";
 import type { ContainedTurnKernelDependencies } from "./ports/outbound/contained-turn-ports.js";
 
 type ConsumedGrantRequestIds = Readonly<{
+  providerAccessConsumptionReceipt?: import("../domain/contained-turn-dispatch-authority.js").ContainedTurnConsumedGrantReceipt<"provider_access">;
   providerAccessGrantRequestId?: string;
+  runtimeSecurityConsumptionReceipt?: import("../domain/contained-turn-dispatch-authority.js").ContainedTurnConsumedGrantReceipt<"runtime_security">;
   runtimeSecurityGrantRequestId?: string;
 }>;
 
@@ -26,6 +30,10 @@ type ConsumptionEvidenceIds = Readonly<{
 }>;
 
 type UnclaimedGrantOutcomeEvidence = Readonly<{
+  consumedGrantReceipts: Readonly<{
+    providerAccess?: import("../domain/contained-turn-dispatch-authority.js").ContainedTurnConsumedGrantReceipt<"provider_access">;
+    runtimeSecurity?: import("../domain/contained-turn-dispatch-authority.js").ContainedTurnConsumedGrantReceipt<"runtime_security">;
+  }>;
   consumedGrantRequestIds: ConsumedGrantRequestIds;
   consumptionEvidenceIds: ConsumptionEvidenceIds;
 }>;
@@ -48,6 +56,23 @@ export type ClaimContainedTurnWithConsumedGrantsOutcome =
   | (UnclaimedGrantOutcomeEvidence & { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" })
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId })
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "unavailable" });
+
+const settleConsumedGrantReceipts = async (
+  dependencies: ContainedTurnKernelDependencies,
+  receipts: UnclaimedGrantOutcomeEvidence["consumedGrantReceipts"],
+  disposition: "abandoned_without_claim" | "claim_committed",
+): Promise<void> => {
+  const effects: Promise<unknown>[] = [];
+  if (receipts.providerAccess !== undefined) {effects.push(dependencies.providerAccess.settleConsumedGrant({
+    disposition, receipt: receipts.providerAccess,
+    settlementRequestId: containedTurnGrantSettlementRequestId(receipts.providerAccess, disposition),
+  }));}
+  if (receipts.runtimeSecurity !== undefined) {effects.push(dependencies.security.settleConsumedGrant({
+    disposition, receipt: receipts.runtimeSecurity,
+    settlementRequestId: containedTurnGrantSettlementRequestId(receipts.runtimeSecurity, disposition),
+  }));}
+  await Promise.allSettled(effects);
+};
 
 /**
  * Consumes one grant per owner and submits the exact pair to the final local
@@ -78,12 +103,12 @@ export const claimContainedTurnWithConsumedGrants = async (
     ? runtimeSecurityResult.value : undefined;
   const consumedGrantRequestIds: ConsumedGrantRequestIds = Object.freeze({
     ...(providerAccess?.kind === "consumed"
-      ? { providerAccessGrantRequestId: providerAccess.receipt.grantRequestId }
+      ? { providerAccessConsumptionReceipt: providerAccess.receipt, providerAccessGrantRequestId: providerAccess.receipt.grantRequestId }
       : providerAccessResult.status === "rejected" || providerAccess?.kind === "indeterminate"
         ? { providerAccessGrantRequestId }
         : {}),
     ...(runtimeSecurity?.kind === "consumed"
-      ? { runtimeSecurityGrantRequestId: runtimeSecurity.receipt.grantRequestId } : {}),
+      ? { runtimeSecurityConsumptionReceipt: runtimeSecurity.receipt, runtimeSecurityGrantRequestId: runtimeSecurity.receipt.grantRequestId } : {}),
   });
   const consumptionEvidenceIds: ConsumptionEvidenceIds = Object.freeze({
     ...(providerAccessResult.status === "rejected"
@@ -97,7 +122,11 @@ export const claimContainedTurnWithConsumedGrants = async (
         ? { runtimeSecurityEvidenceId: validateContainedTurnIdentity("evidence", runtimeSecurity.evidenceId) }
         : {}),
   });
-  const unclaimedEvidence = Object.freeze({ consumedGrantRequestIds, consumptionEvidenceIds });
+  const consumedGrantReceipts = Object.freeze({
+    ...(providerAccess?.kind === "consumed" ? { providerAccess: providerAccess.receipt } : {}),
+    ...(runtimeSecurity?.kind === "consumed" ? { runtimeSecurity: runtimeSecurity.receipt } : {}),
+  });
+  const unclaimedEvidence = Object.freeze({ consumedGrantReceipts, consumedGrantRequestIds, consumptionEvidenceIds });
   if (providerAccess === undefined || runtimeSecurity === undefined) {
     return { ...unclaimedEvidence, kind: "unavailable" };
   }
@@ -131,18 +160,21 @@ export const claimContainedTurnWithConsumedGrants = async (
         return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
       }
       if (outcome.kind === "claimed") {
+        await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed");
         return Object.freeze({
           kind: "claimed",
           operation: outcome.operation,
           startAuthority: outcome.startAuthority,
         });
       }
+      await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed");
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.operation });
     }
     if (outcome.kind === "stale") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
         return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
       }
+      await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed");
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.current });
     }
     if (outcome.kind === "indeterminate") {
@@ -176,20 +208,35 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
 }>): Promise<ClaimPreparedContainedTurnOutcome> => {
   const { custody, dependencies, operation, preparation, preparationToken, trustedScope } = input;
   if (operation.workspaceId === undefined) {return { kind: "stopped", operation };}
-  const subject: ContainedTurnDispatchGrantSubject = Object.freeze({
-    attemptId: preparation.attemptId,
-    custodyId: preparation.custodyId,
-    effectId: operation.effectId,
-    executionGenerationId: preparation.executionGenerationId,
-    hostBootId: custody.hostBootId,
-    hostInstanceId: custody.hostInstanceId,
-    operationCutoffRevision: operation.operationCutoff.revision,
-    operationId: operation.operationId,
-    preparationToken,
+  const providerAccess = operation.providerAccessSnapshot;
+  const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
+  const subject: ContainedTurnDispatchGrantSubject = completeContainedTurnDispatchGrantSubject(Object.freeze({
+    attemptId: preparation.attemptId, custodyId: preparation.custodyId, effectId: operation.effectId,
+    executionGenerationId: preparation.executionGenerationId, hostBootId: custody.hostBootId,
+    hostInstanceId: custody.hostInstanceId, operationCutoffRevision: operation.operationCutoff.revision,
+    operationId: operation.operationId, preparationToken, provider: operation.adapterSnapshot.provider,
+    providerAccessExpectation: Object.freeze({
+      acceptedAuthorityDigest: operation.acceptedAuthorityVectorDigest, accessRef: providerAccess.accessRef,
+      authorityHeadDigest: providerAccess.ownerAuthorityDigest, bindingDigest: providerBindingDigest,
+      bindingRevision: providerAccess.revision, credentialBindingDigest: providerAccess.credentialBindingDigest,
+      credentialBindingRef: providerAccess.credentialBindingRef, credentialGeneration: providerAccess.credentialGeneration,
+      providerAccountRef: providerAccess.providerAccountRef, providerRouteRef: providerAccess.providerRouteRef,
+    }),
     purpose: "contained_turn_provider_start_v1",
-    scopeDigest: containedTurnScopeDigest(trustedScope),
-    workspaceId: operation.workspaceId,
-  });
+    runtimeSecurityExpectation: Object.freeze({
+      acceptedAuthorityDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
+      authorityGeneration: operation.acceptedAuthorityVector.operationAuthorityRevision,
+      authorityHeadDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
+      authorityRevision: operation.acceptedAuthorityVector.securityAuthorityRevision,
+      constraintsDigest: digestContainedTurnCanonicalValue({
+        adapterSnapshot: operation.adapterSnapshot, capabilityManifest: operation.capabilityManifest,
+        intentMode: operation.intent.mode,
+      } as never),
+      containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
+      providerBindingDigest, providerId: operation.adapterSnapshot.provider,
+    }),
+    scope: trustedScope, scopeDigest: containedTurnScopeDigest(trustedScope), workspaceId: operation.workspaceId,
+  }));
   const claim = await claimContainedTurnWithConsumedGrants(
     dependencies, operation, trustedScope, subject, custody.hostCustodyProof,
   );
@@ -207,7 +254,10 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     claim.consumedGrantRequestIds,
     claim.consumptionEvidenceIds,
   );
-  if (cleanup.kind === "claimed") {return { kind: "observed", operation: cleanup.operation };}
+  if (cleanup.kind === "claimed") {
+    await settleConsumedGrantReceipts(dependencies, claim.consumedGrantReceipts, "claim_committed");
+    return { kind: "observed", operation: cleanup.operation };
+  }
   if (claim.kind === "prevented") {
     return { kind: "prevented", operation: cleanup.operation, preventionProofId: claim.preventionProofId };
   }
