@@ -188,7 +188,9 @@ test("product Host composition routes provider execution through the same custod
     let observation = await access.containedTurn.observe(accepted.operationId);
     for (let index = 0; index < 50 && observation.status === "observed" &&
       !["cancelled", "failed", "reconcile_required", "succeeded"].includes(observation.turn.status); index += 1) {
-      await new Promise(resolve => setTimeout(resolve, 1));
+      await new Promise(resolve => {
+        setTimeout(resolve, 1);
+      });
       observation = await access.containedTurn.observe(accepted.operationId);
     }
     assert.equal(observation.status, "observed");

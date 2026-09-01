@@ -6,7 +6,6 @@ import { createContainedTurnProviderAccessPort } from "../../../dist/features/co
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
   completeContainedTurnDispatchGrantSubject,
-  containedTurnDispatchGrantRequestId,
   containedTurnGrantSettlementRequestId,
 } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";

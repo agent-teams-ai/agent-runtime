@@ -197,6 +197,25 @@ const samePermit = (left: ContainedTurnCleanupPermit, right: ContainedTurnCleanu
   left.preparedOperationRevision === right.preparedOperationRevision &&
   left.operationCutoffRevision === right.operationCutoffRevision;
 
+type CleanupPendingPreparation = Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }>;
+
+const advanceContainedTurnPreparationCleanup = (
+  preparation: CleanupPendingPreparation,
+  evidenceId: ContainedTurnEvidenceId | undefined,
+  target: "custody" | "provider_access" | "runtime_security",
+): CleanupPendingPreparation => ({
+  ...preparation,
+  cleanupEvidenceIds: evidenceId === undefined
+    ? preparation.cleanupEvidenceIds
+    : Object.freeze([...new Set([...preparation.cleanupEvidenceIds, evidenceId])]),
+  custodyReleased: preparation.custodyReleased ||
+    (evidenceId === undefined && target === "custody"),
+  providerAccessSettled: preparation.providerAccessSettled ||
+    (evidenceId === undefined && target === "provider_access"),
+  runtimeSecuritySettled: preparation.runtimeSecuritySettled ||
+    (evidenceId === undefined && target === "runtime_security"),
+});
+
 export const recordContainedTurnPreparationCleanup = (
   preparation: ContainedTurnDispatchPreparation,
   input: Readonly<{
@@ -226,18 +245,7 @@ export const recordContainedTurnPreparationCleanup = (
       return preparation;
     }
   }
-  const candidate = {
-    ...preparation,
-    cleanupEvidenceIds: evidenceId === undefined
-      ? preparation.cleanupEvidenceIds
-      : Object.freeze([...new Set([...preparation.cleanupEvidenceIds, evidenceId])]),
-    custodyReleased: preparation.custodyReleased ||
-      (evidenceId === undefined && input.target === "custody"),
-    providerAccessSettled: preparation.providerAccessSettled ||
-      (evidenceId === undefined && input.target === "provider_access"),
-    runtimeSecuritySettled: preparation.runtimeSecuritySettled ||
-      (evidenceId === undefined && input.target === "runtime_security"),
-  };
+  const candidate = advanceContainedTurnPreparationCleanup(preparation, evidenceId, input.target);
   if (candidate.custodyReleased && candidate.providerAccessSettled && candidate.runtimeSecuritySettled) {
     return Object.freeze({
       attemptId: preparation.attemptId,

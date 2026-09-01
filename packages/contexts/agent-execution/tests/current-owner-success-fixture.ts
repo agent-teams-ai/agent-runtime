@@ -296,7 +296,7 @@ export class DeterministicCurrentOwnerHost {
   }
 }
 
-export const successfulClaudeQuery = (host: DeterministicCurrentOwnerHost, workspaceRef: string) => (input: Message) => {
+export const successfulClaudeQuery = (host: DeterministicCurrentOwnerHost, _workspaceRef: string) => (input: Message) => {
   const plan = host.plans.at(-1)!;
   input.options.spawnClaudeCodeProcess({
     args: [...plan.arguments], command: "/synthetic/claude", cwd: input.options.cwd,

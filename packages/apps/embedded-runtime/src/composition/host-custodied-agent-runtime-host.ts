@@ -1,5 +1,8 @@
-import type { AgentRuntimeHostDependencies } from "./agent-runtime-host.js";
-import { createAgentRuntimeHost, type AgentRuntimeHost } from "./agent-runtime-host.js";
+import {
+  createAgentRuntimeHost,
+  type AgentRuntimeHost,
+  type AgentRuntimeHostDependencies,
+} from "./agent-runtime-host.js";
 import {
   createHostCustodiedContainedTurn,
   type HostCustodiedContainedTurnDependencies,

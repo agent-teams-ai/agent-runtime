@@ -15,7 +15,6 @@ import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest } f
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
   completeContainedTurnDispatchGrantSubject,
-  containedTurnDispatchClaimBindingDigest,
   containedTurnDispatchGrantRequestId,
   validateContainedTurnConsumedGrantReceipts,
 } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
