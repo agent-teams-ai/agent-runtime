@@ -107,6 +107,10 @@ export const changes = Object.freeze([
     id: "provider-composition-boundary-closure",
     revision: "7ba071f5f6409f08522d0cdf2120e071c2f4caa9",
   }),
+  Object.freeze({
+    id: "host-composition-platform-qualification",
+    revision: "c4f48ccd255a2cfef1aed4a6e439810b5aeddfce",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -122,7 +126,7 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   tests: Object.freeze({
     fileCount: 99,
-    sha256: "db56cbe73f9d2e5c27d38e9aea4553b9d158722f10df10f9d84ce860d7643ee5",
+    sha256: "3c3c6cb74f17b02411459725f6c7d753f8990b80a3d1152e5eb71fc77578ca6a",
   }),
 });
 
