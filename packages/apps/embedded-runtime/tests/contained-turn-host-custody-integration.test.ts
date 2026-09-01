@@ -192,7 +192,16 @@ test("product Host composition routes provider execution through the same custod
       observation = await access.containedTurn.observe(accepted.operationId);
     }
     assert.equal(observation.status, "observed");
-    assert.equal(observation.status === "observed" && observation.turn.status, "succeeded");
+    const terminalStatus = observation.status === "observed" && observation.turn.status;
+    if (process.platform !== "linux") {
+      assert.equal(terminalStatus, "reconcile_required");
+      assert.deepEqual({containments: custody.containments, finalities: custody.finalities,
+        releases: custody.releases, reserves: custody.reserves, starts: custody.starts},
+      {containments: 0, finalities: 0, releases: 0, reserves: 0, starts: 0});
+      await assert.rejects(host.dispose(), {status: "termination_unproven"});
+      return;
+    }
+    assert.equal(terminalStatus, "succeeded");
     assert.deepEqual({containments: custody.containments, finalities: custody.finalities,
       releases: custody.releases, reserves: custody.reserves, starts: custody.starts},
     {containments: 1, finalities: 1, releases: 0, reserves: 1, starts: 1});
@@ -209,7 +218,7 @@ test("ambiguous Host containment stays nonterminal without releasing operation c
     const outcome = await product.feature.submit.execute(submit);
     assert.equal(outcome.status, "observed");
     assert.equal(outcome.status === "observed" && outcome.turn.status, "reconcile_required");
-    assert.equal(custody.containments, 2);
+    assert.equal(custody.containments, process.platform === "linux" ? 2 : 0);
     assert.equal(custody.releases, 0);
     // A possibly live process retains its operation-private workspace in custody;
     // moving that workspace would manufacture cleanup evidence.
