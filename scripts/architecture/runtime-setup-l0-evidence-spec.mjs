@@ -35,22 +35,26 @@ export const changes = Object.freeze([
     id: "contained-turn-platform-canaries",
     revision: "735f2422d2095a6a9eefbb9491d5dc369bc7e49f",
   }),
+  Object.freeze({
+    id: "contained-turn-v1-integration",
+    revision: "51f6b18989b0c2274eecd8961658a15a3d947cf3",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
 
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
-    fileCount: 4,
-    sha256: "0f1f9f916883c35abae1761f19271062c3825382b943434361eb8160ee145c19",
+    fileCount: 16,
+    sha256: "f7622733c0b0ed79457e2decd3ef0a83aedcd5b38da5bac2bfbb9ce221e04703",
   }),
   sources: Object.freeze({
-    fileCount: 83,
-    sha256: "45af4dd5be5849a96cf826c98d8fd9790043925d913a38e20a38f16e2a69369f",
+    fileCount: 265,
+    sha256: "1ff7311628b25725215f31ac3954d463b9879f402bb367246a6ec964f3291639",
   }),
   tests: Object.freeze({
-    fileCount: 36,
-    sha256: "a9866043e8f35a2c51983592e18cc118da529f38c595f4d21e90a3d20ac30a9d",
+    fileCount: 98,
+    sha256: "51ae596ec60b23082cdbf77dbde51f7564725f00fcfe1f5a466695da081b6811",
   }),
 });
 
