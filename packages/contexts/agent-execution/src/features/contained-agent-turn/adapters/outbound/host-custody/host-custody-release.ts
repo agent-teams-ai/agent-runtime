@@ -74,7 +74,13 @@ const closeLiveCustody = async (
     Math.max(1, live.cleanupDeadline - state.monotonicNow()),
   );
   if (cgroupClosed !== true || state.monotonicNow() >= live.cleanupDeadline) {
-    return unprovenResult("operation-cgroup-release-unproven", input, live);
+    return unprovenResult(
+      live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group"
+        ? "posix-process-group-release-unproven"
+        : "operation-cgroup-release-unproven",
+      input,
+      live,
+    );
   }
   const tombstone: CustodyTombstone = Object.freeze({
     attemptId: live.attemptId,

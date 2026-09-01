@@ -26,6 +26,7 @@ type OpenInput = Parameters<ProviderProcessCustodyPort["open"]>[0];
 
 export interface HostCustodyOpenReservation {
   readonly containmentAfterMs: number;
+  readonly expectedContainmentProfile: HostCustodyLaunchPlan["containmentProfile"];
   readonly input: OpenInput;
   readonly launchPlans: HostCustodyLaunchPlanResolver;
   readonly live: LiveCustody;
@@ -61,6 +62,9 @@ const bindLaunchCandidate = async (reservation: HostCustodyOpenReservation): Pro
   const { input, launchPlans, live } = reservation;
   if (live.retainedWorkspaceAuthority !== undefined) {assertRetainedWorkspaceAuthority(live);}
   const candidate = await resolveLaunchCandidate(launchPlans, input);
+  if (candidate.plan.containmentProfile !== reservation.expectedContainmentProfile) {
+    throw new HostCustodyUnsupportedError("platform-profile-unavailable");
+  }
   assertHostCustodyReservationMode(candidate.plan, reservation.requiredSpawnMode);
   live.fingerprint = candidate.fingerprint;
   live.plan = candidate.plan;

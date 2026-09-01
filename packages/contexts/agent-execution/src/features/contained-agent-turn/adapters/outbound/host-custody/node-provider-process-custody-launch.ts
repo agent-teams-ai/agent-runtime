@@ -11,6 +11,7 @@ import {
   descriptorBoundArguments,
   descriptorBoundEnvironment,
 } from "./host-custody-descriptor-launch.js";
+import { acquireDarwinLaunchAuthority } from "./host-custody-darwin-launch.js";
 import type { VerifiedLaunchDescriptors } from "./host-custody-launch.js";
 import { NodeCustodiedSdkProcess } from "./host-custody-process-tree.js";
 import { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
@@ -70,13 +71,21 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
   const { live } = options;
   let authority: VerifiedLaunchDescriptors | undefined;
   try {
-    authority = acquireVerifiedLaunchDescriptors(
-      live.plan!, live.executable!, live.workspaceRef,
-      options.workspaceDescriptorPath === undefined
-        ? live.workspace!
-        : Object.freeze({observation: live.workspace!, retainedDescriptorPath: options.workspaceDescriptorPath}),
-      live.privatePaths!,
-    );
+    authority = live.plan?.containmentProfile === "cooperative-darwin-posix-process-group"
+      ? acquireDarwinLaunchAuthority(
+        live.plan, live.executable!, live.workspaceRef,
+        options.workspaceDescriptorPath === undefined
+          ? live.workspace!
+          : Object.freeze({observation: live.workspace!, retainedDescriptorPath: options.workspaceDescriptorPath}),
+        live.privatePaths!,
+      )
+      : acquireVerifiedLaunchDescriptors(
+        live.plan!, live.executable!, live.workspaceRef,
+        options.workspaceDescriptorPath === undefined
+          ? live.workspace!
+          : Object.freeze({observation: live.workspace!, retainedDescriptorPath: options.workspaceDescriptorPath}),
+        live.privatePaths!,
+      );
     live.retainedWorkspaceAuthority?.assertLaunchDescriptor(
       authority.workspaceDescriptor.parentDescriptor,
     );
@@ -89,11 +98,25 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
   if (authority === undefined) {throw new DescriptorAuthorityAcquisitionError();}
   let guardian: StableProcessGroupGuardian;
   try {
+    const cooperative = live.plan?.containmentProfile === "cooperative-darwin-posix-process-group";
     guardian = new StableProcessGroupGuardian({
-      arguments: descriptorBoundArguments(options.arguments, live.workspaceRef, authority.workspaceDescriptor.childDescriptor),
+      arguments: cooperative
+        ? options.arguments
+        : descriptorBoundArguments(options.arguments, live.workspaceRef, authority.workspaceDescriptor.childDescriptor),
       descriptors: authority,
-      environment: descriptorBoundEnvironment(options.environment, authority.privatePathDescriptors),
+      environment: cooperative
+        ? options.environment
+        : descriptorBoundEnvironment(options.environment, authority.privatePathDescriptors),
       beforeLaunch: pid => live.residueAuthority?.attachGuardian(pid) ?? Promise.resolve(false),
+      ...(cooperative ? { canonicalLaunch: {
+        command: live.plan!.executablePath,
+        cwd: live.workspaceRef,
+        executableDev: live.executable!.dev.toString(),
+        executableIno: live.executable!.ino.toString(),
+        executableSha256: live.executable!.digest,
+        workspaceDev: live.workspace!.dev.toString(),
+        workspaceIno: live.workspace!.ino.toString(),
+      } } : {}),
       launchPermitted: () => !live.sealed,
     }, options.spawnAcknowledgementAfterMs);
   } catch {authority.close(); throw new GuardianConstructionError();}
@@ -144,7 +167,9 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
   const process: CustodiedProviderProcess = Object.freeze({
     closeInput: closeBounded,
     custodyRef: live.custodyRef,
-    workspaceAuthorityPath: "/proc/self/fd/4",
+    workspaceAuthorityPath: live.plan?.containmentProfile === "cooperative-darwin-posix-process-group"
+      ? live.workspaceRef
+      : "/proc/self/fd/4",
     stderr: stderr.diagnostic,
     stdout,
     waitForExit: () => exit,

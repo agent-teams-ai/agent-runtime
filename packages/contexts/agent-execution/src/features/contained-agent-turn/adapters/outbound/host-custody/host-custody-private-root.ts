@@ -40,7 +40,9 @@ export const quarantinePrivateRoot = (live: LiveCustody): boolean => {
       ])),
       status: "quarantined",
     });
-    const descriptorPath = `/proc/self/fd/${authority.privateRootDescriptor.parentDescriptor}`;
+    const descriptorPath = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group"
+      ? quarantinePath
+      : `/proc/self/fd/${authority.privateRootDescriptor.parentDescriptor}`;
     for (const entry of readdirSync(descriptorPath)) {
       rmSync(`${descriptorPath}/${entry}`, { force: true, recursive: true });
     }

@@ -15,6 +15,10 @@ export {
   type NodeProviderProcessCustodyOptions,
 } from "./adapters/outbound/host-custody/node-provider-process-custody.js";
 export {
+  DarwinCooperativeProcessCustody,
+  type DarwinCooperativeProcessCustodyOptions,
+} from "./adapters/outbound/host-custody/darwin-cooperative-process-custody.js";
+export {
   applyContainedTurnPostgresSchema,
   CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
   CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS,

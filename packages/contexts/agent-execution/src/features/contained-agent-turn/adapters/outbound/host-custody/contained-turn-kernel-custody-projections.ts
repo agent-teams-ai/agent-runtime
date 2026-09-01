@@ -136,6 +136,10 @@ export const openIdentity = (
 export const hostEvidenceProjection = (
   evidence: HostCustodyEvidence,
 ): ContainedTurnCanonicalValue => Object.freeze({
+  ...(evidence.closure.profile === "strict-linux-cgroup-v2" ? {} : {
+    closureLimitations: evidence.closure.limitations,
+    closureProfile: evidence.closure.profile,
+  }),
   closureStatus: evidence.closure.status,
   fingerprintSha256: evidence.fingerprint.fingerprintSha256,
   guardianExit: evidence.guardianExit.status === "observed"
@@ -255,6 +259,7 @@ export const noStartEvidenceIsClosed = (evidence: HostCustodyEvidence): boolean 
   (evidence.stderr.status === "complete" || evidence.stderr.status === "not-started");
 
 export const physicalEvidenceIsClosed = (evidence: HostCustodyEvidence): boolean =>
+  evidence.closure.profile === "strict-linux-cgroup-v2" &&
   evidence.sealed &&
   (evidence.closure.status === "closed" || evidence.closure.status === "not-started");
 

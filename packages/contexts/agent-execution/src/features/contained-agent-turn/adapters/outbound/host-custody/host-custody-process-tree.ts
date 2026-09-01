@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 
 import type {
@@ -95,6 +96,39 @@ export const createPosixProcessIdentityObserver = (): HostCustodyProcessIdentity
         input.pid,
         pgid,
         startTime,
+        input.binarySha256,
+        input.planSha256,
+        input.hostLifecycleGenerationSha256,
+      ]))}`,
+      status: "proved" as const,
+    });
+  },
+});
+
+export const createDarwinProcessIdentityObserver = (): HostCustodyProcessIdentityObserver => Object.freeze({
+  async observe(input: Parameters<HostCustodyProcessIdentityObserver["observe"]>[0]) {
+    const pgid = await new Promise<number | null>(resolve => {
+      execFile("/bin/ps", ["-o", "pgid=", "-p", String(input.pid)], {
+        encoding: "utf8",
+        env: Object.freeze({ LANG: "C", PATH: "/usr/bin:/bin" }),
+        maxBuffer: 4_096,
+        timeout: 1_000,
+      }, (error, stdout) => {
+        if (error !== null) {resolve(null); return;}
+        const value = Number(stdout.trim());
+        resolve(Number.isSafeInteger(value) && value > 0 ? value : null);
+      });
+    });
+    if (pgid === null) {return { status: "unproven" as const };}
+    if (pgid !== input.pgid) {return { status: "ambiguous" as const };}
+    return Object.freeze({
+      child: input.child,
+      childProcessInstanceSha256: input.childProcessInstanceSha256,
+      pgid,
+      pid: input.pid,
+      proofRef: `darwin-posix-identity:${sha256(JSON.stringify([
+        input.pid,
+        pgid,
         input.binarySha256,
         input.planSha256,
         input.hostLifecycleGenerationSha256,

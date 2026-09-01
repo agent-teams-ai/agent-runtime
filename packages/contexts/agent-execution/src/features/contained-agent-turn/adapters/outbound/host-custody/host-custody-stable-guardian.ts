@@ -10,6 +10,8 @@ import type { VerifiedLaunchDescriptors } from "./host-custody-launch.js";
 
 const GUARDIAN_SOURCE = String.raw`
 const { spawn } = require("node:child_process");
+const { createHash } = require("node:crypto");
+const { fstatSync, lstatSync, readFileSync } = require("node:fs");
 const { pipeline } = require("node:stream");
 let provider;
 let launchReceived = false;
@@ -49,6 +51,24 @@ const handoff = (stream, source, destination) => {
     publishStream(stream);
   });
 };
+const exactCanonicalAuthority = message => {
+  if (message.canonicalAuthority === undefined) { return true; }
+  try {
+    const executablePath = lstatSync(message.command, { bigint: true });
+    const executableHeld = fstatSync(message.canonicalAuthority.executableDescriptor, { bigint: true });
+    const workspacePath = lstatSync(message.cwd, { bigint: true });
+    const workspaceHeld = fstatSync(message.canonicalAuthority.workspaceDescriptor, { bigint: true });
+    const executableSha256 = createHash("sha256").update(readFileSync(message.command)).digest("hex");
+    return executablePath.isFile() && workspacePath.isDirectory() && workspaceHeld.isDirectory() &&
+      String(executablePath.dev) === message.canonicalAuthority.executableDev &&
+      String(executablePath.ino) === message.canonicalAuthority.executableIno &&
+      executableSha256 === message.canonicalAuthority.executableSha256 &&
+      executablePath.dev === executableHeld.dev && executablePath.ino === executableHeld.ino &&
+      String(workspacePath.dev) === message.canonicalAuthority.workspaceDev &&
+      String(workspacePath.ino) === message.canonicalAuthority.workspaceIno &&
+      workspacePath.dev === workspaceHeld.dev && workspacePath.ino === workspaceHeld.ino;
+  } catch { return false; }
+};
 const signalGroup = signal => {
   if (signal === "SIGTERM") {
     process.kill(0, signal);
@@ -76,6 +96,13 @@ process.on("message", message => {
   }
   if (message.type !== "launch" || launchReceived) { return; }
   launchReceived = true;
+  if (!exactCanonicalAuthority(message)) {
+    startState = "failed";
+    send({ type: "start-error" });
+    publishStream("stdout");
+    publishStream("stderr");
+    return;
+  }
   const maximumDescriptor = Math.max(2, ...message.inheritedDescriptors);
   const stdio = Array.from({ length: maximumDescriptor + 1 }, () => "ignore");
   stdio[0] = "pipe";
@@ -153,6 +180,15 @@ interface GuardianLaunchInput {
   readonly descriptors: VerifiedLaunchDescriptors;
   readonly environment: Readonly<Record<string, string>>;
   readonly beforeLaunch: (guardianPid: number) => Promise<boolean>;
+  readonly canonicalLaunch?: Readonly<{
+    readonly command: string;
+    readonly cwd: string;
+    readonly executableDev: string;
+    readonly executableIno: string;
+    readonly executableSha256: string;
+    readonly workspaceDev: string;
+    readonly workspaceIno: string;
+  }>;
   readonly launchPermitted: () => boolean;
 }
 
@@ -195,7 +231,7 @@ export class StableProcessGroupGuardian {
       input.descriptors.executableDescriptor,
       ...Object.values(input.descriptors.privatePathDescriptors),
     ].toSorted((left, right) => left.childDescriptor - right.childDescriptor);
-    const child = spawn("/proc/self/exe", ["-e", GUARDIAN_SOURCE], {
+    const child = spawn(input.canonicalLaunch === undefined ? "/proc/self/exe" : process.execPath, ["-e", GUARDIAN_SOURCE], {
       detached: true,
       env: Object.freeze({ LANG: "C.UTF-8" }),
       shell: false,
@@ -312,6 +348,7 @@ export class StableProcessGroupGuardian {
   }
 
   #guardianBound(value: string, guardianPid: number): string {
+    if (this.#input.canonicalLaunch !== undefined) {return value;}
     return this.#inherited.reduce(
       (bound, descriptor) => bound.replaceAll(
         `/proc/self/fd/${descriptor.childDescriptor}`,
@@ -334,12 +371,23 @@ export class StableProcessGroupGuardian {
       }
       this.child.send({
         arguments: this.#input.arguments.map(argument => this.#guardianBound(argument, guardianPid)),
-        command: `/proc/${guardianPid}/fd/${this.#input.descriptors.executableDescriptor.childDescriptor}`,
-        cwd: `/proc/${guardianPid}/fd/${this.#input.descriptors.workspaceDescriptor.childDescriptor}`,
+        command: this.#input.canonicalLaunch?.command ??
+          `/proc/${guardianPid}/fd/${this.#input.descriptors.executableDescriptor.childDescriptor}`,
+        cwd: this.#input.canonicalLaunch?.cwd ??
+          `/proc/${guardianPid}/fd/${this.#input.descriptors.workspaceDescriptor.childDescriptor}`,
         environment: Object.fromEntries(Object.entries(this.#input.environment).map(([key, value]) => [
           key,
           this.#guardianBound(value, guardianPid),
         ])),
+        ...(this.#input.canonicalLaunch === undefined ? {} : { canonicalAuthority: {
+          executableDescriptor: this.#input.descriptors.executableDescriptor.childDescriptor,
+          executableDev: this.#input.canonicalLaunch.executableDev,
+          executableIno: this.#input.canonicalLaunch.executableIno,
+          executableSha256: this.#input.canonicalLaunch.executableSha256,
+          workspaceDescriptor: this.#input.descriptors.workspaceDescriptor.childDescriptor,
+          workspaceDev: this.#input.canonicalLaunch.workspaceDev,
+          workspaceIno: this.#input.canonicalLaunch.workspaceIno,
+        } }),
         inheritedDescriptors: this.#inherited.map(descriptor => descriptor.childDescriptor),
         type: "launch",
       }, error => {

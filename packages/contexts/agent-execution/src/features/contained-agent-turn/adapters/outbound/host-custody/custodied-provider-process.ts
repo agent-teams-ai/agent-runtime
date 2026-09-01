@@ -7,7 +7,7 @@ export interface CustodiedProviderProcessExit {
 
 export interface CustodiedProviderProcess {
   readonly custodyRef: string;
-  readonly workspaceAuthorityPath: "/proc/self/fd/4";
+  readonly workspaceAuthorityPath: string;
   readonly stderr: AsyncIterable<Uint8Array>;
   readonly stdout: AsyncIterable<Uint8Array>;
   closeInput(): Promise<void>;
@@ -64,7 +64,7 @@ export interface HostCustodyDrainEvidence {
 
 export interface HostCustodyLaunchFingerprintEvidence {
   readonly binaryRevision: string;
-  readonly containmentProfile: "strict-linux-cgroup-v2";
+  readonly containmentProfile: HostCustodyContainmentProfile;
   readonly environmentKeys: readonly string[];
   readonly executablePathSha256: string;
   readonly fingerprintSha256: string;
@@ -96,6 +96,23 @@ export interface HostCustodyStrictClosureEvidence {
   readonly status: "closed" | "not-started" | "unproven";
 }
 
+export const DARWIN_COOPERATIVE_CUSTODY_LIMITATION =
+  "descendant-may-escape-via-new-session" as const;
+
+export type HostCustodyContainmentProfile =
+  | "strict-linux-cgroup-v2"
+  | "cooperative-darwin-posix-process-group";
+
+export interface HostCustodyCooperativeClosureEvidence {
+  readonly limitations: readonly [typeof DARWIN_COOPERATIVE_CUSTODY_LIMITATION];
+  readonly profile: "cooperative-darwin-posix-process-group";
+  readonly status: "closed" | "not-started" | "unproven";
+}
+
+export type HostCustodyClosureEvidence =
+  | HostCustodyStrictClosureEvidence
+  | HostCustodyCooperativeClosureEvidence;
+
 export interface HostCustodyPrivateRootClosureEvidence {
   readonly identitySha256: string;
   readonly status: "active" | "deleted" | "quarantined" | "unproven";
@@ -110,7 +127,7 @@ export type HostCustodyProviderExitEvidence =
   | { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly status: "observed" };
 
 export interface HostCustodyEvidence {
-  readonly closure: HostCustodyStrictClosureEvidence;
+  readonly closure: HostCustodyClosureEvidence;
   readonly fingerprint: HostCustodyLaunchFingerprintEvidence;
   readonly guardianExit: HostCustodyGuardianExitEvidence;
   readonly identity: HostCustodyProcessIdentityEvidence;
@@ -190,7 +207,7 @@ export interface CustodiedSdkProcessLauncher {
 export interface HostCustodyLaunchPlan {
   readonly arguments: readonly string[];
   readonly binaryRevision: string;
-  readonly containmentProfile: "strict-linux-cgroup-v2";
+  readonly containmentProfile: HostCustodyContainmentProfile;
   readonly environment: Readonly<Record<string, string>>;
   readonly executablePath: string;
   readonly executableSha256: string;

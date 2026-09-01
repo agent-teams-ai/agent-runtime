@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines -- exact launch verification remains below the 600-line production limit. */
 import { createHash } from "node:crypto";
 import {
   lstat,
@@ -156,8 +157,12 @@ export const assertDelegatedStartFingerprint = (
     readonly environment: Readonly<Record<string, string | undefined>>;
   },
   plan: HostCustodyLaunchPlan,
+  workspaceRef = "/proc/self/fd/4",
 ): Readonly<Record<string, string>> => {
-  if (input.command !== plan.executablePath || input.cwd !== "/proc/self/fd/4") {
+  const expectedCwd = plan.containmentProfile === "cooperative-darwin-posix-process-group"
+    ? workspaceRef
+    : "/proc/self/fd/4";
+  if (input.command !== plan.executablePath || input.cwd !== expectedCwd) {
     throw new HostCustodyFingerprintConflictError("Host Custody delegated command or workspace fingerprint conflict");
   }
   if (canonicalJson(input.arguments) !== canonicalJson(plan.arguments)) {

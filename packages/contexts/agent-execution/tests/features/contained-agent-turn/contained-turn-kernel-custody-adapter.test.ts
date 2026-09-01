@@ -146,6 +146,7 @@ const pendingNoStartEvidence = (): HostCustodyEvidence => Object.freeze({
 });
 
 interface HarnessOptions {
+  readonly cooperative?: boolean;
   readonly guardianCode?: number | null;
   readonly missingProviderExit?: boolean;
   readonly noStart?: boolean;
@@ -157,6 +158,20 @@ interface HarnessOptions {
 
 const createHarness = (options: HarnessOptions = {}) => {
   let evidence = options.noStart === true ? pendingNoStartEvidence() : runningEvidence();
+  if (options.cooperative === true) {
+    evidence = Object.freeze({
+      ...evidence,
+      closure: Object.freeze({
+        limitations: Object.freeze(["descendant-may-escape-via-new-session"] as const),
+        profile: "cooperative-darwin-posix-process-group" as const,
+        status: evidence.closure.status,
+      }),
+      fingerprint: Object.freeze({
+        ...evidence.fingerprint,
+        containmentProfile: "cooperative-darwin-posix-process-group" as const,
+      }),
+    });
+  }
   let executeCalls = 0;
   let openCalls = 0;
   let processCalls = 0;
@@ -187,8 +202,12 @@ const createHarness = (options: HarnessOptions = {}) => {
         ? Object.freeze({
           ...evidence,
           closure: Object.freeze({
-            limitations: Object.freeze([] as const),
-            profile: "strict-linux-cgroup-v2" as const,
+            limitations: options.cooperative === true
+              ? Object.freeze(["descendant-may-escape-via-new-session"] as const)
+              : Object.freeze([] as const),
+            profile: options.cooperative === true
+              ? "cooperative-darwin-posix-process-group" as const
+              : "strict-linux-cgroup-v2" as const,
             status: "not-started" as const,
           }),
           identity: Object.freeze({ ...evidence.identity, status: "not-started" as const }),
@@ -201,8 +220,12 @@ const createHarness = (options: HarnessOptions = {}) => {
         : Object.freeze({
           ...evidence,
           closure: Object.freeze({
-            limitations: Object.freeze([] as const),
-            profile: "strict-linux-cgroup-v2" as const,
+            limitations: options.cooperative === true
+              ? Object.freeze(["descendant-may-escape-via-new-session"] as const)
+              : Object.freeze([] as const),
+            profile: options.cooperative === true
+              ? "cooperative-darwin-posix-process-group" as const
+              : "strict-linux-cgroup-v2" as const,
             status: "closed" as const,
           }),
           guardianExit: Object.freeze({
@@ -599,6 +622,26 @@ test("invalid protocol completion cannot be converted into terminal truth", asyn
   if (started.kind !== "execution_started") {return;}
   assert.deepEqual(await started.execution, conflictingObservation);
   assert.equal((await attest(harness.custody)).kind, "indeterminate");
+});
+
+test("cooperative closure proves execution and drain but cannot become physical containment", async () => {
+  const harness = createHarness({ cooperative: true });
+  const started = await openAndStart(harness, "succeeded");
+  assert.equal(started.kind, "execution_started");
+  if (started.kind !== "execution_started") {return;}
+  assert.deepEqual(await started.execution, { kind: "completed", outcome: "succeeded" });
+  const execution = await attest(harness.custody);
+  assert.equal(execution.kind, "proved");
+  const physicalInput = Object.freeze({
+    attemptId,
+    authorityVectorDigest: authorityDigest,
+    custodyId,
+    operationId,
+    requestDigest: authorityDigest,
+    requestId: "closure-request:cooperative-physical" as never,
+  });
+  assert.equal((await harness.custody.ensurePhysicalContainment(physicalInput)).kind, "indeterminate");
+  assert.equal((await harness.custody.requestPhysicalContainment(physicalInput)).kind, "indeterminate");
 });
 
 test("start identity conflict is rejected before the provider callback", async () => {

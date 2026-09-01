@@ -1,14 +1,17 @@
+/* oxlint-disable max-lines -- custody closure evidence remains below the 600-line production limit. */
 import { createHash } from "node:crypto";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 import type {
   CustodiedProviderProcessExit,
-  HostCustodyStrictClosureEvidence,
+  HostCustodyClosureEvidence,
+  HostCustodyContainmentProfile,
   HostCustodyEvidence,
   HostCustodyLaunchFingerprintEvidence,
   HostCustodyProcessIdentityEvidence,
   HostCustodyProcessIdentityProof,
 } from "./custodied-provider-process.js";
+import { DARWIN_COOPERATIVE_CUSTODY_LIMITATION } from "./custodied-provider-process.js";
 import { canonicalJson, sha256, type ExecutableObservation } from "./host-custody-launch.js";
 import type { SpawnStatus } from "./host-custody-process-tree.js";
 import type { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
@@ -36,6 +39,9 @@ export type HostCustodyUnprovenReason =
   | "operation-cgroup-close-unproven"
   | "operation-cgroup-kill-unproven"
   | "operation-cgroup-release-unproven"
+  | "posix-process-group-close-unproven"
+  | "posix-process-group-kill-unproven"
+  | "posix-process-group-release-unproven"
   | "operation-residue-remains"
   | "operation-residue-unproven"
   | "owner-deadline-exceeded"
@@ -52,7 +58,7 @@ export type HostCustodyUnprovenReason =
 export interface HostCustodyEvidenceState {
   readonly attemptId: string;
   readonly childProcessInstanceSha256?: string;
-  readonly closureEvidence: HostCustodyStrictClosureEvidence;
+  readonly closureEvidence: HostCustodyClosureEvidence;
   readonly custodyRef: string;
   readonly evidenceSealed: boolean;
   readonly executable?: ExecutableObservation;
@@ -69,12 +75,15 @@ export interface HostCustodyEvidenceState {
 }
 
 export const strictClosure = (
-  status: HostCustodyStrictClosureEvidence["status"],
-): HostCustodyStrictClosureEvidence => Object.freeze({
-  limitations: Object.freeze([] as const),
-  profile: "strict-linux-cgroup-v2",
-  status,
-});
+  status: HostCustodyClosureEvidence["status"],
+  profile: HostCustodyContainmentProfile = "strict-linux-cgroup-v2",
+): HostCustodyClosureEvidence => profile === "strict-linux-cgroup-v2"
+  ? Object.freeze({ limitations: Object.freeze([] as const), profile, status })
+  : Object.freeze({
+    limitations: Object.freeze([DARWIN_COOPERATIVE_CUSTODY_LIMITATION] as const),
+    profile,
+    status,
+  });
 
 export const identityBase = (
   live: Pick<HostCustodyEvidenceState, "childProcessInstanceSha256" | "executable" | "fingerprint">,
@@ -124,7 +133,7 @@ export const snapshotEvidence = (live: HostCustodyEvidenceState): HostCustodyEvi
 
 export const containedResult = (
   live: HostCustodyEvidenceState,
-  observation: "never-started" | "strict-linux-cgroup-v2",
+  observation: "cooperative-darwin-posix-process-group" | "never-started" | "strict-linux-cgroup-v2",
 ): Extract<ContainmentResult, { readonly kind: "contained" }> => {
   const evidence = snapshotEvidence(live);
   const receiptIdentity = [
@@ -142,7 +151,9 @@ export const containedResult = (
   ] as const;
   return Object.freeze({
     kind: "contained",
-    receiptRef: `urn:agent-runtime:host-strict-closure:${sha256(canonicalJson(receiptIdentity))}`,
+    receiptRef: `urn:agent-runtime:host-${live.closureEvidence.profile === "cooperative-darwin-posix-process-group"
+      ? "cooperative-closure"
+      : "strict-closure"}:${sha256(canonicalJson(receiptIdentity))}`,
   });
 };
 
@@ -170,7 +181,7 @@ export const unprovenResult = (
 
 interface ContainmentState extends HostCustodyEvidenceState {
   child?: ChildProcessWithoutNullStreams;
-  closureEvidence: HostCustodyStrictClosureEvidence;
+  closureEvidence: HostCustodyClosureEvidence;
   contained?: Extract<ContainmentResult, { readonly kind: "contained" }>;
   evidenceSealed: boolean;
   exit?: Promise<CustodiedProviderProcessExit>;
@@ -253,7 +264,7 @@ const invokeFinalityWithDeadline = async <Value>(
 };
 
 type ClosureAttempt =
-  | { readonly kind: "closed"; readonly observation: "never-started" | "strict-linux-cgroup-v2" }
+  | { readonly kind: "closed"; readonly observation: "cooperative-darwin-posix-process-group" | "never-started" | "strict-linux-cgroup-v2" }
   | { readonly kind: "unproven"; readonly reason: HostCustodyUnprovenReason }
   | undefined;
 
@@ -299,7 +310,9 @@ const noStartResidueFailure = async (
     () => residueAuthority.close(), containmentDeadline, options,
   );
   if (closed === DEADLINE_EXCEEDED) {return "owner-deadline-exceeded";}
-  return closed === true ? undefined : "operation-cgroup-close-unproven";
+  return closed === true ? undefined : live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group"
+    ? "posix-process-group-close-unproven"
+    : "operation-cgroup-close-unproven";
 };
 
 const settleNoGuardianContainment = async (
@@ -314,7 +327,7 @@ const settleNoGuardianContainment = async (
   if (!deadlineOpen(containmentDeadline, options)) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
   if (residueFailure !== undefined) {return { kind: "unproven", reason: residueFailure };}
   if (!deadlineOpen(containmentDeadline, options)) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
-  live.closureEvidence = strictClosure("not-started");
+  live.closureEvidence = strictClosure("not-started", live.fingerprint?.containmentProfile);
   live.identity = Object.freeze({
     ...identityBase(live, options.hostLifecycleGenerationSha256),
     status: "not-started",
@@ -457,10 +470,13 @@ const residueClosureFailure = async (
     options,
   );
   if (residue === DEADLINE_EXCEEDED) {return "owner-deadline-exceeded";}
-  if (killInvocationFailed) {return "operation-cgroup-kill-unproven";}
+  const killUnproven = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group"
+    ? "posix-process-group-kill-unproven" as const
+    : "operation-cgroup-kill-unproven" as const;
+  if (killInvocationFailed) {return killUnproven;}
   if (residue === FINALITY_FAILED || residue === PHASE_TIMEOUT) {return "operation-residue-unproven";}
   if (residue === "empty") {return undefined;}
-  if (killed !== true) {return "operation-cgroup-kill-unproven";}
+  if (killed !== true) {return killUnproven;}
   return residue === "residue" ? "operation-residue-remains" : "operation-residue-unproven";
 };
 
@@ -482,6 +498,7 @@ const ingressClosureFailure = async (
   return stdoutStatus === "overflow" || stderrStatus === "overflow" ? "ingress-overflow" : "ingress-incomplete";
 };
 
+// oxlint-disable-next-line complexity -- ordered fail-closed closure phases remain explicit.
 export const containCustody = async (
   live: ContainmentState,
   input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },
@@ -500,19 +517,21 @@ export const containCustody = async (
     const outcome = await terminateStableGuardianGroup(live, options);
     if (!deadlineOpen(containmentDeadline, options)) {return unprovenResult("owner-deadline-exceeded", input, live);}
     if (outcome.kind === "unproven") {return unprovenResult(outcome.reason, input, live);}
-    observation = live.guardianNoStartAcknowledged === true ? "never-started" : "strict-linux-cgroup-v2";
+    observation = live.guardianNoStartAcknowledged === true
+      ? "never-started"
+      : live.fingerprint?.containmentProfile ?? "strict-linux-cgroup-v2";
     live.evidenceSealed = live.stdout?.settled === true && live.stderr?.settled === true &&
       live.stdout.snapshot().status === "complete" && live.stderr.snapshot().status === "complete";
   }
 
   if (observation === "never-started") {
-    live.closureEvidence = strictClosure("not-started");
+    live.closureEvidence = strictClosure("not-started", live.fingerprint?.containmentProfile);
     live.identity = Object.freeze({
       ...identityBase(live, options.hostLifecycleGenerationSha256),
       status: "not-started",
     });
   } else {
-    live.closureEvidence = strictClosure("closed");
+    live.closureEvidence = strictClosure("closed", live.fingerprint?.containmentProfile);
   }
   if (!live.evidenceSealed) {return unprovenResult("ingress-incomplete", input, live);}
   if (!deadlineOpen(containmentDeadline, options)) {return unprovenResult("owner-deadline-exceeded", input, live);}

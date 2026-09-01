@@ -6,6 +6,7 @@ import type {
   HostCustodyReservationInput,
 } from "./custodied-provider-process.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
+import type { ProcessCustodyRuntimeProfile } from "./host-custody-runtime-profile.js";
 
 const snapshotPlan = (plan: HostCustodyLaunchPlan): HostCustodyLaunchPlan => Object.freeze({
   ...plan,
@@ -83,6 +84,7 @@ export const assertRetainedWorkspaceAuthority = (live: LiveCustody): void => {
 export const bindPrivateHostCustodyReservation = async (
   input: HostCustodyReservationInput,
   owner: object,
+  runtimeProfile: ProcessCustodyRuntimeProfile,
 ): Promise<Readonly<{
   readonly launchPlans: HostCustodyLaunchPlanResolver;
   readonly plan: HostCustodyLaunchPlan;
@@ -104,6 +106,7 @@ export const bindPrivateHostCustodyReservation = async (
   try {
     const observed = fstatSync(descriptor, { bigint: true });
     if (!observed.isDirectory() || observed.dev !== authority.identity.dev || observed.ino !== authority.identity.ino ||
+        runtimeProfile.containmentProfile === "strict-linux-cgroup-v2" &&
         mountIdentity(owner, "reservation", descriptor) !== authority.identity.mountId) {
       throw new TypeError("Host Custody workspace descriptor identity mismatch");
     }
@@ -129,13 +132,16 @@ export const bindPrivateHostCustodyReservation = async (
         const launchObservation = fstatSync(launchDescriptor, { bigint: true });
         if (!launchObservation.isDirectory() || launchObservation.dev !== authority.identity.dev ||
             launchObservation.ino !== authority.identity.ino ||
+            runtimeProfile.containmentProfile === "strict-linux-cgroup-v2" &&
             mountIdentity(owner, "launch", launchDescriptor) !== authority.identity.mountId) {
           throw new TypeError("Host Custody launch workspace identity mismatch");
         }
       },
       close: closeDescriptor,
       descriptor,
-      descriptorPath: `/proc/self/fd/${descriptor}`,
+      descriptorPath: runtimeProfile.containmentProfile === "strict-linux-cgroup-v2"
+        ? `/proc/self/fd/${descriptor}`
+        : `/dev/fd/${descriptor}`,
       identity: authority.identity,
     });
     return Object.freeze({ launchPlans, plan, retainedWorkspaceAuthority });

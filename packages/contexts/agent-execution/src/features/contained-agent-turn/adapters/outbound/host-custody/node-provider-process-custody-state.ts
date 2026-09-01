@@ -3,7 +3,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type {
   CustodiedProviderProcess,
   CustodiedProviderProcessExit,
-  HostCustodyStrictClosureEvidence,
+  HostCustodyClosureEvidence,
   HostCustodyEvidence,
   HostCustodyLaunchFingerprintEvidence,
   HostCustodyLaunchPlan,
@@ -48,7 +48,7 @@ export interface LiveCustody {
   readonly workspaceRef: string;
   readonly workspaceAuthority?: HostCustodyWorkspaceAuthority;
   readonly retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
-  closureEvidence: HostCustodyStrictClosureEvidence;
+  closureEvidence: HostCustodyClosureEvidence;
   containment?: Promise<ContainmentResult>;
   contained?: Extract<ContainmentResult, { readonly kind: "contained" }>;
   child?: ChildProcessWithoutNullStreams;
@@ -90,6 +90,7 @@ export const createLiveCustody = (
   hostLifecycleGenerationSha256: string,
   inputIdentitySha256: string,
   options: Readonly<{
+    containmentProfile: HostCustodyLaunchPlan["containmentProfile"];
     opening: Promise<void>;
     retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
     workspaceAuthority?: HostCustodyWorkspaceAuthority;
@@ -97,7 +98,7 @@ export const createLiveCustody = (
 ): LiveCustody => ({
   abortRequested: false,
   attemptId: input.attemptId,
-  closureEvidence: strictClosure("unproven"),
+  closureEvidence: strictClosure("unproven", options.containmentProfile),
   custodyRef,
   evidenceSealed: false,
   identity: notStartedIdentity(hostLifecycleGenerationSha256),

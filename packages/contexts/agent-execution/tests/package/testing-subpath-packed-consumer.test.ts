@@ -100,6 +100,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS",
       "CONTAINED_TURN_POSTGRES_SCHEMA_VERSION",
       "CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS",
+      "DarwinCooperativeProcessCustody",
       "NodeProviderProcessCustody",
       "PostgresContainedTurnOperationStore",
       "applyContainedTurnPostgresSchema",
