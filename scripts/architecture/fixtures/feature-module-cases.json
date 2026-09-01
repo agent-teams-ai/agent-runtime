@@ -253,6 +253,28 @@
       "expected": []
     },
     {
+      "name": "active-profile-requires-check-gate",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "rootScripts": {
+        "check": "pnpm test:feature-modules && pnpm fixture:check",
+        "check:fast": "pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm fixture:fast"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-check-fast-gate-order",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "rootScripts": {
+        "check": "pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm fixture:check",
+        "check:fast": "pnpm architecture:feature-modules:active && pnpm test:feature-modules && pnpm fixture:fast"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "package.json", "line": 1 }]
+    },
+    {
       "name": "active-profile-requires-central-adoption",
       "status": "active",
       "acceptActivationAdr": true,

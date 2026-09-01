@@ -32,9 +32,6 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0006: Orthogonal runtime-operation state and effect continuity](0006-orthogonal-runtime-operation-state-and-effect-continuity.md)
   remains the broader design proposal. ADR-0010 accepts only its narrow V1
   subset without mutating this document.
-- [ADR-0013: Feature Module Standard v1 candidate adoption](0013-feature-module-standard-v1-candidate-adoption.md)
-  proposes a scoped candidate profile and checker without claiming active or
-  repository-wide conformance.
 
 ## Accepted
 
@@ -63,6 +60,9 @@ immutable evidence; a later change uses an explicit superseding decision.
   replaces only ADR-0009's six-member composition enumeration with the exact
   seven-member dependency object; every other ADR-0009 invariant remains in
   force.
+- [ADR-0013: Scoped Feature Module Standard v1 adoption](0013-feature-module-standard-v1-candidate-adoption.md)
+  accepts active conformance only for the three named features in Agent
+  Execution and Provider Access; it does not claim repository-wide conformance.
 
 ## Superseded
 

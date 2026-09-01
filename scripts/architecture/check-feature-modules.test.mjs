@@ -35,6 +35,10 @@ const baseFiles = {
   ] })}\n`,
   "package.json": `${JSON.stringify({
     name: "@fixture/runtime",
+    scripts: {
+      check: "pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm fixture:check",
+      "check:fast": "pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm fixture:fast",
+    },
     agentTeamsArchitecture: { role: "bounded-context", ownerDocument: "ADR-0005" },
     exports: {
       ".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
@@ -198,6 +202,13 @@ const fixtureDecisionFiles = (fixture) => fixture.acceptActivationAdr ? {
   ] })}\n`,
 } : {};
 
+const applyFixtureRootScripts = (files, scripts) => {
+  if (!scripts) {return;}
+  const manifest = JSON.parse(files["package.json"]);
+  manifest.scripts = scripts;
+  files["package.json"] = `${JSON.stringify(manifest)}\n`;
+};
+
 const writeFixtureFiles = async (root, files) => {
   for (const [path, content] of Object.entries(files)) {
     if (content === null) {
@@ -302,6 +313,7 @@ const runFixture = async (fixture, initialRoot, state) => {
     ...fixture.files,
     [profilePath]: profileSource.endsWith("\n") ? profileSource : `${profileSource}\n`,
   };
+  applyFixtureRootScripts(files, fixture.rootScripts);
   if (fixture.generatedImports) {
     files[fixture.generatedImports.path] = Array.from(
       { length: fixture.generatedImports.count },
@@ -379,7 +391,7 @@ test("candidate scope and output use canonical root identity through a symlink a
     const options = { profilePath: "architecture/feature-module-standard/candidate-profile.json" };
     const canonical = await checkFeatureModules({ root: repositoryRoot, ...options });
     const throughAlias = await checkFeatureModules({ root: alias, ...options });
-    assert.ok(canonical.length > 0, "candidate-scope comparison must exercise production diagnostics");
+    assert.deepEqual(canonical, [], "active scoped tree must remain zero-diagnostic through canonical identity");
     assert.deepEqual(throughAlias, canonical);
   } finally {scheduleDisposablePaths([root]);}
 });

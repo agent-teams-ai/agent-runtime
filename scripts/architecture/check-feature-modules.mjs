@@ -404,6 +404,28 @@ const acceptedDecisionsForRoot = async (root) => {
   } catch {return new Map();}
 };
 
+const activeGateIssues = async (profile, root) => {
+  if (profile.status !== "active") {return [];}
+  const manifestPath = "package.json";
+  try {
+    const inspected = await inspectRepositoryPath(root, manifestPath);
+    if (!inspected.ok || inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes) {throw new TypeError("invalid manifest");}
+    const manifest = parseDeterministicJson(await readFile(inspected.absolutePath, "utf8"));
+    const requiredPair = ["pnpm test:feature-modules", "pnpm architecture:feature-modules:active"];
+    const invalid = ["check", "check:fast"].some((name) => {
+      const steps = typeof manifest?.scripts?.[name] === "string" ? manifest.scripts[name].split(" && ") : [];
+      const fixtureIndex = steps.indexOf(requiredPair[0]);
+      return fixtureIndex < 0
+        || steps.lastIndexOf(requiredPair[0]) !== fixtureIndex
+        || steps[fixtureIndex + 1] !== requiredPair[1]
+        || steps.lastIndexOf(requiredPair[1]) !== fixtureIndex + 1;
+    });
+    return invalid ? [issue("FM_PROFILE_INVALID", manifestPath, 1, "active status requires the active checker immediately after the fixture suite in check and check:fast")] : [];
+  } catch {
+    return [issue("FM_PROFILE_INVALID", manifestPath, 1, "active status requires deterministic root check and check:fast scripts")];
+  }
+};
+
 export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath = DEFAULT_PROFILE, requiredStatus, acceptedDecisions } = {}) => {
   const rootIdentity = await canonicalRoot(root);
   if (!rootIdentity.ok) {return [filesystemIdentityIssue(issue, "<root>")];}
@@ -427,6 +449,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   const assemblyFiles = new Set(profile.assemblyFiles);
   const declaredEdges = new Map(profile.featureEdges.map((edge) => [`${edge.from}->${edge.to}`, new Set(edge.kinds)]));
   const observedEdges = new Map();
+  findings.add(await activeGateIssues(profile, rootIdentity));
   const edgeLocations = new Map();
   const inventory = await collectProductionFiles(rootIdentity, productionRoots);
   const allFiles = inventory.files;

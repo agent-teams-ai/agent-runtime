@@ -3,7 +3,7 @@ id: runtime.architecture.feature-module-standard-v1-candidate
 type: architecture
 status: active
 owner: architecture
-summary: Defines the scoped candidate adoption profile and activation boundary for Feature Module Standard v1.
+summary: Defines scoped active conformance for three Feature Module Standard v1 features.
 related:
   - ADR-0005
   - ADR-0007
@@ -15,26 +15,26 @@ code_anchors:
     pattern: scripts/architecture/check-feature-modules.mjs
 ---
 
-# Feature Module Standard v1 candidate adoption
+# Feature Module Standard v1 scoped active adoption
 
 ## Purpose
 
-Agent Runtime is evaluating a scoped candidate profile of the immutable
+Agent Runtime actively conforms to a scoped profile of the immutable
 `agent-teams.feature-module-standard` version `v1`. The central document is
 owned by `agent-teams-ai/.github` at
 `docs/architecture/feature-module-standard/v1.md`, Git blob
 `d0bfff2033faf544fe65268c1dcdfd524d093015`, with SHA-256
 `851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa`.
 
-This is not a claim of repository-wide conformance or active scoped
-conformance. The profile remains `candidate` while the checker reports
-production violations.
+This is scoped active conformance for exactly three named features. It is not a
+claim of repository-wide conformance, and no unlisted package, application,
+feature, experiment, or bounded context is included.
 
 ## Ownership boundary
 
 The machine-readable authority is
 `architecture/feature-module-standard/candidate-profile.json`; its schema is
-beside it. The candidate production scope contains only:
+beside it. The active production scope contains only:
 
 - `packages/contexts/agent-execution/src/**`;
 - `packages/contexts/provider-access/src/**`;
@@ -50,13 +50,12 @@ does not implement or prove this feature policy.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
-`pnpm test:feature-modules` for disposable conformance fixtures and
-`pnpm architecture:feature-modules:candidate` for the stable current-tree
-report. The fixture suite is blocking in `check` and `check:fast`; the
-production candidate report is intentionally outside either gate. Its
-candidate-only diagnostic allowance applies only to production policy
-diagnostics; structural, profile, schema, scope, pin, authority, and active
-status failures remain nonzero.
+`pnpm test:feature-modules` for disposable positive and negative fixtures,
+`pnpm architecture:feature-modules:candidate` for the stable zero-diagnostic
+current-tree evidence, and `pnpm architecture:feature-modules:active` for the
+blocking scoped conformance gate. The fixture suite and active checker run in
+that order in both `check` and `check:fast`. Structural, profile, schema, scope,
+pin, authority, gate-presence, and active-status failures remain nonzero.
 
 ## Invariants
 
@@ -95,31 +94,24 @@ application-owned ports or models, but it also cannot import public transport
 contracts. Contracts, domain, and application layers cannot import external
 packages or Node builtins; adapters and composition own those integrations.
 
-## Activation TODO and acceptance
+## Active conformance evidence
 
-The current report contains 52 diagnostics: six missing declared feature
-entrypoints, 24 assembly deep imports, eight domain/application imports of
-public transport contracts, two application imports of Node builtins, three
-feature READMEs without declared owners, and nine package-level tests that must
-move beside their scoped features. The estimated production cleanup is six new
-feature entrypoint files, consolidation of 24 assembly import/re-export
-statements, replacement of the eight forbidden contract dependencies with
-domain models or application-owned ports, two builtin integrations moved
-behind application-owned ports, three README ownership declarations, and nine
-test relocations. The existing package export maps already satisfy the
-candidate rule. That work belongs to a production cleanup lane.
+The scoped cleanup and relocation are complete. The deterministic fixture suite
+passes, including positive active-manifest coverage and negative cases that
+remove or reorder the active root gate. The exact candidate command reports
+zero production diagnostics without exceptions, deviations, extensions,
+wildcards, automatic widening, or scope changes.
 
-Activation requires all of the following:
+ADR-0013 is accepted at its exact governed path and is pinned in the immutable
+accepted-decision registry by the final SHA-256 of its accepted bytes. The
+profile is `active`, has no blockers, binds its authority to ADR-0013, records
+an empty exact governed-record set, and records these commands as evidence:
 
-1. `pnpm test:feature-modules` passes.
-2. `pnpm architecture:feature-modules:candidate` reports zero production
-   diagnostics without exceptions, wildcarding, automatic widening, or scope
-   changes.
-3. An accepted ADR authorizes activation, candidate blockers become empty, and
-   the profile records the exact passing fixture command plus zero-diagnostic
-   candidate evidence.
-4. A final integration change flips the profile from `candidate` to `active`
-   and adds the active command to both `check` and `check:fast`.
+- fixture evidence: `pnpm test:feature-modules`;
+- zero-diagnostic production evidence: `pnpm architecture:feature-modules:candidate`;
+- blocking active gate: `pnpm architecture:feature-modules:active`.
 
-Until all four conditions are reviewed and satisfied, diagnostics are a
-candidate adoption report and must not be described as active conformance.
+This evidence proves conformance only for `runtime-installation-discovery`,
+`contained-agent-turn`, and `contained-turn-access` within the two declared
+production roots and assembly files. It does not prove repository-wide Feature
+Module Standard conformance.

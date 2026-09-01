@@ -1,7 +1,7 @@
 {
   "$schema": "./profile.schema.json",
   "schemaVersion": 1,
-  "status": "candidate",
+  "status": "active",
   "authority": {
     "id": "agent-teams.feature-module-standard",
     "version": "v1",
@@ -16,15 +16,32 @@
       "packages/contexts/provider-access/src"
     ],
     "outOfScope": [
-      "Embedded Runtime", "Runtime Configuration", "Runtime Security", "Filesystem Custody", "Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"
+      "Embedded Runtime",
+      "Runtime Configuration",
+      "Runtime Security",
+      "Filesystem Custody",
+      "Module Kit",
+      "experiments",
+      "tooling other than scripts/architecture/check-feature-modules.mjs"
     ]
   },
-  "moduleRoles": ["contracts", "domain", "application", "adapters", "composition"],
+  "moduleRoles": [
+    "contracts",
+    "domain",
+    "application",
+    "adapters",
+    "composition"
+  ],
   "features": [
     {
       "id": "runtime-installation-discovery",
       "root": "packages/contexts/agent-execution/src/features/runtime-installation-discovery",
-      "roles": ["contracts", "application", "adapters", "composition"],
+      "roles": [
+        "contracts",
+        "application",
+        "adapters",
+        "composition"
+      ],
       "entrypoints": {
         "public": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
         "internal": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts"
@@ -33,7 +50,13 @@
     {
       "id": "contained-agent-turn",
       "root": "packages/contexts/agent-execution/src/features/contained-agent-turn",
-      "roles": ["contracts", "domain", "application", "adapters", "composition"],
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
       "entrypoints": {
         "public": "packages/contexts/agent-execution/src/features/contained-agent-turn/index.ts",
         "internal": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts"
@@ -42,7 +65,13 @@
     {
       "id": "contained-turn-access",
       "root": "packages/contexts/provider-access/src/features/contained-turn-access",
-      "roles": ["contracts", "domain", "application", "adapters", "composition"],
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
       "entrypoints": {
         "public": "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
         "internal": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts"
@@ -65,21 +94,110 @@
     "fixtures": "pnpm test:feature-modules"
   },
   "activation": {
-    "blockers": [
-      "Add the six declared public/internal feature entrypoint files in the production cleanup lane.",
-      "Replace package assembly deep re-exports with imports or re-exports through declared feature entrypoints.",
-      "Move the eight domain/application dependencies on public transport contracts behind domain models or application-owned ports.",
-      "Move the two application-layer Node builtin dependencies behind application-owned ports.",
-      "Declare owners in the three scoped feature READMEs and colocate the nine detected feature test files with their owning features.",
-      "Run the candidate command until it reports zero diagnostics, then change status to active and wire the production command into check and check:fast."
-    ],
+    "blockers": [],
     "acceptance": [
       "The fixture command passes with all positive and negative conformance cases.",
       "The candidate command reports zero production diagnostics without exceptions or scope widening.",
       "Accepted ADR-0013 at its exact governed path authorizes activation, names every exact governed record, and the profile records the exact passing fixture command and zero-diagnostic candidate evidence.",
       "The final integration change sets status active and adds the active checker alongside the fixture suite in check and check:fast."
     ],
-    "authority": null,
-    "evidence": null
+    "authority": {
+      "acceptedAdr": "ADR-0013",
+      "decisionPath": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
+      "owner": "architecture",
+      "governedRecords": []
+    },
+    "evidence": {
+      "fixtureCommand": "pnpm test:feature-modules",
+      "candidateCommand": "pnpm architecture:feature-modules:candidate",
+      "productionDiagnostics": 0
+    }
+  },
+  "adoption": {
+    "moduleRoots": [
+      "packages/contexts/agent-execution",
+      "packages/contexts/provider-access"
+    ],
+    "applicationRoots": [],
+    "excludedRoots": [
+      "experiments",
+      "packages/apps/embedded-runtime",
+      "packages/contexts/runtime-configuration",
+      "packages/contexts/runtime-security",
+      "packages/platform/filesystem-custody"
+    ],
+    "abstractLayout": {
+      "modules": [
+        {
+          "moduleRoot": "packages/contexts/agent-execution",
+          "sourceRoot": "packages/contexts/agent-execution/src",
+          "featuresRoot": "packages/contexts/agent-execution/src/features",
+          "moduleComposition": "packages/contexts/agent-execution/src/composition.ts",
+          "publicEntrypoint": "packages/contexts/agent-execution/src/index.ts",
+          "testRoot": "packages/contexts/agent-execution/tests",
+          "featureTestsRoot": "packages/contexts/agent-execution/tests/features",
+          "moduleTestsRoot": "packages/contexts/agent-execution/tests/package"
+        },
+        {
+          "moduleRoot": "packages/contexts/provider-access",
+          "sourceRoot": "packages/contexts/provider-access/src",
+          "featuresRoot": "packages/contexts/provider-access/src/features",
+          "moduleComposition": "packages/contexts/provider-access/src/composition.ts",
+          "publicEntrypoint": "packages/contexts/provider-access/src/index.ts",
+          "testRoot": "packages/contexts/provider-access/tests",
+          "featureTestsRoot": "packages/contexts/provider-access/tests/features",
+          "moduleTestsRoot": "packages/contexts/provider-access/tests/package"
+        }
+      ],
+      "applications": []
+    },
+    "localExtensions": {
+      "language": {
+        "sourceExtensions": [
+          ".js",
+          ".jsx",
+          ".mjs",
+          ".cjs",
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ]
+      },
+      "packaging": {
+        "manifest": "package.json",
+        "curatedExports": [
+          ".",
+          "./composition"
+        ]
+      },
+      "transport": {
+        "publicContractRole": "contracts"
+      },
+      "composition": {
+        "moduleFiles": [
+          "index.ts",
+          "composition.ts"
+        ],
+        "featureEntrypoints": [
+          "index.ts",
+          "internal.ts"
+        ],
+        "syntax": "imports-and-named-reexports-only"
+      }
+    },
+    "localOwnership": {
+      "architectureDocument": {
+        "path": "docs/architecture/feature-module-standard-v1-candidate.md",
+        "owner": "architecture"
+      },
+      "decisionRecords": [
+        {
+          "id": "ADR-0013",
+          "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
+          "owner": "architecture"
+        }
+      ]
+    }
   }
 }

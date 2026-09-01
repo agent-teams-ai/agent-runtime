@@ -10,9 +10,9 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm lint && pnpm test",
+    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm lint && pnpm test",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm lint",
+    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm lint",
     "docs:check": "agent-teams-docs check --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:doctor": "agent-teams-docs doctor --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:find": "agent-teams-docs find --consumer . --profile architecture/foundation/docs-protocol.yaml",

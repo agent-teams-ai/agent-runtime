@@ -1,9 +1,9 @@
 ---
 id: ADR-0013
 type: adr
-status: proposed
+status: accepted
 owner: architecture
-summary: Proposes scoped candidate adoption of immutable Feature Module Standard v1 without claiming conformance.
+summary: Accepts Feature Module Standard v1 for exactly three scoped features without claiming repository-wide conformance.
 related:
   - ADR-0005
   - ADR-0007
@@ -14,9 +14,9 @@ code_anchors:
     pattern: scripts/architecture/check-feature-modules.mjs
 ---
 
-# ADR-0013: Feature Module Standard v1 candidate adoption
+# ADR-0013: Scoped Feature Module Standard v1 adoption
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-29
 
@@ -24,9 +24,10 @@ Date: 2026-08-29
 
 ADR-0005 defines private runtime package identities and ADR-0007 governs
 deterministic documentation. Neither decision adopts an organization feature
-module policy. The current production tree predates curated feature
-entrypoints, so immediately claiming conformance or wiring a new gate would
-misrepresent the repository and block unrelated lanes.
+module policy. The scoped production cleanup and test relocation defined by the
+delivery plan now produce zero diagnostics for the three reviewed features. Acceptance must
+therefore describe only that exact boundary and must not imply repository-wide
+conformance.
 
 The organization standard is immutable at
 `agent-teams-ai/.github:docs/architecture/feature-module-standard/v1.md`, Git
@@ -35,41 +36,52 @@ blob `d0bfff2033faf544fe65268c1dcdfd524d093015`, SHA-256
 
 ## Decision
 
-Propose a Phase A candidate profile and deterministic syntax-aware checker for
-only Agent Execution and Provider Access source, their package assembly files,
-and the three named features in the local adoption document. Candidate status
-records diagnostics but does not establish active conformance.
+Accept the immutable Feature Module Standard v1 for exactly these existing
+features and no others:
 
-The profile cannot use baselines, history, grandfather lists, regex parsing,
-wildcards, future-state declarations, or automatic scope widening. Extensions,
-deviations, and exceptions are closed by default and require exact governed
-diagnostics, an accepted ADR, an owner, a rationale, and a deterministic review
-trigger. Active authority must bind this exact ADR path and enumerate every
-governed record; proposed ADR-0013 cannot satisfy that acceptance check.
+- `runtime-installation-discovery` in Agent Execution;
+- `contained-agent-turn` in Agent Execution;
+- `contained-turn-access` in Provider Access.
 
-Layer direction is default-deny: domain is inward-only, and neither domain nor
-application may import public transport contracts. Application dependencies
-remain limited to domain code and application-owned ports or models. Public
-feature entrypoints expose only their own contracts, wildcard entrypoint and
-assembly re-exports are rejected, and unused declared edges are rejected rather
-than retained as future-state permissions. README ownership, scoped feature
-test placement, package export maps, configured aliases, `module.require`, and
-`createRequire` aliases are included in the zero-diagnostic boundary.
+The governed production roots remain only the Agent Execution and Provider
+Access `src` trees, with only their package `index.ts` and `composition.ts`
+assembly files. The exact active layout, exclusions, local language and
+packaging mappings, and ownership records are declared in
+`architecture/feature-module-standard/candidate-profile.json`. Embedded
+Runtime, Runtime Configuration, Runtime Security, Filesystem Custody, Module
+Kit, experiments, unrelated tooling, every other bounded context, and every
+other feature remain outside this decision. This is scoped active conformance,
+not repository-wide conformance.
 
-The production checker stays outside `check` and `check:fast` while diagnostics
-remain. The deterministic fixture suite is blocking in both gates. A later
-reviewed decision may accept activation only after the fixture suite passes,
-the exact candidate scope reaches zero diagnostics without exceptions or
-widening, the profile changes to `active`, and the active command is wired into
-both gates.
+The profile may not use baselines, history, grandfather lists, regex parsing,
+wildcards, future-state declarations, automatic scope widening, extensions,
+deviations, or exceptions for this activation. Its extension, deviation, and
+exception sets are empty, so the activation authority records an empty exact
+governed-record set. Any later scope extension or policy exception requires a
+separate accepted decision and deterministic evidence.
+
+Layer direction remains default-deny: domain is inward-only, neither domain
+nor application may import public transport contracts, application
+dependencies are limited to domain code and application-owned ports or models,
+and public feature entrypoints expose only their own contracts. Wildcard
+entrypoint and assembly re-exports, unused edges, missing README ownership,
+incorrect scoped test placement, non-curated package exports, configured alias
+bypasses, `module.require`, and `createRequire` aliases remain rejected.
+
+Activation is authorized only with zero diagnostics from the exact candidate
+command, a passing deterministic fixture suite, an active profile bound to this
+accepted ADR at its exact governed path, and the active checker immediately
+after the fixture suite in both root gates. Removing or reordering either gate
+must fail deterministic checker fixtures.
 
 ## Consequences
 
-Phase A makes policy gaps reproducible without changing production packages or
-claiming repository-wide conformance. Current assembly and missing-entrypoint
-violations remain visible for other cleanup lanes. Embedded Runtime, Runtime
-Configuration, Runtime Security, Filesystem Custody, Module Kit, experiments,
-and unrelated tooling remain out of scope.
+The three named features and their two owning package roots are continuously
+checked against the exact pinned standard identity. Their relocated tests are
+owned by their semantic feature or package surface, and both PostgreSQL tests
+remain in the focused PostgreSQL command.
 
-Because this ADR is proposed, it does not independently authorize production
-behavior, exceptions, or activation.
+No provider, kernel, persistence, canary, Module Kit, or other bounded-context
+behavior is authorized or changed by this decision. A green active check proves
+only the profile boundary above; it cannot be cited as repository-wide Feature
+Module Standard conformance.

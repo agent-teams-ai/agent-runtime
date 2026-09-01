@@ -51,6 +51,11 @@
       "id": "ADR-0012",
       "path": "docs/decisions/0012-provider-access-authority-in-contained-turn-composition.md",
       "immutableDigest": "sha256:65084ea45ec06419bbbd859c0835e51125014a184f2e5b746289fc092593c297"
+    },
+    {
+      "id": "ADR-0013",
+      "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
+      "immutableDigest": "sha256:687c877fecbd6a23941ea74ff068075d467e4faa22758f0272bac4fa195bc08a"
     }
   ]
 }
