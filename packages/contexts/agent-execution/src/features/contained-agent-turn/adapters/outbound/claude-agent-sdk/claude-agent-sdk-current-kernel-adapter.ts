@@ -19,9 +19,6 @@ import {
   type ContainedTurnOperationId,
   type ContainedTurnWorkspaceId,
 } from "../../../domain/contained-turn-identities.js";
-import type {
-  ContainedTurnProviderExecutionOutcome,
-} from "../legacy/legacy-contained-turn-ports.js";
 import type { ContainedTurnProviderBinding } from "../../../contracts/contained-agent-turn.js";
 import type {
   CustodiedProviderProcessRegistry,
@@ -35,6 +32,10 @@ import type {
   ClaudeAgentSdkPrivateProjection,
 } from "./claude-agent-sdk-launch-plan.js";
 import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
+
+type ClaudeAgentSdkExecutionOutcome = Awaited<
+  ReturnType<ClaudeAgentSdkContainedTurnProvider["execute"]>
+>;
 
 export interface ClaudeAgentSdkKernelPrivateExecution {
   readonly custodyRef: string;
@@ -166,7 +167,7 @@ const indeterminate = (
 /** Legacy receipt strings are intentionally discarded; they are not Host proofs. */
 export const mapClaudeAgentSdkKernelObservation = (
   input: Parameters<ContainedTurnKernelProviderPort["execute"]>[0],
-  outcome: ContainedTurnProviderExecutionOutcome,
+  outcome: ClaudeAgentSdkExecutionOutcome,
 ): ContainedTurnKernelProviderObservation =>
   outcome.kind === "completed"
     ? Object.freeze({ kind: "completed" as const, outcome: outcome.outcome })

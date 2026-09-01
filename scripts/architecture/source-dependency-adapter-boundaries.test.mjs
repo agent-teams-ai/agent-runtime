@@ -133,8 +133,10 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.legacy-contained-turn-ports"));
   assert.ok(!claude.allowedBoundaries.includes("production.agent-execution"));
   assert.deepEqual(production.allowedBoundaries, [
+    "adapter.agent-execution.claude-agent-sdk",
     "adapter.agent-execution.host-custody",
     "adapter.agent-execution.legacy-contained-turn-ports",
+    "adapter.agent-execution.provider-delegation-ports",
     "core.agent-execution.contained-turn",
   ]);
   assert.ok(!production.entrypoints.includes(paths.legacy));
@@ -172,6 +174,7 @@ test("a forbidden boundary cannot import a legal target entrypoint", async () =>
 test("existing Host and SDK capabilities retain their exact ownership", async () => {
   const host = boundariesById.get("adapter.agent-execution.host-custody");
   assert.deepEqual(host.entrypoints, [
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
   ]);

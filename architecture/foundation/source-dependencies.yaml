@@ -111,7 +111,6 @@ boundaries:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.ts
     allow:
       boundaries:
-        - adapter.agent-execution.legacy-contained-turn-ports
         - adapter.agent-execution.provider-delegation-ports
         - core.agent-execution.contained-turn
       packages:
