@@ -24,8 +24,12 @@ import { containedTurnPreparationToken } from "../../../dist/features/contained-
 import { recoverContainedTurnDispatchPreparations } from "../../../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "../../../dist/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.js";
-import { containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import {
+  containedTurnProviderAccessSnapshotDigest,
+  containedTurnScopeDigest,
+} from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import { completeContainedTurnDispatchGrantSubject } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { mutateContainedTurnOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-kernel.js";
 import {
@@ -489,7 +493,8 @@ postgresTest("two claimers persist exact loser grants and restart-safe cleanup s
         custodyId: reservation.custodyId,
         operationId: bound.operationId,
       });
-      const subject = Object.freeze({
+      const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(bound.providerAccessSnapshot);
+      const subject = completeContainedTurnDispatchGrantSubject(Object.freeze({
         attemptId: reservation.attemptId,
         custodyId: reservation.custodyId,
         effectId: bound.effectId,
@@ -500,16 +505,54 @@ postgresTest("two claimers persist exact loser grants and restart-safe cleanup s
         operationId: bound.operationId,
         preparationToken,
         purpose: "contained_turn_provider_start_v1" as const,
+        provider: bound.adapterSnapshot.provider,
+        providerAccessExpectation: Object.freeze({
+          acceptedAuthorityDigest: bound.acceptedAuthorityVectorDigest,
+          accessRef: bound.providerAccessSnapshot.accessRef,
+          authorityHeadDigest: bound.providerAccessSnapshot.ownerAuthorityDigest,
+          bindingDigest: providerBindingDigest,
+          bindingRevision: bound.providerAccessSnapshot.revision,
+          credentialBindingDigest: bound.providerAccessSnapshot.credentialBindingDigest,
+          credentialBindingRef: bound.providerAccessSnapshot.credentialBindingRef,
+          credentialGeneration: bound.providerAccessSnapshot.credentialGeneration,
+          providerAccountRef: bound.providerAccessSnapshot.providerAccountRef,
+          providerRouteRef: bound.providerAccessSnapshot.providerRouteRef,
+        }),
+        runtimeSecurityExpectation: Object.freeze({
+          acceptedAuthorityDigest: bound.acceptedAuthorityVector.securityDecisionDigest,
+          authorityGeneration: bound.acceptedAuthorityVector.operationAuthorityRevision,
+          authorityHeadDigest: bound.acceptedAuthorityVector.securityDecisionDigest,
+          authorityRevision: bound.acceptedAuthorityVector.securityAuthorityRevision,
+          constraintsDigest: digestContainedTurnCanonicalValue({
+            adapterSnapshot: bound.adapterSnapshot,
+            capabilityManifest: bound.capabilityManifest,
+            intentMode: bound.intent.mode,
+          } as never),
+          containmentPolicyDigest: bound.acceptedAuthorityVector.containmentPolicyDigest,
+          providerBindingDigest,
+          providerId: bound.adapterSnapshot.provider,
+        }),
+        scope: bound.scope,
         scopeDigest: bound.acceptedAuthorityVector.scopeDigest,
         workspaceId,
-      });
-      const receipt = (owner: "provider_access" | "runtime_security") =>
-        normalizeContainedTurnConsumedGrantReceipt(owner, subject, {
-          grantRequestRef: `${owner}:grant:${String(index)}`,
-          ownerAuthorityRef: `${owner}:authority:${String(index)}`,
-          ownerReceiptRef: `${owner}:receipt:${String(index)}`,
-          validThroughOperationCutoffRevision: bound.operationCutoff.revision,
+      }));
+      const receipt = (owner: "provider_access" | "runtime_security") => {
+        const request = owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
+        return normalizeContainedTurnConsumedGrantReceipt(owner, subject, {
+          authorityFacts: owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation,
+          claimBeforeControlTime: 100,
+          claimBindingDigest: request.claimBindingDigest,
+          consumedAtControlTime: 50,
+          consumptionDigest: digestContainedTurnCanonicalValue({ index, owner, state: "consumed" }),
+          grantRequestId: request.grantRequestId,
+          operationId: subject.operationId,
+          ownerEvidenceRef: `${owner}:evidence:${String(index)}`,
+          provider: subject.provider,
+          purpose: "contained-turn.provider-dispatch/v1" as const,
+          requestDigest: request.requestDigest,
+          scope: Object.freeze({ ...subject.scope, scopeDigest: subject.scopeDigest }),
         });
+      };
       const receipts = Object.freeze([receipt("provider_access"), receipt("runtime_security")]) as const;
       return { preparationToken, receipts, subject };
     });
@@ -573,7 +616,7 @@ postgresTest("two claimers persist exact loser grants and restart-safe cleanup s
   });
 });
 
-postgresTest("persisted v2 true flags recover custody and issued grants without replaying consumption", async () => {
+postgresTest("persisted v2 true flags preserve conservative cleanup debt without replaying consumption", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
     const store = new PostgresContainedTurnOperationStore({ pool });
@@ -651,11 +694,7 @@ postgresTest("persisted v2 true flags recover custody and issued grants without 
       discovered: 1,
       retired: 0,
     });
-    assert.deepEqual(calls, [
-      "custody",
-      `provider_access:${providerAccessGrantRequestId}`,
-      `runtime_security:${runtimeSecurityGrantRequestId}`,
-    ]);
+    assert.deepEqual(calls, ["custody"]);
     const stored = await runtimeQuery<{ state: unknown }>(
       pool,
       `SELECT state FROM agent_execution.contained_turn_dispatch_preparation_v1
@@ -663,7 +702,7 @@ postgresTest("persisted v2 true flags recover custody and issued grants without 
       [bound.operationId, active.preparationToken],
     );
     const state = stored.rows[0]?.state as { readonly payload?: { readonly cleanupEvidenceIds?: unknown; readonly kind?: unknown } };
-    assert.equal(state.payload?.kind, "cleanup_closed");
+    assert.equal(state.payload?.kind, "cleanup_pending");
     assert.deepEqual(state.payload?.cleanupEvidenceIds, [historicalEvidenceId]);
   });
 });
