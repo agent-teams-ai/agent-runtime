@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -12,12 +13,16 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import { createCodexAppServerLaunchPlan } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import { createCodexAppServerPermissionBoundary } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
-import { assertPrivateDirectory } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js";
-
-const privateDirectoryCustody = Object.freeze({ assertPrivateDirectory });
+const privateDirectoryCustody = Object.freeze({
+  async assertPrivateDirectory(path: string): Promise<void> {
+    const observation = await lstat(path);
+    assert.equal(observation.isDirectory(), true);
+    assert.equal(observation.isSymbolicLink(), false);
+  },
+});
 
 const fixture = () => {
-  const root = mkdtempSync(join(tmpdir(), "ar-provider-launch-authority-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "ar-provider-launch-authority-")));
   const workspaceRef = join(root, "workspace");
   const privateRootPath = `${workspaceRef}-host-private`;
   const codexHome = join(privateRootPath, "codex-home");

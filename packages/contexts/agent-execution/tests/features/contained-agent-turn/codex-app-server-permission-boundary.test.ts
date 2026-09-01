@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync,
+import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync,
   writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -152,7 +152,7 @@ const assertGeneratedCommandEquivalence = (
 ): void => {assert.deepEqual(production, generated);};
 
 test("validates private roots, disjointness, and stable filesystem identity", async () => {
-  const caseRoot = mkdtempSync(join(tmpdir(), "agent-runtime-codex-root-validation-"));
+  const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-root-validation-")));
   try {
     const workspace = join(caseRoot, "workspace");
     const privateRoot = `${workspace}-host-private`;
@@ -209,7 +209,7 @@ test("validates private roots, disjointness, and stable filesystem identity", as
 });
 
 test("observes provider endpoints with exact workspace identity and portable Unicode semantics", () => {
-  const caseRoot = mkdtempSync(join(tmpdir(), "agent-runtime-codex-path-identity-"));
+  const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-path-identity-")));
   try {
     const workspace = join(caseRoot, "workspace");
     const other = join(caseRoot, "other");
@@ -235,7 +235,7 @@ test("observes provider endpoints with exact workspace identity and portable Uni
 });
 
 test("fails closed on permanent hardlink, type, and missing/new endpoint substitutions", () => {
-  const caseRoot = mkdtempSync(join(tmpdir(), "agent-runtime-codex-endpoint-substitution-"));
+  const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-endpoint-substitution-")));
   try {
     const workspace = join(caseRoot, "workspace");
     const home = join(caseRoot, "home");
@@ -265,7 +265,7 @@ test("fails closed on permanent hardlink, type, and missing/new endpoint substit
 });
 
 test("types restored endpoint substitutions as non-authoritative Node observations", () => {
-  const caseRoot = mkdtempSync(join(tmpdir(), "agent-runtime-codex-endpoint-observation-"));
+  const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-endpoint-observation-")));
   try {
     const workspace = join(caseRoot, "workspace");
     const home = join(caseRoot, "home");
@@ -298,7 +298,7 @@ test("canonical Codex JSON rejects undefined and other non-JSON values", () => {
 });
 
 test("decodes initialize as exact own enumerable plain 0.150.1 data", () => {
-  const caseRoot = mkdtempSync(join(tmpdir(), "agent-runtime-codex-initialize-shape-"));
+  const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-initialize-shape-")));
   try {
     const workspace = join(caseRoot, "workspace");
     const home = join(caseRoot, "home");
@@ -323,7 +323,7 @@ test("decodes initialize as exact own enumerable plain 0.150.1 data", () => {
 });
 
 test("rejects unknown keys throughout config and profile evidence shapes", () => {
-  const caseRoot = mkdtempSync(join(tmpdir(), "agent-runtime-codex-evidence-shape-"));
+  const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-evidence-shape-")));
   try {
     const workspace = join(caseRoot, "workspace");
     const home = join(caseRoot, "home");

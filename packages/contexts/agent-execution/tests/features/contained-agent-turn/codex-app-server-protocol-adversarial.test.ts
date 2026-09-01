@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -40,7 +40,7 @@ class ByteQueue implements AsyncIterable<Uint8Array> {
   }
 }
 
-const root = mkdtempSync(join(tmpdir(), "agent-runtime-codex-protocol-test-"));
+const root = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-protocol-test-")));
 const codexHome = join(root, "codex-home");
 const workspace = join(root, "workspace");
 const privateTmp = join(root, "tmp");

@@ -128,7 +128,9 @@ const assertMarkerAbsent = async (marker: string): Promise<void> => {
     error instanceof Error && "code" in error && error.code === "ENOENT");
 };
 
-test("Host no-start reserve rejects eager and omitted modes before guardian or provider execution", async t => {
+test("Host no-start reserve rejects eager and omitted modes before guardian or provider execution", {
+  skip: process.platform === "linux" ? false : "descriptor-bound production Host Custody is Linux-only",
+}, async t => {
   for (const spawnMode of ["eager" as const, undefined]) {
     await t.test(spawnMode ?? "omitted", async () => {
       const fixture = await createFixture(spawnMode);
@@ -143,7 +145,9 @@ test("Host no-start reserve rejects eager and omitted modes before guardian or p
   }
 });
 
-test("real Node Host delegated reserve remains never-started without start authority", async () => {
+test("real Node Host delegated reserve remains never-started without start authority", {
+  skip: process.platform === "linux" ? false : "descriptor-bound production Host Custody is Linux-only",
+}, async () => {
   const fixture = await createFixture("sdk-delegated");
   const rawReservation = await fixture.custody.reserve(hostOpenInput(
     fixture.workspaceRef, fixture.workspaceAuthority, fixture.plan,

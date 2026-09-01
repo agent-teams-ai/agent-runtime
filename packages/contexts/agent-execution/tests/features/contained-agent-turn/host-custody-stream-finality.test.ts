@@ -23,6 +23,8 @@ import {
   waitForEvidence,
 } from "../../host-custody-test-fixture.ts";
 
+const linuxTest = process.platform === "linux" ? test : test.skip;
+
 class HeldWriteSink extends Writable {
   #heldCallback: ((error?: Error | null) => void) | undefined;
   #observeHeld: (() => void) | undefined;
@@ -102,7 +104,7 @@ const finalityOptions = (forceKillAfterMs = 100) => ({ containmentAfterMs: 1_000
   forceKillAfterMs, hostLifecycleGenerationSha256: "host-generation:finality-failure",
   monotonicNow: () => performance.now(), terminateAfterMs: 100 });
 
-test("containment before guardian dispatch proves empty streams without raw EOF inference", async () => {
+linuxTest("containment before guardian dispatch proves empty streams without raw EOF inference", async () => {
   const workspaceRef = await disposableRoot();
   const deferred = await createCustody({ binding: claudeBinding, spawnMode: "sdk-delegated", workspaceRef });
   const request = {
@@ -538,7 +540,7 @@ test("a never-final stream remains unproven at the configured drain bound", asyn
   assert.equal(stderr.snapshot().status, "incomplete");
 });
 
-test("real guardian containment drains an actually backpressured stdout path", { timeout: 30_000 }, async () => {
+linuxTest("real guardian containment drains an actually backpressured stdout path", { timeout: 30_000 }, async () => {
   const workspaceRef = await disposableRoot();
   const outputBytes = 1_048_576;
   const { custody } = await createCustody({
@@ -754,7 +756,7 @@ test("unproven guardian TERM dispatch still escalates provider and cgroup termin
   assert.equal(live.evidenceSealed, false);
 });
 
-test("guardian EOF without guarded stream finality keeps output drain unproven", async () => {
+linuxTest("guardian EOF without guarded stream finality keeps output drain unproven", async () => {
   const workspaceRef = await disposableRoot();
   const script = String.raw`
 process.stdout.write("unacknowledged-terminal-bytes\n");

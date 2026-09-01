@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after } from "node:test";
@@ -25,7 +25,7 @@ interface FakeCodexProcessBehavior {
   readonly hangWriteMethod?: string;
 }
 
-const syntheticRoot = mkdtempSync(join(tmpdir(), "agent-runtime-codex-boundary-test-"));
+const syntheticRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-boundary-test-")));
 const syntheticCodexHome = join(syntheticRoot, "private-codex-home");
 export const syntheticWorkspace = join(syntheticRoot, "workspace");
 export const syntheticTmp = join(syntheticRoot, "tmp");

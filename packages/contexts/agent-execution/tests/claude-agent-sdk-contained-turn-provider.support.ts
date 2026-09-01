@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -23,7 +23,6 @@ import type {
   CustodiedProviderProcess,
   CustodiedSdkProcess,
 } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
-import { assertPrivateDirectory } from "../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js";
 
 export { nextTurn };
 
@@ -62,7 +61,13 @@ const manifest = Object.freeze({
   supportedModes: Object.freeze(["analysis", "workspace-write"] as const),
 });
 const privateProjections = Object.freeze({ resolve: () => privateProjection });
-export const privateDirectoryCustody = Object.freeze({ assertPrivateDirectory });
+export const privateDirectoryCustody = Object.freeze({
+  async assertPrivateDirectory(path: string): Promise<void> {
+    const observation = await lstat(path);
+    assert.equal(observation.isDirectory(), true);
+    assert.equal(observation.isSymbolicLink(), false);
+  },
+});
 
 export const input = (mode: "analysis" | "workspace-write" = "analysis") => ({
   attemptId: "attempt:claude-test",

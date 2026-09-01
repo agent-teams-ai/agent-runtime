@@ -18,6 +18,8 @@ import {
   trackSyntheticProcessGroup,
 } from "../../host-custody-test-fixture.ts";
 
+const linuxTest = process.platform === "linux" ? test : test.skip;
+
 class NodeProviderProcessCustody extends BaseNodeProviderProcessCustody {
   public constructor(options: ConstructorParameters<typeof BaseNodeProviderProcessCustody>[0]) {
     super({
@@ -172,7 +174,7 @@ const waitUntil = async (
   }
 };
 
-test("TERM-resistant process is stopped within monotonic configured bounds", async () => {
+linuxTest("TERM-resistant process is stopped within monotonic configured bounds", async () => {
   const workspaceRef = await disposableRoot();
   const script = `process.on("SIGTERM", () => {}); process.stdout.write("ready\\n"); setInterval(() => {}, 1000);`;
   const entry = await launchPlan(workspaceRef, "/usr/bin:/bin", script);
@@ -204,7 +206,7 @@ test("TERM-resistant process is stopped within monotonic configured bounds", asy
   assert.equal((await processHandle.waitForExit()).signal, "SIGKILL");
 });
 
-test("an unproven containment result is not memoized over a later safe escalation", async () => {
+linuxTest("an unproven containment result is not memoized over a later safe escalation", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan(
     workspaceRef,
@@ -262,7 +264,7 @@ test("an unproven containment result is not memoized over a later safe escalatio
   assert.equal(custody.evidence(opened.custodyRef)?.sealed, true);
 });
 
-test("hanging identity observation is bounded and launch fails closed", async () => {
+linuxTest("hanging identity observation is bounded and launch fails closed", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan(workspaceRef, "/usr/bin:/bin", `setTimeout(() => process.exit(0), 200);`);
   let observerStartedAt = 0;
@@ -282,7 +284,7 @@ test("hanging identity observation is bounded and launch fails closed", async ()
   assert.ok(performance.now() - observerStartedAt < 1_000);
 });
 
-test("identity proof resolving at the spawn deadline cannot authorize launch", { timeout: 30_000 }, async () => {
+linuxTest("identity proof resolving at the spawn deadline cannot authorize launch", { timeout: 30_000 }, async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan(workspaceRef, "/usr/bin:/bin", "", {
     arguments: ["-c", "read ignored"],
@@ -370,7 +372,7 @@ test("identity proof resolving at the spawn deadline cannot authorize launch", {
   assert.equal(custody.evidence(custodyRef)?.identity.status, "unproven");
 });
 
-test("an identity observer completing after spawn timeout cannot overwrite failed-closed evidence", { timeout: 30_000 }, async () => {
+linuxTest("an identity observer completing after spawn timeout cannot overwrite failed-closed evidence", { timeout: 30_000 }, async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan(workspaceRef, "/usr/bin:/bin", "", {
     arguments: ["-c", "read ignored"],
@@ -456,7 +458,7 @@ test("an identity observer completing after spawn timeout cannot overwrite faile
   assert.notEqual(custody.evidence(custodyRef)?.identity.status, "proved");
 });
 
-test("PID and process-group mismatch is rejected before the process handle is published", async () => {
+linuxTest("PID and process-group mismatch is rejected before the process handle is published", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan(workspaceRef, "/usr/bin:/bin", `setTimeout(() => process.exit(0), 200);`);
   const custody = new NodeProviderProcessCustody({
@@ -482,7 +484,7 @@ test("PID and process-group mismatch is rejected before the process handle is pu
   }), { name: "HostCustodyStartError" });
 });
 
-test("release keeps a secret-free tombstone that prevents same-host replay spawn", async () => {
+linuxTest("release keeps a secret-free tombstone that prevents same-host replay spawn", async () => {
   const workspaceRef = await disposableRoot();
   const privateRootPath = join(dirname(workspaceRef), `${basename(workspaceRef)}-host-private`);
   const secret = "credential-value-that-must-not-escape";
@@ -523,7 +525,7 @@ test("release keeps a secret-free tombstone that prevents same-host replay spawn
   assert.doesNotMatch(receiptRef, new RegExp(secret, "u"));
 });
 
-test("release pressure fails closed before replay retention can become unbounded", async () => {
+linuxTest("release pressure fails closed before replay retention can become unbounded", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan(workspaceRef, "/usr/bin:/bin", `setInterval(() => {}, 1000);`);
   const custody = new NodeProviderProcessCustody({
@@ -553,7 +555,7 @@ test("release pressure fails closed before replay retention can become unbounded
   }), HostCustodyUnsupportedError);
 });
 
-test("unsupported binding and missing custody return closed typed results without secrets", async () => {
+linuxTest("unsupported binding and missing custody return closed typed results without secrets", async () => {
   const workspaceRef = await disposableRoot();
   const empty = new NodeProviderProcessCustody({ launchPlans: createStaticHostCustodyLaunchPlanResolver([]) });
   await assert.rejects(empty.open({

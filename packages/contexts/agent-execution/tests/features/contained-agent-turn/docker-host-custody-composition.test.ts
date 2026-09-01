@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -140,7 +140,7 @@ const owner = Object.freeze({
 }) satisfies DockerCustodyOwnerIdentity;
 
 const disposable = async (): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), "ar-docker-custody-composition-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "ar-docker-custody-composition-")));
   await Promise.all([
     mkdir(join(root, "private", "operation"), { recursive: true }),
     mkdir(join(root, "workspaces", "operation"), { recursive: true }),

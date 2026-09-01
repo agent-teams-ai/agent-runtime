@@ -72,8 +72,8 @@ export const EXPECTED_FIXTURE_MATRIX = Object.freeze([
 ]);
 
 const packageTestCoordinates = testFile => {
-  const match = /^(packages\/[^/]+\/[^/]+)\/(tests\/[^/]+\.test\.ts)$/u.exec(testFile);
-  assert.ok(match, `${testFile} must be a package-owned top-level test file`);
+  const match = /^(packages\/[^/]+\/[^/]+)\/(tests\/.+\.test\.ts)$/u.exec(testFile);
+  assert.ok(match, `${testFile} must be a package-owned test file`);
   return { packageRoot: match[1], relativeTestFile: match[2] };
 };
 

@@ -16,6 +16,8 @@ import {
   syntheticResidueAuthorityFactory,
 } from "../../host-custody-test-fixture.ts";
 
+const linuxTest = process.platform === "linux" ? test : test.skip;
+
 class NodeProviderProcessCustody extends BaseNodeProviderProcessCustody {
   public constructor(options: ConstructorParameters<typeof BaseNodeProviderProcessCustody>[0]) {
     super({
@@ -31,7 +33,7 @@ class NodeProviderProcessCustody extends BaseNodeProviderProcessCustody {
   }
 }
 
-test("qualified Codex HOME and CODEX_HOME alias shares one descriptor-bound child authority", async () => {
+linuxTest("qualified Codex HOME and CODEX_HOME alias shares one descriptor-bound child authority", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan({
     script: `process.stdout.write(JSON.stringify([process.env.CODEX_HOME, process.env.HOME, process.env.TMPDIR]) + "\\n")`,
@@ -112,7 +114,7 @@ const assertRejectedWithoutProviderEffect = async (
   await assert.rejects(access(marker), { code: "ENOENT" });
 };
 
-test("private environment overlap remains rejected without provider effects", async () => {
+linuxTest("private environment overlap remains rejected without provider effects", async () => {
   const cases = [
     {
       label: "tmpdir-home-overlap",
@@ -146,7 +148,7 @@ test("private environment overlap remains rejected without provider effects", as
   }
 });
 
-test("non-Codex provider homes remain pairwise separated", async () => {
+linuxTest("non-Codex provider homes remain pairwise separated", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan({ binding: claudeBinding, workspaceRef });
   const config = entry.plan.environment.CLAUDE_CONFIG_DIR;

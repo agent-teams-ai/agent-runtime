@@ -26,6 +26,8 @@ import {
   key,
 } from "../../fixtures/docker-journal-test-fixture.ts";
 
+const linuxTest = process.platform === "linux" ? test : test.skip;
+
 test("persists and syncs every exact monotone record before returning authority", async () => {
   const storage = new MemoryStorage();
   const journal = new DockerCustodyJournal(storage);
@@ -311,7 +313,7 @@ after(async () => {
   assert.equal(remaining.every(root => root === undefined), true);
 });
 
-test("node storage uses stable custody for exact durable restart replay", async () => {
+linuxTest("node storage uses stable custody for exact durable restart replay", async () => {
   const root = await privateRoot();
   const storage = await nodeStorage(root);
   await advance(new DockerCustodyJournal(storage));
@@ -324,7 +326,7 @@ test("node storage uses stable custody for exact durable restart replay", async 
   assert.equal(bytes.at(-1), "\n".charCodeAt(0));
 });
 
-test("node storage durably retires an exact debt-free close and admits later work", async () => {
+linuxTest("node storage durably retires an exact debt-free close and admits later work", async () => {
   const root = await privateRoot();
   const journal = new DockerCustodyJournal(await nodeStorage(root), { maxJournalFiles: 1 });
   const closed = await advance(journal, key, true);
@@ -337,7 +339,7 @@ test("node storage durably retires an exact debt-free close and admits later wor
   assert.equal((await readdir(root)).filter(name => name.endsWith(".journal")).length, 1);
 });
 
-test("node retirement receipt survives restart and proves an identical lost-acknowledgement retry", async () => {
+linuxTest("node retirement receipt survives restart and proves an identical lost-acknowledgement retry", async () => {
   const root = await privateRoot();
   const durableStorage = await nodeStorage(root);
   const lostAcknowledgementStorage: DockerCustodyJournalStorage = Object.freeze({
@@ -375,7 +377,7 @@ test("node retirement receipt survives restart and proves an identical lost-ackn
   }), { name: "DockerCustodyJournalUnavailableError" });
 });
 
-test("node storage rejects symlink roots, symlink journals, and hardlinked journals", async () => {
+linuxTest("node storage rejects symlink roots, symlink journals, and hardlinked journals", async () => {
   const realRoot = await privateRoot();
   const rootParent = await privateRoot();
   const linkedRoot = join(rootParent, "linked-root");
@@ -399,7 +401,7 @@ test("node storage rejects symlink roots, symlink journals, and hardlinked journ
   await assert.rejects(symlinkStorage.open(locator), { name: "DockerCustodyJournalFilesystemError" });
 });
 
-test("an exact journal-name collision fails closed without creating another authority sequence", async () => {
+linuxTest("an exact journal-name collision fails closed without creating another authority sequence", async () => {
   const root = await privateRoot();
   const locator = dockerCustodyAttemptLocator(key);
   await writeFile(join(root, `docker-custody-v1-${locator}.journal`), "collision\n", { mode: 0o600 });
@@ -415,7 +417,7 @@ test("the descriptor-relative storage adapter is typed unsupported off Linux", a
   }), { name: "DockerCustodyJournalFilesystemError", diagnostic: "unsupported_platform" });
 });
 
-test("node storage detects partial physical tails without truncation or action replay", async () => {
+linuxTest("node storage detects partial physical tails without truncation or action replay", async () => {
   const root = await privateRoot();
   const storage = await nodeStorage(root);
   const journal = new DockerCustodyJournal(storage);
@@ -430,7 +432,7 @@ test("node storage detects partial physical tails without truncation or action r
   assert.deepEqual(await readFile(join(root, name)), before);
 });
 
-test("node storage serializes competing CAS appenders", async () => {
+linuxTest("node storage serializes competing CAS appenders", async () => {
   const root = await privateRoot();
   const first = new DockerCustodyJournal(await nodeStorage(root));
   const second = new DockerCustodyJournal(await nodeStorage(root));
@@ -469,7 +471,7 @@ const runContender = async (
   return stdout.trim();
 };
 
-test("actual child processes serialize cross-process action contenders", async () => {
+linuxTest("actual child processes serialize cross-process action contenders", async () => {
   const root = await privateRoot();
   await new DockerCustodyJournal(await nodeStorage(root)).prepare(key);
   const results = await Promise.all([runContender(root, key), runContender(root, key)]);
@@ -479,7 +481,7 @@ test("actual child processes serialize cross-process action contenders", async (
   assert.equal(recovered[0]?.kind === "replayed" ? recovered[0].sequence : -1, 1);
 });
 
-test("an unknown lock is never broken and never grants action authority", async () => {
+linuxTest("an unknown lock is never broken and never grants action authority", async () => {
   const root = await privateRoot();
   const storage = await nodeStorage(root);
   await writeFile(join(root, ".docker-custody-v1.lock"), "unknown", { mode: 0o600 });
@@ -487,7 +489,7 @@ test("an unknown lock is never broken and never grants action authority", async 
   assert.equal((await readFile(join(root, ".docker-custody-v1.lock"), "utf8")), "unknown");
 });
 
-test("pinned root rejects root and ancestor retarget before authority", async () => {
+linuxTest("pinned root rejects root and ancestor retarget before authority", async () => {
   const original = await privateRoot();
   const storage = await nodeStorage(original);
   const moved = `${original}-moved`;
@@ -514,7 +516,7 @@ test("pinned root rejects root and ancestor retarget before authority", async ()
   assert.deepEqual(await readdir(nested), []);
 });
 
-test("pinned root detects a retarget raced during the authority operation", async () => {
+linuxTest("pinned root detects a retarget raced during the authority operation", async () => {
   const root = await privateRoot();
   const moved = `${root}-raced`;
   temporaryRoots.add(moved);
@@ -543,7 +545,7 @@ test("pinned root detects a retarget raced during the authority operation", asyn
   assert.deepEqual(await readdir(root), []);
 });
 
-test("pinned root revalidates restrictive mode immediately before returning authority", async () => {
+linuxTest("pinned root revalidates restrictive mode immediately before returning authority", async () => {
   const root = await privateRoot();
   let broadened = false;
   const port: DockerCustodyLinuxFileSystemPort = {
@@ -608,7 +610,7 @@ const wrappedHandle = (
   },
 });
 
-test("a same-owner rename replacement or hardlink raced after datasync never returns action authority", async () => {
+linuxTest("a same-owner rename replacement or hardlink raced after datasync never returns action authority", async () => {
   for (const race of ["replacement", "hardlink"] as const) {
     const root = await privateRoot();
     const locator = dockerCustodyAttemptLocator(key);
@@ -650,7 +652,7 @@ test("a same-owner rename replacement or hardlink raced after datasync never ret
   }
 });
 
-test("every lock lifecycle failure is fixed, typed, and secret-safe", async () => {
+linuxTest("every lock lifecycle failure is fixed, typed, and secret-safe", async () => {
   for (const stage of ["stat", "lstat", "open", "datasync", "unlink", "directory_sync", "close"] as const) {
     const root = await privateRoot();
     let injected = false;
@@ -701,7 +703,7 @@ test("every lock lifecycle failure is fixed, typed, and secret-safe", async () =
   }
 });
 
-test("directory close rejection is fixed, typed, and secret-safe", async () => {
+linuxTest("directory close rejection is fixed, typed, and secret-safe", async () => {
   const root = await privateRoot();
   let injected = false;
   const port: DockerCustodyLinuxFileSystemPort = {
@@ -735,7 +737,7 @@ test("directory close rejection is fixed, typed, and secret-safe", async () => {
   });
 });
 
-test("journal close rejection fails every replay, CAS, append, and recovery path safely", async () => {
+linuxTest("journal close rejection fails every replay, CAS, append, and recovery path safely", async () => {
   for (const path of ["append", "replay", "cas", "recovery"] as const) {
     const root = await privateRoot();
     if (path !== "append") {
@@ -778,7 +780,7 @@ test("journal close rejection fails every replay, CAS, append, and recovery path
   }
 });
 
-test("recovery accounts actual descriptor reads instead of stale metadata", async () => {
+linuxTest("recovery accounts actual descriptor reads instead of stale metadata", async () => {
   const root = await privateRoot();
   const storage = await nodeStorage(root, staleMetadataPort());
   await new DockerCustodyJournal(storage).prepare(key);
@@ -787,7 +789,7 @@ test("recovery accounts actual descriptor reads instead of stale metadata", asyn
   assert.equal(recovered[0]?.kind === "replayed" ? recovered[0].sequence : -1, 0);
 });
 
-test("injectable Linux filesystem failures are fixed, typed, and secret-safe", async () => {
+linuxTest("injectable Linux filesystem failures are fixed, typed, and secret-safe", async () => {
   for (const [code, diagnostic] of [["ENOSPC", "storage_full"], ["EACCES", "permission_denied"]] as const) {
     const root = await privateRoot();
     const journal = new DockerCustodyJournal(await nodeStorage(root, faultPort(code)));
@@ -801,7 +803,7 @@ test("injectable Linux filesystem failures are fixed, typed, and secret-safe", a
   }
 });
 
-test("cross-process namespace admission allows only one journal at its bound", async () => {
+linuxTest("cross-process namespace admission allows only one journal at its bound", async () => {
   const root = await privateRoot();
   const other = {
     ...key,

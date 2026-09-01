@@ -32,7 +32,9 @@ const identity: DockerCustodyIdentity = Object.freeze({
 const handshake = Object.freeze({expectedIdentity: identity, kind: "host-handshake" as const,
   launchFingerprintSha256: digest("c"), nonce: "driver-nonce", protocol: DOCKER_CUSTODY_INIT_PROTOCOL});
 
-test("Node custody init launches only after exec, frames both provider streams, and drains child exit", async t => {
+test("Node custody init launches only after exec, frames both provider streams, and drains child exit", {
+  skip: process.platform === "linux" ? false : "the custody init executable slot is Linux-only",
+}, async t => {
   const uid = 65_534;
   const gid = 65_534;
   const fixturePath = join(import.meta.dirname, "../../fixtures", "docker-custody-init-process.mjs");
@@ -83,7 +85,9 @@ test("Node custody init launches only after exec, frames both provider streams, 
   assert.equal(messages.filter(message => message.kind === "provider-drain-complete").length, 1);
 });
 
-test("malformed control and EOF contain a live provider before init exits failed", async t => {
+test("malformed control and EOF contain a live provider before init exits failed", {
+  skip: process.platform === "linux" ? false : "the custody init executable slot is Linux-only",
+}, async t => {
   for (const failure of ["malformed", "eof"] as const) {
     const fixturePath = join(import.meta.dirname, "../../fixtures", "docker-custody-init-process.mjs");
     const child = spawn(process.execPath, [fixturePath], {stdio: ["pipe", "pipe", "pipe"]});
@@ -164,7 +168,9 @@ test("Node writable false commits every offered stdin byte and reports backpress
   assert.deepEqual(writeDockerCustodyProviderInput(input, Buffer.from("late")), {committedBytes: 0, status: "closed"});
 });
 
-test("held executable authority rejects mismatch and substitutions and survives pathname replacement", async t => {
+test("held executable authority rejects mismatch and substitutions and survives pathname replacement", {
+  skip: process.platform === "linux" ? false : "the descriptor-held executable slot is Linux-only",
+}, async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-provider-slot-"));
   t.after(async () => {await rm(root, {force: true, recursive: true});});
   const slot = join(root, "provider-entrypoint");
@@ -193,7 +199,9 @@ test("held executable authority rejects mismatch and substitutions and survives 
   assert.throws(() => holdDockerCustodyProviderExecutable(join(aliasRoot, "provider-entrypoint"), expected), /root is substituted/u);
 });
 
-test("held executable hashing rejects an oversized sparse executable before scanning", async t => {
+test("held executable hashing rejects an oversized sparse executable before scanning", {
+  skip: process.platform === "linux" ? false : "the descriptor-held executable slot is Linux-only",
+}, async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-provider-size-"));
   t.after(async () => {await rm(root, {force: true, recursive: true});});
   const slot = join(root, "provider-entrypoint");

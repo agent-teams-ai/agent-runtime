@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmod, copyFile, lstat, mkdir, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test as nodeTest } from "node:test";
 
 import { NodeProviderProcessCustody as BaseNodeProviderProcessCustody } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.js";
 import { createStaticHostCustodyLaunchPlanResolver } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/static-host-custody-launch-plan-resolver.js";
@@ -18,6 +18,8 @@ import {
   qualifiedIdentityObserver,
   syntheticResidueAuthorityFactory,
 } from "../../host-custody-test-fixture.ts";
+
+const test = process.platform === "linux" ? nodeTest : nodeTest.skip;
 
 class NodeProviderProcessCustody extends BaseNodeProviderProcessCustody {
   public constructor(options: ConstructorParameters<typeof BaseNodeProviderProcessCustody>[0]) {

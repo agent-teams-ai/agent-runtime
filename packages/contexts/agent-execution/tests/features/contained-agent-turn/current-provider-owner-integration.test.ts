@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, open, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, open, readFile, realpath, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
@@ -246,7 +246,7 @@ const dependenciesForProvider = (fixture: ReturnType<typeof createDependencies>,
 };
 
 test("provider owners keep stable kernel and random Host identities distinct and start only post-claim", async () => {
-  const root = await mkdtemp(join(tmpdir(), "current-provider-owner-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "current-provider-owner-")));
   try {
     const codexWorkspace = join(root, "codex-workspace");
     const codexPrivate = `${codexWorkspace}-host-private`;
@@ -342,7 +342,7 @@ test("provider owners keep stable kernel and random Host identities distinct and
 test("Codex and Claude current owners start only after the real atomic claim and cannot replay", async t => {
   for (const provider of ["codex", "claude"] as const) {
     await t.test(provider, async () => {
-      const root = await mkdtemp(join(tmpdir(), `current-owner-real-claim-${provider}-`));
+      const root = await realpath(await mkdtemp(join(tmpdir(), `current-owner-real-claim-${provider}-`)));
       try {
         const host = new FakeHost();
         const owner = await createClaimPathOwner(provider, root, host);
@@ -414,8 +414,10 @@ test("Codex and Claude current owners start only after the real atomic claim and
   }
 });
 
-test("raw Host reservation rejects a replaced filesystem descriptor before launch effects", async () => {
-  const root = await mkdtemp(join(tmpdir(), "current-owner-handoff-"));
+test("raw Host reservation rejects a replaced filesystem descriptor before launch effects", {
+  skip: process.platform === "linux" ? false : "descriptor-bound production Host Custody is Linux-only",
+}, async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "current-owner-handoff-")));
   try {
     const expected = join(root, "expected");
     const replacement = join(root, "replacement");
@@ -448,8 +450,10 @@ test("raw Host reservation rejects a replaced filesystem descriptor before launc
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
-test("raw Host reservation rejects exact path, device and inode on a substituted mount before provider effect", async () => {
-  const root = await mkdtemp(join(tmpdir(), "current-owner-mount-identity-"));
+test("raw Host reservation rejects exact path, device and inode on a substituted mount before provider effect", {
+  skip: process.platform === "linux" ? false : "descriptor-bound production Host Custody is Linux-only",
+}, async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "current-owner-mount-identity-")));
   try {
     const workspaceRef = join(root, "workspace");
     const privateRootPath = `${workspaceRef}-host-private`;
@@ -514,8 +518,10 @@ test("raw Host reservation rejects exact path, device and inode on a substituted
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
-test("throwing reserved-plan getters and reservation validation close retained authority exactly once", async () => {
-  const root = await mkdtemp(join(tmpdir(), "current-owner-reservation-exception-"));
+test("throwing reserved-plan getters and reservation validation close retained authority exactly once", {
+  skip: process.platform === "linux" ? false : "descriptor-bound production Host Custody is Linux-only",
+}, async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "current-owner-reservation-exception-")));
   try {
     const workspaceRef = join(root, "workspace");
     await mkdir(workspaceRef, {mode: 0o700});
@@ -558,7 +564,7 @@ test("throwing reserved-plan getters and reservation validation close retained a
 });
 
 test("prevention retires a prepared attempt without a Host or provider start", async () => {
-  const root = await mkdtemp(join(tmpdir(), "current-owner-prevention-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "current-owner-prevention-")));
   try {
     const workspaceRef = join(root, "workspace");
     const privateRootPath = `${workspaceRef}-host-private`;
@@ -596,7 +602,7 @@ test("prevention retires a prepared attempt without a Host or provider start", a
 });
 
 test("same-provider attempts retain distinct exact plans and reject crossed workspace authority", async () => {
-  const root = await mkdtemp(join(tmpdir(), "current-owner-plans-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "current-owner-plans-")));
   try {
     const identities = [ids("codex", "plan-a"), ids("codex", "plan-b")] as const;
     const records = new Map<string, {codexHome: string; privateRootPath: string; temp: string; workspaceRef: string}>();

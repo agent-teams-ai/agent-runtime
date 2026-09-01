@@ -32,7 +32,11 @@ import {
   workspaceRef,
 } from "../../claude-agent-sdk-contained-turn-provider.support.ts";
 
-test("external credential projection can never enter sealed workspace artifacts", async t => {
+test("external credential projection can never enter sealed workspace artifacts", {
+  skip: process.platform === "linux"
+    ? false
+    : "production descriptor-relative filesystem custody is Linux-only",
+}, async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-exclusion-"));
   t.after(async () => {
     await rm(root, { recursive: true, force: true });
