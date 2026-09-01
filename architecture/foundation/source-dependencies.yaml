@@ -119,6 +119,7 @@ boundaries:
         - node:crypto
         - node:path
         - node:perf_hooks
+        - node:stream
         - node:timers/promises
       runtimeReferences: []
   - id: adapter.agent-execution.provider-delegation-ports
