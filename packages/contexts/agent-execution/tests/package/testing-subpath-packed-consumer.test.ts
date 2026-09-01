@@ -104,6 +104,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "PostgresContainedTurnOperationStore",
       "applyContainedTurnPostgresSchema",
       "createClaudeCurrentKernelOwner",
+      "createCodexAppServerPermissionBoundary",
       "createCodexCurrentKernelOwner",
       "createContainedTurnFeature",
       "createContainedTurnProviderAccessPort",
