@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
   claudeAgentSdkArguments,
   createClaudeAgentSdkLaunchPlan,
   createClaudeAgentSdkPrivateProjection,
@@ -70,13 +71,13 @@ test("provider launch plans bind exact caller-owned root and requested mode with
     assert.equal(claude.privateRootPath, value.privateRootPath);
     assert.equal(claude.spawnMode, "sdk-delegated");
     assert.equal(claude.environment, value.privateProjection.environment);
-    assert.deepEqual(claude.arguments, claudeAgentSdkArguments(intentMode, value.workspaceRef));
+    assert.deepEqual(claude.arguments, claudeAgentSdkArguments(intentMode, CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD));
     assert.equal("delegatedArgumentVariants" in claude, false);
     const settingsIndex = claude.arguments.indexOf("--settings");
     const settings = JSON.parse(claude.arguments[settingsIndex + 1] ?? "null") as {
       sandbox: { filesystem: { allowWrite: string[] } };
     };
-    assert.deepEqual(settings.sandbox.filesystem.allowWrite, intentMode === "analysis" ? [] : [value.workspaceRef]);
+    assert.deepEqual(settings.sandbox.filesystem.allowWrite, intentMode === "analysis" ? [] : [CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD]);
   }
 });
 

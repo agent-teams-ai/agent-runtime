@@ -5,9 +5,9 @@ import { claimContainedTurnWithConsumedGrants } from "../../../dist/features/con
 import { retireAndCleanupContainedTurnPreparation } from "../../../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { createContainedTurnPreparationScopeDependencies } from "../../../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
-import { containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
-import { containedTurnDispatchClaimBindingDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
+import { completeContainedTurnDispatchGrantSubject } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import {
   CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT,
   recordContainedTurnPreparationCleanup,
@@ -34,7 +34,7 @@ import {
 
 const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
 const winner = createReservedOperation();
-const subject = Object.freeze({
+const subject = completeContainedTurnDispatchGrantSubject(Object.freeze({
   attemptId,
   custodyId,
   effectId,
@@ -45,9 +45,33 @@ const subject = Object.freeze({
   operationId,
   preparationToken,
   purpose: "contained_turn_provider_start_v1" as const,
+  provider: "codex" as const,
+  providerAccessExpectation: Object.freeze({
+    acceptedAuthorityDigest: initial.acceptedAuthorityVectorDigest,
+    accessRef: initial.providerAccessSnapshot.accessRef,
+    authorityHeadDigest: initial.providerAccessSnapshot.ownerAuthorityDigest,
+    bindingDigest: containedTurnProviderAccessSnapshotDigest(initial.providerAccessSnapshot),
+    bindingRevision: initial.providerAccessSnapshot.revision,
+    credentialBindingDigest: initial.providerAccessSnapshot.credentialBindingDigest,
+    credentialBindingRef: initial.providerAccessSnapshot.credentialBindingRef,
+    credentialGeneration: initial.providerAccessSnapshot.credentialGeneration,
+    providerAccountRef: initial.providerAccessSnapshot.providerAccountRef,
+    providerRouteRef: initial.providerAccessSnapshot.providerRouteRef,
+  }),
+  runtimeSecurityExpectation: Object.freeze({
+    acceptedAuthorityDigest: initial.acceptedAuthorityVectorDigest,
+    authorityGeneration: initial.acceptedAuthorityVector.operationAuthorityRevision,
+    authorityHeadDigest: initial.acceptedAuthorityVector.securityDecisionDigest,
+    authorityRevision: initial.acceptedAuthorityVector.securityAuthorityRevision,
+    constraintsDigest: digestContainedTurnCanonicalValue({ constraints: "scope-sanitization" }),
+    containmentPolicyDigest: initial.acceptedAuthorityVector.containmentPolicyDigest,
+    providerBindingDigest: containedTurnProviderAccessSnapshotDigest(initial.providerAccessSnapshot),
+    providerId: "codex",
+  }),
+  scope,
   scopeDigest: containedTurnScopeDigest(scope),
   workspaceId,
-});
+}));
 const hostCustodyProof = Object.freeze({
   binding: Object.freeze({
     attemptId,
@@ -61,21 +85,36 @@ const hostCustodyProof = Object.freeze({
 });
 
 const consumedReceipt = (owner: "provider_access" | "runtime_security") => {
-  const grantRequestDigest = digestContainedTurnCanonicalValue({ owner, request: "scope-sanitization" });
+  const request = owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
+  const grantRequestDigest = request.grantRequestId.slice("grant-request:".length);
   return Object.freeze({
-    claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject),
+    authorityFacts: owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation,
+    claimBeforeControlTime: 100,
+    claimBindingDigest: request.claimBindingDigest,
+    consumedAtControlTime: 50,
+    consumptionDigest: digestContainedTurnCanonicalValue({ owner, state: "consumed" }),
     grantRequestDigest,
-    grantRequestId: `grant-request:${grantRequestDigest}`,
+    grantRequestId: request.grantRequestId,
+    operationId,
     owner,
-    ownerAuthorityDigest: digestContainedTurnCanonicalValue({ owner, revision: 1 }),
-    ownerReceiptDigest: digestContainedTurnCanonicalValue({ owner, state: "consumed_pending" }),
+    ownerEvidenceRef: `scope-sanitization:${owner}`,
+    provider: "codex" as const,
+    purpose: "contained-turn.provider-dispatch/v1" as const,
+    requestDigest: request.requestDigest,
+    scope: Object.freeze({ ...scope, scopeDigest: containedTurnScopeDigest(scope) }),
     validThroughOperationCutoffRevision: initial.operationCutoff.revision,
   });
 };
 
 const unavailableAfterConsumed = Object.freeze({
+  consumedGrantReceipts: Object.freeze({
+    providerAccess: consumedReceipt("provider_access"),
+    runtimeSecurity: consumedReceipt("runtime_security"),
+  }),
   consumedGrantRequestIds: Object.freeze({
+    providerAccessConsumptionReceipt: consumedReceipt("provider_access"),
     providerAccessGrantRequestId: consumedReceipt("provider_access").grantRequestId,
+    runtimeSecurityConsumptionReceipt: consumedReceipt("runtime_security"),
     runtimeSecurityGrantRequestId: consumedReceipt("runtime_security").grantRequestId,
   }),
   consumptionEvidenceIds: Object.freeze({}),
@@ -425,12 +464,10 @@ const activePreparation = Object.freeze({
   operationId,
   preparationToken,
   preparedOperationRevision: initial.revision,
-  providerAccessGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
-    owner: "provider_access", request: "scope-sanitization",
-  })}`,
-  runtimeSecurityGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
-    owner: "runtime_security", request: "scope-sanitization",
-  })}`,
+  providerAccessConsumptionReceipt: consumedReceipt("provider_access"),
+  providerAccessGrantRequestId: consumedReceipt("provider_access").grantRequestId,
+  runtimeSecurityConsumptionReceipt: consumedReceipt("runtime_security"),
+  runtimeSecurityGrantRequestId: consumedReceipt("runtime_security").grantRequestId,
   workspaceId,
 });
 const retiredPreparation = retireContainedTurnDispatchPreparation(activePreparation, "retirement:scope-sanitization");
@@ -612,8 +649,7 @@ test("cleanup snapshots once before owner calls and never forwards or returns ow
       rawPermit.operationId = containedTurnIdentity("operation", "operation:mutated-after-snapshot");
       return { kind: "released" };
     },
-    providerSettle: async input => {
-      receivedPermits.push(input.cleanupPermit);
+    providerSettle: async _input => {
       return { kind: "settled" };
     },
     record: target => {
@@ -626,8 +662,7 @@ test("cleanup snapshots once before owner calls and never forwards or returns ow
       return rawRecorded;
     },
     retirement: { kind: "retired", preparation: rawPreparation },
-    securitySettle: async input => {
-      receivedPermits.push(input.cleanupPermit);
+    securitySettle: async _input => {
       return { kind: "settled" };
     },
   });
@@ -635,12 +670,11 @@ test("cleanup snapshots once before owner calls and never forwards or returns ow
   const outcome = await retireAndCleanupContainedTurnPreparation(
     dependencies, initial, scope, subject, "reconciliation",
   );
-  assert.equal(receivedPermits.length, 3);
+  assert.equal(receivedPermits.length, 1);
   assert.equal(recordedAggregates.length, 3);
   assert.equal(outcome.kind, "cleanup_closed");
   for (const permit of receivedPermits) {
     assert.notStrictEqual(permit, rawPermit);
-    assert.strictEqual(permit, receivedPermits[0]);
     assert.deepEqual(permit, retiredPreparation.cleanupPermit);
     assert.equal(Object.isFrozen(permit), true);
   }

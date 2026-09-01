@@ -584,7 +584,7 @@ test("enforces disjoint immutable identities and one-attempt claim coupling", ()
     proofs: [...operation.proofs, claimProof],
     revision: operation.revision + 1,
   };
-  expectInvariant(() => validateContainedTurnOperation(claimed), /dispatch requires allocated|pending provider start observation|requires its own exact proof/u);
+  expectInvariant(() => validateContainedTurnOperation(claimed), /dispatch requires allocated|pending provider start observation|requires its own exact proof|dispatch state must be an exact closed record/u);
   const mutableIdentity = { ...operation, operationId: containedTurnIdentity("operation", "operation:changed"), revision: 1 };
   expectInvariant(() => validateContainedTurnOperation(mutableIdentity, { previous: operation }), /binding mismatch|immutable/u);
 });

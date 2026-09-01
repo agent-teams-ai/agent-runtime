@@ -141,7 +141,7 @@ test("versioned state and preparation codecs upcast, round-trip, and quarantine 
     workspaceId: containedTurnIdentity("workspace", "workspace:codec"),
   });
   const encodedPreparation = encodeContainedTurnPreparation(preparation);
-  assert.equal(encodedPreparation.codecVersion, 3);
+  assert.equal(encodedPreparation.codecVersion, 4);
   assert.deepEqual(
     decodeContainedTurnPreparation(
       JSON.parse(encodedPreparation.json), encodedPreparation.digest, encodedPreparation.codecVersion,

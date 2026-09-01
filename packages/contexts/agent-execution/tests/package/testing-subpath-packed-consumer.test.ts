@@ -107,10 +107,12 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createCodexCurrentKernelOwner",
       "createContainedTurnFeature",
       "createContainedTurnProviderAccessPort",
+      "createContainedTurnRuntimeSecurityPort",
       "createNodeContainedTurnArtifacts",
       "createNodeContainedTurnWorkspace",
       "createNodeExecutableFileObserver",
       "createRuntimeInstallationDiscoveryFeature",
+      "recoverContainedTurnCommittedGrantSettlements",
       "recoverContainedTurnDispatchPreparations",
       "rollbackContainedTurnPostgresSchemaV4",
     ]);

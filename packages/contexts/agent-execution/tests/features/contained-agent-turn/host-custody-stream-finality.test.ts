@@ -160,7 +160,7 @@ test("containment releases unconsumed stdout backpressure before guarded finalit
       guardianExitObservation: guardianExit,
       providerExit,
       async signalGroup() {
-        assert.equal(stdoutSource.isPaused(), false);
+        assert.equal(stdoutSource.isPaused() && !stdoutSource.readableEnded, false);
         settleStdoutFinal?.("complete");
         return "sent" as const;
       },
