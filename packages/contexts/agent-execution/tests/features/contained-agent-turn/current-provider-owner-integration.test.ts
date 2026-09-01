@@ -14,6 +14,7 @@ import {
 import { createCodexAppServerPermissionBoundary } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {
+  CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
   createClaudeAgentSdkLaunchPlan,
   createClaudeAgentSdkPrivateProjection,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
@@ -694,7 +695,7 @@ test("public root remains path-free and outer composition retains the exact seve
     assert.doesNotMatch(publicRoot, new RegExp(privateName, "u"));
   }
   const composition = await readFile(new URL(
-    "../../embedded-runtime/src/composition/contained-turn-feature-composition.ts", import.meta.url,
+    "../../../../../apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts", import.meta.url,
   ), "utf8");
   const supplied = [...composition.matchAll(/^  (operationStore|security|providerAccess|workspace|artifacts|custody|provider):/gmu)]
     .map(match => match[1]);

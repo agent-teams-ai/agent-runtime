@@ -144,7 +144,7 @@ test("production exports expose one kernel authority and isolate only non-author
   const [publicIndex, composition, manifest, dispatch] = await Promise.all([
     readFile(new URL("../../../src/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../../../src/composition.ts", import.meta.url), "utf8"),
-    readFile(new URL(".../../.", import.meta.url), "utf8"),
+    readFile(new URL("../../../package.json", import.meta.url), "utf8"),
     readFile(new URL("../../../src/features/contained-agent-turn/application/contained-turn-dispatch.ts", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(publicIndex, /PostgresContainedTurn|ContainedTurnOperationStore|contained-turn-state/u);
