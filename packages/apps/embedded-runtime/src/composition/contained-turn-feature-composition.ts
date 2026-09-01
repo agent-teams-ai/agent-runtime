@@ -12,7 +12,7 @@ import {
   type OuterContainedTurnProviderAccess,
   type OuterContainedTurnRuntimeSecurityAuthority,
 } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnFeatureApi } from "@agent-teams/agent-execution";
+import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
 
 export interface ContainedTurnOuterCompositionDependencies
   extends Omit<ContainedTurnFeatureDependencies, "providerAccess" | "security"> {
@@ -44,13 +44,13 @@ export interface HostCustodiedContainedTurnDependencies
 }
 
 export interface HostCustodiedContainedTurnComposition {
-  readonly feature: ContainedTurnFeatureApi;
+  readonly feature: ContainedTurnCapabilityBundle;
   dispose(): void;
 }
 /** The only cross-context binding from Provider Access into Agent Execution. */
 export const createContainedTurnFeatureFromProviderAccess = (
   dependencies: ContainedTurnOuterCompositionDependencies,
-): ContainedTurnFeatureApi => createContainedTurnFeature(Object.freeze({
+): ContainedTurnCapabilityBundle => createContainedTurnFeature(Object.freeze({
   operationStore: dependencies.operationStore,
   security: createContainedTurnRuntimeSecurityPort(
     dependencies.security.legacy, dependencies.security.dispatchAuthorityV1,

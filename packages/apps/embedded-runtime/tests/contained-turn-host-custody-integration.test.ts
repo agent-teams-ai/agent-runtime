@@ -4,15 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createCodexAppServerPermissionBoundary } from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
+import { createCodexAppServerPermissionBoundary } from "@agent-teams/agent-execution/composition";
 import {
   createHostCustodiedAgentRuntimeHost,
   createHostCustodiedContainedTurn,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
+  type ContainedTurnOuterCompositionDependencies,
 } from "../dist/composition.js";
-import { DeterministicCurrentOwnerHost } from "../../contexts/agent-execution/tests/current-owner-success-fixture.ts";
-import { createDependencies } from "../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { DeterministicCurrentOwnerHost } from "../../../contexts/agent-execution/tests/current-owner-success-fixture.ts";
+import { createDependencies } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
 const setupCapabilities = Object.freeze({
@@ -30,19 +31,37 @@ const setupCapabilities = Object.freeze({
   }),
 });
 
+type OuterProviderAccess = ContainedTurnOuterCompositionDependencies["providerAccess"];
+type OuterSecurityAuthority = ContainedTurnOuterCompositionDependencies["security"]["dispatchAuthorityV1"];
+
 const providerAccess = Object.freeze({
-  consumeDispatchGrant: Object.freeze({async execute(input: any) {
-    return Object.freeze({kind: "consumed" as const, receipt: Object.freeze({
-      grantRequestRef: input.grantRequestId,
-      ownerAuthorityRef: "provider-access-authority:synthetic",
-      ownerReceiptRef: "provider-access-receipt:synthetic",
-      validThroughOperationCutoffRevision: input.subject.operationCutoffRevision,
-    })});
-  }}),
-  resolve: Object.freeze({async execute(input: any) {
+  dispatchConsumptionV1: Object.freeze({
+    async consumeForDispatch(input: Parameters<OuterProviderAccess["dispatchConsumptionV1"]["consumeForDispatch"]>[0]) {
+      return Object.freeze({kind: "consumed" as const, receipt: Object.freeze({
+        ...input.binding,
+        authorityHeadDigestAtConsumption: input.binding.authorityHeadDigest,
+        claimBeforeControlTime: 100,
+        claimBindingDigest: input.claimBindingDigest,
+        consumedAtControlTime: 50,
+        consumptionDigest: "provider-access-consumption:synthetic",
+        grantRequestId: input.grantRequestId,
+        opaqueOwnerEvidenceRef: "provider-access-evidence:synthetic",
+        operationId: input.operationId,
+        provider: input.provider,
+        purpose: input.purpose,
+        requestDigest: input.requestDigest,
+        scope: input.scope,
+      })});
+    },
+    async observeDispatchConsumption() {return Object.freeze({kind: "not_found" as const});},
+    async settleDispatchConsumption() {
+      return Object.freeze({kind: "settled" as const, receipt: Object.freeze({})});
+    },
+  }),
+  resolve: Object.freeze({async execute(input: Parameters<OuterProviderAccess["resolve"]["execute"]>[0]) {
     return Object.freeze({
       binding: Object.freeze({
-        accessRef: "access:synthetic", credentialBindingDigest: "credential-owner-digest:synthetic",
+        accessRef: "access:synthetic", credentialBindingDigest: "binding:synthetic",
         credentialBindingRef: "credential-binding:synthetic", credentialGeneration: 1,
         projectId: input.scope.projectId, provider: input.provider, providerAccountRef: "account:synthetic",
         providerRouteRef: "route:synthetic", revision: 1, tenantId: input.scope.tenantId,
@@ -52,7 +71,7 @@ const providerAccess = Object.freeze({
       kind: "resolved" as const,
     });
   }}),
-  revalidate: Object.freeze({async execute(input: any) {
+  revalidate: Object.freeze({async execute(input: Parameters<OuterProviderAccess["revalidate"]["execute"]>[0]) {
     return Object.freeze({
       binding: input.binding,
       evidence: Object.freeze({authorityDigest: "authority:dispatch", bindingAuthorityDigest: "binding:synthetic",
@@ -60,18 +79,48 @@ const providerAccess = Object.freeze({
       kind: "valid" as const,
     });
   }}),
-  settleDispatchGrant: Object.freeze({async execute() {return Object.freeze({kind: "settled" as const});}}),
-});
+}) satisfies OuterProviderAccess;
 
-class AmbiguousReleaseHost extends DeterministicCurrentOwnerHost {
-  public override async release() {
-    this.releases += 1;
-    return Object.freeze({evidenceRef: "evidence:ambiguous-release", kind: "unproven" as const});
+const runtimeSecurityAuthority = Object.freeze({
+  async consumeForDispatch(input: Parameters<OuterSecurityAuthority["consumeForDispatch"]>[0]) {
+    return Object.freeze({status: "consumed" as const, receipt: Object.freeze({
+      acceptedAuthorityDigest: input.acceptedAuthorityDigest,
+      authorityGeneration: input.authorityGeneration,
+      authorityHeadDigestAtConsumption: input.expectedAuthorityHeadDigest,
+      authorityRevision: input.expectedAuthorityRevision,
+      claimBeforeControlTime: 100,
+      claimBindingDigest: input.claimBindingDigest,
+      consumedAtControlTime: 50,
+      consumptionDigest: "runtime-security-consumption:synthetic",
+      constraintsDigest: input.expectedConstraintsDigest,
+      containmentPolicyDigest: input.expectedContainmentPolicyDigest,
+      contractVersion: "contained-turn-dispatch-consumption/v1" as const,
+      grantRequestId: input.grantRequestId,
+      operationId: input.operationId,
+      ownerEvidenceRef: "runtime-security-evidence:synthetic",
+      providerBindingDigest: input.providerBindingDigest,
+      providerId: input.providerId,
+      purpose: input.purpose,
+      requestDigest: input.requestDigest,
+      scope: input.scope,
+    })});
+  },
+  async observeDispatchConsumption() {return Object.freeze({status: "not_found" as const});},
+  async settleDispatchConsumption() {
+    return Object.freeze({status: "settled" as const, receipt: Object.freeze({})});
+  },
+}) satisfies OuterSecurityAuthority;
+
+class AmbiguousContainmentHost extends DeterministicCurrentOwnerHost {
+  public override async requestContainment() {
+    this.containments += 1;
+    return Object.freeze({evidenceRef: "evidence:ambiguous-containment", kind: "unproven" as const});
   }
 }
 
 const createCompositionInput = async (hostCustody: DeterministicCurrentOwnerHost, root: string) => {
   const fixture = createDependencies();
+  const effectAdmission = Object.freeze({});
   const workspaceRef = join(root, "workspace");
   const privateRootPath = join(root, "host-private");
   const codexHome = join(privateRootPath, "home");
@@ -85,7 +134,10 @@ const createCompositionInput = async (hostCustody: DeterministicCurrentOwnerHost
     fixture,
     input: Object.freeze({
       operationStore: fixture.dependencies.operationStore,
-      security: fixture.dependencies.security,
+      security: Object.freeze({
+        dispatchAuthorityV1: runtimeSecurityAuthority,
+        legacy: fixture.dependencies.security,
+      }),
       providerAccess,
       workspace: fixture.dependencies.workspace,
       artifacts: fixture.dependencies.artifacts,
@@ -93,6 +145,7 @@ const createCompositionInput = async (hostCustody: DeterministicCurrentOwnerHost
       selectedProvider: Object.freeze({
         kind: "codex" as const,
         owner: Object.freeze({
+          effectCustody: Object.freeze({admit: () => effectAdmission}),
           hostBootId: "host-boot:embedded-custody",
           hostInstanceId: "host-instance:embedded-custody",
           launchRecords: Object.freeze({async resolve() {
@@ -142,22 +195,25 @@ test("product Host composition routes provider execution through the same custod
     assert.equal(observation.status === "observed" && observation.turn.status, "succeeded");
     assert.deepEqual({containments: custody.containments, finalities: custody.finalities,
       releases: custody.releases, reserves: custody.reserves, starts: custody.starts},
-    {containments: 1, finalities: 1, releases: 1, reserves: 1, starts: 1});
+    {containments: 1, finalities: 1, releases: 0, reserves: 1, starts: 1});
     await host.dispose();
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
-test("ambiguous Host release is nonterminal and quarantines the workspace", async () => {
+test("ambiguous Host containment stays nonterminal without releasing operation custody", async () => {
   const root = await mkdtemp(join(tmpdir(), "embedded-host-custody-ambiguous-"));
-  const custody = new AmbiguousReleaseHost();
+  const custody = new AmbiguousContainmentHost();
   try {
     const composed = await createCompositionInput(custody, root);
     const product = createHostCustodiedContainedTurn(composed.input);
     const outcome = await product.feature.submit.execute(submit);
     assert.equal(outcome.status, "observed");
     assert.equal(outcome.status === "observed" && outcome.turn.status, "reconcile_required");
-    assert.equal(custody.releases, 1);
-    assert.equal(composed.fixture.workspaceQuarantines.length, 1);
+    assert.equal(custody.containments, 2);
+    assert.equal(custody.releases, 0);
+    // A possibly live process retains its operation-private workspace in custody;
+    // moving that workspace would manufacture cleanup evidence.
+    assert.equal(composed.fixture.workspaceQuarantines.length, 0);
     product.dispose();
   } finally {await rm(root, {recursive: true, force: true});}
 });

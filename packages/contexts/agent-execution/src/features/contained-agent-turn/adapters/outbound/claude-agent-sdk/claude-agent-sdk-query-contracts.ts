@@ -1,9 +1,29 @@
-type OfficialClaudeQueryFactory = typeof import("@anthropic-ai/claude-agent-sdk")["query"];
-type OfficialClaudeQueryInput = Parameters<OfficialClaudeQueryFactory>[0];
-type OfficialClaudeQueryOptions = NonNullable<OfficialClaudeQueryInput["options"]>;
-type OfficialClaudeSpawnCallback = NonNullable<OfficialClaudeQueryOptions["spawnClaudeCodeProcess"]>;
+import type { Readable, Writable } from "node:stream";
 
-export type ClaudeSdkSpawnOptions = Parameters<OfficialClaudeSpawnCallback>[0];
+export interface ClaudeSdkSpawnOptions {
+  readonly args: string[];
+  readonly command: string;
+  readonly cwd?: string;
+  readonly env: Record<string, string | undefined>;
+  readonly signal: AbortSignal;
+}
+
+export interface ClaudeSdkSpawnedProcess {
+  readonly exitCode: number | null;
+  readonly killed: boolean;
+  readonly signalCode?: NodeJS.Signals | null;
+  readonly stdin: Writable;
+  readonly stdout: Readable;
+  kill(signal: NodeJS.Signals): boolean;
+  off(event: "error", listener: (error: Error) => void): void;
+  off(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+  on(event: "error", listener: (error: Error) => void): void;
+  on(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+  once(event: "error", listener: (error: Error) => void): void;
+  once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+}
+
+export type ClaudeSdkSpawnCallback = (options: ClaudeSdkSpawnOptions) => ClaudeSdkSpawnedProcess;
 
 
 export interface ClaudeSdkQuery extends AsyncIterable<unknown> {
@@ -32,7 +52,7 @@ export interface ClaudeSdkQueryInput {
       readonly filesystem: { readonly allowRead: string[]; readonly allowWrite: string[] };
     };
     readonly settingSources: never[];
-    readonly spawnClaudeCodeProcess: OfficialClaudeSpawnCallback;
+    readonly spawnClaudeCodeProcess: ClaudeSdkSpawnCallback;
     readonly strictMcpConfig: true;
     readonly tools: string[];
   };
@@ -40,13 +60,3 @@ export interface ClaudeSdkQueryInput {
 }
 
 export type ClaudeQueryFactory = (input: ClaudeSdkQueryInput) => ClaudeSdkQuery;
-
-/**
- * The adapter intentionally exposes a stricter, private subset of the SDK
- * input.  Keep the relation available for declaration tests without making
- * the private subset a public SDK contract.
- */
-export type ClaudeSdkOfficialQueryInputAssignability =
-  ClaudeSdkQueryInput extends OfficialClaudeQueryInput ? true : false;
-
-export type ClaudeSdkSpawnedProcess = ReturnType<OfficialClaudeSpawnCallback>;

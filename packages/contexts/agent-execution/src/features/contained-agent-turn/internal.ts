@@ -7,6 +7,10 @@ export {
   type NodeContainedTurnWorkspaceOptions,
 } from "./adapters/outbound/filesystem/node-contained-turn-workspace.js";
 export {
+  createCodexAppServerPermissionBoundary,
+  type CodexAppServerPermissionBoundary,
+} from "./adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
+export {
   NodeProviderProcessCustody,
   type NodeProviderProcessCustodyOptions,
 } from "./adapters/outbound/host-custody/node-provider-process-custody.js";
