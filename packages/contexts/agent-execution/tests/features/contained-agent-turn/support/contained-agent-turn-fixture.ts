@@ -224,7 +224,7 @@ const createDependencies = (options: Readonly<{
         return { current, kind: "stale" };
       }
       if (current.effectId !== input.subject.effectId ||
-          containedTurnDispatchClaimBindingDigest(input.subject) !== receipts[0].claimBindingDigest ||
+          input.subject.providerAccessRequest.claimBindingDigest !== receipts[0].claimBindingDigest ||
           current.acceptedAuthorityVector.scopeDigest !== input.subject.scopeDigest) {
         return { current, kind: "stale" };
       }
