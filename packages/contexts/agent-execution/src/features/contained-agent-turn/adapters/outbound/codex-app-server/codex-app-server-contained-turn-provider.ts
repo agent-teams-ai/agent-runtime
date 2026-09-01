@@ -29,9 +29,6 @@ import type {
   CodexEffectCustodyBinding,
 } from "./codex-app-server-effect-custody.js";
 import {
-  CODEX_APP_SERVER_ADAPTER_REVISION,
-  CODEX_APP_SERVER_BINARY_REVISION,
-  CODEX_CAPABILITY_MANIFEST_REVISION,
   codexContainedThreadConfig,
   codexThreadSandbox,
   codexTurnSandboxPolicy,
@@ -41,6 +38,10 @@ import {
   validateCodexInitializeEvidence,
   validateCodexPermissionProfileEvidence,
 } from "./codex-app-server-permission-boundary.js";
+import {
+  codexAppServerTupleForBinaryRevision,
+  type CodexAppServerPlatformTuple,
+} from "./codex-app-server-platform-tuple.js";
 import {
   closeCodexInputBounded,
   drainCodexStderr,
@@ -123,6 +124,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
   readonly #maxActiveNotificationBytes: number;
   readonly #maxActiveNotifications: number;
   readonly #processes: CustodiedProviderProcessRegistry;
+  readonly #platformTuple: CodexAppServerPlatformTuple;
   readonly #requestTimeoutMs: number;
   readonly #additionalSensitiveOutputTokens: readonly string[];
   readonly #tmpDir: string;
@@ -135,9 +137,9 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       throw new TypeError("Codex App Server adapter requires a Codex provider binding");
     }
     const binding = manifest.providerBinding;
-    if (binding.adapterRevision !== CODEX_APP_SERVER_ADAPTER_REVISION
-      || binding.binaryRevision !== CODEX_APP_SERVER_BINARY_REVISION
-      || binding.capabilityManifestRevision !== CODEX_CAPABILITY_MANIFEST_REVISION) {
+    const platformTuple = codexAppServerTupleForBinaryRevision(binding.binaryRevision);
+    if (binding.adapterRevision !== platformTuple.adapterRevision
+      || binding.capabilityManifestRevision !== platformTuple.protocolRevision) {
       throw new TypeError("Codex App Server adapter requires the exact admitted implementation tuple");
     }
     if (!isAbsolute(options.tmpDir) || resolve(options.tmpDir) !== options.tmpDir || options.tmpDir === "/") {
@@ -158,6 +160,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       }),
     });
     this.manifest = manifest;
+    this.#platformTuple = platformTuple;
     this.#processes = options.processes;
     this.#effectCustody = options.effectCustody;
     this.#maxLineBytes = positiveInteger("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES);
@@ -351,6 +354,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       attemptId: input.attemptId,
       effectId: input.effectId,
       operationId: input.operationId,
+      platformTuple: this.#platformTuple,
     });
     let process: CustodiedProviderProcess | undefined;
     try {
@@ -390,10 +394,14 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         method: "initialize",
         params: {
           capabilities: { experimentalApi: false, requestAttestation: false },
-          clientInfo: { name: "agent-runtime", title: "Agent Runtime", version: this.manifest.providerBinding.adapterRevision },
+          clientInfo: {
+            name: this.#platformTuple.clientName,
+            title: "Agent Runtime",
+            version: this.#platformTuple.adapterRevision,
+          },
         },
       }, false, preTurnNotifications);
-      validateCodexInitializeEvidence(initializeResult, this.#boundary);
+      validateCodexInitializeEvidence(initializeResult, this.#boundary, this.#platformTuple);
       await beforeDeadline(
         process.write(encode({ method: "initialized" })),
         deadlineAfter(this.#requestTimeoutMs),

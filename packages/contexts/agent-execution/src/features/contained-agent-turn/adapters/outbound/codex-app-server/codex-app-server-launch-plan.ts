@@ -3,14 +3,18 @@ import { isAbsolute, relative, resolve } from "node:path";
 
 import type { HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
 import {
-  CODEX_APP_SERVER_BINARY_REVISION,
-  CODEX_APP_SERVER_BINARY_SHA256,
   CODEX_PERMISSION_PROFILE_ID,
   canonicalCodexJson,
   validateCodexDirectoryIdentity,
   type CodexAppServerPermissionBoundary,
   type CodexDirectoryIdentity,
 } from "./codex-app-server-permission-boundary.js";
+import {
+  assertExactCodexAppServerPlatformTuple,
+  codexAppServerTupleForBinaryRevision,
+  CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  type CodexAppServerPlatformTuple,
+} from "./codex-app-server-platform-tuple.js";
 
 const DISABLED_CODEX_FEATURES = Object.freeze([
   "apps",
@@ -27,6 +31,7 @@ export interface CodexAppServerLaunchPlanOptions {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly executablePath: string;
   readonly intentMode: "analysis" | "workspace-write";
+  readonly platformTuple?: CodexAppServerPlatformTuple;
   readonly privateRootPath: string;
   readonly tmpDir: string;
 }
@@ -89,6 +94,11 @@ const isDirectoryIdentity = (value: unknown): value is CodexDirectoryIdentity =>
 export const validateCodexAppServerLaunchPlanRoots = (
   plan: HostCustodyLaunchPlan,
 ): void => {
+  const platformTuple = codexAppServerTupleForBinaryRevision(plan.binaryRevision);
+  if (plan.containmentProfile !== platformTuple.containmentProfile
+    || plan.executableSha256 !== platformTuple.binarySha256) {
+    throw new TypeError("exact Codex App Server launch plan has a tuple/profile mismatch");
+  }
   if (!("codexHome" in plan) || typeof plan.codexHome !== "string"
     || !("tmpDir" in plan) || typeof plan.tmpDir !== "string"
     || !("workspaceRef" in plan) || typeof plan.workspaceRef !== "string"
@@ -118,6 +128,9 @@ export const validateCodexAppServerLaunchPlanRoots = (
 export const createCodexAppServerLaunchPlan = (
   options: CodexAppServerLaunchPlanOptions,
 ): CodexAppServerLaunchPlan => {
+  const platformTuple = assertExactCodexAppServerPlatformTuple(
+    options.platformTuple ?? CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  );
   const intentMode = acceptedIntentMode(options.intentMode);
   validateCodexDirectoryIdentity("codexHome", options.boundary.codexHomeIdentity);
   validateCodexDirectoryIdentity("workspaceRef", options.boundary.workspaceIdentity, false);
@@ -149,10 +162,10 @@ export const createCodexAppServerLaunchPlan = (
   for (const feature of DISABLED_CODEX_FEATURES) {launchArguments.push("--disable", feature);}
   return Object.freeze({
     arguments: Object.freeze(launchArguments),
-    binaryRevision: CODEX_APP_SERVER_BINARY_REVISION,
+    binaryRevision: platformTuple.binaryRevision,
     codexHome: options.boundary.codexHome,
     codexHomeIdentity: options.boundary.codexHomeIdentity,
-    containmentProfile: "strict-linux-cgroup-v2",
+    containmentProfile: platformTuple.containmentProfile,
     effectivePolicyDigest: options.boundary.effectivePolicyDigest,
     environment: Object.freeze({
       CODEX_HOME: options.boundary.codexHome,
@@ -162,7 +175,7 @@ export const createCodexAppServerLaunchPlan = (
       TMPDIR: options.tmpDir,
     }),
     executablePath: options.executablePath,
-    executableSha256: CODEX_APP_SERVER_BINARY_SHA256,
+    executableSha256: platformTuple.binarySha256,
     intentMode,
     permissionProfileId: CODEX_PERMISSION_PROFILE_ID,
     privateRootPath,

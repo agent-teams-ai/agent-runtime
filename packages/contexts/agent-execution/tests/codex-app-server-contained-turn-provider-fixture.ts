@@ -8,6 +8,7 @@ import { after } from "node:test";
 import {
   CODEX_APP_SERVER_ADAPTER_REVISION,
   CODEX_APP_SERVER_BINARY_REVISION,
+  CODEX_APP_SERVER_BINARY_SHA256,
   CODEX_CAPABILITY_MANIFEST_REVISION,
   createCodexAppServerPermissionBoundary,
 } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
@@ -161,7 +162,7 @@ export const standardHandshake = (message: Message, process: FakeCodexProcess): 
   if (message.method === "initialize") {
     process.emit({
       id: message.id,
-      result: { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "codex/0.150.1" },
+      result: { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)" },
     });
     return true;
   }
@@ -274,6 +275,7 @@ export const expectedCompletedReceipt = (
   adapterRevision: CODEX_APP_SERVER_ADAPTER_REVISION,
   attemptId: identity.attemptId,
   binaryRevision: CODEX_APP_SERVER_BINARY_REVISION,
+  binarySha256: CODEX_APP_SERVER_BINARY_SHA256,
   codes: [status === "completed" ? "codex-protocol-terminal-completed-observed"
     : status === "interrupted" ? "codex-protocol-terminal-interrupted-observed"
       : "codex-protocol-terminal-failed-observed"],

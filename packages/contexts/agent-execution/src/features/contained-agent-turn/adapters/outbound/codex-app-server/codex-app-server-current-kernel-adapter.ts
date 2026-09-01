@@ -12,10 +12,10 @@ import { containedTurnIdentity } from "../../../domain/contained-turn-identities
 import type { ContainedTurnCustodyHandle } from "../legacy/legacy-contained-turn-ports.js";
 import { CodexAppServerContainedTurnProvider } from "./codex-app-server-contained-turn-provider.js";
 import {
-  CODEX_APP_SERVER_ADAPTER_REVISION,
-  CODEX_APP_SERVER_BINARY_REVISION,
-  CODEX_CAPABILITY_MANIFEST_REVISION,
-} from "./codex-app-server-permission-boundary.js";
+  assertExactCodexAppServerPlatformTuple,
+  CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  type CodexAppServerPlatformTuple,
+} from "./codex-app-server-platform-tuple.js";
 
 type KernelExecutionInput = Parameters<ContainedTurnKernelProviderPort["execute"]>[0];
 const executeReviewedCodexProtocol = CodexAppServerContainedTurnProvider.prototype.execute;
@@ -50,13 +50,14 @@ export interface CodexAppServerKernelAttemptFactory {
 
 export interface CodexAppServerCurrentKernelAdapterOptions {
   readonly attempts: CodexAppServerKernelAttemptFactory;
+  readonly platformTuple?: CodexAppServerPlatformTuple;
 }
 
 export const CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT:
 ContainedTurnProviderAdapterSnapshot = Object.freeze({
-  adapterRevision: CODEX_APP_SERVER_ADAPTER_REVISION,
-  binaryRevision: CODEX_APP_SERVER_BINARY_REVISION,
-  capabilityManifestRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
+  adapterRevision: CODEX_APP_SERVER_LINUX_X64_TUPLE.adapterRevision,
+  binaryRevision: CODEX_APP_SERVER_LINUX_X64_TUPLE.binaryRevision,
+  capabilityManifestRevision: CODEX_APP_SERVER_LINUX_X64_TUPLE.protocolRevision,
   provider: "codex",
 });
 
@@ -64,7 +65,7 @@ export const CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST:
 ContainedTurnCapabilityManifest = Object.freeze({
   effectCardinality: "one_coarse_effect_per_operation",
   effectClass: "contained_unmediated_effect",
-  manifestRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
+  manifestRevision: CODEX_APP_SERVER_LINUX_X64_TUPLE.protocolRevision,
   manifestVersion: 1,
   provider: "codex",
   providerAttemptCardinality: "at_most_one",
@@ -76,10 +77,11 @@ ContainedTurnCapabilityManifest = Object.freeze({
 
 const sameAdapterSnapshot = (
   value: KernelExecutionInput["adapterSnapshot"],
+  platformTuple: CodexAppServerPlatformTuple,
 ): boolean => value.provider === "codex"
-  && value.adapterRevision === CODEX_APP_SERVER_ADAPTER_REVISION
-  && value.binaryRevision === CODEX_APP_SERVER_BINARY_REVISION
-  && value.capabilityManifestRevision === CODEX_CAPABILITY_MANIFEST_REVISION;
+  && value.adapterRevision === platformTuple.adapterRevision
+  && value.binaryRevision === platformTuple.binaryRevision
+  && value.capabilityManifestRevision === platformTuple.protocolRevision;
 
 const indeterminate = (
   input: KernelExecutionInput,
@@ -116,16 +118,30 @@ const matchesExecutionAuthority = (
 };
 
 export class CodexAppServerCurrentKernelAdapter implements ContainedTurnKernelProviderPort {
-  public readonly adapterSnapshot = CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT;
-  public readonly manifest = CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST;
+  public readonly adapterSnapshot: ContainedTurnProviderAdapterSnapshot;
+  public readonly manifest: ContainedTurnCapabilityManifest;
   readonly #attempts: CodexAppServerKernelAttemptFactory;
+  readonly #platformTuple: CodexAppServerPlatformTuple;
 
   public constructor(options: CodexAppServerCurrentKernelAdapterOptions) {
     this.#attempts = options.attempts;
+    this.#platformTuple = assertExactCodexAppServerPlatformTuple(
+      options.platformTuple ?? CODEX_APP_SERVER_LINUX_X64_TUPLE,
+    );
+    this.adapterSnapshot = Object.freeze({
+      adapterRevision: this.#platformTuple.adapterRevision,
+      binaryRevision: this.#platformTuple.binaryRevision,
+      capabilityManifestRevision: this.#platformTuple.protocolRevision,
+      provider: "codex",
+    });
+    this.manifest = Object.freeze({
+      ...CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST,
+      manifestRevision: this.#platformTuple.protocolRevision,
+    });
   }
 
   public async execute(input: KernelExecutionInput): Promise<ContainedTurnKernelProviderObservation> {
-    if (!sameAdapterSnapshot(input.adapterSnapshot)
+    if (!sameAdapterSnapshot(input.adapterSnapshot, this.#platformTuple)
       || input.providerAccessSnapshot.provider !== "codex") {
       return indeterminate(input, "authority-identity-mismatch");
     }

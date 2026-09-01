@@ -5,12 +5,11 @@ import type {
   ContainedTurnProviderExecutionOutcome,
   ContainedTurnProviderPort,
 } from "../legacy/legacy-contained-turn-ports.js";
+import { canonicalCodexJson } from "./codex-app-server-permission-boundary.js";
 import {
-  CODEX_APP_SERVER_ADAPTER_REVISION,
-  CODEX_APP_SERVER_BINARY_REVISION,
-  CODEX_CAPABILITY_MANIFEST_REVISION,
-  canonicalCodexJson,
-} from "./codex-app-server-permission-boundary.js";
+  CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  type CodexAppServerPlatformTuple,
+} from "./codex-app-server-platform-tuple.js";
 
 type CodexExecutionInput = Parameters<ContainedTurnProviderPort["execute"]>[0];
 
@@ -24,21 +23,25 @@ export interface CodexReceiptIdentity {
   readonly attemptId: string;
   readonly effectId: string;
   readonly operationId: string;
+  readonly platformTuple?: CodexAppServerPlatformTuple;
 }
 
-export const codexReceipt = (kind: string, identity: CodexReceiptIdentity, codes: readonly string[]): string =>
-  `urn:agent-runtime:${kind}:${createHash("sha256").update(canonicalCodexJson({
-    adapterRevision: CODEX_APP_SERVER_ADAPTER_REVISION,
+export const codexReceipt = (kind: string, identity: CodexReceiptIdentity, codes: readonly string[]): string => {
+  const platformTuple = identity.platformTuple ?? CODEX_APP_SERVER_LINUX_X64_TUPLE;
+  return `urn:agent-runtime:${kind}:${createHash("sha256").update(canonicalCodexJson({
+    adapterRevision: platformTuple.adapterRevision,
     attemptId: identity.attemptId,
-    binaryRevision: CODEX_APP_SERVER_BINARY_REVISION,
+    binaryRevision: platformTuple.binaryRevision,
+    binarySha256: platformTuple.binarySha256,
     codes,
     effectId: identity.effectId,
     kind,
     operationId: identity.operationId,
-    protocolRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
+    protocolRevision: platformTuple.protocolRevision,
     provider: "codex",
     redaction: "product-owned-receipt-identity/v2",
   })).digest("hex")}`;
+};
 
 export const codexNotAccepted = (input: {
   readonly identity: CodexReceiptIdentity;

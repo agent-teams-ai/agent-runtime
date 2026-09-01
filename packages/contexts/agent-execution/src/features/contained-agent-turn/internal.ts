@@ -11,6 +11,12 @@ export {
   type CodexAppServerPermissionBoundary,
 } from "./adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 export {
+  CODEX_APP_SERVER_DARWIN_ARM64_TUPLE,
+  CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  selectCodexAppServerPlatformTuple,
+  type CodexAppServerPlatformTuple,
+} from "./adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
+export {
   NodeProviderProcessCustody,
   type NodeProviderProcessCustodyOptions,
 } from "./adapters/outbound/host-custody/node-provider-process-custody.js";

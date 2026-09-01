@@ -8,16 +8,25 @@ import {
   isCodexRecord,
   type CodexJsonRecord,
 } from "./codex-app-server-jsonl.js";
+import {
+  CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  CODEX_PERMISSION_PROFILE_ID,
+  validateCodexAppServerUserAgent,
+  type CodexAppServerPlatformTuple,
+} from "./codex-app-server-platform-tuple.js";
 
-export const CODEX_APP_SERVER_VERSION = "0.150.1";
-export const CODEX_APP_SERVER_BINARY_REVISION = "@openai/codex:0.150.1+linux-x64";
-export const CODEX_APP_SERVER_BINARY_SHA256 = "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386";
-export const CODEX_APP_SERVER_SCHEMA_SHA256 = "8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3";
-export const CODEX_APP_SERVER_BINDINGS_SHA256 = "a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338";
-export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.150.1";
-export const CODEX_PERMISSION_PROFILE_ID = "agent-runtime-contained-v1";
-export const CODEX_CAPABILITY_MANIFEST_REVISION =
-  `contained-turn:v1:codex-app-server:0.150.1:schema-${CODEX_APP_SERVER_SCHEMA_SHA256}:bindings-${CODEX_APP_SERVER_BINDINGS_SHA256}:agent-runtime-contained-v1`;
+export {
+  CODEX_APP_SERVER_ADAPTER_REVISION,
+  CODEX_APP_SERVER_BINDINGS_SHA256,
+  CODEX_APP_SERVER_SCHEMA_SHA256,
+  CODEX_APP_SERVER_VERSION,
+  CODEX_CAPABILITY_MANIFEST_REVISION,
+  CODEX_PERMISSION_PROFILE_ID,
+} from "./codex-app-server-platform-tuple.js";
+
+/** Linux aliases retained for provider-local compatibility; new code consumes the selected tuple. */
+export const CODEX_APP_SERVER_BINARY_REVISION = CODEX_APP_SERVER_LINUX_X64_TUPLE.binaryRevision;
+export const CODEX_APP_SERVER_BINARY_SHA256 = CODEX_APP_SERVER_LINUX_X64_TUPLE.binarySha256;
 
 export const codexContainedThreadConfig = (): CodexJsonRecord => ({
   features: {
@@ -197,15 +206,17 @@ const hasExactKeys = (value: CodexJsonRecord, keys: readonly string[]): boolean 
 export const validateCodexInitializeEvidence = (
   result: unknown,
   boundary: CodexAppServerPermissionBoundary,
+  platformTuple: CodexAppServerPlatformTuple = CODEX_APP_SERVER_LINUX_X64_TUPLE,
 ): void => {
   if (!isCodexRecord(result)
     || !hasExactKeys(result, ["codexHome", "platformFamily", "platformOs", "userAgent"])
     || result.codexHome !== boundary.codexHome
-    || result.platformFamily !== "unix"
-    || result.platformOs !== "linux"
-    || result.userAgent !== `codex/${CODEX_APP_SERVER_VERSION}`) {
+    || result.platformFamily !== platformTuple.platformFamily
+    || result.platformOs !== platformTuple.platformOs) {
     throw evidenceError("initialization does not match the pinned candidate runtime tuple");
   }
+  try {validateCodexAppServerUserAgent(result.userAgent, platformTuple);}
+  catch {throw evidenceError("initialization does not match the pinned candidate runtime tuple");}
 };
 
 const layerType = (layer: CodexJsonRecord): string | undefined =>
