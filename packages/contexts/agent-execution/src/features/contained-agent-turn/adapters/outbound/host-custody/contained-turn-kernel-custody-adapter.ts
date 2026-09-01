@@ -1,4 +1,4 @@
-/* oxlint-disable max-lines -- The dedicated kernel adapter stays within its reviewed 600-line adapter limit. */
+/* oxlint-disable max-lines -- this coordinator remains below the 600-line adapter hard limit. */
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import type {
@@ -7,11 +7,18 @@ import type {
 } from "../../../application/ports/outbound/contained-turn-ports.js";
 import type {
   HostCustodyEvidence,
-  HostCustodyEvidenceRegistry,
   HostCustodyLaunchPlan,
   HostCustodyReservationInput,
   ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
+import {
+  type ContainedTurnHostCustodyPort,
+  type ContainedTurnKernelCustodyAdapterOptions,
+  type ContainedTurnKernelCustodyAttemptOwner,
+  type ContainedTurnKernelWorkspaceOwner,
+  type KernelOpenInput,
+} from "./contained-turn-kernel-custody-contracts.js";
+import { openKernelCompletionBoundary } from "./contained-turn-kernel-custody-deadline.js";
 import {
   canonicalDigest,
   completionProjection,
@@ -31,44 +38,18 @@ import {
   reservationIdentity,
   type SealedProviderCompletion,
 } from "./contained-turn-kernel-custody-projections.js";
-export interface ContainedTurnHostCustodyPort extends ProviderProcessCustodyPort, HostCustodyEvidenceRegistry {
-  reserve(input: HostCustodyReservationInput): ReturnType<ProviderProcessCustodyPort["open"]>;
-}
-type KernelOpenInput = Parameters<ContainedTurnKernelCustodyPort["open"]>[0];
-interface ContainedTurnKernelCustodyLaunchAuthority { readonly intentMode: "analysis" | "workspace-write"; readonly workspaceRef: string; }
-export interface ContainedTurnKernelWorkspaceOwner {
-  withLaunchAuthority<Result>(input: Readonly<{
-    operationId: KernelOpenInput["operationId"];
-    workspaceId: KernelOpenInput["workspaceId"];
-    attemptId: KernelOpenInput["attemptId"];
-  }>, consume: (target: Readonly<{
-    canonicalPath: string;
-    descriptorPath: string;
-    identity: Readonly<{ dev: bigint; ino: bigint; mountId: string }>;
-  }>) => Promise<Result>): Promise<Result>;
-}
-export interface ContainedTurnKernelCustodyAttemptOwner {
-  prepare(input: Readonly<{
-    kernel: KernelOpenInput;
-    providerBinding: HostCustodyReservationInput["providerBinding"];
-    workspaceAuthority: HostCustodyReservationInput["workspaceAuthority"];
-  }>): Promise<HostCustodyLaunchPlan>;
-  retain(input: Readonly<{
-    kernel: KernelOpenInput;
-    underlyingCustodyRef: string;
-    workspaceRef: string;
-  }>): void;
-  retire(input: Readonly<{ attemptId: string; custodyId: string; operationId: string }>): void;
-}
-export interface ContainedTurnKernelCustodyAdapterOptions {
-  readonly completionAfterMs?: number;
-  readonly hostBootId: string;
-  readonly hostInstanceId: string;
-  readonly attemptOwner: ContainedTurnKernelCustodyAttemptOwner;
-  readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
-  readonly monotonicNow?: () => number;
-  readonly startObservationAfterMs?: number;
-}
+import {
+  type ContainedTurnKernelCustodyLaunchAuthority,
+  type KernelReservation,
+  sameReservation,
+} from "./contained-turn-kernel-custody-state.js";
+
+export type {
+  ContainedTurnHostCustodyPort,
+  ContainedTurnKernelCustodyAdapterOptions,
+  ContainedTurnKernelCustodyAttemptOwner,
+  ContainedTurnKernelWorkspaceOwner,
+} from "./contained-turn-kernel-custody-contracts.js";
 type StartInput = Parameters<ContainedTurnKernelCustodyPort["start"]>[0];
 type StartProof = Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }>;
 type NoStartProof = Extract<ContainedTurnProof, { readonly kind: "provider_process_no_start" }>;
@@ -85,38 +66,6 @@ type ExecutionAttestation = Extract<
   Awaited<ReturnType<ContainedTurnKernelCustodyPort["attestExecutionClosure"]>>,
   { readonly kind: "proved" }
 >;
-interface KernelReservation {
-  readonly attemptId: KernelOpenInput["attemptId"];
-  readonly authorityVectorDigest: KernelOpenInput["authorityVectorDigest"];
-  readonly custodyId: KernelOpenInput["custodyId"];
-  readonly effectId: KernelOpenInput["effectId"];
-  readonly intentMode: ContainedTurnKernelCustodyLaunchAuthority["intentMode"];
-  readonly kernelOpenIdentityDigest: ReturnType<typeof openIdentity>;
-  readonly openIdentityDigest: ReturnType<typeof openIdentity>;
-  readonly operationId: KernelOpenInput["operationId"];
-  readonly underlyingCustodyRef: string;
-  readonly workspaceId: KernelOpenInput["workspaceId"];
-  containmentReceiptRef?: string;
-  executionAttestation?: Readonly<{
-    readonly finalCursor: number;
-    readonly result: ExecutionAttestation;
-  }>;
-  executionBoundaryOpened: boolean;
-  physicalProof?: Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>;
-  processStartProved: boolean;
-  providerCompletion?: SealedProviderCompletion;
-  providerCompletionState: "ambiguous" | "cutoff" | "pending" | "sealed";
-  released: boolean;
-  startIdentityDigest?: ReturnType<typeof canonicalDigest>;
-  startBoundaryCutoff: boolean;
-  started: boolean;
-}
-const sameReservation = (
-  reservation: KernelReservation,
-  input: Readonly<{ readonly attemptId: string; readonly custodyId: string; readonly operationId: string }>,
-): boolean => reservation.attemptId === input.attemptId &&
-  reservation.custodyId === input.custodyId &&
-  reservation.operationId === input.operationId;
 /**
  * Outer anti-corruption adapter from raw Host facts to the kernel proof port.
  * Provider protocol completion is sealed from the exact one-use execute promise;
@@ -279,44 +228,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public completionBoundary(
     input: Parameters<ContainedTurnKernelCustodyPort["completionBoundary"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["completionBoundary"]> {
-    const reservation = this.#reservation(input);
-    if (input.phase === "execution") {
-      if (reservation.executionBoundaryOpened) {
-        throw new TypeError("Host Custody execution boundary was already opened");
-      }
-      reservation.executionBoundaryOpened = true;
-    }
-    let released = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const expiration = new Promise<{
-      readonly evidenceId: ReturnType<typeof evidenceId>;
-      readonly kind: "expired";
-    }>(resolve => {
-      timer = setTimeout(() => {
-        timer = undefined;
-        if (released) {return;}
-        if (input.phase === "start") {
-          reservation.startBoundaryCutoff = true;
-        } else if (reservation.providerCompletionState === "pending") {
-          reservation.providerCompletionState = "cutoff";
-        }
-        resolve(Object.freeze({
-          evidenceId: evidenceId("completion-deadline", Object.freeze({
-            ...reservationIdentity(reservation),
-            phase: input.phase,
-          })),
-          kind: "expired",
-        }));
-      }, this.#completionAfterMs);
-    });
-    return Object.freeze({
-      expiration,
-      release: () => {
-        if (released) {return;}
-        released = true;
-        if (timer !== undefined) {clearTimeout(timer); timer = undefined;}
-      },
-    });
+    return openKernelCompletionBoundary(input, this.#reservation(input), this.#completionAfterMs);
   }
   public async start(input: StartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
     const reservation = this.#reservation(input);
