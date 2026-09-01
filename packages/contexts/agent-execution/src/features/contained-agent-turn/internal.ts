@@ -49,4 +49,4 @@ export {
 } from "./composition/claude-current-kernel-owner.js";
 export type {
   ContainedTurnKernelWorkspaceOwner,
-} from "./adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";
+} from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";

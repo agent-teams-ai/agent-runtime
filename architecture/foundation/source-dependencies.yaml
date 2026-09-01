@@ -73,16 +73,19 @@ boundaries:
         - adapter.agent-execution.docker-engine
       packages: []
       builtins:
+        - node:child_process
         - node:crypto
         - node:fs
         - node:fs/promises
         - node:path
+        - node:stream
       runtimeReferences: []
   - id: adapter.agent-execution.host-custody
     dependencyMode: runtime
     roots:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody
     entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts
     allow:
@@ -104,9 +107,11 @@ boundaries:
     dependencyMode: runtime
     roots:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk
-    entrypoints: []
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.ts
     allow:
       boundaries:
+        - adapter.agent-execution.legacy-contained-turn-ports
         - adapter.agent-execution.provider-delegation-ports
         - core.agent-execution.contained-turn
       packages:
@@ -153,8 +158,10 @@ boundaries:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts
     allow:
       boundaries:
+        - adapter.agent-execution.claude-agent-sdk
         - adapter.agent-execution.host-custody
         - adapter.agent-execution.legacy-contained-turn-ports
+        - adapter.agent-execution.provider-delegation-ports
         - core.agent-execution.contained-turn
       packages:
         - "@agent-teams/filesystem-custody"

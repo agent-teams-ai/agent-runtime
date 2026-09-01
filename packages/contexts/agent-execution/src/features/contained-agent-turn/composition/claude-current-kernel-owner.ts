@@ -8,15 +8,13 @@ import type {
 } from "../domain/contained-turn-authority.js";
 import {
   ClaudeAgentSdkCurrentKernelAdapter,
+  captureClaudePrivateDirectoryCustody,
+  createClaudeAgentSdkLaunchPlan,
+  type ClaudeAgentSdkContainedTurnProviderOptions,
   type ClaudeAgentSdkKernelPrivateExecution,
   type ClaudeAgentSdkKernelPrivateExecutionResolver,
-} from "../adapters/outbound/claude-agent-sdk/claude-agent-sdk-current-kernel-adapter.js";
-import {
-  createClaudeAgentSdkLaunchPlan,
   type ClaudeAgentSdkPrivateProjection,
-} from "../adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
-import type { ClaudeAgentSdkContainedTurnProviderOptions } from "../adapters/outbound/claude-agent-sdk/claude-agent-sdk-contained-turn-provider.js";
-import { captureClaudePrivateDirectoryCustody } from "../adapters/outbound/claude-agent-sdk/claude-private-directory-custody.js";
+} from "../adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.js";
 import type { PrivateDirectoryCustodyPort } from "../adapters/outbound/provider-delegation-ports/private-directory-custody-port.js";
 import type {
   CustodiedProviderProcessRegistry,
@@ -28,7 +26,7 @@ import {
   type ContainedTurnHostCustodyPort,
   type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner,
-} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";
+} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 
 type KernelOpen = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["kernel"];
 type Processes = CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;

@@ -17,7 +17,7 @@ import {
   type ContainedTurnHostCustodyPort,
   type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner,
-} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";
+} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 
 type KernelOpen = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["kernel"];
 type AttemptInput = Parameters<CodexAppServerKernelAttemptFactory["prepare"]>[0];
