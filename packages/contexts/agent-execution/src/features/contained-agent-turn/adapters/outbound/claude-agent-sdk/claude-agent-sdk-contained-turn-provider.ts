@@ -24,6 +24,7 @@ import {
 } from "./claude-agent-sdk-turn-execution.js";
 import type {
   ClaudeQueryFactory,
+  ClaudeSdkSpawnedProcess,
   ClaudeSdkQueryInput,
 } from "./claude-agent-sdk-query-contracts.js";
 import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
@@ -178,7 +179,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
         allowedTools: tools,
         cwd: CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
         disallowedTools: [...disallowedTools(input.intent.mode)],
-        env: projection.environment,
+        env: { ...projection.environment },
         includePartialMessages: true,
         maxTurns: 1,
         mcpServers: {},
@@ -194,7 +195,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
           cwd: options.cwd,
           environment: options.env,
           signal: options.signal,
-        }),
+        }) as ClaudeSdkSpawnedProcess,
         strictMcpConfig: true,
         tools,
       },

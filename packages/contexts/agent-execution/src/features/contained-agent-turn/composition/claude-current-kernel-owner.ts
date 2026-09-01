@@ -4,6 +4,8 @@ import type {
 } from "../application/ports/outbound/contained-turn-ports.js";
 import {
   CONTAINED_TURN_REQUIRED_PROOF_KINDS,
+} from "../domain/contained-turn-authority.js";
+import type {
   ContainedTurnCapabilityManifest,
   ContainedTurnProviderAdapterSnapshot,
 } from "../domain/contained-turn-authority.js";

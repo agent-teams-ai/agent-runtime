@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
   claudeAgentSdkArguments,
   createClaudeAgentSdkLaunchPlan,
   createClaudeAgentSdkPrivateProjection,
@@ -166,11 +167,14 @@ test("uses only an external frozen private projection while tools remain workspa
   let captured: Parameters<Parameters<QueryFactory>[0]["options"]["spawnClaudeCodeProcess"]>[0] | undefined;
   const adapter = provider(queryInput => {
     assert.deepEqual(queryInput.options.env, privateProjection.environment);
-    assert.deepEqual(queryInput.options.sandbox.filesystem, { allowRead: [workspaceRef], allowWrite: [] });
+    assert.deepEqual(queryInput.options.sandbox.filesystem, {
+      allowRead: [CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD],
+      allowWrite: [],
+    });
     captured = {
-      args: [...claudeAgentSdkArguments("analysis", workspaceRef)],
+      args: [...claudeAgentSdkArguments("analysis", CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD)],
       command: executablePath,
-      cwd: workspaceRef,
+      cwd: CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
       env: { ...privateProjection.environment },
       signal: new AbortController().signal,
     };
@@ -183,7 +187,7 @@ test("uses only an external frozen private projection while tools remain workspa
   });
   assert.equal((await adapter.execute(input())).kind, "completed");
   assert.ok(captured);
-  assert.equal(captured.cwd, workspaceRef);
+  assert.equal(captured.cwd, CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD);
   assert.deepEqual(captured.env, privateProjection.environment);
 
   const plan = await createClaudeAgentSdkLaunchPlan({
@@ -277,13 +281,13 @@ test("emits zero-based cursors with exact continuity", async () => {
   const adapter = provider(() => ({
     close: () => {},
     interrupt: async () => {},
-    async *[Symbol.asyncIterator]() { yield delta("A"); yield delta("B"); yield success(); },
+    async *[Symbol.asyncIterator]() { yield delta("A "); yield delta("B "); yield success(); },
   }));
   const outcome = await adapter.execute({ ...input(), emit: async chunk => { output.push(chunk); } });
   assert.equal(outcome.kind, "completed");
   assert.deepEqual(output, [
-    { cursor: 0, kind: "assistant", text: "A" },
-    { cursor: 1, kind: "assistant", text: "B" },
+    { cursor: 0, kind: "assistant", text: "A " },
+    { cursor: 1, kind: "assistant", text: "B " },
   ]);
 });
 
@@ -440,7 +444,7 @@ test("streams intentional assistant text incrementally while redacting a later e
   void outcomePromise.then(() => { settled = true; return settled; });
   await waitFor(() => output.length === 1);
   assert.equal(settled, false);
-  assert.deepEqual(output[0], { cursor: 0, kind: "assistant", text: intentionalAssistantText });
+  assert.deepEqual(output[0], { cursor: 0, kind: "assistant", text: "assistant-visible " });
   releaseResult?.();
   const outcome = await outcomePromise;
   assert.equal(outcome.kind, "completed");

@@ -17,21 +17,21 @@ export interface ClaudeSdkQueryInput {
     readonly allowedTools: string[];
     readonly cwd: string;
     readonly disallowedTools: string[];
-    readonly env: Readonly<Record<string, string>>;
+    readonly env: Record<string, string | undefined>;
     readonly includePartialMessages: boolean;
     readonly maxTurns: number;
     readonly mcpServers: Record<string, never>;
     readonly pathToClaudeCodeExecutable: string;
     readonly permissionMode: "dontAsk";
     readonly persistSession: false;
-    readonly plugins: readonly never[];
+    readonly plugins: never[];
     readonly sandbox: {
       readonly allowUnsandboxedCommands: false;
       readonly enabled: true;
       readonly failIfUnavailable: true;
       readonly filesystem: { readonly allowRead: string[]; readonly allowWrite: string[] };
     };
-    readonly settingSources: readonly never[];
+    readonly settingSources: never[];
     readonly spawnClaudeCodeProcess: OfficialClaudeSpawnCallback;
     readonly strictMcpConfig: true;
     readonly tools: string[];
@@ -41,7 +41,12 @@ export interface ClaudeSdkQueryInput {
 
 export type ClaudeQueryFactory = (input: ClaudeSdkQueryInput) => ClaudeSdkQuery;
 
-type AssertAssignable<Value extends true> = Value;
-export type ClaudeSdkOfficialQueryInputAssignability = AssertAssignable<
-  ClaudeSdkQueryInput extends OfficialClaudeQueryInput ? true : false
->;
+/**
+ * The adapter intentionally exposes a stricter, private subset of the SDK
+ * input.  Keep the relation available for declaration tests without making
+ * the private subset a public SDK contract.
+ */
+export type ClaudeSdkOfficialQueryInputAssignability =
+  ClaudeSdkQueryInput extends OfficialClaudeQueryInput ? true : false;
+
+export type ClaudeSdkSpawnedProcess = ReturnType<OfficialClaudeSpawnCallback>;

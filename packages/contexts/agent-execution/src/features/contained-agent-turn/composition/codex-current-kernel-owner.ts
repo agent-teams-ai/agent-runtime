@@ -93,7 +93,7 @@ export const createCodexCurrentKernelOwner = (
   }
   const admit = custodyDescriptor.value as CodexEffectCustodyAuthority["admit"];
   const effectCustody: CodexEffectCustodyAuthority = Object.freeze({
-    admit: request => admit.call(custodyOwner, request),
+    admit: (request: Parameters<CodexEffectCustodyAuthority["admit"]>[0]) => admit.call(custodyOwner, request),
   });
   const records = new Map<string, PreparedRecord>();
   const processes: CustodiedProviderProcessRegistry = Object.freeze({
