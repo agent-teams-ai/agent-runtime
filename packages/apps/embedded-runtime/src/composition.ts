@@ -15,6 +15,18 @@ export {
   type CodexSetupCapabilityBundle,
 } from "./composition/agent-runtime-host.js";
 export type { ContainedTurnCapabilityBundle } from "./composition/contained-turn-runtime-access.js";
+export {
+  createContainedTurnFeatureFromProviderAccess,
+  createHostCustodiedContainedTurn,
+  type ContainedTurnHostProviderSelection,
+  type ContainedTurnOuterCompositionDependencies,
+  type HostCustodiedContainedTurnComposition,
+  type HostCustodiedContainedTurnDependencies,
+} from "./composition/contained-turn-feature-composition.js";
+export {
+  createHostCustodiedAgentRuntimeHost,
+  type HostCustodiedAgentRuntimeHostDependencies,
+} from "./composition/host-custodied-agent-runtime-host.js";
 export type { BuildCodexSetupViewDependencies } from "./application/build-codex-setup-view.js";
 export type { BuildClaudeCodeSetupViewDependencies } from "./application/build-claude-code-setup-view.js";
 export {
