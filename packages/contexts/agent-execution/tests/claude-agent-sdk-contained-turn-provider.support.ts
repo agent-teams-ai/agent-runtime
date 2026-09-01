@@ -16,6 +16,7 @@ import {
 import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {
+  CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
   claudeAgentSdkArguments,
   createClaudeAgentSdkPrivateProjection,
 } from "../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
@@ -114,6 +115,7 @@ export const provider = (
   executablePath,
   interruptGraceMs: 20,
   manifest,
+  platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
   privateDirectoryCustody,
   privateProjections,
   processes: { get: () => inertRegistryProcess(), start: () => inertProcess() },
@@ -313,6 +315,7 @@ export const kernelProvider = (
   executablePath,
   interruptGraceMs: 5,
   manifest: kernelManifest,
+  platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
   privateDirectoryCustody,
   privateExecutions: {
     consume: async (request, consume) => {

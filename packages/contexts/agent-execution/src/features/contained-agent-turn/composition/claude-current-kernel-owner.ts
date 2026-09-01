@@ -10,13 +10,14 @@ import type {
   ContainedTurnProviderAdapterSnapshot,
 } from "../domain/contained-turn-authority.js";
 import {
-  CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
   ClaudeAgentSdkCurrentKernelAdapter,
   captureClaudePrivateDirectoryCustody,
   createClaudeAgentSdkLaunchPlan,
+  selectClaudeAgentSdkPlatformTuple,
   type ClaudeAgentSdkContainedTurnProviderOptions,
   type ClaudeAgentSdkKernelPrivateExecution,
   type ClaudeAgentSdkKernelPrivateExecutionResolver,
+  type ClaudeAgentSdkPlatformTuple,
   type ClaudeAgentSdkPrivateProjection,
 } from "../adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.js";
 import type { PrivateDirectoryCustodyPort } from "../adapters/outbound/provider-delegation-ports/private-directory-custody-port.js";
@@ -64,6 +65,7 @@ export interface CreateClaudeCurrentKernelOwnerOptions {
   readonly hostInstanceId: string;
   readonly launchRecords: ClaudeCurrentKernelLaunchRecordResolver;
   readonly manifest: ContainedTurnCapabilityManifest;
+  readonly platformTuple: ClaudeAgentSdkPlatformTuple;
   readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly queryFactory?: ClaudeAgentSdkContainedTurnProviderOptions["queryFactory"];
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
@@ -98,10 +100,13 @@ const exactStringArray = (left: readonly string[], right: readonly string[]): bo
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions): void => {
-  const tuple = CLAUDE_AGENT_SDK_PRODUCTION_TUPLE;
+  const tuple = selectClaudeAgentSdkPlatformTuple(
+    options.platformTuple.platform, options.platformTuple.architecture,
+  );
   const snapshot = options.adapterSnapshot;
   const manifest = options.manifest;
   if (
+    options.platformTuple !== tuple ||
     snapshot.provider !== "claude" ||
     snapshot.adapterRevision !== tuple.adapterRevision ||
     snapshot.binaryRevision !== tuple.binaryRevision ||
@@ -168,6 +173,7 @@ export const createClaudeCurrentKernelOwner = (
         binaryRevision: options.adapterSnapshot.binaryRevision,
         executablePath: options.executablePath, executableSha256: options.executableSha256,
         intentMode: input.kernel.intentMode, privateProjection: launch.privateProjection,
+        platformTuple: options.platformTuple,
         privateDirectoryCustody, privateRootPath: launch.privateRootPath,
         workspaceRef: input.workspaceAuthority.canonicalPath,
       });
@@ -195,6 +201,7 @@ export const createClaudeCurrentKernelOwner = (
   const provider = new ClaudeAgentSdkCurrentKernelAdapter({
     adapterSnapshot: options.adapterSnapshot, executablePath: options.executablePath,
     manifest: options.manifest, privateDirectoryCustody, privateExecutions, processes,
+    platformTuple: options.platformTuple,
     ...(options.queryFactory === undefined ? {} : { queryFactory: options.queryFactory }),
   });
   return Object.freeze({custody, dispose() {disposed = true; records.clear();}, provider});

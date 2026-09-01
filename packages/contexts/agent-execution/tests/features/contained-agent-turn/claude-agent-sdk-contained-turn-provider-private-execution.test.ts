@@ -6,7 +6,10 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-current-kernel-adapter.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { claudeAgentSdkArguments } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
+import {
+  CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
+  claudeAgentSdkArguments,
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import {
   ManualClock,
   executablePath,
@@ -467,6 +470,7 @@ test("current-kernel adapter snapshots mutable constructor options before execut
     executablePath,
     interruptGraceMs: 5,
     manifest: kernelManifest,
+    platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
     privateDirectoryCustody,
     clock,
     privateExecutions,

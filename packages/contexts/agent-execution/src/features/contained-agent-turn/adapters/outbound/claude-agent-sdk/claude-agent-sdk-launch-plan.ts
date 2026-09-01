@@ -10,21 +10,76 @@ import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory
 
 export const CLAUDE_AGENT_SDK_VERSION = "0.3.251";
 export const CLAUDE_AGENT_SDK_BUNDLED_CLI_VERSION = "2.1.251";
-export const CLAUDE_AGENT_SDK_EXECUTABLE_SHA256 = "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7";
-export const CLAUDE_AGENT_SDK_BINARY_REVISION = `sha256:${CLAUDE_AGENT_SDK_EXECUTABLE_SHA256}`;
 export const CLAUDE_AGENT_SDK_ADAPTER_REVISION = "claude-agent-sdk-contained-turn:0.3.251";
 export const CLAUDE_AGENT_SDK_MANIFEST_REVISION = "claude-contained-turn-v1@1";
 export const CLAUDE_AGENT_SDK_RESOURCE_SCOPE_REVISION = "contained-turn-v1-worst-case-scope@1";
-export const CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD = "/proc/self/fd/4" as const;
-export const CLAUDE_AGENT_SDK_PRODUCTION_TUPLE = Object.freeze({
+export const CLAUDE_AGENT_SDK_LINUX_DESCRIPTOR_CWD = "/proc/self/fd/4" as const;
+/** Compatibility export. The selected Linux tuple is the only consumer of this descriptor path. */
+export const CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD = CLAUDE_AGENT_SDK_LINUX_DESCRIPTOR_CWD;
+
+export type ClaudeAgentSdkPlatformTuple = Readonly<{
+  adapterRevision: typeof CLAUDE_AGENT_SDK_ADAPTER_REVISION;
+  architecture: "arm64" | "x64";
+  binaryRevision: `sha256:${string}`;
+  bundledCliVersion: typeof CLAUDE_AGENT_SDK_BUNDLED_CLI_VERSION;
+  containmentProfile: "cooperative-darwin-posix-process-group" | "strict-linux-cgroup-v2";
+  executableSha256: string;
+  manifestRevision: typeof CLAUDE_AGENT_SDK_MANIFEST_REVISION;
+  platform: "darwin" | "linux";
+  resourceScopeRevision: typeof CLAUDE_AGENT_SDK_RESOURCE_SCOPE_REVISION;
+  sdkVersion: typeof CLAUDE_AGENT_SDK_VERSION;
+  workspaceAuthority: "canonical-operation-workspace" | "retained-descriptor";
+}>;
+
+const platformTuple = (
+  platform: ClaudeAgentSdkPlatformTuple["platform"],
+  architecture: ClaudeAgentSdkPlatformTuple["architecture"],
+  executableSha256: string,
+  containmentProfile: ClaudeAgentSdkPlatformTuple["containmentProfile"],
+  workspaceAuthority: ClaudeAgentSdkPlatformTuple["workspaceAuthority"],
+): ClaudeAgentSdkPlatformTuple => Object.freeze({
   adapterRevision: CLAUDE_AGENT_SDK_ADAPTER_REVISION,
-  binaryRevision: CLAUDE_AGENT_SDK_BINARY_REVISION,
+  architecture,
+  binaryRevision: `sha256:${executableSha256}`,
   bundledCliVersion: CLAUDE_AGENT_SDK_BUNDLED_CLI_VERSION,
-  executableSha256: CLAUDE_AGENT_SDK_EXECUTABLE_SHA256,
+  containmentProfile,
+  executableSha256,
   manifestRevision: CLAUDE_AGENT_SDK_MANIFEST_REVISION,
+  platform,
   resourceScopeRevision: CLAUDE_AGENT_SDK_RESOURCE_SCOPE_REVISION,
   sdkVersion: CLAUDE_AGENT_SDK_VERSION,
+  workspaceAuthority,
 });
+
+export const CLAUDE_AGENT_SDK_LINUX_X64_TUPLE = platformTuple(
+  "linux", "x64", "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "strict-linux-cgroup-v2", "retained-descriptor",
+);
+export const CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE = platformTuple(
+  "darwin", "arm64", "625869b01e0050f260b2980fac248fd9cef9e462612bded4ec9d3d49ff8969a5",
+  "cooperative-darwin-posix-process-group", "canonical-operation-workspace",
+);
+
+/** Compatibility name for the ADR-0010 Linux tuple. New composition selects a platform tuple explicitly. */
+export const CLAUDE_AGENT_SDK_PRODUCTION_TUPLE = CLAUDE_AGENT_SDK_LINUX_X64_TUPLE;
+export const CLAUDE_AGENT_SDK_EXECUTABLE_SHA256 = CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.executableSha256;
+export const CLAUDE_AGENT_SDK_BINARY_REVISION = CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.binaryRevision;
+
+export const selectClaudeAgentSdkPlatformTuple = (
+  platform: string,
+  architecture: string,
+): ClaudeAgentSdkPlatformTuple => {
+  if (platform === "linux" && architecture === "x64") {return CLAUDE_AGENT_SDK_LINUX_X64_TUPLE;}
+  if (platform === "darwin" && architecture === "arm64") {return CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE;}
+  throw new TypeError("Claude Agent SDK has no qualified tuple for the selected platform and architecture");
+};
+
+export const claudeAgentSdkWorkspaceAuthorityPath = (
+  tuple: ClaudeAgentSdkPlatformTuple,
+  workspaceRef: string,
+): string => tuple.workspaceAuthority === "retained-descriptor"
+  ? CLAUDE_AGENT_SDK_LINUX_DESCRIPTOR_CWD
+  : workspaceRef;
 export const CLAUDE_AGENT_SDK_READ_TOOLS = Object.freeze(["Read", "Glob", "Grep"] as const);
 export const CLAUDE_AGENT_SDK_WRITE_TOOLS = Object.freeze([...CLAUDE_AGENT_SDK_READ_TOOLS, "Edit", "Write"] as const);
 
@@ -161,6 +216,7 @@ export interface CreateClaudeAgentSdkLaunchPlanInput {
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
   readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly privateRootPath: string;
+  readonly platformTuple: ClaudeAgentSdkPlatformTuple;
   readonly workspaceRef: string;
 }
 
@@ -195,8 +251,13 @@ export const createClaudeAgentSdkLaunchPlan = async (
   input: CreateClaudeAgentSdkLaunchPlanInput,
 ): Promise<HostCustodyLaunchPlan> => {
   const privateDirectoryCustody = captureClaudePrivateDirectoryCustody(input.privateDirectoryCustody);
+  const tuple = selectClaudeAgentSdkPlatformTuple(input.platformTuple.platform, input.platformTuple.architecture);
   const environment = input.privateProjection.environment;
   const intentMode = acceptedIntentMode(input.intentMode);
+  if (input.platformTuple !== tuple || input.binaryRevision !== tuple.binaryRevision ||
+      input.executableSha256 !== tuple.executableSha256) {
+    throw new TypeError("Claude launch plan tuple does not match its exact binary revision");
+  }
   if (environment.CLAUDE_AGENT_SDK_VERSION !== CLAUDE_AGENT_SDK_VERSION) {
     throw new Error(`Claude SDK launch requires CLAUDE_AGENT_SDK_VERSION=${CLAUDE_AGENT_SDK_VERSION}`);
   }
@@ -211,10 +272,11 @@ export const createClaudeAgentSdkLaunchPlan = async (
     throw new TypeError("Claude launch plan requires a frozen private projection disjoint from its workspace");
   }
   const privateRootPath = acceptedPrivateRoot(input.privateRootPath, input.workspaceRef, environment);
+  const workspaceAuthorityPath = claudeAgentSdkWorkspaceAuthorityPath(tuple, input.workspaceRef);
   return Object.freeze({
-    arguments: claudeAgentSdkArguments(intentMode, CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD),
+    arguments: claudeAgentSdkArguments(intentMode, workspaceAuthorityPath),
     binaryRevision: input.binaryRevision,
-    containmentProfile: "strict-linux-cgroup-v2",
+    containmentProfile: tuple.containmentProfile,
     environment,
     executablePath: input.executablePath,
     executableSha256: input.executableSha256,

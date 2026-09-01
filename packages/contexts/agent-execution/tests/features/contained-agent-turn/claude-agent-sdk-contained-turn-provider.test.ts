@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
+  CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
   claudeAgentSdkArguments,
   createClaudeAgentSdkLaunchPlan,
   createClaudeAgentSdkPrivateProjection,
@@ -15,7 +16,6 @@ import {
   captureClaudePrivateDirectoryCustody,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-private-directory-custody.js";
 import {
-  binding,
   delta,
   executablePath,
   input,
@@ -191,13 +191,14 @@ test("uses only an external frozen private projection while tools remain workspa
   assert.deepEqual(captured.env, privateProjection.environment);
 
   const plan = await createClaudeAgentSdkLaunchPlan({
-    binaryRevision: binding.binaryRevision,
+    binaryRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.binaryRevision,
     executablePath,
-    executableSha256: "0".repeat(64),
+    executableSha256: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.executableSha256,
     intentMode: "analysis",
     privateProjection,
     privateDirectoryCustody,
     privateRootPath: privateRoot,
+    platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
     workspaceRef,
   });
   assert.equal(plan.environment, privateProjection.environment);
@@ -240,13 +241,14 @@ test("rejects forward and reverse symlink aliases between private roots and the 
     privateDirectoryCustody,
   ), false);
   await assert.rejects(createClaudeAgentSdkLaunchPlan({
-    binaryRevision: binding.binaryRevision,
+    binaryRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.binaryRevision,
     executablePath,
-    executableSha256: "0".repeat(64),
+    executableSha256: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.executableSha256,
     intentMode: "analysis",
     privateProjection: forwardProjection,
     privateDirectoryCustody,
     privateRootPath: projection,
+    platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
     workspaceRef: workspace,
   }), /disjoint/u);
 
@@ -265,13 +267,14 @@ test("rejects forward and reverse symlink aliases between private roots and the 
     privateDirectoryCustody,
   ), false);
   await assert.rejects(createClaudeAgentSdkLaunchPlan({
-    binaryRevision: binding.binaryRevision,
+    binaryRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.binaryRevision,
     executablePath,
-    executableSha256: "0".repeat(64),
+    executableSha256: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.executableSha256,
     intentMode: "analysis",
     privateProjection: reverseProjection,
     privateDirectoryCustody,
     privateRootPath: projection,
+    platformTuple: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
     workspaceRef: reverseAlias,
   }), /disjoint/u);
 });

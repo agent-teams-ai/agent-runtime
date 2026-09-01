@@ -28,8 +28,10 @@ import {
   ClaudeAgentSdkContainedTurnProvider,
   type ClaudeAgentSdkContainedTurnProviderOptions,
 } from "./claude-agent-sdk-contained-turn-provider.js";
-import type {
-  ClaudeAgentSdkPrivateProjection,
+import {
+  selectClaudeAgentSdkPlatformTuple,
+  type ClaudeAgentSdkPrivateProjection,
+  type ClaudeAgentSdkPlatformTuple,
 } from "./claude-agent-sdk-launch-plan.js";
 import { captureClaudePrivateDirectoryCustody } from "./claude-private-directory-custody.js";
 
@@ -69,6 +71,7 @@ export interface ClaudeAgentSdkCurrentKernelAdapterOptions {
   readonly executablePath: string;
   readonly interruptGraceMs?: number;
   readonly manifest: ContainedTurnCapabilityManifest;
+  readonly platformTuple: ClaudeAgentSdkPlatformTuple;
   readonly privateDirectoryCustody: ClaudeAgentSdkContainedTurnProviderOptions["privateDirectoryCustody"];
   readonly privateExecutions: ClaudeAgentSdkKernelPrivateExecutionResolver;
   /** The accepted Guardian-backed launcher; it performs the sole physical spawn. */
@@ -198,6 +201,10 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
   readonly #options: ClaudeAgentSdkCurrentKernelAdapterOptions;
 
   public constructor(options: ClaudeAgentSdkCurrentKernelAdapterOptions) {
+    const platformTuple = selectClaudeAgentSdkPlatformTuple(
+      options.platformTuple.platform, options.platformTuple.architecture,
+    );
+    if (options.platformTuple !== platformTuple) {throw new TypeError("Claude current-kernel platform tuple mismatch");}
     if (
       options.adapterSnapshot.provider !== "claude" ||
       options.manifest.provider !== "claude" ||
@@ -221,6 +228,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     this.#options = Object.freeze({
       ...options,
       clock,
+      platformTuple,
       privateDirectoryCustody: captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody),
       privateExecutions: Object.freeze({
         consume: options.privateExecutions.consume.bind(options.privateExecutions),
@@ -340,6 +348,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
         providerBinding: expectedProviderBinding,
         supportedModes: this.manifest.supportedModes,
       },
+      platformTuple: this.#options.platformTuple,
       privateProjections: {
         resolve: () => execution.privateProjection,
       },

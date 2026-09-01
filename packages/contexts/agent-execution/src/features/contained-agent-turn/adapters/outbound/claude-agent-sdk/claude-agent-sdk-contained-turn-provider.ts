@@ -12,10 +12,12 @@ import type {
   PrivateDirectoryCustodyPort,
 } from "../provider-delegation-ports/private-directory-custody-port.js";
 import {
-  CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
+  claudeAgentSdkWorkspaceAuthorityPath,
   claudeAgentSdkTools,
+  selectClaudeAgentSdkPlatformTuple,
   type ClaudeAgentSdkPrivateProjection,
   type ClaudeAgentSdkPrivateProjectionResolver,
+  type ClaudeAgentSdkPlatformTuple,
 } from "./claude-agent-sdk-launch-plan.js";
 import {
   claudeNotAccepted,
@@ -55,6 +57,7 @@ export interface ClaudeAgentSdkContainedTurnProviderOptions {
   readonly executablePath: string;
   readonly interruptGraceMs?: number;
   readonly manifest: ContainedTurnAdapterCapabilityManifest;
+  readonly platformTuple: ClaudeAgentSdkPlatformTuple;
   readonly privateProjections: ClaudeAgentSdkPrivateProjectionResolver;
   readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly processes: CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
@@ -67,6 +70,7 @@ interface ProviderSnapshot {
   readonly clock: ClaudeAgentSdkControlClock;
   readonly executablePath: string;
   readonly interruptGraceMs: number;
+  readonly platformTuple: ClaudeAgentSdkPlatformTuple;
   readonly privateProjections: ClaudeAgentSdkPrivateProjectionResolver;
   readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly processes: CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
@@ -105,6 +109,10 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
   readonly #snapshot: ProviderSnapshot;
 
   public constructor(options: ClaudeAgentSdkContainedTurnProviderOptions) {
+    const platformTuple = selectClaudeAgentSdkPlatformTuple(
+      options.platformTuple.platform, options.platformTuple.architecture,
+    );
+    if (options.platformTuple !== platformTuple) {throw new TypeError("Claude SDK platform tuple mismatch");}
     if (options.manifest.providerBinding.provider !== "claude") {
       throw new Error("Claude Agent SDK adapter requires a Claude provider binding");
     }
@@ -126,6 +134,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
         options.interruptGraceMs,
         DEFAULT_INTERRUPT_GRACE_MS,
       ),
+      platformTuple,
       privateProjections: options.privateProjections,
       privateDirectoryCustody: captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody),
       processes: options.processes,
@@ -172,12 +181,13 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
     input: Parameters<ContainedTurnProviderPort["execute"]>[0],
   ) {
     const tools = [...claudeAgentSdkTools(input.intent.mode)];
+    const workspaceAuthorityPath = claudeAgentSdkWorkspaceAuthorityPath(this.#snapshot.platformTuple, input.workspaceRef);
     return factory({
       prompt: input.intent.prompt,
       options: {
         abortController,
         allowedTools: tools,
-        cwd: CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD,
+        cwd: workspaceAuthorityPath,
         disallowedTools: [...disallowedTools(input.intent.mode)],
         env: { ...projection.environment },
         includePartialMessages: true,
@@ -187,7 +197,7 @@ export class ClaudeAgentSdkContainedTurnProvider implements ContainedTurnProvide
         permissionMode: "dontAsk",
         persistSession: false,
         plugins: [],
-        sandbox: sdkSandbox(input.intent.mode, CLAUDE_AGENT_SDK_HOST_WORKSPACE_CWD),
+        sandbox: sdkSandbox(input.intent.mode, workspaceAuthorityPath),
         settingSources: [],
         spawnClaudeCodeProcess: options => this.#snapshot.processes.start(input.custody.custodyRef, {
           arguments: options.args,
