@@ -525,6 +525,40 @@ linuxTest("release keeps a secret-free tombstone that prevents same-host replay 
   assert.doesNotMatch(receiptRef, new RegExp(secret, "u"));
 });
 
+linuxTest("strict Linux retries private-root cleanup after a transient rename failure", async () => {
+  const workspaceRef = await disposableRoot();
+  const entry = await launchPlan(workspaceRef, "/usr/bin:/bin", `setInterval(() => {}, 1000);`);
+  const custody = new NodeProviderProcessCustody({
+    launchPlans: createStaticHostCustodyLaunchPlanResolver([entry]),
+    processIdentityObserver: qualifiedIdentityObserver,
+  });
+  const request = {
+    attemptId: "attempt:linux-cleanup-retry",
+    operationId: "operation:linux-cleanup-retry",
+    providerBinding: binding,
+    workspaceRef,
+  } as const;
+  const opened = await custody.open(request);
+  const closure = await custody.requestContainment({ ...request, custodyRef: opened.custodyRef });
+  assert.equal(closure.kind, "contained");
+  if (closure.kind !== "contained") {return;}
+  const quarantinePath = `${entry.plan.privateRootPath}.quarantine-${sha256(opened.custodyRef)}`;
+  await mkdir(quarantinePath, { mode: 0o700 });
+  await mkdir(join(quarantinePath, "transient-blocker"), { mode: 0o700 });
+  roots.push(quarantinePath);
+  const releaseInput = { ...request, custodyRef: opened.custodyRef, receiptRef: closure.receiptRef };
+
+  const first = await custody.release(releaseInput);
+  assert.equal(first.kind, "unproven");
+  assert.match(first.kind === "unproven" ? first.evidenceRef : "", /private-root-quarantine-unproven/u);
+  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "unproven");
+
+  await rm(quarantinePath, { recursive: true });
+  assert.deepEqual(await custody.release(releaseInput), { kind: "released" });
+  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "deleted");
+  assert.equal(existsSync(entry.plan.privateRootPath), false);
+});
+
 linuxTest("release pressure fails closed before replay retention can become unbounded", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await launchPlan(workspaceRef, "/usr/bin:/bin", `setInterval(() => {}, 1000);`);

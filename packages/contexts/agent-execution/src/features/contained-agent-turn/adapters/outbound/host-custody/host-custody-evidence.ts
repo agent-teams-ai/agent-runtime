@@ -134,7 +134,7 @@ export const snapshotEvidence = (live: HostCustodyEvidenceState): HostCustodyEvi
 
 export const containedResult = (
   live: HostCustodyEvidenceState,
-  observation: "cooperative-darwin-posix-process-group" | "never-started" | "strict-linux-cgroup-v2",
+  observation: "never-started" | "strict-linux-cgroup-v2",
 ): Extract<ContainmentResult, { readonly kind: "contained" }> => {
   const evidence = snapshotEvidence(live);
   const receiptIdentity = [
@@ -532,10 +532,16 @@ export const containCustody = async (
       status: "not-started",
     });
   } else {
-    live.closureEvidence = strictClosure("closed", live.fingerprint?.containmentProfile);
+    live.closureEvidence = strictClosure(
+      observation === "cooperative-darwin-posix-process-group" ? "unproven" : "closed",
+      live.fingerprint?.containmentProfile,
+    );
   }
   if (!live.evidenceSealed) {return unprovenResult("ingress-incomplete", input, live);}
   if (!deadlineOpen(containmentDeadline, options)) {return unprovenResult("owner-deadline-exceeded", input, live);}
+  if (observation === "cooperative-darwin-posix-process-group") {
+    return unprovenResult("darwin-cooperative-reconciliation-required", input, live);
+  }
   live.contained = containedResult(live, observation);
   return live.contained;
 };

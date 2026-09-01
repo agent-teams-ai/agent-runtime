@@ -1,5 +1,6 @@
 import { snapshotEvidence, unprovenResult } from "./host-custody-evidence.js";
 import {
+  deletePrivateRootAfterProvedNoStart,
   quarantinePrivateRoot,
   quarantinePrivateRootForReconciliation,
 } from "./host-custody-private-root.js";
@@ -68,15 +69,22 @@ const closeLiveCustody = async (
   live: LiveCustody,
   input: HostCustodyReleaseInput,
 ): Promise<HostCustodyReleaseOutcome> => {
-  if (live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group" &&
-      live.spawnStatus !== "never-started") {
+  const cooperativeDarwin = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group";
+  const provedNoStart = (live.spawnStatus === "never-started" || live.spawnStatus === "error-before-start") &&
+    live.closureEvidence.status === "not-started" && live.identity.status === "not-started" &&
+    live.evidenceSealed && (live.spawnStatus === "never-started" || live.guardianNoStartAcknowledged === true);
+  if (cooperativeDarwin && !provedNoStart) {
     if (!quarantinePrivateRootForReconciliation(live)) {
       return unprovenResult("private-root-quarantine-unproven", input, live);
     }
     return unprovenResult("darwin-cooperative-reconciliation-required", input, live);
   }
   live.cleanupDeadline ??= state.monotonicNow() + state.cleanupAfterMs;
-  if (state.monotonicNow() >= live.cleanupDeadline || !quarantinePrivateRoot(live)) {
+  const privateRootClosed = cooperativeDarwin
+    ? deletePrivateRootAfterProvedNoStart(live)
+    : quarantinePrivateRoot(live);
+  if (state.monotonicNow() >= live.cleanupDeadline || !privateRootClosed) {
+    delete live.cleanupDeadline;
     return unprovenResult("private-root-quarantine-unproven", input, live);
   }
   const cgroupClosed = await boundedPromise(
@@ -84,8 +92,9 @@ const closeLiveCustody = async (
     Math.max(1, live.cleanupDeadline - state.monotonicNow()),
   );
   if (cgroupClosed !== true || state.monotonicNow() >= live.cleanupDeadline) {
+    delete live.cleanupDeadline;
     return unprovenResult(
-      live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group"
+      cooperativeDarwin
         ? "posix-process-group-release-unproven"
         : "operation-cgroup-release-unproven",
       input,

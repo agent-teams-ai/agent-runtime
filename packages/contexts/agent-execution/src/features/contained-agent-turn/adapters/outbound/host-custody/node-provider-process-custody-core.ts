@@ -51,6 +51,7 @@ import {
 } from "./node-provider-process-custody-open.js";
 import { replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
+import { quarantinePrivateRootForReconciliation } from "./host-custody-private-root.js";
 import { boundedPromise } from "./host-custody-stdio.js";
 import {
   assertRetainedWorkspaceAuthority,
@@ -541,14 +542,21 @@ export class NodeProviderProcessCustodyCore implements
   ): Promise<ContainmentResult> {
     live.sealed = true;
     live.containmentDeadline ??= this.#monotonicNow() + this.#containmentAfterMs;
-    return containCustody(live, input, {
-      containmentAfterMs: this.#containmentAfterMs,
-      drainAfterMs: this.#drainAfterMs,
-      forceKillAfterMs: this.#forceKillAfterMs,
-      hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
-      monotonicNow: this.#monotonicNow,
-      terminateAfterMs: this.#terminateAfterMs,
-    });
+    try {
+      return await containCustody(live, input, {
+        containmentAfterMs: this.#containmentAfterMs,
+        drainAfterMs: this.#drainAfterMs,
+        forceKillAfterMs: this.#forceKillAfterMs,
+        hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
+        monotonicNow: this.#monotonicNow,
+        terminateAfterMs: this.#terminateAfterMs,
+      });
+    } finally {
+      if (live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group" &&
+          live.spawnStatus !== "never-started" && live.spawnStatus !== "error-before-start") {
+        quarantinePrivateRootForReconciliation(live);
+      }
+    }
   }
 
   async #triggerOverflowContainment(live: LiveCustody): Promise<void> {
