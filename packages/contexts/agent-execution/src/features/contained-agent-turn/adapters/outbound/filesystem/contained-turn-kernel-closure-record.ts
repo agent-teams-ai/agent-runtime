@@ -70,6 +70,50 @@ const parseBinding = (value: Record<string, unknown>): KernelClosureBinding => {
   });
 };
 
+const parseKernelWorkspaceClosureRecord = (
+  value: Record<string, unknown>,
+  binding: KernelClosureBinding,
+): KernelWorkspaceClosureRecord => {
+  if (!exactKeys(value, [
+    "authorityVectorDigest", "kind", "operationId", "receiptRef", "requestDigest",
+    "requestId", "schemaVersion", "workspaceId",
+  ]) || typeof value.receiptRef !== "string" || !WORKSPACE_RECEIPT.test(value.receiptRef)) {
+    throw new Error("contained turn kernel workspace closure record is invalid");
+  }
+  return Object.freeze({ ...binding, kind: "workspace_closure", receiptRef: value.receiptRef, schemaVersion: 1 });
+};
+
+const parseKernelArtifactClosureRecord = (
+  value: Record<string, unknown>,
+  binding: KernelClosureBinding,
+): KernelArtifactClosureRecord => {
+  if (!exactKeys(value, [
+    "authorityVectorDigest", "kind", "manifestReceiptRef", "manifestRef", "operationId",
+    "requestDigest", "requestId", "resultReceiptRef", "resultRef", "schemaVersion", "workspaceId",
+  ]) || typeof value.manifestReceiptRef !== "string" || !MANIFEST_RECEIPT.test(value.manifestReceiptRef) ||
+    typeof value.manifestRef !== "string" || !MANIFEST_REF.test(value.manifestRef) ||
+    typeof value.resultReceiptRef !== "string" || !RESULT_RECEIPT.test(value.resultReceiptRef) ||
+    typeof value.resultRef !== "string" || !RESULT_REF.test(value.resultRef)) {
+    throw new Error("contained turn kernel artifact closure record is invalid");
+  }
+  if (
+    value.manifestRef.split(":").at(-1) !== value.resultRef.split(":").at(-1) ||
+    value.manifestReceiptRef.split(":").at(-1) !== value.resultRef.split(":").at(-1) ||
+    value.resultReceiptRef.split(":").at(-1) !== value.resultRef.split(":").at(-1)
+  ) {
+    throw new Error("contained turn kernel artifact closure references disagree");
+  }
+  return Object.freeze({
+    ...binding,
+    kind: "artifact_seal",
+    manifestReceiptRef: value.manifestReceiptRef,
+    manifestRef: value.manifestRef,
+    resultReceiptRef: value.resultReceiptRef,
+    resultRef: value.resultRef,
+    schemaVersion: 1,
+  });
+};
+
 export const parseKernelClosureRecord = (bytes: Buffer): KernelClosureRecord => {
   let value: unknown;
   try {value = JSON.parse(bytes.toString("utf8")) as unknown;} catch {
@@ -80,40 +124,10 @@ export const parseKernelClosureRecord = (bytes: Buffer): KernelClosureRecord => 
   }
   const binding = parseBinding(value);
   if (value.kind === "workspace_closure") {
-    if (!exactKeys(value, [
-      "authorityVectorDigest", "kind", "operationId", "receiptRef", "requestDigest",
-      "requestId", "schemaVersion", "workspaceId",
-    ]) || typeof value.receiptRef !== "string" || !WORKSPACE_RECEIPT.test(value.receiptRef)) {
-      throw new Error("contained turn kernel workspace closure record is invalid");
-    }
-    return Object.freeze({ ...binding, kind: value.kind, receiptRef: value.receiptRef, schemaVersion: 1 });
+    return parseKernelWorkspaceClosureRecord(value, binding);
   }
   if (value.kind === "artifact_seal") {
-    if (!exactKeys(value, [
-      "authorityVectorDigest", "kind", "manifestReceiptRef", "manifestRef", "operationId",
-      "requestDigest", "requestId", "resultReceiptRef", "resultRef", "schemaVersion", "workspaceId",
-    ]) || typeof value.manifestReceiptRef !== "string" || !MANIFEST_RECEIPT.test(value.manifestReceiptRef) ||
-      typeof value.manifestRef !== "string" || !MANIFEST_REF.test(value.manifestRef) ||
-      typeof value.resultReceiptRef !== "string" || !RESULT_RECEIPT.test(value.resultReceiptRef) ||
-      typeof value.resultRef !== "string" || !RESULT_REF.test(value.resultRef)) {
-      throw new Error("contained turn kernel artifact closure record is invalid");
-    }
-    if (
-      value.manifestRef.split(":").at(-1) !== value.resultRef.split(":").at(-1) ||
-      value.manifestReceiptRef.split(":").at(-1) !== value.resultRef.split(":").at(-1) ||
-      value.resultReceiptRef.split(":").at(-1) !== value.resultRef.split(":").at(-1)
-    ) {
-      throw new Error("contained turn kernel artifact closure references disagree");
-    }
-    return Object.freeze({
-      ...binding,
-      kind: value.kind,
-      manifestReceiptRef: value.manifestReceiptRef,
-      manifestRef: value.manifestRef,
-      resultReceiptRef: value.resultReceiptRef,
-      resultRef: value.resultRef,
-      schemaVersion: 1,
-    });
+    return parseKernelArtifactClosureRecord(value, binding);
   }
   throw new Error("contained turn kernel closure record kind is invalid");
 };

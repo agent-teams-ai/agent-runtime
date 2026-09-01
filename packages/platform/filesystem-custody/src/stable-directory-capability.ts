@@ -77,8 +77,7 @@ export const readStableDirectoryMountIdentity = async (fd: number): Promise<stri
     if (error instanceof TypeError || error instanceof Error && error.message.startsWith("stable directory")) {
       throw error;
     }
-    // eslint-disable-next-line preserve-caught-error -- cause can expose a proc descriptor path
-    throw new Error("stable directory mount identity is unavailable");
+    throw new Error("stable directory mount identity is unavailable", { cause: error });
   } finally {
     await handle?.close();
   }

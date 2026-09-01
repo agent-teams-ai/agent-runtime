@@ -498,6 +498,49 @@ const verifyHistory = async (client: PoolClient, currentVersion: number): Promis
   }
 };
 
+const validateV5RuntimeFenceCatalog = async (
+  client: PoolClient,
+  triggerDefinition: string | undefined,
+): Promise<void> => {
+  const quarantine = await client.query<{ relforcerowsecurity: boolean; relrowsecurity: boolean }>(
+    `SELECT relforcerowsecurity, relrowsecurity
+       FROM pg_class
+      WHERE oid = 'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass`,
+  );
+  const fencedTables = await client.query(
+    `SELECT policyname
+       FROM pg_policies
+      WHERE schemaname = 'agent_execution'
+        AND policyname = 'contained_turn_runtime_schema_fence'
+        AND tablename IN (
+          'contained_turn_operation_v1',
+          'contained_turn_output_v1',
+          'contained_turn_receipt_v1',
+          'contained_turn_dispatch_preparation_v1',
+          'contained_turn_dispatch_preparation_quarantine_v1'
+        )`,
+  );
+  const writeFences = await client.query(
+    `SELECT tgname
+       FROM pg_trigger
+      WHERE NOT tgisinternal
+        AND tgname = 'contained_turn_runtime_schema_write_fence'
+        AND tgrelid IN (
+          'agent_execution.contained_turn_operation_v1'::regclass,
+          'agent_execution.contained_turn_output_v1'::regclass,
+          'agent_execution.contained_turn_receipt_v1'::regclass,
+          'agent_execution.contained_turn_dispatch_preparation_v1'::regclass,
+          'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass
+        )`,
+  );
+  if (triggerDefinition === undefined || !triggerDefinition.includes("tenant_id") ||
+      quarantine.rows[0]?.relrowsecurity !== true ||
+      quarantine.rows[0]?.relforcerowsecurity !== true || fencedTables.rowCount !== 5 ||
+      writeFences.rowCount !== 5) {
+    throw new Error("contained turn PostgreSQL v5 runtime fence drift detected");
+  }
+};
+
 const validateCurrentCatalog = async (client: PoolClient, version: number): Promise<void> => {
   if (version < 3) {return;}
   const columns = await client.query<{ column_name: string; is_nullable: "NO" | "YES" }>(
@@ -552,44 +595,7 @@ const validateCurrentCatalog = async (client: PoolClient, version: number): Prom
     throw new Error("contained turn PostgreSQL contract migration drift detected");
   }
   if (version >= 5) {
-    const triggerDefinition = triggers.rows[0]?.definition;
-    const quarantine = await client.query<{ relforcerowsecurity: boolean; relrowsecurity: boolean }>(
-      `SELECT relforcerowsecurity, relrowsecurity
-         FROM pg_class
-        WHERE oid = 'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass`,
-    );
-    const fencedTables = await client.query(
-      `SELECT policyname
-         FROM pg_policies
-        WHERE schemaname = 'agent_execution'
-          AND policyname = 'contained_turn_runtime_schema_fence'
-          AND tablename IN (
-            'contained_turn_operation_v1',
-            'contained_turn_output_v1',
-            'contained_turn_receipt_v1',
-            'contained_turn_dispatch_preparation_v1',
-            'contained_turn_dispatch_preparation_quarantine_v1'
-          )`,
-    );
-    const writeFences = await client.query(
-      `SELECT tgname
-         FROM pg_trigger
-        WHERE NOT tgisinternal
-          AND tgname = 'contained_turn_runtime_schema_write_fence'
-          AND tgrelid IN (
-            'agent_execution.contained_turn_operation_v1'::regclass,
-            'agent_execution.contained_turn_output_v1'::regclass,
-            'agent_execution.contained_turn_receipt_v1'::regclass,
-            'agent_execution.contained_turn_dispatch_preparation_v1'::regclass,
-            'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass
-          )`,
-    );
-    if (triggerDefinition === undefined || !triggerDefinition.includes("tenant_id") ||
-        quarantine.rows[0]?.relrowsecurity !== true ||
-        quarantine.rows[0]?.relforcerowsecurity !== true || fencedTables.rowCount !== 5 ||
-        writeFences.rowCount !== 5) {
-      throw new Error("contained turn PostgreSQL v5 runtime fence drift detected");
-    }
+    await validateV5RuntimeFenceCatalog(client, triggers.rows[0]?.definition);
   }
 };
 

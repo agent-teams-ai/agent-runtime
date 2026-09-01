@@ -123,6 +123,51 @@ export const queryContainedTurnWorkspaceClosure = async (
   } finally {await closeWorkspaceHandles(handles);}
 };
 
+const prepareClosedWorkspaceCustody = async (input: {
+  readonly active: FileHandle;
+  readonly cleanup: FileHandle;
+  readonly closed: FileHandle;
+  readonly closingBytes: Buffer | undefined;
+  readonly faults: ContainedTurnWorkspaceContext["options"]["testFaults"];
+  readonly frozen: FileHandle;
+  readonly name: string;
+  readonly seal: ReturnType<typeof parseWorkspaceSealRecord>;
+}): Promise<void> => {
+  const activeExists = await directoryExistsAt(input.active, input.name);
+  const frozenExists = await directoryExistsAt(input.frozen, input.name);
+  const cleanupExists = await directoryExistsAt(input.cleanup, input.name);
+  const closedExists = await directoryExistsAt(input.closed, input.name);
+  if (activeExists || [frozenExists, cleanupExists, closedExists].filter(Boolean).length > 1) {
+    throw new Error("contained turn workspace has conflicting closure custody");
+  }
+  if (frozenExists) {
+    const frozenWorkspace = await openDirectoryEntry(input.frozen, input.name);
+    try {
+      const identity = await inspectFileHandle(frozenWorkspace);
+      if (
+        identity.dev.toString() !== input.seal.rootIdentity.dev ||
+        identity.ino.toString() !== input.seal.rootIdentity.ino
+      ) {
+        throw new Error("contained turn frozen workspace identity changed after sealing");
+      }
+    } finally {await frozenWorkspace.close();}
+    requireDirectoryPublication(await moveDirectoryNoReplace({
+      checkpoint: "workspace.close.freeze-to-cleanup",
+      destinationDirectory: input.cleanup,
+      destinationName: input.name,
+      expectedSourceIdentity: {
+        dev: BigInt(input.seal.rootIdentity.dev), ino: BigInt(input.seal.rootIdentity.ino),
+      },
+      faults: input.faults,
+      sourceDirectory: input.frozen,
+      sourceName: input.name,
+    }), "workspace cleanup transition");
+    await input.faults?.checkpoint("workspace.close.frozen-moved");
+  } else if (!cleanupExists && !closedExists && input.closingBytes === undefined) {
+    throw new Error("contained turn frozen workspace disappeared before closure");
+  }
+};
+
 export const closeContainedTurnWorkspace = async (
   input: Parameters<ContainedTurnWorkspacePort["close"]>[0],
   context: ContainedTurnWorkspaceContext,
@@ -176,39 +221,9 @@ export const closeContainedTurnWorkspace = async (
     )) {
       throw new Error("contained turn workspace closing record conflicts with its frozen seal");
     }
-    const activeExists = await directoryExistsAt(active, name);
-    const frozenExists = await directoryExistsAt(frozen, name);
-    const cleanupExists = await directoryExistsAt(cleanup, name);
-    const closedExists = await directoryExistsAt(closed, name);
-    if (activeExists || [frozenExists, cleanupExists, closedExists].filter(Boolean).length > 1) {
-      throw new Error("contained turn workspace has conflicting closure custody");
-    }
-    if (frozenExists) {
-      const frozenWorkspace = await openDirectoryEntry(frozen, name);
-      try {
-        const identity = await inspectFileHandle(frozenWorkspace);
-        if (
-          identity.dev.toString() !== seal.rootIdentity.dev ||
-          identity.ino.toString() !== seal.rootIdentity.ino
-        ) {
-          throw new Error("contained turn frozen workspace identity changed after sealing");
-        }
-      } finally {await frozenWorkspace.close();}
-      requireDirectoryPublication(await moveDirectoryNoReplace({
-        checkpoint: "workspace.close.freeze-to-cleanup",
-        destinationDirectory: cleanup,
-        destinationName: name,
-        expectedSourceIdentity: {
-          dev: BigInt(seal.rootIdentity.dev), ino: BigInt(seal.rootIdentity.ino),
-        },
-        faults: options.testFaults,
-        sourceDirectory: frozen,
-        sourceName: name,
-      }), "workspace cleanup transition");
-      await options.testFaults?.checkpoint("workspace.close.frozen-moved");
-    } else if (!cleanupExists && !closedExists && closingBytes === undefined) {
-      throw new Error("contained turn frozen workspace disappeared before closure");
-    }
+    await prepareClosedWorkspaceCustody({
+      active, cleanup, closed, closingBytes, faults: options.testFaults, frozen, name, seal,
+    });
     const closureBytes = encodeWorkspaceClosureRecord(expectedClosure);
     if (closingBytes === undefined) {
       await writeImmutableFileAt({

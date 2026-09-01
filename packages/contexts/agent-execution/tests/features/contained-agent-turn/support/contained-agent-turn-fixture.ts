@@ -101,6 +101,26 @@ const awaitFixtureGate = async <Value>(
   assert.equal(outcome.kind, "started", "submission settled before the fixture gate was reached");
 };
 
+type ClaimPreparedDispatchInput = Parameters<
+  ContainedTurnKernelDependencies["operationStore"]["claimPreparedDispatch"]
+>[0];
+
+const matchesPreparedDispatch = (
+  preparation: ContainedTurnDispatchPreparation | undefined,
+  current: ContainedTurnKernelOperation,
+  input: ClaimPreparedDispatchInput,
+): preparation is ContainedTurnDispatchPreparation => preparation !== undefined &&
+  preparation.kind === "active" &&
+  preparation.operationId === current.operationId &&
+  preparation.operationId === input.subject.operationId &&
+  preparation.preparationToken === input.subject.preparationToken &&
+  preparation.attemptId === input.subject.attemptId &&
+  preparation.custodyId === input.subject.custodyId &&
+  preparation.workspaceId === current.workspaceId &&
+  preparation.workspaceId === input.subject.workspaceId &&
+  preparation.operationCutoffRevision === input.subject.operationCutoffRevision &&
+  preparation.preparedOperationRevision === input.expectedOperationRevision;
+
 // The fixture deliberately assembles the exact closed set of owner ports in one place.
 // oxlint-disable-next-line max-lines-per-function
 const createDependencies = (options: Readonly<{
@@ -190,16 +210,7 @@ const createDependencies = (options: Readonly<{
         return { kind: "observed_claim", operation: current };
       }
       let preparation = preparations.get(input.subject.preparationToken);
-      if (preparation === undefined || preparation.kind !== "active" ||
-          preparation.operationId !== current.operationId ||
-          preparation.operationId !== input.subject.operationId ||
-          preparation.preparationToken !== input.subject.preparationToken ||
-          preparation.attemptId !== input.subject.attemptId ||
-          preparation.custodyId !== input.subject.custodyId ||
-          preparation.workspaceId !== current.workspaceId ||
-          preparation.workspaceId !== input.subject.workspaceId ||
-          preparation.operationCutoffRevision !== input.subject.operationCutoffRevision ||
-          preparation.preparedOperationRevision !== input.expectedOperationRevision) {
+      if (!matchesPreparedDispatch(preparation, current, input)) {
         return { current, kind: "stale" };
       }
       preparation = bindContainedTurnPreparationGrantRequests(preparation, {

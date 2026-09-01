@@ -34,6 +34,39 @@ export const scopedArtifactWorkspaceName = (
   scope.tenantId, scope.projectId, operationId,
 ])).digest("hex")}`;
 
+const publicationMatchesLookup = (input: {
+  readonly expectedRefs: ReturnType<typeof containedTurnResultRefs>;
+  readonly expectedWorkspaceName: string;
+  readonly lookup: ContainedTurnArtifactLookupBinding;
+  readonly manifestDigest: string;
+  readonly publication: ReturnType<typeof parseResultPublicationRecord>;
+  readonly verified: VerifiedStoredArtifact;
+}): boolean => input.publication.manifestDigest === input.manifestDigest &&
+  input.publication.resultRef === input.lookup.resultRef &&
+  input.publication.workspaceName === input.expectedWorkspaceName &&
+  input.publication.operationId === input.lookup.operationId &&
+  input.publication.scope.tenantId === input.lookup.scope.tenantId &&
+  input.publication.scope.projectId === input.lookup.scope.projectId &&
+  input.publication.treeDigest === input.verified.manifest.treeDigest &&
+  input.publication.manifestReceiptRef === input.expectedRefs.manifestReceiptRef &&
+  input.publication.resultReceiptRef === input.expectedRefs.resultReceiptRef;
+
+const sealAndManifestMatchLookup = (input: {
+  readonly lookup: ContainedTurnArtifactLookupBinding;
+  readonly manifestDigest: string;
+  readonly publication: ReturnType<typeof parseResultPublicationRecord>;
+  readonly seal: ReturnType<typeof parseWorkspaceSealRecord>;
+  readonly verified: VerifiedStoredArtifact;
+}): boolean => input.seal.manifestDigest === input.manifestDigest &&
+  input.seal.treeDigest === input.publication.treeDigest &&
+  input.seal.operationId === input.lookup.operationId &&
+  input.seal.workspaceName === input.publication.workspaceName &&
+  input.seal.scope.tenantId === input.lookup.scope.tenantId &&
+  input.seal.scope.projectId === input.lookup.scope.projectId &&
+  input.verified.manifest.operationId === input.lookup.operationId &&
+  input.verified.manifest.tenantId === input.lookup.scope.tenantId &&
+  input.verified.manifest.projectId === input.lookup.scope.projectId;
+
 export const verifyContainedTurnArtifactLookup = async (input: {
   readonly lookup: ContainedTurnArtifactLookupBinding;
   readonly manifestDigest: string;
@@ -74,25 +107,12 @@ export const verifyContainedTurnArtifactLookup = async (input: {
     input.lookup.operationId,
     input.lookup.scope,
   );
-  if (
-    publication.manifestDigest !== input.manifestDigest ||
-    publication.resultRef !== input.lookup.resultRef ||
-    publication.workspaceName !== expectedWorkspaceName ||
-    publication.operationId !== input.lookup.operationId ||
-    publication.scope.tenantId !== input.lookup.scope.tenantId ||
-    publication.scope.projectId !== input.lookup.scope.projectId ||
-    publication.treeDigest !== verified.manifest.treeDigest ||
-    publication.manifestReceiptRef !== expectedRefs.manifestReceiptRef ||
-    publication.resultReceiptRef !== expectedRefs.resultReceiptRef ||
-    seal.manifestDigest !== input.manifestDigest || seal.treeDigest !== publication.treeDigest ||
-    seal.operationId !== input.lookup.operationId ||
-    seal.workspaceName !== publication.workspaceName ||
-    seal.scope.tenantId !== input.lookup.scope.tenantId ||
-    seal.scope.projectId !== input.lookup.scope.projectId ||
-    verified.manifest.operationId !== input.lookup.operationId ||
-    verified.manifest.tenantId !== input.lookup.scope.tenantId ||
-    verified.manifest.projectId !== input.lookup.scope.projectId
-  ) {
+  if (!publicationMatchesLookup({
+    expectedRefs, expectedWorkspaceName, lookup: input.lookup,
+    manifestDigest: input.manifestDigest, publication, verified,
+  }) || !sealAndManifestMatchLookup({
+    lookup: input.lookup, manifestDigest: input.manifestDigest, publication, seal, verified,
+  })) {
     throw new Error("contained turn artifact lookup scope or operation mismatch");
   }
   return verified;

@@ -266,6 +266,12 @@ const createPrivateDirectoryEntry = async (
   return openDirectoryEntry(parent, component);
 };
 
+const directoryTraversalCleanupFailure = (
+  error: unknown,
+  cleanupError: unknown,
+  message: string,
+): AggregateError => new AggregateError([error, cleanupError], message, { cause: error });
+
 const openDirectoryNoFollow = async (
   path: string,
   createMissing: boolean,
@@ -289,10 +295,10 @@ const openDirectoryNoFollow = async (
         await current.close();
       } catch (error) {
         try {await next.close();} catch (cleanupError) {
-          throw new AggregateError(
-            [error, cleanupError],
+          throw directoryTraversalCleanupFailure(
+            error,
+            cleanupError,
             "contained turn directory capture and cleanup failed",
-            { cause: error },
           );
         }
         throw error;
@@ -301,7 +307,13 @@ const openDirectoryNoFollow = async (
     }
     return current;
   } catch (error) {
-    await current.close();
+    try {await current.close();} catch (cleanupError) {
+      throw directoryTraversalCleanupFailure(
+        error,
+        cleanupError,
+        "contained turn directory traversal and cleanup failed",
+      );
+    }
     throw error;
   }
 };

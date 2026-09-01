@@ -45,6 +45,7 @@ import {
   isFilesystemCode,
   throwRehydrationCleanupFailure,
 } from "./contained-turn-rehydration-filesystem.js";
+import { openContainedTurnRelativeDirectory } from "./contained-turn-relative-directory.js";
 
 export interface ContainedTurnArtifactRehydrationContext {
   readonly contentDigest: (domain: "blob" | "manifest", bytes: Uint8Array) => string;
@@ -58,46 +59,6 @@ export interface ContainedTurnArtifactRehydrationContext {
   readonly verifyArtifact: (manifestDigest: string) => Promise<VerifiedStoredArtifact>;
 }
 
-const openRelativeDirectory = async (
-  root: FileHandle,
-  relativePath: string,
-): Promise<FileHandle | undefined> => {
-  if (relativePath.length === 0) {return undefined;}
-  let current: FileHandle | undefined;
-  try {
-    for (const component of relativePath.split("/")) {
-      const next = await openDirectoryEntry(current ?? root, component);
-      if (current !== undefined) {
-        const previous = current;
-        current = undefined;
-        try {await previous.close();} catch (error) {
-          try {await next.close();} catch (cleanupError) {
-            throw new AggregateError(
-              [error, cleanupError],
-              "contained turn rehydration path handoff and cleanup failed",
-              { cause: error },
-            );
-          }
-          throw error;
-        }
-      }
-      current = next;
-    }
-    return current;
-  } catch (error) {
-    if (current !== undefined) {
-      try {await current.close();} catch (cleanupError) {
-        throw new AggregateError(
-          [error, cleanupError],
-          "contained turn rehydration path capture and cleanup failed",
-          { cause: error },
-        );
-      }
-    }
-    throw error;
-  }
-};
-
 const reconstruct = async (
   root: FileHandle,
   verified: VerifiedStoredArtifact,
@@ -107,7 +68,7 @@ const reconstruct = async (
     const separator = entry.path.lastIndexOf("/");
     const parentPath = separator === -1 ? "" : entry.path.slice(0, separator);
     const name = separator === -1 ? entry.path : entry.path.slice(separator + 1);
-    const openedParent = await openRelativeDirectory(root, parentPath);
+    const openedParent = await openContainedTurnRelativeDirectory(root, parentPath, "rehydration");
     const parent = openedParent ?? root;
     try {
       if (entry.kind === "directory") {
@@ -134,7 +95,7 @@ const reconstruct = async (
     } finally {await openedParent?.close();}
   }
   for (const directory of directories.toReversed()) {
-    const handle = await openRelativeDirectory(root, directory.path);
+    const handle = await openContainedTurnRelativeDirectory(root, directory.path, "rehydration");
     if (handle === undefined) {throw new Error("contained turn reconstructed directory disappeared");}
     try {
       await handle.chmod(directory.mode);

@@ -5,52 +5,12 @@ import {
   assertSameMountIdentity,
   descriptorChildPath,
   fsyncDirectoryHandle,
-  openDirectoryEntry,
 } from "./contained-turn-filesystem-custody.js";
+import { openContainedTurnRelativeDirectory } from "./contained-turn-relative-directory.js";
 import {
   scanContainedTurnWorkspace,
   type ContainedTurnWorkspaceTreeLimits,
 } from "./contained-turn-workspace-tree.js";
-
-const openRelativeDirectory = async (
-  root: FileHandle,
-  relativePath: string,
-): Promise<FileHandle | undefined> => {
-  if (relativePath.length === 0) {return undefined;}
-  let current: FileHandle | undefined;
-  try {
-    for (const component of relativePath.split("/")) {
-      const next = await openDirectoryEntry(current ?? root, component);
-      if (current !== undefined) {
-        const previous = current;
-        current = undefined;
-        try {await previous.close();} catch (error) {
-          try {await next.close();} catch (cleanupError) {
-            throw new AggregateError(
-              [error, cleanupError],
-              "contained turn materialization path handoff and cleanup failed",
-              { cause: error },
-            );
-          }
-          throw error;
-        }
-      }
-      current = next;
-    }
-    return current;
-  } catch (error) {
-    if (current !== undefined) {
-      try {await current.close();} catch (cleanupError) {
-        throw new AggregateError(
-          [error, cleanupError],
-          "contained turn materialization path capture and cleanup failed",
-          { cause: error },
-        );
-      }
-    }
-    throw error;
-  }
-};
 
 export const materializeCanonicalProject = async (
   canonicalProjectRoot: string,
@@ -65,7 +25,9 @@ export const materializeCanonicalProject = async (
     const separator = entry.relativePath.lastIndexOf("/");
     const parentPath = separator === -1 ? "" : entry.relativePath.slice(0, separator);
     const name = separator === -1 ? entry.relativePath : entry.relativePath.slice(separator + 1);
-    const openedParent = await openRelativeDirectory(workspace, parentPath);
+    const openedParent = await openContainedTurnRelativeDirectory(
+      workspace, parentPath, "materialization",
+    );
     const parent = openedParent ?? workspace;
     try {
       if (entry.kind === "directory") {
@@ -90,7 +52,9 @@ export const materializeCanonicalProject = async (
     } finally {await openedParent?.close();}
   }
   for (const directory of directoryModes.toReversed()) {
-    const handle = await openRelativeDirectory(workspace, directory.path);
+    const handle = await openContainedTurnRelativeDirectory(
+      workspace, directory.path, "materialization",
+    );
     if (handle === undefined) {throw new Error("contained turn materialized directory disappeared");}
     try {await handle.chmod(directory.mode); await handle.sync();} finally {await handle.close();}
   }
