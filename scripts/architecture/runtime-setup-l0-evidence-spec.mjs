@@ -43,6 +43,70 @@ export const changes = Object.freeze([
     id: "contained-turn-v1-final-lint-hardening",
     revision: "699eda7614bb2145b1ee758aa79c1fb2d68668a2",
   }),
+  Object.freeze({
+    id: "contained-turn-core-srp-refactor",
+    revision: "5816f832f10bd48b1e4b83d2efbe00573dda3006",
+  }),
+  Object.freeze({
+    id: "host-custody-srp-refactor",
+    revision: "a2d5fbc197af64de7cc03444e230018780cd68c8",
+  }),
+  Object.freeze({
+    id: "postgres-contained-turn-srp-refactor",
+    revision: "d8442bdc456e1cc937b3ee753c237d479ca8baab",
+  }),
+  Object.freeze({
+    id: "codex-effect-custody",
+    revision: "fb2932fb8b846cc9c92ace7aa208df1d8bd93c5e",
+  }),
+  Object.freeze({
+    id: "contained-turn-dispatch-authority-binding",
+    revision: "35133bd87c904545879f59eabea956179bc62e3c",
+  }),
+  Object.freeze({
+    id: "claude-host-custody-binding",
+    revision: "a261f14c84643e2fa5c87b4b397a6d11d7174f12",
+  }),
+  Object.freeze({
+    id: "contained-turn-host-custody-composition",
+    revision: "cdda9783e7654b3a25e4510e69b1b5f2d550553b",
+  }),
+  Object.freeze({
+    id: "scoped-feature-module-activation",
+    revision: "da91fc9ad67e4a5d3f34f9f34db737fe7035ebaa",
+  }),
+  Object.freeze({
+    id: "claude-custody-contract-alignment",
+    revision: "5ef273653d767173f5eccbdd0d6d95292cd28909",
+  }),
+  Object.freeze({
+    id: "claude-stream-redaction-qualification",
+    revision: "d813450a018c2558ae8b711fc6d726e9eb542899",
+  }),
+  Object.freeze({
+    id: "provider-integration-path-repair",
+    revision: "77217bc0cebb4b12ed65e8fd59ed7cea81863394",
+  }),
+  Object.freeze({
+    id: "provider-grant-receipt-fixture-binding",
+    revision: "79f72b5f8772d1fc7c6ee103dbd3ba627096e91c",
+  }),
+  Object.freeze({
+    id: "provider-grant-receipt-qualification-binding",
+    revision: "5f6d00bebac4864024c4ccdf4ff79d231ff3fb3f",
+  }),
+  Object.freeze({
+    id: "contained-turn-qualification-alignment",
+    revision: "214de4b11f30cc188d206a3093ef9d2285dd7d9a",
+  }),
+  Object.freeze({
+    id: "postgres-grant-recovery-qualification",
+    revision: "ab722373179e9426e74f74dd1639a0ff7d5fb5b5",
+  }),
+  Object.freeze({
+    id: "provider-composition-boundary-closure",
+    revision: "7ba071f5f6409f08522d0cdf2120e071c2f4caa9",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -50,15 +114,15 @@ export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
     fileCount: 16,
-    sha256: "f7622733c0b0ed79457e2decd3ef0a83aedcd5b38da5bac2bfbb9ce221e04703",
+    sha256: "d18a15357cca9e9ba21713e5afbd3797ef71d9577f6565f1ce0914cea3483111",
   }),
   sources: Object.freeze({
-    fileCount: 266,
-    sha256: "1728f1041395b3e64915f51bb6d45733d7c7a5edfcf566ebdf98ce6681800500",
+    fileCount: 283,
+    sha256: "30f2773aa610bc1263205bdc6bc71fa97ccbefc604abbf39a9f3e4b020e37c06",
   }),
   tests: Object.freeze({
-    fileCount: 98,
-    sha256: "3895332e27ba27fd84d6e5394501dbe08909393c2177ef7623a1992e10697177",
+    fileCount: 99,
+    sha256: "db56cbe73f9d2e5c27d38e9aea4553b9d158722f10df10f9d84ce860d7643ee5",
   }),
 });
 
