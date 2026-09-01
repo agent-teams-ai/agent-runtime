@@ -3,7 +3,7 @@ import { open, readFile } from "node:fs/promises";
 
 const EXPECTED_SOURCE_SHA256 = "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370";
 const sourceUrl = new URL("./ItemCompletedNotification.json", import.meta.url);
-const outputUrl = new URL("../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/generated-codex-item-schema.ts", import.meta.url);
+const outputUrl = new URL("../../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/generated-codex-item-schema.ts", import.meta.url);
 const handle = await open(sourceUrl, "r");
 let sourceBytes;
 try {

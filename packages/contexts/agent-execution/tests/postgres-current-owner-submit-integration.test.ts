@@ -201,6 +201,7 @@ const createOwner = async (
     const temp = join(privateRootPath, "temp");
     await Promise.all([mkdir(codexHome, {recursive: true, mode: 0o700}), mkdir(temp, {recursive: true, mode: 0o700})]);
     return createCodexCurrentKernelOwner({
+      effectCustody: {admit: () => undefined},
       hostBootId: "host-boot:pg-codex", hostCustody: host as never, hostInstanceId: "host-instance:pg-codex",
       launchRecords: {resolve: async input => ({boundary: createCodexAppServerPermissionBoundary({codexHome,
         workspaceRef: input.workspaceAuthority.canonicalPath}),

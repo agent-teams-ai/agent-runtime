@@ -132,6 +132,10 @@ const workspaceOwner = (expected: ReturnType<typeof ids>, workspaceRef: string) 
   },
 });
 
+const syntheticCodexEffectCustody = () => ({
+  admit(): undefined {return undefined;},
+});
+
 const openInput = (identity: ReturnType<typeof ids>, provider: "claude" | "codex", snapshot: any) => ({
   adapterSnapshot: snapshot, ...identity, intentMode: "analysis" as const, providerAccessSnapshot: access(provider),
 });
@@ -178,6 +182,7 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
     const temp = join(privateRootPath, "temp");
     await Promise.all([mkdir(codexHome, {recursive: true, mode: 0o700}), mkdir(temp, {recursive: true, mode: 0o700})]);
     return createCodexCurrentKernelOwner({
+      effectCustody: syntheticCodexEffectCustody(),
       hostBootId: "host-boot:claim-codex", hostCustody: host as any,
       hostInstanceId: "host-instance:claim-codex",
       launchRecords: {resolve: async () => {
@@ -250,6 +255,7 @@ test("provider owners keep stable kernel and random Host identities distinct and
     const codexIds = ids("codex", "one");
     const codexHost = new FakeHost();
     const codex = createCodexCurrentKernelOwner({
+      effectCustody: syntheticCodexEffectCustody(),
       hostBootId: "host-boot:current-owner", hostCustody: codexHost as any,
       hostInstanceId: "host-instance:current-owner",
       launchRecords: {resolve: async () => ({
@@ -561,6 +567,7 @@ test("prevention retires a prepared attempt without a Host or provider start", a
     const identity = ids("codex", "prevented");
     const host = new FakeHost();
     const owner = createCodexCurrentKernelOwner({
+      effectCustody: syntheticCodexEffectCustody(),
       hostBootId: "host-boot:prevention", hostCustody: host as any,
       hostInstanceId: "host-instance:prevention",
       launchRecords: {resolve: async () => ({
@@ -602,6 +609,7 @@ test("same-provider attempts retain distinct exact plans and reject crossed work
     }
     const host = new FakeHost();
     const owner = createCodexCurrentKernelOwner({
+      effectCustody: syntheticCodexEffectCustody(),
       hostBootId: "host-boot:plans", hostCustody: host as any, hostInstanceId: "host-instance:plans",
       launchRecords: {resolve: async input => {
         const record = records.get(input.workspaceId);
@@ -678,6 +686,8 @@ test("duplicate and late Claude private callbacks remain effect-free", async () 
 });
 
 test("public root remains path-free and outer composition retains the exact seven ports", async () => {
+  assert.throws(() => createCodexCurrentKernelOwner({} as never),
+    /workspace-write requires effect custody/u);
   const publicRoot = await readFile(new URL("../dist/index.d.ts", import.meta.url), "utf8");
   for (const privateName of ["CurrentKernelOwner", "custodyRef", "descriptorPath", "privateRootPath"]) {
     assert.doesNotMatch(publicRoot, new RegExp(privateName, "u"));

@@ -7,6 +7,7 @@ import {
   type CodexAppServerKernelAttemptFactory,
 } from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import { CodexAppServerContainedTurnProvider } from "../adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
+import type { CodexEffectCustodyAuthority } from "../adapters/outbound/codex-app-server/codex-app-server-effect-custody.js";
 import type {
   CustodiedProviderProcessRegistry,
   CustodiedSdkProcessLauncher,
@@ -46,6 +47,8 @@ export interface CodexCurrentKernelLaunchRecordResolver {
   }>): Promise<CodexCurrentKernelLaunchRecord | undefined>;
 }
 export interface CreateCodexCurrentKernelOwnerOptions {
+  /** Mandatory opened-object authority for every Codex command/file effect lifecycle. */
+  readonly effectCustody: CodexEffectCustodyAuthority;
   readonly hostBootId: string;
   readonly hostCustody: ContainedTurnHostCustodyPort & Processes;
   readonly hostInstanceId: string;
@@ -81,6 +84,17 @@ const sameAttempt = (record: PreparedRecord, input: AttemptInput): boolean =>
 export const createCodexCurrentKernelOwner = (
   options: CreateCodexCurrentKernelOwnerOptions,
 ): CodexCurrentKernelOwner => {
+  const custodyOwner = options.effectCustody;
+  const custodyDescriptor = custodyOwner === undefined
+    ? undefined : Object.getOwnPropertyDescriptor(custodyOwner, "admit");
+  if (custodyDescriptor === undefined || !("value" in custodyDescriptor)
+    || typeof custodyDescriptor.value !== "function") {
+    throw new TypeError("Codex current-kernel workspace-write requires effect custody");
+  }
+  const admit = custodyDescriptor.value as CodexEffectCustodyAuthority["admit"];
+  const effectCustody: CodexEffectCustodyAuthority = Object.freeze({
+    admit: request => admit.call(custodyOwner, request),
+  });
   const records = new Map<string, PreparedRecord>();
   const processes: CustodiedProviderProcessRegistry = Object.freeze({
     get: options.hostCustody.get.bind(options.hostCustody),
@@ -108,6 +122,7 @@ export const createCodexCurrentKernelOwner = (
           });
           const provider = new CodexAppServerContainedTurnProvider({
             boundary: record.record.boundary,
+            effectCustody,
             manifest: {
               effectClass: "contained_unmediated_effect",
               providerBinding: record.binding,

@@ -405,10 +405,8 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   }
   const authorityUrl = new URL("./fixtures/protocol/codex-app-server-0.150.1/ItemCompletedNotification.json",
     import.meta.url);
-  const storedAuthorityBytes = readFileSync(authorityUrl);
-  const authorityBytes = storedAuthorityBytes.at(-1) === 0x0a
-    ? storedAuthorityBytes.subarray(0, -1)
-    : storedAuthorityBytes;
+  const authorityBytes = readFileSync(authorityUrl);
+  assert.equal(authorityBytes.length, 41_664);
   assert.equal(createHash("sha256").update(authorityBytes).digest("hex"),
     "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370");
   const authorityManifest = JSON.parse(readFileSync(new URL(
@@ -447,6 +445,13 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     sha256: "b9bdb38db25eb5d49368bd6b7850d4d23b51f908de6fb8cfb5e2f7cfb218f8ef",
     sourceExecutionBinding: "retained-open-descriptor",
   });
+  const packageManifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    readonly scripts: Readonly<Record<string, string>>;
+  };
+  assert.equal(packageManifest.scripts["verify:codex-schema-regeneration"],
+    "node tests/fixtures/protocol/codex-app-server-0.150.1/verify-regeneration.mjs");
+  assert.equal(packageManifest.scripts["verify:codex-schema-runtime"],
+    "node tests/fixtures/protocol/codex-app-server-0.150.1/generate-runtime-item-schema.mjs --check");
   const generatedRuntimeBinding = readFileSync(new URL(`../${authorityManifest.generatedRuntimeBinding.artifact}`,
     import.meta.url));
   assert.equal(createHash("sha256").update(generatedRuntimeBinding).digest("hex"),
