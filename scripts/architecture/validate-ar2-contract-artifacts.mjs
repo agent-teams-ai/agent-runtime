@@ -189,7 +189,7 @@ const loadContractCoverageEvidence = async contractCoverage => {
 };
 
 const LEGACY_COMMIT = "f6afac73cced62d943a0e891ad08d7b8f88f802f";
-const CURRENT_COMMIT = "493c6c37e247f021fc110c5fc624b72f1502d743";
+const CURRENT_COMMIT = "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0";
 const BOUNDED_CONTEXT_IDS = new Set([
   "runtime-configuration", "runtime-security", "provider-access", "agent-execution",
 ]);
