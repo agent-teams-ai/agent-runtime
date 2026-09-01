@@ -1,141 +1,248 @@
 import assert from "node:assert/strict";
+import { constants } from "node:fs";
 import { createHash } from "node:crypto";
-import { lstat, readFile, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdir, open, readFile, realpath, rmdir, stat, statfs, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative } from "node:path";
 
 import { query as claudeQuery } from "@anthropic-ai/claude-agent-sdk";
 
 import {
-  ClaudeAgentSdkContainedTurnProvider,
-  createClaudeAgentSdkEnvironment,
-  createClaudeAgentSdkLaunchPlan,
-  createStaticHostCustodyLaunchPlanResolver,
+  createClaudeCurrentKernelOwner,
   NodeProviderProcessCustody,
 } from "../../dist/composition.js";
+import {
+  CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
+  createClaudeAgentSdkPrivateProjection,
+} from "../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
+import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { digestContainedTurnCanonicalValue } from "../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import { containedTurnIdentity } from "../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 
+const sha256 = value => createHash("sha256").update(value).digest("hex");
 const requiredEnvironment = name => {
   const value = process.env[name];
   if (value === undefined || value.length === 0) {throw new Error(`missing ${name}`);}
   return value;
 };
-
-const canaryRoot = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_ROOT"));
-const workspaceRef = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_WORKSPACE"));
-const executablePath = await realpath(requiredEnvironment("AR_CLAUDE_BINARY"));
-const executableSha256 = requiredEnvironment("AR_CLAUDE_BINARY_SHA256");
-const expectedRootMarker = join(canaryRoot, ".agent-runtime-test-sandbox");
-const configDirectory = join(workspaceRef, ".claude-agent-runtime");
-const platformRevision = `${process.platform}-${process.arch}`;
-
-assert.ok(["darwin-arm64", "linux-x64"].includes(platformRevision));
-
-assert.equal((await lstat(expectedRootMarker)).isFile(), true);
-assert.equal(workspaceRef.startsWith(`${canaryRoot}/`), true);
-assert.equal(configDirectory.startsWith(`${canaryRoot}/`), true);
-assert.equal(createHash("sha256").update(await readFile(executablePath)).digest("hex"), executableSha256);
-assert.equal((await lstat(join(configDirectory, ".credentials.json"))).isFile(), true);
-
-const credentialDigest = createHash("sha256")
-  .update(await readFile(join(configDirectory, ".credentials.json")))
-  .digest("hex");
-const providerBinding = Object.freeze({
-  adapterRevision: "claude-agent-sdk-contained-turn:0.3.251",
-  binaryRevision: `@anthropic-ai/claude-agent-sdk:0.3.251+${platformRevision}`,
-  capabilityManifestRevision: "contained-turn:v1:claude-agent-sdk:0.3.251",
-  credentialBindingDigest: `sha256:${credentialDigest}`,
-  provider: "claude",
-  providerRouteRef: `test-route:${platformRevision}:claude-subscription`,
-});
-const environment = createClaudeAgentSdkEnvironment(workspaceRef);
-const plan = createClaudeAgentSdkLaunchPlan({
-  binaryRevision: providerBinding.binaryRevision,
-  environment,
-  executablePath,
-  executableSha256,
-  workspaceRef,
-});
-const custody = new NodeProviderProcessCustody({
-  forceKillAfterMs: 5_000,
-  launchPlans: createStaticHostCustodyLaunchPlanResolver([{ plan, providerBinding }]),
-  terminateAfterMs: 5_000,
-});
-let sdkFailure = "";
-const provider = new ClaudeAgentSdkContainedTurnProvider({
-  cancellationPollMs: 50,
-  executablePath,
-  interruptGraceMs: 5_000,
-  manifest: {
-    effectClass: "contained_unmediated_effect",
-    providerBinding,
-    supportedModes: ["analysis", "workspace-write"],
+const contains = (parent, candidate) => {
+  const path = relative(parent, candidate);
+  return path === "" || (!path.startsWith("..") && !isAbsolute(path));
+};
+const assertRegularFile = async path => {
+  const entry = await lstat(path);
+  assert.equal(entry.isFile() && !entry.isSymbolicLink(), true);
+};
+const assertPrivateDirectory = async path => {
+  const [entry, directory, canonical] = await Promise.all([lstat(path), stat(path), realpath(path)]);
+  assert.equal(entry.isDirectory() && !entry.isSymbolicLink(), true);
+  assert.equal(canonical, path);
+  assert.equal(typeof process.getuid, "function");
+  assert.equal(directory.uid, process.getuid());
+  assert.equal(directory.mode & 0o077, 0);
+};
+const mountId = async descriptor => {
+  const fdinfo = await readFile(`/proc/self/fdinfo/${descriptor}`, "utf8");
+  const matches = [...fdinfo.matchAll(/^mnt_id:\s*(\d+)$/gmu)];
+  assert.equal(matches.length, 1);
+  return matches[0][1];
+};
+const workspaceOwner = workspaceRef => Object.freeze({
+  async withLaunchAuthority(_input, consume) {
+    const descriptor = await open(workspaceRef, constants.O_RDONLY | constants.O_DIRECTORY);
+    try {
+      const identity = await descriptor.stat({bigint: true});
+      assert.equal(identity.isDirectory(), true);
+      return await consume(Object.freeze({
+        canonicalPath: workspaceRef,
+        descriptorPath: `/proc/self/fd/${descriptor.fd}`,
+        identity: Object.freeze({dev: identity.dev, ino: identity.ino, mountId: await mountId(descriptor.fd)}),
+      }));
+    } finally {await descriptor.close();}
   },
-  processes: custody,
-  queryFactory(input) {
-    const query = claudeQuery(input);
-    return {
-      close: () => query.close(),
-      interrupt: () => query.interrupt(),
-      async *[Symbol.asyncIterator]() {
-        try {
-          yield* query;
-        } catch (error) {
-          sdkFailure = error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000);
-          throw error;
-        }
-      },
+});
+
+const cgroupV2Factory = delegatedRoot => Object.freeze({
+  async create(custodyRef) {
+    const operationRoot = join(delegatedRoot, `operation-${sha256(custodyRef).slice(0, 32)}`);
+    await mkdir(operationRoot, {mode: 0o700});
+    let closed = false;
+    const populated = async () => {
+      const events = await readFile(join(operationRoot, "cgroup.events"), "utf8");
+      const match = /^populated\s+([01])$/mu.exec(events);
+      if (match === null) {throw new Error("operation cgroup has no exact populated state");}
+      return match[1] === "1";
     };
+    return Object.freeze({
+      async attachGuardian(pid) {
+        if (closed || !Number.isSafeInteger(pid) || pid <= 0) {return false;}
+        await writeFile(join(operationRoot, "cgroup.procs"), `${pid}\n`, {encoding: "utf8"});
+        const members = (await readFile(join(operationRoot, "cgroup.procs"), "utf8")).trim().split("\n");
+        return members.includes(String(pid));
+      },
+      async close() {
+        if (closed) {return true;}
+        if (await populated()) {return false;}
+        await rmdir(operationRoot);
+        closed = true;
+        return true;
+      },
+      async killAll() {
+        if (closed) {return false;}
+        await writeFile(join(operationRoot, "cgroup.kill"), "1\n", {encoding: "utf8"});
+        return true;
+      },
+      async proveEmpty(deadline, monotonicNow) {
+        while (monotonicNow() < deadline) {
+          if (!await populated()) {return "empty";}
+          await new Promise(resolve => {setImmediate(resolve);});
+        }
+        return await populated() ? "residue" : "empty";
+      },
+    });
   },
-  turnTimeoutMs: 180_000,
 });
-const attemptId = "attempt:claude-live-canary";
-const operationId = "operation:claude-live-canary";
-const opened = await custody.open({ attemptId, operationId, providerBinding, workspaceRef });
-const output = [];
-let outcome;
-let containment;
-let providerStderr = "";
-try {
-  outcome = await provider.execute({
-    attemptId,
-    custody: opened,
-    effectId: "effect:claude-live-canary",
-    emit: async chunk => {output.push(chunk.text);},
-    intent: {
-      mode: "analysis",
-      prompt: "Reply with exactly AR_CLAUDE_CANARY_OK. Do not invoke tools, spawn agents, or modify files.",
-    },
-    isCancellationRequested: async () => false,
-    operationId,
-    workspaceRef,
-  });
-} finally {
-  containment = await custody.requestContainment({ attemptId, custodyRef: opened.custodyRef, operationId });
-  const liveProcess = custody.get(opened.custodyRef);
-  if (liveProcess !== undefined) {
-    for await (const bytes of liveProcess.stderr) {
-      providerStderr = `${providerStderr}${Buffer.from(bytes).toString("utf8")}`.slice(-2_000);
-    }
-  }
-}
 
-assert.equal(
-  outcome?.kind,
-  "completed",
-  `Claude canary did not complete: ${JSON.stringify({
-    outcome,
-    output: output.join("").slice(0, 2_000),
-    providerStderr,
-    sdkFailure,
-  })}`,
-);
-assert.equal(outcome?.outcome, "succeeded", `Claude canary failed: ${output.join(" | ").slice(0, 2_000)}`);
-assert.match(output.join(""), /AR_CLAUDE_CANARY_OK/u);
-assert.equal(containment.kind, "contained");
-process.stdout.write(`${JSON.stringify({
-  binarySha256: executableSha256,
-  containment: containment.kind,
-  outputDigest: createHash("sha256").update(output.join("")).digest("hex"),
-  outputEvents: output.length,
-  provider: "claude-agent-sdk",
-  status: outcome.outcome,
-})}\n`);
+const run = async () => {
+  assert.equal(`${process.platform}-${process.arch}`, "linux-x64");
+  const canaryRoot = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_ROOT"));
+  const workspaceRef = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_WORKSPACE"));
+  const privateRootPath = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_PRIVATE_ROOT"));
+  const configRoot = await realpath(join(privateRootPath, "config"));
+  const homeRoot = await realpath(join(privateRootPath, "home"));
+  const tempRoot = await realpath(join(privateRootPath, "tmp"));
+  const executablePath = await realpath(requiredEnvironment("AR_CLAUDE_BINARY"));
+  const suppliedExecutableSha256 = requiredEnvironment("AR_CLAUDE_BINARY_SHA256");
+  const delegatedCgroupRoot = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_CGROUP_ROOT"));
+  const credentialPath = join(configRoot, ".credentials.json");
+
+  await assertRegularFile(join(canaryRoot, ".agent-runtime-test-sandbox"));
+  await Promise.all([privateRootPath, configRoot, homeRoot, tempRoot].map(assertPrivateDirectory));
+  await assertRegularFile(credentialPath);
+  assert.equal(contains(canaryRoot, workspaceRef) && workspaceRef !== canaryRoot, true);
+  assert.equal(contains(canaryRoot, privateRootPath) && privateRootPath !== canaryRoot, true);
+  assert.equal(contains(privateRootPath, configRoot) && configRoot !== privateRootPath, true);
+  assert.equal(contains(privateRootPath, homeRoot) && homeRoot !== privateRootPath, true);
+  assert.equal(contains(privateRootPath, tempRoot) && tempRoot !== privateRootPath, true);
+  assert.equal(contains(privateRootPath, workspaceRef) || contains(workspaceRef, privateRootPath), false);
+  assert.equal((await statfs(delegatedCgroupRoot)).type, 0x63677270);
+  assert.equal(suppliedExecutableSha256, CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.executableSha256);
+  assert.equal(sha256(await readFile(executablePath)), CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.executableSha256);
+
+  const tuple = CLAUDE_AGENT_SDK_PRODUCTION_TUPLE;
+  const snapshot = Object.freeze({
+    adapterRevision: tuple.adapterRevision, binaryRevision: tuple.binaryRevision,
+    capabilityManifestRevision: tuple.manifestRevision, provider: "claude",
+  });
+  const manifest = Object.freeze({
+    effectCardinality: "one_coarse_effect_per_operation",
+    effectClass: "contained_unmediated_effect",
+    manifestRevision: tuple.manifestRevision, manifestVersion: 1, provider: "claude",
+    providerAttemptCardinality: "at_most_one",
+    requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
+    resourceScopeRevision: tuple.resourceScopeRevision,
+    supportedModes: Object.freeze(["analysis", "workspace-write"]),
+    unknownCapabilityPolicy: "fail_closed",
+  });
+  const credentialBindingDigest = `sha256:${sha256(await readFile(credentialPath))}`;
+  const providerAccessSnapshot = Object.freeze({
+    accessRef: "access:claude-live-canary", credentialBindingDigest,
+    credentialBindingRef: "credential-binding:claude-live-canary", credentialGeneration: 1,
+    ownerAuthorityDigest: digestContainedTurnCanonicalValue({owner: "claude-live-canary"}),
+    projectId: "project:disposable-live-canary", provider: "claude",
+    providerAccountRef: "account:claude-live-canary",
+    providerRouteRef: "route:claude-live-canary:subscription", revision: 1,
+    tenantId: "tenant:disposable-live-canary",
+  });
+  const authorityVectorDigest = digestContainedTurnCanonicalValue({provider: "claude", workspace: "disposable"});
+  const ids = Object.freeze({
+    attemptId: containedTurnIdentity("attempt", "attempt:claude-live-canary"),
+    custodyId: containedTurnIdentity("custody", "custody:claude-live-canary"),
+    effectId: containedTurnIdentity("effect", "effect:claude-live-canary"),
+    operationId: containedTurnIdentity("operation", "operation:claude-live-canary"),
+    workspaceId: containedTurnIdentity("workspace", "workspace:claude-live-canary"),
+  });
+  const hostCustody = new NodeProviderProcessCustody({
+    containmentAfterMs: 30_000, drainAfterMs: 10_000, forceKillAfterMs: 5_000,
+    launchPlans: Object.freeze({resolve: async () => {throw new Error("ambient launch-plan resolution is forbidden");}}),
+    residueAuthorityFactory: cgroupV2Factory(delegatedCgroupRoot), terminateAfterMs: 5_000,
+  });
+  const privateDirectoryCustody = Object.freeze({assertPrivateDirectory});
+  const privateProjection = createClaudeAgentSdkPrivateProjection({
+    configRoot, homeRoot, projectionRef: "projection:claude-live-canary", tempRoot, workspaceRef,
+  });
+  const owner = createClaudeCurrentKernelOwner({
+    adapterSnapshot: snapshot, executablePath,
+    executableSha256: tuple.executableSha256,
+    hostBootId: "host-boot:claude-live-canary", hostCustody,
+    hostInstanceId: "host-instance:claude-live-canary",
+    launchRecords: Object.freeze({resolve: async input => {
+      assert.equal(input.intentMode, "analysis");
+      assert.equal(input.workspaceAuthority.canonicalPath, workspaceRef);
+      return Object.freeze({privateProjection, privateRootPath});
+    }}),
+    manifest, privateDirectoryCustody,
+    queryFactory(input) {
+      const query = claudeQuery(input);
+      return Object.freeze({
+        close: () => query.close(),
+        interrupt: () => query.interrupt(),
+        async *[Symbol.asyncIterator]() {yield* query;},
+      });
+    },
+    workspaceOwner: workspaceOwner(workspaceRef),
+  });
+  const intent = Object.freeze({
+    mode: "analysis",
+    prompt: "Reply with exactly AR_CLAUDE_CANARY_OK. Do not invoke tools, spawn agents, or modify files.",
+  });
+  const kernelIdentity = Object.freeze({...ids, adapterSnapshot: snapshot, authorityVectorDigest, providerAccessSnapshot});
+  const output = [];
+  let finalCursor = 0;
+  let physicalContainment;
+  try {
+    const opened = await owner.custody.open({...kernelIdentity, intentMode: intent.mode});
+    assert.equal(opened.custodyId, ids.custodyId);
+    const started = await owner.custody.start({
+      attemptId: ids.attemptId, custodyId: ids.custodyId,
+      execute: start => owner.provider.execute({
+        ...kernelIdentity,
+        emit: async chunk => {
+          assert.equal(chunk.cursor, finalCursor);
+          finalCursor += 1;
+          output.push(chunk.text);
+        },
+        intent, isCancellationRequested: async () => false, start,
+      }),
+      intent, operationId: ids.operationId,
+      startAuthority: `start-authority:${authorityVectorDigest}`, workspaceId: ids.workspaceId,
+    });
+    assert.equal(started.kind, "execution_started");
+    const outcome = await started.execution;
+    assert.deepEqual(outcome, {kind: "completed", outcome: "succeeded"});
+    assert.equal(output.join(""), "AR_CLAUDE_CANARY_OK");
+    const closure = await owner.custody.attestExecutionClosure({
+      attemptId: ids.attemptId, custodyId: ids.custodyId, finalCursor, operationId: ids.operationId,
+    });
+    assert.equal(closure.kind, "proved");
+  } finally {
+    physicalContainment = await owner.custody.requestPhysicalContainment({
+      attemptId: ids.attemptId, custodyId: ids.custodyId, operationId: ids.operationId,
+    });
+    owner.dispose();
+  }
+  assert.equal(physicalContainment.kind, "contained");
+  return Object.freeze({
+    binarySha256: tuple.executableSha256,
+    containmentProofDigest: sha256(physicalContainment.proof.proofId),
+    outputDigest: sha256(output.join("")), outputEvents: finalCursor,
+    provider: "claude-agent-sdk-current-kernel", status: "succeeded",
+  });
+};
+
+try {
+  process.stdout.write(`${JSON.stringify(await run())}\n`);
+} catch (error) {
+  const failure = error instanceof Error ? `${error.name}:${error.message}` : String(error);
+  process.stdout.write(`${JSON.stringify({errorDigest: sha256(failure), provider: "claude-agent-sdk-current-kernel", status: "failed"})}\n`);
+  process.exitCode = 1;
+}
