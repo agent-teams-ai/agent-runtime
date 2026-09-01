@@ -375,9 +375,12 @@ Contained Agent Turn V1 implementation present; qualification remains open:
   terminal truth;
 - focused synthetic evidence includes 58 Agent Execution tests, 63 Embedded
   Runtime tests, and five PostgreSQL restart/concurrency/corruption tests;
-- exact Codex `0.150.1` disposable canaries passed on hosted Linux x64 and
-  local macOS arm64 with identical canonical output and confirmed containment.
-  Claude SDK `0.3.251` adapter/custody conformance is green, while the hosted
+- the exact Codex `0.150.1` hosted Linux x64 canary is retained implementation
+  evidence. Darwin arm64 has independently checked-in immutable package,
+  binary-SHA, and initialize candidate authority, plus synthetic cooperative
+  composition coverage, but no registered exact-SHA local macOS canary and no
+  qualification-registry target. Claude SDK `0.3.251` adapter/custody
+  conformance is green, while the hosted
   live canary is blocked at authentication by an expired test OAuth session;
 - OpenCode remains contract-only and no production ACP adapter is claimed.
 
@@ -407,8 +410,9 @@ Remaining:
   terminal-barrier implementation tests for the exact V1 manifests and target
   platforms;
 - Claude hosted and macOS disposable live canaries with a valid isolated test
-  credential binding, plus OpenCode ACP fixture qualification. Codex live
-  canaries are implementation evidence, not deployment qualification;
+  credential binding, the exact-SHA Codex Darwin arm64 local canary and
+  qualification-registry promotion, plus OpenCode ACP fixture qualification.
+  Codex live canaries are implementation evidence, not deployment qualification;
 - adversarial private-handle, Host-shutdown, durable cancellation, immutable
   identity, and persistence fault campaigns beyond the focused V1 suite;
 - spoofed/corrupted provider owner IDs proving adapters cannot replace trusted

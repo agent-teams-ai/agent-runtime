@@ -169,8 +169,12 @@ receipt set. Late receipts are evidence only and cannot reopen terminal truth.
 The acceptance packet freezes static contract-characterization fixtures for
 these exact current candidate revisions:
 
-- Codex `@openai/codex@0.150.1`, binary SHA-256
-  `abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386`;
+- Codex `@openai/codex@0.150.1`: Linux x64 native package
+  `@openai/codex-linux-x64@0.150.1`, binary SHA-256
+  `abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386`,
+  and Darwin arm64 native package `@openai/codex-darwin-arm64@0.150.1`,
+  binary SHA-256
+  `a14f9a907c12c8812878b70e6b7d65f81c39ed795513e46a55817d7428c0ca6b`;
 - Claude Agent SDK `@anthropic-ai/claude-agent-sdk@0.3.251`, bundled Claude
   Code `2.1.251`, binary SHA-256
   `fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7`;
@@ -180,7 +184,11 @@ these exact current candidate revisions:
   `opencode-acp-v1-adapter`.
 
 The accompanying Linux Codex and Claude fixtures prove only exact package,
-binary, generated-contract, and public SDK shape. No provider turn was run.
+binary, generated-contract, and public SDK shape. The Darwin Codex fixture
+independently binds the immutable package, native target/path, binary digest,
+and initialize identity as candidate authority only. No exact-SHA local macOS
+canary for that candidate is registered, and the qualification registry has no
+Darwin Codex target row. No provider turn was run for these static fixtures.
 They do not behavior-qualify the hosted target, authorize production execution,
 or claim that every provider effect is mediated. Behavior qualification is a
 separate delivery gate. The OpenCode item is contract-only and does not assert

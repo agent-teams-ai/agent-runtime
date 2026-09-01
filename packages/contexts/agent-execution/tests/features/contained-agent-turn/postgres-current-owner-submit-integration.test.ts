@@ -206,6 +206,7 @@ const createOwner = async (
     return createCodexCurrentKernelOwner({
       effectCustody: {admit: () => {}},
       hostBootId: "host-boot:pg-codex", hostCustody: host as never, hostInstanceId: "host-instance:pg-codex",
+      platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async input => ({boundary: createCodexAppServerPermissionBoundary({codexHome,
         workspaceRef: input.workspaceAuthority.canonicalPath}),
         executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp})}, workspaceOwner,

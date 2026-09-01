@@ -72,6 +72,7 @@ const kernelInput = (
 
 const createAdapter = (process: FakeCodexProcess, onPrepare?: () => void) =>
   new CodexAppServerCurrentKernelAdapter({
+    platformTarget: {architecture: "x64", platform: "linux"},
     attempts: {
       async prepare(input) {
         onPrepare?.();
@@ -144,6 +145,7 @@ test("preserves the prepared-attempt receiver through the Host delegated start",
     }
   }
   const adapter = new CodexAppServerCurrentKernelAdapter({
+    platformTarget: {architecture: "x64", platform: "linux"},
     attempts: {
       async prepare(input) {
         const receiver = new ReceiverBoundPreparedAttempt(process);
@@ -256,6 +258,7 @@ test("rejects mismatched current-kernel and prepared-attempt identities", async 
 
   const prepared = kernelInput(process);
   const adapter = new CodexAppServerCurrentKernelAdapter({
+    platformTarget: {architecture: "x64", platform: "linux"},
     attempts: {
       async prepare(input) {
         return {
@@ -282,7 +285,8 @@ test("rejects missing or swapped kernel custody identity before Codex provider e
     await t.test(row.name, async () => {
       const process = new FakeCodexProcess(() => {});
       const execution = kernelInput(process);
-      const adapter = new CodexAppServerCurrentKernelAdapter({attempts: {
+      const adapter = new CodexAppServerCurrentKernelAdapter({
+        platformTarget: {architecture: "x64", platform: "linux"}, attempts: {
         async prepare() {return {createProcess: () => ({
           custody: {custodyRef: process.custodyRef}, kernelCustodyId: row.kernelCustodyId,
           provider: createProvider(process), workspaceRef: boundary.workspaceRef,

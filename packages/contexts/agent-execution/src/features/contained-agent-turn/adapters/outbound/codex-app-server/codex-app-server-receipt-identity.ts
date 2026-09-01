@@ -6,10 +6,7 @@ import type {
   ContainedTurnProviderPort,
 } from "../legacy/legacy-contained-turn-ports.js";
 import { canonicalCodexJson } from "./codex-app-server-permission-boundary.js";
-import {
-  CODEX_APP_SERVER_LINUX_X64_TUPLE,
-  type CodexAppServerPlatformTuple,
-} from "./codex-app-server-platform-tuple.js";
+import type { CodexAppServerPlatformTuple } from "./codex-app-server-platform-tuple.js";
 
 type CodexExecutionInput = Parameters<ContainedTurnProviderPort["execute"]>[0];
 
@@ -23,11 +20,11 @@ export interface CodexReceiptIdentity {
   readonly attemptId: string;
   readonly effectId: string;
   readonly operationId: string;
-  readonly platformTuple?: CodexAppServerPlatformTuple;
+  readonly platformTuple: CodexAppServerPlatformTuple;
 }
 
 export const codexReceipt = (kind: string, identity: CodexReceiptIdentity, codes: readonly string[]): string => {
-  const platformTuple = identity.platformTuple ?? CODEX_APP_SERVER_LINUX_X64_TUPLE;
+  const platformTuple = identity.platformTuple;
   return `urn:agent-runtime:${kind}:${createHash("sha256").update(canonicalCodexJson({
     adapterRevision: platformTuple.adapterRevision,
     attemptId: identity.attemptId,

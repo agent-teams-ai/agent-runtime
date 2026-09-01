@@ -12,6 +12,12 @@ export const CODEX_CAPABILITY_MANIFEST_REVISION =
 export type CodexAppServerPlatform = "darwin" | "linux";
 export type CodexAppServerArchitecture = "arm64" | "x64";
 
+/** The complete public selection input; the canonical tuple remains adapter-private. */
+export interface CodexAppServerPlatformTarget {
+  readonly architecture: CodexAppServerArchitecture;
+  readonly platform: CodexAppServerPlatform;
+}
+
 export interface CodexAppServerPlatformTuple {
   readonly adapterRevision: typeof CODEX_APP_SERVER_ADAPTER_REVISION;
   readonly architecture: CodexAppServerArchitecture;
@@ -80,7 +86,7 @@ const selectTuple = (platform: unknown, architecture: unknown): CodexAppServerPl
   return selected;
 };
 
-export const selectCodexAppServerPlatformTuple = (input: Readonly<{readonly architecture: string; readonly platform: string}>): CodexAppServerPlatformTuple => {
+export const selectCodexAppServerPlatformTuple = (input: CodexAppServerPlatformTarget): CodexAppServerPlatformTuple => {
   if (typeof input !== "object" || input === null || Object.getPrototypeOf(input) !== Object.prototype) {
     throw new CodexAppServerPlatformTupleUnsupportedError();
   }

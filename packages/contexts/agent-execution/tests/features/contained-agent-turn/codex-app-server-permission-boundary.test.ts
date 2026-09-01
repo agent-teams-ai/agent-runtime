@@ -17,6 +17,7 @@ import {
   validateCodexPermissionProfileEvidence,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import { createCodexAppServerLaunchPlan } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
+import { CODEX_APP_SERVER_LINUX_X64_TUPLE } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 import {
   diagnoseCodexWorkspaceEndpoint,
   observeCodexWorkspaceEndpoint,
@@ -166,6 +167,7 @@ test("validates private roots, disjointness, and stable filesystem identity", as
       boundary: exactBoundary,
       executablePath: "/opt/codex",
       intentMode: "analysis",
+      platformTarget: {architecture: "x64", platform: "linux"},
       privateRootPath: privateRoot,
       tmpDir: temp,
     });
@@ -199,6 +201,7 @@ test("validates private roots, disjointness, and stable filesystem identity", as
       boundary: exactBoundary,
       executablePath: "/opt/codex",
       intentMode: "analysis",
+      platformTarget: {architecture: "x64", platform: "linux"},
       privateRootPath: privateRoot,
       tmpDir: nestedTemp,
     }), /privateRootPath|disjoint/u);
@@ -307,7 +310,7 @@ test("decodes initialize as exact own enumerable plain 0.150.1 data", () => {
     const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace });
     const exact = { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux",
       userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)" };
-    validateCodexInitializeEvidence(exact, boundary);
+    validateCodexInitializeEvidence(exact, boundary, CODEX_APP_SERVER_LINUX_X64_TUPLE);
     const inherited = Object.assign(Object.create({ substituted: true }) as Record<string, unknown>, exact);
     const hidden = { ...exact };
     Object.defineProperty(hidden, "substituted", { enumerable: false, value: true });
@@ -315,7 +318,9 @@ test("decodes initialize as exact own enumerable plain 0.150.1 data", () => {
     const accessor = { ...exact };
     Object.defineProperty(accessor, "userAgent", { enumerable: true, get: () => "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)" });
     for (const malformed of [{ ...exact, substituted: true }, inherited, hidden, symbol, accessor]) {
-      assert.throws(() => validateCodexInitializeEvidence(malformed, boundary), /initialization/u);
+      assert.throws(() => validateCodexInitializeEvidence(
+        malformed, boundary, CODEX_APP_SERVER_LINUX_X64_TUPLE,
+      ), /initialization/u);
     }
   } finally {
     rmSync(caseRoot, { force: true, recursive: true });

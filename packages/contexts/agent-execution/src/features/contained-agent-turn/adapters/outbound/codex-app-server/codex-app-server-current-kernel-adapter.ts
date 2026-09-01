@@ -12,8 +12,9 @@ import { containedTurnIdentity } from "../../../domain/contained-turn-identities
 import type { ContainedTurnCustodyHandle } from "../legacy/legacy-contained-turn-ports.js";
 import { CodexAppServerContainedTurnProvider } from "./codex-app-server-contained-turn-provider.js";
 import {
-  assertExactCodexAppServerPlatformTuple,
   CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  selectCodexAppServerPlatformTuple,
+  type CodexAppServerPlatformTarget,
   type CodexAppServerPlatformTuple,
 } from "./codex-app-server-platform-tuple.js";
 
@@ -50,7 +51,7 @@ export interface CodexAppServerKernelAttemptFactory {
 
 export interface CodexAppServerCurrentKernelAdapterOptions {
   readonly attempts: CodexAppServerKernelAttemptFactory;
-  readonly platformTuple?: CodexAppServerPlatformTuple;
+  readonly platformTarget: CodexAppServerPlatformTarget;
 }
 
 export const CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT:
@@ -125,9 +126,7 @@ export class CodexAppServerCurrentKernelAdapter implements ContainedTurnKernelPr
 
   public constructor(options: CodexAppServerCurrentKernelAdapterOptions) {
     this.#attempts = options.attempts;
-    this.#platformTuple = assertExactCodexAppServerPlatformTuple(
-      options.platformTuple ?? CODEX_APP_SERVER_LINUX_X64_TUPLE,
-    );
+    this.#platformTuple = selectCodexAppServerPlatformTuple(options.platformTarget);
     this.adapterSnapshot = Object.freeze({
       adapterRevision: this.#platformTuple.adapterRevision,
       binaryRevision: this.#platformTuple.binaryRevision,

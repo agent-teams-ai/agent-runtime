@@ -54,6 +54,7 @@ test("provider launch plans bind exact caller-owned root and requested mode with
       boundary: value.boundary,
       executablePath: "/synthetic/codex",
       intentMode,
+      platformTarget: {architecture: "x64", platform: "linux"},
       privateRootPath: value.privateRootPath,
       tmpDir: value.codexTmp,
     });
@@ -93,9 +94,13 @@ test("provider launch plan factories fail closed for missing or invalid trusted 
     boundary: value.boundary,
     executablePath: "/synthetic/codex",
     intentMode: "analysis" as const,
+    platformTarget: {architecture: "x64" as const, platform: "linux" as const},
     privateRootPath: value.privateRootPath,
     tmpDir: value.codexTmp,
   };
+  assert.throws(() => createCodexAppServerLaunchPlan({
+    ...codexBase, platformTarget: undefined,
+  } as never), /No exact/u);
   assert.throws(() => createCodexAppServerLaunchPlan({ ...codexBase, intentMode: undefined } as never), /intentMode/u);
   assert.throws(() => createCodexAppServerLaunchPlan({ ...codexBase, privateRootPath: undefined } as never), /privateRootPath/u);
   assert.throws(() => createCodexAppServerLaunchPlan({ ...codexBase, privateRootPath: value.workspaceRef }), /disjoint/u);

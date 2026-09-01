@@ -45,6 +45,7 @@ const access = (provider: "claude" | "codex") => Object.freeze({
 class FakeHost {
   readonly plans: unknown[] = [];
   readonly refs = new Map<string, string>();
+  readonly startInputs: unknown[] = [];
   reserves = 0;
   releases = 0;
   starts = 0;
@@ -58,8 +59,9 @@ class FakeHost {
     return Object.freeze({ custodyRef });
   }
   async open() {throw new Error("owner integration must use reserve");}
-  start(custodyRef: string) {
+  start(custodyRef: string, input: unknown) {
     assert.ok([...this.refs.values()].includes(custodyRef));
+    this.startInputs.push(input);
     this.starts += 1;
     return Object.freeze({
       exitCode: null, killed: false, stdin: {}, stdout: {}, kill: () => true,
@@ -187,6 +189,7 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
       effectCustody: syntheticCodexEffectCustody(),
       hostBootId: "host-boot:claim-codex", hostCustody: host as any,
       hostInstanceId: "host-instance:claim-codex",
+      platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async () => {
         return ({
         boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
@@ -260,6 +263,7 @@ test("provider owners keep stable kernel and random Host identities distinct and
       effectCustody: syntheticCodexEffectCustody(),
       hostBootId: "host-boot:current-owner", hostCustody: codexHost as any,
       hostInstanceId: "host-instance:current-owner",
+      platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async () => ({
         boundary: createCodexAppServerPermissionBoundary({ codexHome, workspaceRef: codexWorkspace }),
         executablePath: "/synthetic/codex", privateRootPath: codexPrivate, tmpDir: codexTemp,
@@ -275,6 +279,7 @@ test("provider owners keep stable kernel and random Host identities distinct and
       codexIds, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT,
     ))).kind, "indeterminate");
     assert.equal(codexHost.starts, 1);
+    assert.equal((codexHost.startInputs[0] as {cwd: string}).cwd, "/proc/self/fd/4");
 
     const claudeWorkspace = join(root, "claude-workspace");
     const claudePrivate = `${claudeWorkspace}-host-private`;
@@ -337,6 +342,43 @@ test("provider owners keep stable kernel and random Host identities distinct and
     assert.equal(claudeHost.starts, 1);
     codex.dispose(); claude.dispose();
   } finally {await rm(root, { recursive: true, force: true });}
+});
+
+test("Codex Darwin owner delegates the canonical workspace to cooperative Host Custody", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "codex-darwin-owner-cwd-")));
+  try {
+    const workspaceRef = join(root, "workspace");
+    const privateRootPath = `${workspaceRef}-host-private`;
+    const codexHome = join(privateRootPath, "home");
+    const tmpDir = join(privateRootPath, "tmp");
+    await Promise.all([
+      mkdir(workspaceRef, {mode: 0o700}),
+      mkdir(codexHome, {recursive: true, mode: 0o700}),
+      mkdir(tmpDir, {recursive: true, mode: 0o700}),
+    ]);
+    const identity = ids("codex", "darwin-cwd");
+    const host = new FakeHost();
+    const platformTarget = {architecture: "arm64", platform: "darwin"};
+    const owner = createCodexCurrentKernelOwner({
+      effectCustody: syntheticCodexEffectCustody(), hostBootId: "host-boot:darwin-cwd",
+      hostCustody: host as any, hostInstanceId: "host-instance:darwin-cwd",
+      launchRecords: {resolve: async () => ({
+        boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+        executablePath: "/synthetic/codex-darwin-arm64", privateRootPath, tmpDir,
+      })},
+      platformTarget: platformTarget as never,
+      workspaceOwner: workspaceOwner(identity, workspaceRef),
+    });
+    platformTarget.architecture = "x64";
+    platformTarget.platform = "linux";
+    const snapshot = owner.provider.adapterSnapshot;
+    await owner.custody.open(openInput(identity, "codex", snapshot));
+    assert.equal((await owner.provider.execute(executeInput(identity, "codex", snapshot))).kind, "indeterminate");
+    assert.equal(host.starts, 1);
+    assert.equal((host.startInputs[0] as {cwd: string}).cwd, workspaceRef);
+    assert.notEqual((host.startInputs[0] as {cwd: string}).cwd, "/proc/self/fd/4");
+    owner.dispose();
+  } finally {await rm(root, {recursive: true, force: true});}
 });
 
 test("Codex and Claude current owners start only after the real atomic claim and cannot replay", async t => {
@@ -578,6 +620,7 @@ test("prevention retires a prepared attempt without a Host or provider start", a
       effectCustody: syntheticCodexEffectCustody(),
       hostBootId: "host-boot:prevention", hostCustody: host as any,
       hostInstanceId: "host-instance:prevention",
+      platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async () => ({
         boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
         executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp,
@@ -619,6 +662,7 @@ test("same-provider attempts retain distinct exact plans and reject crossed work
     const owner = createCodexCurrentKernelOwner({
       effectCustody: syntheticCodexEffectCustody(),
       hostBootId: "host-boot:plans", hostCustody: host as any, hostInstanceId: "host-instance:plans",
+      platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async input => {
         const record = records.get(input.workspaceId);
         if (record === undefined || record.workspaceRef !== input.workspaceAuthority.canonicalPath) {return;}
@@ -694,7 +738,10 @@ test("duplicate and late Claude private callbacks remain effect-free", async () 
 });
 
 test("public root remains path-free and outer composition retains the exact seven ports", async () => {
-  assert.throws(() => createCodexCurrentKernelOwner({} as never),
+  assert.throws(() => createCodexCurrentKernelOwner({} as never), /No exact/u);
+  assert.throws(() => createCodexCurrentKernelOwner({
+    platformTarget: {architecture: "x64", platform: "linux"},
+  } as never),
     /workspace-write requires effect custody/u);
   const publicRoot = await readFile(new URL("../../../dist/index.d.ts", import.meta.url), "utf8");
   for (const privateName of ["CurrentKernelOwner", "custodyRef", "descriptorPath", "privateRootPath"]) {

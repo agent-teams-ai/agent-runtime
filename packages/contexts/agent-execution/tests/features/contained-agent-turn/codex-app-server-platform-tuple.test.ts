@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -25,8 +25,16 @@ import { boundary } from "../../codex-app-server-contained-turn-provider-fixture
 
 const linuxUserAgent =
   "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)";
-const darwinUserAgent =
-  "agent-runtime/0.150.1 (Mac OS 15.6.1; arm64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)";
+const candidateAuthority = JSON.parse(readFileSync(new URL(
+  "../../fixtures/protocol/codex-app-server-0.150.1/manifest.json", import.meta.url,
+), "utf8")) as {readonly candidateTargets: {readonly "darwin-arm64": {
+  readonly authority: string; readonly binaryPath: string; readonly binarySha256: string;
+  readonly initialize: {readonly platformFamily: string; readonly platformOs: string; readonly userAgent: string};
+  readonly nativePackage: string; readonly nativeTarget: string; readonly qualification: string;
+  readonly wrapperPackage: string;
+}}};
+const darwinCandidate = candidateAuthority.candidateTargets["darwin-arm64"];
+const darwinUserAgent = darwinCandidate.initialize.userAgent;
 
 test("selects only the exact qualified Codex Linux and Darwin tuples", () => {
   assert.deepEqual(selectCodexAppServerPlatformTuple({ architecture: "x64", platform: "linux" }),
@@ -36,7 +44,14 @@ test("selects only the exact qualified Codex Linux and Darwin tuples", () => {
   assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.binarySha256,
     "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386");
   assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.binarySha256,
-    "a14f9a907c12c8812878b70e6b7d65f81c39ed795513e46a55817d7428c0ca6b");
+    darwinCandidate.binarySha256);
+  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.nativePackageRevision,
+    darwinCandidate.nativePackage);
+  assert.equal(darwinCandidate.wrapperPackage, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.packageRevision);
+  assert.equal(darwinCandidate.nativeTarget, "aarch64-apple-darwin");
+  assert.equal(darwinCandidate.binaryPath, "vendor/aarch64-apple-darwin/codex/codex");
+  assert.equal(darwinCandidate.authority, "checked-in-package-binary-initialize-candidate");
+  assert.equal(darwinCandidate.qualification, "candidate-pending-exact-local-canary");
   assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.containmentProfile, "strict-linux-cgroup-v2");
   assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.containmentProfile,
     "cooperative-darwin-posix-process-group");
@@ -44,7 +59,7 @@ test("selects only the exact qualified Codex Linux and Darwin tuples", () => {
     { architecture: "x64", platform: "win32" },
     { architecture: "arm64", platform: "linux" },
     { architecture: "x64", platform: "darwin" },
-  ]) {assert.throws(() => selectCodexAppServerPlatformTuple(unsupported), /No exact/u);}
+  ]) {assert.throws(() => selectCodexAppServerPlatformTuple(unsupported as never), /No exact/u);}
   assert.throws(() => assertExactCodexAppServerPlatformTuple({
     ...CODEX_APP_SERVER_DARWIN_ARM64_TUPLE,
     containmentProfile: "strict-linux-cgroup-v2",
@@ -60,8 +75,8 @@ test("accepts the two real initialize observations without pinning patch or buil
   );
   validateCodexInitializeEvidence({
     codexHome: boundary.codexHome,
-    platformFamily: "unix",
-    platformOs: "macos",
+    platformFamily: darwinCandidate.initialize.platformFamily,
+    platformOs: darwinCandidate.initialize.platformOs,
     userAgent: darwinUserAgent,
   }, boundary, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE);
 });
@@ -98,8 +113,10 @@ test("rejects hostile, malformed, crossed, prefixed, suffixed, and oversized ini
 
 test("derives stable binding and receipt identity from the selected tuple without evidence leakage", () => {
   const attempts = {prepare: async () => {throw new Error("unused");}};
-  const linux = new CodexAppServerCurrentKernelAdapter({ attempts, platformTuple: CODEX_APP_SERVER_LINUX_X64_TUPLE });
-  const darwin = new CodexAppServerCurrentKernelAdapter({ attempts, platformTuple: CODEX_APP_SERVER_DARWIN_ARM64_TUPLE });
+  const linux = new CodexAppServerCurrentKernelAdapter({ attempts,
+    platformTarget: {architecture: "x64", platform: "linux"} });
+  const darwin = new CodexAppServerCurrentKernelAdapter({ attempts,
+    platformTarget: {architecture: "arm64", platform: "darwin"} });
   assert.equal(linux.adapterSnapshot.binaryRevision, CODEX_APP_SERVER_LINUX_X64_TUPLE.binaryRevision);
   assert.equal(darwin.adapterSnapshot.binaryRevision, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.binaryRevision);
   const identity = { attemptId: "attempt:stable", effectId: "effect:stable", operationId: "operation:stable" };
@@ -126,7 +143,7 @@ test("derives Darwin launch identity and requests only the reviewed cooperative 
       boundary: exactBoundary,
       executablePath: "/synthetic/codex-darwin-arm64",
       intentMode: "analysis",
-      platformTuple: CODEX_APP_SERVER_DARWIN_ARM64_TUPLE,
+      platformTarget: {architecture: "arm64", platform: "darwin"},
       privateRootPath: privateRoot,
       tmpDir: tmp,
     });

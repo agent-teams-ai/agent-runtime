@@ -3,9 +3,8 @@ import type { ContainedTurnKernelProviderPort } from "../application/ports/outbo
 import { createCodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import type { CodexAppServerPermissionBoundary } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import {
-  assertExactCodexAppServerPlatformTuple,
-  CODEX_APP_SERVER_LINUX_X64_TUPLE,
-  type CodexAppServerPlatformTuple,
+  selectCodexAppServerPlatformTuple,
+  type CodexAppServerPlatformTarget,
 } from "../adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 import {
   CodexAppServerCurrentKernelAdapter,
@@ -58,8 +57,8 @@ export interface CreateCodexCurrentKernelOwnerOptions {
   readonly hostCustody: ContainedTurnHostCustodyPort & Processes;
   readonly hostInstanceId: string;
   readonly launchRecords: CodexCurrentKernelLaunchRecordResolver;
-  /** Exact tuple selected at this outer provider composition seam. */
-  readonly platformTuple?: CodexAppServerPlatformTuple;
+  /** Mandatory explicit target selected at this outer provider composition seam. */
+  readonly platformTarget: CodexAppServerPlatformTarget;
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
 }
 export interface CodexCurrentKernelOwner {
@@ -91,9 +90,12 @@ const sameAttempt = (record: PreparedRecord, input: AttemptInput): boolean =>
 export const createCodexCurrentKernelOwner = (
   options: CreateCodexCurrentKernelOwnerOptions,
 ): CodexCurrentKernelOwner => {
-  const platformTuple = assertExactCodexAppServerPlatformTuple(
-    options.platformTuple ?? CODEX_APP_SERVER_LINUX_X64_TUPLE,
-  );
+  const platformTuple = selectCodexAppServerPlatformTuple(options.platformTarget);
+  const platformTarget: CodexAppServerPlatformTarget = Object.freeze({
+    architecture: platformTuple.architecture, platform: platformTuple.platform,
+  });
+  const delegatedCwd = platformTuple.containmentProfile === "strict-linux-cgroup-v2"
+    ? "/proc/self/fd/4" : undefined;
   const custodyOwner = options.effectCustody;
   const custodyDescriptor = custodyOwner === undefined
     ? undefined : Object.getOwnPropertyDescriptor(custodyOwner, "admit");
@@ -126,7 +128,7 @@ export const createCodexCurrentKernelOwner = (
           options.hostCustody.start(record.custodyRef!, {
             arguments: record.plan.arguments,
             command: record.plan.executablePath,
-            cwd: "/proc/self/fd/4",
+            cwd: delegatedCwd ?? record.workspaceRef,
             environment: record.plan.environment,
             signal: new AbortController().signal,
           });
@@ -167,7 +169,7 @@ export const createCodexCurrentKernelOwner = (
       }
       const plan = createCodexAppServerLaunchPlan({
         boundary: launch.boundary, executablePath: launch.executablePath,
-        intentMode: input.kernel.intentMode, platformTuple,
+        intentMode: input.kernel.intentMode, platformTarget,
         privateRootPath: launch.privateRootPath, tmpDir: launch.tmpDir,
       });
       records.set(input.kernel.custodyId, {
@@ -194,6 +196,6 @@ export const createCodexCurrentKernelOwner = (
   return Object.freeze({
     custody,
     dispose() {disposed = true; records.clear();},
-    provider: new CodexAppServerCurrentKernelAdapter({ attempts, platformTuple }),
+    provider: new CodexAppServerCurrentKernelAdapter({ attempts, platformTarget }),
   });
 };

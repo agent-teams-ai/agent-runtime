@@ -7,10 +7,10 @@ import { isAbsolute, join, relative } from "node:path";
 import {
   createCodexAppServerPermissionBoundary,
   createCodexCurrentKernelOwner,
+  DarwinCooperativeProcessCustody,
   NodeProviderProcessCustody,
 } from "../../dist/composition.js";
-import { CODEX_APP_SERVER_BINARY_SHA256 } from "../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
-import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
+import { selectCodexAppServerPlatformTuple } from "../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 import { digestContainedTurnCanonicalValue } from "../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 
@@ -42,8 +42,32 @@ const mountId = async descriptor => {
   assert.equal(matches.length, 1);
   return matches[0][1];
 };
-const workspaceOwner = workspaceRef => Object.freeze({
+const exactPlatformTarget = () => {
+  const platformRevision = `${process.platform}-${process.arch}`;
+  if (platformRevision === "linux-x64") {
+    return Object.freeze({architecture: "x64", platform: "linux"});
+  }
+  if (platformRevision === "darwin-arm64") {
+    return Object.freeze({architecture: "arm64", platform: "darwin"});
+  }
+  throw new Error(`unsupported Codex canary target: ${platformRevision}`);
+};
+const workspaceOwner = (workspaceRef, platformTarget) => Object.freeze({
   async withLaunchAuthority(_input, consume) {
+    if (platformTarget.platform === "darwin" && platformTarget.architecture === "arm64") {
+      const identity = await stat(workspaceRef, {bigint: true});
+      assert.equal(identity.isDirectory(), true);
+      return consume(Object.freeze({
+        canonicalPath: workspaceRef,
+        descriptorPath: workspaceRef,
+        identity: Object.freeze({
+          dev: identity.dev, ino: identity.ino, mountId: "darwin-statfs:unqualified-candidate",
+        }),
+      }));
+    }
+    if (platformTarget.platform !== "linux" || platformTarget.architecture !== "x64") {
+      throw new Error("unsupported Codex canary workspace authority target");
+    }
     const descriptor = await open(workspaceRef, constants.O_RDONLY | constants.O_DIRECTORY);
     try {
       const identity = await descriptor.stat({bigint: true});
@@ -99,7 +123,8 @@ const cgroupV2Factory = delegatedRoot => Object.freeze({
 });
 
 const run = async () => {
-  assert.equal(`${process.platform}-${process.arch}`, "linux-x64");
+  const platformTarget = exactPlatformTarget();
+  const platformTuple = selectCodexAppServerPlatformTuple(platformTarget);
   const canaryRoot = await realpath(requiredEnvironment("AR_CODEX_CANARY_ROOT"));
   const workspaceRef = await realpath(requiredEnvironment("AR_CODEX_CANARY_WORKSPACE"));
   const privateRootPath = await realpath(requiredEnvironment("AR_CODEX_CANARY_PRIVATE_ROOT"));
@@ -107,7 +132,6 @@ const run = async () => {
   const tmpDir = await realpath(join(privateRootPath, "tmp"));
   const executablePath = await realpath(requiredEnvironment("AR_CODEX_BINARY"));
   const suppliedExecutableSha256 = requiredEnvironment("AR_CODEX_BINARY_SHA256");
-  const delegatedCgroupRoot = await realpath(requiredEnvironment("AR_CODEX_CANARY_CGROUP_ROOT"));
 
   await assertRegularFile(join(canaryRoot, ".agent-runtime-test-sandbox"));
   await Promise.all([privateRootPath, codexHome, tmpDir].map(assertPrivateDirectory));
@@ -117,12 +141,10 @@ const run = async () => {
   assert.equal(contains(privateRootPath, codexHome) && codexHome !== privateRootPath, true);
   assert.equal(contains(privateRootPath, tmpDir) && tmpDir !== privateRootPath, true);
   assert.equal(contains(privateRootPath, workspaceRef) || contains(workspaceRef, privateRootPath), false);
-  assert.equal((await statfs(delegatedCgroupRoot)).type, 0x63677270);
-  assert.equal(suppliedExecutableSha256, CODEX_APP_SERVER_BINARY_SHA256);
-  assert.equal(sha256(await readFile(executablePath)), CODEX_APP_SERVER_BINARY_SHA256);
+  assert.equal(suppliedExecutableSha256, platformTuple.binarySha256);
+  assert.equal(sha256(await readFile(executablePath)), platformTuple.binarySha256);
 
   const credentialBindingDigest = `sha256:${sha256(await readFile(join(codexHome, "auth.json")))}`;
-  const snapshot = CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT;
   const providerAccessSnapshot = Object.freeze({
     accessRef: "access:codex-live-canary", credentialBindingDigest,
     credentialBindingRef: "credential-binding:codex-live-canary", credentialGeneration: 1,
@@ -140,11 +162,25 @@ const run = async () => {
     operationId: containedTurnIdentity("operation", "operation:codex-live-canary"),
     workspaceId: containedTurnIdentity("workspace", "workspace:codex-live-canary"),
   });
-  const hostCustody = new NodeProviderProcessCustody({
-    containmentAfterMs: 30_000, drainAfterMs: 10_000, forceKillAfterMs: 5_000,
-    launchPlans: Object.freeze({resolve: async () => {throw new Error("ambient launch-plan resolution is forbidden");}}),
-    residueAuthorityFactory: cgroupV2Factory(delegatedCgroupRoot), terminateAfterMs: 5_000,
+  const launchPlans = Object.freeze({
+    resolve: async () => {throw new Error("ambient launch-plan resolution is forbidden");},
   });
+  let hostCustody;
+  if (platformTarget.platform === "linux" && platformTarget.architecture === "x64") {
+    const delegatedCgroupRoot = await realpath(requiredEnvironment("AR_CODEX_CANARY_CGROUP_ROOT"));
+    assert.equal((await statfs(delegatedCgroupRoot)).type, 0x63677270);
+    hostCustody = new NodeProviderProcessCustody({
+      containmentAfterMs: 30_000, drainAfterMs: 10_000, forceKillAfterMs: 5_000,
+      launchPlans, residueAuthorityFactory: cgroupV2Factory(delegatedCgroupRoot), terminateAfterMs: 5_000,
+    });
+  } else if (platformTarget.platform === "darwin" && platformTarget.architecture === "arm64") {
+    hostCustody = new DarwinCooperativeProcessCustody({
+      containmentAfterMs: 30_000, drainAfterMs: 10_000, forceKillAfterMs: 5_000,
+      launchPlans, terminateAfterMs: 5_000,
+    });
+  } else {
+    throw new Error("unsupported Codex canary Host Custody target");
+  }
   const owner = createCodexCurrentKernelOwner({
     effectCustody: Object.freeze({admit() {throw new Error("analysis canary forbids provider effects");}}),
     hostBootId: "host-boot:codex-live-canary", hostCustody,
@@ -152,13 +188,21 @@ const run = async () => {
     launchRecords: Object.freeze({resolve: async input => {
       assert.equal(input.intentMode, "analysis");
       assert.equal(input.workspaceAuthority.canonicalPath, workspaceRef);
+      if (platformTarget.platform === "linux") {
+        assert.match(input.workspaceAuthority.descriptorPath, /^\/proc\/self\/fd\/\d+$/u);
+      } else {
+        assert.equal(input.workspaceAuthority.descriptorPath, workspaceRef);
+        assert.equal(input.workspaceAuthority.identity.mountId, "darwin-statfs:unqualified-candidate");
+      }
       return Object.freeze({
         boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
         executablePath, privateRootPath, tmpDir,
       });
     }}),
-    workspaceOwner: workspaceOwner(workspaceRef),
+    platformTarget,
+    workspaceOwner: workspaceOwner(workspaceRef, platformTarget),
   });
+  const snapshot = owner.provider.adapterSnapshot;
   const intent = Object.freeze({
     mode: "analysis",
     prompt: "Reply with exactly AR_CODEX_CANARY_OK. Do not invoke tools, spawn agents, or modify files.",
@@ -200,10 +244,10 @@ const run = async () => {
   }
   assert.equal(physicalContainment.kind, "contained");
   return Object.freeze({
-    binarySha256: CODEX_APP_SERVER_BINARY_SHA256,
+    binarySha256: platformTuple.binarySha256,
     containmentProofDigest: sha256(physicalContainment.proof.proofId),
     outputDigest: sha256(output.join("")), outputEvents: finalCursor,
-    provider: "codex-app-server-current-kernel", status: "succeeded",
+    platformTarget, provider: "codex-app-server-current-kernel", status: "succeeded",
   });
 };
 

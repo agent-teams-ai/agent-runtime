@@ -206,7 +206,7 @@ const hasExactKeys = (value: CodexJsonRecord, keys: readonly string[]): boolean 
 export const validateCodexInitializeEvidence = (
   result: unknown,
   boundary: CodexAppServerPermissionBoundary,
-  platformTuple: CodexAppServerPlatformTuple = CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  platformTuple: CodexAppServerPlatformTuple,
 ): void => {
   if (!isCodexRecord(result)
     || !hasExactKeys(result, ["codexHome", "platformFamily", "platformOs", "userAgent"])

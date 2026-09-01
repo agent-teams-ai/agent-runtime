@@ -51,10 +51,11 @@ Caller abort only detaches its waiter. Host disposal submits durable
 cancellation and cannot manufacture containment or terminal truth.
 
 Focused evidence is green: 58 Agent Execution tests, 63 Embedded Runtime
-tests, and five PostgreSQL restart/concurrency/corruption tests. Exact Codex
-`0.150.1` canaries succeeded in new disposable sandboxes on hosted Linux x64
-and local macOS arm64, both with six output events, the same canonical output
-digest, and confirmed process containment. The hosted Claude `0.3.251` path
+tests, and five PostgreSQL restart/concurrency/corruption tests. The exact
+Codex `0.150.1` hosted Linux x64 canary is retained implementation evidence.
+Darwin arm64 has immutable package/binary/initialize candidate authority and
+synthetic cooperative composition evidence, but its exact-SHA local macOS
+canary and qualification-registry promotion remain open. The hosted Claude `0.3.251` path
 passed adapter and custody conformance and reached the provider authentication
 boundary, but live success remains blocked by the test account's expired OAuth
 session. That external failure is retained as a qualification blocker rather

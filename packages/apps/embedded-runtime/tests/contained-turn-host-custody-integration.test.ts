@@ -148,6 +148,7 @@ const createCompositionInput = async (hostCustody: DeterministicCurrentOwnerHost
           effectCustody: Object.freeze({admit: () => effectAdmission}),
           hostBootId: "host-boot:embedded-custody",
           hostInstanceId: "host-instance:embedded-custody",
+          platformTarget: Object.freeze({architecture: "x64" as const, platform: "linux" as const}),
           launchRecords: Object.freeze({async resolve() {
             return Object.freeze({
               boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),

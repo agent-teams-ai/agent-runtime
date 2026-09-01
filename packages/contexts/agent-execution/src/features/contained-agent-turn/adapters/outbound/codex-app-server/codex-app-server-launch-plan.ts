@@ -10,10 +10,9 @@ import {
   type CodexDirectoryIdentity,
 } from "./codex-app-server-permission-boundary.js";
 import {
-  assertExactCodexAppServerPlatformTuple,
   codexAppServerTupleForBinaryRevision,
-  CODEX_APP_SERVER_LINUX_X64_TUPLE,
-  type CodexAppServerPlatformTuple,
+  selectCodexAppServerPlatformTuple,
+  type CodexAppServerPlatformTarget,
 } from "./codex-app-server-platform-tuple.js";
 
 const DISABLED_CODEX_FEATURES = Object.freeze([
@@ -31,7 +30,7 @@ export interface CodexAppServerLaunchPlanOptions {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly executablePath: string;
   readonly intentMode: "analysis" | "workspace-write";
-  readonly platformTuple?: CodexAppServerPlatformTuple;
+  readonly platformTarget: CodexAppServerPlatformTarget;
   readonly privateRootPath: string;
   readonly tmpDir: string;
 }
@@ -128,9 +127,7 @@ export const validateCodexAppServerLaunchPlanRoots = (
 export const createCodexAppServerLaunchPlan = (
   options: CodexAppServerLaunchPlanOptions,
 ): CodexAppServerLaunchPlan => {
-  const platformTuple = assertExactCodexAppServerPlatformTuple(
-    options.platformTuple ?? CODEX_APP_SERVER_LINUX_X64_TUPLE,
-  );
+  const platformTuple = selectCodexAppServerPlatformTuple(options.platformTarget);
   const intentMode = acceptedIntentMode(options.intentMode);
   validateCodexDirectoryIdentity("codexHome", options.boundary.codexHomeIdentity);
   validateCodexDirectoryIdentity("workspaceRef", options.boundary.workspaceIdentity, false);
