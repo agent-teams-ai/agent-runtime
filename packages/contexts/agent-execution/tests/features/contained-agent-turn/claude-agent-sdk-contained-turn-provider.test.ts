@@ -451,10 +451,11 @@ test("streams intentional assistant text incrementally while redacting a later e
   if (outcome.kind === "completed") {
     assert.equal(outcome.outcome, "failed");
   }
-  assert.equal(output.length, 2);
-  assert.equal(output[1]?.kind, "diagnostic");
-  assert.ok((output[1]?.text.length ?? 0) < 256);
-  assert.doesNotMatch(output[1]?.text ?? "", /private-diagnostic|provider\/config|SDK failure/iu);
+  assert.equal(output.length, 3);
+  assert.deepEqual(output[1], { cursor: 1, kind: "assistant", text: "<redacted>" });
+  assert.equal(output[2]?.kind, "diagnostic");
+  assert.ok((output[2]?.text.length ?? 0) < 256);
+  assert.doesNotMatch(output[2]?.text ?? "", /private-diagnostic|provider\/config|SDK failure/iu);
 });
 
 test("rejects a malformed assistant stream envelope without emitting its diagnostic-shaped field", async () => {
