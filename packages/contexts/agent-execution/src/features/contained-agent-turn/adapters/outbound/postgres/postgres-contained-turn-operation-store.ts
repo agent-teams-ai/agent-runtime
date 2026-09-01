@@ -1,5 +1,4 @@
-/* oxlint-disable max-lines -- this adapter is the single durable owner-store surface. */
-
+/* oxlint-disable max-lines -- durable owner-store coordination remains one adapter surface. */
 import type { Pool } from "pg";
 
 import type {
@@ -7,7 +6,6 @@ import type {
   ContainedTurnOwnerStoreAuthority,
 } from "../../../application/ports/outbound/contained-turn-ports.js";
 import {
-  containedTurnCancellationFingerprint,
   containedTurnProviderAccessSnapshotDigest,
   containedTurnScopeDigest,
 } from "../../../domain/contained-turn-authority.js";
@@ -25,7 +23,6 @@ import type { ContainedTurnEvidenceId } from "../../../domain/contained-turn-ide
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
 import { appendContainedTurnOutputForOwnerStore } from "../../../domain/contained-turn-output-transitions.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
-import { containedTurnSatisfactionDigest } from "../../../domain/contained-turn-satisfaction.js";
 import { mutateContainedTurnOperation } from "../../../domain/contained-turn-transitions.js";
 import { containedTurnPreparationToken } from "../../../application/contained-turn-preparation-cleanup.js";
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
@@ -39,6 +36,13 @@ import {
   encodeContainedTurnState,
 } from "./contained-turn-state-codec.js";
 import { ContainedTurnPostgresOperationRepository } from "./contained-turn-postgres-operation-repository.js";
+import {
+  assertContainedTurnPostgresAuthority as assertAuthority,
+  type ContainedTurnPostgresIdentitySource,
+  containedTurnPostgresOperationBinding as operationBinding,
+  defaultContainedTurnPostgresIdentities,
+} from "./contained-turn-postgres-operation-authority.js";
+import { ContainedTurnPostgresOperationEvidence } from "./contained-turn-postgres-operation-evidence.js";
 import {
   CONTAINED_TURN_POSTGRES_MIGRATIONS,
   CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
@@ -55,23 +59,11 @@ export {
   type ContainedTurnPostgresTimeouts,
 } from "./contained-turn-postgres-transactions.js";
 
-interface PreparationRow {
-  readonly state: unknown;
-  readonly state_codec_version: number;
-  readonly state_digest: string | null;
-}
+interface PreparationRow { readonly state: unknown; readonly state_codec_version: number;
+  readonly state_digest: string | null; }
+interface PreparationRecoveryRow extends PreparationRow { readonly operation_id: string; readonly preparation_token: string; }
 
-interface PreparationRecoveryRow extends PreparationRow {
-  readonly operation_id: string;
-  readonly preparation_token: string;
-}
-
-export interface ContainedTurnPostgresIdentitySource {
-  nextId(kind: "attempt" | "cancellation_command" | "cleanup" | "custody" | "effect" |
-    "execution_generation" | "operation" | "operation_authority" | "proof" | "start_authority" |
-    "writer_fence", seed?: string): string;
-}
-
+export type { ContainedTurnPostgresIdentitySource } from "./contained-turn-postgres-operation-authority.js";
 export interface PostgresContainedTurnOperationStoreOptions {
   readonly identities?: ContainedTurnPostgresIdentitySource;
   readonly pool: Pool;
@@ -80,47 +72,16 @@ export interface PostgresContainedTurnOperationStoreOptions {
   readonly timeouts?: Partial<ContainedTurnPostgresTimeouts>;
 }
 
-const defaultIdentities: ContainedTurnPostgresIdentitySource = Object.freeze({
-  nextId(
-    kind: Parameters<ContainedTurnPostgresIdentitySource["nextId"]>[0],
-    seed = kind,
-  ) {
-    return `${kind.replaceAll("_", "-")}:${digestContainedTurnCanonicalValue({ kind, seed })}`;
-  },
-});
-
-const sameScope = (authority: ContainedTurnOwnerStoreAuthority, operation: ContainedTurnKernelOperation): boolean =>
-  authority.operationId === operation.operationId && authority.commandId === operation.commandId &&
-  authority.effectId === operation.effectId && authority.scope.projectId === operation.scope.projectId &&
-  authority.scope.tenantId === operation.scope.tenantId;
-
-const assertAuthority = (authority: ContainedTurnOwnerStoreAuthority, operation: ContainedTurnKernelOperation): void => {
-  if (!sameScope(authority, operation)) {throw new TypeError("PostgreSQL owner-store authority mismatch");}
-};
-
-const operationBinding = (operation: ContainedTurnKernelOperation) => Object.freeze({
-  authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
-  operationId: operation.operationId,
-});
-
-const attemptBinding = (operation: ContainedTurnKernelOperation) => {
-  if (operation.dispatch.kind !== "claimed") {throw new TypeError("attempt proof requires the durable claim");}
-  return Object.freeze({
-    ...operationBinding(operation),
-    attemptId: operation.dispatch.attemptId,
-    effectId: operation.effectId,
-  });
-};
-
-
 export class PostgresContainedTurnOperationStore implements ContainedTurnKernelOperationStore {
+  readonly #evidence: ContainedTurnPostgresOperationEvidence;
   readonly #identities: ContainedTurnPostgresIdentitySource;
   readonly #operations = new ContainedTurnPostgresOperationRepository();
   readonly #runtimeSchemaVersion: number;
   readonly #transactions: ContainedTurnPostgresTransactions;
 
   public constructor(options: PostgresContainedTurnOperationStoreOptions) {
-    this.#identities = options.identities ?? defaultIdentities;
+    this.#identities = options.identities ?? defaultContainedTurnPostgresIdentities;
+    this.#evidence = new ContainedTurnPostgresOperationEvidence(this.#identities);
     const schemaVersion = options.runtimeSchemaVersion ?? CONTAINED_TURN_POSTGRES_SCHEMA_VERSION;
     const migration = CONTAINED_TURN_POSTGRES_MIGRATIONS[schemaVersion - 1];
     if (migration === undefined) {
@@ -133,14 +94,6 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       migrationDigest: migration.digest,
       schemaVersion,
     }, options.timeouts);
-  }
-
-  async #transaction<Result>(work: (client: import("pg").PoolClient) => Promise<Result>): Promise<Result> {
-    return this.#transactions.write(work);
-  }
-
-  async #readTransaction<Result>(work: (client: import("pg").PoolClient) => Promise<Result>): Promise<Result> {
-    return this.#transactions.read(work);
   }
 
   async #load(
@@ -176,7 +129,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   ) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.#transaction(async client => {
+        return await this.#transactions.write(async client => {
           const current = await this.#load(client, authority.operationId, true, authority.scope);
           if (current === undefined) {return { kind: "not_found" as const };}
           assertAuthority(authority, current);
@@ -218,7 +171,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
 
   async #cas(input: Parameters<ContainedTurnKernelOperationStore["commit"]>[0]) {
     try {
-      return await this.#transaction(async client => {
+      return await this.#transactions.write(async client => {
         const current = await this.#load(
           client, input.authority.operationId, true, input.authority.scope,
         );
@@ -242,7 +195,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   public async identifyAcceptance(input: Parameters<ContainedTurnKernelOperationStore["identifyAcceptance"]>[0]) {
-    return this.#readTransaction(async client => {
+    return this.#transactions.read(async client => {
       const result = await client.query<{ operation_id: string }>(
         "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3",
         [input.scope.tenantId, input.scope.projectId, input.commandId],
@@ -273,7 +226,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
 
   public async accept(candidate: ContainedTurnKernelOperation, authority: ContainedTurnOwnerStoreAuthority) {
     assertAuthority(authority, candidate);
-    return this.#transaction(async client => {
+    return this.#transactions.write(async client => {
       const encoded = encodeContainedTurnState(candidate);
       const inserted = await client.query(
         `INSERT INTO agent_execution.contained_turn_operation_v1(operation_id,tenant_id,project_id,command_id,command_fingerprint,effect_id,revision,state,state_codec_version,state_digest,terminal)
@@ -307,7 +260,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   public async appendOutput(input: Parameters<ContainedTurnKernelOperationStore["appendOutput"]>[0]) {
     let candidate: ContainedTurnKernelOperation | undefined;
     try {
-      return await this.#transaction(async client => {
+      return await this.#transactions.write(async client => {
         const current = await this.#load(
           client, input.authority.operationId, true, input.authority.scope,
         );
@@ -333,14 +286,14 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   public async read(input: Parameters<ContainedTurnKernelOperationStore["read"]>[0]) {
-    return this.#readTransaction(client =>
+    return this.#transactions.read(client =>
       this.#load(client, input.operationId, false, input.scope));
   }
 
   public async rebuildProjections(
     input: Parameters<ContainedTurnKernelOperationStore["read"]>[0],
   ): Promise<ContainedTurnKernelOperation | undefined> {
-    return this.#transaction(client => this.#operations.rebuildProjections(client, input));
+    return this.#transactions.write(client => this.#operations.rebuildProjections(client, input));
   }
 
   public async listDispatchPreparations(
@@ -417,15 +370,15 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       return Object.freeze(recoveries);
     };
     return this.#runtimeSchemaVersion >= 5
-      ? this.#transaction(client => recover(client, true))
-      : this.#readTransaction(client => recover(client, false));
+      ? this.#transactions.write(client => recover(client, true))
+      : this.#transactions.read(client => recover(client, false));
   }
 
   public async prepareDispatch(input: Parameters<ContainedTurnKernelOperationStore["prepareDispatch"]>[0]) {
     assertAuthority(input.authority, input.operation);
     const workspaceId = input.operation.workspaceId;
     if (workspaceId === undefined) {throw new TypeError("dispatch preparation requires workspace custody");}
-    return this.#transaction(async client => {
+    return this.#transactions.write(async client => {
       const current = await this.#load(client, input.authority.operationId, true, input.authority.scope);
       if (current === undefined || current.revision !== input.operation.revision) {
         throw new Error("dispatch preparation lost its operation revision fence");
@@ -485,7 +438,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       preparationToken: input.subject.preparationToken,
     });
     const startAuthority = this.#identities.nextId("start_authority", `claim:${claimSeed}`);
-    return this.#transaction(async client => {
+    return this.#transactions.write(async client => {
       const current = await this.#load(
         client, input.authority.operationId, true, input.authority.scope,
       );
@@ -563,7 +516,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   public async retireDispatchPreparation(
     input: Parameters<ContainedTurnKernelOperationStore["retireDispatchPreparation"]>[0],
   ): ReturnType<ContainedTurnKernelOperationStore["retireDispatchPreparation"]> {
-    return this.#transaction(async client => {
+    return this.#transactions.write(async client => {
       const current = await this.#load(client, input.authority.operationId, true, input.authority.scope);
       if (current === undefined) {return { evidenceId: containedTurnIdentity("evidence", `evidence:postgres-retire-missing:${digestContainedTurnCanonicalValue({ operationId: input.authority.operationId, preparationToken: input.preparationToken })}`), kind: "indeterminate" as const };}
       assertAuthority(input.authority, current);
@@ -606,7 +559,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   public async recordDispatchPreparationCleanup(input: Parameters<ContainedTurnKernelOperationStore["recordDispatchPreparationCleanup"]>[0]) {
-    return this.#transaction(async client => {
+    return this.#transactions.write(async client => {
       const current = await this.#load(client, input.authority.operationId, true, input.authority.scope);
       if (current === undefined) {throw new Error("cleanup operation disappeared");}
       assertAuthority(input.authority, current);
@@ -626,84 +579,22 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   public async prepareCancellation(input: Parameters<ContainedTurnKernelOperationStore["prepareCancellation"]>[0]) {
-    assertAuthority(input.authority, input.operation);
-    const cancellationSeed = digestContainedTurnCanonicalValue({
-      operationId: input.operation.operationId,
-      revision: input.operation.revision,
-      scopeDigest: input.operation.acceptedAuthorityVector.scopeDigest,
-    });
-    const cancellationCommandId = containedTurnIdentity("cancellation_command", this.#identities.nextId("cancellation_command", `cancellation:${cancellationSeed}:command`));
-    const fingerprint = containedTurnCancellationFingerprint({ cancellationCommandId, operationId: input.operation.operationId, scopeDigest: input.operation.acceptedAuthorityVector.scopeDigest });
-    return Object.freeze({
-      command: Object.freeze({ cancellationCommandId, fingerprint, operationId: input.operation.operationId, scopeDigest: input.operation.acceptedAuthorityVector.scopeDigest }),
-      cutoffProof: Object.freeze({ binding: { ...operationBinding(input.operation), cancellationCommandId }, kind: "cutoff" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `cancellation:${cancellationSeed}:cutoff`)) }),
-      preventionProofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `cancellation:${cancellationSeed}:prevention`)),
-      proof: Object.freeze({ binding: { ...operationBinding(input.operation), cancellationCommandId, cancellationFingerprint: fingerprint }, kind: "cancellation" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `cancellation:${cancellationSeed}:command`)) }),
-    });
+    return this.#evidence.prepareCancellation(input);
   }
 
   public async proofsForAcceptedEffect(input: Parameters<ContainedTurnKernelOperationStore["proofsForAcceptedEffect"]>[0]) {
-    assertAuthority(input.authority, input.operation);
-    const binding = attemptBinding(input.operation);
-    const seed = digestContainedTurnCanonicalValue({
-      attemptId: binding.attemptId,
-      operationId: input.operation.operationId,
-      revision: input.operation.revision,
-    });
-    return Object.freeze({
-      acceptanceProof: { binding: { ...binding, disposition: "accepted" as const }, kind: "provider_acceptance" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `effect:${seed}:acceptance`)) },
-      effectProof: { binding: { ...binding, disposition: "committed" as const }, kind: "effect_resolution" as const, proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `effect:${seed}:resolution`)) },
-      kind: "proved" as const,
-    });
+    return this.#evidence.proofsForAcceptedEffect(input);
   }
 
   public async proofsForProcessNoStart(input: Parameters<ContainedTurnKernelOperationStore["proofsForProcessNoStart"]>[0]) {
-    assertAuthority(input.authority, input.operation);
-    const binding = operationBinding(input.operation);
-    const seed = digestContainedTurnCanonicalValue({ operationId: input.operation.operationId, revision: input.operation.revision });
-    const proof = (role: string) => containedTurnIdentity("proof", this.#identities.nextId("proof", `no-start:${seed}:${role}`));
-    return Object.freeze({
-      containmentProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "containment_not_required" as const, proofId: proof("containment") },
-      effectProof: { binding: { ...binding, disposition: "not_committed" as const, effectId: input.operation.effectId }, kind: "effect_no_start" as const, proofId: proof("effect") },
-      executionProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_start" as const, proofId: proof("execution") },
-      outputProof: { binding: { ...binding, finalCursor: input.operation.output.chunks.length }, kind: "output_no_start_drain" as const, proofId: proof("output") },
-      providerProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "provider_not_started" as const, proofId: proof("provider") },
-    });
+    return this.#evidence.proofsForProcessNoStart(input);
   }
 
   public async proofsForPrevention(input: Parameters<ContainedTurnKernelOperationStore["proofsForPrevention"]>[0]) {
-    assertAuthority(input.authority, input.operation);
-    const binding = operationBinding(input.operation);
-    const seed = digestContainedTurnCanonicalValue({
-      operationId: input.operation.operationId,
-      preventionProofId: input.preventionProofId,
-      revision: input.operation.revision,
-    });
-    const proof = (role: string) => containedTurnIdentity("proof", this.#identities.nextId("proof", `prevention:${seed}:${role}`));
-    return Object.freeze({
-      containmentProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "containment_not_required" as const, proofId: proof("containment") },
-      cutoffProof: { binding, kind: "cutoff" as const, proofId: proof("cutoff") },
-      effectProof: { binding: { ...binding, disposition: "not_committed" as const, effectId: input.operation.effectId }, kind: "effect_no_start" as const, proofId: proof("effect") },
-      executionProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_start" as const, proofId: proof("execution") },
-      hostCustodyProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "host_custody_no_start" as const, proofId: proof("custody") },
-      noDispatchProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_dispatch" as const, proofId: input.preventionProofId },
-      outputProof: { binding: { ...binding, finalCursor: 0 }, kind: "output_no_start_drain" as const, proofId: proof("output") },
-      providerProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "provider_not_started" as const, proofId: proof("provider") },
-    });
+    return this.#evidence.proofsForPrevention(input);
   }
 
   public async terminalProof(input: Parameters<ContainedTurnKernelOperationStore["terminalProof"]>[0]) {
-    assertAuthority(input.authority, input.operation);
-    if (input.satisfactionDigest !== containedTurnSatisfactionDigest(input.operation) || input.operation.providerExecution.kind !== "closed") {throw new TypeError("terminal proof precondition mismatch");}
-    const seed = digestContainedTurnCanonicalValue({
-      operationId: input.operation.operationId,
-      revision: input.operation.revision,
-      satisfactionDigest: input.satisfactionDigest,
-    });
-    return Object.freeze({
-      binding: { ...operationBinding(input.operation), requiredReceiptSetDigest: input.operation.requiredReceiptSetDigest, requiredReceiptSetVersion: input.operation.requiredReceiptSet.setVersion, satisfactionDigest: input.satisfactionDigest, terminalOutcome: input.operation.providerExecution.outcome },
-      kind: "terminal_truth" as const,
-      proofId: containedTurnIdentity("proof", this.#identities.nextId("proof", `terminal:${seed}`)),
-    });
+    return this.#evidence.terminalProof(input);
   }
 }
