@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 import { DarwinCooperativeProcessCustody } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.js";
 import { createStaticHostCustodyLaunchPlanResolver } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/static-host-custody-launch-plan-resolver.js";
+import { createDarwinCooperativeProcessCustodyTestSupport } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody-test-support.js";
 import {
   binding,
   disposableRoot,
@@ -39,21 +40,23 @@ const groupObserver = Object.freeze({
   },
 });
 
-test("Darwin cooperative custody refuses a non-Darwin platform through its injected seam", () => {
+test("Darwin production custody cannot be enabled by spoofing a public platform option", () => {
+  if (process.platform === "darwin") {return;}
   assert.throws(() => new DarwinCooperativeProcessCustody({
     launchPlans: Object.freeze({async resolve() {return;}}),
-    platform: "linux",
-  }), { code: "platform-profile-unavailable", name: "HostCustodyUnsupportedError" });
+    platform: "darwin",
+  } as ConstructorParameters<typeof DarwinCooperativeProcessCustody>[0] & { readonly platform: string }), {
+    code: "platform-profile-unavailable", name: "HostCustodyUnsupportedError",
+  });
 });
 
-test("Darwin eager custody closes the exact process group and records its cooperative limitation", async () => {
+test("Darwin eager custody records every name-bound limitation and quarantines started evidence", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await cooperativeEntry(workspaceRef);
-  const custody = new DarwinCooperativeProcessCustody({
+  const custody = createDarwinCooperativeProcessCustodyTestSupport({
     drainAfterMs: 2_000,
     forceKillAfterMs: 2_000,
     launchPlans: createStaticHostCustodyLaunchPlanResolver([entry]),
-    platform: "darwin",
     processGroupObserver: groupObserver,
     processIdentityObserver: qualifiedIdentityObserver,
     terminateAfterMs: 50,
@@ -73,15 +76,24 @@ test("Darwin eager custody closes the exact process group and records its cooper
   const contained = await custody.requestContainment({ ...request, custodyRef: opened.custodyRef });
   assert.equal(contained.kind, "contained");
   if (contained.kind !== "contained") {return;}
-  assert.deepEqual(await custody.release({
+  const releaseInput = {
     ...request,
     custodyRef: opened.custodyRef,
     receiptRef: contained.receiptRef,
-  }), { kind: "released" });
+  };
+  const released = await custody.release(releaseInput);
+  assert.equal(released.kind, "unproven");
+  assert.deepEqual(await custody.release(releaseInput), released);
   const evidence = custody.evidence(opened.custodyRef);
   assert.equal(evidence?.closure.profile, "cooperative-darwin-posix-process-group");
-  assert.deepEqual(evidence?.closure.limitations, ["descendant-may-escape-via-new-session"]);
+  assert.deepEqual(evidence?.closure.limitations, [
+    "canonical-executable-path-is-name-bound-at-spawn",
+    "canonical-workspace-path-is-name-bound-at-spawn",
+    "private-environment-paths-are-name-bound-at-spawn",
+    "descendant-may-escape-via-new-session",
+  ]);
   assert.equal(evidence?.closure.status, "closed");
+  assert.equal(evidence?.privateRoot.status, "quarantined");
   assert.equal(evidence?.sealed, true);
   assert.doesNotMatch(JSON.stringify(evidence), new RegExp(workspaceRef, "u"));
 });
@@ -89,9 +101,8 @@ test("Darwin eager custody closes the exact process group and records its cooper
 test("Darwin delegated custody preserves exact one-start replay and conflicting identity", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await cooperativeEntry(workspaceRef, "sdk-delegated");
-  const custody = new DarwinCooperativeProcessCustody({
+  const custody = createDarwinCooperativeProcessCustodyTestSupport({
     launchPlans: createStaticHostCustodyLaunchPlanResolver([entry]),
-    platform: "darwin",
     processGroupObserver: groupObserver,
     processIdentityObserver: qualifiedIdentityObserver,
   });
@@ -138,9 +149,8 @@ test("Darwin delegated custody preserves exact one-start replay and conflicting 
 test("Darwin delegated reservation proves cooperative no-start without launching a provider", async () => {
   const workspaceRef = await disposableRoot();
   const entry = await cooperativeEntry(workspaceRef, "sdk-delegated");
-  const custody = new DarwinCooperativeProcessCustody({
+  const custody = createDarwinCooperativeProcessCustodyTestSupport({
     launchPlans: createStaticHostCustodyLaunchPlanResolver([entry]),
-    platform: "darwin",
   });
   const request = Object.freeze({
     attemptId: "attempt:darwin-no-start",
@@ -151,12 +161,20 @@ test("Darwin delegated reservation proves cooperative no-start without launching
   });
   const opened = await custody.open(request);
   assert.equal(custody.get(opened.custodyRef), undefined);
-  assert.equal((await custody.requestContainment({ ...request, custodyRef: opened.custodyRef })).kind, "contained");
+  const contained = await custody.requestContainment({ ...request, custodyRef: opened.custodyRef });
+  assert.equal(contained.kind, "contained");
   const evidence = custody.evidence(opened.custodyRef);
   assert.equal(evidence?.spawn, "never-started");
   assert.equal(evidence?.closure.profile, "cooperative-darwin-posix-process-group");
   assert.equal(evidence?.closure.status, "not-started");
   assert.equal(evidence?.providerExit.status, "not-started");
+  if (contained.kind !== "contained") {return;}
+  assert.equal((await custody.release({
+    ...request,
+    custodyRef: opened.custodyRef,
+    receiptRef: contained.receiptRef,
+  })).kind, "unproven");
+  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "active");
 });
 
 test("Darwin custody escalates TERM to KILL and fails closed on ambiguous group closure", async () => {
@@ -167,11 +185,10 @@ test("Darwin custody escalates TERM to KILL and fails closed on ambiguous group 
     "process.on('SIGTERM', () => {}); process.stdout.write('ready\\n'); setInterval(() => {}, 1000);",
   );
   let observation: "empty" | "unproven" = "empty";
-  const custody = new DarwinCooperativeProcessCustody({
+  const custody = createDarwinCooperativeProcessCustodyTestSupport({
     containmentAfterMs: 2_000,
     forceKillAfterMs: 500,
     launchPlans: createStaticHostCustodyLaunchPlanResolver([entry]),
-    platform: "darwin",
     processGroupObserver: Object.freeze({async observe() {return observation;}}),
     processIdentityObserver: qualifiedIdentityObserver,
     terminateAfterMs: 25,
@@ -196,9 +213,8 @@ test("Darwin custody escalates TERM to KILL and fails closed on ambiguous group 
   const secondWorkspace = await disposableRoot();
   const secondEntry = await cooperativeEntry(secondWorkspace);
   observation = "unproven";
-  const ambiguous = new DarwinCooperativeProcessCustody({
+  const ambiguous = createDarwinCooperativeProcessCustodyTestSupport({
     launchPlans: createStaticHostCustodyLaunchPlanResolver([secondEntry]),
-    platform: "darwin",
     processGroupObserver: Object.freeze({async observe() {return observation;}}),
     processIdentityObserver: qualifiedIdentityObserver,
   });

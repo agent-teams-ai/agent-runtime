@@ -30,7 +30,7 @@ const openDirectory = (path: string, retained = false): number => openSync(
   constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (retained ? 0 : (constants.O_NOFOLLOW ?? 0)),
 );
 
-/** Retains exact macOS-available descriptor/stat facts through guardian spawn. */
+/** Retains cooperative observations; exec, cwd, and private environment paths remain name-bound. */
 export const acquireDarwinLaunchAuthority = (
   plan: HostCustodyLaunchPlan,
   executable: ExecutableObservation,

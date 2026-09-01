@@ -96,15 +96,19 @@ export interface HostCustodyStrictClosureEvidence {
   readonly status: "closed" | "not-started" | "unproven";
 }
 
-export const DARWIN_COOPERATIVE_CUSTODY_LIMITATION =
-  "descendant-may-escape-via-new-session" as const;
+export const DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS = Object.freeze([
+  "canonical-executable-path-is-name-bound-at-spawn",
+  "canonical-workspace-path-is-name-bound-at-spawn",
+  "private-environment-paths-are-name-bound-at-spawn",
+  "descendant-may-escape-via-new-session",
+] as const);
 
 export type HostCustodyContainmentProfile =
   | "strict-linux-cgroup-v2"
   | "cooperative-darwin-posix-process-group";
 
 export interface HostCustodyCooperativeClosureEvidence {
-  readonly limitations: readonly [typeof DARWIN_COOPERATIVE_CUSTODY_LIMITATION];
+  readonly limitations: typeof DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS;
   readonly profile: "cooperative-darwin-posix-process-group";
   readonly status: "closed" | "not-started" | "unproven";
 }

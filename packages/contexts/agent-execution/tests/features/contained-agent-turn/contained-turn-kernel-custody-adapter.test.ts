@@ -5,8 +5,9 @@ import {
   ContainedTurnKernelCustodyAdapter,
   type ContainedTurnHostCustodyPort,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";
-import type {
-  HostCustodyEvidence,
+import {
+  DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS,
+  type HostCustodyEvidence,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import type {
   ContainedTurnKernelCustodyPort,
@@ -162,7 +163,7 @@ const createHarness = (options: HarnessOptions = {}) => {
     evidence = Object.freeze({
       ...evidence,
       closure: Object.freeze({
-        limitations: Object.freeze(["descendant-may-escape-via-new-session"] as const),
+        limitations: DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS,
         profile: "cooperative-darwin-posix-process-group" as const,
         status: evidence.closure.status,
       }),
@@ -203,7 +204,7 @@ const createHarness = (options: HarnessOptions = {}) => {
           ...evidence,
           closure: Object.freeze({
             limitations: options.cooperative === true
-              ? Object.freeze(["descendant-may-escape-via-new-session"] as const)
+              ? DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS
               : Object.freeze([] as const),
             profile: options.cooperative === true
               ? "cooperative-darwin-posix-process-group" as const
@@ -221,7 +222,7 @@ const createHarness = (options: HarnessOptions = {}) => {
           ...evidence,
           closure: Object.freeze({
             limitations: options.cooperative === true
-              ? Object.freeze(["descendant-may-escape-via-new-session"] as const)
+              ? DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS
               : Object.freeze([] as const),
             profile: options.cooperative === true
               ? "cooperative-darwin-posix-process-group" as const

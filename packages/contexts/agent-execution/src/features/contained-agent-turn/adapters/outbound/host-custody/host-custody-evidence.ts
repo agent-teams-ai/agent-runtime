@@ -11,7 +11,7 @@ import type {
   HostCustodyProcessIdentityEvidence,
   HostCustodyProcessIdentityProof,
 } from "./custodied-provider-process.js";
-import { DARWIN_COOPERATIVE_CUSTODY_LIMITATION } from "./custodied-provider-process.js";
+import { DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS } from "./custodied-provider-process.js";
 import { canonicalJson, sha256, type ExecutableObservation } from "./host-custody-launch.js";
 import type { SpawnStatus } from "./host-custody-process-tree.js";
 import type { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
@@ -29,6 +29,7 @@ export type ContainmentResult =
 
 export type HostCustodyUnprovenReason =
   | "containment-deadline-unavailable"
+  | "darwin-cooperative-reconciliation-required"
   | "ingress-incomplete"
   | "ingress-overflow"
   | "launch-fingerprint-unavailable"
@@ -80,7 +81,7 @@ export const strictClosure = (
 ): HostCustodyClosureEvidence => profile === "strict-linux-cgroup-v2"
   ? Object.freeze({ limitations: Object.freeze([] as const), profile, status })
   : Object.freeze({
-    limitations: Object.freeze([DARWIN_COOPERATIVE_CUSTODY_LIMITATION] as const),
+    limitations: DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS,
     profile,
     status,
   });

@@ -1,5 +1,8 @@
 import { snapshotEvidence, unprovenResult } from "./host-custody-evidence.js";
-import { quarantinePrivateRoot } from "./host-custody-private-root.js";
+import {
+  quarantinePrivateRoot,
+  quarantinePrivateRootForReconciliation,
+} from "./host-custody-private-root.js";
 import type { CustodyTombstone, LiveCustody } from "./node-provider-process-custody-state.js";
 import { boundedPromise } from "./host-custody-stdio.js";
 
@@ -65,6 +68,13 @@ const closeLiveCustody = async (
   live: LiveCustody,
   input: HostCustodyReleaseInput,
 ): Promise<HostCustodyReleaseOutcome> => {
+  if (live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group" &&
+      live.spawnStatus !== "never-started") {
+    if (!quarantinePrivateRootForReconciliation(live)) {
+      return unprovenResult("private-root-quarantine-unproven", input, live);
+    }
+    return unprovenResult("darwin-cooperative-reconciliation-required", input, live);
+  }
   live.cleanupDeadline ??= state.monotonicNow() + state.cleanupAfterMs;
   if (state.monotonicNow() >= live.cleanupDeadline || !quarantinePrivateRoot(live)) {
     return unprovenResult("private-root-quarantine-unproven", input, live);

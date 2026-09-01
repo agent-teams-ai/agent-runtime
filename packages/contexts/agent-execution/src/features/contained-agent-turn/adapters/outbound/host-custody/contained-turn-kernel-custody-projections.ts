@@ -260,6 +260,7 @@ export const noStartEvidenceIsClosed = (evidence: HostCustodyEvidence): boolean 
 
 export const physicalEvidenceIsClosed = (evidence: HostCustodyEvidence): boolean =>
   evidence.closure.profile === "strict-linux-cgroup-v2" &&
+  evidence.closure.limitations.length === 0 &&
   evidence.sealed &&
   (evidence.closure.status === "closed" || evidence.closure.status === "not-started");
 
