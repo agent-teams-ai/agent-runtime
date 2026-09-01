@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "699eda7614bb2145b1ee758aa79c1fb2d68668a2",
+  "sourceRevision": "29101e00041bdf736ca3549bdb38ad477dd916ed",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,13 +40,13 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "380d6404fc91f3076139d9f72d912857dd35305dfcd52c5745e9b9bc2fce500a",
-    "architecture": "x64",
+    "outputSha256": "0104ff938b35766f00ecffbd8066591431d48f889d4a9674ce4e1a9c91dd7bf9",
+    "architecture": "arm64",
     "nodeVersion": "v24.18.0",
-    "platform": "linux",
+    "platform": "darwin",
     "testSummary": {
-      "tests": 117,
-      "pass": 117,
+      "tests": 119,
+      "pass": 119,
       "fail": 0,
       "cancelled": 0,
       "skipped": 0
@@ -55,15 +55,15 @@
   "artifactDigests": {
     "fixtures": {
       "fileCount": 16,
-      "sha256": "f7622733c0b0ed79457e2decd3ef0a83aedcd5b38da5bac2bfbb9ce221e04703"
+      "sha256": "d18a15357cca9e9ba21713e5afbd3797ef71d9577f6565f1ce0914cea3483111"
     },
     "sources": {
-      "fileCount": 266,
-      "sha256": "1728f1041395b3e64915f51bb6d45733d7c7a5edfcf566ebdf98ce6681800500"
+      "fileCount": 283,
+      "sha256": "30f2773aa610bc1263205bdc6bc71fa97ccbefc604abbf39a9f3e4b020e37c06"
     },
     "tests": {
-      "fileCount": 98,
-      "sha256": "3895332e27ba27fd84d6e5394501dbe08909393c2177ef7623a1992e10697177"
+      "fileCount": 99,
+      "sha256": "baf1c719fdcf876f48f7d88a876d21a935ebd91419dc96fa98d243fda1fa8221"
     }
   },
   "historicalChanges": [
@@ -383,6 +383,528 @@
         "before": 88,
         "after": 88,
         "retained": 88,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "contained-turn-core-srp-refactor",
+      "revision": "5816f832f10bd48b1e4b83d2efbe00573dda3006",
+      "files": 7,
+      "additions": 713,
+      "deletions": 597,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 7,
+        "additions": 713,
+        "deletions": 597
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 88,
+        "after": 88,
+        "retained": 88,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "host-custody-srp-refactor",
+      "revision": "a2d5fbc197af64de7cc03444e230018780cd68c8",
+      "files": 6,
+      "additions": 322,
+      "deletions": 202,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 6,
+        "additions": 322,
+        "deletions": 202
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 88,
+        "after": 88,
+        "retained": 88,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "postgres-contained-turn-srp-refactor",
+      "revision": "d8442bdc456e1cc937b3ee753c237d479ca8baab",
+      "files": 6,
+      "additions": 981,
+      "deletions": 903,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 6,
+        "additions": 981,
+        "deletions": 903
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 88,
+        "after": 88,
+        "retained": 88,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-effect-custody",
+      "revision": "fb2932fb8b846cc9c92ace7aa208df1d8bd93c5e",
+      "files": 7,
+      "additions": 39,
+      "deletions": 6,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 1,
+        "additions": 15,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 15,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 5,
+        "additions": 22,
+        "deletions": 6
+      },
+      "behaviorFixtures": {
+        "before": 88,
+        "after": 88,
+        "retained": 88,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "contained-turn-dispatch-authority-binding",
+      "revision": "35133bd87c904545879f59eabea956179bc62e3c",
+      "files": 25,
+      "additions": 739,
+      "deletions": 515,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 5,
+        "additions": 261,
+        "deletions": 191
+      },
+      "production": {
+        "files": 20,
+        "additions": 578,
+        "deletions": 356
+      },
+      "tests": {
+        "files": 5,
+        "additions": 161,
+        "deletions": 159
+      },
+      "behaviorFixtures": {
+        "before": 88,
+        "after": 88,
+        "retained": 88,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "claude-host-custody-binding",
+      "revision": "a261f14c84643e2fa5c87b4b397a6d11d7174f12",
+      "files": 11,
+      "additions": 158,
+      "deletions": 35,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 1,
+        "additions": 34,
+        "deletions": 1
+      },
+      "production": {
+        "files": 8,
+        "additions": 137,
+        "deletions": 20
+      },
+      "tests": {
+        "files": 3,
+        "additions": 21,
+        "deletions": 15
+      },
+      "behaviorFixtures": {
+        "before": 88,
+        "after": 88,
+        "retained": 88,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "contained-turn-host-custody-composition",
+      "revision": "cdda9783e7654b3a25e4510e69b1b5f2d550553b",
+      "files": 5,
+      "additions": 276,
+      "deletions": 1,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 3,
+        "additions": 112,
+        "deletions": 0
+      },
+      "production": {
+        "files": 3,
+        "additions": 112,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 163,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 88,
+        "after": 90,
+        "retained": 88,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "scoped-feature-module-activation",
+      "revision": "da91fc9ad67e4a5d3f34f9f34db737fe7035ebaa",
+      "files": 92,
+      "additions": 21153,
+      "deletions": 20969,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 80,
+        "additions": 20857,
+        "deletions": 20857
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "claude-custody-contract-alignment",
+      "revision": "5ef273653d767173f5eccbdd0d6d95292cd28909",
+      "files": 5,
+      "additions": 30,
+      "deletions": 18,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 2,
+        "additions": 3,
+        "deletions": 1
+      },
+      "production": {
+        "files": 4,
+        "additions": 18,
+        "deletions": 10
+      },
+      "tests": {
+        "files": 1,
+        "additions": 12,
+        "deletions": 8
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "claude-stream-redaction-qualification",
+      "revision": "d813450a018c2558ae8b711fc6d726e9eb542899",
+      "files": 1,
+      "additions": 5,
+      "deletions": 4,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 5,
+        "deletions": 4
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "provider-integration-path-repair",
+      "revision": "77217bc0cebb4b12ed65e8fd59ed7cea81863394",
+      "files": 2,
+      "additions": 3,
+      "deletions": 2,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 2,
+        "additions": 3,
+        "deletions": 2
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "provider-grant-receipt-fixture-binding",
+      "revision": "79f72b5f8772d1fc7c6ee103dbd3ba627096e91c",
+      "files": 1,
+      "additions": 1,
+      "deletions": 1,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 1,
+        "deletions": 1
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "provider-grant-receipt-qualification-binding",
+      "revision": "5f6d00bebac4864024c4ccdf4ff79d231ff3fb3f",
+      "files": 1,
+      "additions": 1,
+      "deletions": 1,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 1,
+        "deletions": 1
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "contained-turn-qualification-alignment",
+      "revision": "214de4b11f30cc188d206a3093ef9d2285dd7d9a",
+      "files": 6,
+      "additions": 63,
+      "deletions": 26,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 6,
+        "additions": 63,
+        "deletions": 26
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "postgres-grant-recovery-qualification",
+      "revision": "ab722373179e9426e74f74dd1639a0ff7d5fb5b5",
+      "files": 1,
+      "additions": 55,
+      "deletions": 16,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 55,
+        "deletions": 16
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "provider-composition-boundary-closure",
+      "revision": "7ba071f5f6409f08522d0cdf2120e071c2f4caa9",
+      "files": 6,
+      "additions": 127,
+      "deletions": 45,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 2,
+        "additions": 5,
+        "deletions": 3
+      },
+      "production": {
+        "files": 5,
+        "additions": 45,
+        "deletions": 19
+      },
+      "tests": {
+        "files": 1,
+        "additions": 82,
+        "deletions": 26
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 89,
+        "reusePercent": 98.89
+      }
+    },
+    {
+      "id": "host-composition-platform-qualification",
+      "revision": "c4f48ccd255a2cfef1aed4a6e439810b5aeddfce",
+      "files": 1,
+      "additions": 11,
+      "deletions": 2,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 11,
+        "deletions": 2
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "composition-boundary-package-qualification",
+      "revision": "29101e00041bdf736ca3549bdb38ad477dd916ed",
+      "files": 1,
+      "additions": 1,
+      "deletions": 0,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 1,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 90,
+        "after": 90,
+        "retained": 90,
         "reusePercent": 100
       }
     }
