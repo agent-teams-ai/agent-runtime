@@ -508,7 +508,7 @@ const createDependencies = (options: Readonly<{
             kind: "consumed" as const,
             receipt: {
               authorityFacts: subject.providerAccessExpectation, claimBeforeControlTime: 100,
-              claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject), consumedAtControlTime: 50,
+              claimBindingDigest: subject.providerAccessRequest.claimBindingDigest, consumedAtControlTime: 50,
               consumptionDigest: "provider-access-consumption:one",
               grantRequestDigest: subject.providerAccessRequest.grantRequestId.slice("grant-request:".length) as never,
               grantRequestId: subject.providerAccessRequest.grantRequestId, operationId: subject.operationId,
