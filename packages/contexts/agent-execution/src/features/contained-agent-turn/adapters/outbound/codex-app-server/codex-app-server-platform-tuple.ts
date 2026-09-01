@@ -77,7 +77,7 @@ export const CODEX_APP_SERVER_DARWIN_ARM64_TUPLE = tuple({
 const TUPLES = Object.freeze([CODEX_APP_SERVER_LINUX_X64_TUPLE, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE] as const);
 
 export class CodexAppServerPlatformTupleUnsupportedError extends Error {
-  public constructor() {super("No exact Codex App Server platform tuple is qualified"); this.name = "CodexAppServerPlatformTupleUnsupportedError";}
+  public constructor() {super("No exact Codex App Server platform tuple is supported"); this.name = "CodexAppServerPlatformTupleUnsupportedError";}
 }
 
 const selectTuple = (platform: unknown, architecture: unknown): CodexAppServerPlatformTuple => {
@@ -119,7 +119,7 @@ export const assertExactCodexAppServerPlatformTuple = (candidate: CodexAppServer
   for (const key of Object.keys(selected) as (keyof CodexAppServerPlatformTuple)[]) {
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true
-      || descriptor.value !== selected[key]) {throw new TypeError("Codex App Server platform tuple does not match its qualified profile");}
+      || descriptor.value !== selected[key]) {throw new TypeError("Codex App Server platform tuple does not match its supported profile");}
   }
   return selected;
 };

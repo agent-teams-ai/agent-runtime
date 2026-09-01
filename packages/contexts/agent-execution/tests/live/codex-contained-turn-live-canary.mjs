@@ -122,6 +122,54 @@ const cgroupV2Factory = delegatedRoot => Object.freeze({
   },
 });
 
+const observeCustodyReservation = custody => {
+  let openedCustody;
+  const hostCustody = new Proxy(custody, {
+    get(target, property) {
+      if (property === "reserve") {
+        return async input => {
+          const opened = await target.reserve(input);
+          assert.equal(openedCustody, undefined);
+          openedCustody = opened;
+          return opened;
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return Object.freeze({
+    hostCustody,
+    opened() { assert.ok(openedCustody); return openedCustody; },
+  });
+};
+
+const safeContainmentEvidence = (custody, opened, physicalContainment, platformTarget) => {
+  const evidence = custody.evidence(opened.custodyRef);
+  assert.ok(evidence);
+  const safe = Object.freeze({
+    limitations: evidence.closure.limitations,
+    profile: evidence.closure.profile,
+    status: evidence.closure.status,
+  });
+  assert.equal(safe.status, "closed");
+  if (platformTarget.platform === "linux") {
+    assert.equal(physicalContainment.kind, "contained");
+    assert.equal(safe.profile, "strict-linux-cgroup-v2");
+    assert.deepEqual(safe.limitations, []);
+  } else {
+    assert.equal(physicalContainment.kind, "indeterminate");
+    assert.equal(safe.profile, "cooperative-darwin-posix-process-group");
+    assert.deepEqual(safe.limitations, [
+      "canonical-executable-path-is-name-bound-at-spawn",
+      "canonical-workspace-path-is-name-bound-at-spawn",
+      "private-environment-paths-are-name-bound-at-spawn",
+      "descendant-may-escape-via-new-session",
+    ]);
+  }
+  return safe;
+};
+
 const run = async () => {
   const platformTarget = exactPlatformTarget();
   const platformTuple = selectCodexAppServerPlatformTuple(platformTarget);
@@ -165,25 +213,26 @@ const run = async () => {
   const launchPlans = Object.freeze({
     resolve: async () => {throw new Error("ambient launch-plan resolution is forbidden");},
   });
-  let hostCustody;
+  let custody;
   if (platformTarget.platform === "linux" && platformTarget.architecture === "x64") {
     const delegatedCgroupRoot = await realpath(requiredEnvironment("AR_CODEX_CANARY_CGROUP_ROOT"));
     assert.equal((await statfs(delegatedCgroupRoot)).type, 0x63677270);
-    hostCustody = new NodeProviderProcessCustody({
+    custody = new NodeProviderProcessCustody({
       containmentAfterMs: 30_000, drainAfterMs: 10_000, forceKillAfterMs: 5_000,
       launchPlans, residueAuthorityFactory: cgroupV2Factory(delegatedCgroupRoot), terminateAfterMs: 5_000,
     });
   } else if (platformTarget.platform === "darwin" && platformTarget.architecture === "arm64") {
-    hostCustody = new DarwinCooperativeProcessCustody({
+    custody = new DarwinCooperativeProcessCustody({
       containmentAfterMs: 30_000, drainAfterMs: 10_000, forceKillAfterMs: 5_000,
       launchPlans, terminateAfterMs: 5_000,
     });
   } else {
     throw new Error("unsupported Codex canary Host Custody target");
   }
+  const observedCustody = observeCustodyReservation(custody);
   const owner = createCodexCurrentKernelOwner({
     effectCustody: Object.freeze({admit() {throw new Error("analysis canary forbids provider effects");}}),
-    hostBootId: "host-boot:codex-live-canary", hostCustody,
+    hostBootId: "host-boot:codex-live-canary", hostCustody: observedCustody.hostCustody,
     hostInstanceId: "host-instance:codex-live-canary",
     launchRecords: Object.freeze({resolve: async input => {
       assert.equal(input.intentMode, "analysis");
@@ -242,10 +291,14 @@ const run = async () => {
     });
     owner.dispose();
   }
-  assert.equal(physicalContainment.kind, "contained");
+  const containmentEvidence = safeContainmentEvidence(
+    custody, observedCustody.opened(), physicalContainment, platformTarget,
+  );
   return Object.freeze({
     binarySha256: platformTuple.binarySha256,
-    containmentProofDigest: sha256(physicalContainment.proof.proofId),
+    closureStatus: containmentEvidence.status,
+    containmentLimitations: containmentEvidence.limitations,
+    containmentProfile: containmentEvidence.profile,
     outputDigest: sha256(output.join("")), outputEvents: finalCursor,
     platformTarget, provider: "codex-app-server-current-kernel", status: "succeeded",
   });

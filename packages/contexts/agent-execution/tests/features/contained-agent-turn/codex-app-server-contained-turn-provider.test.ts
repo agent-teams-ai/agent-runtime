@@ -699,3 +699,27 @@ test("rejects a sensitive marker split across assistant deltas before public evi
   assertContainmentRequired(outcome);
   assert.equal(JSON.stringify(outcome).includes(privateSecret), false);
 });
+
+test("rejects the canonical workspace path split across assistant deltas before public evidence", async () => {
+  const splitAt = Math.floor(boundary.workspaceRef.length / 3);
+  const process = new FakeCodexProcess((message, target) => {
+    if (standardHandshake(message, target)) {return;}
+    if (message.method === "turn/start") {
+      target.emit({ id: message.id, result: { turn: generatedTurn("turn:workspace-split", "inProgress") } });
+      emitTurnStarted(target, "turn:workspace-split");
+      emitAgentStarted(target, "turn:workspace-split", "item:workspace-split");
+      for (const delta of [
+        boundary.workspaceRef.slice(0, splitAt),
+        boundary.workspaceRef.slice(splitAt, splitAt * 2),
+        boundary.workspaceRef.slice(splitAt * 2),
+      ]) {
+        target.emit({ method: "item/agentMessage/delta", params: {
+          delta, itemId: "item:workspace-split", threadId: "thread:test", turnId: "turn:workspace-split",
+        } });
+      }
+    }
+  });
+  const outcome = await createProvider(process).execute(executeInput(process));
+  assertContainmentRequired(outcome);
+  assert.equal(JSON.stringify(outcome).includes(boundary.workspaceRef), false);
+});

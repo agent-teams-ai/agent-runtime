@@ -381,6 +381,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       sensitiveOutputTokens = Object.freeze([...new Set([
         this.#boundary.codexHome,
         this.#tmpDir,
+        this.#boundary.workspaceRef,
         ...this.#additionalSensitiveOutputTokens,
       ].filter((token): token is string => typeof token === "string" && token.length > 0))]);
       if (input.workspaceRef !== this.#boundary.workspaceRef) {

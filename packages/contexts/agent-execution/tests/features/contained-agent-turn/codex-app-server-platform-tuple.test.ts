@@ -36,7 +36,7 @@ const candidateAuthority = JSON.parse(readFileSync(new URL(
 const darwinCandidate = candidateAuthority.candidateTargets["darwin-arm64"];
 const darwinUserAgent = darwinCandidate.initialize.userAgent;
 
-test("selects only the exact qualified Codex Linux and Darwin tuples", () => {
+test("selects the supported Codex Linux tuple and admitted static Darwin candidate", () => {
   assert.deepEqual(selectCodexAppServerPlatformTuple({ architecture: "x64", platform: "linux" }),
     CODEX_APP_SERVER_LINUX_X64_TUPLE);
   assert.deepEqual(selectCodexAppServerPlatformTuple({ architecture: "arm64", platform: "darwin" }),
