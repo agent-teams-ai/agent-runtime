@@ -16,8 +16,6 @@ import { createContainedTurnPreparationScopeDependencies } from "./preparation-s
 
 export type ContainedTurnFeatureDependencies = ContainedTurnKernelDependencies;
 
-const noop = () => {};
-
 const mapScope = (scope: ContainedTurnScope) => Object.freeze({
   projectId: scope.projectId,
   tenantId: scope.tenantId,
@@ -55,31 +53,16 @@ export const createContainedTurnFeature = (
     submit: Object.freeze({
       execute: async (input: SubmitContainedTurnInput, options?: SubmitContainedTurnOptions) => {
         options?.signal?.throwIfAborted();
-        let removeAbortHandler = noop;
-        let outcome: Awaited<ReturnType<typeof application.submit>>;
-        try {
-          outcome = await application.submit({
-            commandId: input.commandId,
-            expectedProvider: input.expectedProvider,
-            intent: Object.freeze({ mode: input.intent.mode, prompt: input.intent.prompt }),
-            scope: mapScope(input.scope),
-          }, {
-            onAccepted: operation => {
-              const ref = mapOperationRef(operation.operationId, operation.scope);
-              const requestCancellation = () => {
-                void application.cancel({ operationId: ref.operationId, scope: mapScope(ref.scope) }).catch(noop);
-              };
-              if (options?.signal?.aborted === true) {requestCancellation();}
-              else if (options?.signal !== undefined) {
-                options.signal.addEventListener("abort", requestCancellation, { once: true });
-                removeAbortHandler = () => options.signal?.removeEventListener("abort", requestCancellation);
-              }
-              options?.onAccepted?.(ref);
-            },
-          });
-        } finally {
-          removeAbortHandler();
-        }
+        const outcome = await application.submit({
+          commandId: input.commandId,
+          expectedProvider: input.expectedProvider,
+          intent: Object.freeze({ mode: input.intent.mode, prompt: input.intent.prompt }),
+          scope: mapScope(input.scope),
+        }, {
+          onAccepted: operation => {
+            options?.onAccepted?.(mapOperationRef(operation.operationId, operation.scope));
+          },
+        });
         if (outcome.status !== "observed") {return outcome;}
         return Object.freeze({ status: "observed" as const, turn: containedTurnApplicationView(outcome.operation) });
       },

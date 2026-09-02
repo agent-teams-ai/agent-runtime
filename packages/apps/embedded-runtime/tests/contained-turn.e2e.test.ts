@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
+import {
+  createDependencies,
+  operationId as fixtureOperationId,
+} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+
 import {
   AgentRuntimeHostDisposalIncompleteError,
   AgentRuntimeHostLifecycleError,
@@ -690,6 +696,59 @@ test("caller abort detaches only its waiter and never manufactures durable cance
   await new Promise<void>(resolve => {setImmediate(resolve);});
   assert.equal(calls.cancel, 0);
   releaseCompletion?.();
+});
+
+test("composed caller abort preserves the real operation while explicit cancel remains durable", async t => {
+  let releaseProvider!: () => void;
+  const providerGate = new Promise<void>(resolve => {releaseProvider = resolve;});
+  const controller = new AbortController();
+  let fixture: ReturnType<typeof createDependencies>;
+  let beforeAbort: ReturnType<ReturnType<typeof createDependencies>["current"]> = undefined;
+  fixture = createDependencies({
+    providerGate,
+    providerStarted: () => {
+      beforeAbort = fixture.current();
+      controller.abort(new DOMException("caller detached", "AbortError"));
+    },
+  });
+  const feature = createContainedTurnFeature(fixture.dependencies);
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  t.after(async () => {
+    releaseProvider();
+    await assert.rejects(host.dispose(), error =>
+      error instanceof AgentRuntimeHostDisposalIncompleteError &&
+      error.status === "termination_unproven");
+  });
+  const scope = Object.freeze({ projectId: "project:one", tenantId: "tenant:one" });
+  const access = host.bindAccess({ containedTurn: scope });
+
+  const submission = access.containedTurn.submit({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "inspect disposable state" },
+  }, { signal: controller.signal });
+  await assert.rejects(submission, { name: "AbortError" });
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+
+  assert.ok(beforeAbort !== undefined);
+  assert.equal(beforeAbort.cancellation.kind, "open");
+  assert.equal(beforeAbort.operationCutoff.kind, "open");
+  assert.equal(beforeAbort.output.fence.kind, "open");
+  assert.equal(beforeAbort.providerExecution.kind, "active");
+
+  assert.equal(fixture.current(), beforeAbort);
+  assert.equal(fixture.containmentCalls.value, 0);
+  assert.equal(fixture.providerCalls.value, 1);
+
+  const cancellation = await access.containedTurn.cancel(fixtureOperationId);
+  assert.equal(cancellation.status, "observed");
+  const afterCancellation = fixture.current();
+  assert.ok(afterCancellation !== undefined);
+  assert.equal(afterCancellation.cancellation.kind, "requested");
+  assert.equal(afterCancellation.operationCutoff.kind, "closed");
+  assert.ok(afterCancellation.revision > beforeAbort.revision);
+  assert.equal(fixture.containmentCalls.value, 1);
+  assert.equal(fixture.providerCalls.value, 1);
 });
 
 test("fails closed when capability or trusted scope is absent", async t => {

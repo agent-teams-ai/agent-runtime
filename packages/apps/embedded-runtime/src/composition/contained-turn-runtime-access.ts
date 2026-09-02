@@ -257,14 +257,14 @@ class ContainedTurnSubmissionCustody {
     }
   };
 
-  public start(input: Readonly<SubmitRuntimeContainedTurnInput>, signal: AbortSignal): void {
+  public start(input: Readonly<SubmitRuntimeContainedTurnInput>): void {
     let completion: Promise<unknown>;
     try {
       completion = this.#dependencies.executeCall(() =>
         this.#dependencies.capability!.submit.execute({
           ...input,
           scope: this.#dependencies.scope!,
-        }, { onAccepted: this.#accepted, signal }));
+        }, { onAccepted: this.#accepted }));
     } catch {
       this.#acceptanceOpen = false;
       this.#reject(containedTurnOwnerInvocationFailed);
@@ -350,7 +350,7 @@ export const createContainedTurnRuntimeAccess = (
       : AbortSignal.any([dependencies.hostSignal, options.signal]);
     signal.throwIfAborted();
     const response = new Promise<SubmitRuntimeContainedTurnOutcome>((resolve, reject) => {
-      new ContainedTurnSubmissionCustody(dependencies, resolve, reject).start(input, signal);
+      new ContainedTurnSubmissionCustody(dependencies, resolve, reject).start(input);
     });
     return raceWithAbort(response, signal);
   },

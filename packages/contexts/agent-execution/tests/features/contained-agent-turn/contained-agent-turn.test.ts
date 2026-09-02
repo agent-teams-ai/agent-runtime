@@ -132,24 +132,46 @@ test("durable acceptance is published before provider execution and accepted can
   if (completed.status === "observed") {assert.equal(completed.turn.status, "reconcile_required");}
 });
 
-test("abort after durable acceptance requests application cancellation without relying on onAccepted", async () => {
+test("abort after durable acceptance leaves owner state unchanged while explicit cancellation still works", async () => {
   let releaseProvider!: () => void;
   const providerGate = new Promise<void>(resolve => {releaseProvider = resolve;});
   let providerStarted!: () => void;
   const started = new Promise<void>(resolve => {providerStarted = resolve;});
   const controller = new AbortController();
-  const { containmentCalls, dependencies } = createDependencies({ providerGate, providerStarted });
-  const submission = createContainedTurnFeature(dependencies).submit.execute({
+  const { containmentCalls, current, dependencies, providerCalls } = createDependencies({ providerGate, providerStarted });
+  const feature = createContainedTurnFeature(dependencies);
+  const submission = feature.submit.execute({
     commandId: "command:one",
     expectedProvider: "codex",
     intent: { mode: "analysis", prompt: "inspect disposable state" },
     scope: { projectId: "project:one", tenantId: "tenant:one" },
   }, { signal: controller.signal });
   await awaitFixtureGate(started, submission);
+  while (current()?.providerExecution.kind !== "active") {
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+  }
+  const beforeAbort = current();
+  assert.ok(beforeAbort !== undefined);
   try {
     controller.abort();
-    while (containmentCalls.value === 0) {await new Promise<void>(resolve => {setImmediate(resolve);});}
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    assert.equal(current(), beforeAbort);
+    assert.equal(beforeAbort.cancellation.kind, "open");
+    assert.equal(beforeAbort.operationCutoff.kind, "open");
+    assert.equal(beforeAbort.output.fence.kind, "open");
+    assert.equal(beforeAbort.providerExecution.kind, "active");
+    assert.equal(containmentCalls.value, 0);
+    assert.equal(providerCalls.value, 1);
+
+    const cancellation = await feature.cancel.execute({ operationId, scope: beforeAbort.scope });
+    assert.equal(cancellation.status, "observed");
+    const afterCancellation = current();
+    assert.ok(afterCancellation !== undefined);
+    assert.equal(afterCancellation.cancellation.kind, "requested");
+    assert.equal(afterCancellation.operationCutoff.kind, "closed");
+    assert.ok(afterCancellation.revision > beforeAbort.revision);
     assert.equal(containmentCalls.value, 1);
+    assert.equal(providerCalls.value, 1);
   } finally {releaseProvider();}
   const completed = await submission;
   assert.equal(completed.status, "observed");
