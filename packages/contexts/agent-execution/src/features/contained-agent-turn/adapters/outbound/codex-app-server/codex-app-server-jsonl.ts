@@ -31,8 +31,29 @@ export const codexServerRequestMethod = (message: CodexJsonRecord): string | und
 export const codexNotificationMethod = (message: CodexJsonRecord): string | undefined =>
   !(`id` in message) ? codexStringField(message, "method") : undefined;
 
+type JsonContainer =
+  | { readonly kind: "array" }
+  | { readonly kind: "object"; expectingKey: boolean; readonly keys: Set<string> };
+
+const registerDecodedPropertyName = (
+  container: JsonContainer | undefined,
+  source: string,
+  start: number,
+  end: number,
+): void => {
+  if (container?.kind !== "object" || !container.expectingKey || source[end] !== '"') {return;}
+  let key: unknown;
+  try {key = JSON.parse(source.slice(start, end + 1));} catch {return;}
+  if (typeof key !== "string") {return;}
+  if (container.keys.has(key)) {
+    throw new Error("Codex App Server emitted duplicate decoded property names");
+  }
+  container.keys.add(key);
+  container.expectingKey = false;
+};
+
 const assertNoDuplicateDecodedPropertyNames = (source: string): void => {
-  const containers: Array<{ readonly kind: "array" } | { readonly kind: "object"; expectingKey: boolean; readonly keys: Set<string> }> = [];
+  const containers: JsonContainer[] = [];
   for (let index = 0; index < source.length; index += 1) {
     const character = source[index];
     if (character === '"') {
@@ -41,18 +62,7 @@ const assertNoDuplicateDecodedPropertyNames = (source: string): void => {
         if (source[index] === "\\") {index += 1; continue;}
         if (source[index] === '"') {break;}
       }
-      const container = containers.at(-1);
-      if (container?.kind === "object" && container.expectingKey && source[index] === '"') {
-        let key: unknown;
-        try {key = JSON.parse(source.slice(start, index + 1));} catch {continue;}
-        if (typeof key === "string") {
-          if (container.keys.has(key)) {
-            throw new Error("Codex App Server emitted duplicate decoded property names");
-          }
-          container.keys.add(key);
-          container.expectingKey = false;
-        }
-      }
+      registerDecodedPropertyName(containers.at(-1), source, start, index);
       continue;
     }
     if (character === "{") {containers.push({expectingKey: true, keys: new Set(), kind: "object"}); continue;}
