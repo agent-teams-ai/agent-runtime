@@ -71,6 +71,13 @@ const trustedApply = Reflect.apply;
 const trustedBind = Function.prototype.bind;
 const trustedFreeze = Object.freeze;
 const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+const trustedGetPrototypeOf = Object.getPrototypeOf;
+const trustedIsExtensible = Object.isExtensible;
+const trustedOwnKeys = Reflect.ownKeys;
+const trustedObjectPrototype = Object.prototype;
+type NodeUtilTypes = Readonly<{ isProxy(value: unknown): boolean }>;
+const trustedIsProxy = (process.getBuiltinModule("node:util") as Readonly<{ types: NodeUtilTypes }>).types.isProxy;
 
 const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
   if (value === null || typeof value !== "object") {
@@ -78,24 +85,31 @@ const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<
   }
   let descriptors: Record<PropertyKey, PropertyDescriptor>;
   try {
-    const prototype = Object.getPrototypeOf(value) as unknown;
-    if (prototype !== Object.prototype && prototype !== null) {
+    if (trustedIsProxy(value)) {
+      throw new ProviderAccessRouteCOwnerError("invalid_shape");
+    }
+    const prototype = trustedGetPrototypeOf(value) as unknown;
+    if (prototype !== trustedObjectPrototype && prototype !== null) {
       throw new ProviderAccessRouteCOwnerError("invalid_prototype");
     }
-    descriptors = Object.getOwnPropertyDescriptors(value) as Record<PropertyKey, PropertyDescriptor>;
-    if (Object.isExtensible(value)) {
+    descriptors = trustedGetOwnPropertyDescriptors(value) as Record<PropertyKey, PropertyDescriptor>;
+    if (trustedIsExtensible(value)) {
       throw new ProviderAccessRouteCOwnerError("mutable_shape");
     }
   } catch (error) {
     if (error instanceof ProviderAccessRouteCOwnerError) { throw error; }
     throw new ProviderAccessRouteCOwnerError("invalid_shape");
   }
-  const ownKeys = Reflect.ownKeys(descriptors);
-  if (ownKeys.some(key => typeof key !== "string") ||
-    ownKeys.map(String).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {
+  const ownKeys = trustedOwnKeys(descriptors);
+  let exactKeys = ownKeys.length === keys.length;
+  for (let index = 0; exactKeys && index < ownKeys.length; index += 1) {
+    const key = ownKeys[index];
+    exactKeys = typeof key === "string" && keys.includes(key);
+  }
+  if (!exactKeys) {
     throw new ProviderAccessRouteCOwnerError("invalid_shape");
   }
-  const record: Record<string, unknown> = {};
+  const record = Object.create(null) as Record<string, unknown>;
   for (const key of keys) {
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor)) {
@@ -111,7 +125,8 @@ const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<
 
 const capturedMethod = <Method>(owner: object, value: unknown): Method => {
   try {
-    if (typeof value !== "function" || trustedGetOwnPropertyDescriptor(value, "bind") !== undefined) {
+    if (typeof value !== "function" || trustedIsProxy(value) ||
+        trustedGetOwnPropertyDescriptor(value, "bind") !== undefined) {
       throw new ProviderAccessRouteCOwnerError("invalid_method");
     }
     const bound = trustedApply(trustedBind, value, [owner]) as unknown;
@@ -162,6 +177,12 @@ const resolutionDigest = (binding: ContainedTurnProviderAccessSnapshot, evidence
 const grantEvidenceId = (phase: "consume" | "settle", value: unknown) => containedTurnIdentity(
   "evidence", `evidence:provider-access:${phase}:${digestContainedTurnCanonicalValue(value as never)}`,
 );
+const boundaryFailureEvidenceId = (
+  phase: "consume" | "resolve" | "revalidate" | "settle",
+  value: unknown,
+) => containedTurnIdentity(
+  "evidence", `evidence:provider-access:boundary:${phase}:${digestContainedTurnCanonicalValue(value as never)}`,
+);
 
 /** Real ACL from both Provider Access V1 owner contracts into the single Agent Execution port. */
 export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnProviderAccess): ContainedTurnProviderAccessPort => {
@@ -176,33 +197,38 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
       grantRequestId: input.grantRequestId, operationId: subject.operationId, provider: subject.provider,
       purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE, requestDigest: subject.providerAccessRequest.requestDigest, scope,
     });
-    let outcome: ProviderAccessConsumeOutcome;
-    try {outcome = await owner.consumeForDispatch(request);} catch {return { evidenceId: grantEvidenceId("consume", request), kind: "indeterminate" };}
-    if (outcome.kind === "indeterminate") {
-      try {outcome = await owner.observeDispatchConsumption({ grantRequestId: request.grantRequestId, provider: request.provider, requestDigest: request.requestDigest, scope });}
-      catch {return { evidenceId: grantEvidenceId("consume", request), kind: "indeterminate" };}
+    try {
+      let outcome = await owner.consumeForDispatch(request);
+      if (outcome.kind === "indeterminate") {
+        outcome = await owner.observeDispatchConsumption({
+          grantRequestId: request.grantRequestId, provider: request.provider,
+          requestDigest: request.requestDigest, scope,
+        });
+      }
+      if (outcome.kind === "consumed") {
+        const receipt = outcome.receipt;
+        return { kind: "consumed", receipt: normalizeContainedTurnConsumedGrantReceipt("provider_access", subject, {
+          authorityFacts: Object.freeze({
+            acceptedAuthorityDigest: receipt.acceptedAuthorityDigest, accessRef: receipt.accessRef,
+            authorityHeadDigest: receipt.authorityHeadDigestAtConsumption, bindingDigest: receipt.bindingDigest,
+            bindingRevision: receipt.bindingRevision, credentialBindingDigest: receipt.credentialBindingDigest,
+            credentialBindingRef: receipt.credentialBindingRef, credentialGeneration: receipt.credentialGeneration,
+            providerAccountRef: receipt.providerAccountRef, providerRouteRef: receipt.providerRouteRef,
+          }),
+          claimBeforeControlTime: receipt.claimBeforeControlTime, claimBindingDigest: receipt.claimBindingDigest as never,
+          consumedAtControlTime: receipt.consumedAtControlTime, consumptionDigest: receipt.consumptionDigest,
+          grantRequestId: receipt.grantRequestId, operationId: receipt.operationId as never,
+          ownerEvidenceRef: receipt.opaqueOwnerEvidenceRef, provider: receipt.provider, purpose: receipt.purpose,
+          requestDigest: receipt.requestDigest as never, scope: receipt.scope as never,
+        }) };
+      }
+      if (outcome.kind === "prevented") {
+        return { kind: "prevented", preventionProofId: containedTurnIdentity("proof", `proof:provider-access:dispatch:${digestContainedTurnCanonicalValue(outcome.prevention as never)}`) };
+      }
+      return { evidenceId: boundaryFailureEvidenceId("consume", request), kind: "indeterminate" };
+    } catch {
+      return { evidenceId: boundaryFailureEvidenceId("consume", request), kind: "indeterminate" };
     }
-    if (outcome.kind === "consumed") {
-      const receipt = outcome.receipt;
-      return { kind: "consumed", receipt: normalizeContainedTurnConsumedGrantReceipt("provider_access", subject, {
-        authorityFacts: Object.freeze({
-          acceptedAuthorityDigest: receipt.acceptedAuthorityDigest, accessRef: receipt.accessRef,
-          authorityHeadDigest: receipt.authorityHeadDigestAtConsumption, bindingDigest: receipt.bindingDigest,
-          bindingRevision: receipt.bindingRevision, credentialBindingDigest: receipt.credentialBindingDigest,
-          credentialBindingRef: receipt.credentialBindingRef, credentialGeneration: receipt.credentialGeneration,
-          providerAccountRef: receipt.providerAccountRef, providerRouteRef: receipt.providerRouteRef,
-        }),
-        claimBeforeControlTime: receipt.claimBeforeControlTime, claimBindingDigest: receipt.claimBindingDigest as never,
-        consumedAtControlTime: receipt.consumedAtControlTime, consumptionDigest: receipt.consumptionDigest,
-        grantRequestId: receipt.grantRequestId, operationId: receipt.operationId as never,
-        ownerEvidenceRef: receipt.opaqueOwnerEvidenceRef, provider: receipt.provider, purpose: receipt.purpose,
-        requestDigest: receipt.requestDigest as never, scope: receipt.scope as never,
-      }) };
-    }
-    if (outcome.kind === "prevented") {
-      return { kind: "prevented", preventionProofId: containedTurnIdentity("proof", `proof:provider-access:dispatch:${digestContainedTurnCanonicalValue(outcome.prevention as never)}`) };
-    }
-    return { evidenceId: grantEvidenceId("consume", outcome), kind: "indeterminate" };
   },
   async settleConsumedGrant(input) {
     const receipt = input.receipt;
@@ -213,22 +239,32 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
         scope: receipt.scope, settlementRequestId: input.settlementRequestId,
       });
       return outcome.kind === "settled" ? { kind: "settled" } : { evidenceId: grantEvidenceId("settle", { input, outcome }), kind: "indeterminate" };
-    } catch {return { evidenceId: grantEvidenceId("settle", input), kind: "indeterminate" };}
+    } catch {return { evidenceId: boundaryFailureEvidenceId("settle", input), kind: "indeterminate" };}
   },
   async resolveForAcceptance(input: Readonly<{ intent: ContainedTurnIntent; provider: ContainedTurnProvider; scope: ContainedTurnScope }>) {
-    const outcome = await owner.resolve({ provider: input.provider, scope: input.scope });
-    if (outcome.evidence.purpose !== "acceptance") {return { evidenceId: evidenceId(outcome.evidence, "acceptance"), kind: "indeterminate", reason: "authority_unknown" };}
-    if (outcome.kind === "resolved") {const binding = snapshot(outcome.binding, outcome.evidence); return { acceptanceProofId: proofId(outcome.evidence, "acceptance"), acceptanceResolutionDigest: resolutionDigest(binding, outcome.evidence, "acceptance"), kind: "resolved", snapshot: binding };}
-    if (outcome.reason === "revoked" || outcome.reason === "not_found") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "acceptance"), reason: "access_denied" };}
-    return { evidenceId: evidenceId(outcome.evidence, "acceptance"), kind: "indeterminate", reason: "authority_unknown" };
+    const request = Object.freeze({ provider: input.provider, scope: input.scope });
+    try {
+      const outcome = await owner.resolve(request);
+      if (outcome.evidence.purpose !== "acceptance") {return { evidenceId: evidenceId(outcome.evidence, "acceptance"), kind: "indeterminate", reason: "authority_unknown" };}
+      if (outcome.kind === "resolved") {const binding = snapshot(outcome.binding, outcome.evidence); return { acceptanceProofId: proofId(outcome.evidence, "acceptance"), acceptanceResolutionDigest: resolutionDigest(binding, outcome.evidence, "acceptance"), kind: "resolved", snapshot: binding };}
+      if (outcome.reason === "revoked" || outcome.reason === "not_found") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "acceptance"), reason: "access_denied" };}
+      return { evidenceId: boundaryFailureEvidenceId("resolve", request), kind: "indeterminate", reason: "authority_unknown" };
+    } catch {
+      return { evidenceId: boundaryFailureEvidenceId("resolve", request), kind: "indeterminate", reason: "authority_unknown" };
+    }
   },
   async revalidateForDispatch(input) {
     const outerBinding: OuterBinding = Object.freeze({ ...input.acceptedSnapshot, credentialBindingDigest: input.acceptedSnapshot.ownerAuthorityDigest });
-    const outcome = await owner.revalidate({ binding: outerBinding, provider: input.acceptedSnapshot.provider, scope: input.scope });
-    if (outcome.evidence.purpose !== "dispatch") {return { evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate", reason: "authority_unknown" };}
-    if (outcome.kind === "valid") {const binding = snapshot(outcome.binding, outcome.evidence); return { dispatchProofId: proofId(outcome.evidence, "dispatch"), dispatchResolutionDigest: resolutionDigest(binding, outcome.evidence, "dispatch"), kind: "current", snapshot: binding };}
-    if (outcome.reason === "revoked" || outcome.reason.endsWith("_changed") || outcome.reason === "credential_rotated" || outcome.reason === "revision_changed") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "dispatch"), reason: "access_revoked" };}
-    return { evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate", reason: "authority_unknown" };
+    const request = Object.freeze({ binding: outerBinding, provider: input.acceptedSnapshot.provider, scope: input.scope });
+    try {
+      const outcome = await owner.revalidate(request);
+      if (outcome.evidence.purpose !== "dispatch") {return { evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate", reason: "authority_unknown" };}
+      if (outcome.kind === "valid") {const binding = snapshot(outcome.binding, outcome.evidence); return { dispatchProofId: proofId(outcome.evidence, "dispatch"), dispatchResolutionDigest: resolutionDigest(binding, outcome.evidence, "dispatch"), kind: "current", snapshot: binding };}
+      if (outcome.reason === "revoked" || outcome.reason.endsWith("_changed") || outcome.reason === "credential_rotated" || outcome.reason === "revision_changed") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "dispatch"), reason: "access_revoked" };}
+      return { evidenceId: boundaryFailureEvidenceId("revalidate", request), kind: "indeterminate", reason: "authority_unknown" };
+    } catch {
+      return { evidenceId: boundaryFailureEvidenceId("revalidate", request), kind: "indeterminate", reason: "authority_unknown" };
+    }
   },
   };
   return Object.freeze(port);

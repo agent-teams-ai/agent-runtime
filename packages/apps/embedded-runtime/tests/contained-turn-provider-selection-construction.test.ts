@@ -8,7 +8,7 @@ import {
 } from "../dist/composition/contained-turn-feature-composition.js";
 import { composeHostCustodiedAgentRuntimeHost } from
   "../dist/composition/host-custodied-agent-runtime-host.js";
-import { ContainedTurnConstructionCleanupError } from
+import { ContainedTurnConstructionCleanupError, ContainedTurnOwnerDisposalError } from
   "../dist/composition/contained-turn-construction-failure.js";
 
 const capability = Object.freeze({
@@ -243,17 +243,90 @@ test("later feature failure disposes its owner exactly once and publishes no cap
   assert.deepEqual(probe.calls, {claude: 0, codex: 1, dispose: 1, feature: 1});
 });
 
-test("cleanup failure has a bounded classification and preserves both failures", () => {
-  const primary = new Error("synthetic feature construction failure");
-  const cleanup = new Error("synthetic owner cleanup failure");
+test("cleanup failure publishes only a fixed private bounded diagnostic", () => {
+  const primary = new Error("primary-secret-credential");
+  const cleanup = new Error("cleanup-secret-path");
   const probe = harness(cleanup);
-  assert.throws(() => composeHostCustodiedContainedTurn(
+  const error = captureThrown(() => composeHostCustodiedContainedTurn(
     dependencies(Object.freeze({kind: "claude", owner: Object.freeze({})})) as never,
     probe.factories, (() => {probe.calls.feature += 1; throw primary;}) as never,
-  ), error => error instanceof ContainedTurnConstructionCleanupError &&
-    error.code === "contained_turn_construction_cleanup_failed" && error.cause === primary &&
-    error.errors[0] === primary && error.errors[1] === cleanup);
+  ));
+  assert.ok(error instanceof ContainedTurnConstructionCleanupError);
+  assert.equal(error.code, "contained_turn_construction_cleanup_failed");
+  assert.equal(error.name, "ContainedTurnConstructionCleanupError");
+  assert.equal(error.message, "Contained turn construction cleanup failed");
+  assert.equal(error.stack, undefined);
+  assert.equal("cause" in error, false);
+  assert.equal("errors" in error, false);
+  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["code", "message", "name"]);
+  assert.doesNotMatch(`${error.name}:${error.message}:${error.stack ?? ""}:${JSON.stringify(error)}`,
+    /primary-secret|cleanup-secret/u);
   assert.deepEqual(probe.calls, {claude: 1, codex: 0, dispose: 1, feature: 1});
+});
+
+test("provider owner result is captured as exact data before feature dependencies are observed", () => {
+  const valid = Object.freeze({custody: Object.freeze({}), dispose() {}, provider: Object.freeze({})});
+  let hostileTrapCalls = 0;
+  const hostileHandler = {
+    get() {hostileTrapCalls += 1; throw new Error("owner-proxy-secret");},
+    getOwnPropertyDescriptor() {hostileTrapCalls += 1; throw new Error("owner-proxy-secret");},
+    getPrototypeOf() {hostileTrapCalls += 1; throw new Error("owner-proxy-secret");},
+    ownKeys() {hostileTrapCalls += 1; throw new Error("owner-proxy-secret");},
+  } satisfies ProxyHandler<object>;
+  const disposeProxy = new Proxy(() => {}, hostileHandler);
+  const accessor = Object.freeze(Object.defineProperties({}, {
+    custody: {enumerable: true, value: Object.freeze({})},
+    dispose: {enumerable: true, get() {hostileTrapCalls += 1; return () => {};}},
+    provider: {enumerable: true, value: Object.freeze({})},
+  }));
+  const cases = [
+    new Proxy(valid, hostileHandler),
+    {custody: valid.custody, dispose: valid.dispose, provider: valid.provider},
+    Object.freeze({custody: valid.custody, dispose: valid.dispose}),
+    Object.freeze({...valid, extra: true}),
+    Object.freeze(Object.assign(Object.create({authority: true}), valid)),
+    accessor,
+    Object.freeze({custody: valid.custody, dispose: disposeProxy, provider: valid.provider}),
+  ];
+  for (const owner of cases) {
+    const probe = harness();
+    let featureCalls = 0;
+    const error = captureThrown(() => composeHostCustodiedContainedTurn(
+      dependencies(Object.freeze({kind: "codex", owner: Object.freeze({})})) as never,
+      Object.freeze({...probe.factories, codex: (() => owner) as never}),
+      (() => {featureCalls += 1; return capability;}) as never,
+    ));
+    assert.ok(error instanceof TypeError);
+    assert.equal(error.message, "Contained turn provider owner is invalid");
+    assert.equal("cause" in error, false);
+    assert.equal(featureCalls, 0);
+  }
+  assert.equal(hostileTrapCalls, 0);
+});
+
+test("contained owner disposal is retryable and redacts the failed attempt", () => {
+  let disposeCalls = 0;
+  const owner = Object.freeze({
+    custody: Object.freeze({}),
+    dispose() {
+      disposeCalls += 1;
+      if (disposeCalls === 1) {throw new Error("owner-disposal-secret");}
+    },
+    provider: Object.freeze({}),
+  });
+  const probe = harness();
+  const product = composeHostCustodiedContainedTurn(
+    dependencies(Object.freeze({kind: "codex", owner: Object.freeze({})})) as never,
+    Object.freeze({...probe.factories, codex: (() => owner) as never}), probe.featureFactory,
+  );
+  const error = captureThrown(product.dispose);
+  assert.ok(error instanceof ContainedTurnOwnerDisposalError);
+  assert.equal(error.code, "contained_turn_owner_disposal_failed");
+  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["code", "message", "name"]);
+  assert.doesNotMatch(JSON.stringify(error), /owner-disposal-secret/u);
+  product.dispose();
+  product.dispose();
+  assert.equal(disposeCalls, 2);
 });
 
 test("later Host construction failure disposes the contained owner and publishes no Host", () => {
@@ -267,4 +340,48 @@ test("later Host construction failure disposes the contained owner and publishes
   () => {throw failure;});}, error => error === failure);
   assert.equal(published, undefined);
   assert.equal(disposed, 1);
+});
+
+test("Host construction plus owner-cleanup failure is redacted", () => {
+  const primary = new Error("host-construction-primary-secret");
+  const cleanup = new Error("host-construction-cleanup-secret");
+  const error = captureThrown(() => composeHostCustodiedAgentRuntimeHost({
+    capabilities: Object.freeze({claudeCodeSetup: Object.freeze({}), codexSetup: Object.freeze({})}),
+    containedTurn: Object.freeze({}),
+  } as never, () => Object.freeze({
+    feature: capability,
+    dispose() {throw cleanup;},
+  }), () => {throw primary;}));
+  assert.ok(error instanceof ContainedTurnConstructionCleanupError);
+  assert.equal(error.name, "ContainedTurnConstructionCleanupError");
+  assert.equal(error.message, "Contained turn construction cleanup failed");
+  assert.equal(error.stack, undefined);
+  assert.equal("cause" in error, false);
+  assert.equal("errors" in error, false);
+  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["code", "message", "name"]);
+  assert.doesNotMatch(`${error.name}:${error.message}:${error.stack ?? ""}:${JSON.stringify(error)}`,
+    /host-construction-(primary|cleanup)-secret/u);
+});
+
+test("Host wrapper retries contained-owner disposal after a failed attempt", async () => {
+  let hostDisposals = 0;
+  let ownerDisposals = 0;
+  const host = composeHostCustodiedAgentRuntimeHost({
+    capabilities: Object.freeze({claudeCodeSetup: Object.freeze({}), codexSetup: Object.freeze({})}),
+    containedTurn: Object.freeze({}),
+  } as never, () => Object.freeze({
+    feature: capability,
+    dispose() {
+      ownerDisposals += 1;
+      if (ownerDisposals === 1) {throw new ContainedTurnOwnerDisposalError();}
+    },
+  }), () => Object.freeze({
+    bindAccess() {throw new Error("unused");},
+    async dispose() {hostDisposals += 1;},
+  }) as never);
+  await assert.rejects(host.dispose(), error => error instanceof ContainedTurnOwnerDisposalError);
+  await host.dispose();
+  await host.dispose();
+  assert.equal(ownerDisposals, 2);
+  assert.equal(hostDisposals, 3);
 });

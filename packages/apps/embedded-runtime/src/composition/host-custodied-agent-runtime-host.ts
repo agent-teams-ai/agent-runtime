@@ -40,8 +40,8 @@ export const composeHostCustodiedAgentRuntimeHost = (
   const dispose = async (): Promise<void> => {
     await host.dispose();
     if (!ownerDisposed) {
-      ownerDisposed = true;
       containedTurn.dispose();
+      ownerDisposed = true;
     }
   };
   return Object.freeze({

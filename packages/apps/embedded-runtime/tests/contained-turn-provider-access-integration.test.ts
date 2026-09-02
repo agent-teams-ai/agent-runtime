@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   createContainedTurnProviderAccessPort,
-  ProviderAccessRouteCOwnerError,
   type OuterContainedTurnProviderAccess,
 } from "@agent-teams/agent-execution/composition";
 import {
@@ -54,6 +53,14 @@ const ownerWithShadowedResolveBind = (bindDescriptor: PropertyDescriptor): Outer
   return Object.freeze({ ...valid, resolve: Object.freeze({ execute }) });
 };
 
+const isRouteCOwnerError = (error: unknown, diagnostic: string): boolean => {
+  if (error === null || typeof error !== "object") {return false;}
+  const candidate = error as Readonly<{code?: unknown; diagnostic?: unknown; message?: unknown; name?: unknown}>;
+  return candidate.code === "ERR_PROVIDER_ACCESS_ROUTE_C_OWNER" &&
+    candidate.diagnostic === diagnostic && candidate.name === "ProviderAccessRouteCOwnerError" &&
+    candidate.message === `Provider Access Route C owner rejected: ${diagnostic}`;
+};
+
 test("real Route C owner resolves, revalidates, observes ambiguous consumption, and settles", async () => {
   const feature = createStaticContainedTurnProviderAccessFeature([{ ...record, kind: "binding" as const }]);
   const acceptedAuthorityDigest = "accepted-authority:one";
@@ -73,15 +80,36 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
     initialControlTime: 50,
   });
   let hideFirstConsumption = true;
+  let hostileDispatchPhase: "consume" | "none" | "observe" | "primitive" | "settle" = "none";
+  const dispatchSecret = "provider-dispatch-output-secret";
   const owner = Object.freeze({
     dispatchConsumptionV1: Object.freeze({
       async consumeForDispatch(input: Parameters<OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["consumeForDispatch"]>[0]) {
+        if (hostileDispatchPhase === "consume") {
+          return new Proxy(Object.freeze({kind: "consumed" as const}), {
+            get() {throw new Error(dispatchSecret);},
+          }) as never;
+        }
+        if (hostileDispatchPhase === "observe") {return Object.freeze({kind: "indeterminate" as const});}
+        if (hostileDispatchPhase === "primitive") {return null as never;}
         const outcome = await harness.access.consumeForDispatch(input);
         if (hideFirstConsumption) { hideFirstConsumption = false; return Object.freeze({ kind: "indeterminate" as const }); }
         return outcome;
       },
-      observeDispatchConsumption: harness.access.observeDispatchConsumption.bind(harness.access),
-      settleDispatchConsumption: harness.access.settleDispatchConsumption.bind(harness.access),
+      async observeDispatchConsumption(input: Parameters<OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["observeDispatchConsumption"]>[0]) {
+        if (hostileDispatchPhase === "observe") {
+          return Object.freeze(Object.defineProperty({}, "kind", {
+            enumerable: true, get() {throw new Error(dispatchSecret);},
+          })) as never;
+        }
+        return harness.access.observeDispatchConsumption(input);
+      },
+      async settleDispatchConsumption(input: Parameters<OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["settleDispatchConsumption"]>[0]) {
+        if (hostileDispatchPhase === "settle") {
+          throw Object.assign(new Error(dispatchSecret), {cause: dispatchSecret});
+        }
+        return harness.access.settleDispatchConsumption(input);
+      },
     }),
     resolve: feature.resolve,
     revalidate: feature.revalidate,
@@ -138,6 +166,27 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
   });
   assert.equal(settlement.kind, "settled");
   assert.equal(harness.control.observeOwnerState({ provider: "codex", scopeDigest }), "claim_committed");
+  hostileDispatchPhase = "consume";
+  const malformedConsumption = await port.consumeForDispatch({
+    grantRequestId: subject.providerAccessRequest.grantRequestId, subject,
+  });
+  assert.equal(malformedConsumption.kind, "indeterminate");
+  assert.doesNotMatch(JSON.stringify(malformedConsumption), /provider-dispatch-output-secret/u);
+  hostileDispatchPhase = "observe";
+  assert.equal((await port.consumeForDispatch({
+    grantRequestId: subject.providerAccessRequest.grantRequestId, subject,
+  })).kind, "indeterminate");
+  hostileDispatchPhase = "primitive";
+  assert.equal((await port.consumeForDispatch({
+    grantRequestId: subject.providerAccessRequest.grantRequestId, subject,
+  })).kind, "indeterminate");
+  hostileDispatchPhase = "settle";
+  const failedSettlement = await port.settleConsumedGrant({
+    disposition: "claim_committed", receipt: consumed.receipt,
+    settlementRequestId: containedTurnGrantSettlementRequestId(consumed.receipt, "claim_committed"),
+  });
+  assert.equal(failedSettlement.kind, "indeterminate");
+  assert.doesNotMatch(JSON.stringify(failedSettlement), /provider-dispatch-output-secret/u);
 });
 
 test("real Route C revalidation fails closed on drift, revocation, and scope mismatch", async () => {
@@ -178,6 +227,18 @@ test("real Route C revalidation fails closed on drift, revocation, and scope mis
 
 test("Route C construction rejects descriptor, prototype, authority, method, and mutable-shape violations", () => {
   const valid = staticOwner();
+  let nestedGetterCalls = 0;
+  const accessorExecute = Object.freeze(Object.defineProperty({}, "execute", {
+    enumerable: true, get() {nestedGetterCalls += 1; return valid.resolve.execute;},
+  }));
+  const accessorDispatch = Object.preventExtensions(Object.defineProperties({}, {
+    consumeForDispatch: {enumerable: true, get() {nestedGetterCalls += 1; return unusedDispatch.consumeForDispatch;}},
+    observeDispatchConsumption: {configurable: false, enumerable: true, value: unusedDispatch.observeDispatchConsumption},
+    settleDispatchConsumption: {configurable: false, enumerable: true, value: unusedDispatch.settleDispatchConsumption},
+  }));
+  const accessorRevalidate = Object.freeze(Object.defineProperty({}, "execute", {
+    enumerable: true, get() {nestedGetterCalls += 1; return valid.revalidate.execute;},
+  }));
   const cases: ReadonlyArray<readonly [unknown, string]> = [
     [Object.freeze({ resolve: valid.resolve, revalidate: valid.revalidate }), "invalid_shape"],
     [Object.freeze({ ...valid, credentialAuthority: Object.freeze({}) }), "invalid_shape"],
@@ -205,14 +266,21 @@ test("Route C construction rejects descriptor, prototype, authority, method, and
       revalidate: { configurable: false, enumerable: true, value: valid.revalidate },
     })), "accessor_backed"],
     [Object.freeze(Object.assign(Object.create({ hiddenAuthority: true }), valid)), "invalid_prototype"],
+    [new Proxy(valid, {}), "invalid_shape"],
+    [Object.freeze({...valid, dispatchConsumptionV1: new Proxy(valid.dispatchConsumptionV1, {})}), "invalid_shape"],
+    [Object.freeze({...valid, resolve: new Proxy(valid.resolve, {})}), "invalid_shape"],
+    [Object.freeze({...valid, revalidate: new Proxy(valid.revalidate, {})}), "invalid_shape"],
+    [Object.freeze({...valid, resolve: accessorExecute}), "accessor_backed"],
+    [Object.freeze({...valid, dispatchConsumptionV1: accessorDispatch}), "accessor_backed"],
+    [Object.freeze({...valid, revalidate: accessorRevalidate}), "accessor_backed"],
   ];
   for (const [candidate, diagnostic] of cases) {
     assert.throws(
       () => createContainedTurnProviderAccessPort(candidate as OuterContainedTurnProviderAccess),
-      (error: unknown) => error instanceof ProviderAccessRouteCOwnerError &&
-        error.code === "ERR_PROVIDER_ACCESS_ROUTE_C_OWNER" && error.diagnostic === diagnostic,
+      (error: unknown) => isRouteCOwnerError(error, diagnostic),
     );
   }
+  assert.equal(nestedGetterCalls, 0);
 });
 
 test("Route C captures sealed owner methods once and ignores later value mutation", async () => {
@@ -276,7 +344,7 @@ test("frozen Route C owners reject shadowed bind without leaking attacker failur
   const secretError = Object.assign(new Error("route-c-error-secret", { cause: secretObject }), {
     authority: "route-c-error-custom-secret",
   });
-  const mutableDelegate = Object.assign(() => undefined, { authority: "mutable-delegate" });
+  const mutableDelegate = Object.assign(() => {}, { authority: "mutable-delegate" });
   let returnedDelegateCalls = 0;
   let returnedNonFunctionCalls = 0;
   let thrownObjectCalls = 0;
@@ -294,7 +362,6 @@ test("frozen Route C owners reject shadowed bind without leaking attacker failur
     {
       bindDescriptor: { value() {
         thrownObjectCalls += 1;
-        // oxlint-disable-next-line no-throw-literal -- the boundary must contain arbitrary attacker-thrown values.
         throw secretObject;
       }, writable: false },
       calls: () => thrownObjectCalls,
@@ -327,10 +394,9 @@ test("frozen Route C owners reject shadowed bind without leaking attacker failur
       published = createContainedTurnFeatureFromProviderAccess(dependencies as never);
     }, (error: unknown) => {
       rejection = error;
-      return error instanceof ProviderAccessRouteCOwnerError &&
-        error.code === "ERR_PROVIDER_ACCESS_ROUTE_C_OWNER" && error.diagnostic === "invalid_method";
+      return isRouteCOwnerError(error, "invalid_method");
     });
-    assert.ok(rejection instanceof ProviderAccessRouteCOwnerError);
+    assert.ok(rejection instanceof Error);
     assert.equal(rejection.message, "Provider Access Route C owner rejected: invalid_method");
     assert.deepEqual(
       Object.getOwnPropertyNames(rejection).filter(key => key !== "stack").toSorted(),
@@ -344,6 +410,66 @@ test("frozen Route C owners reject shadowed bind without leaking attacker failur
     assert.equal(downstreamReads, 0);
     assert.equal(published, undefined);
   }
+});
+
+test("Route C rejects proxied delegates before observing the remaining seven-port dependencies", () => {
+  const valid = staticOwner();
+  const proxiedExecute = new Proxy(valid.resolve.execute, {});
+  const owner = Object.freeze({...valid, resolve: Object.freeze({execute: proxiedExecute})});
+  let downstreamReads = 0;
+  const dependencies = Object.defineProperties({}, {
+    providerAccess: {enumerable: true, value: owner},
+    operationStore: {get() {downstreamReads += 1;}},
+    security: {get() {downstreamReads += 1;}},
+    workspace: {get() {downstreamReads += 1;}},
+    artifacts: {get() {downstreamReads += 1;}},
+    custody: {get() {downstreamReads += 1;}},
+    provider: {get() {downstreamReads += 1;}},
+  });
+  assert.throws(
+    () => createContainedTurnFeatureFromProviderAccess(dependencies as never),
+    error => isRouteCOwnerError(error, "invalid_method"),
+  );
+  assert.equal(downstreamReads, 0);
+});
+
+test("Route C redacts thrown and malformed resolve/revalidate owner outputs", async () => {
+  const secret = "provider-owner-output-secret";
+  const malformed = new Proxy(Object.freeze({kind: "resolved"}), {
+    get() {throw new Error(secret);},
+  });
+  let resolveMode: "malformed" | "valid" = "malformed";
+  const valid = staticOwner();
+  const owner = Object.freeze({
+    dispatchConsumptionV1: unusedDispatch,
+    resolve: Object.freeze({
+      async execute(input: Parameters<OuterContainedTurnProviderAccess["resolve"]["execute"]>[0]) {
+        if (resolveMode === "malformed") {return malformed as never;}
+        return valid.resolve.execute(input);
+      },
+    }),
+    revalidate: Object.freeze({
+      async execute() {throw Object.assign(new Error(secret), {cause: secret, path: `/tmp/${secret}`});},
+    }),
+  }) satisfies OuterContainedTurnProviderAccess;
+  const port = createContainedTurnProviderAccessPort(owner);
+  const unresolved = await port.resolveForAcceptance({
+    intent: {mode: "analysis", prompt: "Inspect."}, provider: "codex", scope,
+  });
+  assert.equal(unresolved.kind, "indeterminate");
+  assert.doesNotMatch(JSON.stringify(unresolved), /provider-owner-output-secret/u);
+
+  resolveMode = "valid";
+  const accepted = await port.resolveForAcceptance({
+    intent: {mode: "analysis", prompt: "Inspect."}, provider: "codex", scope,
+  });
+  assert.equal(accepted.kind, "resolved");
+  if (accepted.kind !== "resolved") {return;}
+  const revalidated = await port.revalidateForDispatch({
+    acceptedSnapshot: accepted.snapshot, operationId: "operation:redacted-owner-output", scope,
+  });
+  assert.equal(revalidated.kind, "indeterminate");
+  assert.doesNotMatch(JSON.stringify(revalidated), /provider-owner-output-secret/u);
 });
 
 test("missing dispatch fails before seven-port factory reads or handle publication", () => {
@@ -362,7 +488,7 @@ test("missing dispatch fails before seven-port factory reads or handle publicati
   let published: unknown;
   assert.throws(() => {
     published = createContainedTurnFeatureFromProviderAccess(dependencies as never);
-  }, (error: unknown) => error instanceof ProviderAccessRouteCOwnerError && error.diagnostic === "invalid_shape");
+  }, (error: unknown) => isRouteCOwnerError(error, "invalid_shape"));
   assert.equal(downstreamReads, 0);
   assert.equal(published, undefined);
 });

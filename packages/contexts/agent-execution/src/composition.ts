@@ -21,7 +21,6 @@ export {
   DarwinCooperativeProcessCustody,
   NodeProviderProcessCustody,
   PostgresContainedTurnOperationStore,
-  ProviderAccessRouteCOwnerError,
   recoverContainedTurnCommittedGrantSettlements,
   recoverContainedTurnDispatchPreparations,
   rollbackContainedTurnPostgresSchemaV4,

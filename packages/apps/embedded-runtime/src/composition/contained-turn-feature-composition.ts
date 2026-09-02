@@ -13,7 +13,10 @@ import {
   type OuterContainedTurnRuntimeSecurityAuthority,
 } from "@agent-teams/agent-execution/composition";
 import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
-import { disposeAfterContainedTurnConstructionFailure } from "./contained-turn-construction-failure.js";
+import {
+  ContainedTurnOwnerDisposalError,
+  disposeAfterContainedTurnConstructionFailure,
+} from "./contained-turn-construction-failure.js";
 import {
   snapshotContainedTurnProviderSelection,
   type ContainedTurnProviderSelectionSnapshot,
@@ -75,6 +78,90 @@ export class ProviderRouteEnforcementUnsupportedError extends Error {
   }
 }
 
+const trustedApply = Reflect.apply;
+const trustedBind = Function.prototype.bind;
+const trustedFreeze = Object.freeze;
+const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+const trustedGetPrototypeOf = Object.getPrototypeOf;
+const trustedIsExtensible = Object.isExtensible;
+const trustedOwnKeys = Reflect.ownKeys;
+const trustedObjectPrototype = Object.prototype;
+type NodeUtilTypes = Readonly<{ isProxy(value: unknown): boolean }>;
+const trustedIsProxy = (process.getBuiltinModule("node:util") as Readonly<{ types: NodeUtilTypes }>).types.isProxy;
+
+const invalidProviderOwner = (): TypeError => new TypeError("Contained turn provider owner is invalid");
+const invalidProviderAccessDependency = (): TypeError =>
+  new TypeError("Contained turn Provider Access dependency is invalid");
+
+const isExactProviderOwnerRecord = (value: unknown): value is object => {
+  if (value === null || typeof value !== "object" || trustedIsProxy(value) ||
+      trustedGetPrototypeOf(value) !== trustedObjectPrototype || trustedIsExtensible(value)) {
+    return false;
+  }
+  const keys = trustedOwnKeys(value);
+  if (keys.length !== 3) {return false;}
+  const expectedKeys = ["custody", "dispose", "provider"] as const;
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index];
+    if (typeof key !== "string" || !expectedKeys.includes(key as never)) {return false;}
+  }
+  return true;
+};
+
+const stableDataValue = (descriptor: PropertyDescriptor | undefined): unknown => {
+  if (descriptor === undefined || !("value" in descriptor) || descriptor.configurable !== false) {
+    throw invalidProviderOwner();
+  }
+  return descriptor.value;
+};
+
+const captureProviderOwnerDispose = (owner: object, value: unknown): (() => void) => {
+  if (typeof value !== "function" || trustedIsProxy(value) ||
+      trustedGetOwnPropertyDescriptor(value, "bind") !== undefined) {
+    throw invalidProviderOwner();
+  }
+  const bound = trustedApply(trustedBind, value, [owner]) as unknown;
+  if (typeof bound !== "function") {throw invalidProviderOwner();}
+  return trustedFreeze(bound) as () => void;
+};
+
+const captureProviderOwner = (
+  value: unknown,
+): ClaudeCurrentKernelOwner | CodexCurrentKernelOwner => {
+  try {
+    if (!isExactProviderOwnerRecord(value)) {throw invalidProviderOwner();}
+    const descriptors = trustedGetOwnPropertyDescriptors(value);
+    const custody = stableDataValue(descriptors.custody);
+    const dispose = captureProviderOwnerDispose(value, stableDataValue(descriptors.dispose));
+    const provider = stableDataValue(descriptors.provider);
+    return trustedFreeze({
+      custody,
+      dispose,
+      provider,
+    }) as ClaudeCurrentKernelOwner | CodexCurrentKernelOwner;
+  } catch {
+    throw invalidProviderOwner();
+  }
+};
+
+const captureProviderAccessDependency = (
+  dependencies: ContainedTurnOuterCompositionDependencies,
+): OuterContainedTurnProviderAccess => {
+  try {
+    if (trustedIsProxy(dependencies)) {
+      throw invalidProviderAccessDependency();
+    }
+    const descriptor = trustedGetOwnPropertyDescriptor(dependencies, "providerAccess");
+    if (descriptor === undefined || !("value" in descriptor)) {
+      throw invalidProviderAccessDependency();
+    }
+    return descriptor.value as OuterContainedTurnProviderAccess;
+  } catch {
+    throw invalidProviderAccessDependency();
+  }
+};
+
 const createSelectedProviderOwner = (
   snapshot: ContainedTurnProviderSelectionSnapshot,
   hostCustody: HostCustodyAuthority,
@@ -85,12 +172,12 @@ const createSelectedProviderOwner = (
     case "claude": {
       const options = {...selection.owner, hostCustody};
       snapshot.assertStable();
-      return factories.claude(options);
+      return captureProviderOwner(factories.claude(options));
     }
     case "codex": {
       const options = {...selection.owner, hostCustody};
       snapshot.assertStable();
-      return factories.codex(options);
+      return captureProviderOwner(factories.codex(options));
     }
     default: throw new TypeError("Contained turn provider selection is invalid");
   }
@@ -100,9 +187,11 @@ const createSelectedProviderOwner = (
 export const createContainedTurnFeatureFromProviderAccess = (
   dependencies: ContainedTurnOuterCompositionDependencies,
 ): ContainedTurnCapabilityBundle => {
-  // Product composition gates candidates before reaching this exact seven-port
-  // binding; repository-owned synthetic evidence uses it without claiming qualification.
-  const providerAccess = createContainedTurnProviderAccessPort(dependencies.providerAccess);
+  // Product composition gates unqualified candidates before this exact seven-port
+  // binding. Candidate evidence still closes Route C before publishing a handle.
+  const providerAccess = createContainedTurnProviderAccessPort(
+    captureProviderAccessDependency(dependencies),
+  );
   return createContainedTurnFeature(Object.freeze({
     operationStore: dependencies.operationStore,
     security: createContainedTurnRuntimeSecurityPort(
@@ -145,8 +234,12 @@ export const composeHostCustodiedContainedTurn = (
     feature,
     dispose() {
       if (disposed) {return;}
+      try {
+        owner.dispose();
+      } catch {
+        throw new ContainedTurnOwnerDisposalError();
+      }
       disposed = true;
-      owner.dispose();
     },
   });
 };
