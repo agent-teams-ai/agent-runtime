@@ -6,6 +6,7 @@ import type { ContainedTurnKernelOperation } from "../../../domain/contained-tur
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
 import {
   CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET,
   ContainedTurnStateBudgetError,
   decodeContainedTurnState,
   encodeContainedTurnState,
@@ -19,6 +20,7 @@ interface OperationRow {
   readonly project_id: string;
   readonly revision: string;
   readonly state: unknown;
+  readonly state_bytes: number;
   readonly state_within_budget: boolean;
   readonly state_codec_version: number;
   readonly state_digest: string;
@@ -36,6 +38,19 @@ interface ProofRow {
   readonly receipt_kind: string;
   readonly receipt_ref: string;
 }
+
+interface ProjectionMetadataRow {
+  readonly output_bytes: string;
+  readonly output_count: string;
+  readonly receipt_bytes: string;
+  readonly receipt_count: string;
+}
+
+const safeCount = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {throw new ContainedTurnStateBudgetError();}
+  return parsed;
+};
 
 const operationFromRow = (row: OperationRow): ContainedTurnKernelOperation => {
   if (!row.state_within_budget) {throw new ContainedTurnStateBudgetError();}
@@ -84,6 +99,7 @@ export class ContainedTurnPostgresOperationRepository {
     const result = await client.query<OperationRow>(
       `SELECT operation_id, tenant_id, project_id, command_id, command_fingerprint, effect_id,
               revision::text,
+              octet_length(state::text) AS state_bytes,
               CASE WHEN octet_length(state::text) <= ${String(CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes)}
                 THEN state END AS state,
               octet_length(state::text) <= ${String(CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes)} AS state_within_budget,
@@ -104,14 +120,45 @@ export class ContainedTurnPostgresOperationRepository {
     const row = await this.#authoritativeRow(client, operationId, lock, scope);
     if (row === undefined) {return undefined;}
     const operation = operationFromRow(row);
+    const metadata = await client.query<ProjectionMetadataRow>(
+      `SELECT
+         (SELECT count(*)::text FROM agent_execution.contained_turn_output_v1 WHERE operation_id=$1) AS output_count,
+         (SELECT COALESCE(sum(octet_length(output_text) + octet_length(output_kind) + 4),0)::text
+            FROM agent_execution.contained_turn_output_v1 WHERE operation_id=$1) AS output_bytes,
+         (SELECT count(*)::text FROM agent_execution.contained_turn_receipt_v1 WHERE operation_id=$1) AS receipt_count,
+         (SELECT COALESCE(sum(octet_length(receipt_ref) + octet_length(receipt_kind)),0)::text
+            FROM agent_execution.contained_turn_receipt_v1 WHERE operation_id=$1) AS receipt_bytes`,
+      [operationId],
+    );
+    const projection = metadata.rows[0];
+    if (projection === undefined) {throw new Error("contained turn PostgreSQL projection metadata missing");}
+    const outputCount = safeCount(projection.output_count);
+    const receiptCount = safeCount(projection.receipt_count);
+    const materializedBytes = row.state_bytes + safeCount(projection.output_bytes) +
+      safeCount(projection.receipt_bytes);
+    if (outputCount !== operation.output.chunks.length || receiptCount !== operation.proofs.length) {
+      throw new Error("contained turn PostgreSQL projection cardinality mismatch");
+    }
+    if (!Number.isSafeInteger(materializedBytes) ||
+        materializedBytes > CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumBatchBytes) {
+      throw new ContainedTurnStateBudgetError();
+    }
     const [outputs, proofs] = await Promise.all([
       client.query<OutputRow>(
-        "SELECT cursor, output_kind, output_text FROM agent_execution.contained_turn_output_v1 WHERE operation_id = $1 ORDER BY cursor",
-        [operationId],
+        `SELECT cursor, output_kind,
+                CASE WHEN octet_length(output_text) <= $3 THEN output_text END AS output_text
+           FROM agent_execution.contained_turn_output_v1
+          WHERE operation_id = $1 ORDER BY cursor LIMIT $2`,
+        [operationId, outputCount + 1,
+          CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumBatchBytes],
       ),
       client.query<ProofRow>(
-        "SELECT receipt_kind, receipt_ref FROM agent_execution.contained_turn_receipt_v1 WHERE operation_id = $1 ORDER BY receipt_ref",
-        [operationId],
+        `SELECT receipt_kind,
+                CASE WHEN octet_length(receipt_ref) <= $3 THEN receipt_ref END AS receipt_ref
+           FROM agent_execution.contained_turn_receipt_v1
+          WHERE operation_id = $1 ORDER BY receipt_ref LIMIT $2`,
+        [operationId, receiptCount + 1,
+          CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumBatchBytes],
       ),
     ]);
     validateProjections(operation, outputs.rows, proofs.rows);

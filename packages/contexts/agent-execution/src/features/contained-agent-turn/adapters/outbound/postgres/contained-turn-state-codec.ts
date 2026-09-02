@@ -12,6 +12,11 @@ export const CONTAINED_TURN_POSTGRES_JSON_BUDGET = Object.freeze({
   maximumNodes: 50_000,
   maximumSerializedBytes: 8 * 1024 * 1024,
 });
+export const CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET = Object.freeze({
+  maximumBatchBytes: 9 * 1024 * 1024,
+  maximumMigrationBytes: 32 * 1024 * 1024,
+  migrationBatchRows: 4,
+});
 export const CONTAINED_TURN_STATE_BUDGET_DIAGNOSTIC =
   "contained turn persisted state exceeds the deterministic decoding budget";
 

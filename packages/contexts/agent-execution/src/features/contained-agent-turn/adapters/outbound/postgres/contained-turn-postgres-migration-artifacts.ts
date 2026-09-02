@@ -324,13 +324,15 @@ ALTER TABLE agent_execution.contained_turn_dispatch_preparation_v1
   ALTER COLUMN state_digest DROP NOT NULL;
 `;
 
+const V3_OPERATION_DIGEST_VALIDATION_REVISION =
+  "contained-turn-operation-digest-keyset-validation-v1";
 const V4_PREPARATION_DIGEST_BACKFILL_REVISION =
-  "contained-turn-preparation-canonical-json-sha256-v1";
+  "contained-turn-preparation-canonical-json-sha256-keyset-v2";
 
 const digest = (sql: string): string => createHash("sha256").update(sql).digest("hex");
 const V1_DIGEST = digest(V1_SQL);
 const V2_DIGEST = digest(V2_SQL);
-export const V3_DIGEST = digest(V3_SQL);
+export const V3_DIGEST = digest(`${V3_OPERATION_DIGEST_VALIDATION_REVISION}\n${V3_SQL}`);
 export const V4_DIGEST = digest(`${V4_PREPARATION_DIGEST_BACKFILL_REVISION}\n${V4_SQL}`);
 const V5_DIGEST = digest(V5_SQL);
 
@@ -360,4 +362,3 @@ export const migrationFor = (version: number): ContainedTurnPostgresMigrationIde
   }
   return { ...identity, sql };
 };
-

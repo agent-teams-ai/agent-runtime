@@ -1,12 +1,10 @@
 import type { ContainedTurnKernelOperationStore } from "../../../application/ports/outbound/contained-turn-ports.js";
 import type { ContainedTurnDispatchPreparation } from "../../../domain/contained-turn-dispatch-preparation.js";
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
-import {
-  CONTAINED_TURN_PREPARATION_CODEC_VERSION,
-  decodeContainedTurnPreparation,
-} from "./contained-turn-preparation-codec.js";
+import { decodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
 import {
   CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET,
   ContainedTurnStateBudgetError,
   ContainedTurnStateQuarantineError,
 } from "./contained-turn-state-codec.js";
@@ -14,7 +12,10 @@ import type { ContainedTurnPostgresOperationRepository } from "./contained-turn-
 import type { ContainedTurnPostgresTransactions } from "./contained-turn-postgres-transactions.js";
 
 interface PreparationRecoveryMetadataRow {
+  readonly operation_state_bytes: number;
   readonly operation_id: string;
+  readonly output_bytes: string;
+  readonly receipt_bytes: string;
   readonly preparation_token: string;
   readonly state_bytes: number;
   readonly state_codec_version: number;
@@ -32,11 +33,18 @@ interface PreparationRecoveryStateRow extends PreparationRecoveryMetadataRow {
   readonly tenant_id: string | null;
 }
 
-const RECOVERY_BATCH_SERIALIZED_BYTES = 9 * 1024 * 1024;
+const RECOVERY_CANDIDATE_LIMIT = 1_000;
 
 const recoveryMetadataSql = (quarantine: boolean): string =>
   `SELECT p.operation_id,p.preparation_token,p.state_codec_version,p.state_digest,
-          octet_length(p.state::text) AS state_bytes
+          octet_length(p.state::text) AS state_bytes,
+          octet_length(o.state::text) AS operation_state_bytes,
+          (SELECT COALESCE(sum(octet_length(x.output_text) + octet_length(x.output_kind) + 4),0)::text
+             FROM agent_execution.contained_turn_output_v1 AS x
+            WHERE x.operation_id=p.operation_id) AS output_bytes,
+          (SELECT COALESCE(sum(octet_length(r.receipt_ref) + octet_length(r.receipt_kind)),0)::text
+             FROM agent_execution.contained_turn_receipt_v1 AS r
+            WHERE r.operation_id=p.operation_id) AS receipt_bytes
      FROM agent_execution.contained_turn_dispatch_preparation_v1 AS p
      JOIN agent_execution.contained_turn_operation_v1 AS o
        ON o.operation_id = p.operation_id
@@ -47,21 +55,31 @@ const recoveryMetadataSql = (quarantine: boolean): string =>
       AND q.observed_state_digest IS NOT DISTINCT FROM p.state_digest` : ""}
     WHERE o.tenant_id = $1 AND o.project_id = $2
       ${quarantine ? "AND q.operation_id IS NULL" : ""}
-      AND (octet_length(p.state::text) > $6
-        OR (((p.state_codec_version = 2 OR p.state_codec_version = $4) AND
-             (p.state #>> '{payload,kind}') = ANY($3::text[]))
-        OR (p.state_codec_version = 1 AND (p.state #>> '{kind}') = ANY($3::text[]))
-        OR p.state_codec_version NOT IN (1, 2, $4)))
     ORDER BY p.operation_id,p.preparation_token
-    LIMIT $5${quarantine ? " FOR UPDATE OF p,o" : ""}`;
+    LIMIT $3${quarantine ? " FOR UPDATE OF p,o" : ""}`;
+
+const budgetNumber = (value: number | string): number => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {throw new ContainedTurnStateBudgetError();}
+  return parsed;
+};
 
 const assertMetadataWithinBudget = (rows: readonly PreparationRecoveryMetadataRow[]): void => {
+  if (rows.length > RECOVERY_CANDIDATE_LIMIT) {throw new ContainedTurnStateBudgetError();}
   let batchBytes = 0;
   let budgetViolated = false;
+  const countedOperations = new Set<string>();
   for (const row of rows) {
-    batchBytes += row.state_bytes;
-    budgetViolated ||= row.state_bytes > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes ||
-      batchBytes > RECOVERY_BATCH_SERIALIZED_BYTES;
+    const stateBytes = budgetNumber(row.state_bytes);
+    batchBytes += stateBytes;
+    if (!countedOperations.has(row.operation_id)) {
+      countedOperations.add(row.operation_id);
+      batchBytes += budgetNumber(row.operation_state_bytes) + budgetNumber(row.output_bytes) +
+        budgetNumber(row.receipt_bytes);
+    }
+    budgetViolated ||= stateBytes > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes ||
+      budgetNumber(row.operation_state_bytes) > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes ||
+      batchBytes > CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumBatchBytes;
   }
   if (budgetViolated) {throw new ContainedTurnStateBudgetError();}
 };
@@ -103,9 +121,7 @@ export class ContainedTurnPostgresPreparationRecovery {
     const recover = async (client: import("pg").PoolClient, quarantine: boolean) => {
       const metadata = await client.query<PreparationRecoveryMetadataRow>(
         recoveryMetadataSql(quarantine),
-        [input.scope.tenantId, input.scope.projectId, kinds,
-          CONTAINED_TURN_PREPARATION_CODEC_VERSION, quarantine ? 1_000 : limit,
-          CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes],
+        [input.scope.tenantId, input.scope.projectId, RECOVERY_CANDIDATE_LIMIT + 1],
       );
       assertMetadataWithinBudget(metadata.rows);
       if (metadata.rows.length === 0) {return Object.freeze([]);}
@@ -139,6 +155,7 @@ export class ContainedTurnPostgresPreparationRecovery {
         operation: ContainedTurnKernelOperation;
         preparation: ContainedTurnDispatchPreparation;
       }>> = [];
+      const operationById = new Map<string, ContainedTurnKernelOperation>();
       for (const row of states.rows) {
         let preparation: ContainedTurnDispatchPreparation;
         try {
@@ -164,14 +181,16 @@ export class ContainedTurnPostgresPreparationRecovery {
           );
           continue;
         }
-        if (preparation.kind !== "active" && preparation.kind !== "cleanup_pending") {continue;}
+        if (!kinds.includes(preparation.kind as "active" | "cleanup_pending")) {continue;}
         if (preparation.operationId !== row.operation_id ||
             preparation.preparationToken !== row.preparation_token) {
           throw new Error("dispatch preparation recovery row identity mismatch");
         }
-        const operation = await this.operations.load(
-          client, row.operation_id, false, input.scope,
-        );
+        let operation = operationById.get(row.operation_id);
+        if (operation === undefined) {
+          operation = await this.operations.load(client, row.operation_id, false, input.scope);
+          if (operation !== undefined) {operationById.set(row.operation_id, operation);}
+        }
         if (operation === undefined) {
           throw new Error("dispatch preparation recovery operation disappeared");
         }

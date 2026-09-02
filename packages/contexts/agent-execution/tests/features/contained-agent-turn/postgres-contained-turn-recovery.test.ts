@@ -248,8 +248,11 @@ test("recovery verifies phase-one identity and size metadata before decoding mat
       queries.push(text);
       if (queries.length === 1) {
         return { rows: [{
+          operation_state_bytes: 256,
           operation_id: "operation:two-phase",
+          output_bytes: "0",
           preparation_token: "preparation:two-phase",
+          receipt_bytes: "0",
           state_bytes: 128,
           state_codec_version: 4,
           state_digest: "1".repeat(64),
@@ -285,7 +288,8 @@ test("recovery verifies phase-one identity and size metadata before decoding mat
   assert.equal(queries.length, 2);
   assert.match(queries[0] ?? "", /octet_length\(p\.state::text\) AS state_bytes/u);
   assert.doesNotMatch(queries[0] ?? "", /THEN p\.state|p\.state AS state/u);
-  assert.match(queries[0] ?? "", /ORDER BY p\.operation_id,p\.preparation_token[\s\S]*LIMIT \$5 FOR UPDATE OF p,o/u);
+  assert.match(queries[0] ?? "", /ORDER BY p\.operation_id,p\.preparation_token[\s\S]*LIMIT \$3 FOR UPDATE OF p,o/u);
+  assert.doesNotMatch(queries[0] ?? "", /payload,kind|#>> '\{kind\}'/u);
   assert.match(queries[1] ?? "", /JOIN agent_execution\.contained_turn_dispatch_preparation_v1/u);
 });
 

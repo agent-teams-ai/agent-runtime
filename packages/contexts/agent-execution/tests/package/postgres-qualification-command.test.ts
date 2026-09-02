@@ -21,6 +21,7 @@ const postgresTests = [
   join(containedTurnTestRoot, "postgres-contained-turn.test.ts"),
   join(containedTurnTestRoot, "postgres-current-owner-submit-integration.test.ts"),
   join(containedTurnTestRoot, "postgres-contained-turn-recovery.test.ts"),
+  join(containedTurnTestRoot, "postgres-contained-turn-bounds.test.ts"),
 ];
 
 const environmentWithoutDatabaseUrl = (): NodeJS.ProcessEnv => {
@@ -179,6 +180,11 @@ test("PostgreSQL qualification uses exact argv for every focused PostgreSQL test
   assert.ok(
     discoveredTests.includes(
       join(containedTurnTestRoot, "postgres-contained-turn-recovery.test.ts"),
+    ),
+  );
+  assert.ok(
+    discoveredTests.includes(
+      join(containedTurnTestRoot, "postgres-contained-turn-bounds.test.ts"),
     ),
   );
 });

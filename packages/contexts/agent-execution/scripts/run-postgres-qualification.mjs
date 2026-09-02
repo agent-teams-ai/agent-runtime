@@ -36,6 +36,12 @@ const testFiles = [
       import.meta.url,
     ),
   ),
+  fileURLToPath(
+    new URL(
+      "../tests/features/contained-agent-turn/postgres-contained-turn-bounds.test.ts",
+      import.meta.url,
+    ),
+  ),
 ];
 
 const addSecret = (secrets, value) => {

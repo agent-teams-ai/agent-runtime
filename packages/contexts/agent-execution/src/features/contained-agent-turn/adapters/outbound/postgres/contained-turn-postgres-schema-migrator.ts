@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from "pg";
 import {
   canonicalContainedTurnPostgresJson,
   CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET,
   ContainedTurnStateBudgetError,
   digestContainedTurnPostgresJson,
 } from "./contained-turn-state-codec.js";
@@ -260,57 +261,92 @@ const validateCurrentCatalog = async (client: PoolClient, version: number): Prom
   }
 };
 
-const backfillPreparationDigests = async (client: PoolClient): Promise<void> => {
-  const rows = await client.query<{
-    operation_id: string;
-    preparation_token: string;
-    state: unknown;
-    state_codec_version: number;
-    state_within_budget: boolean;
-  }>(
-    `SELECT operation_id, preparation_token,
-            CASE WHEN octet_length(state::text) <= $1 THEN state END AS state,
-            octet_length(state::text) <= $1 AS state_within_budget, state_codec_version
-       FROM agent_execution.contained_turn_dispatch_preparation_v1
-      WHERE state_digest IS NULL
-      ORDER BY operation_id, preparation_token
-      FOR UPDATE`,
-    [CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes],
+const addMigrationBytes = (total: number, candidate: number): number => {
+  const next = total + candidate;
+  if (!Number.isSafeInteger(candidate) || candidate < 0 || !Number.isSafeInteger(next) ||
+      candidate > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes ||
+      next > CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumMigrationBytes) {
+    throw new ContainedTurnStateBudgetError();
+  }
+  return next;
+};
+
+export const backfillContainedTurnPreparationDigests = async (client: PoolClient): Promise<void> => {
+  await client.query(
+    "LOCK TABLE agent_execution.contained_turn_dispatch_preparation_v1 IN SHARE ROW EXCLUSIVE MODE",
   );
-  for (const row of rows.rows) {
-    if (!row.state_within_budget) {throw new ContainedTurnStateBudgetError();}
-    decodeContainedTurnPreparation(row.state, null, row.state_codec_version);
-    const stateDigest = createHash("sha256")
-      .update(canonicalContainedTurnPostgresJson(row.state))
-      .digest("hex");
-    const updated = await client.query(
-      `UPDATE agent_execution.contained_turn_dispatch_preparation_v1
-          SET state_digest = $3
-        WHERE operation_id = $1 AND preparation_token = $2 AND state_digest IS NULL`,
-      [row.operation_id, row.preparation_token, stateDigest],
+  let afterOperationId = "";
+  let afterPreparationToken = "";
+  let totalBytes = 0;
+  while (true) {
+    const rows = await client.query<{
+      operation_id: string;
+      preparation_token: string;
+      state: unknown;
+      state_bytes: number;
+      state_codec_version: number;
+    }>(
+      `SELECT operation_id, preparation_token, state_codec_version,
+              octet_length(state::text) AS state_bytes,
+              CASE WHEN octet_length(state::text) <= $1 THEN state END AS state
+         FROM agent_execution.contained_turn_dispatch_preparation_v1
+        WHERE state_digest IS NULL
+          AND (operation_id,preparation_token) > ($2,$3)
+        ORDER BY operation_id,preparation_token
+        LIMIT $4 FOR UPDATE`,
+      [CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes, afterOperationId,
+        afterPreparationToken, CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows],
     );
-    if (updated.rowCount !== 1) {
-      throw new Error("contained turn PostgreSQL preparation digest backfill lost its row fence");
+    for (const row of rows.rows) {
+      totalBytes = addMigrationBytes(totalBytes, row.state_bytes);
+      decodeContainedTurnPreparation(row.state, null, row.state_codec_version);
+      const stateDigest = createHash("sha256")
+        .update(canonicalContainedTurnPostgresJson(row.state))
+        .digest("hex");
+      const updated = await client.query(
+        `UPDATE agent_execution.contained_turn_dispatch_preparation_v1
+            SET state_digest = $3
+          WHERE operation_id = $1 AND preparation_token = $2 AND state_digest IS NULL`,
+        [row.operation_id, row.preparation_token, stateDigest],
+      );
+      if (updated.rowCount !== 1) {
+        throw new Error("contained turn PostgreSQL preparation digest backfill lost its row fence");
+      }
+      afterOperationId = row.operation_id;
+      afterPreparationToken = row.preparation_token;
     }
+    if (rows.rows.length < CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows) {return;}
   }
 };
 
-const validateLegacyOperationDigests = async (client: PoolClient): Promise<void> => {
-  const rows = await client.query<{
-    state: unknown;
-    state_digest: string;
-    state_within_budget: boolean;
-  }>(
-    `SELECT CASE WHEN octet_length(state::text) <= $1 THEN state END AS state,
-            octet_length(state::text) <= $1 AS state_within_budget, state_digest
-       FROM agent_execution.contained_turn_operation_v1 ORDER BY operation_id`,
-    [CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes],
+export const validateContainedTurnLegacyOperationDigests = async (client: PoolClient): Promise<void> => {
+  await client.query(
+    "LOCK TABLE agent_execution.contained_turn_operation_v1 IN SHARE ROW EXCLUSIVE MODE",
   );
-  for (const row of rows.rows) {
-    if (!row.state_within_budget) {throw new ContainedTurnStateBudgetError();}
-    if (digestContainedTurnPostgresJson(row.state) !== row.state_digest) {
-      throw new Error("contained turn PostgreSQL legacy operation digest mismatch");
+  let afterOperationId = "";
+  let totalBytes = 0;
+  while (true) {
+    const rows = await client.query<{
+      operation_id: string;
+      state: unknown;
+      state_bytes: number;
+      state_digest: string;
+    }>(
+      `SELECT operation_id,state_digest,octet_length(state::text) AS state_bytes,
+              CASE WHEN octet_length(state::text) <= $1 THEN state END AS state
+         FROM agent_execution.contained_turn_operation_v1
+        WHERE operation_id > $2 ORDER BY operation_id LIMIT $3 FOR UPDATE`,
+      [CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes, afterOperationId,
+        CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows],
+    );
+    for (const row of rows.rows) {
+      totalBytes = addMigrationBytes(totalBytes, row.state_bytes);
+      if (digestContainedTurnPostgresJson(row.state) !== row.state_digest) {
+        throw new Error("contained turn PostgreSQL legacy operation digest mismatch");
+      }
+      afterOperationId = row.operation_id;
     }
+    if (rows.rows.length < CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows) {return;}
   }
 };
 
@@ -359,8 +395,8 @@ const applyMigration = async (
     throw new Error("contained turn PostgreSQL migration history cannot be rewritten");
   }
   if (migration.version === 2) {await rejectPopulatedV1WithoutExactConversion(client);}
-  if (migration.version === 3) {await validateLegacyOperationDigests(client);}
-  if (migration.version === 4) {await backfillPreparationDigests(client);}
+  if (migration.version === 3) {await validateContainedTurnLegacyOperationDigests(client);}
+  if (migration.version === 4) {await backfillContainedTurnPreparationDigests(client);}
   await client.query(migration.sql);
   if (recorded === undefined) {
     await client.query(
