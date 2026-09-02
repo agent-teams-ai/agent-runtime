@@ -1,5 +1,3 @@
-import { types as utilTypes } from "node:util";
-
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
 import type { ContainedTurnKernelProviderPort } from "../application/ports/outbound/contained-turn-ports.js";
 import { createCodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
@@ -25,6 +23,7 @@ import {
   type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner,
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+import { snapshotCodexCredentialOutputTokens } from "./codex-credential-output-inventory.js";
 
 type KernelOpen = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["kernel"];
 type AttemptInput = Parameters<CodexAppServerKernelAttemptFactory["prepare"]>[0];
@@ -86,42 +85,6 @@ interface PreparedRecord {
   readonly workspaceRef: string;
   custodyRef?: string;
 }
-const snapshotCredentialOutputInventory = (
-  launch: CodexCurrentKernelLaunchRecord,
-  expected: OwnerPrepareInput["kernel"]["providerAccessSnapshot"],
-): readonly string[] => {
-  const descriptor = Object.getOwnPropertyDescriptor(launch, "credentialOutputInventory");
-  if (descriptor === undefined || !("value" in descriptor) || descriptor.value === null
-    || typeof descriptor.value !== "object" || Array.isArray(descriptor.value) || utilTypes.isProxy(descriptor.value)) {
-    throw new TypeError("Codex credential output inventory is required");
-  }
-  const inventory = descriptor.value as Record<string, unknown>;
-  const inventoryKeys = Reflect.ownKeys(inventory);
-  if (inventoryKeys.length !== 3 || !["credentialBindingDigest", "credentialGeneration", "sensitiveOutputTokens"]
-    .every(key => Object.hasOwn(inventory, key))) {
-    throw new TypeError("Codex credential output inventory must have an exact bounded shape");
-  }
-  const digest = Object.getOwnPropertyDescriptor(inventory, "credentialBindingDigest");
-  const generation = Object.getOwnPropertyDescriptor(inventory, "credentialGeneration");
-  const tokens = Object.getOwnPropertyDescriptor(inventory, "sensitiveOutputTokens");
-  if (digest === undefined || !("value" in digest) || generation === undefined || !("value" in generation)
-    || tokens === undefined || !("value" in tokens) || !Array.isArray(tokens.value) || utilTypes.isProxy(tokens.value)
-    || digest.value !== expected.credentialBindingDigest || generation.value !== expected.credentialGeneration) {
-    throw new TypeError("Codex credential output inventory drifted from accepted credential authority");
-  }
-  const tokenKeys = Reflect.ownKeys(tokens.value);
-  if (tokenKeys.length !== tokens.value.length + 1 || tokenKeys.at(-1) !== "length") {
-    throw new TypeError("Codex credential output inventory must be a dense plain array");
-  }
-  const snapshot = tokens.value.map((token, index) => {
-    const tokenDescriptor = Object.getOwnPropertyDescriptor(tokens.value, String(index));
-    if (tokenDescriptor === undefined || !("value" in tokenDescriptor) || typeof tokenDescriptor.value !== "string") {
-      throw new TypeError("Codex credential output inventory must contain own data strings");
-    }
-    return tokenDescriptor.value;
-  });
-  return Object.freeze(snapshot);
-};
 const sameAttempt = (record: PreparedRecord, input: AttemptInput): boolean =>
   record.kernel.operationId === input.operationId && record.kernel.attemptId === input.attemptId &&
   record.kernel.custodyId === input.custodyId && record.kernel.effectId === input.effectId &&
@@ -219,7 +182,7 @@ export const createCodexCurrentKernelOwner = (
       if (launch === undefined || launch.boundary.workspaceRef !== input.workspaceAuthority.canonicalPath) {
         throw new TypeError("Codex launch record is unavailable or workspace-bound incorrectly");
       }
-      const sensitiveOutputTokens = snapshotCredentialOutputInventory(launch, input.kernel.providerAccessSnapshot);
+      const sensitiveOutputTokens = snapshotCodexCredentialOutputTokens(launch, input.kernel.providerAccessSnapshot);
       const plan = createCodexAppServerLaunchPlan({
         boundary: launch.boundary, executablePath: launch.executablePath,
         intentMode: input.kernel.intentMode, platformTarget,
