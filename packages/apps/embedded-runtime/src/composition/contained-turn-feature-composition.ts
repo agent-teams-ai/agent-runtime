@@ -13,6 +13,11 @@ import {
   type OuterContainedTurnRuntimeSecurityAuthority,
 } from "@agent-teams/agent-execution/composition";
 import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
+import { disposeAfterContainedTurnConstructionFailure } from "./contained-turn-construction-failure.js";
+import {
+  snapshotContainedTurnProviderSelection,
+  type ContainedTurnProviderSelectionSnapshot,
+} from "./contained-turn-provider-selection.js";
 
 export interface ContainedTurnOuterCompositionDependencies
   extends Omit<ContainedTurnFeatureDependencies, "providerAccess" | "security"> {
@@ -47,6 +52,38 @@ export interface HostCustodiedContainedTurnComposition {
   readonly feature: ContainedTurnCapabilityBundle;
   dispose(): void;
 }
+
+export interface ContainedTurnProviderOwnerFactories {
+  readonly claude: typeof createClaudeCurrentKernelOwner;
+  readonly codex: typeof createCodexCurrentKernelOwner;
+}
+
+const currentProviderOwnerFactories = Object.freeze({
+  claude: createClaudeCurrentKernelOwner,
+  codex: createCodexCurrentKernelOwner,
+});
+
+const createSelectedProviderOwner = (
+  snapshot: ContainedTurnProviderSelectionSnapshot,
+  hostCustody: HostCustodyAuthority,
+  factories: ContainedTurnProviderOwnerFactories,
+): ClaudeCurrentKernelOwner | CodexCurrentKernelOwner => {
+  const selection = snapshot.selection;
+  switch (selection.kind) {
+    case "claude": {
+      const options = {...selection.owner, hostCustody};
+      snapshot.assertStable();
+      return factories.claude(options);
+    }
+    case "codex": {
+      const options = {...selection.owner, hostCustody};
+      snapshot.assertStable();
+      return factories.codex(options);
+    }
+    default: throw new TypeError("Contained turn provider selection is invalid");
+  }
+};
+
 /** The only cross-context binding from Provider Access into Agent Execution. */
 export const createContainedTurnFeatureFromProviderAccess = (
   dependencies: ContainedTurnOuterCompositionDependencies,
@@ -67,28 +104,29 @@ export const createContainedTurnFeatureFromProviderAccess = (
 };
 
 /** Product-owned outer assembly for one explicitly selected provider and one Host Custody authority. */
-export const createHostCustodiedContainedTurn = (
+export const composeHostCustodiedContainedTurn = (
   dependencies: HostCustodiedContainedTurnDependencies,
+  ownerFactories: ContainedTurnProviderOwnerFactories,
+  featureFactory: typeof createContainedTurnFeatureFromProviderAccess,
 ): HostCustodiedContainedTurnComposition => {
-  const owner: ClaudeCurrentKernelOwner | CodexCurrentKernelOwner =
-    dependencies.selectedProvider.kind === "claude"
-      ? createClaudeCurrentKernelOwner({
-        ...dependencies.selectedProvider.owner,
-        hostCustody: dependencies.hostCustody,
-      })
-      : createCodexCurrentKernelOwner({
-        ...dependencies.selectedProvider.owner,
-        hostCustody: dependencies.hostCustody,
-      });
-  const feature = createContainedTurnFeatureFromProviderAccess(Object.freeze({
-    operationStore: dependencies.operationStore,
-    security: dependencies.security,
-    providerAccess: dependencies.providerAccess,
-    workspace: dependencies.workspace,
-    artifacts: dependencies.artifacts,
-    custody: owner.custody,
-    provider: owner.provider,
-  }));
+  const selectedProvider = snapshotContainedTurnProviderSelection(dependencies);
+  const owner = createSelectedProviderOwner(
+    selectedProvider, dependencies.hostCustody, ownerFactories,
+  );
+  let feature: ContainedTurnCapabilityBundle;
+  try {
+    feature = featureFactory(Object.freeze({
+      operationStore: dependencies.operationStore,
+      security: dependencies.security,
+      providerAccess: dependencies.providerAccess,
+      workspace: dependencies.workspace,
+      artifacts: dependencies.artifacts,
+      custody: owner.custody,
+      provider: owner.provider,
+    }));
+  } catch (error) {
+    disposeAfterContainedTurnConstructionFailure(error, () => owner.dispose());
+  }
   let disposed = false;
   return Object.freeze({
     feature,
@@ -99,3 +137,12 @@ export const createHostCustodiedContainedTurn = (
     },
   });
 };
+
+/** Product-owned outer assembly with the only two qualified provider factories. */
+export const createHostCustodiedContainedTurn = (
+  dependencies: HostCustodiedContainedTurnDependencies,
+): HostCustodiedContainedTurnComposition => composeHostCustodiedContainedTurn(
+  dependencies,
+  currentProviderOwnerFactories,
+  createContainedTurnFeatureFromProviderAccess,
+);

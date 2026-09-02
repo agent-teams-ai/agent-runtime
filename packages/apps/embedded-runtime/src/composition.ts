@@ -23,6 +23,8 @@ export {
   type HostCustodiedContainedTurnComposition,
   type HostCustodiedContainedTurnDependencies,
 } from "./composition/contained-turn-feature-composition.js";
+export { ContainedTurnConstructionCleanupError } from
+  "./composition/contained-turn-construction-failure.js";
 export {
   createHostCustodiedAgentRuntimeHost,
   type HostCustodiedAgentRuntimeHostDependencies,
