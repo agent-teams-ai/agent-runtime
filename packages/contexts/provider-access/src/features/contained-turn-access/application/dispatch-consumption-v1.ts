@@ -42,12 +42,6 @@ const driftReason = (command: DispatchConsumeCommand, head: DispatchBindingHead)
   if (head.authorityHeadDigest !== command.binding.authorityHeadDigest) {return "authority_head_changed";}
   return undefined;
 };
-const headMatches = (head: DispatchBindingHead, expected: DispatchExpectationValue): boolean =>
-  head.acceptedAuthorityDigest === expected.acceptedAuthorityDigest && head.accessRef === expected.accessRef &&
-  head.authorityHeadDigest === expected.authorityHeadDigest && head.bindingDigest === expected.bindingDigest &&
-  head.bindingRevision === expected.bindingRevision && head.credentialBindingDigest === expected.credentialBindingDigest &&
-  head.credentialBindingRef === expected.credentialBindingRef && head.credentialGeneration === expected.credentialGeneration &&
-  head.providerAccountRef === expected.providerAccountRef && head.providerRouteRef === expected.providerRouteRef;
 const receiptMatches = (receipt: DispatchConsumedReceipt, expected: DispatchExpectationValue): boolean =>
   receipt.acceptedAuthorityDigest === expected.acceptedAuthorityDigest && receipt.accessRef === expected.accessRef &&
   receipt.authorityHeadDigestAtConsumption === expected.authorityHeadDigest && receipt.bindingDigest === expected.bindingDigest &&
@@ -134,10 +128,7 @@ const settleInTransaction = async (
   const rawConsumption = await transaction.findConsumption();
   if (rawConsumption === undefined) {return Object.freeze({ kind: "not_found" });}
   const consumption = await verifiedConsumption(rawConsumption, selector, dependencies.digest);
-  const rawHead = await transaction.findBindingHead();
-  if (rawHead === undefined) {return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });}
-  const head = verifiedBindingHead(rawHead, selector);
-  if (!headMatches(head, input.expectedBinding) || consumption.operationId !== input.operationId ||
+  if (consumption.operationId !== input.operationId ||
     consumption.provider !== input.provider || consumption.scope.tenantId !== input.scope.tenantId ||
     consumption.scope.projectId !== input.scope.projectId || consumption.scope.scopeDigest !== input.scope.scopeDigest ||
     !receiptMatches(consumption, input.expectedBinding)) {

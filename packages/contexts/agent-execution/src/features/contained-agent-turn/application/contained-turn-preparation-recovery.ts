@@ -4,6 +4,7 @@ import type {
   ContainedTurnDispatchPreparation,
 } from "../domain/contained-turn-dispatch-preparation.js";
 import type { ContainedTurnEvidenceId } from "../domain/contained-turn-identities.js";
+import { recordContainedTurnRejectedDebt } from "./contained-turn-closure.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import type { ContainedTurnKernelDependencies } from "./ports/outbound/contained-turn-ports.js";
 import { containedTurnOwnerStoreAuthority } from "./contained-turn-store-authority.js";
@@ -97,7 +98,7 @@ export const recoverContainedTurnCommittedGrantSettlements = async (
 ): Promise<Readonly<{ attempted: 0 | 2 }>> => {
   if (operation.dispatch.kind !== "claimed") {return Object.freeze({ attempted: 0 });}
   const [providerAccessReceipt, runtimeSecurityReceipt] = operation.dispatch.grantReceipts;
-  await Promise.allSettled([
+  const results = await Promise.allSettled([
     dependencies.providerAccess.settleConsumedGrant({
       disposition: "claim_committed",
       receipt: providerAccessReceipt,
@@ -113,5 +114,8 @@ export const recoverContainedTurnCommittedGrantSettlements = async (
       ),
     }),
   ]);
+  if (results.some(result => result.status === "rejected" || (result.status === "fulfilled" && (result.value as { readonly kind?: string }).kind !== "settled" && (result.value as { readonly kind?: string }).kind !== "already_settled"))) {
+    await recordContainedTurnRejectedDebt(dependencies, operation, operation.scope, "grant_settlement_rejected", "dispatch_authority");
+  }
   return Object.freeze({ attempted: 2 });
 };

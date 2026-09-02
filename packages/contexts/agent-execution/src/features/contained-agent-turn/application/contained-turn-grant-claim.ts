@@ -61,7 +61,7 @@ const settleConsumedGrantReceipts = async (
   dependencies: ContainedTurnKernelDependencies,
   receipts: UnclaimedGrantOutcomeEvidence["consumedGrantReceipts"],
   disposition: "abandoned_without_claim" | "claim_committed",
-): Promise<void> => {
+): Promise<boolean> => {
   const effects: Promise<unknown>[] = [];
   if (receipts.providerAccess !== undefined) {effects.push(dependencies.providerAccess.settleConsumedGrant({
     disposition, receipt: receipts.providerAccess,
@@ -71,7 +71,8 @@ const settleConsumedGrantReceipts = async (
     disposition, receipt: receipts.runtimeSecurity,
     settlementRequestId: containedTurnGrantSettlementRequestId(receipts.runtimeSecurity, disposition),
   }));}
-  await Promise.allSettled(effects);
+  const results = await Promise.allSettled(effects);
+  return results.some(result => { if (result.status === "rejected") return true; const kind = (result.value as { readonly kind?: string }).kind; return kind !== "settled" && kind !== "already_settled"; });
 };
 
 /**
@@ -160,21 +161,21 @@ export const claimContainedTurnWithConsumedGrants = async (
         return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
       }
       if (outcome.kind === "claimed") {
-        await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed");
+        if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
         return Object.freeze({
           kind: "claimed",
           operation: outcome.operation,
           startAuthority: outcome.startAuthority,
         });
       }
-      await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed");
+      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.operation });
     }
     if (outcome.kind === "stale") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
         return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
-      }
-      await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed");
+      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.current, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
+      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.current });
     }
     if (outcome.kind === "indeterminate") {
@@ -255,7 +256,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     claim.consumptionEvidenceIds,
   );
   if (cleanup.kind === "claimed") {
-    await settleConsumedGrantReceipts(dependencies, claim.consumedGrantReceipts, "claim_committed");
+    if (await settleConsumedGrantReceipts(dependencies, claim.consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, cleanup.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
     return { kind: "observed", operation: cleanup.operation };
   }
   if (claim.kind === "prevented") {

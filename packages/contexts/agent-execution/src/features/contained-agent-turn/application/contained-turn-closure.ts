@@ -48,7 +48,8 @@ export type RedactedIndeterminateSource =
   | "workspace_bind_lost"
   | "workspace_bind_rejected"
   | "workspace_cleanup_rejected"
-  | "workspace_create_rejected";
+  | "workspace_create_rejected"
+  | "grant_settlement_rejected";
 
 export const redactedContainedTurnEvidenceId = (
   operation: ContainedTurnKernelOperation,

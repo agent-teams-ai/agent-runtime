@@ -12,6 +12,7 @@ type OwnerState = "absent" | "consumed_pending" | "claim_committed" | "abandoned
 interface BindingSlot { head: DispatchBindingHead; consumption?: DispatchConsumedReceipt; state: OwnerState }
 interface State {
   readonly consumptions: Map<string, { receipt: DispatchConsumedReceipt; slot: BindingSlot }>;
+  readonly historicalOwnerState: Map<string, OwnerState>;
   readonly grants: Map<string, DispatchConsumptionJournalEntry>;
   readonly settlements: Map<string, DispatchSettlementOutcome>;
   readonly settlementsByConsumption: Map<string, DispatchSettlementOutcome>;
@@ -29,6 +30,7 @@ export interface InMemoryDispatchConsumptionControl {
   advanceControlTime(value: number): Promise<void>;
   replaceBindingHead(head: DispatchBindingHead): Promise<void>;
   observeOwnerState(input: { readonly provider: "claude" | "codex"; readonly scopeDigest: string }): OwnerState | undefined;
+  observeHistoricalOwnerState(input: { readonly consumptionDigest: string }): OwnerState | undefined;
 }
 
 const putCanonicalHead = (state: State, head: DispatchBindingHead): void => {
@@ -95,7 +97,7 @@ const commit = (state: State, selector: DispatchConsumptionTransactionSelector, 
   const { pendingConsumption, pendingGrant, pendingSettlement, slot } = pending;
   if (pendingConsumption !== undefined && slot !== undefined) {
     slot.consumption = pendingConsumption; slot.state = "consumed_pending";
-    state.consumptions.set(pendingConsumption.consumptionDigest, { receipt: pendingConsumption, slot });
+    state.consumptions.set(pendingConsumption.consumptionDigest, { receipt: pendingConsumption, slot }); state.historicalOwnerState.set(pendingConsumption.consumptionDigest, "consumed_pending");
   }
   if (pendingGrant !== undefined && selector.kind === "consume") {state.grants.set(grantKey(selector), pendingGrant);}
   if (pendingSettlement !== undefined && selector.kind === "settle") {
@@ -103,7 +105,7 @@ const commit = (state: State, selector: DispatchConsumptionTransactionSelector, 
     if (pendingSettlement.kind === "settled") {
       state.settlementsByConsumption.set(selector.consumptionDigest, pendingSettlement);
       const owner = state.consumptions.get(selector.consumptionDigest);
-      if (owner !== undefined) {owner.slot.state = pendingSettlement.receipt.disposition as DispatchDisposition;}
+      if (owner !== undefined) {owner.slot.state = pendingSettlement.receipt.disposition as DispatchDisposition; state.historicalOwnerState.set(selector.consumptionDigest, owner.slot.state);}
     }
   }
 };
@@ -111,7 +113,7 @@ const commit = (state: State, selector: DispatchConsumptionTransactionSelector, 
 export const createInMemoryDispatchConsumptionRepository = (
   initialHeads: readonly DispatchBindingHead[], initialControlTime: number,
 ): { readonly control: InMemoryDispatchConsumptionControl; readonly repository: DispatchConsumptionRepository } => {
-  const state: State = { consumptions: new Map(), grants: new Map(), settlements: new Map(), settlementsByConsumption: new Map(), slots: new Map() };
+  const state: State = { consumptions: new Map(), historicalOwnerState: new Map(), grants: new Map(), settlements: new Map(), settlementsByConsumption: new Map(), slots: new Map() };
   let controlTime = initialControlTime;
   const detachedHeads = detachedDispatchData("initial binding heads", initialHeads);
   if (!Array.isArray(detachedHeads)) {throw new TypeError("initial binding heads must be an array");}
@@ -146,6 +148,7 @@ export const createInMemoryDispatchConsumptionRepository = (
         if (!Number.isSafeInteger(value) || value < controlTime) {throw new TypeError("control time must advance monotonically");}
         controlTime = value;
       }),
+      observeHistoricalOwnerState: (input: { readonly consumptionDigest: string }) => state.historicalOwnerState.get(input.consumptionDigest),
       observeOwnerState: (input: { readonly provider: "claude" | "codex"; readonly scopeDigest: string }) => {
         const matches = [...state.slots.values()].map(scoped => scoped.get(input.provider))
           .filter((slot): slot is BindingSlot => slot?.head.scopeDigest === input.scopeDigest);
