@@ -1,105 +1,80 @@
 import { CodexAppServerProtocolError } from "./codex-app-server-jsonl.js";
 
-const CREDENTIAL_MARKERS = Object.freeze([
-  "CREDENTIAL_MARKER<",
-  "API_KEY_MARKER<",
-  "ACCESS_TOKEN_MARKER<",
-  "REFRESH_TOKEN_MARKER<",
-  "-----BEGIN PRIVATE KEY-----",
-  "-----BEGIN RSA PRIVATE KEY-----",
-  "-----BEGIN EC PRIVATE KEY-----",
-  "-----BEGIN OPENSSH PRIVATE KEY-----",
-]);
+export type CodexPrivatePathPlatform = "darwin" | "linux" | "win32";
 
-const CREDENTIAL_SHAPES = Object.freeze([
-  Object.freeze({ leader: "sk-", minimumBodyLength: 20, requiresBoundary: true }),
-  Object.freeze({ leader: "OPENAI_API_KEY=", minimumBodyLength: 16, requiresBoundary: false }),
-  Object.freeze({ leader: "CODEX_API_KEY=", minimumBodyLength: 16, requiresBoundary: false }),
-  Object.freeze({ leader: "Authorization: Bearer ", minimumBodyLength: 16, requiresBoundary: false }),
-  Object.freeze({ leader: "\"access_token\":\"", minimumBodyLength: 16, requiresBoundary: false }),
-  Object.freeze({ leader: "\"access_token\": \"", minimumBodyLength: 16, requiresBoundary: false }),
-  Object.freeze({ leader: "\"refresh_token\":\"", minimumBodyLength: 16, requiresBoundary: false }),
-  Object.freeze({ leader: "\"refresh_token\": \"", minimumBodyLength: 16, requiresBoundary: false }),
-  Object.freeze({ leader: "\"id_token\":\"", minimumBodyLength: 16, requiresBoundary: false }),
-  Object.freeze({ leader: "\"id_token\": \"", minimumBodyLength: 16, requiresBoundary: false }),
-]);
+export interface CodexCanonicalOutputPolicy {
+  readonly exactSensitiveTokens: readonly string[];
+  readonly privatePaths: readonly string[];
+  readonly privatePathPlatform: CodexPrivatePathPlatform;
+}
 
-const credentialBodyCharacter = (value: string): boolean =>
-  /^[A-Za-z0-9._~+/=-]$/u.test(value);
+const CREDENTIAL_BODY = String.raw`[A-Za-z0-9._~+/=-]`;
 
-const hasShapeBoundary = (text: string, index: number, required: boolean): boolean => {
-  if (!required || index === 0) {return true;}
-  return !/[A-Za-z0-9_]/u.test(text[index - 1] ?? "");
+/** Names are test-visible so the matrix must cover every independently declared policy family. */
+export const CODEX_CREDENTIAL_POLICY_FAMILIES = Object.freeze([
+  "synthetic-marker",
+  "private-key-marker",
+  "openai-sk-credential",
+  "api-key-assignment",
+  "authorization-bearer",
+  "token-field",
+] as const);
+
+const CREDENTIAL_PATTERNS: Readonly<Record<(typeof CODEX_CREDENTIAL_POLICY_FAMILIES)[number], RegExp>> = Object.freeze({
+  "synthetic-marker": /(?:credential|api[\s_-]*key|access[\s_-]*token|refresh[\s_-]*token)[\s_-]*marker\s*</iu,
+  "private-key-marker": /-----\s*begin\s+(?:(?:rsa|ec|openssh)\s+)?private\s+key\s*-----/iu,
+  "openai-sk-credential": new RegExp(String.raw`sk-${CREDENTIAL_BODY}{20}`, "iu"),
+  "api-key-assignment": new RegExp(
+    String.raw`(?:openai|codex)[\s_-]*api[\s_-]*key\s*(?:=|:)\s*["']?${CREDENTIAL_BODY}{16}`,
+    "iu",
+  ),
+  "authorization-bearer": new RegExp(
+    String.raw`authorization\s*:\s*bearer\s+${CREDENTIAL_BODY}{16}`,
+    "iu",
+  ),
+  "token-field": new RegExp(
+    String.raw`["']?(?:access|refresh|id)[\s_-]*token["']?\s*(?:=|:)\s*["']?${CREDENTIAL_BODY}{16}`,
+    "iu",
+  ),
+});
+
+const canonicalCaseFold = (value: string): string =>
+  value.normalize("NFC").toUpperCase().toLowerCase().normalize("NFC");
+
+const pathComparable = (value: string, platform: CodexPrivatePathPlatform): string =>
+  platform === "linux" ? value : canonicalCaseFold(value);
+
+export const codexTextContainsPrivatePath = (
+  text: string,
+  privatePaths: readonly string[],
+  platform: CodexPrivatePathPlatform,
+): boolean => {
+  const comparableText = pathComparable(text, platform);
+  return privatePaths.some(path => comparableText.includes(pathComparable(path, platform)));
 };
 
-const containsCredentialShape = (text: string): boolean => {
-  for (const shape of CREDENTIAL_SHAPES) {
-    let offset = 0;
-    while (offset < text.length) {
-      const index = text.indexOf(shape.leader, offset);
-      if (index < 0) {break;}
-      offset = index + 1;
-      if (!hasShapeBoundary(text, index, shape.requiresBoundary)) {continue;}
-      const bodyStart = index + shape.leader.length;
-      let bodyLength = 0;
-      while (bodyLength < shape.minimumBodyLength
-        && credentialBodyCharacter(text[bodyStart + bodyLength] ?? "")) {
-        bodyLength += 1;
-      }
-      if (bodyLength === shape.minimumBodyLength) {return true;}
+export const codexTerminalOutputText = (
+  text: string,
+  exactSensitiveTokens: readonly string[],
+): string => {
+  let retainedLength = 0;
+  for (const token of exactSensitiveTokens) {
+    const maximum = Math.min(text.length, token.length - 1);
+    for (let length = maximum; length > retainedLength; length -= 1) {
+      if (text.endsWith(token.slice(0, length))) {retainedLength = length; break;}
     }
   }
-  return false;
+  return retainedLength === 0 ? text : text.slice(0, -retainedLength);
 };
 
-/** Enumerated marker/shape detection only; unknown secrets still require an exact owner-supplied token. */
+/** Bounded declared shapes plus exact owner-authorized tokens; this is not arbitrary secret discovery. */
 export const assertCodexCanonicalOutputAllowed = (
   text: string,
-  sensitiveOutputTokens: readonly string[],
+  policy: CodexCanonicalOutputPolicy,
 ): void => {
-  if (sensitiveOutputTokens.some(token => text.includes(token))
-    || CREDENTIAL_MARKERS.some(marker => text.includes(marker))
-    || containsCredentialShape(text)) {
+  if (policy.exactSensitiveTokens.some(token => text.includes(token))
+    || codexTextContainsPrivatePath(text, policy.privatePaths, policy.privatePathPlatform)
+    || CODEX_CREDENTIAL_POLICY_FAMILIES.some(family => CREDENTIAL_PATTERNS[family].test(text))) {
     throw new CodexAppServerProtocolError("Codex output matched the bounded private-output policy", true);
   }
 };
-
-const longestLiteralPrefixSuffix = (text: string, literals: readonly string[]): number => {
-  let retainedLength = 0;
-  for (const literal of literals) {
-    const maximum = Math.min(text.length, literal.length - 1);
-    for (let length = maximum; length > retainedLength; length -= 1) {
-      if (text.endsWith(literal.slice(0, length))) {retainedLength = length; break;}
-    }
-  }
-  return retainedLength;
-};
-
-const credentialShapePrefixSuffixLength = (text: string): number => {
-  let retainedLength = longestLiteralPrefixSuffix(text, CREDENTIAL_SHAPES.map(shape => shape.leader));
-  for (const shape of CREDENTIAL_SHAPES) {
-    const index = text.lastIndexOf(shape.leader);
-    if (index < 0 || !hasShapeBoundary(text, index, shape.requiresBoundary)) {continue;}
-    const body = text.slice(index + shape.leader.length);
-    if (body.length < shape.minimumBodyLength && [...body].every(credentialBodyCharacter)) {
-      retainedLength = Math.max(retainedLength, text.length - index);
-    }
-  }
-  return retainedLength;
-};
-
-export interface CodexCanonicalOutputRetention {
-  readonly builtInPolicyLength: number;
-  readonly exactTokenLength: number;
-}
-
-export const codexCanonicalOutputRetention = (
-  text: string,
-  sensitiveOutputTokens: readonly string[],
-): CodexCanonicalOutputRetention => Object.freeze({
-  builtInPolicyLength: Math.max(
-    longestLiteralPrefixSuffix(text, CREDENTIAL_MARKERS),
-    credentialShapePrefixSuffixLength(text),
-  ),
-  exactTokenLength: longestLiteralPrefixSuffix(text, sensitiveOutputTokens),
-});

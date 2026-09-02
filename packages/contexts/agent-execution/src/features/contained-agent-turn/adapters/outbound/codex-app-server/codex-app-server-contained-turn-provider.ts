@@ -62,6 +62,10 @@ import {
   type CodexAppServerExecutionOutcome,
   type CodexPublicEvidenceCode,
 } from "./codex-app-server-containment-outcome.js";
+import {
+  codexTextContainsPrivatePath,
+  type CodexCanonicalOutputPolicy,
+} from "./codex-app-server-output-policy.js";
 
 export type {
   CodexAppServerExecutionOutcome,
@@ -265,7 +269,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     active: {
       readonly effectCustody?: CodexEffectCustodyBinding;
       readonly observeProtocolTerminal: () => void;
-      readonly sensitiveOutputTokens: readonly string[];
+      readonly outputPolicy: CodexCanonicalOutputPolicy;
       readonly threadId: string;
       readonly turnId: string;
     },
@@ -273,7 +277,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     const progress = createCodexActiveTurnProgress();
     const deadline = deadlineAfter(this.#turnTimeoutMs);
     let nextCancellationCheck = performance.now();
-    while (true) {
+    try {while (true) {
       if (progress.interruptRequestId === undefined && performance.now() >= nextCancellationCheck) {
         const cancellationDeadline = Math.min(deadline, deadlineAfter(this.#requestTimeoutMs));
         if (await beforeDeadline(input.isCancellationRequested(), cancellationDeadline, "Codex cancellation check timed out")) {
@@ -311,7 +315,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           mode: input.intent.mode,
           observeProtocolTerminal: active.observeProtocolTerminal,
           progress,
-          sensitiveOutputTokens: active.sensitiveOutputTokens,
+          outputPolicy: active.outputPolicy,
           threadId: active.threadId,
           turnId: active.turnId,
         }),
@@ -319,6 +323,9 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         "Codex active message handling timed out",
       );
       if (completed !== undefined) {return completed.status;}
+    }} finally {
+      progress.pendingAssistantText = "";
+      progress.pendingCanonicalAssistantText = "";
     }
   }
 
@@ -383,19 +390,28 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     let turnRequestWritten = false;
     let protocolTerminalObserved = false;
     let threadId: string | undefined; let turnId: string | undefined;
-    let sensitiveOutputTokens: readonly string[] = this.#additionalSensitiveOutputTokens;
+    let outputPolicy: CodexCanonicalOutputPolicy = Object.freeze({
+      exactSensitiveTokens: this.#additionalSensitiveOutputTokens,
+      privatePaths: Object.freeze([]),
+      privatePathPlatform: this.#platformTuple.platform,
+    });
     try {
-      sensitiveOutputTokens = Object.freeze([...new Set([
+      const privatePaths = Object.freeze([...new Set([
         this.#boundary.codexHome,
         this.#privateRootPath,
         this.#tmpDir,
         this.#boundary.workspaceRef,
-        ...this.#additionalSensitiveOutputTokens,
-      ].filter((token): token is string => typeof token === "string" && token.length > 0))]);
+      ].filter((path): path is string => typeof path === "string" && path.length > 0))]);
+      outputPolicy = Object.freeze({
+        exactSensitiveTokens: this.#additionalSensitiveOutputTokens,
+        privatePaths,
+        privatePathPlatform: this.#platformTuple.platform,
+      });
       if (input.workspaceRef !== this.#boundary.workspaceRef) {
         throw new CodexAppServerProtocolError("Codex workspace does not match the immutable permission boundary", false);
       }
-      if (sensitiveOutputTokens.some(token => input.intent.prompt.includes(token))) {
+      if (codexTextContainsPrivatePath(input.intent.prompt, privatePaths, this.#platformTuple.platform)
+        || this.#additionalSensitiveOutputTokens.some(token => input.intent.prompt.includes(token))) {
         throw new CodexAppServerProtocolError("Codex prompt contains a private path or marker", false);
       }
       const initializeResult = await this.#request(process, reader, {
@@ -469,7 +485,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         reader,
         input,
         { ...(effectCustody === undefined ? {} : { effectCustody }), observeProtocolTerminal: () => {protocolTerminalObserved = true;},
-          sensitiveOutputTokens, threadId, turnId },
+          outputPolicy, threadId, turnId },
       );
       await proveCodexOutputDrain({ process, reader, stderrDrain, timeoutMs: this.#requestTimeoutMs });
       return completedCodexOutcome({ identity, status: completionStatus });

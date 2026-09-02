@@ -11,7 +11,8 @@ import { canonicalCodexJson, type CodexAppServerPermissionBoundary } from "./cod
 import type { CodexEffectCustodyBinding } from "./codex-app-server-effect-custody.js";
 import {
   assertCodexCanonicalOutputAllowed,
-  codexCanonicalOutputRetention,
+  codexTerminalOutputText,
+  type CodexCanonicalOutputPolicy,
 } from "./codex-app-server-output-policy.js";
 import {
   admitCodexActiveNotification,
@@ -234,8 +235,8 @@ const emitCodexError = async (
 const emitCodexAssistantDelta = (
   params: JsonRecord,
   admission: {
+    readonly outputPolicy: CodexCanonicalOutputPolicy;
     readonly progress: CodexActiveTurnProgress;
-    readonly sensitiveOutputTokens: readonly string[];
     readonly threadId: string;
     readonly turnId: string;
   },
@@ -247,7 +248,7 @@ const emitCodexAssistantDelta = (
   }
   const combined = admission.progress.pendingAssistantText + params.delta;
   const canonical = admission.progress.pendingCanonicalAssistantText + combined;
-  assertCodexCanonicalOutputAllowed(canonical, admission.sensitiveOutputTokens);
+  assertCodexCanonicalOutputAllowed(canonical, admission.outputPolicy);
   admission.progress.pendingAssistantText = combined;
   const active = admission.progress.activeItems.get(String(params.itemId));
   if (active === undefined || active.type !== "agentMessage") {
@@ -259,19 +260,14 @@ const emitCodexAssistantDelta = (
 const flushCodexAssistantText = async (
   input: Parameters<ContainedTurnProviderPort["execute"]>[0],
   progress: CodexActiveTurnProgress,
-  sensitiveOutputTokens: readonly string[],
-  terminal = false,
+  outputPolicy: CodexCanonicalOutputPolicy,
 ): Promise<void> => {
   const pending = progress.pendingCanonicalAssistantText;
   if (pending.length === 0) {return;}
-  const retention = codexCanonicalOutputRetention(pending, sensitiveOutputTokens);
-  const retainedLength = terminal
-    ? retention.exactTokenLength
-    : Math.max(retention.exactTokenLength, retention.builtInPolicyLength);
-  const text = pending.slice(0, pending.length - retainedLength);
-  progress.pendingCanonicalAssistantText = pending.slice(text.length);
-  if (text.length === 0) {return;}
-  await input.emit({ cursor: progress.cursor, kind: "assistant", text });
+  progress.pendingCanonicalAssistantText = "";
+  const admitted = codexTerminalOutputText(pending, outputPolicy.exactSensitiveTokens);
+  if (admitted.length === 0) {return;}
+  await input.emit({ cursor: progress.cursor, kind: "assistant", text: admitted });
   progress.cursor += 1;
 };
 
@@ -321,7 +317,7 @@ const observeItemCompleted = async (
   params: JsonRecord,
   input: Parameters<ContainedTurnProviderPort["execute"]>[0],
   identity: { readonly boundary: CodexAppServerPermissionBoundary; readonly mode: "analysis" | "workspace-write";
-    readonly effectCustody?: CodexEffectCustodyBinding; readonly sensitiveOutputTokens: readonly string[];
+    readonly effectCustody?: CodexEffectCustodyBinding; readonly outputPolicy: CodexCanonicalOutputPolicy;
     readonly threadId: string; readonly turnId: string },
   progress: CodexActiveTurnProgress,
 ): Promise<void> => {
@@ -357,7 +353,6 @@ const observeItemCompleted = async (
     }
     progress.pendingCanonicalAssistantText += progress.pendingAssistantText;
     progress.pendingAssistantText = "";
-    await flushCodexAssistantText(input, progress, identity.sensitiveOutputTokens);
     delete progress.activeAgentItemId;
   }
   progress.completedItems.push(admitted);
@@ -376,7 +371,7 @@ const completeCodexTurn = async (
   lifecycle: {
     readonly boundary: CodexAppServerPermissionBoundary; readonly observeProtocolTerminal: () => void;
     readonly effectCustody?: CodexEffectCustodyBinding; readonly progress: CodexActiveTurnProgress;
-    readonly sensitiveOutputTokens: readonly string[];
+    readonly outputPolicy: CodexCanonicalOutputPolicy;
   },
 ): Promise<CodexActiveTurnCompletion> => {
   if (!exactKeys(params, ["threadId", "turn"]) || params.threadId !== threadId) {
@@ -406,7 +401,8 @@ const completeCodexTurn = async (
   }
   lifecycle.observeProtocolTerminal();
   try {
-    await flushCodexAssistantText(input, lifecycle.progress, lifecycle.sensitiveOutputTokens, true);
+    assertCodexCanonicalOutputAllowed(lifecycle.progress.pendingCanonicalAssistantText, lifecycle.outputPolicy);
+    await flushCodexAssistantText(input, lifecycle.progress, lifecycle.outputPolicy);
   } finally {
     lifecycle.progress.pendingCanonicalAssistantText = "";
   }
@@ -431,7 +427,7 @@ export const handleCodexActiveMessage = async (input: {
   readonly mode: "analysis" | "workspace-write";
   readonly observeProtocolTerminal: () => void;
   readonly progress: CodexActiveTurnProgress;
-  readonly sensitiveOutputTokens: readonly string[];
+  readonly outputPolicy: CodexCanonicalOutputPolicy;
   readonly threadId: string;
   readonly turnId: string;
 }): Promise<CodexActiveTurnCompletion | undefined> => {
@@ -475,8 +471,8 @@ export const handleCodexActiveMessage = async (input: {
   }
   if (method === "item/agentMessage/delta") {
     emitCodexAssistantDelta(params, {
+      outputPolicy: input.outputPolicy,
       progress: input.progress,
-      sensitiveOutputTokens: input.sensitiveOutputTokens,
       threadId: input.threadId,
       turnId: input.turnId,
     });
@@ -490,7 +486,7 @@ export const handleCodexActiveMessage = async (input: {
       input.turnId,
       { boundary: input.boundary, ...(input.effectCustody === undefined ? {} : { effectCustody: input.effectCustody }),
         observeProtocolTerminal: input.observeProtocolTerminal, progress: input.progress,
-        sensitiveOutputTokens: input.sensitiveOutputTokens },
+        outputPolicy: input.outputPolicy },
     );
   }
   if (!Object.hasOwn(PASSIVE_SHAPES, method)) {
