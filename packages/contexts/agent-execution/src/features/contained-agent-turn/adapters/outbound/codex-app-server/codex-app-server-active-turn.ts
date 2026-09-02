@@ -10,6 +10,10 @@ import {
 import { canonicalCodexJson, type CodexAppServerPermissionBoundary } from "./codex-app-server-permission-boundary.js";
 import type { CodexEffectCustodyBinding } from "./codex-app-server-effect-custody.js";
 import {
+  assertCodexCanonicalOutputAllowed,
+  codexCanonicalOutputRetention,
+} from "./codex-app-server-output-policy.js";
+import {
   admitCodexActiveNotification,
   createCodexActiveTurnProgress,
   type CodexActiveTurnCompletion,
@@ -243,9 +247,7 @@ const emitCodexAssistantDelta = (
   }
   const combined = admission.progress.pendingAssistantText + params.delta;
   const canonical = admission.progress.pendingCanonicalAssistantText + combined;
-  if (admission.sensitiveOutputTokens.some(token => canonical.includes(token))) {
-    throw new CodexAppServerProtocolError("Codex output contained a private marker", true);
-  }
+  assertCodexCanonicalOutputAllowed(canonical, admission.sensitiveOutputTokens);
   admission.progress.pendingAssistantText = combined;
   const active = admission.progress.activeItems.get(String(params.itemId));
   if (active === undefined || active.type !== "agentMessage") {
@@ -258,16 +260,14 @@ const flushCodexAssistantText = async (
   input: Parameters<ContainedTurnProviderPort["execute"]>[0],
   progress: CodexActiveTurnProgress,
   sensitiveOutputTokens: readonly string[],
+  terminal = false,
 ): Promise<void> => {
   const pending = progress.pendingCanonicalAssistantText;
   if (pending.length === 0) {return;}
-  let retainedLength = 0;
-  for (const token of sensitiveOutputTokens) {
-    const maximum = Math.min(pending.length, token.length - 1);
-    for (let length = maximum; length > retainedLength; length -= 1) {
-      if (pending.endsWith(token.slice(0, length))) {retainedLength = length; break;}
-    }
-  }
+  const retention = codexCanonicalOutputRetention(pending, sensitiveOutputTokens);
+  const retainedLength = terminal
+    ? retention.exactTokenLength
+    : Math.max(retention.exactTokenLength, retention.builtInPolicyLength);
   const text = pending.slice(0, pending.length - retainedLength);
   progress.pendingCanonicalAssistantText = pending.slice(text.length);
   if (text.length === 0) {return;}
@@ -376,6 +376,7 @@ const completeCodexTurn = async (
   lifecycle: {
     readonly boundary: CodexAppServerPermissionBoundary; readonly observeProtocolTerminal: () => void;
     readonly effectCustody?: CodexEffectCustodyBinding; readonly progress: CodexActiveTurnProgress;
+    readonly sensitiveOutputTokens: readonly string[];
   },
 ): Promise<CodexActiveTurnCompletion> => {
   if (!exactKeys(params, ["threadId", "turn"]) || params.threadId !== threadId) {
@@ -403,8 +404,12 @@ const completeCodexTurn = async (
   if (lifecycle.progress.interruptRequestId !== undefined && !lifecycle.progress.interruptAcknowledged) {
     throw new CodexAppServerProtocolError("Codex turn completed before exact interruption acknowledgement", true);
   }
-  lifecycle.progress.pendingCanonicalAssistantText = "";
   lifecycle.observeProtocolTerminal();
+  try {
+    await flushCodexAssistantText(input, lifecycle.progress, lifecycle.sensitiveOutputTokens, true);
+  } finally {
+    lifecycle.progress.pendingCanonicalAssistantText = "";
+  }
   if (completed.status === "failed") {
     await input.emit({
       cursor: lifecycle.progress.cursor,
@@ -484,7 +489,8 @@ export const handleCodexActiveMessage = async (input: {
       input.threadId,
       input.turnId,
       { boundary: input.boundary, ...(input.effectCustody === undefined ? {} : { effectCustody: input.effectCustody }),
-        observeProtocolTerminal: input.observeProtocolTerminal, progress: input.progress },
+        observeProtocolTerminal: input.observeProtocolTerminal, progress: input.progress,
+        sensitiveOutputTokens: input.sensitiveOutputTokens },
     );
   }
   if (!Object.hasOwn(PASSIVE_SHAPES, method)) {
