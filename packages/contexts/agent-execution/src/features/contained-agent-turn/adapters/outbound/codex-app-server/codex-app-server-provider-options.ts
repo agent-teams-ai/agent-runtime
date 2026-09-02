@@ -20,6 +20,7 @@ interface CodexProviderOptionsInput {
   readonly maxActiveNotifications?: number;
   readonly maxLineBytes?: number;
   readonly processes: CustodiedProviderProcessRegistry;
+  readonly privateRootPath: string;
   readonly requestTimeoutMs?: number;
   readonly sensitiveOutputTokens?: readonly string[];
   readonly tmpDir: string;
@@ -183,7 +184,7 @@ const callableAuthority = <T extends object>(
 };
 
 export const detachCodexProviderOptions = (input: CodexProviderOptionsInput): CodexProviderOptionsInput => {
-  const options = snapshotRecord(input, "Codex provider constructor options", ["boundary", "manifest", "processes", "tmpDir"], [
+  const options = snapshotRecord(input, "Codex provider constructor options", ["boundary", "manifest", "privateRootPath", "processes", "tmpDir"], [
     "cancellationPollMs", "effectCustody", "maxActiveNotificationBytes", "maxActiveNotifications",
     "maxLineBytes", "requestTimeoutMs", "sensitiveOutputTokens", "turnTimeoutMs",
   ]);
@@ -211,6 +212,7 @@ export const detachCodexProviderOptions = (input: CodexProviderOptionsInput): Co
     ...(options.maxActiveNotificationBytes === undefined ? {} : { maxActiveNotificationBytes: options.maxActiveNotificationBytes as number }),
     ...(options.maxActiveNotifications === undefined ? {} : { maxActiveNotifications: options.maxActiveNotifications as number }),
     ...(options.maxLineBytes === undefined ? {} : { maxLineBytes: options.maxLineBytes as number }),
+    privateRootPath: boundedString(options.privateRootPath, "Codex private root"),
     processes,
     ...(options.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: options.requestTimeoutMs as number }),
     sensitiveOutputTokens: Object.freeze(sensitiveOutputTokens),

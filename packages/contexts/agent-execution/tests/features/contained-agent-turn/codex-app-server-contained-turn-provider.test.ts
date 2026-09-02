@@ -17,6 +17,7 @@ import {
   manifest,
   rejectInitialize,
   standardHandshake,
+  syntheticPrivateRoot,
   syntheticTmp,
   syntheticWorkspace,
   type Message,
@@ -25,7 +26,8 @@ import {
 const executeWithRegistryFailure = async (privateText: string) => {
   const process = completedProcess();
   const provider = new CodexAppServerContainedTurnProvider({
-    boundary, manifest, processes: { get() {throw new Error(privateText);} }, tmpDir: syntheticTmp,
+    boundary, manifest, privateRootPath: syntheticPrivateRoot,
+    processes: { get() {throw new Error(privateText);} }, tmpDir: syntheticTmp,
   });
   return provider.execute(executeInput(process));
 };
@@ -112,7 +114,8 @@ test("deep-detaches receipt identity and rejects accessor or Proxy authority", a
   await assert.rejects(createProvider(completedProcess()).execute(accessorInput), /own data property/u); assert.equal(getterReads, 0);
   const proxyProcess = completedProcess(); await assert.rejects(createProvider(proxyProcess)
     .execute(new Proxy(executeInput(proxyProcess), {})), /must not be a Proxy/u);
-  assert.throws(() => new CodexAppServerContainedTurnProvider({ boundary, manifest: new Proxy(manifest, {}), processes: { get() {} }, tmpDir: syntheticTmp }), /must not be a Proxy/u);
+  assert.throws(() => new CodexAppServerContainedTurnProvider({ boundary, manifest: new Proxy(manifest, {}),
+    privateRootPath: syntheticPrivateRoot, processes: { get() {} }, tmpDir: syntheticTmp }), /must not be a Proxy/u);
 });
 test("snapshots exact constructor authority once from plain own data descriptors", async () => {
   const process = completedProcess();
@@ -122,14 +125,16 @@ test("snapshots exact constructor authority once from plain own data descriptors
     if (custodyRef === process.custodyRef) {return process;}
   } };
   originalGet = registry.get;
-  const options = { boundary, manifest, processes: registry, tmpDir: syntheticTmp };
+  const options = { boundary, manifest, privateRootPath: syntheticPrivateRoot, processes: registry, tmpDir: syntheticTmp };
   const provider = new CodexAppServerContainedTurnProvider(options);
   registry.get = () => {throw new Error("caller mutated registry");};
   options.tmpDir = "/caller/mutated/tmp";
   assert.equal((await provider.execute(executeInput(process))).kind, "completed");
 
   let reads = 0;
-  const accessorOptions = { boundary, manifest, processes: registry } as Record<string, unknown>;
+  const accessorOptions = {
+    boundary, manifest, privateRootPath: syntheticPrivateRoot, processes: registry,
+  } as Record<string, unknown>;
   Object.defineProperty(accessorOptions, "tmpDir", { enumerable: true, get() {reads += 1; return syntheticTmp;} });
   assert.throws(() => new CodexAppServerContainedTurnProvider(accessorOptions as never), /own data property/u);
   assert.equal(reads, 0);
@@ -295,7 +300,7 @@ test("fails ambiguous after dispatch for approval requests, malformed output, an
   });
   assert.deepEqual((await createProvider(malformedProcess).execute(executeInput(malformedProcess))).kind, "ambiguous");
   const missing = new CodexAppServerContainedTurnProvider({
-    boundary, manifest, processes: { get() {} }, tmpDir: syntheticTmp,
+    boundary, manifest, privateRootPath: syntheticPrivateRoot, processes: { get() {} }, tmpDir: syntheticTmp,
   });
   assert.deepEqual((await missing.execute(executeInput(malformedProcess))).kind, "ambiguous");
 });
@@ -678,48 +683,125 @@ test("actual diagnostics and outcomes are byte-identical across private notifica
   }
 });
 
-test("rejects a sensitive marker split across assistant deltas before public evidence", async () => {
+test("redacts a sensitive token split across separate completed assistant items at the canonical sink", async () => {
   const privateSecret = "AR_PRIVATE_SPLIT_SENTINEL_1f82";
+  const credential = "CREDENTIAL_MARKER<synthetic-redaction>";
+  const providerOutput = "raw-provider-output-must-not-escape";
   const splitAt = Math.floor(privateSecret.length / 2);
+  const firstText = `valid assistant text\n${privateSecret.slice(0, splitAt)}`;
+  const secondText = `${privateSecret.slice(splitAt)}:${credential}:${providerOutput}`;
+  const output: { readonly cursor: number; readonly kind: string; readonly text: string }[] = [];
   const process = new FakeCodexProcess((message, target) => {
     if (standardHandshake(message, target)) {return;}
     if (message.method === "turn/start") {
       target.emit({ id: message.id, result: { turn: generatedTurn("turn:split", "inProgress") } });
-      emitTurnStarted(target, "turn:split"); emitAgentStarted(target, "turn:split", "item:split");
-      for (const delta of [privateSecret.slice(0, splitAt), privateSecret.slice(splitAt)]) {
-        target.emit({ method: "item/agentMessage/delta", params: {
-          delta, itemId: "item:split", threadId: "thread:test", turnId: "turn:split",
-        } });
-      }
+      emitTurnStarted(target, "turn:split");
+      emitAgentStarted(target, "turn:split", "item:split-prefix");
+      target.emit({ method: "item/agentMessage/delta", params: {
+        delta: firstText, itemId: "item:split-prefix", threadId: "thread:test", turnId: "turn:split",
+      } });
+      emitAgentCompleted(target, "turn:split", "item:split-prefix", firstText);
+      emitAgentStarted(target, "turn:split", "item:split-suffix");
+      target.emit({ method: "item/agentMessage/delta", params: {
+        delta: secondText, itemId: "item:split-suffix", threadId: "thread:test", turnId: "turn:split",
+      } });
+      emitAgentCompleted(target, "turn:split", "item:split-suffix", secondText);
+      target.emit({ method: "turn/completed", params: { threadId: "thread:test", turn: generatedTurn(
+        "turn:split", "completed", null,
+        [agentMessage("item:split-prefix", firstText), agentMessage("item:split-suffix", secondText)],
+      ) } });
     }
   });
-  const provider = new CodexAppServerContainedTurnProvider({ boundary, manifest,
+  const provider = new CodexAppServerContainedTurnProvider({ boundary, manifest, privateRootPath: syntheticPrivateRoot,
     processes: { get: () => process }, sensitiveOutputTokens: [privateSecret], tmpDir: syntheticTmp });
-  const outcome = await provider.execute(executeInput(process));
+  const outcome = await provider.execute({ ...executeInput(process), emit: async chunk => {output.push(chunk);} });
   assertContainmentRequired(outcome);
-  assert.equal(JSON.stringify(outcome).includes(privateSecret), false);
+  assert.deepEqual(output, [{ cursor: 0, kind: "assistant", text: "valid assistant text\n" }]);
+  const publicEvidence = JSON.stringify({ outcome, output });
+  for (const privateValue of [privateSecret, credential, providerOutput, boundary.codexHome,
+    boundary.workspaceRef, syntheticPrivateRoot, syntheticTmp]) {
+    assert.equal(publicEvidence.includes(privateValue), false);
+  }
 });
 
-test("rejects the canonical workspace path split across assistant deltas before public evidence", async () => {
-  const splitAt = Math.floor(boundary.workspaceRef.length / 3);
+test("redacts the launch-authorized private root itself from the canonical sink", async () => {
+  const credential = "CREDENTIAL_MARKER<synthetic-private-root>";
+  const providerOutput = "private-root-provider-output-must-not-escape";
+  const splitAt = Math.floor(syntheticPrivateRoot.length / 2);
+  const privateText = `${syntheticPrivateRoot}:${credential}:${providerOutput}`;
+  const output: { readonly cursor: number; readonly kind: string; readonly text: string }[] = [];
   const process = new FakeCodexProcess((message, target) => {
     if (standardHandshake(message, target)) {return;}
     if (message.method === "turn/start") {
-      target.emit({ id: message.id, result: { turn: generatedTurn("turn:workspace-split", "inProgress") } });
-      emitTurnStarted(target, "turn:workspace-split");
-      emitAgentStarted(target, "turn:workspace-split", "item:workspace-split");
-      for (const delta of [
-        boundary.workspaceRef.slice(0, splitAt),
-        boundary.workspaceRef.slice(splitAt, splitAt * 2),
-        boundary.workspaceRef.slice(splitAt * 2),
-      ]) {
+      target.emit({ id: message.id, result: { turn: generatedTurn("turn:private-root", "inProgress") } });
+      emitTurnStarted(target, "turn:private-root");
+      emitAgentStarted(target, "turn:private-root", "item:public");
+      target.emit({ method: "item/agentMessage/delta", params: {
+        delta: "public assistant chunk", itemId: "item:public", threadId: "thread:test", turnId: "turn:private-root",
+      } });
+      emitAgentCompleted(target, "turn:private-root", "item:public", "public assistant chunk");
+      emitAgentStarted(target, "turn:private-root", "item:private-root");
+      for (const delta of [privateText.slice(0, splitAt), privateText.slice(splitAt)]) {
         target.emit({ method: "item/agentMessage/delta", params: {
-          delta, itemId: "item:workspace-split", threadId: "thread:test", turnId: "turn:workspace-split",
+          delta, itemId: "item:private-root", threadId: "thread:test", turnId: "turn:private-root",
         } });
       }
+      emitAgentCompleted(target, "turn:private-root", "item:private-root", privateText);
+      target.emit({ method: "turn/completed", params: { threadId: "thread:test", turn: generatedTurn(
+        "turn:private-root", "completed", null,
+        [agentMessage("item:public", "public assistant chunk"), agentMessage("item:private-root", privateText)],
+      ) } });
     }
   });
-  const outcome = await createProvider(process).execute(executeInput(process));
+  const outcome = await createProvider(process).execute({
+    ...executeInput(process), emit: async chunk => {output.push(chunk);},
+  });
   assertContainmentRequired(outcome);
-  assert.equal(JSON.stringify(outcome).includes(boundary.workspaceRef), false);
+  assert.deepEqual(output, [{ cursor: 0, kind: "assistant", text: "public assistant chunk" }]);
+  const publicEvidence = JSON.stringify({ outcome, output });
+  for (const privateValue of [syntheticPrivateRoot, credential, providerOutput, boundary.codexHome,
+    boundary.workspaceRef, syntheticTmp]) {
+    assert.equal(publicEvidence.includes(privateValue), false);
+  }
+});
+
+test("retains overlapping token prefixes and discards a terminal prefix with deterministic cursors", async () => {
+  const output: { readonly cursor: number; readonly kind: string; readonly text: string }[] = [];
+  const items = [
+    agentMessage("item:prefix-a", "alphaAB"),
+    agentMessage("item:prefix-b", "XbetaB"),
+    agentMessage("item:prefix-c", "YomegaABC"),
+  ];
+  const process = new FakeCodexProcess((message, target) => {
+    if (standardHandshake(message, target)) {return;}
+    if (message.method === "turn/start") {
+      target.emit({ id: message.id, result: { turn: generatedTurn("turn:prefixes", "inProgress") } });
+      emitTurnStarted(target, "turn:prefixes");
+      for (const item of items) {
+        emitAgentStarted(target, "turn:prefixes", item.id);
+        target.emit({ method: "item/agentMessage/delta", params: {
+          delta: item.text, itemId: item.id, threadId: "thread:test", turnId: "turn:prefixes",
+        } });
+        emitAgentCompleted(target, "turn:prefixes", item.id, item.text);
+      }
+      target.emit({ method: "turn/completed", params: { threadId: "thread:test", turn: generatedTurn(
+        "turn:prefixes", "completed", null, items,
+      ) } });
+    }
+  });
+  const provider = new CodexAppServerContainedTurnProvider({
+    boundary, manifest, privateRootPath: syntheticPrivateRoot, processes: { get: () => process },
+    sensitiveOutputTokens: ["ABCD", "BCD", "!"], tmpDir: syntheticTmp,
+  });
+  const outcome = await provider.execute({ ...executeInput(process), emit: async chunk => {output.push(chunk);} });
+  assert.equal(outcome.kind, "completed");
+  assert.deepEqual(output, [
+    { cursor: 0, kind: "assistant", text: "alpha" },
+    { cursor: 1, kind: "assistant", text: "ABXbeta" },
+    { cursor: 2, kind: "assistant", text: "BYomega" },
+  ]);
+  assert.throws(() => new CodexAppServerContainedTurnProvider({
+    boundary, manifest, privateRootPath: syntheticPrivateRoot, processes: { get: () => process },
+    sensitiveOutputTokens: [""], tmpDir: syntheticTmp,
+  }), /bounded non-empty string/u);
 });

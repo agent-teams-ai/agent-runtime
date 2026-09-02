@@ -27,9 +27,11 @@ interface FakeCodexProcessBehavior {
 }
 
 const syntheticRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-boundary-test-")));
-const syntheticCodexHome = join(syntheticRoot, "private-codex-home");
+export const syntheticPrivateRoot = join(syntheticRoot, "private");
+const syntheticCodexHome = join(syntheticPrivateRoot, "codex-home");
 export const syntheticWorkspace = join(syntheticRoot, "workspace");
-export const syntheticTmp = join(syntheticRoot, "tmp");
+export const syntheticTmp = join(syntheticPrivateRoot, "tmp");
+mkdirSync(syntheticPrivateRoot, { mode: 0o700 });
 mkdirSync(syntheticCodexHome, { mode: 0o700 });
 mkdirSync(syntheticWorkspace);
 mkdirSync(syntheticTmp, { mode: 0o700 });
@@ -230,6 +232,7 @@ export const createProvider = (process: FakeCodexProcess, overrides: {
       if (custodyRef === process.custodyRef) {return process;}
     },
   },
+  privateRootPath: syntheticPrivateRoot,
   requestTimeoutMs: 2_000,
   tmpDir: syntheticTmp,
   turnTimeoutMs: overrides.turnTimeoutMs ?? 2_000,

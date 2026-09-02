@@ -41,9 +41,11 @@ class ByteQueue implements AsyncIterable<Uint8Array> {
 }
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-protocol-test-")));
-const codexHome = join(root, "codex-home");
+const privateRoot = join(root, "private");
+const codexHome = join(privateRoot, "codex-home");
 const workspace = join(root, "workspace");
-const privateTmp = join(root, "tmp");
+const privateTmp = join(privateRoot, "tmp");
+mkdirSync(privateRoot, { mode: 0o700 });
 mkdirSync(codexHome, { mode: 0o700 });
 mkdirSync(workspace);
 mkdirSync(privateTmp, { mode: 0o700 });
@@ -191,6 +193,7 @@ const execute = async (
       }),
       supportedModes: Object.freeze(["analysis", "workspace-write"] as const),
     }),
+    privateRootPath: privateRoot,
     processes: { get: custodyRef => custodyRef === process.custodyRef ? process : undefined },
     requestTimeoutMs,
     tmpDir: privateTmp,

@@ -140,6 +140,7 @@ export const createCodexCurrentKernelOwner = (
               providerBinding: record.binding,
               supportedModes: Object.freeze(["analysis", "workspace-write"]),
             },
+            privateRootPath: record.plan.privateRootPath,
             processes,
             tmpDir: record.record.tmpDir,
           });

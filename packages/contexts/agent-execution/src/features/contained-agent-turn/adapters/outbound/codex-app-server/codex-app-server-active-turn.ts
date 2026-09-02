@@ -242,7 +242,8 @@ const emitCodexAssistantDelta = (
     throw new CodexAppServerProtocolError("Codex assistant delta identity is invalid", true);
   }
   const combined = admission.progress.pendingAssistantText + params.delta;
-  if (admission.sensitiveOutputTokens.some(token => combined.includes(token))) {
+  const canonical = admission.progress.pendingCanonicalAssistantText + combined;
+  if (admission.sensitiveOutputTokens.some(token => canonical.includes(token))) {
     throw new CodexAppServerProtocolError("Codex output contained a private marker", true);
   }
   admission.progress.pendingAssistantText = combined;
@@ -256,10 +257,20 @@ const emitCodexAssistantDelta = (
 const flushCodexAssistantText = async (
   input: Parameters<ContainedTurnProviderPort["execute"]>[0],
   progress: CodexActiveTurnProgress,
+  sensitiveOutputTokens: readonly string[],
 ): Promise<void> => {
-  if (progress.pendingAssistantText.length === 0) {return;}
-  const text = progress.pendingAssistantText;
-  progress.pendingAssistantText = "";
+  const pending = progress.pendingCanonicalAssistantText;
+  if (pending.length === 0) {return;}
+  let retainedLength = 0;
+  for (const token of sensitiveOutputTokens) {
+    const maximum = Math.min(pending.length, token.length - 1);
+    for (let length = maximum; length > retainedLength; length -= 1) {
+      if (pending.endsWith(token.slice(0, length))) {retainedLength = length; break;}
+    }
+  }
+  const text = pending.slice(0, pending.length - retainedLength);
+  progress.pendingCanonicalAssistantText = pending.slice(text.length);
+  if (text.length === 0) {return;}
   await input.emit({ cursor: progress.cursor, kind: "assistant", text });
   progress.cursor += 1;
 };
@@ -310,7 +321,8 @@ const observeItemCompleted = async (
   params: JsonRecord,
   input: Parameters<ContainedTurnProviderPort["execute"]>[0],
   identity: { readonly boundary: CodexAppServerPermissionBoundary; readonly mode: "analysis" | "workspace-write";
-    readonly effectCustody?: CodexEffectCustodyBinding; readonly threadId: string; readonly turnId: string },
+    readonly effectCustody?: CodexEffectCustodyBinding; readonly sensitiveOutputTokens: readonly string[];
+    readonly threadId: string; readonly turnId: string },
   progress: CodexActiveTurnProgress,
 ): Promise<void> => {
   if (!exactKeys(params, ["completedAtMs", "item", "threadId", "turnId"])
@@ -343,7 +355,9 @@ const observeItemCompleted = async (
       || admitted.item.text !== progress.pendingAssistantText) {
       throw new CodexAppServerProtocolError("Codex completed agent message does not match its exact delta lifecycle", true);
     }
-    await flushCodexAssistantText(input, progress);
+    progress.pendingCanonicalAssistantText += progress.pendingAssistantText;
+    progress.pendingAssistantText = "";
+    await flushCodexAssistantText(input, progress, identity.sensitiveOutputTokens);
     delete progress.activeAgentItemId;
   }
   progress.completedItems.push(admitted);
@@ -389,6 +403,7 @@ const completeCodexTurn = async (
   if (lifecycle.progress.interruptRequestId !== undefined && !lifecycle.progress.interruptAcknowledged) {
     throw new CodexAppServerProtocolError("Codex turn completed before exact interruption acknowledgement", true);
   }
+  lifecycle.progress.pendingCanonicalAssistantText = "";
   lifecycle.observeProtocolTerminal();
   if (completed.status === "failed") {
     await input.emit({

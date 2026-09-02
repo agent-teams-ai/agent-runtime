@@ -83,6 +83,7 @@ export interface CodexAppServerContainedTurnProviderOptions {
   readonly maxActiveNotifications?: number;
   readonly maxLineBytes?: number;
   readonly processes: CustodiedProviderProcessRegistry;
+  readonly privateRootPath: string;
   readonly requestTimeoutMs?: number;
   readonly sensitiveOutputTokens?: readonly string[];
   readonly tmpDir: string;
@@ -125,6 +126,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
   readonly #maxActiveNotifications: number;
   readonly #processes: CustodiedProviderProcessRegistry;
   readonly #platformTuple: CodexAppServerPlatformTuple;
+  readonly #privateRootPath: string;
   readonly #requestTimeoutMs: number;
   readonly #additionalSensitiveOutputTokens: readonly string[];
   readonly #tmpDir: string;
@@ -149,6 +151,10 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     if (tmpRelativeToWorkspace === "" || (!tmpRelativeToWorkspace.startsWith("..") && !isAbsolute(tmpRelativeToWorkspace))) {
       throw new TypeError("Codex private TMPDIR must be outside the canonical workspace");
     }
+    if (!isAbsolute(options.privateRootPath) || resolve(options.privateRootPath) !== options.privateRootPath
+      || options.privateRootPath === "/") {
+      throw new TypeError("Codex App Server adapter requires a normalized absolute private root");
+    }
     this.#boundary = Object.freeze({
       ...options.boundary,
       permissionProfile: Object.freeze({
@@ -161,6 +167,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     });
     this.manifest = manifest;
     this.#platformTuple = platformTuple;
+    this.#privateRootPath = options.privateRootPath;
     this.#processes = options.processes;
     this.#effectCustody = options.effectCustody;
     this.#maxLineBytes = positiveInteger("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES);
@@ -380,6 +387,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     try {
       sensitiveOutputTokens = Object.freeze([...new Set([
         this.#boundary.codexHome,
+        this.#privateRootPath,
         this.#tmpDir,
         this.#boundary.workspaceRef,
         ...this.#additionalSensitiveOutputTokens,

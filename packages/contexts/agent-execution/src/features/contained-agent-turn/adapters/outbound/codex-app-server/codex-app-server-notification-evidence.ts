@@ -15,6 +15,7 @@ export interface CodexActiveTurnProgress {
   readonly observedResponseSemantics: Map<string, string>;
   readonly observedItemIds: Set<string>;
   pendingAssistantText: string;
+  pendingCanonicalAssistantText: string;
   turnStarted: boolean;
 }
 
@@ -26,7 +27,7 @@ export const createCodexActiveTurnProgress = (): CodexActiveTurnProgress => ({
   activeItems: new Map(), completedItems: [], cursor: 0, interruptAcknowledged: false,
   interruptDeadline: undefined, notificationCount: 0, notificationBytes: 0,
   observedResponseSemantics: new Map(), observedItemIds: new Set(),
-  pendingAssistantText: "", turnStarted: false,
+  pendingAssistantText: "", pendingCanonicalAssistantText: "", turnStarted: false,
 });
 
 export const admitCodexActiveNotification = (input: {
