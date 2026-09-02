@@ -14,6 +14,19 @@ const skip = (source, index, predicate, end = source.length) => {
   while (index < end && predicate(source[index])) {index += 1;}
   return index;
 };
+const skipJSDocWhitespace = (source, index, end = source.length) => {
+  while (index < end) {
+    if (horizontal(source[index])) {index += 1; continue;}
+    if (!lineBreak(source[index])) {break;}
+    if (source[index] === "\r" && source[index + 1] === "\n") {index += 2;}
+    else {index += 1;}
+    index = skip(source, index, horizontal, end);
+    if (source[index] === "*" && source[index + 1] !== "/") {
+      index = skip(source, index + 1, horizontal, end);
+    }
+  }
+  return index;
+};
 const wordAt = (source, index, word) => source.startsWith(word, index)
   && !nameCharacter(source[index - 1])
   && !nameCharacter(source[index + word.length]);
@@ -101,11 +114,11 @@ const importTypeRecords = ({ begin, end, raw, source, start }) => {
   for (let index = begin; index < end; index += 1) {
     if (["\"", "'"].includes(raw[index])) {index = readQuoted(raw, index, end).next - 1; continue;}
     if (!wordAt(raw, index, "import")) {continue;}
-    let next = skip(raw, index + 6, whitespace, end);
+    let next = skipJSDocWhitespace(raw, index + 6, end);
     if (raw[next] !== "(") {continue;}
-    next = skip(raw, next + 1, whitespace, end);
+    next = skipJSDocWhitespace(raw, next + 1, end);
     const quoted = readQuoted(raw, next, end);
-    next = skip(raw, quoted.next, whitespace, end);
+    next = skipJSDocWhitespace(raw, quoted.next, end);
     const valid = !quoted.invalid && !quoted.escaped && Boolean(quoted.value) && raw[next] === ")";
     records.push(record({
       line: lineAt(source, start + index),
@@ -117,19 +130,35 @@ const importTypeRecords = ({ begin, end, raw, source, start }) => {
   return records;
 };
 
-const importTagRecord = ({ contentStart, lineEnd, raw, source, start, tagStart }) => {
-  let index = skip(raw, contentStart, horizontal, lineEnd);
-  if (wordAt(raw, index, "type")) {index = skip(raw, index + 4, horizontal, lineEnd);}
+const tagContentEnd = (raw, lineEnd) => {
+  const commentEnd = raw.endsWith("*/") ? raw.length - 2 : raw.length;
+  if (lineEnd >= commentEnd) {return commentEnd;}
+  let lineStart = lineEnd;
+  while (lineStart < raw.length) {
+    if (raw[lineStart] === "\r" && raw[lineStart + 1] === "\n") {lineStart += 2;}
+    else if (lineBreak(raw[lineStart])) {lineStart += 1;}
+    let lineFinish = lineStart;
+    while (lineFinish < raw.length && !lineBreak(raw[lineFinish])) {lineFinish += 1;}
+    let content = skip(raw, lineStart, horizontal, lineFinish);
+    if (raw[content] === "*" && raw[content + 1] !== "/") {content = skip(raw, content + 1, horizontal, lineFinish);}
+    if (raw[content] === "@" || raw.startsWith("*/", content)) {return content;}
+    lineStart = lineFinish;
+  }
+  return commentEnd;
+};
+
+const importTagRecord = ({ contentStart, contentEnd, raw, source, start, tagStart }) => {
+  let index = skipJSDocWhitespace(raw, contentStart, contentEnd);
+  if (wordAt(raw, index, "type")) {index = skipJSDocWhitespace(raw, index + 4, contentEnd);}
   const bindingStart = index;
   let from = -1;
-  for (; index < lineEnd; index += 1) {if (wordAt(raw, index, "from")) {from = index;}}
+  for (; index < contentEnd; index += 1) {if (wordAt(raw, index, "from")) {from = index;}}
   let valid = from > bindingStart && raw.slice(bindingStart, from).trim();
-  index = valid ? skip(raw, from + 4, horizontal, lineEnd) : lineEnd;
-  const quoted = readQuoted(raw, index, lineEnd);
-  index = skip(raw, quoted.next, whitespace, lineEnd);
-  if (raw[index] === ";") {index = skip(raw, index + 1, whitespace, lineEnd);}
-  if (raw.startsWith("*/", index)) {index = skip(raw, index + 2, whitespace, lineEnd);}
-  valid = Boolean(valid && !quoted.invalid && !quoted.escaped && quoted.value && index === lineEnd);
+  index = valid ? skipJSDocWhitespace(raw, from + 4, contentEnd) : contentEnd;
+  const quoted = readQuoted(raw, index, contentEnd);
+  index = skipJSDocWhitespace(raw, quoted.next, contentEnd);
+  if (raw[index] === ";") {index = skipJSDocWhitespace(raw, index + 1, contentEnd);}
+  valid = Boolean(valid && !quoted.invalid && !quoted.escaped && quoted.value && index === contentEnd);
   return record({
     line: lineAt(source, start + tagStart),
     nonliteral: !valid,
@@ -148,6 +177,7 @@ const jsdocRecords = (raw, start, source) => {
     if (raw[index] === "*") {index = skip(raw, index + 1, horizontal, lineEnd);}
     if (raw[index] === "@") {
       const tagStart = index, parsed = readName(raw, index + 1, lineEnd), tag = parsed.name;
+      const contentEnd = tagContentEnd(raw, lineEnd);
       if (TYPE_TAGS.has(tag) || tag === "template") {
         const open = skip(raw, parsed.next, horizontal, lineEnd);
         if (raw[open] === "{") {
@@ -156,10 +186,10 @@ const jsdocRecords = (raw, start, source) => {
       } else if (OPTIONAL_BRACE_TYPE_TAGS.has(tag)) {
         const open = skip(raw, parsed.next, horizontal, lineEnd);
         const begin = raw[open] === "{" ? open + 1 : open;
-        const end = raw[open] === "{" ? typeExpressionEnd(raw, open) : lineEnd;
+        const end = raw[open] === "{" ? typeExpressionEnd(raw, open) : contentEnd;
         records.push(...importTypeRecords({ begin, end, raw, source, start }));
       } else if (tag === "import") {
-        records.push(importTagRecord({ contentStart: parsed.next, lineEnd, raw, source, start, tagStart }));
+        records.push(importTagRecord({ contentStart: parsed.next, contentEnd, raw, source, start, tagStart }));
       }
     }
     lineStart = lineEnd + (raw[lineEnd] === "\r" && raw[lineEnd + 1] === "\n" ? 2 : 1);
@@ -176,11 +206,11 @@ const JSDOC_HOST_TYPES = new Set([
   "IfStatement", "ImportDeclaration", "ImportExpression", "JSXAttribute", "LabeledStatement",
   "MethodDefinition", "MethodSignature", "ModuleDeclaration", "NamedTupleMember", "NamespaceExportDeclaration",
   "ObjectMethod", "ObjectProperty", "ParenthesizedExpression", "PropertyDefinition", "PropertySignature",
-  "ReturnStatement", "StaticBlock", "SwitchStatement", "ThrowStatement", "TryStatement", "TSCallSignatureDeclaration",
+  "Property", "ReturnStatement", "StaticBlock", "SwitchCase", "SwitchStatement", "ThrowStatement", "TryStatement", "TSCallSignatureDeclaration",
   "TSConstructSignatureDeclaration", "TSConstructorType", "TSEnumDeclaration", "TSEnumMember",
   "TSDeclareFunction", "TSFunctionType", "TSImportEqualsDeclaration", "TSInterfaceDeclaration", "TSMethodSignature",
   "TSModuleDeclaration", "TSPropertySignature", "TSTypeAliasDeclaration", "TSTypeParameter",
-  "VariableDeclaration", "WhileStatement", "WithStatement",
+  "VariableDeclaration", "WhileStatement", "WithStatement", "ExportSpecifier",
 ]);
 
 const childNodes = (node) => Object.entries(node ?? {}).flatMap(([key, value]) => {
@@ -190,10 +220,14 @@ const childNodes = (node) => Object.entries(node ?? {}).flatMap(([key, value]) =
 });
 
 const attachmentIndex = (program, source, comments) => {
-  const hosts = new Set(), topLevelRanges = [];
+  const hosts = new Set(), inlineHosts = new Set(), topLevelRanges = [];
   const visit = (node, mayAttach = true) => {
     if (!node || typeof node !== "object") {return;}
     if (mayAttach && JSDOC_HOST_TYPES.has(node.type) && Number.isInteger(node.start)) {hosts.add(node.start);}
+    for (const parameter of node.params ?? []) {
+      if (Number.isInteger(parameter?.start)) {inlineHosts.add(parameter.start);}
+    }
+    if (node.type === "ExportSpecifier" && Number.isInteger(node.start)) {inlineHosts.add(node.start);}
     for (const child of childNodes(node)) {
       const nestedExportDeclaration = child === node.declaration
         && ["ExportDefaultDeclaration", "ExportNamedDeclaration"].includes(node.type);
@@ -216,9 +250,18 @@ const attachmentIndex = (program, source, comments) => {
     return cursor;
   };
   const topLevelAtEof = (range) => !topLevelRanges.some(({ end, start }) => start < range.start && range.end < end);
+  const beginsLine = (offset) => {
+    let cursor = offset - 1;
+    while (cursor >= 0 && !lineBreak(source[cursor])) {
+      if (!horizontal(source[cursor])) {return false;}
+      cursor -= 1;
+    }
+    return true;
+  };
   return (range) => {
     const next = triviaEnd(range);
-    return hosts.has(next) || next === source.length && topLevelAtEof(range);
+    return inlineHosts.has(next)
+      || beginsLine(range.start) && (hosts.has(next) || next === source.length && topLevelAtEof(range));
   };
 };
 

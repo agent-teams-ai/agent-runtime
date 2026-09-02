@@ -615,6 +615,39 @@
       ]
     },
     {
+      "name": "multiline-compiler-jsdoc-imports-are-forbidden-in-domain",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "/** @type {import(\n * \"external-multiline-braced\"\n *).Braced} */\nexport const braced = undefined;\n/**\n * @type\n * import(\n *   \"external-multiline-braceless\"\n * ).Braceless\n */\nexport const braceless = undefined;\n/**\n * @import {\n *   External\n * } from \"external-multiline-tag\"\n */\nexport const imported = undefined;\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 7 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 13 }
+      ]
+    },
+    {
+      "name": "compiler-attached-jsdoc-hosts-are-forbidden-in-domain",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "export function host(/** @type {import(\"external-parameter\").Parameter} */ parameter) {}\nconst local = 1;\nexport {\n  /** @type {import(\"external-export-specifier\").Exported} */ local,\n};\nswitch (local) {\n  /** @type {import(\"external-switch-case\").Case} */\n  case 1: break;\n}\nexport const object = {\n  /** @type {import(\"external-object-property\").Property} */\n  property: true,\n};\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 4 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 7 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 11 }
+      ]
+    },
+    {
+      "name": "same-line-class-member-and-source-lookalikes-are-not-jsdoc-dependencies",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "export const beforeClass = true; /** @type {import(\"external-class\").Class} */ class Hidden {}\nexport class Example {\n  first = true; /** @type {import(\"external-member\").Member} */ second = true;\n}\nconst stringValue = 'import(\"external-string\")';\nconst templateValue = `import(\"external-template\")`;\nconst regexValue = /import\\(\"external-regex\"\\)/u;\n// /** @type {import(\"external-line-comment\").Comment} */\nexport const value = Boolean(stringValue && templateValue && regexValue);\n"
+      },
+      "expected": []
+    },
+    {
       "name": "syntactically-valid-unattached-jsdoc-is-not-a-dependency",
       "files": {
         "src/features/alpha/domain/value.ts": "export const values = [\n  true /** @type {import(\"external-inline\").Value} */,\n  false,\n];\nexport function value() {\n  return true;\n  /** @throws {import(\"external-block-end\").Failure} */\n}\nexport /** @type {import(\"external-after-modifier\").Value} */ const exported = true;\n"
