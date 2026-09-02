@@ -43,6 +43,28 @@ const harness = (disposeFailure?: Error) => {
   };
 };
 
+const invalidSelectionMessage = "Contained turn provider selection is invalid";
+
+const captureThrown = (operation: () => unknown): unknown => {
+  try {
+    operation();
+  } catch (error) {
+    return error;
+  }
+  assert.fail("expected operation to throw");
+};
+
+const assertRedactedValidationError = (published: unknown, original: unknown, markers: readonly string[]) => {
+  assert.ok(published instanceof TypeError);
+  assert.notEqual(published, original);
+  assert.equal(published.message, invalidSelectionMessage);
+  assert.equal("cause" in published, false);
+  assert.equal("custom" in published, false);
+  assert.deepEqual(Reflect.ownKeys(published).toSorted(), ["message", "stack"]);
+  const diagnostic = `${published.message}\n${published.stack ?? ""}`;
+  for (const marker of markers) {assert.equal(diagnostic.includes(marker), false);}
+};
+
 test("exact Codex and Claude selections invoke only the selected owner factory", () => {
   for (const kind of ["codex", "claude"] as const) {
     const selected = Object.freeze({kind, owner: Object.freeze({})});
@@ -85,6 +107,49 @@ test("invalid selection shapes fail before either provider factory and redact un
     );
     assert.equal(published, undefined);
     assert.deepEqual(probe.calls, {claude: 0, codex: 0, dispose: 0, feature: 0});
+  }
+});
+
+test("hostile selection traps and trap accessors cannot publish thrown validation details", () => {
+  const secret = "credential-secret-7fc2";
+  const path = "/private/runtime/customer-42";
+  const provider = "unqualified-provider-customer-42";
+  const causes = [
+    () => Object.assign(new TypeError(invalidSelectionMessage), {
+      cause: new Error(secret), custom: path, provider, stack: `hostile-stack ${provider}`,
+    }),
+    () => Object.assign(new TypeError(`nonmatching ${secret}`), {
+      cause: path, custom: provider, stack: `hostile-stack ${path}`,
+    }),
+    () => Object.assign(new Error(`ordinary ${path}`), {
+      cause: provider, custom: secret, stack: `hostile-stack ${secret}`,
+    }),
+    () => ({cause: secret, custom: path, message: invalidSelectionMessage, provider,
+      stack: `hostile-stack ${secret} ${path} ${provider}`}),
+  ] as const;
+
+  for (const makeOriginal of causes) {
+    for (const seam of ["proxy-trap", "trap-accessor"] as const) {
+      const original = makeOriginal();
+      const selectedProvider = seam === "proxy-trap"
+        ? Object.freeze({kind: "codex", owner: Object.freeze({})})
+        : new Proxy({kind: "codex", owner: Object.freeze({})}, Object.defineProperty(
+          {}, "ownKeys", {get() {throw original;}},
+        ) as ProxyHandler<{kind: string; owner: object}>);
+      const input = seam === "proxy-trap"
+        ? new Proxy(dependencies(selectedProvider), {
+          getOwnPropertyDescriptor() {throw original;},
+        })
+        : dependencies(selectedProvider);
+      const probe = harness();
+
+      const published = captureThrown(() => composeHostCustodiedContainedTurn(
+        input as never, probe.factories, probe.featureFactory,
+      ));
+
+      assertRedactedValidationError(published, original, [secret, path, provider]);
+      assert.deepEqual(probe.calls, {claude: 0, codex: 0, dispose: 0, feature: 0});
+    }
   }
 });
 

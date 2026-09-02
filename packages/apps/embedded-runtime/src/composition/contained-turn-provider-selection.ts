@@ -61,8 +61,7 @@ export const snapshotContainedTurnProviderSelection = (
     const assertStable = (): void => {
       try {
         assertStableUnchecked();
-      } catch (error) {
-        if (error instanceof TypeError && error.message === invalidSelection().message) {throw error;}
+      } catch {
         throw invalidSelection();
       }
     };
@@ -72,8 +71,7 @@ export const snapshotContainedTurnProviderSelection = (
       selection: Object.freeze({kind: kindDescriptor.value, owner: ownerDescriptor.value}) as
         ContainedTurnHostProviderSelection,
     });
-  } catch (error) {
-    if (error instanceof TypeError && error.message === invalidSelection().message) {throw error;}
+  } catch {
     throw invalidSelection();
   }
 };
