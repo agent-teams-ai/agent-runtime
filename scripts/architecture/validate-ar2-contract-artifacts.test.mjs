@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile,
+  link, lstat, mkdir, mkdtemp, open, readdir, readFile, realpath, rename, rm,
+  symlink, writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
+import { readCustodiedRepositoryFile } from "./ar2-evidence-custody.mjs";
 import {
   auditLegacyInventoryEvidence,
   readAr2CoverageTestSource,
@@ -272,7 +275,7 @@ test("AR-2 validator rejects fixture or executed-test mapping drift", async () =
   );
 });
 
-test("AR-2 coverage custody rejects unsafe paths before reading evidence", async t => {
+test("AR-2 descriptor custody rejects unsafe paths and filesystem objects", async t => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "ar2-evidence-custody-"));
   t.after(() => rm(fixtureRoot, { recursive: true, force: true }));
   const testsRoot = join(fixtureRoot, "packages", "contexts", "example", "tests");
@@ -282,18 +285,21 @@ test("AR-2 coverage custody rejects unsafe paths before reading evidence", async
   await mkdir(outsideRoot);
   await writeFile(join(nestedRoot, "valid.test.ts"), "export {};\n");
   await writeFile(join(outsideRoot, "outside.test.ts"), "throw new Error('outside');\n");
+  await link(join(nestedRoot, "valid.test.ts"), join(nestedRoot, "hardlinked.test.ts"));
   await symlink(join(outsideRoot, "outside.test.ts"), join(nestedRoot, "linked.test.ts"));
   await symlink(outsideRoot, join(testsRoot, "linked-ancestor"));
   await mkdir(join(nestedRoot, "directory.test.ts"));
 
   const evidenceRoot = pathToFileURL(`${fixtureRoot}/`);
   const validPath = "packages/contexts/example/tests/nested/valid.test.ts";
-  const defaultFileSystem = { lstat, readdir, readFile, realpath };
+  const defaultFileSystem = { lstat, open, readdir, realpath };
+  await rm(join(nestedRoot, "hardlinked.test.ts"));
   await assert.doesNotReject(readAr2CoverageTestSource(validPath, { evidenceRoot }));
 
-  await t.test("rejects absolute, encoded traversal, dot segments, and backslashes", async () => {
+  await t.test("rejects absolute, Unicode, encoded, case, dot, and backslash aliases", async () => {
     for (const unsafePath of [
       join(fixtureRoot, "outside", "outside.test.ts"),
+      "packages/contexts/example/tests/nested/valid.tést.ts",
       "packages/contexts/example/tests/%2e%2e/outside.test.ts",
       "packages/contexts/example/tests/nested/../outside.test.ts",
       "packages\\contexts\\example\\tests\\outside.test.ts",
@@ -305,6 +311,13 @@ test("AR-2 coverage custody rejects unsafe paths before reading evidence", async
           && !error.message.includes(fixtureRoot),
       );
     }
+    await assert.rejects(
+      readAr2CoverageTestSource(
+        "packages/contexts/example/tests/nested/VALID.test.ts",
+        { evidenceRoot },
+      ),
+      /ambiguous identity/u,
+    );
   });
 
   await t.test("rejects a symbolic-link evidence file", async () => {
@@ -337,6 +350,15 @@ test("AR-2 coverage custody rejects unsafe paths before reading evidence", async
     );
   });
 
+  await t.test("rejects a multiply-linked evidence target", async () => {
+    await link(join(nestedRoot, "valid.test.ts"), join(nestedRoot, "hardlinked.test.ts"));
+    await assert.rejects(
+      readAr2CoverageTestSource(validPath, { evidenceRoot }),
+      /exactly one link/u,
+    );
+    await rm(join(nestedRoot, "hardlinked.test.ts"));
+  });
+
   await t.test("rejects a canonical realpath escape", async () => {
     await assert.rejects(
       readAr2CoverageTestSource(validPath, {
@@ -348,7 +370,7 @@ test("AR-2 coverage custody rejects unsafe paths before reading evidence", async
             : realpath(path),
         },
       }),
-      /canonical path escapes its package tests root/u,
+      /canonical path escapes its allowed root/u,
     );
   });
 
@@ -361,15 +383,154 @@ test("AR-2 coverage custody rejects unsafe paths before reading evidence", async
           evidenceRoot,
           fileSystem: {
             ...defaultFileSystem,
-            readFile: async () => {
+            open: async (...arguments_) => {
               contentReads += 1;
-              return "unreachable";
+              return open(...arguments_);
             },
           },
         },
       ),
       /symbolic links are forbidden/u,
     );
-    assert.equal(contentReads, 0);
+    assert.equal(contentReads, 0, "a rejected lineage must never be opened");
   });
+});
+
+test("AR-2 descriptor custody rejects deterministic substitution and drift", async t => {
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "ar2-evidence-races-"));
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }));
+  const relativePath = "packages/contexts/example/tests/race.test.ts";
+  const target = join(fixtureRoot, relativePath);
+  await mkdir(join(fixtureRoot, "packages", "contexts", "example", "tests"), { recursive: true });
+  const evidenceRoot = pathToFileURL(`${fixtureRoot}/`);
+  const base = { lstat, open, readdir, realpath };
+
+  await t.test("rejects replacement between validation and descriptor open without reading it", async () => {
+    await writeFile(target, "accepted-original\n");
+    const original = `${target}.original`;
+    let reads = 0;
+    await assert.rejects(readAr2CoverageTestSource(relativePath, {
+      evidenceRoot,
+      fileSystem: {
+        ...base,
+        open: async (path, flags) => {
+          await rename(path, original);
+          await writeFile(path, "substituted-secret-bytes\n");
+          const descriptor = await open(path, flags);
+          return {
+            close: () => descriptor.close(),
+            read: (...arguments_) => {reads += 1; return descriptor.read(...arguments_);},
+            stat: options => descriptor.stat(options),
+          };
+        },
+      },
+    }), /changed before descriptor binding/u);
+    assert.equal(reads, 0, "substituted bytes must not be read or accepted");
+    await rm(original);
+  });
+
+  await t.test("rejects an ancestor swap before descriptor open without reading it", async () => {
+    await writeFile(target, "accepted-original\n");
+    const tests = join(fixtureRoot, "packages", "contexts", "example", "tests");
+    const displaced = `${tests}.displaced`;
+    let reads = 0;
+    await assert.rejects(readAr2CoverageTestSource(relativePath, {
+      evidenceRoot,
+      fileSystem: {
+        ...base,
+        open: async (path, flags) => {
+          await rename(tests, displaced);
+          await mkdir(tests);
+          await writeFile(path, "ancestor-substitution-bytes\n");
+          const descriptor = await open(path, flags);
+          return {
+            close: () => descriptor.close(),
+            read: (...arguments_) => {reads += 1; return descriptor.read(...arguments_);},
+            stat: options => descriptor.stat(options),
+          };
+        },
+      },
+    }), /changed before descriptor binding/u);
+    assert.equal(reads, 0, "ancestor-substituted bytes must not be read or accepted");
+    await rm(tests, { recursive: true });
+    await rename(displaced, tests);
+  });
+
+  await t.test("rejects descriptor identity drift after the bounded read", async () => {
+    await writeFile(target, "accepted-original\n");
+    let mutated = false;
+    await assert.rejects(readAr2CoverageTestSource(relativePath, {
+      evidenceRoot,
+      fileSystem: {
+        ...base,
+        open: async (path, flags) => {
+          const descriptor = await open(path, flags);
+          return {
+            close: () => descriptor.close(),
+            read: async (...arguments_) => {
+              const result = await descriptor.read(...arguments_);
+              if (!mutated && result.bytesRead > 0) {
+                mutated = true;
+                await writeFile(path, "post-read-substitution\n");
+              }
+              return result;
+            },
+            stat: options => descriptor.stat(options),
+          };
+        },
+      },
+    }), /descriptor identity drifted during read/u);
+    assert.equal(mutated, true);
+  });
+});
+
+test("AR-2 package manifest evidence uses descriptor custody", async t => {
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "ar2-package-custody-"));
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }));
+  const packageRoot = "packages/contexts/example";
+  const manifestPath = `${packageRoot}/package.json`;
+  const packageDirectory = join(fixtureRoot, packageRoot);
+  const outside = join(fixtureRoot, "outside.json");
+  await mkdir(packageDirectory, { recursive: true });
+  await writeFile(outside, "{}\n");
+  await symlink(outside, join(packageDirectory, "package.json"));
+  const options = { allowedRoot: packageRoot, evidenceRoot: fixtureRoot };
+  await assert.rejects(
+    readCustodiedRepositoryFile(manifestPath, options),
+    /symbolic links are forbidden/u,
+  );
+  await rm(join(packageDirectory, "package.json"));
+  await mkdir(join(packageDirectory, "package.json"));
+  await assert.rejects(
+    readCustodiedRepositoryFile(manifestPath, options),
+    /evidence target is not a regular file/u,
+  );
+});
+
+test("AR-2 CLI failure boundary emits only its stable repository diagnostic", async () => {
+  const moduleUrl = new URL("./validate-ar2-contract-artifacts.mjs", import.meta.url).href;
+  const sensitive = `/private/host/${process.pid}/secret-input-content`;
+  const program = `
+    const { runAr2ContractArtifactsCli } = await import(${JSON.stringify(moduleUrl)});
+    process.exitCode = await runAr2ContractArtifactsCli({
+      validate: async () => { throw new Error(${JSON.stringify(sensitive)}); },
+    });
+  `;
+  const child = spawn(process.execPath, ["--input-type=module", "--eval", program], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const stdout = []; const stderr = [];
+  child.stdout.on("data", chunk => stdout.push(chunk));
+  child.stderr.on("data", chunk => stderr.push(chunk));
+  const status = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", resolve);
+  });
+  assert.equal(status, 1);
+  assert.equal(Buffer.concat(stdout).toString("utf8"), "");
+  assert.equal(
+    Buffer.concat(stderr).toString("utf8"),
+    "AR-2 contract artifact validation failed\n",
+  );
+  assert.doesNotMatch(Buffer.concat(stderr).toString("utf8"), /private|secret|Error| at /u);
 });

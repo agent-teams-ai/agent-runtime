@@ -1,28 +1,31 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { lstat, readdir, readFile, realpath } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { isAbsolute, resolve, win32 } from "node:path";
+import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
+
+import { readCustodiedRepositoryFile } from "./ar2-evidence-custody.mjs";
 
 export { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
 import { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
 
-const inventoryPath = new URL("../../docs/architecture/legacy-feature-inventory.json", import.meta.url);
-const inventorySchemaPath = new URL("../../docs/architecture/legacy-feature-inventory.schema.json", import.meta.url);
-const freezePath = new URL("../../docs/architecture/claude-code-setup-freeze.json", import.meta.url);
-const freezeSchemaPath = new URL("../../docs/architecture/claude-code-setup-freeze.schema.json", import.meta.url);
-const fixtureRoot = new URL("../../packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings/", import.meta.url);
-const fixtureManifestPath = new URL("manifest.json", fixtureRoot);
-const negativeFixturesPath = new URL("negative-fixtures.json", fixtureRoot);
-const contractCoveragePath = new URL("contract-coverage.json", fixtureRoot);
-const packagePath = new URL("../../package.json", import.meta.url);
-const roadmapPath = new URL("../../docs/architecture/provider-setup-delivery-roadmap.md", import.meta.url);
-const readinessPath = new URL("../../docs/architecture/readiness.md", import.meta.url);
-const runtimeAccessPath = new URL("../../packages/apps/embedded-runtime/src/contracts/runtime-access.ts", import.meta.url);
+const inventoryPath = "docs/architecture/legacy-feature-inventory.json";
+const inventorySchemaPath = "docs/architecture/legacy-feature-inventory.schema.json";
+const freezePath = "docs/architecture/claude-code-setup-freeze.json";
+const freezeSchemaPath = "docs/architecture/claude-code-setup-freeze.schema.json";
+const fixtureRoot = "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings";
+const fixtureManifestPath = `${fixtureRoot}/manifest.json`;
+const negativeFixturesPath = `${fixtureRoot}/negative-fixtures.json`;
+const contractCoveragePath = `${fixtureRoot}/contract-coverage.json`;
+const packagePath = "package.json";
+const roadmapPath = "docs/architecture/provider-setup-delivery-roadmap.md";
+const readinessPath = "docs/architecture/readiness.md";
+const runtimeAccessPath = "packages/apps/embedded-runtime/src/contracts/runtime-access.ts";
 const repositoryRoot = new URL("../../", import.meta.url);
 
-const readJson = async path => JSON.parse(await readFile(path, "utf8"));
+const readEvidence = async (path, options) => readCustodiedRepositoryFile(path, options);
+const readText = async (path, options) => (await readEvidence(path, options)).toString("utf8");
+const readJson = async (path, options) => JSON.parse(await readText(path, options));
 const exactKeys = (value, keys, label) => {
   assert.deepEqual(Object.keys(value).toSorted(), [...keys].toSorted(), `${label} keys`);
 };
@@ -63,35 +66,14 @@ const packageTestCoordinates = testFile => {
   return { packageRoot: match[1], relativeTestFile: match[2] };
 };
 
-const defaultEvidenceFileSystem = Object.freeze({ lstat, readdir, readFile, realpath });
-
-const custodyFailure = (evidencePath, reason) => assert.fail(`${evidencePath} AR-2 evidence custody rejected: ${reason}`);
-
-const asDirectoryUrl = root => {
-  const url = root instanceof URL ? new URL(root) : pathToFileURL(resolve(root));
-  if (!url.pathname.endsWith("/")) {url.pathname += "/";}
-  return url;
-};
-
 export const readAr2CoverageTestSource = async (testFile, options = {}) => {
-  const { evidenceRoot = repositoryRoot, fileSystem = defaultEvidenceFileSystem } = options;
   const { packageRoot, relativeTestFile } = packageTestCoordinates(testFile);
-  const repositoryPath = fileURLToPath(asDirectoryUrl(evidenceRoot)); const segments = testFile.split("/");
-  let currentPath = repositoryPath;
-  const observe = async (operation, reason) => {try {return await operation();} catch {custodyFailure(testFile, reason);}};
-  for (const [index, segment] of segments.entries()) {
-    const names = await observe(() => fileSystem.readdir(currentPath), "an ancestor directory is missing or unreadable");
-    const portableIdentity = segment.normalize("NFC").toLowerCase(); const identityMatches = names.filter(name => name.normalize("NFC").toLowerCase() === portableIdentity);
-    if (identityMatches.length !== 1 || identityMatches[0] !== segment) {custodyFailure(testFile, "a path segment is missing or has ambiguous identity");}
-    currentPath = join(currentPath, segment);
-    const metadata = await observe(() => fileSystem.lstat(currentPath), "a path segment is missing or unreadable");
-    if (metadata.isSymbolicLink()) {custodyFailure(testFile, "symbolic links are forbidden");}
-    if (index === segments.length - 1 ? !metadata.isFile() : !metadata.isDirectory()) {custodyFailure(testFile, index === segments.length - 1 ? "the evidence target is not a regular file" : "an ancestor is not a directory");}
-  }
-  const allowedRootPath = join(repositoryPath, packageRoot, "tests"); const canonicalPaths = () => Promise.all([fileSystem.realpath(allowedRootPath), fileSystem.realpath(currentPath)]);
-  const [resolvedAllowedRoot, resolvedEvidencePath] = await observe(canonicalPaths, "canonical path identity could not be established");
-  const containedPath = relative(resolvedAllowedRoot, resolvedEvidencePath); if (containedPath === ".." || containedPath.startsWith(`..${sep}`) || isAbsolute(containedPath)) {custodyFailure(testFile, "canonical path escapes its package tests root");}
-  const source = await observe(() => fileSystem.readFile(currentPath, "utf8"), "the validated evidence file could not be read"); return { packageRoot, relativeTestFile, source };
+  const source = (await readEvidence(testFile, {
+    ...options,
+    allowedRoot: `${packageRoot}/tests`,
+    evidenceRoot: options.evidenceRoot ?? repositoryRoot,
+  })).toString("utf8");
+  return { packageRoot, relativeTestFile, source };
 };
 
 const testScriptExecutes = (script, relativeTestFile) => script
@@ -197,7 +179,9 @@ const loadContractCoverageEvidence = async contractCoverage => {
   const testSources = new Map(retainedSources.map(({ source }, index) => [testFiles[index], source]));
   const packageRoots = [...new Set(retainedSources.map(({ packageRoot }) => packageRoot))];
   const packageTestScripts = new Map(await Promise.all(packageRoots.map(async packageRoot => {
-    const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
+    const packageManifest = await readJson(`${packageRoot}/package.json`, {
+      allowedRoot: packageRoot,
+    });
     return [packageRoot, packageManifest.scripts?.test];
   })));
   return { packageTestScripts, testSources };
@@ -320,10 +304,9 @@ const resolveJsonPointer = (value, pointer) => pointer
   .reduce((current, token) => current?.[token.replaceAll("~1", "/").replaceAll("~0", "~")], value);
 
 const validateEvidenceAnchor = async (entry, evidenceRoot) => {
-  const path = new URL(entry.path, evidenceRoot);
   let source;
   await assert.doesNotReject(async () => {
-    source = await readFile(path, "utf8");
+    source = await readText(entry.path, { evidenceRoot });
   }, `${entry.repository}:${entry.path} evidence path must exist`);
   const [kind, coordinate] = entry.locator.split(/:(.*)/su, 2);
   if (kind === "line") {
@@ -351,7 +334,7 @@ export const auditLegacyInventoryEvidence = async (exactLegacyRoot, inventoryOve
   assert.ok(exactLegacyRoot, "an explicit exact legacy root is required");
   const inventory = inventoryOverride ?? await readJson(inventoryPath);
   validateInventory(inventory);
-  return validateInventoryEvidenceFor(inventory, "legacy", asDirectoryUrl(exactLegacyRoot));
+  return validateInventoryEvidenceFor(inventory, "legacy", exactLegacyRoot);
 };
 
 const validateFreeze = async freeze => {
@@ -418,8 +401,9 @@ const validateFreeze = async freeze => {
   assert.ok(freeze.resultSemantics.sections.includes("observedPortableIntent"));
   assert.ok(freeze.resultSemantics.sections.includes("deferredObservations"));
   unique(freeze.snapshot.documents.map(document => document.id), "snapshot document IDs");
-  const semanticArtifactUrl = new URL(`../../${freeze.snapshot.semanticArtifact.path}`, import.meta.url);
-  const semanticArtifactBytes = await readFile(semanticArtifactUrl);
+  const semanticArtifactBytes = await readEvidence(freeze.snapshot.semanticArtifact.path, {
+    allowedRoot: "docs/architecture",
+  });
   assert.equal(sha256(semanticArtifactBytes), freeze.snapshot.semanticArtifact.sha256, "official semantic artifact content hash");
   const semanticArtifact = JSON.parse(semanticArtifactBytes.toString("utf8"));
   const frozenFacts = await validateOfficialSemantics(semanticArtifact);
@@ -464,9 +448,9 @@ export const validateAr2ContractArtifacts = async () => {
     readJson(negativeFixturesPath),
     readJson(contractCoveragePath),
     readJson(packagePath),
-    readFile(roadmapPath, "utf8"),
-    readFile(readinessPath, "utf8"),
-    readFile(runtimeAccessPath, "utf8"),
+    readText(roadmapPath),
+    readText(readinessPath),
+    readText(runtimeAccessPath),
   ]);
   validateSchema(inventorySchema, inventory, "legacy inventory");
   validateSchema(freezeSchema, freeze, "Claude freeze");
@@ -525,7 +509,19 @@ export const validateAr2ContractArtifacts = async () => {
   };
 };
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
-  const result = await validateAr2ContractArtifacts();
-  process.stdout.write(`AR-2 contract artifacts valid (${result.inventoryItems} inventory items, ${result.snapshotDocuments} snapshots)\n`);
+export const runAr2ContractArtifactsCli = async ({
+  stderr = process.stderr, stdout = process.stdout, validate = validateAr2ContractArtifacts,
+} = {}) => {
+  try {
+    const result = await validate();
+    stdout.write(`AR-2 contract artifacts valid (${result.inventoryItems} inventory items, ${result.snapshotDocuments} snapshots)\n`);
+    return 0;
+  } catch {
+    stderr.write("AR-2 contract artifact validation failed\n");
+    return 1;
+  }
+};
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = await runAr2ContractArtifactsCli();
 }
