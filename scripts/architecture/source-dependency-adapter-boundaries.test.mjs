@@ -176,6 +176,7 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   assert.deepEqual(host.entrypoints, [
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
   ]);
 
