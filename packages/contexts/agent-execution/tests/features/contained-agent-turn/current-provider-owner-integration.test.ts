@@ -21,6 +21,7 @@ import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../../dist/features/cont
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { createDependencies } from "../../features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { containedTurnFactoryPortKeys } from "./support/current-provider-owner-composition-ports.ts";
 import {
   boundary as codexFixtureBoundary,
   FakeCodexProcess,
@@ -758,13 +759,7 @@ test("public root remains path-free and outer composition retains the exact seve
   const composition = await readFile(new URL(
     "../../../../../apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts", import.meta.url,
   ), "utf8");
-  const featureFactoryPorts = /export const createContainedTurnFeatureFromProviderAccess[\s\S]*?return createContainedTurnFeature\(Object\.freeze\(\{(?<ports>[\s\S]*?)\n\s*\}\)\);\n\};/u
-    .exec(composition)?.groups?.ports;
-  assert.ok(featureFactoryPorts);
-  const supplied = [...featureFactoryPorts.matchAll(
-    /^\s+(operationStore|security|providerAccess|workspace|artifacts|custody|provider)(?=:|,?$)/gmu,
-  )]
-    .map(match => match[1]);
+  const supplied = containedTurnFactoryPortKeys(composition);
   assert.deepEqual(supplied, ["operationStore", "security", "providerAccess", "workspace", "artifacts", "custody", "provider"]);
   assert.doesNotMatch(composition, /production/u);
 });
