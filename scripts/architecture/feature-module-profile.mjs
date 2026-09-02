@@ -16,6 +16,7 @@ export const STRUCTURAL_CODES = new Set([
   "FM_ENTRYPOINT_MISSING",
   "FM_INLINE_BEHAVIOR",
   "FM_INVALID_AUTHORITY",
+  "FM_MAX_LINES",
   "FM_NONLITERAL_LOADING",
   "FM_PACKAGE_EXPORT_MAP",
   "FM_PARSE_FAILURE",
@@ -67,7 +68,7 @@ const LOCAL_MODULE_FILES = Object.freeze(["index.ts", "composition.ts"]);
 const LOCAL_FEATURE_ENTRYPOINTS = Object.freeze(["index.ts", "internal.ts"]);
 const LOCAL_ARCHITECTURE_DOCUMENT = "docs/architecture/feature-module-standard-v1-candidate.md";
 const LOCAL_DECISION = Object.freeze({ id: "ADR-0013", path: ACTIVATION_AUTHORITY.decisionPath, owner: "architecture" });
-const GOVERNABLE_CODES = new Set(["FM_PACKAGE_EXPORT_MAP", "FM_README_OWNERSHIP", "FM_TEST_PLACEMENT"]);
+const GOVERNABLE_CODES = new Set(["FM_MAX_LINES", "FM_PACKAGE_EXPORT_MAP", "FM_README_OWNERSHIP", "FM_TEST_PLACEMENT"]);
 const GOVERNED_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const GOVERNED_CODE_PATTERN = /^FM_[A-Z0-9_]+$/u;
 const STABLE_VALUE_PATTERN = /^[!-~](?:[ -~]*[!-~])?$/u;

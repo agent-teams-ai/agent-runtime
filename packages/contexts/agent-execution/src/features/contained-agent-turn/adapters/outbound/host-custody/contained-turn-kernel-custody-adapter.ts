@@ -1,4 +1,3 @@
-/* oxlint-disable max-lines -- this coordinator remains below the 600-line adapter hard limit. */
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import type {

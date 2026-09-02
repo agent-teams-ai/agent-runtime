@@ -1,4 +1,3 @@
-/* oxlint-disable max-lines -- exact launch verification remains below the 600-line production limit. */
 import { createHash } from "node:crypto";
 import {
   lstat,

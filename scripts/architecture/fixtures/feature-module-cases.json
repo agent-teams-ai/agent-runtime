@@ -573,6 +573,57 @@
       "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 3 }]
     },
     {
+      "name": "compiler-comment-references-within-the-same-feature-are-allowed",
+      "files": {
+        "src/features/alpha/domain/reference.js": "/// <reference path=\"./value.ts\" />\n/** @type {import(\"./value.js\").Value} */\nexport const reference = true;\n/** @import type { Value } from \"./value.js\" */\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "triple-slash-cross-feature-deep-reference-is-forbidden",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "edges": [{ "from": "beta", "to": "alpha", "kinds": ["type"] }],
+      "files": {
+        "src/features/beta/adapters/value.ts": "/// <reference path=\"../../alpha/domain/value.ts\" />\nexport const adapterValue = true;\n"
+      },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "compiler-comment-package-and-lib-references-are-forbidden-in-domain",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "/// <reference types=\"external-types\" />\n/// <reference lib=\"es2024\" />\n/** @type {import(\"external-schema\").Schema} */\nexport const value = true;\n/** @import type { External } from \"external-package\" */\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 2 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 3 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 5 }
+      ]
+    },
+    {
+      "name": "compiler-reference-precedence-and-malformed-references-are-enforced",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "/// <reference path=\"./value.js\" types=\"external\" />\n/// <reference path=target />\n/** @type {import(target).Value} */\nexport const value = true;\n/** @import type { Value } from target */\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.js", "line": 2 },
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.js", "line": 3 },
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.js", "line": 5 }
+      ]
+    },
+    {
+      "name": "arbitrary-comment-text-is-not-scanned-for-imports",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "// prose: /// <reference types=\"external\" />\n/** prose import(\"external-package\") and @import { X } from \"external-package\" */\nexport const value = true;\n"
+      },
+      "expected": []
+    },
+    {
       "name": "all-import-and-reexport-syntax-is-enforced",
       "secondFeature": true,
       "secondRoles": ["domain", "adapters"],
@@ -1439,6 +1490,22 @@
       "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/features/alpha/value.test.ts", "line": 2 }]
     },
     {
+      "name": "test-ownership-detects-jsdoc-import-types",
+      "secondFeature": true,
+      "files": {
+        "tests/features/alpha/value.test.js": "/** @type {import(\"../../../src/features/beta/domain/value.js\").Beta} */\nconst value = undefined;\nvoid value;\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.js", "line": 1 }]
+    },
+    {
+      "name": "test-ownership-detects-triple-slash-path-references",
+      "secondFeature": true,
+      "files": {
+        "tests/features/alpha/value.test.ts": "/// <reference path=\"../../../src/features/beta/domain/value.ts\" />\nexport {};\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
       "name": "test-default-parameter-loader-cannot-hide-misownership",
       "secondFeature": true,
       "files": { "tests/features/alpha/value.test.ts": "import { createRequire as makeRequire } from 'node:module';\nfunction value(load = makeRequire(import.meta.url)) { return load('../../../src/features/beta/domain/value.js'); }\nvoid value();\n" },
@@ -1482,6 +1549,45 @@
       "name": "parse-failure",
       "files": { "src/features/alpha/domain/value.ts": "export const value = ;\n" },
       "expected": [{ "code": "FM_PARSE_FAILURE", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "domain-counted-production-line-limit-is-enforced",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/too-long.ts", "lines": 501 },
+      "cliRuns": [{ "arguments": [], "exit": 1, "output": "src/features/alpha/domain/too-long.ts:1 FM_MAX_LINES src/features/alpha/domain/too-long.ts has 501 counted production lines; limit 500" }],
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "application-counted-production-line-limit-is-enforced",
+      "alphaRoles": ["domain", "application"],
+      "generatedSourceFile": { "path": "src/features/alpha/application/too-long.ts", "lines": 501 },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/application/too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "adapter-counted-production-line-limit-is-enforced",
+      "alphaRoles": ["domain", "adapters"],
+      "generatedSourceFile": { "path": "src/features/alpha/adapters/too-long.ts", "lines": 601 },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/adapters/too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "counted-production-line-limit-skips-comments-and-blank-lines",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/at-limit.ts", "lines": 500, "prefix": "// leading comment\n\n/* block\n * comment\n */\n", "suffix": "\n// trailing comment\n" },
+      "expected": []
+    },
+    {
+      "name": "colocated-tests-retain-the-800-line-lint-policy",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/large.test.ts", "lines": 700 },
+      "expected": []
+    },
+    {
+      "name": "generated-production-files-retain-maintainability-exclusion",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/generated/large.ts", "lines": 501 },
+      "expected": []
+    },
+    {
+      "name": "accepted-extension-can-govern-an-exact-maintainability-diagnostic",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/extended.ts", "lines": 501 },
+      "extensions": [{ "id": "alpha-domain-size", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/domain/extended.ts changes", "diagnostics": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/extended.ts", "line": 1 }] }],
+      "expected": []
     },
     {
       "name": "import-and-diagnostic-ceilings-are-bounded-and-deterministic",

@@ -8,6 +8,7 @@ import { parseSync } from "oxc-parser";
 import { parseDeterministicJson, readLocalPackageImports } from "./feature-module-config.mjs";
 import { importRecords } from "./feature-module-imports.mjs";
 import { boundedIssueText, CHECKER_LIMITS, createDiagnosticCollector, escapedDiagnosticText, overflowIssue } from "./feature-module-limits.mjs";
+import { maintainabilityIssues } from "./feature-module-maintainability.mjs";
 import { parseFeatureReadmeMetadata } from "./feature-module-readme.mjs";
 import {
   canonicalRoot,
@@ -247,11 +248,11 @@ const parseFileImports = async (absoluteFile, path, resources) => {
   try { parsed = parseSync(path, source); }
   catch { return { imports: [], issues: [issue("FM_PARSE_FAILURE", path, 1, "source cannot be parsed deterministically")] }; }
   if (!parsed.errors?.length) {
-    const imports = importRecords(parsed.program, source), remaining = CHECKER_LIMITS.imports - resources.imports;
+    const imports = importRecords(parsed.program, source, parsed.comments), remaining = CHECKER_LIMITS.imports - resources.imports;
     const overflow = imports.overflow || imports.length > remaining;
     const retained = imports.slice(0, Math.max(0, remaining));
     resources.imports += retained.length;
-    return { imports: retained, issues: [], program: parsed.program, source, overflow };
+    return { comments: parsed.comments, imports: retained, issues: [], program: parsed.program, source, overflow };
   }
   return {
     imports: [],
@@ -490,6 +491,13 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
     findings.add(ownershipIssues(path, sourceFeature, isAssembly, profile));
     const parsed = await parseFileImports(absoluteFile, path, resources);
     findings.add(parsed.issues);
+    findings.add(maintainabilityIssues({
+      comments: parsed.comments,
+      issue,
+      path,
+      role: sourceFeature && layerForPath(sourceFeature, path),
+      source: parsed.source,
+    }));
     findings.add(assemblyGrammarIssues({ isAssembly, path, sourceFeature, program: parsed.program, source: parsed.source }));
     for (const imported of parsed.imports) {findings.add(inspectImport({ features, isAssembly, sourceFeature, path, imported, declaredEdges, observedEdges, edgeLocations, localPackageImports, productionRoots, identityPaths }));}
     if (parsed.overflow) {findings.overflow("import"); break;}

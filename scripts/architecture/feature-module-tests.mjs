@@ -99,7 +99,7 @@ const readTestImports = async (context, absoluteTest) => {
       overflow: parsed.errors.length >= CHECKER_LIMITS.diagnostics,
     };
   }
-  const imports = importRecords(parsed.program, source);
+  const imports = importRecords(parsed.program, source, parsed.comments);
   const remaining = CHECKER_LIMITS.imports - context.testImportBudget.imports;
   const overflow = imports.overflow || imports.length > remaining;
   const retained = imports.slice(0, Math.max(0, remaining));

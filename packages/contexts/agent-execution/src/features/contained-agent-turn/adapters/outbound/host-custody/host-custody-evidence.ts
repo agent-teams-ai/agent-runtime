@@ -1,4 +1,3 @@
-/* oxlint-disable max-lines -- custody closure evidence remains below the 600-line production limit. */
 import { createHash } from "node:crypto";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 

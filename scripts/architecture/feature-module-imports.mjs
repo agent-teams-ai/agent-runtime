@@ -1,3 +1,5 @@
+import { commentImportRecords } from "./feature-module-comment-references.mjs";
+
 const MODULE_SPECIFIERS = new Set(["module", "node:module"]);
 const MAX_ALIAS_DEPTH = 8;
 const MAX_IMPORT_RECORDS = 2048;
@@ -481,9 +483,10 @@ const mutationRecord = (node, source, analysis) => {
   return makeRecord({ node, specifierNode: target, kind: "runtime", syntax: "loader-mutation", source, nonliteral: true });
 };
 
-export const importRecords = (program, source) => {
-  const analysis = createCapabilityAnalysis(program), records = [];
-  let overflow = false;
+export const importRecords = (program, source, comments = program.comments) => {
+  const analysis = createCapabilityAnalysis(program), commentRecords = commentImportRecords(program, source, comments);
+  const records = commentRecords.slice(0, MAX_IMPORT_RECORDS);
+  let overflow = commentRecords.length > MAX_IMPORT_RECORDS;
   walkAst(program, (node) => {
     if (records.length >= MAX_IMPORT_RECORDS) {overflow = true; return;}
     const imported = readImportRecord(node, source, analysis), mutated = mutationRecord(node, source, analysis);

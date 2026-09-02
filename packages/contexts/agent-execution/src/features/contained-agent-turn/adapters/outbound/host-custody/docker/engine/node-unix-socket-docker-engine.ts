@@ -1,4 +1,3 @@
-/* oxlint-disable max-lines -- Keeping the Docker Engine protocol adapter together preserves its reviewable request/response boundary. */
 import { DockerEngineError } from "./docker-engine-error.js";
 import {
   decodeEngineIdentity,

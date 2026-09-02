@@ -1,4 +1,3 @@
-/* oxlint-disable max-lines -- the fake remains below the 600-line adapter hard limit. */
 import { createHash } from "node:crypto";
 
 import { validateAuthorityShape } from "./docker-engine-codec.js";

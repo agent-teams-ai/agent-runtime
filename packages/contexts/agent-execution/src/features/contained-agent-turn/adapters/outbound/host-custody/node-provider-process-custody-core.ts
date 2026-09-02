@@ -1,4 +1,3 @@
-/* oxlint-disable max-lines -- shared POSIX custody core remains within the reviewed 600-line production limit. */
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {

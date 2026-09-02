@@ -325,6 +325,9 @@ const runFixture = async (fixture, initialRoot, state) => {
     files[`${fixture.generatedFiles.directory}/file-${String(index).padStart(5, "0")}${extension}`] = extension === ".ts" ? `export const value${index} = true;\n` : "fixture\n";
   }
   if (fixture.generatedLargeFile) {files[fixture.generatedLargeFile.path] = " ".repeat(fixture.generatedLargeFile.bytes);}
+  if (fixture.generatedSourceFile) {
+    files[fixture.generatedSourceFile.path] = `${fixture.generatedSourceFile.prefix ?? ""}${`${fixture.generatedSourceFile.line ?? "export {};"}\n`.repeat(fixture.generatedSourceFile.lines)}${fixture.generatedSourceFile.suffix ?? ""}`;
+  }
   await writeFixtureFiles(initialRoot, files);
   await applyFixtureHardlinks(initialRoot, fixture.hardlinks);
   const externalRoot = `${initialRoot}-symlink-targets`;
