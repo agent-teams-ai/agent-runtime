@@ -16,6 +16,7 @@ import {
 } from "../../../dist/composition.js";
 import type { ContainedTurnKernelOperationStore } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { createCodexAppServerPermissionBoundary } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
+import { CODEX_APP_SERVER_LINUX_X64_TUPLE } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 import {
   CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
   createClaudeAgentSdkPrivateProjection,
@@ -30,6 +31,11 @@ import { createSyntheticFilesystemLayout } from "../../filesystem-contained-turn
 
 const databaseUrl = process.env.POSTGRES_DURABILITY_URL;
 const privateDirectoryCustody = Object.freeze({assertPrivateDirectory: async (_path: string) => {}});
+const codexInitialization = Object.freeze({
+  platformFamily: CODEX_APP_SERVER_LINUX_X64_TUPLE.platformFamily,
+  platformOs: CODEX_APP_SERVER_LINUX_X64_TUPLE.platformOs,
+  userAgent: `agent-runtime/${CODEX_APP_SERVER_LINUX_X64_TUPLE.version} (${CODEX_APP_SERVER_LINUX_X64_TUPLE.userAgentOsName} 24.04; ${CODEX_APP_SERVER_LINUX_X64_TUPLE.userAgentArchitecture}) synthetic (agent-runtime; ${CODEX_APP_SERVER_LINUX_X64_TUPLE.adapterRevision})`,
+});
 
 type PersistedOperation = NonNullable<Awaited<ReturnType<PostgresContainedTurnOperationStore["read"]>>>;
 
@@ -419,7 +425,7 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
         const root = await mkdtemp(join(tmpdir(), `pg-current-owner-success-${provider}-`));
         const durableFilesystem = await durableWorkspaceComposition();
         try {
-          const host = new DeterministicCurrentOwnerHost();
+          const host = new DeterministicCurrentOwnerHost(codexInitialization);
           const owner = await createOwner(provider, root, host, true, durableFilesystem.workspaceOwner);
           const fixture = createDependencies();
           const selected = forProvider(fixture, provider);
@@ -501,7 +507,7 @@ test("PostgreSQL current owners resume proved durable closure without replaying 
         const root = await mkdtemp(join(tmpdir(), `pg-current-owner-recovery-${provider}-`));
         const durableFilesystem = await durableWorkspaceComposition();
         try {
-          const host = new DeterministicCurrentOwnerHost();
+          const host = new DeterministicCurrentOwnerHost(codexInitialization);
           const owner = await createOwner(provider, root, host, true, durableFilesystem.workspaceOwner);
           const fixture = createDependencies();
           const selected = forProvider(fixture, provider);

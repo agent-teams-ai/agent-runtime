@@ -378,6 +378,10 @@ test("recovery verifies phase-one identity and size metadata before decoding mat
   assert.match(queries[0] ?? "", /\(p\.operation_id,p\.preparation_token\) > \(\$3,\$4\)[\s\S]*ORDER BY p\.operation_id,p\.preparation_token[\s\S]*LIMIT \$5 FOR UPDATE OF p,o/u);
   assert.doesNotMatch(queries[0] ?? "", /payload,kind|#>> '\{kind\}'/u);
   assert.match(queries[2] ?? "", /JOIN agent_execution\.contained_turn_dispatch_preparation_v1/u);
+  assert.match(
+    queries[2] ?? "",
+    /expected\.operation_state_bytes,[\s\S]*expected\.output_bytes,expected\.receipt_bytes/u,
+  );
 });
 
 postgresTest("a later recovery batch violation takes precedence over an earlier digest mismatch", async () => {

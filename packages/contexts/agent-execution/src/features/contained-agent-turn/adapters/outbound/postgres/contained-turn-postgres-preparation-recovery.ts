@@ -161,11 +161,17 @@ export class ContainedTurnPostgresPreparationRecovery {
 
       const materialize = async (metadata: readonly PreparationRecoveryMetadataRow[]) => client.query<PreparationRecoveryStateRow>(
         `WITH approved AS (
-           SELECT * FROM unnest($1::text[],$2::text[],$3::integer[],$4::text[],$5::integer[])
-             AS expected(operation_id,preparation_token,state_codec_version,state_digest,state_bytes)
+           SELECT * FROM unnest(
+             $1::text[],$2::text[],$3::integer[],$4::text[],$5::integer[],
+             $6::integer[],$7::text[],$8::text[]
+           ) AS expected(
+             operation_id,preparation_token,state_codec_version,state_digest,state_bytes,
+             operation_state_bytes,output_bytes,receipt_bytes
+           )
          )
          SELECT expected.operation_id,expected.preparation_token,expected.state_codec_version,
-                expected.state_digest,expected.state_bytes,
+                expected.state_digest,expected.state_bytes,expected.operation_state_bytes,
+                expected.output_bytes,expected.receipt_bytes,
                 p.operation_id AS actual_operation_id,
                 p.preparation_token AS actual_preparation_token,
                 p.state_codec_version AS actual_state_codec_version,
@@ -181,7 +187,8 @@ export class ContainedTurnPostgresPreparationRecovery {
           ORDER BY expected.operation_id,expected.preparation_token`,
         [metadata.map(row => row.operation_id), metadata.map(row => row.preparation_token),
           metadata.map(row => row.state_codec_version), metadata.map(row => row.state_digest),
-          metadata.map(row => row.state_bytes)],
+          metadata.map(row => row.state_bytes), metadata.map(row => row.operation_state_bytes),
+          metadata.map(row => row.output_bytes), metadata.map(row => row.receipt_bytes)],
       );
       const recoveries: Array<Readonly<{
         operation: ContainedTurnKernelOperation;

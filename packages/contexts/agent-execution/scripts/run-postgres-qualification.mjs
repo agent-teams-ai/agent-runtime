@@ -134,6 +134,63 @@ const createChildEnvironment = (environment, databaseUrl) => {
   return childEnvironment;
 };
 
+const validateInvocation = (args, databaseUrl, writeStderr) => {
+  const preflightOnly = args.length === 1 && args[0] === "--preflight";
+  if (databaseUrl === undefined || databaseUrl.trim() === "") {
+    writeStderr(
+      "PostgreSQL qualification failed: POSTGRES_DURABILITY_URL is required and must not be empty.\n",
+    );
+    return;
+  }
+  if (args.length > 0 && !preflightOnly) {
+    writeStderr("PostgreSQL qualification failed: unsupported runner arguments.\n");
+    return;
+  }
+  const parsed = parseDatabaseUrl(databaseUrl);
+  if (parsed === undefined) {
+    writeStderr("PostgreSQL qualification failed: POSTGRES_DURABILITY_URL is malformed.\n");
+    return;
+  }
+  return { databaseUrl: databaseUrl.trim(), parsed, preflightOnly };
+};
+
+const startQualificationChild = (spawn, executable, environment, databaseUrl) => spawn(
+  executable,
+  ["--test", "--test-concurrency=1", ...testFiles],
+  {
+    cwd: packageRoot,
+    encoding: "utf8",
+    env: createChildEnvironment(environment, databaseUrl),
+    maxBuffer: MAX_CAPTURE_BYTES,
+    killSignal: "SIGTERM",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: POSTGRES_QUALIFICATION_CHILD_TIMEOUT_MS,
+  },
+);
+
+const captureOverflowed = (result) => result.error?.code === "ENOBUFS"
+  || capturedByteLength(result.stdout) > MAX_CAPTURE_BYTES
+  || capturedByteLength(result.stderr) > MAX_CAPTURE_BYTES;
+
+const writeCapturedDiagnostics = (result, redact, writeStdout, writeStderr) => {
+  const stdout = capturedText(result.stdout);
+  const stderr = capturedText(result.stderr);
+  if (stdout !== "") {writeStdout(redact(stdout));}
+  if (stderr !== "") {writeStderr(redact(stderr));}
+};
+
+const childFailureDiagnostic = (result) => {
+  if (result.error !== undefined) {
+    return "PostgreSQL qualification failed: test runner could not be started.\n";
+  }
+  if (result.signal !== null && result.signal !== undefined) {
+    return "PostgreSQL qualification failed: test runner terminated by a signal.\n";
+  }
+  if (result.status !== 0) {
+    return "PostgreSQL qualification failed: test runner exited unsuccessfully.\n";
+  }
+};
+
 export const runPostgresQualification = ({
   args = process.argv.slice(2),
   databaseUrl = process.env.POSTGRES_DURABILITY_URL,
@@ -143,48 +200,14 @@ export const runPostgresQualification = ({
   writeStdout = (diagnostic) => process.stdout.write(diagnostic),
   writeStderr = (diagnostic) => process.stderr.write(diagnostic),
 } = {}) => {
-  const preflightOnly = args.length === 1 && args[0] === "--preflight";
-
-  if (databaseUrl === undefined || databaseUrl.trim() === "") {
-    writeStderr(
-      "PostgreSQL qualification failed: POSTGRES_DURABILITY_URL is required and must not be empty.\n",
-    );
-    return 1;
-  }
-  if (args.length > 0 && !preflightOnly) {
-    writeStderr("PostgreSQL qualification failed: unsupported runner arguments.\n");
-    return 1;
-  }
-  if (preflightOnly) {
-    if (parseDatabaseUrl(databaseUrl) === undefined) {
-      writeStderr("PostgreSQL qualification failed: POSTGRES_DURABILITY_URL is malformed.\n");
-      return 1;
-    }
-    return 0;
-  }
-
-  const normalizedDatabaseUrl = databaseUrl.trim();
-  const parsedDatabaseUrl = parseDatabaseUrl(normalizedDatabaseUrl);
-  if (parsedDatabaseUrl === undefined) {
-    writeStderr("PostgreSQL qualification failed: POSTGRES_DURABILITY_URL is malformed.\n");
-    return 1;
-  }
-
-  const redact = createRedactor(normalizedDatabaseUrl, parsedDatabaseUrl);
+  const invocation = validateInvocation(args, databaseUrl, writeStderr);
+  if (invocation === undefined) {return 1;}
+  if (invocation.preflightOnly) {return 0;}
+  const redact = createRedactor(invocation.databaseUrl, invocation.parsed);
   let result;
   try {
-    result = spawn(
-      executable,
-      ["--test", "--test-concurrency=1", ...testFiles],
-      {
-        cwd: packageRoot,
-        encoding: "utf8",
-        env: createChildEnvironment(environment, normalizedDatabaseUrl),
-        maxBuffer: MAX_CAPTURE_BYTES,
-        killSignal: "SIGTERM",
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: POSTGRES_QUALIFICATION_CHILD_TIMEOUT_MS,
-      },
+    result = startQualificationChild(
+      spawn, executable, environment, invocation.databaseUrl,
     );
   } catch {
     writeStderr("PostgreSQL qualification failed: test runner could not be started.\n");
@@ -195,37 +218,15 @@ export const runPostgresQualification = ({
     writeStderr(POSTGRES_QUALIFICATION_TIMEOUT_DIAGNOSTIC);
     return 1;
   }
-  if (
-    result.error?.code === "ENOBUFS" ||
-    capturedByteLength(result.stdout) > MAX_CAPTURE_BYTES ||
-    capturedByteLength(result.stderr) > MAX_CAPTURE_BYTES
-  ) {
+  if (captureOverflowed(result)) {
     writeStderr(
       "PostgreSQL qualification failed: test runner output exceeded the safe capture limit.\n",
     );
     return 1;
   }
-  const stdout = capturedText(result.stdout);
-  const stderr = capturedText(result.stderr);
-  if (stdout !== "") {
-    writeStdout(redact(stdout));
-  }
-  if (stderr !== "") {
-    writeStderr(redact(stderr));
-  }
-
-  if (result.error !== undefined) {
-    writeStderr("PostgreSQL qualification failed: test runner could not be started.\n");
-    return 1;
-  }
-  if (result.signal !== null && result.signal !== undefined) {
-    writeStderr("PostgreSQL qualification failed: test runner terminated by a signal.\n");
-    return 1;
-  }
-  if (result.status !== 0) {
-    writeStderr("PostgreSQL qualification failed: test runner exited unsuccessfully.\n");
-    return 1;
-  }
+  writeCapturedDiagnostics(result, redact, writeStdout, writeStderr);
+  const failure = childFailureDiagnostic(result);
+  if (failure !== undefined) {writeStderr(failure); return 1;}
   return 0;
 };
 

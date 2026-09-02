@@ -373,6 +373,58 @@ postgresTest("expand migration accepts legacy writes before the contract migrati
   });
 });
 
+postgresTest("real codec-1 preparation backfill crosses two page boundaries and reaches V5", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool, 3);
+    const operation = operationForProject("project:legacy-pages", "legacy-pages");
+    const store = new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 3 });
+    assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
+    const legacyRows = Array.from({ length: 9 }, (_unused, index) => {
+      const suffix = String(index).padStart(2, "0");
+      return {
+        attemptId: containedTurnIdentity("attempt", `attempt:legacy-pages:${suffix}`),
+        custodyId: containedTurnIdentity("custody", `custody:legacy-pages:${suffix}`),
+        kind: "active",
+        operationCutoffRevision: operation.operationCutoff.revision,
+        operationId: operation.operationId,
+        preparationToken: containedTurnIdentity("preparation", `preparation:legacy-pages:${suffix}`),
+        preparedOperationRevision: operation.revision,
+        providerAccessGrantRequestId: "provider-access-grant:legacy-placeholder",
+        runtimeSecurityGrantRequestId: "runtime-security-grant:legacy-placeholder",
+        workspaceId: containedTurnIdentity("workspace", `workspace:legacy-pages:${suffix}`),
+      };
+    });
+    await pool.query(
+      `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+         (operation_id,preparation_token,state_codec_version,state,state_digest)
+       SELECT $1,row.preparation_token,1,row.state,NULL
+         FROM jsonb_to_recordset($2::jsonb) AS row(preparation_token text,state jsonb)`,
+      [operation.operationId, JSON.stringify(legacyRows.map(row => ({
+        preparation_token: row.preparationToken,
+        state: row,
+      })))],
+    );
+
+    await applyContainedTurnPostgresSchema(pool);
+
+    const migrated = await pool.query<{ count: number; null_digests: number }>(
+      `SELECT count(*)::integer AS count,
+              count(*) FILTER (WHERE state_digest IS NULL)::integer AS null_digests
+         FROM agent_execution.contained_turn_dispatch_preparation_v1
+        WHERE operation_id=$1`,
+      [operation.operationId],
+    );
+    assert.deepEqual(migrated.rows[0], { count: 9, null_digests: 0 });
+    assert.deepEqual((await pool.query(
+      "SELECT version,migration_digest FROM agent_execution.schema_migration WHERE component=$1",
+      [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component],
+    )).rows[0], {
+      migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[4]?.digest,
+      version: 5,
+    });
+  });
+});
+
 postgresTest("contract migration waits for old transactions and durably excludes the old binary", async () => {
   await withPool(async pool => {
     await resetSchema(pool, 4);

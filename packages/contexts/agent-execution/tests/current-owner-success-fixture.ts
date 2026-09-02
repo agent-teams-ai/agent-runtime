@@ -1,5 +1,11 @@
 type Message = Record<string, any>;
 
+export interface CodexInitializeFixture {
+  readonly platformFamily: "unix";
+  readonly platformOs: "linux" | "macos";
+  readonly userAgent: string;
+}
+
 class AsyncByteQueue implements AsyncIterable<Uint8Array> {
   readonly #buffer: Uint8Array[] = [];
   readonly #waiters: ((value: IteratorResult<Uint8Array>) => void)[] = [];
@@ -95,17 +101,20 @@ class CodexProtocolProcess {
   readonly #lifecycle: HostLifecycle;
   readonly #observeProviderExit: () => void;
   readonly #plan: Message;
+  readonly #initialization: CodexInitializeFixture;
 
   public constructor(
     custodyRef: string,
     plan: Message,
     lifecycle: HostLifecycle,
     observeProviderExit: () => void,
+    initialization: CodexInitializeFixture,
   ) {
     this.custodyRef = custodyRef;
     this.#lifecycle = lifecycle;
     this.#observeProviderExit = observeProviderExit;
     this.#plan = plan;
+    this.#initialization = initialization;
     this.stderr = new AsyncByteQueue(() => {this.#lifecycle.stderrDrained = true;});
     this.stdout = new AsyncByteQueue(() => {this.#lifecycle.stdoutDrained = true;});
     this.stderr.end();
@@ -155,7 +164,7 @@ class CodexProtocolProcess {
       network: {enabled: false},
     };
     if (message.method === "initialize") {
-      this.#emit({id: message.id, result: {codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "codex/0.150.1"}});
+      this.#emit({id: message.id, result: {codexHome, ...this.#initialization}});
     } else if (message.method === "config/read") {
       this.#emit({id: message.id, result: {
         config: {default_permissions: permissionProfileId, permissions: {[permissionProfileId]: permissionProfile}},
@@ -192,6 +201,7 @@ class CodexProtocolProcess {
 }
 
 export class DeterministicCurrentOwnerHost {
+  readonly #codexInitialization: CodexInitializeFixture;
   readonly plans: Message[] = [];
   readonly #children = new Map<string, DeterministicSdkProcess>();
   readonly #lifecycles = new Map<string, HostLifecycle>();
@@ -201,6 +211,10 @@ export class DeterministicCurrentOwnerHost {
   releases = 0;
   reserves = 0;
   starts = 0;
+
+  public constructor(codexInitialization: CodexInitializeFixture) {
+    this.#codexInitialization = codexInitialization;
+  }
 
   public async reserve(input: Message) {
     this.reserves += 1;
@@ -215,7 +229,7 @@ export class DeterministicCurrentOwnerHost {
     const child = new DeterministicSdkProcess(lifecycle);
     this.#children.set(custodyRef, child);
     this.#processes.set(custodyRef, new CodexProtocolProcess(
-      custodyRef, input.launchPlan, lifecycle, () => {child.markExited();},
+      custodyRef, input.launchPlan, lifecycle, () => {child.markExited();}, this.#codexInitialization,
     ));
     return Object.freeze({custodyRef});
   }
