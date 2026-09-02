@@ -2,7 +2,16 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const MAX_CAPTURE_BYTES = 256 * 1024;
-const REDACTION = "[REDACTED]";
+const MAX_DATABASE_URL_BYTES = 8 * 1024;
+const CHILD_ENVIRONMENT_KEYS = [
+  "PATH",
+  "SystemRoot",
+  "ComSpec",
+  "PATHEXT",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+];
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const testFiles = [
@@ -15,6 +24,12 @@ const testFiles = [
   fileURLToPath(
     new URL(
       "../tests/features/contained-agent-turn/postgres-current-owner-submit-integration.test.ts",
+      import.meta.url,
+    ),
+  ),
+  fileURLToPath(
+    new URL(
+      "../tests/features/contained-agent-turn/postgres-contained-turn-recovery.test.ts",
       import.meta.url,
     ),
   ),
@@ -31,42 +46,37 @@ const addSecret = (secrets, value) => {
   }
 };
 
-const createRedactor = (databaseUrl) => {
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+const createRedactor = (databaseUrl, parsed) => {
   const secrets = new Set();
   addSecret(secrets, databaseUrl);
   addSecret(secrets, databaseUrl.trim());
-
-  try {
-    const parsed = new URL(databaseUrl.trim());
-    addSecret(secrets, parsed.href);
-    addSecret(secrets, parsed.username);
-    addSecret(secrets, parsed.password);
-    addSecret(secrets, parsed.hostname);
-    addSecret(secrets, parsed.host);
-    addSecret(secrets, parsed.port);
-    addSecret(secrets, parsed.pathname);
-    addSecret(secrets, parsed.pathname.replace(/^\//u, ""));
-    addSecret(secrets, parsed.search);
-    addSecret(secrets, parsed.hash);
-    addSecret(secrets, parsed.hash.replace(/^#/u, ""));
-    for (const value of parsed.searchParams.values()) {
-      addSecret(secrets, value);
-    }
-  } catch {
-    return undefined;
+  addSecret(secrets, parsed.href);
+  addSecret(secrets, parsed.username);
+  addSecret(secrets, parsed.password);
+  addSecret(secrets, parsed.hostname);
+  addSecret(secrets, parsed.host);
+  addSecret(secrets, parsed.port);
+  addSecret(secrets, parsed.pathname);
+  addSecret(secrets, parsed.pathname.replace(/^\//u, ""));
+  addSecret(secrets, parsed.search);
+  addSecret(secrets, parsed.hash);
+  addSecret(secrets, parsed.hash.replace(/^#/u, ""));
+  for (const [name, value] of parsed.searchParams) {
+    addSecret(secrets, name);
+    addSecret(secrets, value);
   }
 
   const orderedSecrets = [...secrets]
     .filter((secret) => secret !== "")
     .sort((left, right) => right.length - left.length);
+  const pattern = new RegExp(orderedSecrets.map(escapeRegExp).join("|"), "giu");
 
-  return (diagnostic) => {
-    let redacted = diagnostic;
-    for (const secret of orderedSecrets) {
-      redacted = redacted.replaceAll(secret, REDACTION);
-    }
-    return redacted;
-  };
+  // A single replacement pass cannot rescan replacement text. Length-preserving
+  // masks also ensure that even one-character URL components cannot amplify
+  // diagnostics or survive as partial secrets.
+  return (diagnostic) => diagnostic.replace(pattern, (secret) => "*".repeat(secret.length));
 };
 
 const capturedText = (value) => {
@@ -79,12 +89,40 @@ const capturedText = (value) => {
   return "";
 };
 
-const boundedText = (value) => {
-  const encoded = Buffer.from(value, "utf8");
-  if (encoded.byteLength <= MAX_CAPTURE_BYTES) {
-    return value;
+const capturedByteLength = (value) => {
+  if (Buffer.isBuffer(value)) {
+    return value.byteLength;
   }
-  return `${encoded.subarray(0, MAX_CAPTURE_BYTES).toString("utf8")}\n[diagnostic truncated]\n`;
+  return typeof value === "string" ? Buffer.byteLength(value, "utf8") : 0;
+};
+
+const parseDatabaseUrl = (databaseUrl) => {
+  if (Buffer.byteLength(databaseUrl, "utf8") > MAX_DATABASE_URL_BYTES) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(databaseUrl.trim());
+    if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
+};
+
+const createChildEnvironment = (environment, databaseUrl) => {
+  const childEnvironment = {};
+  for (const allowedKey of CHILD_ENVIRONMENT_KEYS) {
+    const sourceKey = Object.keys(environment).find(
+      (key) => key.toLowerCase() === allowedKey.toLowerCase(),
+    );
+    if (sourceKey !== undefined && typeof environment[sourceKey] === "string") {
+      childEnvironment[allowedKey] = environment[sourceKey];
+    }
+  }
+  childEnvironment.POSTGRES_DURABILITY_URL = databaseUrl;
+  return childEnvironment;
 };
 
 export const runPostgresQualification = ({
@@ -109,10 +147,21 @@ export const runPostgresQualification = ({
     return 1;
   }
   if (preflightOnly) {
+    if (parseDatabaseUrl(databaseUrl) === undefined) {
+      writeStderr("PostgreSQL qualification failed: POSTGRES_DURABILITY_URL is malformed.\n");
+      return 1;
+    }
     return 0;
   }
 
-  const redact = createRedactor(databaseUrl);
+  const normalizedDatabaseUrl = databaseUrl.trim();
+  const parsedDatabaseUrl = parseDatabaseUrl(normalizedDatabaseUrl);
+  if (parsedDatabaseUrl === undefined) {
+    writeStderr("PostgreSQL qualification failed: POSTGRES_DURABILITY_URL is malformed.\n");
+    return 1;
+  }
+
+  const redact = createRedactor(normalizedDatabaseUrl, parsedDatabaseUrl);
   let result;
   try {
     result = spawn(
@@ -121,7 +170,7 @@ export const runPostgresQualification = ({
       {
         cwd: packageRoot,
         encoding: "utf8",
-        env: environment,
+        env: createChildEnvironment(environment, normalizedDatabaseUrl),
         maxBuffer: MAX_CAPTURE_BYTES,
         stdio: ["ignore", "pipe", "pipe"],
       },
@@ -131,23 +180,27 @@ export const runPostgresQualification = ({
     return 1;
   }
 
-  if (redact !== undefined) {
-    const stdout = boundedText(redact(capturedText(result.stdout)));
-    const stderr = boundedText(redact(capturedText(result.stderr)));
-    if (stdout !== "") {
-      writeStdout(stdout);
-    }
-    if (stderr !== "") {
-      writeStderr(stderr);
-    }
+  if (
+    result.error?.code === "ENOBUFS" ||
+    capturedByteLength(result.stdout) > MAX_CAPTURE_BYTES ||
+    capturedByteLength(result.stderr) > MAX_CAPTURE_BYTES
+  ) {
+    writeStderr(
+      "PostgreSQL qualification failed: test runner output exceeded the safe capture limit.\n",
+    );
+    return 1;
+  }
+  const stdout = capturedText(result.stdout);
+  const stderr = capturedText(result.stderr);
+  if (stdout !== "") {
+    writeStdout(redact(stdout));
+  }
+  if (stderr !== "") {
+    writeStderr(redact(stderr));
   }
 
   if (result.error !== undefined) {
-    const message =
-      result.error.code === "ENOBUFS"
-        ? "PostgreSQL qualification failed: test runner output exceeded the safe capture limit.\n"
-        : "PostgreSQL qualification failed: test runner could not be started.\n";
-    writeStderr(message);
+    writeStderr("PostgreSQL qualification failed: test runner could not be started.\n");
     return 1;
   }
   if (result.signal !== null && result.signal !== undefined) {
