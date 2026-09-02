@@ -15,6 +15,7 @@ related:
   - ADR-0009
   - ADR-0010
   - ADR-0012
+  - ADR-0014
 blocked_by: []
 code_anchors: []
 ---
@@ -25,9 +26,10 @@ Status: current qualification register, not a production-readiness claim
 
 The canonical domain, dependency, package-identity, private application
 entrypoint, and narrow contained-turn decisions are the accepted ADRs listed
-above, including ADR-0012; ADR-0006 remains proposed and ADR-0011 is unassigned.
-ADR-0009, ADR-0010, and ADR-0012 authorize only the Contained Agent Turn V1
-contract; they do not authorize a production implementation or deployment.
+above, including ADR-0012 and ADR-0014; ADR-0006 remains proposed and ADR-0011
+is unassigned. ADR-0009, ADR-0010, ADR-0012, and ADR-0014 authorize only the
+Contained Agent Turn V1 contract and narrow Darwin candidate direction; they do
+not authorize a production implementation or deployment.
 The committed ADR-0006 JSON oracle plus the ADR-0010 V1 disposition and contract fixtures,
 independent evaluators, property/mutation checks, and synthetic XState
 requirement-27 verifier are executable architecture evidence governed through
@@ -386,9 +388,11 @@ Contained Agent Turn V1 implementation present; qualification remains open:
   to strict descriptor-bound cgroup-v2 custody, while Darwin arm64 binds the
   same SDK and CLI versions with SHA
   `625869b01e0050f260b2980fac248fd9cef9e462612bded4ec9d3d49ff8969a5`
-  to canonical-path cooperative POSIX process-group custody. The Darwin tuple
-  remains an unqualified candidate until an exact-SHA disposable local macOS
-  canary is registered; the hosted Linux live canary remains blocked at
+  to canonical-path cooperative POSIX process-group custody. ADR-0014 records
+  the Darwin direction as candidate-only: no Darwin Claude qualification row or
+  registered qualification claim exists. The tuple remains unqualified until
+  an exact-SHA disposable local macOS canary produces honest evidence for later
+  registry promotion; the hosted Linux live canary remains blocked at
   authentication by an expired test OAuth session. None of this is production
   or deployment qualification;
 - OpenCode remains contract-only and no production ACP adapter is claimed.

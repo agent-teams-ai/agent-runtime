@@ -45,6 +45,25 @@ test("qualification registry pins every promoted evidence row", async () => {
   });
 });
 
+test("qualification registry omits pre-qualification ADR-0014 Darwin candidates", async () => {
+  const registry = await readRegistry();
+  const entries = registry.entries as { targets: { binaryClosure: string }[] }[];
+  const registeredBinaryClosures = entries.flatMap(({ targets }) =>
+    targets.map(({ binaryClosure }) => binaryClosure),
+  );
+
+  for (const forbiddenDigest of [
+    "a14f9a907c12c8812878b70e6b7d65f81c39ed795513e46a55817d7428c0ca6b",
+    "625869b01e0050f260b2980fac248fd9cef9e462612bded4ec9d3d49ff8969a5",
+  ]) {
+    assert.equal(
+      registeredBinaryClosures.some((closure) => closure.includes(forbiddenDigest)),
+      false,
+      `ADR-0014 candidate digest ${forbiddenDigest} must remain omitted`,
+    );
+  }
+});
+
 test("qualification registry rejects wildcard target dimensions", async () => {
   const registry = await readRegistry();
   const entries = structuredClone(registry.entries) as Record<string, unknown>[];

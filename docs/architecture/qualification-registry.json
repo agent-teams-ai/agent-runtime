@@ -522,37 +522,6 @@
       ]
     },
     {
-      "id": "macos-claude-agent-sdk-0-3-251-darwin-candidate",
-      "qualification": "unqualified",
-      "evidence": [
-        {
-          "kind": "redacted-summary",
-          "path": "experiments/runtime-profile-behavior/fixtures/linux-claude-agent-sdk-0.3.251-static-summary.json",
-          "sha256": "92b1479ee76dcb5c047f41b577087da6ad8e3bb9566cb0ded65c6958dcedd3c1"
-        }
-      ],
-      "readinessSections": [
-        "Execution, tools, and child agents"
-      ],
-      "limitations": [
-        "PR #55 disposable candidate only: cooperative Darwin process-group custody cannot establish physical or composite containment proof.",
-        "The retained static evidence characterizes the Linux 0.3.251 package and SDK contract only and does not qualify the Darwin binary or behavior; an exact-SHA local macOS arm64 canary with an isolated test credential binding is required before promotion.",
-        "This row is not implementation, deployment, or production qualification."
-      ],
-      "targets": [
-        {
-          "provider": "claude",
-          "providerAdapter": "claude-agent-sdk-contained-turn:0.3.251",
-          "binaryClosure": "@anthropic-ai/claude-agent-sdk@0.3.251[claude-code@2.1.251;darwin-arm64-sha256:625869b01e0050f260b2980fac248fd9cef9e462612bded4ec9d3d49ff8969a5]",
-          "platform": "macos-apple-silicon",
-          "credentialRoute": "disposable-isolated-test-binding-pending",
-          "storageTopology": "operation-private-workspace-with-provider-private-projection",
-          "transportTopology": "claude-agent-sdk-custom-spawn-through-cooperative-host-custody",
-          "failureDomain": "single-macos-host-cooperative-process-group"
-        }
-      ]
-    },
-    {
       "id": "macos-claude-session-store",
       "qualification": "scoped",
       "evidence": [

@@ -50,6 +50,26 @@ test("committed frozen authority preserves all evidence bytes", async () => {
   assert.equal(await verifyFrozenDocumentBytes(repositoryRoot), 37);
 });
 
+test("accepted ADR-0014 is reachable from both canonical documentation indexes", async () => {
+  const registry = JSON.parse(await readFile(
+    join(repositoryRoot, "architecture/decisions/accepted-decisions.json"),
+    "utf8"
+  ));
+  const [readingOrder, decisionIndex] = await Promise.all([
+    readFile(join(repositoryRoot, "docs/README.md"), "utf8"),
+    readFile(join(repositoryRoot, "docs/decisions/README.md"), "utf8")
+  ]);
+
+  const decision = registry.decisions.find(({ id }) => id === "ADR-0014");
+  assert.deepEqual(decision, {
+    id: "ADR-0014",
+    path: "docs/decisions/0014-darwin-provider-candidate-platform-qualification.md",
+    immutableDigest: "sha256:b923c5f780461715861e829391fd7a01f7f7cb81586760655f5f8218c6d9b7e3"
+  });
+  assert.match(readingOrder, /decisions\/0014-darwin-provider-candidate-platform-qualification\.md/u);
+  assert.match(decisionIndex, /0014-darwin-provider-candidate-platform-qualification\.md/u);
+});
+
 test("catalog authority has the reviewed type and lifecycle census", async () => {
   const sidecar = await readFile(join(repositoryRoot, "docs/document-metadata.yaml"), "utf8");
   const sidecarBlocks = sidecar.split(/^  (?=docs\/)/mu).slice(1);

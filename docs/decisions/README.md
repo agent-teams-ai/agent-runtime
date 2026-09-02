@@ -16,6 +16,7 @@ related:
   - ADR-0010
   - ADR-0012
   - ADR-0013
+  - ADR-0014
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -63,6 +64,9 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0013: Scoped Feature Module Standard v1 adoption](0013-feature-module-standard-v1-candidate-adoption.md)
   accepts active conformance only for the three named features in Agent
   Execution and Provider Access; it does not claim repository-wide conformance.
+- [ADR-0014: Darwin provider candidate platform qualification](0014-darwin-provider-candidate-platform-qualification.md)
+  accepts exact Codex and Claude Darwin arm64 revisions as unqualified
+  candidates without changing Linux authority or ADR-0010 operation semantics.
 
 ## Superseded
 
