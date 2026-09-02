@@ -166,7 +166,7 @@ AR-2 implementation present; synthetic evidence present; qualification open:
   [`Legacy Feature Inventory`](legacy-feature-inventory.json) and the
   machine-readable Claude Code
   [`freeze packet`](claude-code-setup-freeze.json) are present and pass a
-  deterministic artifact gate. Each of its 21 frozen fixture rows maps to
+  deterministic artifact gate. Each of its 26 frozen fixture rows maps to
   exactly one declared Node test selected by its owning package test script;
 - inventory schema V2 does not use a fixed row count or authored ID list as
   completeness proof. It validates unique IDs, provider/ID consistency,
@@ -187,7 +187,7 @@ AR-2 implementation present; synthetic evidence present; qualification open:
 - the frozen `claude-code-settings@2026-08-28` dialect identifies official
   documentation semantics only. It does not qualify, version, or prove
   compatibility of a discovered executable;
-- revision 3 of the content-addressed
+- revision 4 of the content-addressed
   [official-semantics artifact](claude-code-official-semantics.snapshot.json)
   binds five normalized evidence records to five exact official response bodies
   retained as deterministic gzip artifacts. The offline artifact gate reads
