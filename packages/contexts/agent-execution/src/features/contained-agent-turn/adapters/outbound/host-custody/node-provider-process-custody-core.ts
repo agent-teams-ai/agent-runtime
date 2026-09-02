@@ -14,17 +14,10 @@ import {
   type HostCustodyLaunchPlanResolver,
   type HostCustodyReservationInput,
   type HostCustodyProcessIdentityObserver,
-  type HostCustodyProcessIdentityProof,
   type HostCustodySpawnAcknowledgement,
   type ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
-import {
-  containCustody,
-  identityBase,
-  snapshotEvidence,
-  unprovenResult,
-  type ContainmentResult,
-} from "./host-custody-evidence.js";
+import { containCustody, snapshotEvidence, unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
 import {
   assertDelegatedStartFingerprint,
   canonicalJson,
@@ -38,10 +31,7 @@ import {
   createPosixProcessIdentityObserver,
   delegatedStartAbortError,
   NodeCustodiedSdkProcess,
-  observeProcessIdentity,
-  type SpawnStatus,
 } from "./host-custody-process-tree.js";
-import { StableProcessGroupGuardian, type GuardianStartObservation } from "./host-custody-stable-guardian.js";
 import type { OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import { launchGuardedProvider } from "./node-provider-process-custody-launch.js";
 import {
@@ -51,7 +41,6 @@ import {
 import { replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
 import { quarantinePrivateRootForReconciliation } from "./host-custody-private-root.js";
-import { boundedPromise } from "./host-custody-stdio.js";
 import {
   assertRetainedWorkspaceAuthority,
   assertReservedWorkspaceAuthority,
@@ -70,6 +59,7 @@ import {
   assertRuntimeProfilePlatform,
   type ProcessCustodyRuntimeProfile,
 } from "./host-custody-runtime-profile.js";
+import { acknowledgeProviderSpawn } from "./node-provider-process-custody-spawn-acknowledgement.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
 export class NodeProviderProcessCustodyCore implements
   ProviderProcessCustodyPort,
@@ -381,7 +371,15 @@ export class NodeProviderProcessCustodyCore implements
     live.launchAuthority = launched.authority;
     live.spawnStatus = "ambiguous";
     live.guardian = launched.guardian;
-    live.spawnAcknowledgement = this.#acknowledgeSpawn(live, launched.guardian);
+    live.spawnAcknowledgement = acknowledgeProviderSpawn(live, launched.guardian, {
+      hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
+      identityObservationAfterMs: this.#identityObservationAfterMs,
+      monotonicNow: this.#monotonicNow,
+      onStartFailure: () => this.#triggerStartFailureContainment(live),
+      processIdentityObserver: this.#processIdentityObserver,
+      spawnAcknowledgementAfterMs: this.#spawnAcknowledgementAfterMs,
+      spawnAcknowledgementObserver: this.#spawnAcknowledgementObserver,
+    });
     live.child = launched.child;
     live.exit = launched.exit;
     live.process = launched.process;
@@ -389,129 +387,6 @@ export class NodeProviderProcessCustodyCore implements
     live.stderr = launched.stderr;
     live.stdout = launched.stdout;
     return launched.sdkProcess;
-  }
-
-  async #observeSpawnAcknowledgement(
-    live: LiveCustody,
-    guardian: StableProcessGroupGuardian,
-    start: GuardianStartObservation,
-    acknowledgementDeadline: number,
-  ): Promise<SpawnStatus> {
-    if (start.status !== "acknowledged") {return start.status;}
-    live.providerPid = start.providerPid;
-    const pgid = guardian.child.pid;
-    const observer = this.#spawnAcknowledgementObserver;
-    if (pgid === undefined || observer === undefined) {return pgid === undefined ? "ambiguous" : "acknowledged";}
-    try {
-      const remaining = acknowledgementDeadline - this.#monotonicNow();
-      if (remaining <= 0) {return "ambiguous";}
-      const observed = await boundedPromise(
-        observer({
-          child: guardian.child,
-          childProcessInstanceSha256: live.childProcessInstanceSha256 ?? sha256("missing-child-instance"),
-        }),
-        remaining,
-      );
-      if (observed === undefined || this.#monotonicNow() >= acknowledgementDeadline) {return "ambiguous";}
-      if (
-        observed.status === "acknowledged" &&
-        observed.child === guardian.child &&
-        observed.pid === start.providerPid &&
-        observed.pgid === pgid
-      ) {
-        return "acknowledged";
-      }
-      return observed.status === "error-before-start" ? "error-before-start" : "ambiguous";
-    } catch {return "ambiguous";}
-  }
-
-  async #acknowledgeSpawn(live: LiveCustody, guardian: StableProcessGroupGuardian): Promise<SpawnStatus> {
-    const acknowledgementDeadline = this.#monotonicNow() + this.#spawnAcknowledgementAfterMs;
-    const startRemaining = acknowledgementDeadline - this.#monotonicNow();
-    const start = startRemaining <= 0
-      ? undefined
-      : await boundedPromise(guardian.start, startRemaining);
-    if (start === undefined || this.#monotonicNow() >= acknowledgementDeadline) {
-      live.spawnStatus = "ambiguous";
-      live.signalAuthorized = false;
-      live.identity = Object.freeze({
-        ...identityBase(live, this.#hostLifecycleGenerationSha256),
-        status: "ambiguous",
-      });
-      setTimeout(() => {void this.#triggerStartFailureContainment(live);}, 0);
-      return "ambiguous";
-    }
-    live.guardianNoStartAcknowledged = start.status === "error-before-start";
-    if (start.status === "error-before-start" && start.code !== undefined) {
-      live.guardianStartErrorCode = start.code;
-    }
-    let acknowledgement = await this.#observeSpawnAcknowledgement(live, guardian, start, acknowledgementDeadline);
-    live.spawnStatus = acknowledgement;
-    if (acknowledgement === "acknowledged") {
-      live.identityProof = this.#observeProcessIdentity(live, guardian.child, acknowledgementDeadline);
-      const remaining = acknowledgementDeadline - this.#monotonicNow();
-      const proof = remaining <= 0
-        ? undefined
-        : await boundedPromise(live.identityProof, remaining);
-      if (proof === undefined || this.#monotonicNow() >= acknowledgementDeadline) {
-        acknowledgement = "ambiguous";
-        live.spawnStatus = "ambiguous";
-        live.signalAuthorized = false;
-        if (live.identity.status === "not-started" || live.identity.status === "proved") {
-          const pgid = guardian.child.pid;
-          const pid = live.providerPid;
-          live.identity = Object.freeze({
-            ...identityBase(live, this.#hostLifecycleGenerationSha256),
-            ...(pid === undefined || pgid === undefined ? {} : { pgid, pid }),
-            status: "unproven",
-          });
-        }
-      }
-    } else {
-      live.signalAuthorized = false;
-      const pgid = guardian.child.pid;
-      const pid = live.providerPid;
-      live.identity = Object.freeze({
-        ...identityBase(live, this.#hostLifecycleGenerationSha256),
-        ...(pid === undefined || pgid === undefined ? {} : { pgid, pid }),
-        status: acknowledgement === "error-before-start" ? "not-started" : "ambiguous",
-      });
-    }
-    if (acknowledgement !== "acknowledged") {
-      setTimeout(() => {void this.#triggerStartFailureContainment(live);}, 0);
-    }
-    return acknowledgement;
-  }
-
-  async #observeProcessIdentity(
-    live: LiveCustody,
-    child: ChildProcessWithoutNullStreams,
-    acknowledgementDeadline: number,
-  ): Promise<HostCustodyProcessIdentityProof | undefined> {
-    if (live.fingerprint === undefined || live.executable === undefined || live.plan === undefined) {
-      live.signalAuthorized = false;
-      live.identity = Object.freeze({ ...identityBase(live, this.#hostLifecycleGenerationSha256), status: "ambiguous" });
-      return undefined;
-    }
-    const observation = await observeProcessIdentity({
-      child,
-      childProcessInstanceSha256: live.childProcessInstanceSha256 ?? sha256("missing-child-instance"),
-      executable: live.executable,
-      fingerprint: live.fingerprint,
-      hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
-      monotonicNow: this.#monotonicNow,
-      observer: this.#processIdentityObserver,
-      observationTimeoutMs: this.#identityObservationAfterMs,
-      providerPid: live.providerPid ?? -1,
-    });
-    if (
-      this.#monotonicNow() >= acknowledgementDeadline ||
-      live.sealed ||
-      live.spawnStatus !== "acknowledged"
-    ) {return undefined;}
-    live.identity = observation.evidence;
-    live.signalAuthorized = observation.proof !== undefined && observation.evidence.status === "proved";
-    return observation.proof;
   }
 
   #containSingleFlight(
