@@ -31,6 +31,40 @@ export const codexServerRequestMethod = (message: CodexJsonRecord): string | und
 export const codexNotificationMethod = (message: CodexJsonRecord): string | undefined =>
   !(`id` in message) ? codexStringField(message, "method") : undefined;
 
+const assertNoDuplicateDecodedPropertyNames = (source: string): void => {
+  const containers: Array<{ readonly kind: "array" } | { readonly kind: "object"; expectingKey: boolean; readonly keys: Set<string> }> = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '"') {
+      const start = index;
+      for (index += 1; index < source.length; index += 1) {
+        if (source[index] === "\\") {index += 1; continue;}
+        if (source[index] === '"') {break;}
+      }
+      const container = containers.at(-1);
+      if (container?.kind === "object" && container.expectingKey && source[index] === '"') {
+        let key: unknown;
+        try {key = JSON.parse(source.slice(start, index + 1));} catch {continue;}
+        if (typeof key === "string") {
+          if (container.keys.has(key)) {
+            throw new Error("Codex App Server emitted duplicate decoded property names");
+          }
+          container.keys.add(key);
+          container.expectingKey = false;
+        }
+      }
+      continue;
+    }
+    if (character === "{") {containers.push({expectingKey: true, keys: new Set(), kind: "object"}); continue;}
+    if (character === "[") {containers.push({kind: "array"}); continue;}
+    if (character === "}" || character === "]") {containers.pop(); continue;}
+    if (character === ",") {
+      const container = containers.at(-1);
+      if (container?.kind === "object") {container.expectingKey = true;}
+    }
+  }
+};
+
 type CodexResponseEnvelope = Readonly<
   | { readonly id: string; readonly kind: "result"; readonly result: unknown }
   | { readonly error: CodexJsonRecord; readonly id: string; readonly kind: "error" }
@@ -157,7 +191,9 @@ export class BoundedCodexJsonLineReader {
     if (normalized.length === 0) {return undefined;}
     let decoded: unknown;
     try {
-      decoded = JSON.parse(BoundedCodexJsonLineReader.#decoder.decode(normalized));
+      const source = BoundedCodexJsonLineReader.#decoder.decode(normalized);
+      assertNoDuplicateDecodedPropertyNames(source);
+      decoded = JSON.parse(source);
     } catch {
       throw new Error("Codex App Server emitted invalid UTF-8 or malformed JSON");
     }

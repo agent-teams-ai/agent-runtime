@@ -334,9 +334,11 @@ test("terminal path admission covers every decomposed and Windows grammar prefix
     `//./UNC/${uncBody}`, `/??/UNc/${uncBody}`]) {
     assertEveryPathPrefixRetained(unc, spelling, "win32");
   }
-  assert.equal(codexTerminalOutputText("public:\\\\?\\UN", {
-    exactSensitiveTokens: [], privatePaths: [unc], privatePathPlatform: "win32",
-  }), "");
+  for (const partialPrefix of ["\\\\", "\\\\?", "\\\\?\\", "\\\\?\\U", "\\\\?\\UN", "\\\\?\\UNC"]) {
+    assert.equal(codexTerminalOutputText(`public:${partialPrefix}`, {
+      exactSensitiveTokens: [], privatePaths: [unc], privatePathPlatform: "win32",
+    }), "", `partial Win32 UNC device prefix ${JSON.stringify(partialPrefix)} was admitted`);
+  }
 
   const linuxNfc = "/private/Café/CODEX";
   const linuxNfd = linuxNfc.normalize("NFD");
@@ -365,6 +367,25 @@ test("canonicalizes repeated separators and dot-segment aliases before private-p
   assert.equal(codexTextContainsPrivatePath("/srv/private-other/./codex", ["/srv/private/codex"], "linux"), false);
   assert.equal(codexTextContainsPrivatePath("C:\\Users\\PrivateOther\\..\\Public\\Codex",
     ["C:\\Users\\Private\\Codex"], "win32"), false);
+});
+
+test("canonicalizes Win32 trailing-dot and trailing-space aliases per drive and UNC component", () => {
+  const cases = [
+    {path: "C:\\Users\\Private\\Codex", text: "c:\\Users. \\Private.\\Codex   "},
+    {path: "C:\\Users\\Private\\Codex", text: "c:\\Users\\decoy\\.. \\Private\\Codex."},
+    {path: "\\\\Server\\Private Share\\Codex", text: "\\\\server.\\Private Share .\\Codex..."},
+    {path: "\\\\Server\\Private Share\\Codex", text: "\\\\?\\UNC\\server \\Private Share.\\Codex "},
+  ];
+  for (const entry of cases) {
+    assert.equal(codexTextContainsPrivatePath(entry.text, [entry.path], "win32"), true);
+    assert.throws(() => assertCodexCanonicalOutputAllowed(entry.text, {
+      exactSensitiveTokens: [], privatePaths: [entry.path], privatePathPlatform: "win32",
+    }));
+  }
+  assert.equal(codexTextContainsPrivatePath("C:\\Users\\PrivateOther.\\Codex",
+    ["C:\\Users\\Private\\Codex"], "win32"), false);
+  assert.equal(codexTextContainsPrivatePath("\\\\Server\\Private Other.\\Codex",
+    ["\\\\Server\\Private Share\\Codex"], "win32"), false);
 });
 
 test("whole-turn admission clears terminal prefixes and uses bounded notification retention", async () => {

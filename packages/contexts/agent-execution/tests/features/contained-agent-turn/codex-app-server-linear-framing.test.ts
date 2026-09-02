@@ -68,6 +68,17 @@ test("CRLF, blank lines, and final fragments have deterministic framing", async 
   await assert.rejects(completedThenFinal.read(deadline()), /unterminated message/u);
 });
 
+test("JSONL rejects duplicate decoded property names before object decoding", async () => {
+  for (const line of [
+    '{"id":"request:1","id":"request:2","result":{}}\n',
+    '{"id":"request:1","\\u0069d":"request:2","result":{}}\n',
+    '{"id":"request:1","result":{"turn":{},"t\\u0075rn":{}}}\n',
+  ]) {
+    const reader = new BoundedCodexJsonLineReader(source([bytes(line)]), bytes(line).length - 1);
+    await assert.rejects(reader.read(deadline()), /malformed JSON/u);
+  }
+});
+
 test("bounded text segments expose one copy pass for high fragment counts", () => {
   const fragments = 16_384;
   const segments = new CodexAppServerTextSegments(fragments, fragments);

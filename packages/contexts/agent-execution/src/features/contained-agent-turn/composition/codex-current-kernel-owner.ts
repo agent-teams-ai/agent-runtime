@@ -1,3 +1,5 @@
+import { types as utilTypes } from "node:util";
+
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
 import type { ContainedTurnKernelProviderPort } from "../application/ports/outbound/contained-turn-ports.js";
 import { createCodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
@@ -33,10 +35,14 @@ type Processes = CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
 
 export interface CodexCurrentKernelLaunchRecord {
   readonly boundary: CodexAppServerPermissionBoundary;
+  readonly credentialOutputInventory: Readonly<{
+    readonly credentialBindingDigest: string;
+    readonly credentialGeneration: number;
+    /** Exact Host-custodied credential values and derived digests that must never reach canonical output. */
+    readonly sensitiveOutputTokens: readonly string[];
+  }>;
   readonly executablePath: string;
   readonly privateRootPath: string;
-  /** Exact Host-custodied credential values and derived digests that must never reach canonical output. */
-  readonly sensitiveOutputTokens: readonly string[];
   readonly tmpDir: string;
 }
 export interface CodexCurrentKernelLaunchRecordResolver {
@@ -44,6 +50,8 @@ export interface CodexCurrentKernelLaunchRecordResolver {
     attemptId: KernelOpen["attemptId"];
     authorityVectorDigest: KernelOpen["authorityVectorDigest"];
     custodyId: KernelOpen["custodyId"];
+    credentialBindingDigest: KernelOpen["providerAccessSnapshot"]["credentialBindingDigest"];
+    credentialGeneration: KernelOpen["providerAccessSnapshot"]["credentialGeneration"];
     effectId: KernelOpen["effectId"];
     intentMode: KernelOpen["intentMode"];
     operationId: KernelOpen["operationId"];
@@ -74,9 +82,46 @@ interface PreparedRecord {
   readonly kernel: KernelOpen;
   readonly plan: HostCustodyLaunchPlan;
   readonly record: CodexCurrentKernelLaunchRecord;
+  readonly sensitiveOutputTokens: readonly string[];
   readonly workspaceRef: string;
   custodyRef?: string;
 }
+const snapshotCredentialOutputInventory = (
+  launch: CodexCurrentKernelLaunchRecord,
+  expected: OwnerPrepareInput["kernel"]["providerAccessSnapshot"],
+): readonly string[] => {
+  const descriptor = Object.getOwnPropertyDescriptor(launch, "credentialOutputInventory");
+  if (descriptor === undefined || !("value" in descriptor) || descriptor.value === null
+    || typeof descriptor.value !== "object" || Array.isArray(descriptor.value) || utilTypes.isProxy(descriptor.value)) {
+    throw new TypeError("Codex credential output inventory is required");
+  }
+  const inventory = descriptor.value as Record<string, unknown>;
+  const inventoryKeys = Reflect.ownKeys(inventory);
+  if (inventoryKeys.length !== 3 || !["credentialBindingDigest", "credentialGeneration", "sensitiveOutputTokens"]
+    .every(key => Object.hasOwn(inventory, key))) {
+    throw new TypeError("Codex credential output inventory must have an exact bounded shape");
+  }
+  const digest = Object.getOwnPropertyDescriptor(inventory, "credentialBindingDigest");
+  const generation = Object.getOwnPropertyDescriptor(inventory, "credentialGeneration");
+  const tokens = Object.getOwnPropertyDescriptor(inventory, "sensitiveOutputTokens");
+  if (digest === undefined || !("value" in digest) || generation === undefined || !("value" in generation)
+    || tokens === undefined || !("value" in tokens) || !Array.isArray(tokens.value) || utilTypes.isProxy(tokens.value)
+    || digest.value !== expected.credentialBindingDigest || generation.value !== expected.credentialGeneration) {
+    throw new TypeError("Codex credential output inventory drifted from accepted credential authority");
+  }
+  const tokenKeys = Reflect.ownKeys(tokens.value);
+  if (tokenKeys.length !== tokens.value.length + 1 || tokenKeys.at(-1) !== "length") {
+    throw new TypeError("Codex credential output inventory must be a dense plain array");
+  }
+  const snapshot = tokens.value.map((token, index) => {
+    const tokenDescriptor = Object.getOwnPropertyDescriptor(tokens.value, String(index));
+    if (tokenDescriptor === undefined || !("value" in tokenDescriptor) || typeof tokenDescriptor.value !== "string") {
+      throw new TypeError("Codex credential output inventory must contain own data strings");
+    }
+    return tokenDescriptor.value;
+  });
+  return Object.freeze(snapshot);
+};
 const sameAttempt = (record: PreparedRecord, input: AttemptInput): boolean =>
   record.kernel.operationId === input.operationId && record.kernel.attemptId === input.attemptId &&
   record.kernel.custodyId === input.custodyId && record.kernel.effectId === input.effectId &&
@@ -144,7 +189,7 @@ export const createCodexCurrentKernelOwner = (
             },
             privateRootPath: record.plan.privateRootPath,
             processes,
-            sensitiveOutputTokens: record.record.sensitiveOutputTokens,
+            sensitiveOutputTokens: record.sensitiveOutputTokens,
             tmpDir: record.record.tmpDir,
           });
           return Object.freeze({
@@ -163,7 +208,10 @@ export const createCodexCurrentKernelOwner = (
       }
       const launch = await options.launchRecords.resolve({
         attemptId: input.kernel.attemptId, authorityVectorDigest: input.kernel.authorityVectorDigest,
-        custodyId: input.kernel.custodyId, effectId: input.kernel.effectId,
+        custodyId: input.kernel.custodyId,
+        credentialBindingDigest: input.kernel.providerAccessSnapshot.credentialBindingDigest,
+        credentialGeneration: input.kernel.providerAccessSnapshot.credentialGeneration,
+        effectId: input.kernel.effectId,
         intentMode: input.kernel.intentMode, operationId: input.kernel.operationId,
         providerBinding: input.providerBinding, workspaceAuthority: input.workspaceAuthority,
         workspaceId: input.kernel.workspaceId,
@@ -171,13 +219,14 @@ export const createCodexCurrentKernelOwner = (
       if (launch === undefined || launch.boundary.workspaceRef !== input.workspaceAuthority.canonicalPath) {
         throw new TypeError("Codex launch record is unavailable or workspace-bound incorrectly");
       }
+      const sensitiveOutputTokens = snapshotCredentialOutputInventory(launch, input.kernel.providerAccessSnapshot);
       const plan = createCodexAppServerLaunchPlan({
         boundary: launch.boundary, executablePath: launch.executablePath,
         intentMode: input.kernel.intentMode, platformTarget,
         privateRootPath: launch.privateRootPath, tmpDir: launch.tmpDir,
       });
       records.set(input.kernel.custodyId, {
-        binding: input.providerBinding, kernel: input.kernel, plan, record: launch,
+        binding: input.providerBinding, kernel: input.kernel, plan, record: launch, sensitiveOutputTokens,
         workspaceRef: input.workspaceAuthority.canonicalPath,
       });
       return plan;

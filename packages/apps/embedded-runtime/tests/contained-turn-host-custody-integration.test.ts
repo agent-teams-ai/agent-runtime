@@ -149,9 +149,14 @@ const createCompositionInput = async (hostCustody: DeterministicCurrentOwnerHost
           hostBootId: "host-boot:embedded-custody",
           hostInstanceId: "host-instance:embedded-custody",
           platformTarget: Object.freeze({architecture: "x64" as const, platform: "linux" as const}),
-          launchRecords: Object.freeze({async resolve() {
+          launchRecords: Object.freeze({async resolve(input) {
             return Object.freeze({
               boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+              credentialOutputInventory: Object.freeze({
+                credentialBindingDigest: input.credentialBindingDigest,
+                credentialGeneration: input.credentialGeneration,
+                sensitiveOutputTokens: Object.freeze([]),
+              }),
               executablePath: "/synthetic/codex", privateRootPath, tmpDir,
             });
           }}),

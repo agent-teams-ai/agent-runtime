@@ -30,7 +30,7 @@ import {
   syntheticPrivateRoot as codexFixturePrivateRoot,
   syntheticTmp as codexFixtureTmp,
 } from "../../codex-app-server-contained-turn-provider-fixture.ts";
-import { emitAgentStarted, emitTurnStarted, generatedTurn } from "../../codex-app-server-test-messages.mjs";
+import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../codex-app-server-test-messages.mjs";
 
 const ids = (provider: "claude" | "codex", suffix: string) => Object.freeze({
   attemptId: containedTurnIdentity("attempt", `attempt:${provider}:${suffix}`),
@@ -47,6 +47,14 @@ const access = (provider: "claude" | "codex") => Object.freeze({
   ownerAuthorityDigest: `owner:${provider}`, projectId: "project:test", provider,
   providerAccountRef: `account:${provider}`, providerRouteRef: `route:${provider}`,
   revision: 1, tenantId: "tenant:test",
+});
+const codexCredentialOutputInventory = (
+  authority: Pick<ReturnType<typeof access>, "credentialBindingDigest" | "credentialGeneration">,
+  sensitiveOutputTokens: readonly string[] = [],
+) => Object.freeze({
+  credentialBindingDigest: authority.credentialBindingDigest,
+  credentialGeneration: authority.credentialGeneration,
+  sensitiveOutputTokens: Object.freeze([...sensitiveOutputTokens]),
 });
 
 class FakeHost {
@@ -197,10 +205,11 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
       hostBootId: "host-boot:claim-codex", hostCustody: host as any,
       hostInstanceId: "host-instance:claim-codex",
       platformTarget: {architecture: "x64", platform: "linux"},
-      launchRecords: {resolve: async () => {
+      launchRecords: {resolve: async input => {
         return ({
         boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
-        executablePath: "/synthetic/codex", privateRootPath, sensitiveOutputTokens: [], tmpDir: temp,
+        credentialOutputInventory: codexCredentialOutputInventory(input),
+        executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp,
         });
       }},
       workspaceOwner: ownerWorkspace,
@@ -272,9 +281,10 @@ test("provider owners keep stable kernel and random Host identities distinct and
       hostBootId: "host-boot:current-owner", hostCustody: codexHost as any,
       hostInstanceId: "host-instance:current-owner",
       platformTarget: {architecture: "x64", platform: "linux"},
-      launchRecords: {resolve: async () => ({
+      launchRecords: {resolve: async input => ({
         boundary: createCodexAppServerPermissionBoundary({ codexHome, workspaceRef: codexWorkspace }),
-        executablePath: "/synthetic/codex", privateRootPath: codexPrivate, sensitiveOutputTokens: [], tmpDir: codexTemp,
+        credentialOutputInventory: codexCredentialOutputInventory(input),
+        executablePath: "/synthetic/codex", privateRootPath: codexPrivate, tmpDir: codexTemp,
       })},
       workspaceOwner: workspaceOwner(codexIds, codexWorkspace),
     });
@@ -371,9 +381,10 @@ test("Codex Darwin owner delegates the canonical workspace to cooperative Host C
     const owner = createCodexCurrentKernelOwner({
       effectCustody: syntheticCodexEffectCustody(), hostBootId: "host-boot:darwin-cwd",
       hostCustody: host as any, hostInstanceId: "host-instance:darwin-cwd",
-      launchRecords: {resolve: async () => ({
+      launchRecords: {resolve: async input => ({
         boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
-        executablePath: "/synthetic/codex-darwin-arm64", privateRootPath, sensitiveOutputTokens: [], tmpDir,
+        credentialOutputInventory: codexCredentialOutputInventory(input),
+        executablePath: "/synthetic/codex-darwin-arm64", privateRootPath, tmpDir,
       })},
       platformTarget: platformTarget as never,
       workspaceOwner: workspaceOwner(identity, workspaceRef),
@@ -407,6 +418,10 @@ test("Codex production composition carries Host-custodied exact OAuth tokens and
         delta: `unlabeled ${oauthToken} ${tokenDigest}`, itemId: "item:sensitive",
         threadId: "thread:test", turnId: "turn:sensitive",
       }});
+      emitAgentCompleted(target, "turn:sensitive", "item:sensitive", `unlabeled ${oauthToken} ${tokenDigest}`);
+      target.emit({method: "turn/completed", params: {
+        threadId: "thread:test", turn: generatedTurn("turn:sensitive", "completed"),
+      }});
     }
   });
   class CredentialHost extends FakeHost {
@@ -420,18 +435,27 @@ test("Codex production composition carries Host-custodied exact OAuth tokens and
   }
   const host = new CredentialHost();
   const identity = ids("codex", "sensitive-output");
+  const mutableTokens = [oauthToken, tokenDigest];
+  const mutableInventory = {
+    credentialBindingDigest: access("codex").credentialBindingDigest,
+    credentialGeneration: access("codex").credentialGeneration,
+    sensitiveOutputTokens: mutableTokens,
+  };
   const owner = createCodexCurrentKernelOwner({
     effectCustody: syntheticCodexEffectCustody(), hostBootId: "host-boot:sensitive-output",
     hostCustody: host as any, hostInstanceId: "host-instance:sensitive-output",
     launchRecords: {resolve: async () => ({
       boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
-      executablePath: "/synthetic/codex", privateRootPath,
-      sensitiveOutputTokens: Object.freeze([oauthToken, tokenDigest]), tmpDir,
+      credentialOutputInventory: mutableInventory,
+      executablePath: "/synthetic/codex", privateRootPath, tmpDir,
     })},
     platformTarget: {architecture: "x64", platform: "linux"},
     workspaceOwner: workspaceOwner(identity, workspaceRef),
   });
   await owner.custody.open(openInput(identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT));
+  mutableTokens.splice(0, mutableTokens.length, "later-substituted-token");
+  mutableInventory.credentialBindingDigest = "later-substituted-digest" as never;
+  mutableInventory.credentialGeneration = 2;
   const output: unknown[] = [];
   const outcome = await owner.provider.execute({...executeInput(
     identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT,
@@ -444,6 +468,31 @@ test("Codex production composition carries Host-custodied exact OAuth tokens and
   assert.equal(JSON.stringify(openInput(identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT))
     .includes(oauthToken), false);
   owner.dispose();
+});
+
+test("Codex production owner fails closed on omitted or credential-drifted output inventory", async () => {
+  for (const [suffix, inventory] of [
+    ["omitted", undefined],
+    ["digest", {...codexCredentialOutputInventory(access("codex")), credentialBindingDigest: "drifted"}],
+    ["generation", {...codexCredentialOutputInventory(access("codex")), credentialGeneration: 2}],
+  ] as const) {
+    const identity = ids("codex", `inventory-${suffix}`);
+    const owner = createCodexCurrentKernelOwner({
+      effectCustody: syntheticCodexEffectCustody(), hostBootId: `host-boot:inventory-${suffix}`,
+      hostCustody: new FakeHost() as any, hostInstanceId: `host-instance:inventory-${suffix}`,
+      launchRecords: {resolve: async () => ({
+        boundary: codexFixtureBoundary,
+        ...(inventory === undefined ? {} : {credentialOutputInventory: inventory}),
+        executablePath: "/synthetic/codex", privateRootPath: codexFixturePrivateRoot, tmpDir: codexFixtureTmp,
+      } as never)},
+      platformTarget: {architecture: "x64", platform: "linux"},
+      workspaceOwner: workspaceOwner(identity, codexFixtureBoundary.workspaceRef),
+    });
+    await assert.rejects(owner.custody.open(openInput(
+      identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT,
+    )), /credential output inventory/u);
+    owner.dispose();
+  }
 });
 
 test("Codex and Claude current owners start only after the real atomic claim and cannot replay", async t => {
@@ -688,9 +737,10 @@ test("prevention retires a prepared attempt without a Host or provider start", a
       hostBootId: "host-boot:prevention", hostCustody: host as any,
       hostInstanceId: "host-instance:prevention",
       platformTarget: {architecture: "x64", platform: "linux"},
-      launchRecords: {resolve: async () => ({
+      launchRecords: {resolve: async input => ({
         boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
-        executablePath: "/synthetic/codex", privateRootPath, sensitiveOutputTokens: [], tmpDir: temp,
+        credentialOutputInventory: codexCredentialOutputInventory(input),
+        executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp,
       })},
       workspaceOwner: workspaceOwner(identity, workspaceRef),
     });
@@ -735,7 +785,8 @@ test("same-provider attempts retain distinct exact plans and reject crossed work
         if (record === undefined || record.workspaceRef !== input.workspaceAuthority.canonicalPath) {return;}
         return {
           boundary: createCodexAppServerPermissionBoundary(record), executablePath: "/synthetic/codex",
-          privateRootPath: record.privateRootPath, sensitiveOutputTokens: [], tmpDir: record.temp,
+          credentialOutputInventory: codexCredentialOutputInventory(input),
+          privateRootPath: record.privateRootPath, tmpDir: record.temp,
         };
       }},
       workspaceOwner: {async withLaunchAuthority(input: any, consume: (authority: any) => Promise<unknown>) {

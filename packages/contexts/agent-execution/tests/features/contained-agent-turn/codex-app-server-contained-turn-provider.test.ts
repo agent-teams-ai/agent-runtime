@@ -331,6 +331,17 @@ test("rejects malformed normal response envelopes before dispatch", async () => 
     assert.equal(process.requests.some(message => message.method === "turn/start"), false);
   }
 });
+test("rejects duplicate decoded keys in a normal response before envelope validation", async () => {
+  const process = new FakeCodexProcess((message, target) => {
+    if (message.method === "initialize") {
+      target.stdout.push(Buffer.from(
+        `{"id":${JSON.stringify(message.id)},"\\u0069d":"substituted","result":{}}\n`, "utf8",
+      ));
+    }
+  });
+  assert.equal((await createProvider(process).execute(executeInput(process))).kind, "not_accepted");
+  assert.equal(process.requests.some(message => message.method === "turn/start"), false);
+});
 test("fails before turn bytes for absent, disallowed, or wrong permission profiles", async () => {
   const variants = [
     [] as Message[],
@@ -657,6 +668,21 @@ test("accepts one exact empty interrupt result and rejects duplicate or malforme
     });
     assertContainmentRequired(await createProvider(process).execute(executeInput(process, async () => true)));
   }
+});
+test("rejects duplicate decoded keys before interrupt acknowledgement validation", async () => {
+  const process = new FakeCodexProcess((message, target) => {
+    if (standardHandshake(message, target)) {return;}
+    if (message.method === "turn/start") {
+      target.emit({id: message.id, result: {turn: generatedTurn("turn:interrupt-duplicate", "inProgress")}});
+      emitTurnStarted(target, "turn:interrupt-duplicate");
+    }
+    if (message.method === "turn/interrupt") {
+      target.stdout.push(Buffer.from(
+        `{"id":${JSON.stringify(message.id)},"result":{},"\\u0072esult":{"accepted":true}}\n`, "utf8",
+      ));
+    }
+  });
+  assertContainmentRequired(await createProvider(process).execute(executeInput(process, async () => true)));
 });
 test("actual diagnostics and outcomes are byte-identical across private notification values, JSON sizes, and counts", async () => {
   // Kept beside the assertion so the complete public-oracle scenario remains reviewable as one test.

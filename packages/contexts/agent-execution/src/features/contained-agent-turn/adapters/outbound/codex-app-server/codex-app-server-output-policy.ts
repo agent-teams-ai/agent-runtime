@@ -71,10 +71,16 @@ const windowsPathComparable = (value: string): string => windowsLexicalComparabl
   .replace(/(^|[^/])\/{2,}[?.]\/+(?:unc\/+)?/gu, "$1/")
   .replace(/(^|[^/])\/+\?\?\/+(?:unc\/+)?/gu, "$1/");
 
+const canonicalizeWindowsComponents = (value: string): string => value.split("/").map(segment => {
+  const withoutTrailingSpaces = segment.replace(/ +$/gu, "");
+  return withoutTrailingSpaces === "." || withoutTrailingSpaces === ".."
+    ? withoutTrailingSpaces : segment.replace(/[ .]+$/gu, "");
+}).join("/");
+
 const pathComparable = (value: string, platform: CodexPrivatePathPlatform): string => {
   const lexical = platform === "linux" ? value
     : platform === "win32" ? windowsPathComparable(value) : canonicalCaseFold(value);
-  return collapseLexicalPathAliases(lexical);
+  return collapseLexicalPathAliases(platform === "win32" ? canonicalizeWindowsComponents(lexical) : lexical);
 };
 
 export const codexTextContainsPrivatePath = (
@@ -115,8 +121,18 @@ const terminalPrivatePathTargets = (
   platform: CodexPrivatePathPlatform,
 ): readonly string[] => {
   if (platform !== "win32") {return [pathComparable(path, platform)];}
-  return [pathComparable(path, platform)];
+  const canonical = pathComparable(path, platform);
+  if (!canonical.startsWith("/")) {return [canonical, `//?/${canonical}`, `//./${canonical}`, `/??/${canonical}`];}
+  const uncBody = canonical.replace(/^\/+/, "");
+  return [canonical, `//?/unc/${uncBody}`, `//./unc/${uncBody}`, `/??/unc/${uncBody}`];
 };
+
+const terminalPathComparables = (
+  text: string,
+  platform: CodexPrivatePathPlatform,
+): readonly string[] => platform === "win32"
+  ? [pathComparable(text, platform), canonicalizeWindowsComponents(windowsLexicalComparable(text))]
+  : [pathComparable(text, platform)];
 
 const CREDENTIAL_SKELETONS = Object.freeze([
   ["credentialmarker<", 0], ["apikeymarker<", 0], ["accesstokenmarker<", 0], ["refreshtokenmarker<", 0],
@@ -172,10 +188,10 @@ export const codexTerminalOutputText = (
   text: string,
   policy: CodexCanonicalOutputPolicy,
 ): string => {
-  const pathText = pathComparable(text, policy.privatePathPlatform);
+  const pathTexts = terminalPathComparables(text, policy.privatePathPlatform);
   const unsafeExactPrefix = policy.exactSensitiveTokens.some(token => textEndsWithProperPrefix(text, token));
   const unsafePathPrefix = policy.privatePaths.some(path => terminalPrivatePathTargets(path, policy.privatePathPlatform)
-    .some(target => textEndsWithProperPrefix(pathText, target)));
+    .some(target => pathTexts.some(pathText => textEndsWithProperPrefix(pathText, target))));
   return unsafeExactPrefix || unsafePathPrefix || textEndsWithCredentialLanguagePrefix(text) ? "" : text;
 };
 
