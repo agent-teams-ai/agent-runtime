@@ -24,6 +24,14 @@ const quarantinePath = (live: LiveCustody): string | undefined => {
 
 export const quarantinePrivateRootForReconciliation = (live: LiveCustody): boolean => {
   if (live.privateRootClosure.status === "deleted") {return false;}
+  if (live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group") {
+    // Node exposes no descriptor-relative, no-replace rename authority on Darwin,
+    // and a same-UID process could replace the retained pathname after a rename.
+    // Keep both the captured descriptor and its directory entry intact for an
+    // external reconciler instead of turning pathname observations into custody.
+    live.privateRootClosure = Object.freeze({ ...live.privateRootClosure, status: "unproven" });
+    return false;
+  }
   const authority = live.launchAuthority;
   const expected = live.privatePaths?.root;
   if (authority === undefined || expected === undefined) {return false;}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -57,7 +57,7 @@ test("Darwin production custody cannot be enabled by spoofing a public platform 
   });
 });
 
-test("Darwin escaped-session descendant survives group closure while custody reconciles and quarantines", async () => {
+test("Darwin escaped-session descendant survives group closure while custody retains unproven evidence", async () => {
   const workspaceRef = await disposableRoot();
   const providerOutput = "provider-secret-output-must-not-enter-evidence";
   const entry = await cooperativeEntry(workspaceRef, "eager", String.raw`
@@ -95,7 +95,7 @@ setInterval(() => {}, 1000);
     assert.ok(match);
     detachedPid = Number(match[1]);
     trackSyntheticProcessGroup(detachedPid);
-    roots.push(`${entry.plan.privateRootPath}.quarantine-${sha256(opened.custodyRef)}`);
+    const quarantinePath = `${entry.plan.privateRootPath}.quarantine-${sha256(opened.custodyRef)}`;
 
     const outcome = await custody.requestContainment({ ...request, custodyRef: opened.custodyRef });
     assert.equal(outcome.kind, "unproven");
@@ -110,7 +110,9 @@ setInterval(() => {}, 1000);
       "descendant-may-escape-via-new-session",
     ]);
     assert.equal(evidence?.closure.status, "unproven");
-    assert.equal(evidence?.privateRoot.status, "quarantined");
+    assert.equal(evidence?.privateRoot.status, "unproven");
+    assert.equal(existsSync(entry.plan.privateRootPath), true);
+    assert.equal(existsSync(quarantinePath), false);
     assert.equal(evidence?.sealed, true);
     const canonicalEvidence = JSON.stringify({ evidence, outcome });
     assert.doesNotMatch(canonicalEvidence, new RegExp(workspaceRef, "u"));
@@ -218,7 +220,7 @@ test("Darwin delegated reservation proves no-start but retains its root for reco
   const released = await custody.release(releaseInput);
   assert.equal(released.kind, "unproven");
   assert.match(released.kind === "unproven" ? released.evidenceRef : "", /private-root-quarantine-unproven/u);
-  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "active");
+  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "unproven");
   assert.equal(existsSync(entry.plan.privateRootPath), true);
 });
 
@@ -277,16 +279,15 @@ test("Darwin delegated error-before-start retains its proved-unused root for rec
   if (contained.kind !== "contained") {return;}
   const releaseInput = { ...request, custodyRef: opened.custodyRef, receiptRef: contained.receiptRef };
   const quarantinePath = `${entry.plan.privateRootPath}.quarantine-${sha256(opened.custodyRef)}`;
-  roots.push(quarantinePath);
   const released = await custody.release(releaseInput);
   assert.equal(released.kind, "unproven");
-  assert.match(released.kind === "unproven" ? released.evidenceRef : "", /darwin-cooperative-reconciliation-required/u);
-  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "quarantined");
-  assert.equal(existsSync(entry.plan.privateRootPath), false);
-  assert.equal(existsSync(quarantinePath), true);
+  assert.match(released.kind === "unproven" ? released.evidenceRef : "", /private-root-quarantine-unproven/u);
+  assert.equal(custody.evidence(opened.custodyRef)?.privateRoot.status, "unproven");
+  assert.equal(existsSync(entry.plan.privateRootPath), true);
+  assert.equal(existsSync(quarantinePath), false);
 });
 
-test("Darwin observer no-start contradiction quarantines while an escaped descendant remains", async () => {
+test("Darwin observer no-start contradiction retains the root while an escaped descendant remains", async () => {
   const workspaceRef = await disposableRoot();
   const escapedPidPath = join(workspaceRef, "escaped-pid");
   const entry = await cooperativeEntry(workspaceRef, "eager", String.raw`
@@ -330,7 +331,6 @@ setInterval(() => {}, 1000);
     escapedPid = Number(await readFile(escapedPidPath, "utf8"));
     trackSyntheticProcessGroup(escapedPid);
     const quarantinePath = `${entry.plan.privateRootPath}.quarantine-${sha256(custodyRef)}`;
-    roots.push(quarantinePath);
     const contained = await custody.requestContainment({ ...request, custodyRef });
     assert.equal(contained.kind, "unproven");
     assert.match(contained.kind === "unproven" ? contained.evidenceRef : "", /darwin-cooperative-reconciliation-required/u);
@@ -338,8 +338,9 @@ setInterval(() => {}, 1000);
     const evidence = custody.evidence(custodyRef);
     assert.equal(evidence?.spawn, "error-before-start");
     assert.notEqual(evidence?.closure.status, "not-started");
-    assert.equal(evidence?.privateRoot.status, "quarantined");
-    assert.equal(existsSync(quarantinePath), true);
+    assert.equal(evidence?.privateRoot.status, "unproven");
+    assert.equal(existsSync(entry.plan.privateRootPath), true);
+    assert.equal(existsSync(quarantinePath), false);
   } finally {
     if (escapedPid !== undefined) {
       try {process.kill(-escapedPid, "SIGKILL");} catch {}
@@ -348,7 +349,7 @@ setInterval(() => {}, 1000);
   }
 });
 
-test("Darwin no-start release never deletes swapped roots or child replacements", async () => {
+test("Darwin fail-closed release preserves destination exclusivity and swapped pathname evidence", async () => {
   const reserveNoStart = async (suffix: string) => {
     const workspaceRef = await disposableRoot();
     const entry = await cooperativeEntry(workspaceRef, "sdk-delegated");
@@ -383,6 +384,23 @@ test("Darwin no-start release never deletes swapped roots or child replacements"
     assert.ok(contained.kind === "contained");
     return { contained, custody, entry, opened, request };
   };
+
+  const destinationCollision = await reserveNoStart("destination-collision");
+  const collisionPath = `${destinationCollision.entry.plan.privateRootPath}.quarantine-${sha256(destinationCollision.opened.custodyRef)}`;
+  roots.push(collisionPath);
+  await mkdir(collisionPath, { mode: 0o700 });
+  const sourceBefore = await lstat(destinationCollision.entry.plan.privateRootPath, { bigint: true });
+  const collisionBefore = await lstat(collisionPath, { bigint: true });
+  const collisionOutcome = await destinationCollision.custody.release({
+    ...destinationCollision.request,
+    custodyRef: destinationCollision.opened.custodyRef,
+    receiptRef: destinationCollision.contained.receiptRef,
+  });
+  assert.equal(collisionOutcome.kind, "unproven");
+  assert.match(collisionOutcome.kind === "unproven" ? collisionOutcome.evidenceRef : "", /private-root-quarantine-unproven/u);
+  assert.equal((await lstat(destinationCollision.entry.plan.privateRootPath, { bigint: true })).ino, sourceBefore.ino);
+  assert.equal((await lstat(collisionPath, { bigint: true })).ino, collisionBefore.ino);
+  assert.equal(destinationCollision.custody.evidence(destinationCollision.opened.custodyRef)?.privateRoot.status, "unproven");
 
   const rootSwap = await reserveNoStart("root");
   const capturedRoot = `${rootSwap.entry.plan.privateRootPath}.captured`;
