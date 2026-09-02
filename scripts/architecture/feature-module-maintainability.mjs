@@ -21,6 +21,6 @@ export const maintainabilityIssues = ({ comments, issue, path, role, source }) =
   if (!limit) {return [];}
   const actual = countedProductionLines(source, comments);
   return actual > limit
-    ? [issue("FM_MAX_LINES", path, 1, `${path} has ${actual} counted production lines; limit ${limit}`)]
+    ? [issue("FM_MAX_LINES", path, 1, `${actual} counted production lines exceeds limit ${limit}`)]
     : [];
 };

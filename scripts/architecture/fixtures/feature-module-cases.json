@@ -1605,7 +1605,7 @@
     {
       "name": "domain-counted-production-line-limit-is-enforced",
       "generatedSourceFile": { "path": "src/features/alpha/domain/too-long.ts", "lines": 501 },
-      "cliRuns": [{ "arguments": [], "exit": 1, "output": "src/features/alpha/domain/too-long.ts:1 FM_MAX_LINES src/features/alpha/domain/too-long.ts has 501 counted production lines; limit 500" }],
+      "cliRuns": [{ "arguments": [], "exit": 1, "output": "src/features/alpha/domain/too-long.ts:1 FM_MAX_LINES 501 counted production lines exceeds limit 500", "notOutput": ["src<path>", "feature-module-check-"] }],
       "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/too-long.ts", "line": 1 }]
     },
     {
@@ -1636,13 +1636,13 @@
     {
       "name": "application-counted-production-line-limit-is-enforced",
       "alphaRoles": ["domain", "application"],
-      "generatedSourceFile": { "path": "src/features/alpha/application/too-long.ts", "lines": 501 },
+      "generatedSourceFile": { "path": "src/features/alpha/application/too-long.ts", "lines": 500, "prefix": "export const applicationValue = true;\n" },
       "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/application/too-long.ts", "line": 1 }]
     },
     {
       "name": "adapter-counted-production-line-limit-is-enforced",
       "alphaRoles": ["domain", "adapters"],
-      "generatedSourceFile": { "path": "src/features/alpha/adapters/too-long.ts", "lines": 601 },
+      "generatedSourceFile": { "path": "src/features/alpha/adapters/too-long.ts", "lines": 600, "prefix": "export const adapterValue = true;\n" },
       "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/adapters/too-long.ts", "line": 1 }]
     },
     {
