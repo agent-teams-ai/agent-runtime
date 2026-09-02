@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  link, lstat, mkdir, mkdtemp, open, readdir, readFile, realpath, rename, rm,
+  link, lstat, mkdir, mkdtemp, open, readdir, realpath, rm,
   symlink, writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,7 +10,13 @@ import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
-import { readCustodiedRepositoryFile } from "./ar2-evidence-custody.mjs";
+import {
+  assertAr2EvidenceCustodyCapability,
+  readCustodiedRepositoryFile,
+} from "./ar2-evidence-custody.mjs";
+import {
+  registerAr2EvidenceCustodyRaceTests,
+} from "./ar2-evidence-custody-races.test-cases.mjs";
 import {
   auditLegacyInventoryEvidence,
   readAr2CoverageTestSource,
@@ -22,29 +28,31 @@ import {
   validateOfficialSemantics,
 } from "./validate-ar2-contract-artifacts.mjs";
 
-const repositoryRoot = new URL("../../", import.meta.url);
-const readJson = async path => JSON.parse(await readFile(path, "utf8"));
+const readRepositoryBytes = (path, allowedRoot = ".") =>
+  readCustodiedRepositoryFile(path, { allowedRoot });
+const readRepositoryText = async (path, allowedRoot) =>
+  (await readRepositoryBytes(path, allowedRoot)).toString("utf8");
+const readJson = async (path, allowedRoot) =>
+  JSON.parse(await readRepositoryText(path, allowedRoot));
+
+registerAr2EvidenceCustodyRaceTests();
 
 const loadCoverageInputs = async () => {
   const [freeze, negatives, contractCoverage] = await Promise.all([
-    readJson(new URL("docs/architecture/claude-code-setup-freeze.json", repositoryRoot)),
-    readJson(new URL(
-      "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings/negative-fixtures.json",
-      repositoryRoot,
-    )),
-    readJson(new URL(
-      "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings/contract-coverage.json",
-      repositoryRoot,
-    )),
+    readJson("docs/architecture/claude-code-setup-freeze.json", "docs/architecture"),
+    readJson("packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings/negative-fixtures.json",
+      "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings"),
+    readJson("packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings/contract-coverage.json",
+      "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings"),
   ]);
   const testFiles = [...new Set(contractCoverage.cases.map(entry => entry.testFile))];
   const testSources = new Map(await Promise.all(testFiles.map(async testFile => [
     testFile,
-    await readFile(new URL(testFile, repositoryRoot), "utf8"),
+    await readRepositoryText(testFile, /^(packages\/[^/]+\/[^/]+\/tests)\//u.exec(testFile)[1]),
   ])));
   const packageRoots = [...new Set(testFiles.map(testFile => /^(packages\/[^/]+\/[^/]+)\//u.exec(testFile)[1]))];
   const packageTestScripts = new Map(await Promise.all(packageRoots.map(async packageRoot => {
-    const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
+    const packageManifest = await readJson(`${packageRoot}/package.json`, packageRoot);
     return [packageRoot, packageManifest.scripts.test];
   })));
   return {
@@ -75,11 +83,9 @@ test("AR-2 inventory and Claude freeze packet satisfy the frozen contract", asyn
 
 test("Claude public diagnostics have exact set parity with the freeze", async () => {
   const [freeze, runtimeAccessSource] = await Promise.all([
-    readJson(new URL("docs/architecture/claude-code-setup-freeze.json", repositoryRoot)),
-    readFile(new URL(
-      "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-      repositoryRoot,
-    ), "utf8"),
+    readJson("docs/architecture/claude-code-setup-freeze.json", "docs/architecture"),
+    readRepositoryText("packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+      "packages/apps/embedded-runtime/src"),
   ]);
   assert.doesNotThrow(() => validateClaudeDiagnosticParity(freeze.diagnostics, runtimeAccessSource));
   assert.throws(
@@ -94,11 +100,9 @@ test("Claude public diagnostics have exact set parity with the freeze", async ()
 
 test("Claude public expected limitations have exact field parity with the freeze", async () => {
   const [freeze, runtimeAccessSource] = await Promise.all([
-    readJson(new URL("docs/architecture/claude-code-setup-freeze.json", repositoryRoot)),
-    readFile(new URL(
-      "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-      repositoryRoot,
-    ), "utf8"),
+    readJson("docs/architecture/claude-code-setup-freeze.json", "docs/architecture"),
+    readRepositoryText("packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+      "packages/apps/embedded-runtime/src"),
   ]);
   assert.doesNotThrow(() => validateClaudeExpectedLimitationsParity(
     freeze.expectedLimitations,
@@ -114,10 +118,9 @@ test("Claude public expected limitations have exact field parity with the freeze
 });
 
 test("inventory preserves omitted jobs and explicit supersession without defining completeness", async () => {
-  const inventory = await readJson(new URL(
-    "docs/architecture/legacy-feature-inventory.json",
-    repositoryRoot,
-  ));
+  const inventory = await readJson(
+    "docs/architecture/legacy-feature-inventory.json", "docs/architecture",
+  );
   const byId = new Map(inventory.items.map(item => [item.capabilityId, item]));
   for (const capabilityId of ["CODEX-TRUST-01", "CLF-08", "CLF-09"]) {
     assert.equal(byId.get(capabilityId)?.implementationStatus, "not_implemented");
@@ -133,10 +136,9 @@ test("inventory preserves omitted jobs and explicit supersession without definin
 });
 
 test("inventory semantics permit future rows without authored-list or cardinality coupling", async () => {
-  const inventory = await readJson(new URL(
-    "docs/architecture/legacy-feature-inventory.json",
-    repositoryRoot,
-  ));
+  const inventory = await readJson(
+    "docs/architecture/legacy-feature-inventory.json", "docs/architecture",
+  );
   const future = structuredClone(inventory.items.find(item => item.capabilityId === "CODEX-TRUST-01"));
   const codexCount = inventory.items.filter(item => item.provider === "codex").length;
   future.capabilityId = "CODEX-TRUST-99";
@@ -147,11 +149,20 @@ test("inventory semantics permit future rows without authored-list or cardinalit
 });
 
 test("default repository validation has no exact-legacy-checkout dependency", async () => {
-  const validatorSource = await readFile(new URL(
-    "scripts/architecture/validate-ar2-contract-artifacts.mjs",
-    repositoryRoot,
-  ), "utf8");
+  const validatorSource = await readRepositoryText(
+    "scripts/architecture/validate-ar2-contract-artifacts.mjs", "scripts/architecture",
+  );
   assert.doesNotMatch(validatorSource, /legacy-exact|\/home\/agent-runtime-postmerge/u);
+  for (const [path, expectedRead] of [
+    ["scripts/architecture/validate-claude-official-semantics.mjs", /readCustodiedRepositoryFile\(document\.artifactPath/u],
+    ["packages/contexts/runtime-configuration/tests/claude-code-contract.test.ts", /readCustodiedRepositoryFile\(/u],
+    ["packages/apps/embedded-runtime/tests/claude-code-setup.e2e.test.ts", /readAr2FixtureJson\(/u],
+  ]) {
+    const allowedRoot = path.slice(0, path.lastIndexOf("/"));
+    const source = await readRepositoryText(path, allowedRoot);
+    assert.match(source, /ar2-evidence-custody\.mjs/u, `${path} must use AR-2 descriptor custody`);
+    assert.match(source, expectedRead, `${path} must route the reviewed evidence read through custody`);
+  }
   await assert.doesNotReject(validateAr2ContractArtifacts());
 });
 
@@ -161,10 +172,9 @@ test("optional legacy evidence audit resolves anchors under an explicit fixture 
   await mkdir(join(exactLegacyRoot, "src"));
   await writeFile(join(exactLegacyRoot, "src", "fixture.ts"), "export const fixtureAnchor = true;\n");
 
-  const inventory = await readJson(new URL(
-    "docs/architecture/legacy-feature-inventory.json",
-    repositoryRoot,
-  ));
+  const inventory = await readJson(
+    "docs/architecture/legacy-feature-inventory.json", "docs/architecture",
+  );
   const legacyEntries = [
     ...inventory.crossCuttingInvariants.flatMap(invariant =>
       invariant.acceptanceEvidence.map(entry => entry.evidence)),
@@ -187,10 +197,9 @@ test("optional legacy evidence audit resolves anchors under an explicit fixture 
 });
 
 test("owner kinds keep four domain contexts separate from composition and Desktop", async () => {
-  const inventory = await readJson(new URL(
-    "docs/architecture/legacy-feature-inventory.json",
-    repositoryRoot,
-  ));
+  const inventory = await readJson(
+    "docs/architecture/legacy-feature-inventory.json", "docs/architecture",
+  );
   const owners = inventory.items.flatMap(item => item.owners);
   assert.deepEqual(
     [...new Set(owners.filter(owner => owner.kind === "bounded-context").map(owner => owner.id))].toSorted(),
@@ -207,10 +216,9 @@ test("owner kinds keep four domain contexts separate from composition and Deskto
 });
 
 test("inventory semantics reject duplicate IDs, provider drift, and evidence commit drift", async () => {
-  const source = await readJson(new URL(
-    "docs/architecture/legacy-feature-inventory.json",
-    repositoryRoot,
-  ));
+  const source = await readJson(
+    "docs/architecture/legacy-feature-inventory.json", "docs/architecture",
+  );
 
   const duplicate = structuredClone(source);
   duplicate.items.push(structuredClone(duplicate.items[0]));
@@ -226,20 +234,18 @@ test("inventory semantics reject duplicate IDs, provider drift, and evidence com
 });
 
 test("AR-2 validator rejects gzip metadata drift and a fabricated retained excerpt", async () => {
-  const snapshot = await readJson(new URL(
-    "docs/architecture/claude-code-official-semantics.snapshot.json",
-    repositoryRoot,
-  ));
+  const snapshot = await readJson(
+    "docs/architecture/claude-code-official-semantics.snapshot.json", "docs/architecture",
+  );
   snapshot.documents[0].gzipSha256 = "0".repeat(64);
   await assert.rejects(
     validateOfficialSemantics(snapshot),
     /deterministic gzip hash/u,
   );
 
-  const fabricatedExcerpt = await readJson(new URL(
-    "docs/architecture/claude-code-official-semantics.snapshot.json",
-    repositoryRoot,
-  ));
+  const fabricatedExcerpt = await readJson(
+    "docs/architecture/claude-code-official-semantics.snapshot.json", "docs/architecture",
+  );
   fabricatedExcerpt.documents[0].retainedBytesUtf8 = fabricatedExcerpt.documents[0]
     .retainedBytesUtf8
     .replace("User |", "Fake |");
@@ -249,6 +255,11 @@ test("AR-2 validator rejects gzip metadata drift and a fabricated retained excer
   await assert.rejects(
     validateOfficialSemantics(fabricatedExcerpt),
     /retained evidence derivation/u,
+  );
+
+  assert.throws(
+    () => assertAr2EvidenceCustodyCapability("win32"),
+    error => error.message === "AR-2 evidence custody rejected: descriptor-bound no-follow reads are unsupported on this platform",
   );
 });
 
@@ -284,6 +295,7 @@ test("AR-2 descriptor custody rejects unsafe paths and filesystem objects", asyn
   await mkdir(nestedRoot, { recursive: true });
   await mkdir(outsideRoot);
   await writeFile(join(nestedRoot, "valid.test.ts"), "export {};\n");
+  await writeFile(join(nestedRoot, "oversized.test.ts"), "x".repeat(33));
   await writeFile(join(outsideRoot, "outside.test.ts"), "throw new Error('outside');\n");
   await link(join(nestedRoot, "valid.test.ts"), join(nestedRoot, "hardlinked.test.ts"));
   await symlink(join(outsideRoot, "outside.test.ts"), join(nestedRoot, "linked.test.ts"));
@@ -318,6 +330,17 @@ test("AR-2 descriptor custody rejects unsafe paths and filesystem objects", asyn
       ),
       /ambiguous identity/u,
     );
+    for (const [platform, fileSystemConstants] of [
+      ["win32", { O_RDONLY: 0, O_NOFOLLOW: 131072, O_NONBLOCK: 2048 }],
+      ["linux", { O_RDONLY: 0, O_NOFOLLOW: 0, O_NONBLOCK: 2048 }],
+      ["linux", { O_RDONLY: 0, O_NOFOLLOW: 131072, O_NONBLOCK: 0 }],
+    ]) {
+      assert.throws(
+        () => assertAr2EvidenceCustodyCapability(platform, fileSystemConstants),
+        error => error.message === "AR-2 evidence custody rejected: descriptor-bound no-follow reads are unsupported on this platform"
+          && !error.message.includes(validPath),
+      );
+    }
   });
 
   await t.test("rejects a symbolic-link evidence file", async () => {
@@ -347,6 +370,13 @@ test("AR-2 descriptor custody rejects unsafe paths and filesystem objects", asyn
         { evidenceRoot },
       ),
       /evidence target is not a regular file/u,
+    );
+    await assert.rejects(
+      readAr2CoverageTestSource(
+        "packages/contexts/example/tests/nested/oversized.test.ts",
+        { evidenceRoot, maxBytes: 32 },
+      ),
+      /evidence target exceeds its byte budget/u,
     );
   });
 
@@ -393,94 +423,6 @@ test("AR-2 descriptor custody rejects unsafe paths and filesystem objects", asyn
       /symbolic links are forbidden/u,
     );
     assert.equal(contentReads, 0, "a rejected lineage must never be opened");
-  });
-});
-
-test("AR-2 descriptor custody rejects deterministic substitution and drift", async t => {
-  const fixtureRoot = await mkdtemp(join(tmpdir(), "ar2-evidence-races-"));
-  t.after(() => rm(fixtureRoot, { recursive: true, force: true }));
-  const relativePath = "packages/contexts/example/tests/race.test.ts";
-  const target = join(fixtureRoot, relativePath);
-  await mkdir(join(fixtureRoot, "packages", "contexts", "example", "tests"), { recursive: true });
-  const evidenceRoot = pathToFileURL(`${fixtureRoot}/`);
-  const base = { lstat, open, readdir, realpath };
-
-  await t.test("rejects replacement between validation and descriptor open without reading it", async () => {
-    await writeFile(target, "accepted-original\n");
-    const original = `${target}.original`;
-    let reads = 0;
-    await assert.rejects(readAr2CoverageTestSource(relativePath, {
-      evidenceRoot,
-      fileSystem: {
-        ...base,
-        open: async (path, flags) => {
-          await rename(path, original);
-          await writeFile(path, "substituted-secret-bytes\n");
-          const descriptor = await open(path, flags);
-          return {
-            close: () => descriptor.close(),
-            read: (...arguments_) => {reads += 1; return descriptor.read(...arguments_);},
-            stat: options => descriptor.stat(options),
-          };
-        },
-      },
-    }), /changed before descriptor binding/u);
-    assert.equal(reads, 0, "substituted bytes must not be read or accepted");
-    await rm(original);
-  });
-
-  await t.test("rejects an ancestor swap before descriptor open without reading it", async () => {
-    await writeFile(target, "accepted-original\n");
-    const tests = join(fixtureRoot, "packages", "contexts", "example", "tests");
-    const displaced = `${tests}.displaced`;
-    let reads = 0;
-    await assert.rejects(readAr2CoverageTestSource(relativePath, {
-      evidenceRoot,
-      fileSystem: {
-        ...base,
-        open: async (path, flags) => {
-          await rename(tests, displaced);
-          await mkdir(tests);
-          await writeFile(path, "ancestor-substitution-bytes\n");
-          const descriptor = await open(path, flags);
-          return {
-            close: () => descriptor.close(),
-            read: (...arguments_) => {reads += 1; return descriptor.read(...arguments_);},
-            stat: options => descriptor.stat(options),
-          };
-        },
-      },
-    }), /changed before descriptor binding/u);
-    assert.equal(reads, 0, "ancestor-substituted bytes must not be read or accepted");
-    await rm(tests, { recursive: true });
-    await rename(displaced, tests);
-  });
-
-  await t.test("rejects descriptor identity drift after the bounded read", async () => {
-    await writeFile(target, "accepted-original\n");
-    let mutated = false;
-    await assert.rejects(readAr2CoverageTestSource(relativePath, {
-      evidenceRoot,
-      fileSystem: {
-        ...base,
-        open: async (path, flags) => {
-          const descriptor = await open(path, flags);
-          return {
-            close: () => descriptor.close(),
-            read: async (...arguments_) => {
-              const result = await descriptor.read(...arguments_);
-              if (!mutated && result.bytesRead > 0) {
-                mutated = true;
-                await writeFile(path, "post-read-substitution\n");
-              }
-              return result;
-            },
-            stat: options => descriptor.stat(options),
-          };
-        },
-      },
-    }), /descriptor identity drifted during read/u);
-    assert.equal(mutated, true);
   });
 });
 

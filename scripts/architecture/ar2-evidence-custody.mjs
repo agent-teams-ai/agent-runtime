@@ -6,9 +6,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const defaultFileSystem = Object.freeze({ lstat, open, readdir, realpath });
+const SUPPORTED_PLATFORMS = new Set([
+  "aix", "darwin", "freebsd", "linux", "openbsd", "sunos",
+]);
 
-const fail = (path, reason) => assert.fail(
-  `${path} AR-2 evidence custody rejected: ${reason}`,
+const fail = (_path, reason) => assert.fail(
+  `AR-2 evidence custody rejected: ${reason}`,
 );
 
 const portableRelativePath = (path, { allowRoot = false } = {}) => {
@@ -113,6 +116,23 @@ const readBounded = async (path, handle, maxBytes) => {
   fail(path, "the evidence target exceeds its byte budget");
 };
 
+export const assertAr2EvidenceCustodyCapability = (
+  platform = process.platform,
+  fileSystemConstants = constants,
+) => {
+  const noFollow = fileSystemConstants.O_NOFOLLOW;
+  const nonBlock = fileSystemConstants.O_NONBLOCK;
+  const readOnly = fileSystemConstants.O_RDONLY;
+  if (
+    !SUPPORTED_PLATFORMS.has(platform)
+    || !Number.isInteger(readOnly) || readOnly < 0
+    || !Number.isInteger(noFollow) || noFollow <= 0
+    || !Number.isInteger(nonBlock) || nonBlock <= 0
+  ) {
+    fail("<invalid>", "descriptor-bound no-follow reads are unsupported on this platform");
+  }
+};
+
 const custodyPlan = (targetPath, options) => {
   const {
     allowedRoot = ".", evidenceRoot, fileSystem = defaultFileSystem,
@@ -127,12 +147,11 @@ const custodyPlan = (targetPath, options) => {
     segments.length < allowedSegments.length
     || allowedSegments.some((segment, index) => segments[index] !== segment)
   ) {fail(targetPath, "the lexical path escapes its allowed root");}
-  if (typeof constants.O_NOFOLLOW !== "number" || typeof constants.O_NONBLOCK !== "number") {
-    fail(targetPath, "descriptor-bound no-follow reads are unsupported on this platform");
-  }
+  assertAr2EvidenceCustodyCapability();
   const repositoryPath = asDirectoryPath(evidenceRoot ?? new URL("../../", import.meta.url));
   return {
     allowedRootPath: join(repositoryPath, ...allowedSegments), fileSystem, maxBytes,
+    openFlags: constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     path: join(repositoryPath, ...segments), repositoryPath, segments,
   };
 };
@@ -156,7 +175,7 @@ const sameLineage = (left, right) => left.length === right.length
 
 export const readCustodiedRepositoryFile = async (targetPath, options = {}) => {
   const {
-    allowedRootPath, fileSystem, maxBytes, path, repositoryPath, segments,
+    allowedRootPath, fileSystem, maxBytes, openFlags, path, repositoryPath, segments,
   } = custodyPlan(targetPath, options);
   const beforeLineage = await inspectLineage({
     fileSystem, repositoryPath, segments, targetPath,
@@ -167,8 +186,7 @@ export const readCustodiedRepositoryFile = async (targetPath, options = {}) => {
   let handle;
   try {
     handle = await observe(targetPath, () => fileSystem.open(
-      path,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      path, openFlags,
     ), "the validated evidence target could not be opened without following links");
     const beforeDescriptorStats = await observe(targetPath,
       () => handle.stat({ bigint: true }), "the evidence descriptor could not be inspected");
