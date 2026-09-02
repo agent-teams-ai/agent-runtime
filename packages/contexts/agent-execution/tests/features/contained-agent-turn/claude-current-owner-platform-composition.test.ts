@@ -235,7 +235,8 @@ test("composed owners reject Linux and Darwin Host-profile swaps before delegate
   }
 });
 
-test("exact Darwin target composes with cooperative Darwin Host custody without claiming physical proof", () => {
+test("exact Darwin target composes with cooperative Darwin Host custody without claiming physical proof",
+  { skip: process.platform !== "darwin" }, () => {
   const tuple = CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE;
   const hostCustody = new DarwinCooperativeProcessCustody({
     launchPlans: Object.freeze({async resolve() {return;}}),
@@ -258,4 +259,4 @@ test("exact Darwin target composes with cooperative Darwin Host custody without 
   assert.ok(owner.provider);
   assert.equal(hostCustody.evidence("not-a-custody-ref"), undefined);
   owner.dispose();
-});
+  });

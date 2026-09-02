@@ -5,8 +5,17 @@ import {
   CodexAppServerContainedTurnProvider,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
 import {
+  createCodexActiveTurnProgress,
+  handleCodexActiveMessage,
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.js";
+import {
+  CODEX_APP_SERVER_PROTOCOL_ERROR_CODE,
+  codexResponseResult,
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.js";
+import {
   assertCodexCanonicalOutputAllowed,
   CODEX_CREDENTIAL_POLICY_FAMILIES,
+  codexTerminalOutputText,
   codexTextContainsPrivatePath,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-output-policy.js";
 import { agentMessage, emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../codex-app-server-test-messages.mjs";
@@ -36,13 +45,27 @@ const CREDENTIAL_MATRIX: readonly Readonly<{
   { family: "private-key-marker", name: "RSA private key", text: "-----BEGIN RSA PRIVATE KEY-----" },
   { family: "private-key-marker", name: "EC private key", text: "-----Begin Ec Private Key-----" },
   { family: "private-key-marker", name: "OpenSSH private key", text: "----- BEGIN OPENSSH PRIVATE KEY -----" },
+  { family: "private-key-marker", name: "encrypted private key", text: "-----BEGIN ENCRYPTED PRIVATE KEY-----" },
   { family: "openai-sk-credential", name: "embedded sk credential", text: "ask-0123456789abcdefghij-suffix" },
   { family: "api-key-assignment", name: "OpenAI API key assignment", text: "OPENAI API KEY = '0123456789abcdef'" },
   { family: "api-key-assignment", name: "Codex API key assignment", text: "prefix-CoDeX_ApI-Key : abcdefghijklmnop-suffix" },
   { family: "authorization-bearer", name: "Authorization bearer", text: "AUTHORIZATION \t:  BEARER \n0123456789abcdef" },
+  { family: "authorization-bearer", name: "quoted JSON Authorization bearer",
+    text: "\"Authorization\" : \"Bearer 0123456789abcdef\"" },
+  { family: "api-key-assignment", name: "generic JSON api_key", text: "{\"api_key\" : \"0123456789abcdef\"}" },
   { family: "token-field", name: "JSON access token", text: "{ \"Access_Token\" \t: \t\"0123456789abcdef\" }" },
   { family: "token-field", name: "refresh-token assignment", text: "refresh-token = '0123456789abcdef'" },
   { family: "token-field", name: "id token assignment", text: "prefix id token: 0123456789abcdef suffix" },
+]);
+
+const TERMINAL_PREFIX_LANGUAGES = Object.freeze([
+  "CrEdEnTiAl_MaRkEr <", "api-key-marker<", "ACCESS TOKEN MARKER <", "refresh_token_marker<",
+  "-----begin private key-----", "-----BEGIN RSA PRIVATE KEY-----", "-----Begin Ec Private Key-----",
+  "----- BEGIN OPENSSH PRIVATE KEY -----", "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+  "sk-0123456789abcdefghij", "OPENAI API KEY = '0123456789abcdef", "CoDeX_ApI-Key : abcdefghijklmnop",
+  "AUTHORIZATION \t:  BEARER \n0123456789abcdef", "\"Authorization\" : \"Bearer 0123456789abcdef",
+  "\"api_key\" : \"0123456789abcdef", "\"Access_Token\" : \"0123456789abcdef",
+  "refresh-token = '0123456789abcdef", "id token: 0123456789abcdef",
 ]);
 
 const assertContainmentRequired = (
@@ -97,8 +120,43 @@ const executeAssistantItems = (
   sensitiveOutputTokens: readonly string[] = [],
 ) => executeAssistantChunks(turnId, texts.map(text => [text]), sensitiveOutputTokens);
 
+const executeTerminalBoundary = async (status: "failed" | "interrupted", text: string) => {
+  const output: OutputChunk[] = [];
+  const turnId = `turn:terminal:${status}`;
+  const item = agentMessage("item:terminal", text);
+  const terminal = (target: FakeCodexProcess) => target.emit({method: "turn/completed", params: {
+    threadId: "thread:test",
+    turn: generatedTurn(turnId, status, status === "failed"
+      ? {additionalDetails: null, codexErrorInfo: "other", message: "hostile provider failure detail"} : null, [item]),
+  }});
+  const process = new FakeCodexProcess((message, target) => {
+    if (standardHandshake(message, target)) {return;}
+    if (message.method === "turn/start") {
+      target.emit({id: message.id, result: {turn: generatedTurn(turnId, "inProgress")}});
+      emitTurnStarted(target, turnId);
+      emitAgentStarted(target, turnId, item.id);
+      target.emit({method: "item/agentMessage/delta", params: {
+        delta: text, itemId: item.id, threadId: "thread:test", turnId,
+      }});
+      emitAgentCompleted(target, turnId, item.id, text);
+      if (status === "failed") {terminal(target);}
+    }
+    if (message.method === "turn/interrupt" && status === "interrupted") {
+      target.emit({id: message.id, result: {}});
+      terminal(target);
+    }
+  });
+  const provider = new CodexAppServerContainedTurnProvider({
+    boundary, cancellationPollMs: 1, manifest, privateRootPath: syntheticPrivateRoot,
+    processes: {get: () => process}, tmpDir: syntheticTmp,
+  });
+  const outcome = await provider.execute({...executeInput(process), emit: async chunk => {output.push(chunk);},
+    isCancellationRequested: async () => status === "interrupted"});
+  return {outcome, output};
+};
+
 test("credential matrix covers every declared family and rejects every item split without leaking a prior prefix", async () => {
-  assert.equal(CREDENTIAL_MATRIX.length, 15, "removing an individual credential matrix row must fail coverage");
+  assert.equal(CREDENTIAL_MATRIX.length, 18, "removing an individual credential matrix row must fail coverage");
   assert.deepEqual(new Set(CREDENTIAL_MATRIX.map(entry => entry.family)), new Set(CODEX_CREDENTIAL_POLICY_FAMILIES));
   let sequence = 0;
   for (const entry of CREDENTIAL_MATRIX) {
@@ -110,6 +168,12 @@ test("credential matrix covers every declared family and rejects every item spli
       assertContainmentRequired(evidence.outcome);
       assert.deepEqual(evidence.output, [], `${entry.name} leaked at item split ${split}`);
       assert.equal(JSON.stringify(evidence).includes(entry.text), false);
+      const deltaEvidence = await executeAssistantChunks(`turn:credential-delta:${sequence}`, [[
+        entry.text.slice(0, split), entry.text.slice(split),
+      ]]);
+      sequence += 1;
+      assertContainmentRequired(deltaEvidence.outcome);
+      assert.deepEqual(deltaEvidence.output, [], `${entry.name} leaked at delta split ${split}`);
     }
   }
 });
@@ -142,9 +206,15 @@ test("private paths use Linux byte identity and Darwin/Windows canonical caseles
     { expected: true, path: nfc, platform: "darwin" as const, text: `prefix ${nfdDifferentCase} suffix` },
     { expected: true, path: "C:\\Users\\Private\\Codex", platform: "win32" as const,
       text: "prefix c:\\users\\private\\CODEX suffix" },
+    { expected: true, path: "C:\\Users\\Caf\u00e9\\Codex", platform: "win32" as const,
+      text: "prefix \\\\?\\c:/USERS/cafe\u0301/CODEX suffix" },
+    { expected: true, path: "\\\\Server\\Private Share\\Codex", platform: "win32" as const,
+      text: "prefix \\\\?\\UNC\\server/private share/CODEX suffix" },
+    { expected: true, path: "\\\\Server\\Private Share\\Codex", platform: "win32" as const,
+      text: "prefix //SERVER/PRIVATE SHARE/codex suffix" },
     { expected: false, path: "/private/root", platform: "linux" as const, text: "/PRIVATE/ROOT" },
   ];
-  assert.equal(cases.length, 4, "removing a platform-path matrix row must fail coverage");
+  assert.equal(cases.length, 7, "removing a platform-path matrix row must fail coverage");
   for (const entry of cases) {
     assert.equal(codexTextContainsPrivatePath(entry.text, [entry.path], entry.platform), entry.expected);
   }
@@ -161,12 +231,70 @@ test("exact owner tokens and platform paths remain separate bounded policy input
   assert.doesNotThrow(() => assertCodexCanonicalOutputAllowed("ordinary output", policy));
 });
 
+test("provider-controlled JSON-RPC detail, method, path, and output never enter thrown errors", async () => {
+  const hostile = "PRIVATE_PROVIDER_DETAIL_/private/path_api_key";
+  assert.throws(() => codexResponseResult({id: "request:1", error: {message: hostile}}, "request:1"), error => {
+    assert.equal(error instanceof Error && error.message.includes(hostile), false);
+    assert.equal(error !== null && typeof error === "object" && "code" in error && error.code,
+      CODEX_APP_SERVER_PROTOCOL_ERROR_CODE);
+    return true;
+  });
+  const progress = createCodexActiveTurnProgress();
+  const outputPolicy = Object.freeze({exactSensitiveTokens: Object.freeze([]), privatePaths: Object.freeze([]),
+    privatePathPlatform: "linux" as const});
+  await assert.rejects(handleCodexActiveMessage({
+    boundary, emitInput: {} as never, maxNotificationBytes: 1_024, maxNotifications: 16,
+    message: {id: "hostile:1", method: hostile}, mode: "analysis", observeProtocolTerminal() {},
+    outputPolicy, progress, threadId: "thread:test", turnId: "turn:test",
+  }), error => error instanceof Error && !error.message.includes(hostile));
+  await assert.rejects(handleCodexActiveMessage({
+    boundary, emitInput: {} as never, maxNotificationBytes: 1_024, maxNotifications: 16,
+    message: {method: hostile, params: {}}, mode: "analysis", observeProtocolTerminal() {},
+    outputPolicy, progress: createCodexActiveTurnProgress(), threadId: "thread:test", turnId: "turn:test",
+  }), error => error instanceof Error && !error.message.includes(hostile));
+  assert.throws(() => assertCodexCanonicalOutputAllowed(hostile,
+    {...outputPolicy, privatePaths: ["/private/path"]}), error =>
+    error instanceof Error && !error.message.includes(hostile) && !error.message.includes("/private/path"));
+});
+
+test("terminal admission retains every credential, exact-token, and normalized private-path prefix", () => {
+  const basePolicy = Object.freeze({exactSensitiveTokens: Object.freeze([]), privatePaths: Object.freeze([]),
+    privatePathPlatform: "linux" as const});
+  assert.equal(TERMINAL_PREFIX_LANGUAGES.length, 18);
+  for (const [name, language] of TERMINAL_PREFIX_LANGUAGES.entries()) {
+    for (let length = 1; length < language.length; length += 1) {
+      const candidate = `public:${language.slice(0, length)}`;
+      try {assertCodexCanonicalOutputAllowed(candidate, basePolicy);} catch {continue;}
+      assert.equal(codexTerminalOutputText(candidate, basePolicy), "",
+        `credential language ${name} prefix length ${length} was admitted`);
+    }
+  }
+  const skWithNineteenBodyCharacters = "sk-0123456789abcdefghi";
+  assert.equal(codexTerminalOutputText(`public:${skWithNineteenBodyCharacters}`, basePolicy), "");
+
+  const exact = "owner-token-012345";
+  for (let length = 1; length < exact.length; length += 1) {
+    assert.equal(codexTerminalOutputText(`public:${exact.slice(0, length)}`,
+      {...basePolicy, exactSensitiveTokens: [exact]}), "");
+  }
+  const windowsRoot = "\\\\Server\\Private\\Caf\u00e9";
+  const windowsPrefix = "\\\\?\\UNC\\server/private/caf\u00e9".slice(0, -1);
+  assert.equal(codexTerminalOutputText(`public:${windowsPrefix}`,
+    {...basePolicy, privatePaths: [windowsRoot], privatePathPlatform: "win32"}), "");
+  for (let length = 1; length < syntheticPrivateRoot.length; length += 1) {
+    assert.equal(codexTerminalOutputText(`public:${syntheticPrivateRoot.slice(0, length)}`,
+      {...basePolicy, privatePaths: [syntheticPrivateRoot]}), "",
+      `private root prefix length ${length} was admitted`);
+  }
+  assert.equal(codexTerminalOutputText("ordinary terminal output", basePolicy), "ordinary terminal output");
+});
+
 test("whole-turn admission clears terminal prefixes and uses bounded notification retention", async () => {
   const terminal = await executeAssistantItems("turn:prefixes", ["alphaAB", "XbetaB", "YomegaABC"], [
     "ABCD", "BCD", "!",
   ]);
   assert.equal(terminal.outcome.kind, "completed");
-  assert.deepEqual(terminal.output, [{ cursor: 0, kind: "assistant", text: "alphaABXbetaBYomega" }]);
+  assert.deepEqual(terminal.output, []);
 
   const bounded = await executeAssistantChunks("turn:bounded", [["x".repeat(256)]], [], 64);
   assertContainmentRequired(bounded.outcome);
@@ -177,6 +305,16 @@ test("whole-turn admission clears terminal prefixes and uses bounded notificatio
     boundary, manifest, privateRootPath: syntheticPrivateRoot, processes: { get: () => process },
     sensitiveOutputTokens: [""], tmpDir: syntheticTmp,
   }), /bounded non-empty string/u);
+});
+
+test("failed and cancelled completion never emit retained credential or private-path prefixes", async () => {
+  const failed = await executeTerminalBoundary("failed", syntheticPrivateRoot.slice(0, -1));
+  assert.equal(failed.outcome.kind, "completed");
+  assert.deepEqual(failed.output, [{cursor: 0, kind: "diagnostic",
+    text: "codex-provider-terminal-failure-redacted/v1"}]);
+  const cancelled = await executeTerminalBoundary("interrupted", "sk-0123456789abcdefghi");
+  assert.equal(cancelled.outcome.kind, "completed");
+  assert.deepEqual(cancelled.output, []);
 });
 
 test("private roots and exact sensitive tokens never preserve an earlier public emission", async () => {

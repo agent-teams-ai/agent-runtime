@@ -2,8 +2,10 @@ export const CODEX_APP_SERVER_TIMEOUT = Symbol("codex-app-server-timeout");
 
 export type CodexJsonRecord = Record<string, unknown>;
 export type CodexReadOutcome = CodexJsonRecord | typeof CODEX_APP_SERVER_TIMEOUT | undefined;
+export const CODEX_APP_SERVER_PROTOCOL_ERROR_CODE = "CODEX_APP_SERVER_PROTOCOL_ERROR" as const;
 
 export class CodexAppServerProtocolError extends Error {
+  public readonly code = CODEX_APP_SERVER_PROTOCOL_ERROR_CODE;
   public constructor(
     message: string,
     public readonly afterTurnRequest: boolean,
@@ -35,8 +37,7 @@ export const codexResponseResult = (
 ): unknown | typeof CODEX_APP_SERVER_TIMEOUT => {
   if (message.id !== requestId) {return CODEX_APP_SERVER_TIMEOUT;}
   if (isCodexRecord(message.error)) {
-    const detail = codexStringField(message.error, "message") ?? "unknown JSON-RPC error";
-    throw new CodexAppServerProtocolError(`Codex App Server rejected a request: ${detail}`, false, true);
+    throw new CodexAppServerProtocolError("Codex App Server request was rejected", false, true);
   }
   if (!("result" in message)) {throw new Error("Codex App Server response has no result");}
   return message.result;

@@ -362,7 +362,7 @@ export const observeCodexActiveProfileEvidence = (
   const method = codexNotificationMethod(message);
   if (method !== "thread/settings/updated") {
     if (method === "thread/started" || method === "thread/status/changed") {return false;}
-    throw evidenceError(`unexpected pre-turn notification ${method ?? "without-method"}`);
+    throw evidenceError("unexpected pre-turn notification");
   }
   if (!isCodexRecord(message.params) || message.params.threadId !== threadId
     || !isCodexRecord(message.params.threadSettings)) {

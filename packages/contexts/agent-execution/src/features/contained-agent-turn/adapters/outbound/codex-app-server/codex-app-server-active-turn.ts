@@ -138,7 +138,7 @@ const validatePassiveNotification = (
 ): void => {
   const shape = PASSIVE_SHAPES[method];
   if (shape === undefined || !exactKeys(params, shape.keys) || !shape.validate(params)) {
-    throw new CodexAppServerProtocolError(`unexpected or malformed Codex active notification ${method}`, true);
+    throw new CodexAppServerProtocolError("Codex active notification is unsupported or malformed", true);
   }
   if ("threadId" in params && params.threadId !== null && params.threadId !== threadId) {
     throw new CodexAppServerProtocolError("Codex active notification thread identity changed", true);
@@ -265,7 +265,7 @@ const flushCodexAssistantText = async (
   const pending = progress.pendingCanonicalAssistantText;
   if (pending.length === 0) {return;}
   progress.pendingCanonicalAssistantText = "";
-  const admitted = codexTerminalOutputText(pending, outputPolicy.exactSensitiveTokens);
+  const admitted = codexTerminalOutputText(pending, outputPolicy);
   if (admitted.length === 0) {return;}
   await input.emit({ cursor: progress.cursor, kind: "assistant", text: admitted });
   progress.cursor += 1;
@@ -433,7 +433,7 @@ export const handleCodexActiveMessage = async (input: {
 }): Promise<CodexActiveTurnCompletion | undefined> => {
   const serverMethod = serverRequestMethod(input.message);
   if (serverMethod !== undefined) {
-    throw new CodexAppServerProtocolError(`unexpected Codex server request ${serverMethod}`, true);
+    throw new CodexAppServerProtocolError("Codex App Server emitted an unexpected server request", true);
   }
   if ("id" in input.message) {
     observeInterruptResponse(input.message, input.progress);
@@ -490,7 +490,7 @@ export const handleCodexActiveMessage = async (input: {
     );
   }
   if (!Object.hasOwn(PASSIVE_SHAPES, method)) {
-    throw new CodexAppServerProtocolError(`unexpected Codex active notification ${method}`, true);
+    throw new CodexAppServerProtocolError("Codex App Server emitted an unsupported active notification", true);
   }
   applyCodexPassiveItemNotification(method, params, input.progress, input.boundary, input.effectCustody);
   return undefined;

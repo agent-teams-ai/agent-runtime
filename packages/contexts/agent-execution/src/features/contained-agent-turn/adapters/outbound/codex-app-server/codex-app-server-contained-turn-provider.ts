@@ -199,8 +199,8 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
   ): Promise<unknown> {
     const requestId = String(request.id);
     const deadline = deadlineAfter(this.#requestTimeoutMs);
-    await beforeDeadline(process.write(encode(request)), deadline, "Codex App Server write timed out").catch(error => {
-      throw new CodexAppServerProtocolError(error instanceof Error ? error.message : "Codex write failed", afterTurnRequest);
+    await beforeDeadline(process.write(encode(request)), deadline, "Codex App Server write timed out").catch(() => {
+      throw new CodexAppServerProtocolError("Codex App Server request write failed", afterTurnRequest);
     });
     while (true) {
       const message = await reader.read(deadline);
@@ -209,7 +209,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       }
       const serverMethod = serverRequestMethod(message);
       if (serverMethod !== undefined) {
-        throw new CodexAppServerProtocolError(`unexpected Codex server request ${serverMethod}`, afterTurnRequest);
+        throw new CodexAppServerProtocolError("Codex App Server emitted an unexpected server request", afterTurnRequest);
       }
       if ("id" in message) {
         try {
@@ -217,7 +217,8 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           if (result !== TIMEOUT) {return result;}
         } catch (error) {
           if (error instanceof CodexAppServerProtocolError) {
-            throw new CodexAppServerProtocolError(error.message, afterTurnRequest, error.explicitlyRejected);
+            throw new CodexAppServerProtocolError("Codex App Server request was rejected", afterTurnRequest,
+              error.explicitlyRejected);
           }
           throw error;
         }
