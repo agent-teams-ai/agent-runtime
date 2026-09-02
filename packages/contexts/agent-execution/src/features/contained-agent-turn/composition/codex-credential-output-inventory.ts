@@ -19,64 +19,98 @@ interface ExpectedCredentialAuthority {
   readonly credentialGeneration: number;
 }
 
-export const snapshotCodexCredentialOutputTokens = (
-  launch: object,
-  expected: ExpectedCredentialAuthority,
-): readonly string[] => {
+const isDataDescriptor = (
+  descriptor: PropertyDescriptor | undefined,
+): descriptor is PropertyDescriptor & {readonly value: unknown} =>
+  descriptor !== undefined && "value" in descriptor;
+
+const readInventory = (launch: object): Record<string, unknown> => {
   const descriptor = getOwnPropertyDescriptor(launch, "credentialOutputInventory");
-  if (descriptor === undefined || !("value" in descriptor) || descriptor.value === null
-    || typeof descriptor.value !== "object" || arrayIsArray(descriptor.value) || utilTypes.isProxy(descriptor.value)) {
+  if (!isDataDescriptor(descriptor) || descriptor.value === null
+    || typeof descriptor.value !== "object" || arrayIsArray(descriptor.value)
+    || utilTypes.isProxy(descriptor.value)) {
     throw new TypeError("Codex credential output inventory is required");
   }
-  const inventory = descriptor.value as Record<string, unknown>;
+  return descriptor.value as Record<string, unknown>;
+};
+
+const assertExactInventoryShape = (inventory: Record<string, unknown>): void => {
   const inventoryKeys = ownKeys(inventory);
   if (inventoryKeys.length !== 3 || !hasOwn(inventory, "credentialBindingDigest")
     || !hasOwn(inventory, "credentialGeneration") || !hasOwn(inventory, "sensitiveOutputTokens")) {
     throw new TypeError("Codex credential output inventory must have an exact bounded shape");
   }
+};
+
+const readTokenArray = (
+  inventory: Record<string, unknown>,
+  expected: ExpectedCredentialAuthority,
+): unknown[] => {
   const digest = getOwnPropertyDescriptor(inventory, "credentialBindingDigest");
   const generation = getOwnPropertyDescriptor(inventory, "credentialGeneration");
   const tokens = getOwnPropertyDescriptor(inventory, "sensitiveOutputTokens");
-  if (digest === undefined || !("value" in digest) || generation === undefined || !("value" in generation)
-    || tokens === undefined || !("value" in tokens) || !arrayIsArray(tokens.value) || utilTypes.isProxy(tokens.value)
-    || digest.value !== expected.credentialBindingDigest || generation.value !== expected.credentialGeneration) {
+  if (!isDataDescriptor(digest) || !isDataDescriptor(generation) || !isDataDescriptor(tokens)
+    || !arrayIsArray(tokens.value) || utilTypes.isProxy(tokens.value)
+    || digest.value !== expected.credentialBindingDigest
+    || generation.value !== expected.credentialGeneration) {
     throw new TypeError("Codex credential output inventory drifted from accepted credential authority");
   }
-  const tokenArray = tokens.value as unknown[];
+  return tokens.value as unknown[];
+};
+
+const readBoundedLength = (tokenArray: unknown[]): number => {
   if (getPrototypeOf(tokenArray) !== trustedArrayPrototype) {
     throw new TypeError("Codex credential output inventory must be a trusted plain array");
   }
-  const lengthDescriptor = getOwnPropertyDescriptor(tokenArray, "length");
-  if (lengthDescriptor === undefined || !("value" in lengthDescriptor)
-    || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0
-    || lengthDescriptor.value > MAX_TOKENS) {
+  const descriptor = getOwnPropertyDescriptor(tokenArray, "length");
+  if (!isDataDescriptor(descriptor) || !Number.isSafeInteger(descriptor.value)
+    || Number(descriptor.value) < 0 || Number(descriptor.value) > MAX_TOKENS) {
     throw new TypeError("Codex credential output inventory exceeds its fixed bounds");
   }
-  const length = Number(lengthDescriptor.value);
+  return Number(descriptor.value);
+};
+
+const assertDenseArray = (tokenArray: unknown[], length: number): void => {
   const tokenKeys = ownKeys(tokenArray);
-  let exactDenseKeys = tokenKeys.length === length + 1;
-  for (let index = 0; exactDenseKeys && index <= length; index += 1) {
-    exactDenseKeys = tokenKeys[index] === (index === length ? "length" : String(index));
-  }
-  if (!exactDenseKeys) {
+  if (tokenKeys.length !== length + 1) {
     throw new TypeError("Codex credential output inventory must be a dense plain array");
   }
+  for (let index = 0; index <= length; index += 1) {
+    if (tokenKeys[index] !== (index === length ? "length" : String(index))) {
+      throw new TypeError("Codex credential output inventory must be a dense plain array");
+    }
+  }
+};
+
+const snapshotTokens = (tokenArray: unknown[], length: number): readonly string[] => {
   const snapshot: string[] = [];
   let aggregateBytes = 0;
   for (let index = 0; index < length; index += 1) {
-    const tokenDescriptor = getOwnPropertyDescriptor(tokenArray, String(index));
-    if (tokenDescriptor === undefined || !("value" in tokenDescriptor)
-      || typeof tokenDescriptor.value !== "string" || tokenDescriptor.value.length === 0) {
+    const descriptor = getOwnPropertyDescriptor(tokenArray, String(index));
+    if (!isDataDescriptor(descriptor) || typeof descriptor.value !== "string"
+      || descriptor.value.length === 0) {
       throw new TypeError("Codex credential output inventory must contain own data strings");
     }
-    const bytes = utf8ByteLength(tokenDescriptor.value, "utf8");
+    const bytes = utf8ByteLength(descriptor.value, "utf8");
     aggregateBytes += bytes;
     if (bytes > MAX_TOKEN_BYTES || aggregateBytes > MAX_AGGREGATE_BYTES) {
       throw new TypeError("Codex credential output inventory exceeds its fixed bounds");
     }
     defineProperty(snapshot, String(index), {
-      configurable: true, enumerable: true, value: tokenDescriptor.value, writable: true,
+      configurable: true, enumerable: true, value: descriptor.value, writable: true,
     });
   }
   return freeze(snapshot);
+};
+
+export const snapshotCodexCredentialOutputTokens = (
+  launch: object,
+  expected: ExpectedCredentialAuthority,
+): readonly string[] => {
+  const inventory = readInventory(launch);
+  assertExactInventoryShape(inventory);
+  const tokenArray = readTokenArray(inventory, expected);
+  const length = readBoundedLength(tokenArray);
+  assertDenseArray(tokenArray, length);
+  return snapshotTokens(tokenArray, length);
 };
