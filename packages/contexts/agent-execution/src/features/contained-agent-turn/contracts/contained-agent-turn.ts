@@ -1,4 +1,5 @@
-export type ContainedTurnProvider = "claude" | "codex";
+/** Opaque provider identity. Concrete support is selected by the outer adapter. */
+export type ContainedTurnProvider = string;
 
 export type ContainedTurnMode = "analysis" | "workspace-write";
 

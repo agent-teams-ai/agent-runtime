@@ -22,6 +22,8 @@ export const providerUnsupportedOutcome = Object.freeze({
 });
 
 const MAX_PROVIDER_IDENTITY_LENGTH = 128;
+const MAX_COMMAND_ID_LENGTH = 256;
+const MAX_PROMPT_BYTES = 65_536;
 const MAX_OWNER_IDENTITY_LENGTH = 512;
 const MAX_OUTPUT_CHUNKS = 10_000;
 const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
@@ -43,6 +45,20 @@ const copyProviderIdentity = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
     // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
     value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
+    ? value
+    : undefined;
+
+const copyCommandId = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 && value.length <= MAX_COMMAND_ID_LENGTH &&
+    /^[\x20-\x7E]+$/u.test(value) && value.isWellFormed() &&
+    !value.includes("\u0000")
+    ? value
+    : undefined;
+
+const copyPrompt = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 && value.isWellFormed() &&
+    new TextEncoder().encode(value).byteLength <= MAX_PROMPT_BYTES &&
+    !value.includes("\u0000")
     ? value
     : undefined;
 
@@ -228,15 +244,18 @@ export const copyInput = (
   input: SubmitRuntimeContainedTurnInput,
 ): SubmitRuntimeContainedTurnInput | undefined => {
   try {
+    const commandId = copyCommandId(input.commandId);
     const expectedProvider = copyProviderIdentity(input.expectedProvider);
-    if (expectedProvider === undefined) {
+    const intent = input.intent;
+    const prompt = copyPrompt(intent.prompt);
+    if (commandId === undefined || expectedProvider === undefined || prompt === undefined ||
+      (intent.mode !== "analysis" && intent.mode !== "workspace-write")) {
       return;
     }
-    const intent = input.intent;
     return Object.freeze({
-      commandId: input.commandId,
+      commandId,
       expectedProvider,
-      intent: Object.freeze({ mode: intent.mode, prompt: intent.prompt }),
+      intent: Object.freeze({ mode: intent.mode, prompt }),
     });
   } catch {
     return;

@@ -218,7 +218,7 @@ export interface HostCustodyLaunchPlan {
   readonly privateRootPath: string;
   readonly privatePathEnvironmentKeys?: readonly string[];
   readonly intentMode: "analysis" | "workspace-write";
-  readonly provider: "claude" | "codex";
+  readonly provider: string;
   readonly spawnMode?: "eager" | "sdk-delegated";
 }
 

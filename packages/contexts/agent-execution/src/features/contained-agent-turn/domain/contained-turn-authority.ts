@@ -13,7 +13,8 @@ import type {
   ContainedTurnOperationId,
 } from "./contained-turn-identities.js";
 
-export type ContainedTurnProvider = "claude" | "codex";
+/** Opaque provider identity. Provider-specific semantics belong to outer adapters. */
+export type ContainedTurnProvider = string;
 export type ContainedTurnMode = "analysis" | "workspace-write";
 
 export interface ContainedTurnScope {
@@ -227,6 +228,14 @@ export const validateContainedTurnManifest = (
   );
   assertContainedTurnCanonicalArray(manifest.requiredProofKinds);
   assertContainedTurnCanonicalArray(manifest.supportedModes);
+  validateContainedTurnText("capability manifest provider", manifest.provider, {
+    encoding: "utf8",
+    maximumBytes: 128,
+  });
+  validateContainedTurnText("adapter provider", adapter.provider, {
+    encoding: "utf8",
+    maximumBytes: 128,
+  });
   const supported = new Set<ContainedTurnMode>(manifest.supportedModes);
   const exactProofKinds = manifest.requiredProofKinds.length === CONTAINED_TURN_REQUIRED_PROOF_KINDS.length &&
     manifest.requiredProofKinds.every((kind, index) => kind === CONTAINED_TURN_REQUIRED_PROOF_KINDS[index]);
@@ -234,7 +243,7 @@ export const validateContainedTurnManifest = (
     manifest.manifestVersion !== 1 || manifest.effectClass !== "contained_unmediated_effect" ||
     manifest.effectCardinality !== "one_coarse_effect_per_operation" ||
     manifest.providerAttemptCardinality !== "at_most_one" || manifest.unknownCapabilityPolicy !== "fail_closed" ||
-    (manifest.provider !== "claude" && manifest.provider !== "codex") || manifest.provider !== adapter.provider ||
+    manifest.provider !== adapter.provider ||
     manifest.manifestRevision !== adapter.capabilityManifestRevision ||
     supported.size !== manifest.supportedModes.length || supported.size === 0 || !exactProofKinds
   ) {throw new TypeError("capability manifest is missing, unknown, contradictory, or not closed");}

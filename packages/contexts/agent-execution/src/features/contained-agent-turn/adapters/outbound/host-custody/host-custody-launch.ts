@@ -265,12 +265,19 @@ const allowedEnvironmentKeys = Object.freeze({
   codex: new Set(["CODEX_HOME", "HOME", "LANG", "PATH", "TMPDIR"]),
 } as const);
 
+const environmentKeysForProvider = (provider: string): ReadonlySet<string> | undefined => {
+  if (provider === "claude") {return allowedEnvironmentKeys.claude;}
+  if (provider === "codex") {return allowedEnvironmentKeys.codex;}
+  return undefined;
+};
+
 const declaredPrivateEnvironmentKeys = (plan: HostCustodyLaunchPlan): readonly string[] => {
   const declared = plan.privatePathEnvironmentKeys ?? [];
   if (new Set(declared).size !== declared.length) {
     throw new Error("Host Custody private environment keys must be unique");
   }
-  if (declared.some(key => !allowedEnvironmentKeys[plan.provider].has(key))) {
+  const allowed = environmentKeysForProvider(plan.provider);
+  if (allowed === undefined || declared.some(key => !allowed.has(key))) {
     throw new Error("Host Custody private environment key is not allowlisted");
   }
   return Object.freeze([...declared].toSorted());
@@ -278,14 +285,19 @@ const declaredPrivateEnvironmentKeys = (plan: HostCustodyLaunchPlan): readonly s
 
 const privateEnvironmentKeys = (plan: HostCustodyLaunchPlan): readonly string[] => {
   const declared = declaredPrivateEnvironmentKeys(plan);
-  const providerConfigKey = plan.provider === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR";
+  const providerConfigKey = plan.provider === "codex" ? "CODEX_HOME" :
+    plan.provider === "claude" ? "CLAUDE_CONFIG_DIR" : undefined;
+  if (providerConfigKey === undefined) {
+    throw new Error("Host Custody provider is not supported by the selected environment policy");
+  }
   const keys = [...new Set(["HOME", "TMPDIR", providerConfigKey, ...declared])].toSorted();
   return Object.freeze(keys);
 };
 
 const assertAllowlistedEnvironment = (plan: HostCustodyLaunchPlan): void => {
   const keys = Object.keys(plan.environment);
-  if (keys.length === 0 || keys.some(key => !allowedEnvironmentKeys[plan.provider].has(key))) {
+  const allowed = environmentKeysForProvider(plan.provider);
+  if (allowed === undefined || keys.length === 0 || keys.some(key => !allowed.has(key))) {
     throw new Error("Host Custody environment contains an unclassified key");
   }
   for (const [key, value] of Object.entries(plan.environment)) {

@@ -1,4 +1,5 @@
 import type { ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
+import type { ContainedTurnProvider } from "./contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue, parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import type {
   ContainedTurnAttemptId,
@@ -41,7 +42,7 @@ export interface ContainedTurnDispatchGrantSubject {
   readonly effectId: ContainedTurnEffectId; readonly executionGenerationId: ContainedTurnExecutionGenerationId;
   readonly hostBootId: ContainedTurnHostBootId; readonly hostInstanceId: ContainedTurnHostInstanceId;
   readonly operationCutoffRevision: ContainedTurnOperationCutoffRevision; readonly operationId: ContainedTurnOperationId;
-  readonly preparationToken: ContainedTurnPreparationToken; readonly provider: "claude" | "codex";
+  readonly preparationToken: ContainedTurnPreparationToken; readonly provider: ContainedTurnProvider;
   readonly providerAccessExpectation: ContainedTurnProviderAccessDispatchExpectation;
   readonly providerAccessRequest: ContainedTurnOwnerDispatchRequestIdentity;
   readonly purpose: "contained_turn_provider_start_v1";
@@ -121,7 +122,7 @@ export interface ContainedTurnConsumedGrantReceipt<Owner extends ContainedTurnDi
   readonly consumedAtControlTime: number; readonly consumptionDigest: string;
   readonly grantRequestDigest: ContainedTurnCanonicalDigest; readonly grantRequestId: string;
   readonly operationId: ContainedTurnOperationId; readonly owner: Owner; readonly ownerEvidenceRef: string;
-  readonly provider: "claude" | "codex"; readonly purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE;
+  readonly provider: ContainedTurnProvider; readonly purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE;
   readonly requestDigest: ContainedTurnCanonicalDigest;
   readonly scope: Readonly<{ projectId: string; scopeDigest: ContainedTurnCanonicalDigest; tenantId: string }>;
   readonly validThroughOperationCutoffRevision: ContainedTurnOperationCutoffRevision;

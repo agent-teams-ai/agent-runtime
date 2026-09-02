@@ -415,6 +415,35 @@ test("rejects malformed, non-string, and oversized provider input before composi
   assert.equal(submitCalls, 0);
 });
 
+test("rejects unbounded command and prompt input before composition", async t => {
+  let submitCalls = 0;
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({ async execute() {return { status: "not_found" };} }),
+    observe: Object.freeze({ async execute() {return { status: "not_found" };} }),
+    submit: Object.freeze({ async execute() {submitCalls += 1; return { status: "denied" };} }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  t.after(() => host.dispose());
+  const access = host.bindAccess({ containedTurn: trustedScope });
+  const rejected = { code: "provider_unsupported", status: "unsupported" };
+  const base = {
+    commandId: "command:bounded-input",
+    expectedProvider: "codex",
+    intent: { mode: "analysis" as const, prompt: "synthetic" },
+  };
+
+  assert.deepEqual(await access.containedTurn.submit({
+    ...base, commandId: "c".repeat(257),
+  }), rejected);
+  assert.deepEqual(await access.containedTurn.submit({
+    ...base, intent: { mode: "analysis", prompt: "p".repeat(65_537) },
+  }), rejected);
+  assert.deepEqual(await access.containedTurn.submit({
+    ...base, intent: { mode: "invalid" as never, prompt: "synthetic" },
+  }), rejected);
+  assert.equal(submitCalls, 0);
+});
+
 test("fails closed on malformed, non-string, and oversized provider observations", async t => {
   const thrownProxy = new Proxy(Object.create(null) as object, {
     get(_target, property) {
