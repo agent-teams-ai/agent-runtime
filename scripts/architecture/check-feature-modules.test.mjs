@@ -68,6 +68,29 @@ const makeFixtureRoot = async () => {
   }
 };
 
+const fullCasefoldCollisionFixture = "unicode-full-casefold-file-collision-fails-closed";
+
+const allocateFixtureRoot = async (fixture) => {
+  const root = await makeFixtureRoot();
+  if (process.platform !== "darwin" || fixture.name !== fullCasefoldCollisionFixture) {
+    return { root, cleanup: [root] };
+  }
+  const image = join(root, "case-sensitive.dmg"), mount = join(root, "case-sensitive-volume");
+  await mkdir(mount);
+  await execFileAsync("hdiutil", ["create", "-size", "32m", "-fs", "Case-sensitive APFS", "-volname", `feature-module-${process.pid}`, image]);
+  try {
+    await execFileAsync("hdiutil", ["attach", "-nobrowse", "-noverify", "-mountpoint", mount, image]);
+  } catch (error) {
+    scheduleDisposablePaths([root]);
+    throw error;
+  }
+  return {
+    root: mount,
+    cleanup: [root],
+    teardown: () => execFileAsync("hdiutil", ["detach", mount]),
+  };
+};
+
 const disposableBases = await Promise.all([tmpdir(), process.cwd()].map(async (path) => ({
   lexical: resolve(path),
   canonical: await realpath(path),
@@ -298,22 +321,14 @@ const assertCliRuns = async (fixture, root, profilePath) => {
   }
 };
 
-const runFixture = async (fixture, initialRoot, state) => {
-  const profile = fixtureProfile(fixture);
-  const profilePath = fixture.profilePath ?? "profile.json";
-  let profileSource = fixture.profileSource ?? JSON.stringify(profile, null, 2);
-  if (fixture.profileDuplicate) {
-    const duplicate = `${JSON.stringify(fixture.profileDuplicate.key)}: ${JSON.stringify(fixture.profileDuplicate.value)},`;
-    profileSource = profileSource.replace(/^\{/u, `{\n  ${duplicate}`);
-  }
-  const files = {
-    ...baseFiles,
-    ...fixtureDecisionFiles(fixture),
-    ...(fixture.secondFeature ? secondFiles : {}),
-    ...fixture.files,
-    [profilePath]: profileSource.endsWith("\n") ? profileSource : `${profileSource}\n`,
-  };
-  applyFixtureRootScripts(files, fixture.rootScripts);
+const fixtureProfileSource = (fixture, profile) => {
+  let source = fixture.profileSource ?? JSON.stringify(profile, null, 2);
+  if (!fixture.profileDuplicate) {return source;}
+  const duplicate = `${JSON.stringify(fixture.profileDuplicate.key)}: ${JSON.stringify(fixture.profileDuplicate.value)},`;
+  return source.replace(/^\{/u, `{\n  ${duplicate}`);
+};
+
+const addGeneratedFixtureFiles = (files, fixture) => {
   if (fixture.generatedImports) {
     files[fixture.generatedImports.path] = Array.from(
       { length: fixture.generatedImports.count },
@@ -329,6 +344,24 @@ const runFixture = async (fixture, initialRoot, state) => {
     const separator = fixture.generatedSourceFile.separator ?? "\n";
     files[fixture.generatedSourceFile.path] = `${fixture.generatedSourceFile.prefix ?? ""}${`${fixture.generatedSourceFile.line ?? "export {};"}${separator}`.repeat(fixture.generatedSourceFile.lines)}${fixture.generatedSourceFile.suffix ?? ""}`;
   }
+};
+
+const buildFixtureFiles = (fixture, profilePath) => {
+  const profile = fixtureProfile(fixture);
+  const profileSource = fixtureProfileSource(fixture, profile);
+  const files = {
+    ...baseFiles,
+    ...fixtureDecisionFiles(fixture),
+    ...(fixture.secondFeature ? secondFiles : {}),
+    ...fixture.files,
+    [profilePath]: profileSource.endsWith("\n") ? profileSource : `${profileSource}\n`,
+  };
+  applyFixtureRootScripts(files, fixture.rootScripts);
+  addGeneratedFixtureFiles(files, fixture);
+  return files;
+};
+
+const prepareFixtureRoot = async (fixture, initialRoot, state, files) => {
   await writeFixtureFiles(initialRoot, files);
   await applyFixtureHardlinks(initialRoot, fixture.hardlinks);
   const externalRoot = `${initialRoot}-symlink-targets`;
@@ -336,25 +369,40 @@ const runFixture = async (fixture, initialRoot, state) => {
   await applyFixtureSymlinks(initialRoot, fixture.symlinks, externalRoot);
   const identity = await fixtureRootIdentity(initialRoot, fixture.rootMode);
   state.cleanup = [...identity.cleanup, ...state.cleanup.filter((path) => path !== initialRoot)];
+  return identity.root;
+};
+
+const normalizedFeatureModuleIssues = async (options) => (await checkFeatureModules(options))
+  .map(({ code, path, line }) => ({ code, path, line }));
+
+const assertFixtureIssues = async (fixture, checkerOptions, actual) => {
+  if (!fixture.assertOverflow) {
+    assert.deepEqual(actual, fixture.expected);
+    return;
+  }
+  assert.equal(actual.filter(({ code }) => code === "FM_CHECKER_OVERFLOW").length, 1);
+  assert.ok(actual.length <= CHECKER_LIMITS.diagnostics);
+  assert.ok(Buffer.byteLength(formatIssues(await checkFeatureModules(checkerOptions)), "utf8") <= CHECKER_LIMITS.renderedBytes);
+};
+
+const runFixture = async (fixture, initialRoot, state) => {
+  const profilePath = fixture.profilePath ?? "profile.json";
+  const files = buildFixtureFiles(fixture, profilePath);
+  const root = await prepareFixtureRoot(fixture, initialRoot, state, files);
   const decisionOptions = fixture.useDecisionRegistry ? {} : { acceptedDecisions: fixtureAcceptedDecisions(fixture) };
-  const actual = (await checkFeatureModules({ root: identity.root, profilePath, requiredStatus: fixture.requiredStatus, ...decisionOptions }))
-    .map(({ code, path, line }) => ({ code, path, line }));
-  if (fixture.assertOverflow) {
-    assert.equal(actual.filter(({ code }) => code === "FM_CHECKER_OVERFLOW").length, 1);
-    assert.ok(actual.length <= CHECKER_LIMITS.diagnostics);
-    assert.ok(Buffer.byteLength(formatIssues(await checkFeatureModules({ root: identity.root, profilePath, ...decisionOptions })), "utf8") <= CHECKER_LIMITS.renderedBytes);
-  } else {assert.deepEqual(actual, fixture.expected);}
+  const checkerOptions = { root, profilePath, requiredStatus: fixture.requiredStatus, ...decisionOptions };
+  const actual = await normalizedFeatureModuleIssues(checkerOptions);
+  await assertFixtureIssues(fixture, { root, profilePath, ...decisionOptions }, actual);
   if (fixture.doubleRun || fixture.assertOverflow) {
-    const repeated = (await checkFeatureModules({ root: identity.root, profilePath, requiredStatus: fixture.requiredStatus, ...decisionOptions }))
-      .map(({ code, path, line }) => ({ code, path, line }));
+    const repeated = await normalizedFeatureModuleIssues(checkerOptions);
     assert.deepEqual(repeated, actual);
   }
   const structuralCodes = new Set(actual.map(({ code }) => code).filter((code) => STRUCTURAL_CODES.has(code)));
   for (const code of structuralCodes) {structuralFixtureCoverage.add(code);}
-  await assertStructuralAllowance(fixture, identity.root, profilePath, structuralCodes);
-  await assertRequireActive(fixture, identity.root, profilePath);
-  await assertAllowDiagnosticsFailure(fixture, identity.root, profilePath);
-  await assertCliRuns(fixture, identity.root, profilePath);
+  await assertStructuralAllowance(fixture, root, profilePath, structuralCodes);
+  await assertRequireActive(fixture, root, profilePath);
+  await assertAllowDiagnosticsFailure(fixture, root, profilePath);
+  await assertCliRuns(fixture, root, profilePath);
 };
 
 const expandedFixtures = fixtureManifest.cases.flatMap((fixture) => fixture.activeAdoptionOmitEach?.map((path) => ({
@@ -365,10 +413,13 @@ const expandedFixtures = fixtureManifest.cases.flatMap((fixture) => fixture.acti
 
 for (const fixture of expandedFixtures) {
   test(fixture.name, async () => {
-    const root = await makeFixtureRoot();
-    const state = { cleanup: [root] };
-    try {await runFixture(fixture, root, state);}
-    finally {scheduleDisposablePaths(state.cleanup);}
+    const allocation = await allocateFixtureRoot(fixture);
+    const state = { cleanup: allocation.cleanup };
+    try {await runFixture(fixture, allocation.root, state);}
+    finally {
+      await allocation.teardown?.();
+      scheduleDisposablePaths(state.cleanup);
+    }
   });
 }
 
