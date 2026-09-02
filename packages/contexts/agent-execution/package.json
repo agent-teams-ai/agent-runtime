@@ -7,7 +7,7 @@
     "build": "tsc --project tsconfig.json --pretty false",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
-    "test": "node --test --test-concurrency=1 tests/features/runtime-installation-discovery/*.test.ts tests/features/contained-agent-turn/*.test.ts tests/package/*.test.ts tests/live/contained-turn-live-canary-lifecycle.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/features/runtime-installation-discovery/*.test.ts tests/features/contained-agent-turn/*.test.ts tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs tests/package/*.test.ts",
     "test:contained-turn:acceptance": "node scripts/run-postgres-qualification.mjs --preflight && node --test --test-concurrency=1 tests/features/contained-agent-turn/contained-agent-turn.test.ts tests/features/contained-agent-turn/contained-turn-kernel.test.ts tests/features/contained-agent-turn/contained-turn-kernel-lifecycle.test.ts tests/features/contained-agent-turn/contained-turn-dispatch-preparation.test.ts tests/features/contained-agent-turn/contained-turn-authority-closure.test.ts tests/features/contained-agent-turn/contained-turn-provider-access-acl.test.ts && pnpm run test:postgres",
     "test:postgres": "node scripts/run-postgres-qualification.mjs",
     "verify:codex-schema-regeneration": "node tests/fixtures/protocol/codex-app-server-0.150.1/verify-regeneration.mjs",

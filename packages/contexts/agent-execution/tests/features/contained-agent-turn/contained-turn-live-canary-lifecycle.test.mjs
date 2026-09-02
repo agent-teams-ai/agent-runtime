@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runContainedTurnLiveCanaryLifecycle } from "./contained-turn-live-canary-lifecycle.mjs";
+import { runContainedTurnLiveCanaryLifecycle } from "../../live/contained-turn-live-canary-lifecycle.mjs";
 
 test("failure before kernel open preserves the primary error without inventing containment", async () => {
   const primary = new Error("secret provider open failure");
