@@ -81,7 +81,8 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
   });
   let hideFirstConsumption = true;
   let hostileDispatchPhase:
-    "consume" | "crossed-settle" | "malformed-settle" | "none" | "observe" | "prevented" | "primitive" | "settle" = "none";
+    "consume" | "crossed-settle" | "malformed-settle" | "none" | "observe" | "prevented" |
+    "primitive" | "sealed-settle" | "settle" = "none";
   const dispatchSecret = "provider-dispatch-output-secret";
   const owner = Object.freeze({
     dispatchConsumptionV1: Object.freeze({
@@ -121,6 +122,9 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
             kind: "settled" as const,
             receipt: Object.freeze({...outcome.receipt, operationId: "operation:foreign"}),
           });
+        }
+        if (hostileDispatchPhase === "sealed-settle" && outcome.kind === "settled") {
+          return Object.seal({kind: "settled" as const, receipt: Object.seal({...outcome.receipt})});
         }
         return outcome;
       },
@@ -204,6 +208,11 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
     settlementRequestId: containedTurnGrantSettlementRequestId(consumed.receipt, "claim_committed"),
   })).kind, "indeterminate");
   hostileDispatchPhase = "crossed-settle";
+  assert.equal((await port.settleConsumedGrant({
+    disposition: "claim_committed", receipt: consumed.receipt,
+    settlementRequestId: containedTurnGrantSettlementRequestId(consumed.receipt, "claim_committed"),
+  })).kind, "indeterminate");
+  hostileDispatchPhase = "sealed-settle";
   assert.equal((await port.settleConsumedGrant({
     disposition: "claim_committed", receipt: consumed.receipt,
     settlementRequestId: containedTurnGrantSettlementRequestId(consumed.receipt, "claim_committed"),

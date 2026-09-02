@@ -79,6 +79,7 @@ const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
 const trustedGetPrototypeOf = Object.getPrototypeOf;
 const trustedIsExtensible = Object.isExtensible;
+const trustedIsFrozen = Object.isFrozen;
 const trustedOwnKeys = Reflect.ownKeys;
 const trustedObjectPrototype = Object.prototype;
 type NodeUtilTypes = Readonly<{ isProxy(value: unknown): boolean }>;
@@ -125,6 +126,12 @@ const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<
     }
     record[key] = descriptor.value;
   }
+  return record;
+};
+
+const exactFrozenDataRecord = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
+  const record = exactStableDataRecord(value, keys);
+  if (!trustedIsFrozen(value)) {throw new TypeError("Provider Access owner output must be frozen data");}
   return record;
 };
 
@@ -205,13 +212,13 @@ const exactBoundedToken = (value: unknown): value is string => {
 };
 
 const scopeMatches = (value: unknown, expected: DispatchScope): boolean => {
-  const scope = exactStableDataRecord(value, dispatchScopeKeys);
+  const scope = exactFrozenDataRecord(value, dispatchScopeKeys);
   return scope.projectId === expected.projectId && scope.scopeDigest === expected.scopeDigest &&
     scope.tenantId === expected.tenantId;
 };
 
 const bindingMatches = (value: unknown, expected: DispatchBinding): boolean => {
-  const binding = exactStableDataRecord(value, dispatchBindingKeys);
+  const binding = exactFrozenDataRecord(value, dispatchBindingKeys);
   for (const key of dispatchBindingKeys) {
     if (binding[key] !== expected[key]) {return false;}
   }
@@ -234,7 +241,7 @@ const snapshotBoundPrevention = (
   value: unknown,
   request: Readonly<{grantRequestId: string; requestDigest: string; scope: DispatchScope}>,
 ): ProviderAccessPrevention => {
-  const data = exactStableDataRecord(value, [
+  const data = exactFrozenDataRecord(value, [
     "grantRequestId", "observedAtControlTime", "opaqueOwnerEvidenceRef", "reason", "requestDigest", "scope",
   ]);
   if (data.grantRequestId !== request.grantRequestId || data.requestDigest !== request.requestDigest ||
@@ -261,9 +268,9 @@ const settlementMatches = (
     scope: DispatchScope; settlementRequestId: string;
   }>,
 ): boolean => {
-  const outcome = exactStableDataRecord(value, ["kind", "receipt"]);
+  const outcome = exactFrozenDataRecord(value, ["kind", "receipt"]);
   if (outcome.kind !== "settled") {return false;}
-  const receipt = exactStableDataRecord(outcome.receipt, [
+  const receipt = exactFrozenDataRecord(outcome.receipt, [
     "consumptionDigest", "disposition", "expectedBinding", "operationId", "provider", "scope",
     "settledAtControlTime", "settlementDigest", "settlementRequestId",
   ]);

@@ -17,9 +17,19 @@ const capability = Object.freeze({
   submit: Object.freeze({execute: async () => Object.freeze({status: "denied" as const})}),
 });
 
+const providerAccess = Object.freeze({
+  dispatchConsumptionV1: Object.freeze({
+    async consumeForDispatch() {return Object.freeze({kind: "indeterminate" as const});},
+    async observeDispatchConsumption() {return Object.freeze({kind: "indeterminate" as const});},
+    async settleDispatchConsumption() {return Object.freeze({kind: "indeterminate" as const});},
+  }),
+  resolve: Object.freeze({async execute() {throw new Error("unused Provider Access resolve");}}),
+  revalidate: Object.freeze({async execute() {throw new Error("unused Provider Access revalidate");}}),
+});
+
 const dependencies = (selectedProvider: unknown) => Object.freeze({
   artifacts: Object.freeze({}), hostCustody: Object.freeze({}), operationStore: Object.freeze({}),
-  providerAccess: Object.freeze({}), security: Object.freeze({}), selectedProvider,
+  providerAccess, security: Object.freeze({}), selectedProvider,
   workspace: Object.freeze({}),
 });
 
@@ -190,7 +200,7 @@ test("hostile selection traps and trap accessors cannot publish thrown validatio
 test("own descriptor snapshot rejects accessor dependencies and observable mutation races", () => {
   const selectionAccessor = Object.freeze(Object.defineProperty({
     artifacts: Object.freeze({}), hostCustody: Object.freeze({}), operationStore: Object.freeze({}),
-    providerAccess: Object.freeze({}), security: Object.freeze({}), workspace: Object.freeze({}),
+    providerAccess, security: Object.freeze({}), workspace: Object.freeze({}),
   }, "selectedProvider", {
     enumerable: true, get: () => Object.freeze({kind: "codex", owner: Object.freeze({})}),
   }));
@@ -337,6 +347,32 @@ test("real Host composition rejects Provider Access accessors before all other p
   assert.equal("cause" in error, false);
   assert.doesNotMatch(`${error.name}:${error.message}:${error.stack ?? ""}`, /provider-access-getter-secret/u);
   assert.equal(providerAccessReads, 0);
+  assert.equal(otherReads, 0);
+  assert.deepEqual(probe.calls, {claude: 0, codex: 0, dispose: 0, feature: 0});
+});
+
+test("real Host composition rejects a Provider Access value Proxy before all other ports and owners", () => {
+  let proxyTraps = 0;
+  let otherReads = 0;
+  const providerAccessProxy = new Proxy(Object.freeze({}), {
+    get() {proxyTraps += 1; throw new Error("provider-access-proxy-secret");},
+    getOwnPropertyDescriptor() {proxyTraps += 1; throw new Error("provider-access-proxy-secret");},
+    getPrototypeOf() {proxyTraps += 1; throw new Error("provider-access-proxy-secret");},
+    ownKeys() {proxyTraps += 1; throw new Error("provider-access-proxy-secret");},
+  });
+  const hostile = Object.defineProperties({}, {
+    providerAccess: {enumerable: true, value: providerAccessProxy},
+    operationStore: {get() {otherReads += 1;}}, security: {get() {otherReads += 1;}},
+    workspace: {get() {otherReads += 1;}}, artifacts: {get() {otherReads += 1;}},
+    hostCustody: {get() {otherReads += 1;}}, selectedProvider: {get() {otherReads += 1;}},
+  });
+  const probe = harness();
+  const error = captureThrown(() => composeHostCustodiedContainedTurn(
+    hostile as never, probe.factories, probe.featureFactory,
+  ));
+  assert.equal((error as Readonly<{code?: unknown}>).code, "ERR_PROVIDER_ACCESS_ROUTE_C_OWNER");
+  assert.doesNotMatch(`${(error as Error).name}:${(error as Error).message}`, /provider-access-proxy-secret/u);
+  assert.equal(proxyTraps, 0);
   assert.equal(otherReads, 0);
   assert.deepEqual(probe.calls, {claude: 0, codex: 0, dispose: 0, feature: 0});
 });

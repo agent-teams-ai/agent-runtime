@@ -148,6 +148,7 @@ const captureProviderOwner = (
 const captureProviderAccessDependency = (
   dependencies: ContainedTurnOuterCompositionDependencies,
 ): OuterContainedTurnProviderAccess => {
+  let owner: OuterContainedTurnProviderAccess;
   try {
     if (trustedIsProxy(dependencies)) {
       throw invalidProviderAccessDependency();
@@ -156,10 +157,12 @@ const captureProviderAccessDependency = (
     if (descriptor === undefined || !("value" in descriptor)) {
       throw invalidProviderAccessDependency();
     }
-    return descriptor.value as OuterContainedTurnProviderAccess;
+    owner = descriptor.value as OuterContainedTurnProviderAccess;
   } catch {
     throw invalidProviderAccessDependency();
   }
+  createContainedTurnProviderAccessPort(owner);
+  return owner;
 };
 
 const createSelectedProviderOwner = (
