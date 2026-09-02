@@ -174,8 +174,10 @@ export const claimContainedTurnWithConsumedGrants = async (
     if (outcome.kind === "stale") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
         return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
-      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.current, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
-      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
+      }
+      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) {
+        await recordContainedTurnRejectedDebt(dependencies, outcome.current, trustedScope, "grant_settlement_rejected", "dispatch_authority");
+      }
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.current });
     }
     if (outcome.kind === "indeterminate") {
