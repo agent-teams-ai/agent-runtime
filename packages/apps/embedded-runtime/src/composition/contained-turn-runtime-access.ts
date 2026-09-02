@@ -79,14 +79,39 @@ export interface ContainedTurnRuntimeAccessDependencies {
   ) => void;
   readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef) => Promise<unknown>;
   readonly scope: ContainedTurnCompositionScope | undefined;
+  readonly submissionCoordinator: ContainedTurnSubmissionCoordinator | undefined;
   readonly executeCall: <T>(operation: () => Promise<T>) => Promise<T>;
 }
 
 type SubmitResolution = (outcome: SubmitRuntimeContainedTurnOutcome) => void;
 
+interface ContainedTurnSubmissionOwnerDependencies {
+  readonly capability: ContainedTurnCapabilityBundle;
+  readonly hostSignal: AbortSignal;
+  readonly isDisposed: () => boolean;
+  readonly onAccepted: (
+    operation: ContainedTurnCompositionOperationRef,
+    ownerCall: object,
+  ) => void;
+  readonly onObserved: (
+    operationId: string,
+    status: ContainedTurnOwnerStatus | "contract_violation",
+  ) => void;
+  readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef) => Promise<unknown>;
+  readonly scope: ContainedTurnCompositionScope;
+  readonly executeCall: <T>(operation: () => Promise<T>) => Promise<T>;
+}
+
+export interface ContainedTurnSubmissionCoordinator {
+  acquire(
+    input: Readonly<SubmitRuntimeContainedTurnInput>,
+    scope: ContainedTurnCompositionScope,
+  ): Promise<SubmitRuntimeContainedTurnOutcome>;
+}
+
 class ContainedTurnSubmissionCustody {
-  readonly #dependencies: ContainedTurnRuntimeAccessDependencies;
-  readonly #ownerCall = Object.freeze({});
+  readonly #dependencies: ContainedTurnSubmissionOwnerDependencies;
+  readonly #ownerCall: object;
   readonly #reject: (reason: unknown) => void;
   readonly #resolve: SubmitResolution;
   #acceptedOperationId: string | undefined;
@@ -95,11 +120,13 @@ class ContainedTurnSubmissionCustody {
   #responded = false;
 
   public constructor(
-    dependencies: ContainedTurnRuntimeAccessDependencies,
+    dependencies: ContainedTurnSubmissionOwnerDependencies,
+    ownerCall: object,
     resolve: SubmitResolution,
     reject: (reason: unknown) => void,
   ) {
     this.#dependencies = dependencies;
+    this.#ownerCall = ownerCall;
     this.#resolve = resolve;
     this.#reject = reject;
   }
@@ -257,68 +284,89 @@ class ContainedTurnSubmissionCustody {
     }
   };
 
-  public start(input: Readonly<SubmitRuntimeContainedTurnInput>, hostSignal: AbortSignal): void {
+  public start(input: Readonly<SubmitRuntimeContainedTurnInput>): Promise<void> {
     let completion: Promise<unknown>;
     try {
       completion = this.#dependencies.executeCall(() =>
         this.#dependencies.capability!.submit.execute({
           ...input,
           scope: this.#dependencies.scope!,
-        }, { onAccepted: this.#accepted, signal: hostSignal }));
+        }, { onAccepted: this.#accepted, signal: this.#dependencies.hostSignal }));
     } catch {
       this.#acceptanceOpen = false;
       this.#reject(containedTurnOwnerInvocationFailed);
-      return;
+      return Promise.resolve();
     }
-    void this.#handleCompletion(completion).catch(() => {});
+    return this.#handleCompletion(completion);
   }
 }
 
-const waitForSubmissionAcceptance = (
-  dependencies: ContainedTurnRuntimeAccessDependencies,
-  input: Readonly<SubmitRuntimeContainedTurnInput>,
-  callerSignal: AbortSignal | undefined,
-): Promise<SubmitRuntimeContainedTurnOutcome> => new Promise((resolve, reject) => {
-  let settled = false;
-  const signals = callerSignal === undefined
-    ? [dependencies.hostSignal]
-    : [dependencies.hostSignal, callerSignal];
-  const abortListeners: Readonly<{
-    abort: () => void;
-    signal: AbortSignal;
-  }>[] = [];
-  const settle = (callback: () => void): void => {
-    if (settled) {
-      return;
-    }
-    settled = true;
-    for (const listener of abortListeners) {
-      listener.signal.removeEventListener("abort", listener.abort);
-    }
-    callback();
-  };
-  for (const signal of signals) {
-    abortListeners.push(Object.freeze({
-      abort: () => settle(() => reject(
-        signal.reason ?? new DOMException("Agent Runtime operation was cancelled", "AbortError"),
-      )),
-      signal,
-    }));
-  }
+interface SubmissionIdentity {
+  readonly input: Readonly<SubmitRuntimeContainedTurnInput>;
+  readonly ownerCall: object;
+  readonly scope: ContainedTurnCompositionScope;
+}
 
-  for (const listener of abortListeners) {
-    if (listener.signal.aborted) {
-      listener.abort();
-      return;
+const sameSubmission = (
+  candidate: SubmissionIdentity,
+  input: Readonly<SubmitRuntimeContainedTurnInput>,
+  scope: ContainedTurnCompositionScope,
+): boolean => candidate.input.commandId === input.commandId &&
+  candidate.input.expectedProvider === input.expectedProvider &&
+  candidate.input.intent.mode === input.intent.mode &&
+  candidate.input.intent.prompt === input.intent.prompt &&
+  candidate.scope.projectId === scope.projectId &&
+  candidate.scope.tenantId === scope.tenantId;
+
+export const createContainedTurnSubmissionCoordinator = (
+  dependencies: Omit<ContainedTurnSubmissionOwnerDependencies, "scope">,
+): ContainedTurnSubmissionCoordinator => {
+  const identitiesByCommand = new Map<string, SubmissionIdentity[]>();
+  const inFlightByIdentity = new Map<SubmissionIdentity, Promise<SubmitRuntimeContainedTurnOutcome>>();
+
+  const acquire = (
+    input: Readonly<SubmitRuntimeContainedTurnInput>,
+    scope: ContainedTurnCompositionScope,
+  ): Promise<SubmitRuntimeContainedTurnOutcome> => {
+    const identities = identitiesByCommand.get(input.commandId) ?? [];
+    let identity = identities.find(candidate => sameSubmission(candidate, input, scope));
+    if (identity === undefined) {
+      identity = Object.freeze({ input, ownerCall: Object.freeze({}), scope });
+      identities.push(identity);
+      if (!identitiesByCommand.has(input.commandId)) {
+        identitiesByCommand.set(input.commandId, identities);
+      }
     }
-    listener.signal.addEventListener("abort", listener.abort, { once: true });
-  }
-  new ContainedTurnSubmissionCustody(
-    dependencies,
-    outcome => settle(() => resolve(outcome)),
-    reason => settle(() => reject(reason)),
-  ).start(input, dependencies.hostSignal);
-});
+    const inFlight = inFlightByIdentity.get(identity);
+    if (inFlight !== undefined) {
+      return inFlight;
+    }
+
+    let resolveAcceptance!: SubmitResolution;
+    let rejectAcceptance!: (reason: unknown) => void;
+    const acceptance = new Promise<SubmitRuntimeContainedTurnOutcome>((resolve, reject) => {
+      resolveAcceptance = resolve;
+      rejectAcceptance = reject;
+    });
+    inFlightByIdentity.set(identity, acceptance);
+
+    const ownerCompletion = new ContainedTurnSubmissionCustody(
+      Object.freeze({ ...dependencies, scope }),
+      identity.ownerCall,
+      resolveAcceptance,
+      rejectAcceptance,
+    ).start(input);
+    const removeInFlight = (): void => {
+      if (inFlightByIdentity.get(identity) === acceptance) {
+        inFlightByIdentity.delete(identity);
+      }
+    };
+    void ownerCompletion.then(removeInFlight, removeInFlight).catch(() => {});
+    return acceptance;
+  };
+
+  return Object.freeze({ acquire });
+};
 
 export const createContainedTurnRuntimeAccess = (
   dependencies: ContainedTurnRuntimeAccessDependencies,
@@ -388,11 +436,17 @@ export const createContainedTurnRuntimeAccess = (
     if (input === undefined) {
       return providerUnsupportedOutcome;
     }
-    if (dependencies.capability === undefined || dependencies.scope === undefined) {
+    const submissionCoordinator = dependencies.submissionCoordinator;
+    if (dependencies.capability === undefined || dependencies.scope === undefined ||
+      submissionCoordinator === undefined) {
       return unavailableOutcome;
     }
     dependencies.hostSignal.throwIfAborted();
     options?.signal?.throwIfAborted();
-    return waitForSubmissionAcceptance(dependencies, input, options?.signal);
+    const acceptance = submissionCoordinator.acquire(input, dependencies.scope);
+    const signal = options?.signal === undefined
+      ? dependencies.hostSignal
+      : AbortSignal.any([dependencies.hostSignal, options.signal]);
+    return raceWithAbort(acceptance, signal);
   },
 });

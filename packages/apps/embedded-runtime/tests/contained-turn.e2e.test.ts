@@ -657,7 +657,7 @@ test("caller abort before durable acceptance detaches only its waiter without an
   let releaseCompletion: (() => void) | undefined;
   const acceptanceGate = new Promise<void>(resolve => {publishAcceptance = resolve;});
   const completionGate = new Promise<void>(resolve => {releaseCompletion = resolve;});
-  const calls = { cancel: 0 };
+  const calls = { cancel: 0, submit: 0 };
   const ownerFailure = new Error("owner completion after caller detachment");
   let ownerSignal: AbortSignal | undefined;
   const feature: ContainedTurnCapabilityBundle = Object.freeze({
@@ -673,6 +673,7 @@ test("caller abort before durable acceptance detaches only its waiter without an
     }),
     submit: Object.freeze({
       async execute(input, options) {
+        calls.submit += 1;
         ownerSignal = options?.signal;
         await acceptanceGate;
         options?.onAccepted?.({ operationId: "operation:embedded", scope: input.scope });
@@ -692,12 +693,22 @@ test("caller abort before durable acceptance detaches only its waiter without an
     expectedProvider: "codex",
     intent: { mode: "analysis", prompt: "synthetic" },
   }, { signal: controller.signal });
+  const survivingSubmission = host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit({
+    commandId: "command:abort-waiter",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "synthetic" },
+  });
+  assert.equal(calls.submit, 1);
   controller.abort(new DOMException("caller detached", "AbortError"));
   await assert.rejects(submission, { name: "AbortError" });
   assert.equal(ownerSignal?.aborted, false);
   assert.equal(calls.cancel, 0);
   publishAcceptance?.();
-  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.deepEqual(await survivingSubmission, {
+    operationId: "operation:embedded",
+    status: "accepted",
+  });
+  assert.equal(calls.submit, 1);
   assert.equal(calls.cancel, 0);
   releaseCompletion?.();
 });

@@ -43,6 +43,7 @@ import {
 import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
 import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
 import {
+  createContainedTurnSubmissionCoordinator,
   createContainedTurnRuntimeAccess,
   type ContainedTurnCapabilityBundle,
 } from "./contained-turn-runtime-access.js";
@@ -278,6 +279,17 @@ export const createAgentRuntimeHost = (
     randomBytes(32),
   );
   const lifecycle = createAgentRuntimeHostDisposalLifecycle(capabilityDependencies.containedTurn);
+  const containedTurnSubmissionCoordinator = capabilityDependencies.containedTurn === undefined
+    ? undefined
+    : createContainedTurnSubmissionCoordinator({
+        capability: capabilityDependencies.containedTurn,
+        hostSignal: lifecycle.signal,
+        isDisposed: lifecycle.isDisposed,
+        onAccepted: lifecycle.registerContainedTurn,
+        onObserved: lifecycle.recordContainedTurnStatus,
+        requestCancellation: lifecycle.requestContainedTurnCancellation,
+        executeCall: lifecycle.executeCall,
+      });
 
   return Object.freeze({
     bindAccess(scope: TrustedRuntimeAccessScope) {
@@ -341,6 +353,7 @@ export const createAgentRuntimeHost = (
           scope: boundContainedTurnScope.status === "available"
             ? boundContainedTurnScope.scope
             : undefined,
+          submissionCoordinator: containedTurnSubmissionCoordinator,
           executeCall: lifecycle.executeCall,
         }),
       });

@@ -373,11 +373,56 @@ test("Host rejects access after disposal with a bounded typed lifecycle error", 
     error instanceof AgentRuntimeHostLifecycleError && error.code === "host_disposed");
 });
 
-test("Host rejects a duplicate operation identity as an owner contract violation", async () => {
+test("Host shares concurrent exact replays and starts a fresh sequential replay", async () => {
+  let releaseOwner!: () => void;
+  const ownerGate = new Promise<void>(resolve => {releaseOwner = resolve;});
+  let submitCalls = 0;
   const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
       async execute(input) {
         return { status: "observed", turn: { ...turnView("cancelled"), operationId: input.operationId } } as const;
+      },
+    }),
+    observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
+    submit: Object.freeze({
+      async execute(input, options) {
+        submitCalls += 1;
+        options?.onAccepted?.({ operationId: "operation:duplicate", scope: input.scope });
+        await ownerGate;
+        return { status: "observed", turn: {
+          ...turnView("running"), operationId: "operation:duplicate",
+        } } as const;
+      },
+    }),
+  });
+  const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
+  const access = host.bindAccess({ containedTurn: trustedScope });
+  const input = {
+    commandId: "command:duplicate",
+    expectedProvider: "codex",
+    intent: { mode: "analysis" as const, prompt: "synthetic duplicate" },
+  };
+  const first = access.containedTurn.submit(input);
+  const concurrent = host.bindAccess({ containedTurn: trustedScope }).containedTurn.submit(input);
+  assert.equal(submitCalls, 1);
+  assert.deepEqual(await Promise.all([first, concurrent]), [
+    { operationId: "operation:duplicate", status: "accepted" },
+    { operationId: "operation:duplicate", status: "accepted" },
+  ]);
+  releaseOwner();
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal((await access.containedTurn.submit(input)).status, "accepted");
+  assert.equal(submitCalls, 2);
+  await host.dispose();
+});
+
+test("Host rejects a conflicting replay that claims the same operation identity", async () => {
+  const feature: ContainedTurnCapabilityBundle = Object.freeze({
+    cancel: Object.freeze({
+      async execute(input) {
+        return { status: "observed", turn: {
+          ...turnView("cancelled"), operationId: input.operationId,
+        } } as const;
       },
     }),
     observe: Object.freeze({ async execute() {return { status: "not_found" } as const;} }),
@@ -392,13 +437,16 @@ test("Host rejects a duplicate operation identity as an owner contract violation
   });
   const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
   const access = host.bindAccess({ containedTurn: trustedScope });
-  const input = {
+  assert.equal((await access.containedTurn.submit({
     commandId: "command:duplicate",
     expectedProvider: "codex",
-    intent: { mode: "analysis" as const, prompt: "synthetic duplicate" },
-  };
-  assert.equal((await access.containedTurn.submit(input)).status, "accepted");
-  await assert.rejects(access.containedTurn.submit(input), error =>
+    intent: { mode: "analysis", prompt: "first fingerprint" },
+  })).status, "accepted");
+  await assert.rejects(access.containedTurn.submit({
+    commandId: "command:duplicate",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "conflicting fingerprint" },
+  }), error =>
     error instanceof ContainedTurnOwnerContractError && error.code === "duplicate_operation_id");
   await host.dispose();
 });
