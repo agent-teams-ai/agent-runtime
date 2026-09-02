@@ -56,6 +56,11 @@
       "id": "ADR-0013",
       "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
       "immutableDigest": "sha256:a925f597fc3ae0a5b4c241650582d534df2254ca45384a7008085370dbda83da"
+    },
+    {
+      "id": "ADR-0014",
+      "path": "docs/decisions/0014-darwin-provider-candidate-platform-qualification.md",
+      "immutableDigest": "sha256:b923c5f780461715861e829391fd7a01f7f7cb81586760655f5f8218c6d9b7e3"
     }
   ]
 }
