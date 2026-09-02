@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 
 import { encodeContainedTurnPreparation } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-preparation-codec.js";
+import { ContainedTurnPostgresPreparationRecovery } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-preparation-recovery.js";
 import {
   ContainedTurnStateBudgetError,
   CONTAINED_TURN_STATE_BUDGET_DIAGNOSTIC,
@@ -239,7 +241,55 @@ postgresTest("retirement rejects a payload token that disagrees with its row key
   });
 });
 
-postgresTest("recovery fails closed before materializing an oversized serialized batch", async () => {
+test("recovery verifies phase-one identity and size metadata before decoding materialized state", async () => {
+  const queries: string[] = [];
+  const client = {
+    async query(text: string) {
+      queries.push(text);
+      if (queries.length === 1) {
+        return { rows: [{
+          operation_id: "operation:two-phase",
+          preparation_token: "preparation:two-phase",
+          state_bytes: 128,
+          state_codec_version: 4,
+          state_digest: "1".repeat(64),
+        }] };
+      }
+      return { rows: [{
+        actual_operation_id: "operation:two-phase",
+        actual_preparation_token: "preparation:two-phase",
+        actual_state_bytes: 129,
+        actual_state_codec_version: 4,
+        actual_state_digest: "1".repeat(64),
+        operation_id: "operation:two-phase",
+        preparation_token: "preparation:two-phase",
+        project_id: "project:two-phase",
+        state: { codecVersion: 4, payload: { kind: "active" } },
+        state_bytes: 128,
+        state_codec_version: 4,
+        state_digest: "1".repeat(64),
+        tenant_id: "tenant:two-phase",
+      }] };
+    },
+  };
+  const transactions = {
+    async write<Result>(work: (selected: typeof client) => Promise<Result>) {return work(client);},
+  };
+  const recovery = new ContainedTurnPostgresPreparationRecovery(
+    {} as never, 5, transactions as never,
+  );
+  await assert.rejects(
+    recovery.list({ scope: { projectId: "project:two-phase", tenantId: "tenant:two-phase" } }),
+    /metadata changed during materialization/u,
+  );
+  assert.equal(queries.length, 2);
+  assert.match(queries[0] ?? "", /octet_length\(p\.state::text\) AS state_bytes/u);
+  assert.doesNotMatch(queries[0] ?? "", /THEN p\.state|p\.state AS state/u);
+  assert.match(queries[0] ?? "", /ORDER BY p\.operation_id,p\.preparation_token[\s\S]*LIMIT \$5 FOR UPDATE OF p,o/u);
+  assert.match(queries[1] ?? "", /JOIN agent_execution\.contained_turn_dispatch_preparation_v1/u);
+});
+
+postgresTest("a later recovery batch violation takes precedence over an earlier digest mismatch", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
     const store = new PostgresContainedTurnOperationStore({ pool });

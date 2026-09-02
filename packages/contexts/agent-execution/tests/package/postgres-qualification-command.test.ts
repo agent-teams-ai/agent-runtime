@@ -432,7 +432,7 @@ test("ordinary direct PostgreSQL test discovery remains optional without a servi
 
   assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
   assert.match(result.stdout, /skipped 16/u);
-  assert.match(result.stdout, /pass 2/u);
+  assert.match(result.stdout, /pass 3/u);
   assert.match(result.stdout, /fail 0/u);
 });
 
