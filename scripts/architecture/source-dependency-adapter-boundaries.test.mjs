@@ -113,7 +113,10 @@ test("transitional boundaries and adapter permissions remain exact", () => {
 
   assert.deepEqual(legacy.roots, [dirname(paths.legacy)]);
   assert.deepEqual(legacy.entrypoints, [paths.legacy]);
-  assert.deepEqual(legacy.allowedBoundaries, ["core.agent-execution.contained-turn"]);
+  assert.deepEqual(legacy.allowedBoundaries, [
+    "adapter.agent-execution.host-custody",
+    "core.agent-execution.contained-turn",
+  ]);
   assert.deepEqual(legacy.allowedPackages, []);
   assert.deepEqual(legacy.allowedBuiltins, []);
   assert.deepEqual(legacy.allowedRuntimeReferences, []);

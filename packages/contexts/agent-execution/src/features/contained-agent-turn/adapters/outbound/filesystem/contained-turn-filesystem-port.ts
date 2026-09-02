@@ -1,5 +1,5 @@
 import type { ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
-import type { ContainedTurnOutputKind } from "../../../domain/contained-turn-operation.js";
+import type { ContainedTurnOutputKind } from "../../../contracts/contained-agent-turn.js";
 
 /**
  * Filesystem-private contract retained by the durable custody engine.

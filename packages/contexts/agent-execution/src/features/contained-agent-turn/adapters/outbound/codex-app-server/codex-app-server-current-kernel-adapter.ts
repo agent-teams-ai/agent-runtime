@@ -9,7 +9,7 @@ import {
 } from "../../../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
-import type { ContainedTurnCustodyHandle } from "../legacy/legacy-contained-turn-ports.js";
+import type { ContainedTurnCustodyHandle } from "../host-custody/custodied-provider-process.js";
 import { CodexAppServerContainedTurnProvider } from "./codex-app-server-contained-turn-provider.js";
 import {
   CODEX_APP_SERVER_LINUX_X64_TUPLE,

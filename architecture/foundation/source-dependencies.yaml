@@ -32,7 +32,6 @@ boundaries:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-kernel-model.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-limits.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-operation.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-output-authority.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-output-transitions.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-proofs.ts
@@ -145,6 +144,7 @@ boundaries:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts
     allow:
       boundaries:
+        - adapter.agent-execution.host-custody
         - core.agent-execution.contained-turn
       packages: []
       builtins: []
