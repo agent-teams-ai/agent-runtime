@@ -4,6 +4,8 @@ import type { Pool, PoolClient } from "pg";
 
 import {
   canonicalContainedTurnPostgresJson,
+  CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  ContainedTurnStateBudgetError,
   digestContainedTurnPostgresJson,
 } from "./contained-turn-state-codec.js";
 import { decodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
@@ -33,6 +35,17 @@ export const CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS = Object.freeze({
   lockTimeoutMs: 5_000,
   statementTimeoutMs: 30_000,
 });
+export const CONTAINED_TURN_POSTGRES_V1_DATA_DIAGNOSTIC =
+  "contained turn PostgreSQL populated v1 schema requires an exact legacy conversion";
+
+export class ContainedTurnPostgresLegacyConversionRequiredError extends Error {
+  public readonly code = "CONTAINED_TURN_POSTGRES_LEGACY_CONVERSION_REQUIRED";
+
+  public constructor() {
+    super(CONTAINED_TURN_POSTGRES_V1_DATA_DIAGNOSTIC);
+    this.name = "ContainedTurnPostgresLegacyConversionRequiredError";
+  }
+}
 
 interface MigrationRow {
   readonly migration_digest: string;
@@ -253,14 +266,19 @@ const backfillPreparationDigests = async (client: PoolClient): Promise<void> => 
     preparation_token: string;
     state: unknown;
     state_codec_version: number;
+    state_within_budget: boolean;
   }>(
-    `SELECT operation_id, preparation_token, state, state_codec_version
+    `SELECT operation_id, preparation_token,
+            CASE WHEN octet_length(state::text) <= $1 THEN state END AS state,
+            octet_length(state::text) <= $1 AS state_within_budget, state_codec_version
        FROM agent_execution.contained_turn_dispatch_preparation_v1
       WHERE state_digest IS NULL
       ORDER BY operation_id, preparation_token
       FOR UPDATE`,
+    [CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes],
   );
   for (const row of rows.rows) {
+    if (!row.state_within_budget) {throw new ContainedTurnStateBudgetError();}
     decodeContainedTurnPreparation(row.state, null, row.state_codec_version);
     const stateDigest = createHash("sha256")
       .update(canonicalContainedTurnPostgresJson(row.state))
@@ -278,13 +296,44 @@ const backfillPreparationDigests = async (client: PoolClient): Promise<void> => 
 };
 
 const validateLegacyOperationDigests = async (client: PoolClient): Promise<void> => {
-  const rows = await client.query<{ state: unknown; state_digest: string }>(
-    "SELECT state, state_digest FROM agent_execution.contained_turn_operation_v1 ORDER BY operation_id",
+  const rows = await client.query<{
+    state: unknown;
+    state_digest: string;
+    state_within_budget: boolean;
+  }>(
+    `SELECT CASE WHEN octet_length(state::text) <= $1 THEN state END AS state,
+            octet_length(state::text) <= $1 AS state_within_budget, state_digest
+       FROM agent_execution.contained_turn_operation_v1 ORDER BY operation_id`,
+    [CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes],
   );
   for (const row of rows.rows) {
+    if (!row.state_within_budget) {throw new ContainedTurnStateBudgetError();}
     if (digestContainedTurnPostgresJson(row.state) !== row.state_digest) {
       throw new Error("contained turn PostgreSQL legacy operation digest mismatch");
     }
+  }
+};
+
+const rejectPopulatedV1WithoutExactConversion = async (client: PoolClient): Promise<void> => {
+  const result = await client.query<{
+    has_operations: boolean;
+    has_outputs: boolean;
+    has_receipts: boolean;
+  }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM agent_execution.contained_turn_operation_v1 LIMIT 1
+     ) AS has_operations,
+     EXISTS (
+       SELECT 1 FROM agent_execution.contained_turn_output_v1 LIMIT 1
+     ) AS has_outputs,
+     EXISTS (
+       SELECT 1 FROM agent_execution.contained_turn_receipt_v1 LIMIT 1
+     ) AS has_receipts`,
+  );
+  const presence = result.rows[0];
+  if (presence?.has_operations === true || presence?.has_outputs === true ||
+      presence?.has_receipts === true) {
+    throw new ContainedTurnPostgresLegacyConversionRequiredError();
   }
 };
 
@@ -309,6 +358,7 @@ const applyMigration = async (
       recorded.predecessor_digest !== (migration.predecessorDigest ?? null))) {
     throw new Error("contained turn PostgreSQL migration history cannot be rewritten");
   }
+  if (migration.version === 2) {await rejectPopulatedV1WithoutExactConversion(client);}
   if (migration.version === 3) {await validateLegacyOperationDigests(client);}
   if (migration.version === 4) {await backfillPreparationDigests(client);}
   await client.query(migration.sql);
@@ -407,4 +457,3 @@ export const rollbackContainedTurnPostgresSchemaV4 = async (pool: Pool): Promise
     client.release(discardClient);
   }
 };
-

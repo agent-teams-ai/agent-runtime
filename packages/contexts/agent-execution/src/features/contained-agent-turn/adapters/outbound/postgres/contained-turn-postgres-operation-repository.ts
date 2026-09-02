@@ -4,7 +4,12 @@ import type { ContainedTurnScope } from "../../../domain/contained-turn-authorit
 import type { ContainedTurnOperationId } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
-import { decodeContainedTurnState, encodeContainedTurnState } from "./contained-turn-state-codec.js";
+import {
+  CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  ContainedTurnStateBudgetError,
+  decodeContainedTurnState,
+  encodeContainedTurnState,
+} from "./contained-turn-state-codec.js";
 
 interface OperationRow {
   readonly command_fingerprint: string;
@@ -14,6 +19,7 @@ interface OperationRow {
   readonly project_id: string;
   readonly revision: string;
   readonly state: unknown;
+  readonly state_within_budget: boolean;
   readonly state_codec_version: number;
   readonly state_digest: string;
   readonly tenant_id: string;
@@ -32,6 +38,7 @@ interface ProofRow {
 }
 
 const operationFromRow = (row: OperationRow): ContainedTurnKernelOperation => {
+  if (!row.state_within_budget) {throw new ContainedTurnStateBudgetError();}
   const operation = decodeContainedTurnState(row.state, row.state_digest, row.state_codec_version);
   if (operation.operationId !== row.operation_id || operation.scope.tenantId !== row.tenant_id ||
       operation.scope.projectId !== row.project_id || operation.commandId !== row.command_id ||
@@ -76,7 +83,11 @@ export class ContainedTurnPostgresOperationRepository {
     const scopePredicate = scope === undefined ? "" : " AND tenant_id = $2 AND project_id = $3";
     const result = await client.query<OperationRow>(
       `SELECT operation_id, tenant_id, project_id, command_id, command_fingerprint, effect_id,
-              revision::text, state, state_codec_version, state_digest, terminal
+              revision::text,
+              CASE WHEN octet_length(state::text) <= ${String(CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes)}
+                THEN state END AS state,
+              octet_length(state::text) <= ${String(CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes)} AS state_within_budget,
+              state_codec_version, state_digest, terminal
          FROM agent_execution.contained_turn_operation_v1
         WHERE operation_id = $1${scopePredicate}${lock ? " FOR UPDATE" : ""}`,
       scope === undefined ? [operationId] : [operationId, scope.tenantId, scope.projectId],

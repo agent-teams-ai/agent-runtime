@@ -5,7 +5,11 @@ import {
   CONTAINED_TURN_PREPARATION_CODEC_VERSION,
   decodeContainedTurnPreparation,
 } from "./contained-turn-preparation-codec.js";
-import { ContainedTurnStateQuarantineError } from "./contained-turn-state-codec.js";
+import {
+  CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  ContainedTurnStateBudgetError,
+  ContainedTurnStateQuarantineError,
+} from "./contained-turn-state-codec.js";
 import type { ContainedTurnPostgresOperationRepository } from "./contained-turn-postgres-operation-repository.js";
 import type { ContainedTurnPostgresTransactions } from "./contained-turn-postgres-transactions.js";
 
@@ -15,7 +19,11 @@ interface PreparationRecoveryRow {
   readonly state: unknown;
   readonly state_codec_version: number;
   readonly state_digest: string | null;
+  readonly batch_within_budget: boolean;
+  readonly state_within_row_budget: boolean;
 }
+
+const RECOVERY_BATCH_SERIALIZED_BYTES = 9 * 1024 * 1024;
 
 type RecoveryInput = Parameters<
   NonNullable<ContainedTurnKernelOperationStore["listDispatchPreparations"]>
@@ -37,8 +45,10 @@ export class ContainedTurnPostgresPreparationRecovery {
     }
     const recover = async (client: import("pg").PoolClient, quarantine: boolean) => {
       const rows = await client.query<PreparationRecoveryRow>(
-        `SELECT p.operation_id,p.preparation_token,p.state,p.state_codec_version,p.state_digest
-           FROM agent_execution.contained_turn_dispatch_preparation_v1 AS p
+        `WITH scoped AS MATERIALIZED (
+           SELECT p.operation_id,p.preparation_token,p.state,p.state_codec_version,p.state_digest,
+                  octet_length(p.state::text) AS state_bytes
+             FROM agent_execution.contained_turn_dispatch_preparation_v1 AS p
            JOIN agent_execution.contained_turn_operation_v1 AS o
              ON o.operation_id = p.operation_id
            ${quarantine ? `LEFT JOIN agent_execution.contained_turn_dispatch_preparation_quarantine_v1 AS q
@@ -46,23 +56,41 @@ export class ContainedTurnPostgresPreparationRecovery {
             AND q.preparation_token = p.preparation_token
             AND q.observed_codec_version = p.state_codec_version
             AND q.observed_state_digest IS NOT DISTINCT FROM p.state_digest` : ""}
-          WHERE o.tenant_id = $1 AND o.project_id = $2
+            WHERE o.tenant_id = $1 AND o.project_id = $2
             ${quarantine ? "AND q.operation_id IS NULL" : ""}
-            AND (((p.state_codec_version = 2 OR p.state_codec_version = $4) AND (p.state #>> '{payload,kind}') = ANY($3::text[]))
-                 OR (p.state_codec_version = 1 AND (p.state #>> '{kind}') = ANY($3::text[]))
-                 OR p.state_codec_version NOT IN (1, 2, $4))
-          ORDER BY p.operation_id,p.preparation_token
-          LIMIT $5`,
+          ), candidates AS (
+           SELECT *,sum(state_bytes) OVER (ORDER BY operation_id,preparation_token) AS batch_bytes
+             FROM scoped
+            WHERE state_bytes > $6
+               OR (((state_codec_version = 2 OR state_codec_version = $4) AND
+                    (state #>> '{payload,kind}') = ANY($3::text[]))
+               OR (state_codec_version = 1 AND (state #>> '{kind}') = ANY($3::text[]))
+               OR state_codec_version NOT IN (1, 2, $4))
+            ORDER BY operation_id,preparation_token
+            LIMIT $5
+          )
+          SELECT operation_id,preparation_token,
+                 CASE WHEN state_bytes <= $6 AND batch_bytes <= $7 THEN state END AS state,
+                 state_bytes <= $6 AS state_within_row_budget,
+                 batch_bytes <= $7 AS batch_within_budget,
+                 state_codec_version,state_digest
+            FROM candidates ORDER BY operation_id,preparation_token`,
         [input.scope.tenantId, input.scope.projectId, kinds,
-          CONTAINED_TURN_PREPARATION_CODEC_VERSION, quarantine ? 1_000 : limit],
+          CONTAINED_TURN_PREPARATION_CODEC_VERSION, quarantine ? 1_000 : limit,
+          CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes,
+          RECOVERY_BATCH_SERIALIZED_BYTES],
       );
       const recoveries: Array<Readonly<{
         operation: ContainedTurnKernelOperation;
         preparation: ContainedTurnDispatchPreparation;
       }>> = [];
       for (const row of rows.rows) {
+        if (!row.batch_within_budget) {throw new ContainedTurnStateBudgetError();}
         let preparation: ContainedTurnDispatchPreparation;
         try {
+          if (!row.state_within_row_budget) {
+            throw new ContainedTurnStateQuarantineError(row.state_codec_version, "malformed");
+          }
           preparation = decodeContainedTurnPreparation(
             row.state, row.state_digest, row.state_codec_version,
           );
@@ -81,7 +109,7 @@ export class ContainedTurnPostgresPreparationRecovery {
                    last_observed_at=transaction_timestamp(),
                    observation_count=agent_execution.contained_turn_dispatch_preparation_quarantine_v1.observation_count + 1`,
             [row.operation_id, row.preparation_token, row.state_codec_version,
-              row.state_digest, row.state, error.reason],
+              row.state_digest, row.state ?? {}, error.reason],
           );
           continue;
         }

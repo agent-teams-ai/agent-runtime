@@ -3,6 +3,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const MAX_CAPTURE_BYTES = 256 * 1024;
 const MAX_DATABASE_URL_BYTES = 8 * 1024;
+export const POSTGRES_QUALIFICATION_CHILD_TIMEOUT_MS = 10 * 60 * 1000;
+export const POSTGRES_QUALIFICATION_TIMEOUT_DIAGNOSTIC =
+  "PostgreSQL qualification failed: test runner timed out.\n";
 const CHILD_ENVIRONMENT_KEYS = [
   "PATH",
   "SystemRoot",
@@ -172,7 +175,9 @@ export const runPostgresQualification = ({
         encoding: "utf8",
         env: createChildEnvironment(environment, normalizedDatabaseUrl),
         maxBuffer: MAX_CAPTURE_BYTES,
+        killSignal: "SIGTERM",
         stdio: ["ignore", "pipe", "pipe"],
+        timeout: POSTGRES_QUALIFICATION_CHILD_TIMEOUT_MS,
       },
     );
   } catch {
@@ -180,6 +185,10 @@ export const runPostgresQualification = ({
     return 1;
   }
 
+  if (result.error?.code === "ETIMEDOUT") {
+    writeStderr(POSTGRES_QUALIFICATION_TIMEOUT_DIAGNOSTIC);
+    return 1;
+  }
   if (
     result.error?.code === "ENOBUFS" ||
     capturedByteLength(result.stdout) > MAX_CAPTURE_BYTES ||

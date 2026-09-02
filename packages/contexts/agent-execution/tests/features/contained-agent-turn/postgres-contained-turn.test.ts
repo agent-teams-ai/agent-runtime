@@ -5,8 +5,10 @@ import { type Pool, type PoolClient } from "pg";
 
 import {
   applyContainedTurnPostgresSchema,
+  ContainedTurnPostgresLegacyConversionRequiredError,
   CONTAINED_TURN_POSTGRES_MIGRATIONS,
   CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
+  CONTAINED_TURN_POSTGRES_V1_DATA_DIAGNOSTIC,
   rollbackContainedTurnPostgresSchemaV4,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 import {
@@ -15,6 +17,9 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-preparation-codec.js";
 import {
   ContainedTurnStateQuarantineError,
+  ContainedTurnStateBudgetError,
+  CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  CONTAINED_TURN_STATE_BUDGET_DIAGNOSTIC,
   decodeContainedTurnState,
   digestContainedTurnPostgresJson,
   encodeContainedTurnState,
@@ -104,6 +109,100 @@ test("versioned state and preparation codecs upcast, round-trip, and quarantine 
     decodeContainedTurnPreparation(legacyPreparation, null, 1),
     preparation,
   );
+});
+
+test("persisted JSON hashing rejects deterministic byte, depth, node, and width excess", () => {
+  const rejectsBudget = (candidate: unknown) => assert.throws(
+    () => digestContainedTurnPostgresJson(candidate),
+    (error: unknown) => error instanceof ContainedTurnStateBudgetError &&
+      error.message === CONTAINED_TURN_STATE_BUDGET_DIAGNOSTIC,
+  );
+  rejectsBudget("x".repeat(CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumCanonicalBytes + 1));
+  let deep: unknown = null;
+  for (let index = 0; index <= CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumDepth; index += 1) {
+    deep = { nested: deep };
+  }
+  rejectsBudget(deep);
+  rejectsBudget(Array.from({
+    length: CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumCollectionWidth + 1,
+  }, () => null));
+  rejectsBudget(Array.from({
+    length: CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumCollectionWidth,
+  }, () => Array.from({ length: 13 }, () => null)));
+});
+
+postgresTest("populated genuine v1 fails closed before migration without changing history or data", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool, 1);
+    const operation = operationForProject("project:v1-rejection", "v1-rejection");
+    const legacy = { ...operation, schemaVersion: 1 };
+    await pool.query(
+      `INSERT INTO agent_execution.contained_turn_operation_v1
+         (operation_id,tenant_id,command_id,command_fingerprint,effect_id,revision,state,state_digest,terminal)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,false)`,
+      [operation.operationId, operation.scope.tenantId, operation.commandId,
+        operation.commandFingerprint, operation.effectId, operation.revision,
+        JSON.stringify(legacy), digestContainedTurnPostgresJson(legacy)],
+    );
+    await pool.query(
+      "INSERT INTO agent_execution.contained_turn_output_v1(operation_id,cursor,output_kind,output_text) VALUES ($1,0,'diagnostic','legacy-output')",
+      [operation.operationId],
+    );
+    await pool.query(
+      "INSERT INTO agent_execution.contained_turn_receipt_v1(operation_id,receipt_kind,receipt_ref) VALUES ($1,'legacy','legacy-receipt')",
+      [operation.operationId],
+    );
+    const snapshot = async () => pool.query(
+      `SELECT
+        (SELECT row_to_json(m) FROM agent_execution.schema_migration AS m) AS migration,
+        (SELECT jsonb_agg(to_jsonb(h) ORDER BY version) FROM agent_execution.schema_migration_history AS h) AS history,
+        (SELECT jsonb_agg(to_jsonb(o) ORDER BY operation_id) FROM agent_execution.contained_turn_operation_v1 AS o) AS operations,
+        (SELECT jsonb_agg(to_jsonb(x) ORDER BY operation_id,cursor) FROM agent_execution.contained_turn_output_v1 AS x) AS outputs,
+        (SELECT jsonb_agg(to_jsonb(r) ORDER BY operation_id,receipt_kind) FROM agent_execution.contained_turn_receipt_v1 AS r) AS receipts`,
+    );
+    const before = (await snapshot()).rows[0];
+
+    await assert.rejects(
+      applyContainedTurnPostgresSchema(pool),
+      (error: unknown) => error instanceof ContainedTurnPostgresLegacyConversionRequiredError &&
+        error.code === "CONTAINED_TURN_POSTGRES_LEGACY_CONVERSION_REQUIRED" &&
+        error.message === CONTAINED_TURN_POSTGRES_V1_DATA_DIAGNOSTIC,
+    );
+
+    assert.deepEqual((await snapshot()).rows[0], before);
+    assert.equal((await pool.query(
+      `SELECT count(*)::integer AS count FROM information_schema.columns
+        WHERE table_schema='agent_execution' AND table_name='contained_turn_operation_v1'
+          AND column_name IN ('project_id','state_codec_version')`,
+    )).rows[0]?.count, 0);
+  });
+});
+
+postgresTest("operation reads reject oversized JSON before pg materializes the selected state", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const operation = operationForProject("project:oversized-state", "oversized-state");
+    const store = new PostgresContainedTurnOperationStore({ pool });
+    assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
+    await runtimeQuery(
+      pool,
+      `UPDATE agent_execution.contained_turn_operation_v1
+          SET state=jsonb_build_object('oversized',repeat('x',$2)),state_digest=repeat('0',64)
+        WHERE operation_id=$1`,
+      [operation.operationId, CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes + 1],
+    );
+
+    await assert.rejects(
+      store.read({ operationId: operation.operationId, scope: operation.scope }),
+      (error: unknown) => error instanceof ContainedTurnStateBudgetError,
+    );
+    assert.equal((await runtimeQuery<{ oversized: boolean }>(
+      pool,
+      `SELECT octet_length(state::text) > $2 AS oversized
+         FROM agent_execution.contained_turn_operation_v1 WHERE operation_id=$1`,
+      [operation.operationId, CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes],
+    )).rows[0]?.oversized, true);
+  });
 });
 
 postgresTest("migration chain is exact, serialized, drift-detecting, no-op safe, and reversible", async () => {

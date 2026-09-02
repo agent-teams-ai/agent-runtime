@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 
 import { encodeContainedTurnPreparation } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-preparation-codec.js";
-import { digestContainedTurnPostgresJson } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
+import {
+  ContainedTurnStateBudgetError,
+  CONTAINED_TURN_STATE_BUDGET_DIAGNOSTIC,
+  digestContainedTurnPostgresJson,
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
 import { PostgresContainedTurnOperationStore } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
 import { recoverContainedTurnDispatchPreparations } from "../../../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
@@ -232,5 +236,35 @@ postgresTest("retirement rejects a payload token that disagrees with its row key
       reason: "reconciliation",
     });
     assert.equal(retired.kind, "stale");
+  });
+});
+
+postgresTest("recovery fails closed before materializing an oversized serialized batch", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const store = new PostgresContainedTurnOperationStore({ pool });
+    const operation = operationForProject("project:oversized-recovery", "oversized-recovery");
+    assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
+    for (const suffix of ["a", "b"]) {
+      await runtimeQuery(
+        pool,
+        `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+           (operation_id,preparation_token,state_codec_version,state,state_digest)
+         VALUES ($1,$2,4,jsonb_build_object(
+           'codecVersion',4,'payload',jsonb_build_object('kind','active','padding',repeat('x',$3))
+         ),repeat('0',64))`,
+        [operation.operationId, `preparation:oversized-batch-${suffix}`, 5 * 1024 * 1024],
+      );
+    }
+
+    await assert.rejects(
+      store.listDispatchPreparations({ limit: 1_000, scope: operation.scope }),
+      (error: unknown) => error instanceof ContainedTurnStateBudgetError &&
+        error.message === CONTAINED_TURN_STATE_BUDGET_DIAGNOSTIC,
+    );
+    assert.equal((await runtimeQuery<{ count: string }>(
+      pool,
+      "SELECT count(*)::text AS count FROM agent_execution.contained_turn_dispatch_preparation_quarantine_v1",
+    )).rows[0]?.count, "0");
   });
 });

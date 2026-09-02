@@ -5,7 +5,11 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { runPostgresQualification } from "../../scripts/run-postgres-qualification.mjs";
+import {
+  POSTGRES_QUALIFICATION_CHILD_TIMEOUT_MS,
+  POSTGRES_QUALIFICATION_TIMEOUT_DIAGNOSTIC,
+  runPostgresQualification,
+} from "../../scripts/run-postgres-qualification.mjs";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../../../../../", import.meta.url));
@@ -141,8 +145,11 @@ test("PostgreSQL qualification uses bounded pipes and a minimal child environmen
       TMPDIR: "/qualification/tmp",
     },
     maxBuffer: 256 * 1024,
+    killSignal: "SIGTERM",
     stdio: ["ignore", "pipe", "pipe"],
+    timeout: POSTGRES_QUALIFICATION_CHILD_TIMEOUT_MS,
   });
+  assert.ok(POSTGRES_QUALIFICATION_CHILD_TIMEOUT_MS < 20 * 60 * 1000);
 });
 
 test("PostgreSQL qualification uses exact argv for every focused PostgreSQL test file", async () => {
@@ -229,6 +236,29 @@ test("PostgreSQL qualification fails closed on a child spawn error", () => {
   assert.doesNotMatch(result.stderr, /qualification-user|qualification-secret|db\.internal/u);
   assert.match(result.stderr, /spawn context \*+/u);
   assert.match(result.stderr, /test runner could not be started/u);
+});
+
+test("PostgreSQL qualification classifies timeout first without leaking child context", () => {
+  const timeoutError = Object.assign(new Error("timeout included a raw path"), {
+    code: "ETIMEDOUT",
+    path: "/sensitive/qualification/runner",
+  });
+  const result = invokeQualification({
+    environment: { SYNTHETIC_UNRELATED_SECRET: "ambient-secret" },
+    result: {
+      error: timeoutError,
+      signal: "SIGTERM",
+      status: null,
+      stderr: `stderr ${qualificationDatabaseUrl} ambient-secret /sensitive/qualification/runner\n`,
+      stdout: `stdout ${qualificationDatabaseUrl}\n`,
+    },
+  });
+
+  assert.deepEqual(result, {
+    status: 1,
+    stdout: "",
+    stderr: POSTGRES_QUALIFICATION_TIMEOUT_DIAGNOSTIC,
+  });
 });
 
 test("PostgreSQL qualification fails closed when spawn throws", () => {
@@ -401,7 +431,8 @@ test("ordinary direct PostgreSQL test discovery remains optional without a servi
   );
 
   assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
-  assert.match(result.stdout, /skipped 13/u);
+  assert.match(result.stdout, /skipped 16/u);
+  assert.match(result.stdout, /pass 2/u);
   assert.match(result.stdout, /fail 0/u);
 });
 

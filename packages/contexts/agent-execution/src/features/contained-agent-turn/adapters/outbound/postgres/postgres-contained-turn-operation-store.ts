@@ -26,7 +26,11 @@ import { mutateContainedTurnOperation } from "../../../domain/contained-turn-tra
 import { containedTurnPreparationToken } from "../../../application/contained-turn-preparation-cleanup.js";
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
 import { decodeContainedTurnPreparation, encodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
-import { encodeContainedTurnState } from "./contained-turn-state-codec.js";
+import {
+  CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  ContainedTurnStateBudgetError,
+  encodeContainedTurnState,
+} from "./contained-turn-state-codec.js";
 import { ContainedTurnPostgresOperationRepository } from "./contained-turn-postgres-operation-repository.js";
 import { ContainedTurnPostgresPreparationRecovery } from "./contained-turn-postgres-preparation-recovery.js";
 import {
@@ -53,7 +57,17 @@ export {
 } from "./contained-turn-postgres-transactions.js";
 
 interface PreparationRow { readonly state: unknown; readonly state_codec_version: number;
-  readonly state_digest: string | null; }
+  readonly state_digest: string | null; readonly state_within_budget: boolean; }
+const PREPARATION_STATE_SELECTION = `CASE
+  WHEN octet_length(state::text) <= ${String(CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes)}
+  THEN state END AS state,
+  octet_length(state::text) <= ${String(CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes)}
+    AS state_within_budget,state_codec_version,state_digest`;
+
+const decodePreparationRow = (row: PreparationRow): ContainedTurnDispatchPreparation => {
+  if (!row.state_within_budget) {throw new ContainedTurnStateBudgetError();}
+  return decodeContainedTurnPreparation(row.state, row.state_digest, row.state_codec_version);
+};
 export type { ContainedTurnPostgresIdentitySource } from "./contained-turn-postgres-operation-authority.js";
 export interface PostgresContainedTurnOperationStoreOptions {
   readonly identities?: ContainedTurnPostgresIdentitySource;
@@ -371,13 +385,11 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
         return { kind: "observed_claim" as const, operation: current };
       }
       const row = await client.query<PreparationRow>(
-        "SELECT state,state_codec_version,state_digest FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE",
+        `SELECT ${PREPARATION_STATE_SELECTION} FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE`,
         [current.operationId, input.subject.preparationToken],
       );
       const persisted = row.rows[0];
-      const preparation = persisted === undefined ? undefined : decodeContainedTurnPreparation(
-        persisted.state, persisted.state_digest, persisted.state_codec_version,
-      );
+      const preparation = persisted === undefined ? undefined : decodePreparationRow(persisted);
       if (preparation === undefined || preparation.kind !== "active") {return { current, kind: "stale" as const };}
       if (preparation.operationId !== current.operationId ||
           preparation.operationId !== input.subject.operationId ||
@@ -447,13 +459,11 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       assertAuthority(input.authority, current);
       if (current.dispatch.kind === "claimed" && current.dispatch.preparationToken === input.preparationToken) {return { kind: "claimed" as const, operation: current };}
       const row = await client.query<PreparationRow>(
-        "SELECT state,state_codec_version,state_digest FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE",
+        `SELECT ${PREPARATION_STATE_SELECTION} FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE`,
         [current.operationId, input.preparationToken],
       );
       const persisted = row.rows[0];
-      const preparation = persisted === undefined ? undefined : decodeContainedTurnPreparation(
-        persisted.state, persisted.state_digest, persisted.state_codec_version,
-      );
+      const preparation = persisted === undefined ? undefined : decodePreparationRow(persisted);
       if (preparation === undefined) {return { current, kind: "stale" as const };}
       if (preparation.kind === "claimed") {return { current, kind: "stale" as const };}
       if (preparation.operationId !== current.operationId ||
@@ -489,14 +499,12 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       if (current === undefined) {throw new Error("cleanup operation disappeared");}
       assertAuthority(input.authority, current);
       const row = await client.query<PreparationRow>(
-        "SELECT state,state_codec_version,state_digest FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE",
+        `SELECT ${PREPARATION_STATE_SELECTION} FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE`,
         [current.operationId, input.permit.preparationToken],
       );
       const persisted = row.rows[0];
       if (persisted === undefined) {throw new Error("cleanup preparation disappeared");}
-      const next = recordContainedTurnPreparationCleanup(decodeContainedTurnPreparation(
-        persisted.state, persisted.state_digest, persisted.state_codec_version,
-      ), input);
+      const next = recordContainedTurnPreparationCleanup(decodePreparationRow(persisted), input);
       const encoded = encodeContainedTurnPreparation(next);
       await client.query("UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb,state_codec_version=$4,state_digest=$5 WHERE operation_id=$1 AND preparation_token=$2", [current.operationId, input.permit.preparationToken, encoded.json, encoded.codecVersion, encoded.digest]);
       return next;

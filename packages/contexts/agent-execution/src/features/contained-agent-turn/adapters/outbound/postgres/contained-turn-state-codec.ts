@@ -5,6 +5,23 @@ import { validateContainedTurnOperation } from "../../../domain/contained-turn-v
 
 export const CONTAINED_TURN_STATE_CODEC_VERSION = 2;
 
+export const CONTAINED_TURN_POSTGRES_JSON_BUDGET = Object.freeze({
+  maximumCanonicalBytes: 8 * 1024 * 1024,
+  maximumCollectionWidth: 4_096,
+  maximumDepth: 64,
+  maximumNodes: 50_000,
+  maximumSerializedBytes: 8 * 1024 * 1024,
+});
+export const CONTAINED_TURN_STATE_BUDGET_DIAGNOSTIC =
+  "contained turn persisted state exceeds the deterministic decoding budget";
+
+export class ContainedTurnStateBudgetError extends Error {
+  public constructor() {
+    super(CONTAINED_TURN_STATE_BUDGET_DIAGNOSTIC);
+    this.name = "ContainedTurnStateBudgetError";
+  }
+}
+
 export class ContainedTurnStateQuarantineError extends Error {
   public constructor(
     public readonly codecVersion: number,
@@ -15,7 +32,46 @@ export class ContainedTurnStateQuarantineError extends Error {
   }
 }
 
-export const canonicalContainedTurnPostgresJson = (value: unknown): string => {
+const rejectOutsideCanonicalBudget = (root: unknown): void => {
+  const pending: Array<Readonly<{ depth: number; value: unknown }>> = [{ depth: 0, value: root }];
+  let canonicalBytes = 0;
+  let nodes = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) {break;}
+    nodes += 1;
+    if (nodes > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumNodes ||
+        current.depth > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumDepth) {
+      throw new ContainedTurnStateBudgetError();
+    }
+    if (current.value === null || typeof current.value !== "object") {
+      const serialized = JSON.stringify(current.value);
+      canonicalBytes += typeof serialized === "string" ? Buffer.byteLength(serialized, "utf8") : 0;
+      if (canonicalBytes > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumCanonicalBytes) {
+        throw new ContainedTurnStateBudgetError();
+      }
+      continue;
+    }
+    const values = Array.isArray(current.value)
+      ? current.value
+      : Object.values(current.value as Readonly<Record<string, unknown>>);
+    if (values.length > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumCollectionWidth) {
+      throw new ContainedTurnStateBudgetError();
+    }
+    canonicalBytes += 2 + Math.max(0, values.length - 1);
+    if (!Array.isArray(current.value)) {
+      for (const key of Object.keys(current.value)) {
+        canonicalBytes += Buffer.byteLength(JSON.stringify(key), "utf8") + 1;
+      }
+    }
+    if (canonicalBytes > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumCanonicalBytes) {
+      throw new ContainedTurnStateBudgetError();
+    }
+    for (const nested of values) {pending.push({ depth: current.depth + 1, value: nested });}
+  }
+};
+
+const canonicalJson = (value: unknown): string => {
   if (value === undefined || typeof value === "function" || typeof value === "symbol" || typeof value === "bigint") {
     throw new TypeError("PostgreSQL JSON values must be JSON-compatible");
   }
@@ -24,21 +80,36 @@ export const canonicalContainedTurnPostgresJson = (value: unknown): string => {
   }
   if (value === null || typeof value !== "object") {return JSON.stringify(value);}
   if (Array.isArray(value)) {
-    return `[${value.map(candidate => canonicalContainedTurnPostgresJson(candidate)).join(",")}]`;
+    return `[${value.map(candidate => canonicalJson(candidate)).join(",")}]`;
   }
   const record = value as Readonly<Record<string, unknown>>;
   return `{${Object.keys(record).toSorted().map(key =>
-    `${JSON.stringify(key)}:${canonicalContainedTurnPostgresJson(record[key])}`).join(",")}}`;
+    `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+};
+
+export const canonicalContainedTurnPostgresJson = (value: unknown): string => {
+  rejectOutsideCanonicalBudget(value);
+  const canonical = canonicalJson(value);
+  if (Buffer.byteLength(canonical, "utf8") >
+      CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumCanonicalBytes) {
+    throw new ContainedTurnStateBudgetError();
+  }
+  return canonical;
 };
 
 export const digestContainedTurnPostgresJson = (value: unknown): string =>
   createHash("sha256").update(canonicalContainedTurnPostgresJson(value)).digest("hex");
 
 const deepFreeze = <Value>(value: Value): Value => {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nested of Object.values(value)) {deepFreeze(nested);}
-    Object.freeze(value);
+  const pending: unknown[] = [value];
+  const visited = new Set<unknown>();
+  while (pending.length > 0) {
+    const candidate = pending.pop();
+    if (candidate === null || typeof candidate !== "object" || visited.has(candidate)) {continue;}
+    visited.add(candidate);
+    pending.push(...Object.values(candidate));
   }
+  for (const candidate of [...visited].reverse()) {Object.freeze(candidate);}
   return value;
 };
 
