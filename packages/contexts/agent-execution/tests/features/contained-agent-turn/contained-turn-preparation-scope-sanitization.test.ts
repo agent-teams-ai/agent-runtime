@@ -135,8 +135,8 @@ const canonicalDependencies = (
       retireDispatchPreparation: unavailablePreparationDependency,
       ...dependencies.operationStore,
     }),
-    security: Object.freeze({ consumeForDispatch: unavailablePreparationDependency, settleConsumedGrant: unavailablePreparationDependency, ...dependencies.security }),
-    providerAccess: Object.freeze({ consumeForDispatch: unavailablePreparationDependency, settleConsumedGrant: unavailablePreparationDependency, ...dependencies.providerAccess }),
+    security: Object.freeze({ consumeForDispatch: unavailablePreparationDependency, settleConsumedGrant: async () => ({ kind: "settled" as const }), ...dependencies.security }),
+    providerAccess: Object.freeze({ consumeForDispatch: unavailablePreparationDependency, settleConsumedGrant: async () => ({ kind: "settled" as const }), ...dependencies.providerAccess }),
     workspace: Object.freeze({ ensureClosed: unavailablePreparationDependency, queryClosure: unavailablePreparationDependency, ...dependencies.workspace }),
     artifacts: Object.freeze({ ensureSealed: unavailablePreparationDependency, querySeal: unavailablePreparationDependency, ...dependencies.artifacts }),
     custody: Object.freeze({
