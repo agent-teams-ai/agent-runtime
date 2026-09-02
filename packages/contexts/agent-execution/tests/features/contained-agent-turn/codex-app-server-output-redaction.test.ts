@@ -78,6 +78,18 @@ const assertContainmentRequired = (
   assert.equal("outputDrainProven" in outcome && outcome.outputDrainProven, false);
 };
 
+const assertEveryPathPrefixRetained = (
+  privatePath: string,
+  spelling: string,
+  platform: "darwin" | "linux" | "win32",
+): void => {
+  const policy = {exactSensitiveTokens: [], privatePaths: [privatePath], privatePathPlatform: platform};
+  for (let length = 1; length < spelling.length; length += 1) {
+    assert.equal(codexTerminalOutputText(`public:${spelling.slice(0, length)}`, policy), "",
+      `${platform} admitted ${JSON.stringify(spelling.slice(0, length))}`);
+  }
+};
+
 const executeAssistantChunks = async (
   turnId: string,
   chunksByItem: readonly (readonly string[])[],
@@ -289,6 +301,33 @@ test("terminal admission retains every credential, exact-token, and normalized p
   assert.equal(codexTerminalOutputText("ordinary terminal output", basePolicy), "ordinary terminal output");
 });
 
+test("terminal path admission covers every decomposed and Windows grammar prefix", () => {
+  const darwinNfc = "/Users/Private/Café/CODEX";
+  assertEveryPathPrefixRetained(darwinNfc, darwinNfc.normalize("NFD").toLowerCase(), "darwin");
+
+  const drive = "C:\\Users\\Private\\Café\\CODEX";
+  const driveBody = "c:/users/private/café/codex";
+  for (const spelling of [drive, driveBody, `\\\\?\\${driveBody}`, `//./${driveBody}`, `/??/${driveBody}`]) {
+    assertEveryPathPrefixRetained(drive, spelling, "win32");
+  }
+  const unc = "\\\\Server\\Private Share\\Café\\CODEX";
+  const uncBody = "server/private share/café/codex";
+  for (const spelling of [unc, `//${uncBody}`, `\\\\?\\UNC\\${uncBody}`,
+    `//./UNC/${uncBody}`, `/??/UNc/${uncBody}`]) {
+    assertEveryPathPrefixRetained(unc, spelling, "win32");
+  }
+  assert.equal(codexTerminalOutputText("public:\\\\?\\UN", {
+    exactSensitiveTokens: [], privatePaths: [unc], privatePathPlatform: "win32",
+  }), "");
+
+  const linuxNfc = "/private/Café/CODEX";
+  const linuxNfd = linuxNfc.normalize("NFD");
+  const byteDistinctLinuxText = `${linuxNfd.slice(0, -1)}!`;
+  assert.equal(codexTerminalOutputText(byteDistinctLinuxText, {
+    exactSensitiveTokens: [], privatePaths: [linuxNfc], privatePathPlatform: "linux",
+  }), byteDistinctLinuxText, "Linux must retain byte-sensitive decomposition identity");
+});
+
 test("whole-turn admission clears terminal prefixes and uses bounded notification retention", async () => {
   const terminal = await executeAssistantItems("turn:prefixes", ["alphaAB", "XbetaB", "YomegaABC"], [
     "ABCD", "BCD", "!",
@@ -308,6 +347,9 @@ test("whole-turn admission clears terminal prefixes and uses bounded notificatio
 });
 
 test("failed and cancelled completion never emit retained credential or private-path prefixes", async () => {
+  const completed = await executeAssistantItems("turn:completed-prefix", [syntheticPrivateRoot.slice(0, -1)]);
+  assert.equal(completed.outcome.kind, "completed");
+  assert.deepEqual(completed.output, []);
   const failed = await executeTerminalBoundary("failed", syntheticPrivateRoot.slice(0, -1));
   assert.equal(failed.outcome.kind, "completed");
   assert.deepEqual(failed.output, [{cursor: 0, kind: "diagnostic",

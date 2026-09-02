@@ -99,6 +99,16 @@ const positiveInteger = (name: string, value: number | undefined, fallback: numb
   return selected;
 };
 
+const boundedPositiveInteger = (
+  name: string,
+  value: number | undefined,
+  maximum: number,
+): number => {
+  const selected = positiveInteger(name, value, maximum);
+  if (selected > maximum) {throw new TypeError(`${name} exceeds the fixed Codex containment envelope`);}
+  return selected;
+};
+
 const deadlineAfter = (milliseconds: number): number => performance.now() + milliseconds;
 
 const beforeDeadline = async <T>(promise: Promise<T>, deadline: number, message: string): Promise<T> => {
@@ -175,10 +185,10 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     this.#processes = options.processes;
     this.#effectCustody = options.effectCustody;
     this.#maxLineBytes = positiveInteger("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES);
-    this.#maxActiveNotificationBytes = positiveInteger(
+    this.#maxActiveNotificationBytes = boundedPositiveInteger(
       "maxActiveNotificationBytes", options.maxActiveNotificationBytes, DEFAULT_MAX_ACTIVE_NOTIFICATION_BYTES,
     );
-    this.#maxActiveNotifications = positiveInteger(
+    this.#maxActiveNotifications = boundedPositiveInteger(
       "maxActiveNotifications", options.maxActiveNotifications, DEFAULT_MAX_ACTIVE_NOTIFICATIONS,
     );
     this.#requestTimeoutMs = positiveInteger("requestTimeoutMs", options.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS);
@@ -325,8 +335,9 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       );
       if (completed !== undefined) {return completed.status;}
     }} finally {
-      progress.pendingAssistantText = "";
-      progress.pendingCanonicalAssistantText = "";
+      delete progress.activeAssistantText;
+      delete progress.assistantTurnText;
+      progress.itemTextSegments.clear();
     }
   }
 

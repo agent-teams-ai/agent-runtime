@@ -469,6 +469,11 @@ test("requires assistant item identity and rejects malformed delta lifecycles", 
   }
 });
 test("bounds active notification messages and canonical bytes", async () => {
+  const envelopeProcess = completedProcess();
+  assert.throws(() => createProvider(envelopeProcess, {maxActiveNotificationBytes: 16_777_217}),
+    /fixed Codex containment envelope/u);
+  assert.throws(() => createProvider(envelopeProcess, {maxActiveNotifications: 16_385}),
+    /fixed Codex containment envelope/u);
   for (const overrides of [
     { maxActiveNotificationBytes: 16 },
     { maxActiveNotifications: 1 },

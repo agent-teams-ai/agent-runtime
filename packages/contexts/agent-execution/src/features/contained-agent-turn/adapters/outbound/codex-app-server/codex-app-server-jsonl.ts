@@ -47,7 +47,10 @@ export class BoundedCodexJsonLineReader {
   static readonly #decoder = new TextDecoder("utf-8", { fatal: true });
   readonly #iterator: AsyncIterator<Uint8Array>;
   readonly #maxLineBytes: number;
-  #buffer = Buffer.alloc(0);
+  #chunk: Buffer | undefined;
+  #chunkOffset = 0;
+  #fragments: Buffer[] = [];
+  #fragmentBytes = 0;
   #ended = false;
   #pending: Promise<IteratorResult<Uint8Array>> | undefined;
 
@@ -70,27 +73,73 @@ export class BoundedCodexJsonLineReader {
     return result;
   }
 
+  #appendFragment(fragment: Buffer): void {
+    if (fragment.length === 0) {return;}
+    this.#fragmentBytes += fragment.length;
+    if (this.#fragmentBytes > this.#maxLineBytes) {
+      throw new Error("Codex App Server line exceeds the configured bound");
+    }
+    this.#fragments.push(fragment);
+  }
+
+  #completeLine(fragment: Buffer): Buffer {
+    const lineBytes = this.#fragmentBytes + fragment.length;
+    if (lineBytes > this.#maxLineBytes) {
+      throw new Error("Codex App Server line exceeds the configured bound");
+    }
+    let line: Buffer;
+    if (this.#fragments.length === 0) {
+      line = fragment;
+    } else {
+      if (fragment.length > 0) {this.#fragments.push(fragment);}
+      line = Buffer.concat(this.#fragments, lineBytes);
+    }
+    this.#fragments = [];
+    this.#fragmentBytes = 0;
+    return line;
+  }
+
+  #takeLineFromChunk(): Buffer | undefined {
+    if (this.#chunk === undefined) {return undefined;}
+    const newline = this.#chunk.indexOf(0x0a, this.#chunkOffset);
+    if (newline < 0) {
+      this.#appendFragment(this.#chunk.subarray(this.#chunkOffset));
+      this.#chunk = undefined;
+      this.#chunkOffset = 0;
+      return undefined;
+    }
+    const line = this.#completeLine(this.#chunk.subarray(this.#chunkOffset, newline));
+    this.#chunkOffset = newline + 1;
+    if (this.#chunkOffset === this.#chunk.length) {
+      this.#chunk = undefined;
+      this.#chunkOffset = 0;
+    }
+    return line;
+  }
+
+  #decodeLine(line: Buffer): CodexJsonRecord | undefined {
+    const normalized = line.length > 0 && line.at(-1) === 0x0d ? line.subarray(0, -1) : line;
+    if (normalized.length === 0) {return undefined;}
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(BoundedCodexJsonLineReader.#decoder.decode(normalized));
+    } catch {
+      throw new Error("Codex App Server emitted invalid UTF-8 or malformed JSON");
+    }
+    if (!isCodexRecord(decoded)) {throw new Error("Codex App Server message must be an object");}
+    return decoded;
+  }
+
   public async read(deadline: number): Promise<CodexReadOutcome> {
     while (true) {
-      const newline = this.#buffer.indexOf(0x0a);
-      if (newline >= 0) {
-        if (newline > this.#maxLineBytes) {throw new Error("Codex App Server line exceeds the configured bound");}
-        const line = this.#buffer.subarray(0, newline);
-        this.#buffer = this.#buffer.subarray(newline + 1);
-        const normalized = line.length > 0 && line.at(-1) === 0x0d ? line.subarray(0, -1) : line;
-        if (normalized.length === 0) {continue;}
-        let decoded: unknown;
-        try {
-          decoded = JSON.parse(BoundedCodexJsonLineReader.#decoder.decode(normalized));
-        } catch {
-          throw new Error("Codex App Server emitted invalid UTF-8 or malformed JSON");
-        }
-        if (!isCodexRecord(decoded)) {throw new Error("Codex App Server message must be an object");}
-        return decoded;
+      const line = this.#takeLineFromChunk();
+      if (line !== undefined) {
+        const decoded = this.#decodeLine(line);
+        if (decoded !== undefined) {return decoded;}
+        continue;
       }
-      if (this.#buffer.length > this.#maxLineBytes) {throw new Error("Codex App Server line exceeds the configured bound");}
       if (this.#ended) {
-        if (this.#buffer.length !== 0) {throw new Error("Codex App Server closed with an unterminated message");}
+        if (this.#fragmentBytes !== 0) {throw new Error("Codex App Server closed with an unterminated message");}
         return undefined;
       }
       const next = await this.#nextChunk(deadline);
@@ -98,11 +147,8 @@ export class BoundedCodexJsonLineReader {
       if (next.done) {
         this.#ended = true;
       } else {
-        const bytes = Buffer.from(next.value);
-        if (this.#buffer.length + bytes.length > this.#maxLineBytes + 1) {
-          throw new Error("Codex App Server input buffer exceeds the configured bound");
-        }
-        this.#buffer = Buffer.concat([this.#buffer, bytes]);
+        this.#chunk = Buffer.from(next.value);
+        this.#chunkOffset = 0;
       }
     }
   }

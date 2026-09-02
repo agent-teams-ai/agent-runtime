@@ -21,6 +21,8 @@ import {
   type CodexActiveTurnProgress,
 } from "./codex-app-server-notification-evidence.js";
 import { admitCodexThreadItem, applyCodexPassiveItemNotification, reconcileCodexCompletedThreadItem, reconcileCodexTerminalThreadItems } from "./codex-app-server-thread-item.js";
+import { createCodexItemTextSegments, materializeCodexItemText } from "./codex-app-server-thread-item-lifecycle.js";
+import { CodexAppServerTextSegments } from "./codex-app-server-text-segments.js";
 
 export { createCodexActiveTurnProgress, type CodexActiveTurnCompletion };
 
@@ -246,26 +248,21 @@ const emitCodexAssistantDelta = (
     || params.itemId !== admission.progress.activeAgentItemId || typeof params.delta !== "string") {
     throw new CodexAppServerProtocolError("Codex assistant delta identity is invalid", true);
   }
-  const combined = admission.progress.pendingAssistantText + params.delta;
-  const canonical = admission.progress.pendingCanonicalAssistantText + combined;
-  assertCodexCanonicalOutputAllowed(canonical, admission.outputPolicy);
-  admission.progress.pendingAssistantText = combined;
   const active = admission.progress.activeItems.get(String(params.itemId));
-  if (active === undefined || active.type !== "agentMessage") {
+  if (active === undefined || active.type !== "agentMessage" || admission.progress.activeAssistantText === undefined) {
     throw new CodexAppServerProtocolError("Codex assistant lifecycle state is invalid", true);
   }
-  active.item.text = combined;
+  admission.progress.activeAssistantText.append(params.delta);
 };
 
 const flushCodexAssistantText = async (
   input: Parameters<ContainedTurnProviderPort["execute"]>[0],
   progress: CodexActiveTurnProgress,
+  text: string,
   outputPolicy: CodexCanonicalOutputPolicy,
 ): Promise<void> => {
-  const pending = progress.pendingCanonicalAssistantText;
-  if (pending.length === 0) {return;}
-  progress.pendingCanonicalAssistantText = "";
-  const admitted = codexTerminalOutputText(pending, outputPolicy);
+  if (text.length === 0) {return;}
+  const admitted = codexTerminalOutputText(text, outputPolicy);
   if (admitted.length === 0) {return;}
   await input.emit({ cursor: progress.cursor, kind: "assistant", text: admitted });
   progress.cursor += 1;
@@ -285,6 +282,7 @@ const observeTurnStarted = (params: JsonRecord, threadId: string, turnId: string
 const observeItemStarted = (
   params: JsonRecord,
   identity: { readonly boundary: CodexAppServerPermissionBoundary; readonly effectCustody?: CodexEffectCustodyBinding;
+    readonly maxNotificationBytes: number; readonly maxNotifications: number;
     readonly mode: "analysis" | "workspace-write"; readonly threadId: string; readonly turnId: string },
   progress: CodexActiveTurnProgress,
 ): void => {
@@ -307,10 +305,20 @@ const observeItemStarted = (
       throw new CodexAppServerProtocolError("Codex agent-message item/start shape is invalid", true);
     }
     progress.activeAgentItemId = itemId;
-    progress.pendingAssistantText = "";
+    progress.activeAssistantText = new CodexAppServerTextSegments(
+      identity.maxNotificationBytes, identity.maxNotifications,
+    );
+    progress.assistantTurnText ??= new CodexAppServerTextSegments(
+      identity.maxNotificationBytes, identity.maxNotifications,
+    );
   }
   progress.observedItemIds.add(itemId);
-  progress.activeItems.set(itemId, { ...admitted, item: structuredClone(admitted.item) });
+  const active = { ...admitted, item: structuredClone(admitted.item) };
+  progress.activeItems.set(itemId, active);
+  const textSegments = createCodexItemTextSegments(
+    active, identity.maxNotificationBytes, identity.maxNotifications,
+  );
+  if (textSegments !== undefined) {progress.itemTextSegments.set(itemId, textSegments);}
 };
 
 const observeItemCompleted = async (
@@ -343,25 +351,37 @@ const observeItemCompleted = async (
     { phase: "completed", ...(active.effectCustodyAdmission === undefined
       ? {} : { priorAdmission: active.effectCustodyAdmission }) },
   );
+  let assistantText: string | undefined;
+  if (itemType === "agentMessage") {
+    assistantText = progress.activeAssistantText?.materialize();
+    if (assistantText === undefined) {
+      throw new CodexAppServerProtocolError("Codex completed agent message lacks bounded text custody", true);
+    }
+    active.item.text = assistantText;
+  } else {
+    materializeCodexItemText(active, progress.itemTextSegments.get(itemId));
+  }
   if (!reconcileCodexCompletedThreadItem(active, admitted)) {
     throw new CodexAppServerProtocolError("Codex completed item payload did not match its observed lifecycle", true);
   }
   if (itemType === "agentMessage") {
     if (itemId !== progress.activeAgentItemId
-      || admitted.item.text !== progress.pendingAssistantText) {
+      || assistantText === undefined || admitted.item.text !== assistantText
+      || progress.assistantTurnText === undefined) {
       throw new CodexAppServerProtocolError("Codex completed agent message does not match its exact delta lifecycle", true);
     }
-    progress.pendingCanonicalAssistantText += progress.pendingAssistantText;
-    progress.pendingAssistantText = "";
+    progress.assistantTurnText.append(assistantText);
+    delete progress.activeAssistantText;
     delete progress.activeAgentItemId;
   }
   progress.completedItems.push(admitted);
   progress.activeItems.delete(itemId);
+  progress.itemTextSegments.delete(itemId);
 };
 
 const terminalLifecycleClosed = (progress: CodexActiveTurnProgress): boolean =>
   progress.turnStarted && progress.activeItems.size === 0
-  && progress.activeAgentItemId === undefined && progress.pendingAssistantText.length === 0;
+  && progress.activeAgentItemId === undefined && progress.activeAssistantText === undefined;
 
 const completeCodexTurn = async (
   params: JsonRecord,
@@ -400,12 +420,10 @@ const completeCodexTurn = async (
     throw new CodexAppServerProtocolError("Codex turn completed before exact interruption acknowledgement", true);
   }
   lifecycle.observeProtocolTerminal();
-  try {
-    assertCodexCanonicalOutputAllowed(lifecycle.progress.pendingCanonicalAssistantText, lifecycle.outputPolicy);
-    await flushCodexAssistantText(input, lifecycle.progress, lifecycle.outputPolicy);
-  } finally {
-    lifecycle.progress.pendingCanonicalAssistantText = "";
-  }
+  const assistantText = lifecycle.progress.assistantTurnText?.materialize() ?? "";
+  delete lifecycle.progress.assistantTurnText;
+  assertCodexCanonicalOutputAllowed(assistantText, lifecycle.outputPolicy);
+  await flushCodexAssistantText(input, lifecycle.progress, assistantText, lifecycle.outputPolicy);
   if (completed.status === "failed") {
     await input.emit({
       cursor: lifecycle.progress.cursor,

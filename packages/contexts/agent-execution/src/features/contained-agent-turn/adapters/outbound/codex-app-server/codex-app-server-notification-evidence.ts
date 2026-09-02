@@ -1,21 +1,24 @@
 import { CodexAppServerProtocolError, type CodexJsonRecord as JsonRecord } from "./codex-app-server-jsonl.js";
 import { canonicalCodexJson } from "./codex-app-server-permission-boundary.js";
 import type { CodexAdmittedThreadItem } from "./codex-app-server-thread-item.js";
+import type { CodexItemTextSegments } from "./codex-app-server-thread-item-lifecycle.js";
+import type { CodexAppServerTextSegments } from "./codex-app-server-text-segments.js";
 
 export interface CodexActiveTurnProgress {
   activeItems: Map<string, CodexAdmittedThreadItem>;
   activeAgentItemId?: string;
+  activeAssistantText?: CodexAppServerTextSegments;
+  assistantTurnText?: CodexAppServerTextSegments;
   readonly completedItems: CodexAdmittedThreadItem[];
   cursor: number;
   interruptAcknowledged: boolean;
   interruptDeadline: number | undefined;
   interruptRequestId?: string;
+  readonly itemTextSegments: Map<string, CodexItemTextSegments>;
   notificationCount: number;
   notificationBytes: number;
   readonly observedResponseSemantics: Map<string, string>;
   readonly observedItemIds: Set<string>;
-  pendingAssistantText: string;
-  pendingCanonicalAssistantText: string;
   turnStarted: boolean;
 }
 
@@ -25,9 +28,9 @@ export interface CodexActiveTurnCompletion {
 
 export const createCodexActiveTurnProgress = (): CodexActiveTurnProgress => ({
   activeItems: new Map(), completedItems: [], cursor: 0, interruptAcknowledged: false,
-  interruptDeadline: undefined, notificationCount: 0, notificationBytes: 0,
+  interruptDeadline: undefined, itemTextSegments: new Map(), notificationCount: 0, notificationBytes: 0,
   observedResponseSemantics: new Map(), observedItemIds: new Set(),
-  pendingAssistantText: "", pendingCanonicalAssistantText: "", turnStarted: false,
+  turnStarted: false,
 });
 
 export const admitCodexActiveNotification = (input: {
