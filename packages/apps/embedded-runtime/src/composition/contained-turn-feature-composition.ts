@@ -125,7 +125,7 @@ export const composeHostCustodiedContainedTurn = (
       provider: owner.provider,
     }));
   } catch (error) {
-    disposeAfterContainedTurnConstructionFailure(error, () => owner.dispose());
+    return disposeAfterContainedTurnConstructionFailure(error, () => owner.dispose());
   }
   let disposed = false;
   return Object.freeze({

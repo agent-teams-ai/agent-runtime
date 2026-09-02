@@ -35,7 +35,7 @@ export const composeHostCustodiedAgentRuntimeHost = (
       containedTurn: containedTurn.feature,
     }));
   } catch (error) {
-    disposeAfterContainedTurnConstructionFailure(error, containedTurn.dispose);
+    return disposeAfterContainedTurnConstructionFailure(error, containedTurn.dispose);
   }
   const dispose = async (): Promise<void> => {
     await host.dispose();
