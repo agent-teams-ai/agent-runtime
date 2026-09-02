@@ -48,6 +48,10 @@ jobs:
       - name: Run quality gate
         run: pnpm check
 
+      - name: Run advisory quality diagnostics
+        continue-on-error: true
+        run: pnpm quality:diagnostic
+
   runtime-macos:
     name: runtime-macos
     runs-on: macos-15

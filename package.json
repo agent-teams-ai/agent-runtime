@@ -35,6 +35,7 @@
     "lint:changed": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config --format agent --no-error-on-unmatched-pattern",
     "product:build": "pnpm --filter './packages/**' -r run build",
     "product:check": "pnpm --filter './packages/**' -r run clean && pnpm product:build && pnpm --filter './packages/**' -r run test",
+    "quality:diagnostic": "agent-teams-foundation gate run ci-diagnostics --format json",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
     "architecture:runtime-setup-l0-evidence": "node --test scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs && node scripts/architecture/runtime-setup-l0-evidence.mjs --check",
     "architecture:runtime-setup-l0-evidence:capture": "node scripts/architecture/runtime-setup-l0-evidence.mjs --capture",
