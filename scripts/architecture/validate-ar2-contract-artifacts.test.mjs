@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
 import {
   auditLegacyInventoryEvidence,
+  readAr2CoverageTestSource,
   validateAr2ContractArtifacts,
   validateContractCoverage,
   validateClaudeDiagnosticParity,
@@ -266,4 +270,106 @@ test("AR-2 validator rejects fixture or executed-test mapping drift", async () =
     () => validateContractCoverage(testReferenceDrift),
     /must name exactly one declared Node test/u,
   );
+});
+
+test("AR-2 coverage custody rejects unsafe paths before reading evidence", async t => {
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "ar2-evidence-custody-"));
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }));
+  const testsRoot = join(fixtureRoot, "packages", "contexts", "example", "tests");
+  const nestedRoot = join(testsRoot, "nested");
+  const outsideRoot = join(fixtureRoot, "outside");
+  await mkdir(nestedRoot, { recursive: true });
+  await mkdir(outsideRoot);
+  await writeFile(join(nestedRoot, "valid.test.ts"), "export {};\n");
+  await writeFile(join(outsideRoot, "outside.test.ts"), "throw new Error('outside');\n");
+  await symlink(join(outsideRoot, "outside.test.ts"), join(nestedRoot, "linked.test.ts"));
+  await symlink(outsideRoot, join(testsRoot, "linked-ancestor"));
+  await mkdir(join(nestedRoot, "directory.test.ts"));
+
+  const evidenceRoot = pathToFileURL(`${fixtureRoot}/`);
+  const validPath = "packages/contexts/example/tests/nested/valid.test.ts";
+  const defaultFileSystem = { lstat, readdir, readFile, realpath };
+  await assert.doesNotReject(readAr2CoverageTestSource(validPath, { evidenceRoot }));
+
+  await t.test("rejects absolute, encoded traversal, dot segments, and backslashes", async () => {
+    for (const unsafePath of [
+      join(fixtureRoot, "outside", "outside.test.ts"),
+      "packages/contexts/example/tests/%2e%2e/outside.test.ts",
+      "packages/contexts/example/tests/nested/../outside.test.ts",
+      "packages\\contexts\\example\\tests\\outside.test.ts",
+      "file:///tmp/outside.test.ts",
+    ]) {
+      await assert.rejects(
+        readAr2CoverageTestSource(unsafePath, { evidenceRoot }),
+        error => error.message.includes("<invalid> AR-2 evidence custody rejected")
+          && !error.message.includes(fixtureRoot),
+      );
+    }
+  });
+
+  await t.test("rejects a symbolic-link evidence file", async () => {
+    await assert.rejects(
+      readAr2CoverageTestSource(
+        "packages/contexts/example/tests/nested/linked.test.ts",
+        { evidenceRoot },
+      ),
+      /symbolic links are forbidden/u,
+    );
+  });
+
+  await t.test("rejects a symbolic-link ancestor", async () => {
+    await assert.rejects(
+      readAr2CoverageTestSource(
+        "packages/contexts/example/tests/linked-ancestor/outside.test.ts",
+        { evidenceRoot },
+      ),
+      /symbolic links are forbidden/u,
+    );
+  });
+
+  await t.test("rejects a non-regular evidence target", async () => {
+    await assert.rejects(
+      readAr2CoverageTestSource(
+        "packages/contexts/example/tests/nested/directory.test.ts",
+        { evidenceRoot },
+      ),
+      /evidence target is not a regular file/u,
+    );
+  });
+
+  await t.test("rejects a canonical realpath escape", async () => {
+    await assert.rejects(
+      readAr2CoverageTestSource(validPath, {
+        evidenceRoot,
+        fileSystem: {
+          ...defaultFileSystem,
+          realpath: async path => path.endsWith("valid.test.ts")
+            ? join(outsideRoot, "outside.test.ts")
+            : realpath(path),
+        },
+      }),
+      /canonical path escapes its package tests root/u,
+    );
+  });
+
+  await t.test("does not read content before custody validation succeeds", async () => {
+    let contentReads = 0;
+    await assert.rejects(
+      readAr2CoverageTestSource(
+        "packages/contexts/example/tests/nested/linked.test.ts",
+        {
+          evidenceRoot,
+          fileSystem: {
+            ...defaultFileSystem,
+            readFile: async () => {
+              contentReads += 1;
+              return "unreachable";
+            },
+          },
+        },
+      ),
+      /symbolic links are forbidden/u,
+    );
+    assert.equal(contentReads, 0);
+  });
 });

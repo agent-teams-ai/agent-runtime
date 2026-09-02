@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 
 export { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
@@ -43,38 +43,55 @@ const fixtureProjection = ({ id, expected, diagnostic }) => ({
 });
 
 export const EXPECTED_FIXTURE_MATRIX = Object.freeze([
-  { id: "installation-absent", expected: "observed-with-install-action" },
-  { id: "installation-one-alias", expected: "found-unverified" },
-  { id: "installation-multiple-aliases", expected: "identity-grouped" },
-  { id: "source-user-only", expected: "source-bound-intent" },
-  { id: "source-shared-project-only", expected: "source-bound-intent" },
-  { id: "source-project-local-only", expected: "source-bound-intent" },
-  { id: "sources-conflict", expected: "two-observations-no-winner" },
-  { id: "malformed-higher-precedence", expected: "unrelated-source-preserved" },
-  { id: "duplicate-json-keys", diagnostic: "config_duplicate_key" },
-  { id: "bom", diagnostic: "config_parse_failed" },
-  { id: "invalid-utf8", diagnostic: "config_invalid_utf8" },
-  { id: "oversized-json", diagnostic: "config_too_large" },
-  { id: "deep-json", diagnostic: "config_parse_failed" },
-  { id: "unsupported-effort-max", diagnostic: "setting_value_unsupported" },
-  { id: "provider-route-model", expected: "provider-deployment-deferred" },
-  { id: "secret-sentinels", diagnostic: "secret_setting_rejected" },
-  { id: "credential-material", diagnostic: "credential_material_rejected" },
-  { id: "untrusted-workspace", diagnostic: "source_untrusted" },
-  { id: "stale-source", diagnostic: "source_epoch_stale" },
-  { id: "unsupported-platform", diagnostic: "unsupported_platform" },
-  { id: "unsupported-dialect", diagnostic: "configuration_dialect_unsupported" },
-  { id: "access-scope-limit-exceeded", diagnostic: "access_scope_limit_exceeded" },
-  { id: "capability-unavailable", diagnostic: "capability_unavailable" },
-  { id: "model-default-special", expected: "provider-default" },
-  { id: "model-exact-name", expected: "exact-name" },
-  { id: "model-arbitrary-selector-deferred", expected: "unclassified-selector-deferred" },
+  { id: "installation-absent", expected: "observed-with-install-action" }, { id: "installation-one-alias", expected: "found-unverified" }, { id: "installation-multiple-aliases", expected: "identity-grouped" }, { id: "source-user-only", expected: "source-bound-intent" },
+  { id: "source-shared-project-only", expected: "source-bound-intent" }, { id: "source-project-local-only", expected: "source-bound-intent" }, { id: "sources-conflict", expected: "two-observations-no-winner" }, { id: "malformed-higher-precedence", expected: "unrelated-source-preserved" },
+  { id: "duplicate-json-keys", diagnostic: "config_duplicate_key" }, { id: "bom", diagnostic: "config_parse_failed" }, { id: "invalid-utf8", diagnostic: "config_invalid_utf8" }, { id: "oversized-json", diagnostic: "config_too_large" },
+  { id: "deep-json", diagnostic: "config_parse_failed" }, { id: "unsupported-effort-max", diagnostic: "setting_value_unsupported" }, { id: "provider-route-model", expected: "provider-deployment-deferred" }, { id: "secret-sentinels", diagnostic: "secret_setting_rejected" },
+  { id: "credential-material", diagnostic: "credential_material_rejected" }, { id: "untrusted-workspace", diagnostic: "source_untrusted" }, { id: "stale-source", diagnostic: "source_epoch_stale" }, { id: "unsupported-platform", diagnostic: "unsupported_platform" },
+  { id: "unsupported-dialect", diagnostic: "configuration_dialect_unsupported" }, { id: "access-scope-limit-exceeded", diagnostic: "access_scope_limit_exceeded" }, { id: "capability-unavailable", diagnostic: "capability_unavailable" }, { id: "model-default-special", expected: "provider-default" },
+  { id: "model-exact-name", expected: "exact-name" }, { id: "model-arbitrary-selector-deferred", expected: "unclassified-selector-deferred" },
 ]);
 
+const lexicalCustodyFailure = reason => assert.fail(`<invalid> AR-2 evidence custody rejected: ${reason}`);
+
 const packageTestCoordinates = testFile => {
-  const match = /^(packages\/[^/]+\/[^/]+)\/(tests\/.+\.test\.ts)$/u.exec(testFile);
-  assert.ok(match, `${testFile} must be a package-owned test file`);
+  if (typeof testFile !== "string") {lexicalCustodyFailure("the path must be a string");}
+  if (isAbsolute(testFile) || win32.isAbsolute(testFile) || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(testFile)) {lexicalCustodyFailure("the path must be repository-relative");} if (!/^[A-Za-z0-9._/-]+$/u.test(testFile)) {lexicalCustodyFailure("the path must use unencoded portable separators and ASCII segments");}
+  if (testFile.split("/").some(segment => segment === "" || segment === "." || segment === "..")) {lexicalCustodyFailure("the path must not contain empty or dot segments");}
+  const match = /^(packages\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)\/(tests\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\.test\.ts)$/u.exec(testFile);
+  if (!match) {lexicalCustodyFailure("the path must name a package-owned test file");}
   return { packageRoot: match[1], relativeTestFile: match[2] };
+};
+
+const defaultEvidenceFileSystem = Object.freeze({ lstat, readdir, readFile, realpath });
+
+const custodyFailure = (evidencePath, reason) => assert.fail(`${evidencePath} AR-2 evidence custody rejected: ${reason}`);
+
+const asDirectoryUrl = root => {
+  const url = root instanceof URL ? new URL(root) : pathToFileURL(resolve(root));
+  if (!url.pathname.endsWith("/")) {url.pathname += "/";}
+  return url;
+};
+
+export const readAr2CoverageTestSource = async (testFile, options = {}) => {
+  const { evidenceRoot = repositoryRoot, fileSystem = defaultEvidenceFileSystem } = options;
+  const { packageRoot, relativeTestFile } = packageTestCoordinates(testFile);
+  const repositoryPath = fileURLToPath(asDirectoryUrl(evidenceRoot)); const segments = testFile.split("/");
+  let currentPath = repositoryPath;
+  const observe = async (operation, reason) => {try {return await operation();} catch {custodyFailure(testFile, reason);}};
+  for (const [index, segment] of segments.entries()) {
+    const names = await observe(() => fileSystem.readdir(currentPath), "an ancestor directory is missing or unreadable");
+    const portableIdentity = segment.normalize("NFC").toLowerCase(); const identityMatches = names.filter(name => name.normalize("NFC").toLowerCase() === portableIdentity);
+    if (identityMatches.length !== 1 || identityMatches[0] !== segment) {custodyFailure(testFile, "a path segment is missing or has ambiguous identity");}
+    currentPath = join(currentPath, segment);
+    const metadata = await observe(() => fileSystem.lstat(currentPath), "a path segment is missing or unreadable");
+    if (metadata.isSymbolicLink()) {custodyFailure(testFile, "symbolic links are forbidden");}
+    if (index === segments.length - 1 ? !metadata.isFile() : !metadata.isDirectory()) {custodyFailure(testFile, index === segments.length - 1 ? "the evidence target is not a regular file" : "an ancestor is not a directory");}
+  }
+  const allowedRootPath = join(repositoryPath, packageRoot, "tests"); const canonicalPaths = () => Promise.all([fileSystem.realpath(allowedRootPath), fileSystem.realpath(currentPath)]);
+  const [resolvedAllowedRoot, resolvedEvidencePath] = await observe(canonicalPaths, "canonical path identity could not be established");
+  const containedPath = relative(resolvedAllowedRoot, resolvedEvidencePath); if (containedPath === ".." || containedPath.startsWith(`..${sep}`) || isAbsolute(containedPath)) {custodyFailure(testFile, "canonical path escapes its package tests root");}
+  const source = await observe(() => fileSystem.readFile(currentPath, "utf8"), "the validated evidence file could not be read"); return { packageRoot, relativeTestFile, source };
 };
 
 const testScriptExecutes = (script, relativeTestFile) => script
@@ -176,11 +193,9 @@ export const validateClaudeExpectedLimitationsParity = (frozenLimitations, runti
 
 const loadContractCoverageEvidence = async contractCoverage => {
   const testFiles = [...new Set(contractCoverage.cases.map(entry => entry.testFile))];
-  const testSources = new Map(await Promise.all(testFiles.map(async testFile => [
-    testFile,
-    await readFile(new URL(testFile, repositoryRoot), "utf8"),
-  ])));
-  const packageRoots = [...new Set(testFiles.map(testFile => packageTestCoordinates(testFile).packageRoot))];
+  const retainedSources = await Promise.all(testFiles.map(testFile => readAr2CoverageTestSource(testFile)));
+  const testSources = new Map(retainedSources.map(({ source }, index) => [testFiles[index], source]));
+  const packageRoots = [...new Set(retainedSources.map(({ packageRoot }) => packageRoot))];
   const packageTestScripts = new Map(await Promise.all(packageRoots.map(async packageRoot => {
     const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
     return [packageRoot, packageManifest.scripts?.test];
@@ -324,12 +339,6 @@ const validateEvidenceAnchor = async (entry, evidenceRoot) => {
   } else {
     assert.fail(`${entry.path} unsupported locator ${entry.locator}`);
   }
-};
-
-const asDirectoryUrl = root => {
-  const url = root instanceof URL ? new URL(root) : pathToFileURL(resolve(root));
-  if (!url.pathname.endsWith("/")) {url.pathname += "/";}
-  return url;
 };
 
 const validateInventoryEvidenceFor = async (inventory, repository, evidenceRoot) => {

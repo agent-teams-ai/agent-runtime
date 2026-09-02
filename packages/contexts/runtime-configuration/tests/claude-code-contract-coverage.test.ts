@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { readAr2CoverageTestSource } from "../../../../scripts/architecture/validate-ar2-contract-artifacts.mjs";
+
 const fixtureRoot = new URL("./fixtures/claude-code-settings/", import.meta.url);
 const repositoryRoot = new URL("../../../..", import.meta.url);
 const readJson = async (path: URL) => JSON.parse(await readFile(path, "utf8"));
@@ -44,7 +46,7 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         Object.keys(entry).toSorted(),
         ["id", entry.diagnostic === undefined ? "expected" : "diagnostic", "testFile", "testName"].toSorted(),
       );
-      const source = await readFile(new URL(entry.testFile, repositoryRoot), "utf8");
+      const { packageRoot, relativeTestFile, source } = await readAr2CoverageTestSource(entry.testFile);
       const declaration = new RegExp(
         `\\btest\\(\\s*${escapeRegExp(JSON.stringify(entry.testName))}\\s*,`,
         "gu",
@@ -54,9 +56,6 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         1,
         `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
       );
-      const coordinates = /^(packages\/[^/]+\/[^/]+)\/(tests\/.+\.test\.ts)$/u.exec(entry.testFile);
-      assert.ok(coordinates, `${entry.testFile} must be a package-owned test file`);
-      const [, packageRoot, relativeTestFile] = coordinates;
       const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
       assert.equal(
         testScriptExecutes(packageManifest.scripts?.test ?? "", relativeTestFile),
