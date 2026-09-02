@@ -113,6 +113,9 @@ const validateCanonicalDigests = (operation: ContainedTurnKernelOperation): void
   }
 };
 
+const validateAuthorityRevisionNamespace = (name: string, value: string, acceptedPrefixes: readonly string[]): void =>
+  invariant(acceptedPrefixes.some((prefix) => value.startsWith(prefix)), `${name} must use its authority revision namespace`);
+
 const validateAuthorityReferences = (operation: ContainedTurnKernelOperation): void => {
   const references: Array<readonly [string, string]> = [
     ["accessRef", operation.providerAccessSnapshot.accessRef],
@@ -135,6 +138,20 @@ const validateAuthorityReferences = (operation: ContainedTurnKernelOperation): v
   }
   if (operation.resultRef !== undefined) {references.push(["resultRef", operation.resultRef]);}
   for (const [name, value] of references) {validateContainedTurnText(name, value, CONTAINED_TURN_LIMITS.text.identifier);}
+  validateAuthorityRevisionNamespace(
+    "operationAuthorityRevision",
+    operation.acceptedAuthorityVector.operationAuthorityRevision,
+    ["operation-authority:", "operation-revision:"],
+  );
+  validateAuthorityRevisionNamespace(
+    "securityAuthorityRevision",
+    operation.acceptedAuthorityVector.securityAuthorityRevision,
+    ["security-authority:", "security-revision:"],
+  );
+  invariant(
+    operation.acceptedAuthorityVector.operationAuthorityRevision !== operation.acceptedAuthorityVector.securityAuthorityRevision,
+    "operation and security authority revisions must remain distinct",
+  );
   invariant(
     Number.isSafeInteger(operation.providerAccessSnapshot.credentialGeneration) &&
       operation.providerAccessSnapshot.credentialGeneration >= 1 &&

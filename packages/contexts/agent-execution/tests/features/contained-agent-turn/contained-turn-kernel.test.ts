@@ -117,6 +117,28 @@ test("freezes the exact seven consumer-owned dependencies and separate provider 
     /Provider Access snapshot must be an exact closed record/u,
   );
 });
+
+test("requires disjoint operation and security authority revision namespaces", () => {
+  assert.throws(
+    () => validateContainedTurnOperation(createOperation({
+      acceptedAuthorityVector: {
+        ...authorityVector,
+        securityAuthorityRevision: authorityVector.operationAuthorityRevision,
+      },
+    })),
+    /securityAuthorityRevision must use its authority revision namespace/u,
+  );
+  assert.throws(
+    () => validateContainedTurnOperation(createOperation({
+      acceptedAuthorityVector: {
+        ...authorityVector,
+        operationAuthorityRevision: "revision:shared",
+      },
+    })),
+    /operationAuthorityRevision must use its authority revision namespace/u,
+  );
+});
+
 test("freezes the accepted PostgreSQL command replay and semantic-conflict invariant", async () => {
   const acceptedByCommand = new Map<string, ContainedTurnKernelOperation>();
   const accept: ContainedTurnKernelOperationStore["accept"] = async (candidate, ownerAuthority) => {

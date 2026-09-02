@@ -4,6 +4,9 @@ import { lstat, mkdir, open, readFile, rename, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { test } from "node:test";
 
+const descriptorPathFor = (descriptor: number): string =>
+  `${process.platform === "darwin" ? "/dev/fd" : "/proc/self/fd"}/${descriptor}`;
+
 import { DarwinCooperativeProcessCustody } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.js";
 import { createStaticHostCustodyLaunchPlanResolver } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/static-host-custody-launch-plan-resolver.js";
 import { createDarwinCooperativeProcessCustodyTestSupport } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody-test-support.js";
@@ -148,7 +151,7 @@ test("Darwin delegated custody preserves exact one-start replay and conflicting 
     launchPlan: entry.plan,
     workspaceAuthority: Object.freeze({
       canonicalPath: workspaceRef,
-      descriptorPath: `/proc/self/fd/${workspaceHandle.fd}`,
+      descriptorPath: descriptorPathFor(workspaceHandle.fd),
       identity: Object.freeze({
         dev: workspaceStats.dev,
         ino: workspaceStats.ino,
@@ -194,7 +197,7 @@ test("Darwin delegated reservation proves no-start but retains its root for reco
     launchPlan: entry.plan,
     workspaceAuthority: Object.freeze({
       canonicalPath: workspaceRef,
-      descriptorPath: `/proc/self/fd/${workspaceHandle.fd}`,
+      descriptorPath: descriptorPathFor(workspaceHandle.fd),
       identity: Object.freeze({
         dev: workspaceStats.dev,
         ino: workspaceStats.ino,
@@ -256,7 +259,7 @@ test("Darwin delegated error-before-start retains its proved-unused root for rec
     launchPlan: entry.plan,
     workspaceAuthority: Object.freeze({
       canonicalPath: workspaceRef,
-      descriptorPath: `/proc/self/fd/${workspaceHandle.fd}`,
+      descriptorPath: descriptorPathFor(workspaceHandle.fd),
       identity: Object.freeze({
         dev: workspaceStats.dev,
         ino: workspaceStats.ino,
@@ -370,7 +373,7 @@ test("Darwin fail-closed release preserves destination exclusivity and swapped p
       launchPlan: entry.plan,
       workspaceAuthority: Object.freeze({
         canonicalPath: workspaceRef,
-        descriptorPath: `/proc/self/fd/${workspaceHandle.fd}`,
+        descriptorPath: descriptorPathFor(workspaceHandle.fd),
         identity: Object.freeze({
           dev: workspaceStats.dev,
           ino: workspaceStats.ino,

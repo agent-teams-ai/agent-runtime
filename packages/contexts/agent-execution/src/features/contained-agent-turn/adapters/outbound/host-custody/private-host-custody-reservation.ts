@@ -94,7 +94,12 @@ export const bindPrivateHostCustodyReservation = async (
   if (authority.canonicalPath !== input.workspaceRef || authority.identity.mountId.length === 0) {
     throw new TypeError("Host Custody workspace authority path mismatch");
   }
-  const descriptor = openSync(authority.descriptorPath, constants.O_RDONLY | constants.O_DIRECTORY);
+  // Linux descriptor paths support O_DIRECTORY directly. macOS /dev/fd entries
+  // are descriptors rather than directory names, so the kernel fstat check below
+  // provides the directory invariant without asking open(2) for O_DIRECTORY.
+  const descriptorFlags = constants.O_RDONLY |
+    (runtimeProfile.containmentProfile === "strict-linux-cgroup-v2" ? constants.O_DIRECTORY : 0);
+  const descriptor = openSync(authority.descriptorPath, descriptorFlags);
   testHooks.get(owner)?.descriptorLifecycle?.("opened");
   let descriptorOwned = true;
   const closeDescriptor = (): void => {
