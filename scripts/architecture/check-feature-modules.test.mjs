@@ -326,7 +326,8 @@ const runFixture = async (fixture, initialRoot, state) => {
   }
   if (fixture.generatedLargeFile) {files[fixture.generatedLargeFile.path] = " ".repeat(fixture.generatedLargeFile.bytes);}
   if (fixture.generatedSourceFile) {
-    files[fixture.generatedSourceFile.path] = `${fixture.generatedSourceFile.prefix ?? ""}${`${fixture.generatedSourceFile.line ?? "export {};"}\n`.repeat(fixture.generatedSourceFile.lines)}${fixture.generatedSourceFile.suffix ?? ""}`;
+    const separator = fixture.generatedSourceFile.separator ?? "\n";
+    files[fixture.generatedSourceFile.path] = `${fixture.generatedSourceFile.prefix ?? ""}${`${fixture.generatedSourceFile.line ?? "export {};"}${separator}`.repeat(fixture.generatedSourceFile.lines)}${fixture.generatedSourceFile.suffix ?? ""}`;
   }
   await writeFixtureFiles(initialRoot, files);
   await applyFixtureHardlinks(initialRoot, fixture.hardlinks);

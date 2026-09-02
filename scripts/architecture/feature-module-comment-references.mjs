@@ -1,6 +1,9 @@
-const lineAt = (source, offset) => source.slice(0, Math.max(0, offset ?? 0)).split("\n").length;
+const LINE_SEPARATOR = /\r\n|[\n\r\u2028\u2029]/u;
+const lineAt = (source, offset) => source.slice(0, Math.max(0, offset ?? 0)).split(LINE_SEPARATOR).length;
 const horizontal = (character) => character === " " || character === "\t";
-const whitespace = (character) => horizontal(character) || character === "\r" || character === "\n";
+const lineBreak = (character) => ["\r", "\n", "\u2028", "\u2029"].includes(character);
+const whitespace = (character) => horizontal(character) || lineBreak(character);
+const triviaWhitespace = (character) => Boolean(character) && /\s/u.test(character);
 const nameCharacter = (character) => Boolean(character) && (
   character >= "A" && character <= "Z"
   || character >= "a" && character <= "z"
@@ -73,8 +76,9 @@ const tripleSlashRecord = (raw, line) => {
 
 const TYPE_TAGS = new Set([
   "arg", "argument", "augments", "enum", "extends", "implements", "param", "prop", "property",
-  "return", "returns", "satisfies", "this", "type", "typedef",
+  "return", "returns", "satisfies", "this", "throws", "typedef",
 ]);
+const OPTIONAL_BRACE_TYPE_TAGS = new Set(["type"]);
 
 const typeExpressionEnd = (raw, open) => {
   let depth = 0, quote;
@@ -138,29 +142,89 @@ const jsdocRecords = (raw, start, source) => {
   const records = [];
   let lineStart = 3;
   while (lineStart < raw.length) {
-    let lineEnd = raw.indexOf("\n", lineStart);
-    if (lineEnd < 0) {lineEnd = raw.length;}
+    let lineEnd = lineStart;
+    while (lineEnd < raw.length && !lineBreak(raw[lineEnd])) {lineEnd += 1;}
     let index = skip(raw, lineStart, horizontal, lineEnd);
     if (raw[index] === "*") {index = skip(raw, index + 1, horizontal, lineEnd);}
     if (raw[index] === "@") {
       const tagStart = index, parsed = readName(raw, index + 1, lineEnd), tag = parsed.name;
-      if (TYPE_TAGS.has(tag)) {
+      if (TYPE_TAGS.has(tag) || tag === "template") {
         const open = skip(raw, parsed.next, horizontal, lineEnd);
         if (raw[open] === "{") {
           records.push(...importTypeRecords({ begin: open + 1, end: typeExpressionEnd(raw, open), raw, source, start }));
         }
+      } else if (OPTIONAL_BRACE_TYPE_TAGS.has(tag)) {
+        const open = skip(raw, parsed.next, horizontal, lineEnd);
+        const begin = raw[open] === "{" ? open + 1 : open;
+        const end = raw[open] === "{" ? typeExpressionEnd(raw, open) : lineEnd;
+        records.push(...importTypeRecords({ begin, end, raw, source, start }));
       } else if (tag === "import") {
         records.push(importTagRecord({ contentStart: parsed.next, lineEnd, raw, source, start, tagStart }));
       }
     }
-    lineStart = lineEnd + 1;
+    lineStart = lineEnd + (raw[lineEnd] === "\r" && raw[lineEnd + 1] === "\n" ? 2 : 1);
   }
   return records;
 };
 
+const JSDOC_HOST_TYPES = new Set([
+  "ArrowFunctionExpression", "BreakStatement", "CallSignature", "ClassDeclaration", "ClassExpression",
+  "Constructor", "ConstructorType", "ConstructSignature", "ContinueStatement", "DebuggerStatement",
+  "DoWhileStatement", "EmptyStatement", "EnumDeclaration", "EnumMember", "ExportAllDeclaration",
+  "ExportDefaultDeclaration", "ExportNamedDeclaration", "ExpressionStatement", "ForInStatement",
+  "ForOfStatement", "ForStatement", "FunctionDeclaration", "FunctionExpression", "FunctionType",
+  "IfStatement", "ImportDeclaration", "ImportExpression", "JSXAttribute", "LabeledStatement",
+  "MethodDefinition", "MethodSignature", "ModuleDeclaration", "NamedTupleMember", "NamespaceExportDeclaration",
+  "ObjectMethod", "ObjectProperty", "ParenthesizedExpression", "PropertyDefinition", "PropertySignature",
+  "ReturnStatement", "StaticBlock", "SwitchStatement", "ThrowStatement", "TryStatement", "TSCallSignatureDeclaration",
+  "TSConstructSignatureDeclaration", "TSConstructorType", "TSEnumDeclaration", "TSEnumMember",
+  "TSDeclareFunction", "TSFunctionType", "TSImportEqualsDeclaration", "TSInterfaceDeclaration", "TSMethodSignature",
+  "TSModuleDeclaration", "TSPropertySignature", "TSTypeAliasDeclaration", "TSTypeParameter",
+  "VariableDeclaration", "WhileStatement", "WithStatement",
+]);
+
+const childNodes = (node) => Object.entries(node ?? {}).flatMap(([key, value]) => {
+  if (["comments", "errors", "parent", "tokens"].includes(key)) {return [];}
+  if (Array.isArray(value)) {return value.filter((item) => item && typeof item === "object" && typeof item.type === "string");}
+  return value && typeof value === "object" && typeof value.type === "string" ? [value] : [];
+});
+
+const attachmentIndex = (program, source, comments) => {
+  const hosts = new Set(), topLevelRanges = [];
+  const visit = (node, mayAttach = true) => {
+    if (!node || typeof node !== "object") {return;}
+    if (mayAttach && JSDOC_HOST_TYPES.has(node.type) && Number.isInteger(node.start)) {hosts.add(node.start);}
+    for (const child of childNodes(node)) {
+      const nestedExportDeclaration = child === node.declaration
+        && ["ExportDefaultDeclaration", "ExportNamedDeclaration"].includes(node.type);
+      visit(child, !nestedExportDeclaration);
+    }
+  };
+  for (const node of program.body ?? []) {
+    if (Number.isInteger(node.start) && Number.isInteger(node.end)) {topLevelRanges.push({ end: node.end, start: node.start });}
+    visit(node);
+  }
+  const commentRanges = new Map((comments ?? []).map(commentRange).filter(Boolean).map((range) => [range.start, range]));
+  const triviaEnd = (range) => {
+    let cursor = range.end;
+    while (cursor < source.length) {
+      cursor = skip(source, cursor, triviaWhitespace);
+      const following = commentRanges.get(cursor);
+      if (!following) {break;}
+      cursor = following.end;
+    }
+    return cursor;
+  };
+  const topLevelAtEof = (range) => !topLevelRanges.some(({ end, start }) => start < range.start && range.end < end);
+  return (range) => {
+    const next = triviaEnd(range);
+    return hosts.has(next) || next === source.length && topLevelAtEof(range);
+  };
+};
+
 export const commentImportRecords = (program, source, comments) => {
   const boundary = Math.min(program.body?.[0]?.start ?? source.length, program.directives?.[0]?.start ?? source.length);
-  const records = [];
+  const records = [], isAttachedJSDoc = attachmentIndex(program, source, comments);
   for (const comment of comments ?? []) {
     const range = commentRange(comment);
     if (!range) {continue;}
@@ -169,7 +233,9 @@ export const commentImportRecords = (program, source, comments) => {
       const reference = tripleSlashRecord(raw, lineAt(source, range.start));
       if (reference) {records.push(reference);}
     }
-    if (comment.type === "Block" && raw.startsWith("/**")) {records.push(...jsdocRecords(raw, range.start, source));}
+    if (comment.type === "Block" && raw.startsWith("/**") && isAttachedJSDoc(range)) {
+      records.push(...jsdocRecords(raw, range.start, source));
+    }
   }
   return records;
 };

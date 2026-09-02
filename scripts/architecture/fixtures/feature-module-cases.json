@@ -603,6 +603,25 @@
       ]
     },
     {
+      "name": "typescript-recognized-jsdoc-type-tags-are-forbidden-in-domain",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "/** @throws {import(\"external-throws\").Failure} */\nexport function fail() {}\n/** @template {import(\"external-template\").Constraint} T */\nexport function identity(value) { return value; }\n/** @type import(\"external-type\").Value */\nexport const value = undefined;\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 3 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 5 }
+      ]
+    },
+    {
+      "name": "syntactically-valid-unattached-jsdoc-is-not-a-dependency",
+      "files": {
+        "src/features/alpha/domain/value.ts": "export const values = [\n  true /** @type {import(\"external-inline\").Value} */,\n  false,\n];\nexport function value() {\n  return true;\n  /** @throws {import(\"external-block-end\").Failure} */\n}\nexport /** @type {import(\"external-after-modifier\").Value} */ const exported = true;\n"
+      },
+      "expected": []
+    },
+    {
       "name": "compiler-reference-precedence-and-malformed-references-are-enforced",
       "files": {
         "src/features/alpha/domain/value.ts": null,
@@ -1555,6 +1574,31 @@
       "generatedSourceFile": { "path": "src/features/alpha/domain/too-long.ts", "lines": 501 },
       "cliRuns": [{ "arguments": [], "exit": 1, "output": "src/features/alpha/domain/too-long.ts:1 FM_MAX_LINES src/features/alpha/domain/too-long.ts has 501 counted production lines; limit 500" }],
       "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "lf-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/lf-too-long.ts", "lines": 501, "separator": "\n" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/lf-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "crlf-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/crlf-too-long.ts", "lines": 501, "separator": "\r\n" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/crlf-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "lone-cr-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/cr-too-long.ts", "lines": 501, "separator": "\r" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/cr-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "unicode-line-separator-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/ls-too-long.ts", "lines": 501, "separator": "\u2028" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/ls-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "unicode-paragraph-separator-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/ps-too-long.ts", "lines": 501, "separator": "\u2029" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/ps-too-long.ts", "line": 1 }]
     },
     {
       "name": "application-counted-production-line-limit-is-enforced",
