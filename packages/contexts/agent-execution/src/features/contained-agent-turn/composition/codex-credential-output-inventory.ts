@@ -1,5 +1,3 @@
-import { types as utilTypes } from "node:util";
-
 const MAX_TOKENS = 256;
 const MAX_TOKEN_BYTES = 4_096;
 const MAX_AGGREGATE_BYTES = 65_536;
@@ -11,6 +9,9 @@ const getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const getPrototypeOf = Object.getPrototypeOf;
 const hasOwn = Object.hasOwn;
 const ownKeys = Reflect.ownKeys;
+const utilTypes = (process.getBuiltinModule("node:util") as {
+  readonly types: {readonly isProxy: (value: unknown) => boolean};
+}).types;
 const utf8ByteLength = Buffer.byteLength.bind(Buffer);
 
 interface ExpectedCredentialAuthority {

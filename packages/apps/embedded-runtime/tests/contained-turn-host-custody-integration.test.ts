@@ -16,6 +16,11 @@ import { DeterministicCurrentOwnerHost } from "../../../contexts/agent-execution
 import { createDependencies } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
+const codexInitialization = Object.freeze({
+  platformFamily: "unix" as const,
+  platformOs: "linux" as const,
+  userAgent: "agent-runtime/0.150.1 (Ubuntu 24.04; x86_64) synthetic (agent-runtime; codex-app-server-contained-turn:0.150.1)",
+});
 const setupCapabilities = Object.freeze({
   claudeCodeSetup: Object.freeze({
     authorizeClaudeCodeSetupInspection: Object.freeze({execute: unavailable}),
@@ -182,7 +187,7 @@ const submit = Object.freeze({
 
 test("product Host composition routes provider execution through the same custody authority", async () => {
   const root = await mkdtemp(join(tmpdir(), "embedded-host-custody-"));
-  const custody = new DeterministicCurrentOwnerHost();
+  const custody = new DeterministicCurrentOwnerHost(codexInitialization);
   try {
     const composed = await createCompositionInput(custody, root);
     const host = createHostCustodiedAgentRuntimeHost({
@@ -226,7 +231,7 @@ test("ambiguous Host containment stays nonterminal without releasing operation c
     const outcome = await product.feature.submit.execute(submit);
     assert.equal(outcome.status, "observed");
     assert.equal(outcome.status === "observed" && outcome.turn.status, "reconcile_required");
-    assert.equal(custody.containments, process.platform === "linux" ? 2 : 0);
+    assert.equal(custody.containments, process.platform === "linux" ? 1 : 0);
     assert.equal(custody.releases, 0);
     // A possibly live process retains its operation-private workspace in custody;
     // moving that workspace would manufacture cleanup evidence.

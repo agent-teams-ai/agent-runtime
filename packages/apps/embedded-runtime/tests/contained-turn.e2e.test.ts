@@ -718,12 +718,13 @@ test("caller abort after accepted response preserves the operation and explicit 
   const providerGate = new Promise<void>(resolve => {releaseProvider = resolve;});
   const controller = new AbortController();
   let fixture: ReturnType<typeof createDependencies>;
-  let beforeAbort: ReturnType<ReturnType<typeof createDependencies>["current"]>;
+  let reportProviderStarted!: () => void;
+  const providerStarted = new Promise<void>(resolve => {reportProviderStarted = resolve;});
   fixture = createDependencies({
     providerGate,
     providerStarted: () => {
-      beforeAbort = fixture.current();
       controller.abort(new DOMException("caller detached", "AbortError"));
+      reportProviderStarted();
     },
   });
   const feature = createContainedTurnFeature(fixture.dependencies);
@@ -743,15 +744,19 @@ test("caller abort after accepted response preserves the operation and explicit 
     intent: { mode: "analysis", prompt: "inspect disposable state" },
   }, { signal: controller.signal });
   assert.deepEqual(await submission, { operationId: fixtureOperationId, status: "accepted" });
-  await new Promise<void>(resolve => {setImmediate(resolve);});
+  await providerStarted;
+  while (fixture.current()?.providerExecution.kind !== "active") {
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+  }
 
-  assert.ok(beforeAbort !== undefined);
-  assert.equal(beforeAbort.cancellation.kind, "open");
-  assert.equal(beforeAbort.operationCutoff.kind, "open");
-  assert.equal(beforeAbort.output.fence.kind, "open");
-  assert.equal(beforeAbort.providerExecution.kind, "active");
+  const afterAbortBeforeCancellation = fixture.current();
+  assert.ok(afterAbortBeforeCancellation !== undefined);
+  assert.equal(afterAbortBeforeCancellation.cancellation.kind, "open");
+  assert.equal(afterAbortBeforeCancellation.operationCutoff.kind, "open");
+  assert.equal(afterAbortBeforeCancellation.output.fence.kind, "open");
+  assert.equal(afterAbortBeforeCancellation.providerExecution.kind, "active");
 
-  assert.equal(fixture.current(), beforeAbort);
+  assert.equal(fixture.current(), afterAbortBeforeCancellation);
   assert.equal(fixture.containmentCalls.value, 0);
   assert.equal(fixture.providerCalls.value, 1);
 
@@ -767,7 +772,7 @@ test("caller abort after accepted response preserves the operation and explicit 
     );
   }
   assert.equal(afterCancellation.operationCutoff.kind, "closed");
-  assert.ok(afterCancellation.revision > beforeAbort.revision);
+  assert.ok(afterCancellation.revision > afterAbortBeforeCancellation.revision);
   assert.equal(fixture.containmentCalls.value, 1);
   assert.equal(fixture.providerCalls.value, 1);
 });
