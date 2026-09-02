@@ -72,7 +72,11 @@ const settleConsumedGrantReceipts = async (
     settlementRequestId: containedTurnGrantSettlementRequestId(receipts.runtimeSecurity, disposition),
   }));}
   const results = await Promise.allSettled(effects);
-  return results.some(result => { if (result.status === "rejected") return true; const kind = (result.value as { readonly kind?: string }).kind; return kind !== "settled" && kind !== "already_settled"; });
+  return results.some(result => {
+    if (result.status === "rejected") {return true;}
+    const kind = (result.value as { readonly kind?: string }).kind;
+    return kind !== "settled" && kind !== "already_settled";
+  });
 };
 
 /**
