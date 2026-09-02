@@ -18,6 +18,8 @@ export type { ContainedTurnCapabilityBundle } from "./composition/contained-turn
 export {
   createContainedTurnFeatureFromProviderAccess,
   createHostCustodiedContainedTurn,
+  PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON,
+  ProviderRouteEnforcementUnsupportedError,
   type ContainedTurnHostProviderSelection,
   type ContainedTurnOuterCompositionDependencies,
   type HostCustodiedContainedTurnComposition,

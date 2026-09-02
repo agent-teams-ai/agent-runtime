@@ -5,14 +5,9 @@ import { lstat, mkdir, open, readFile, realpath, rmdir, stat, statfs, writeFile 
 import { isAbsolute, join, relative } from "node:path";
 
 import {
-  createCodexAppServerPermissionBoundary,
-  createCodexCurrentKernelOwner,
-  DarwinCooperativeProcessCustody,
-  NodeProviderProcessCustody,
-} from "../../dist/composition.js";
-import { selectCodexAppServerPlatformTuple } from "../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
-import { digestContainedTurnCanonicalValue } from "../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
-import { containedTurnIdentity } from "../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+  createProviderCandidateEvidenceEnvelope,
+  resolveCanaryExecutionProvenance,
+} from "./provider-candidate-evidence-envelope.mjs";
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const requiredEnvironment = name => {
@@ -170,9 +165,54 @@ const safeContainmentEvidence = (custody, opened, physicalContainment, platformT
   return safe;
 };
 
+const resolveCandidateExecution = () => {
+  const canaryId = "codex-contained-turn-live-canary/v1";
+  return resolveCanaryExecutionProvenance({
+    buildRootUrl: new URL("../../dist/", import.meta.url),
+    canaryId,
+    canarySourceUrl: import.meta.url,
+    claimedSourceSha: requiredEnvironment("AR_SOURCE_SHA"),
+    provider: "codex-app-server-current-kernel",
+  });
+};
+
+const loadCandidateBuild = async () => {
+  const [composition, tuple, codecs, identities] = await Promise.all([
+    import("../../dist/composition.js"),
+    import("../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js"),
+    import("../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js"),
+    import("../../dist/features/contained-agent-turn/domain/contained-turn-identities.js"),
+  ]);
+  return Object.freeze({ ...composition, ...tuple, ...codecs, ...identities });
+};
+
+const prepareCandidateEvidence = (platformTuple, executionProvenance) => {
+  const canaryId = "codex-contained-turn-live-canary/v1";
+  return Object.freeze({
+    binaryRevision: platformTuple.binaryRevision,
+    binarySha256: platformTuple.binarySha256,
+    packageIdentity: Object.freeze({
+      nativeRevision: platformTuple.nativePackageRevision,
+      wrapperRevision: platformTuple.packageRevision,
+    }),
+    platformTuple,
+    provider: "codex-app-server-current-kernel",
+    canaryId,
+    executionProvenance,
+  });
+};
+
 const run = async () => {
   const platformTarget = exactPlatformTarget();
+  const executionProvenance = await resolveCandidateExecution();
+  const candidateBuild = await loadCandidateBuild();
+  const {
+    containedTurnIdentity, createCodexAppServerPermissionBoundary, createCodexCurrentKernelOwner,
+    DarwinCooperativeProcessCustody, digestContainedTurnCanonicalValue, NodeProviderProcessCustody,
+    selectCodexAppServerPlatformTuple,
+  } = candidateBuild;
   const platformTuple = selectCodexAppServerPlatformTuple(platformTarget);
+  candidateEvidence = prepareCandidateEvidence(platformTuple, executionProvenance);
   const canaryRoot = await realpath(requiredEnvironment("AR_CODEX_CANARY_ROOT"));
   const workspaceRef = await realpath(requiredEnvironment("AR_CODEX_CANARY_WORKSPACE"));
   const privateRootPath = await realpath(requiredEnvironment("AR_CODEX_CANARY_PRIVATE_ROOT"));
@@ -294,20 +334,40 @@ const run = async () => {
   const containmentEvidence = safeContainmentEvidence(
     custody, observedCustody.opened(), physicalContainment, platformTarget,
   );
-  return Object.freeze({
-    binarySha256: platformTuple.binarySha256,
-    closureStatus: containmentEvidence.status,
-    containmentLimitations: containmentEvidence.limitations,
-    containmentProfile: containmentEvidence.profile,
-    outputDigest: sha256(output.join("")), outputEvents: finalCursor,
-    platformTarget, provider: "codex-app-server-current-kernel", status: "succeeded",
+  return createProviderCandidateEvidenceEnvelope({
+    ...candidateEvidence,
+    compositeContainment: "indeterminate",
+    observations: Object.freeze({
+      ...(physicalContainment.kind === "contained"
+        ? {containmentProofDigest: sha256(physicalContainment.proof.proofId)} : {}),
+      closureStatus: containmentEvidence.status,
+      containmentLimitations: containmentEvidence.limitations,
+      containmentProfile: containmentEvidence.profile,
+      outputDigest: sha256(output.join("")), outputEvents: finalCursor,
+    }),
+    physicalContainment: physicalContainment.kind,
+    status: "succeeded",
   });
 };
 
+let candidateEvidence;
 try {
   process.stdout.write(`${JSON.stringify(await run())}\n`);
 } catch (error) {
   const failure = error instanceof Error ? `${error.name}:${error.message}` : String(error);
-  process.stdout.write(`${JSON.stringify({errorDigest: sha256(failure), provider: "codex-app-server-current-kernel", status: "failed"})}\n`);
+  if (candidateEvidence === undefined) {
+    process.stderr.write(`invalid Codex canary invocation (${sha256(failure)})\n`);
+  } else {
+    try {
+      process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope({
+        ...candidateEvidence, compositeContainment: "indeterminate",
+        observations: Object.freeze({errorDigest: sha256(failure)}),
+        physicalContainment: "indeterminate", status: "failed",
+      }))}\n`);
+    } catch (provenanceError) {
+      const detail = provenanceError instanceof Error ? provenanceError.name : "UnknownError";
+      process.stderr.write(`invalid Codex canary evidence (${sha256(detail)})\n`);
+    }
+  }
   process.exitCode = 1;
 }

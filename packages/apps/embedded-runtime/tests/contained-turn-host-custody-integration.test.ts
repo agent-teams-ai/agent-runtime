@@ -7,11 +7,13 @@ import test from "node:test";
 import { createCodexAppServerPermissionBoundary } from "@agent-teams/agent-execution/composition";
 import {
   createHostCustodiedAgentRuntimeHost,
-  createHostCustodiedContainedTurn,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
+  ProviderRouteEnforcementUnsupportedError,
   type ContainedTurnOuterCompositionDependencies,
 } from "../dist/composition.js";
+import { composeCandidateHostCustodiedContainedTurnForImplementationEvidence } from
+  "../dist/composition/contained-turn-feature-composition.js";
 import { DeterministicCurrentOwnerHost } from "../../../contexts/agent-execution/tests/current-owner-success-fixture.ts";
 import { createDependencies } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
@@ -185,40 +187,18 @@ const submit = Object.freeze({
   scope: Object.freeze({projectId: "project:one", tenantId: "tenant:one"}),
 });
 
-test("product Host composition routes provider execution through the same custody authority", async () => {
+test("product Host composition rejects a candidate before Host Custody effects", async () => {
   const root = await mkdtemp(join(tmpdir(), "embedded-host-custody-"));
   const custody = new DeterministicCurrentOwnerHost(codexInitialization);
   try {
     const composed = await createCompositionInput(custody, root);
-    const host = createHostCustodiedAgentRuntimeHost({
+    assert.throws(() => createHostCustodiedAgentRuntimeHost({
       capabilities: setupCapabilities, containedTurn: composed.input,
-    });
-    const access = host.bindAccess({containedTurn: submit.scope});
-    const accepted = await access.containedTurn.submit(submit);
-    assert.equal(accepted.status, "accepted");
-    let observation = await access.containedTurn.observe(accepted.operationId);
-    for (let index = 0; index < 50 && observation.status === "observed" &&
-      !["cancelled", "failed", "reconcile_required", "succeeded"].includes(observation.turn.status); index += 1) {
-      await new Promise(resolve => {
-        setTimeout(resolve, 1);
-      });
-      observation = await access.containedTurn.observe(accepted.operationId);
-    }
-    assert.equal(observation.status, "observed");
-    const terminalStatus = observation.status === "observed" && observation.turn.status;
-    if (process.platform !== "linux") {
-      assert.equal(terminalStatus, "reconcile_required");
-      assert.deepEqual({containments: custody.containments, finalities: custody.finalities,
-        releases: custody.releases, reserves: custody.reserves, starts: custody.starts},
-      {containments: 0, finalities: 0, releases: 0, reserves: 0, starts: 0});
-      await assert.rejects(host.dispose(), {status: "termination_unproven"});
-      return;
-    }
-    assert.equal(terminalStatus, "succeeded");
+    }), error => error instanceof ProviderRouteEnforcementUnsupportedError &&
+      error.reason === "route-enforcement-unqualified");
     assert.deepEqual({containments: custody.containments, finalities: custody.finalities,
       releases: custody.releases, reserves: custody.reserves, starts: custody.starts},
-    {containments: 1, finalities: 1, releases: 0, reserves: 1, starts: 1});
-    await host.dispose();
+    {containments: 0, finalities: 0, releases: 0, reserves: 0, starts: 0});
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
@@ -227,7 +207,7 @@ test("ambiguous Host containment stays nonterminal without releasing operation c
   const custody = new AmbiguousContainmentHost();
   try {
     const composed = await createCompositionInput(custody, root);
-    const product = createHostCustodiedContainedTurn(composed.input);
+    const product = composeCandidateHostCustodiedContainedTurnForImplementationEvidence(composed.input);
     const outcome = await product.feature.submit.execute(submit);
     assert.equal(outcome.status, "observed");
     assert.equal(outcome.status === "observed" && outcome.turn.status, "reconcile_required");

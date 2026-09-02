@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   composeHostCustodiedContainedTurn,
+  createHostCustodiedContainedTurn,
+  ProviderRouteEnforcementUnsupportedError,
 } from "../dist/composition/contained-turn-feature-composition.js";
 import { composeHostCustodiedAgentRuntimeHost } from
   "../dist/composition/host-custodied-agent-runtime-host.js";
@@ -79,6 +81,30 @@ test("exact Codex and Claude selections invoke only the selected owner factory",
     product.dispose();
     product.dispose();
     assert.equal(probe.calls.dispose, 1);
+  }
+});
+
+test("production provider selection fails closed before every construction effect", () => {
+  for (const kind of ["codex", "claude"] as const) {
+    let reads = 0;
+    const routeClaims = Object.freeze({
+      authorityDigest: "sha256:claimed-authority",
+      canaryReceipt: "receipt:claimed-canary",
+      manifest: "manifest:claimed-provider",
+      providerRouteRef: `route:${kind}:claimed-egress`,
+    });
+    const input = new Proxy({selectedProvider: Object.freeze({kind, owner: routeClaims})}, {
+      get() {reads += 1; throw new Error("production gate read candidate dependencies");},
+      getOwnPropertyDescriptor() {reads += 1; throw new Error("production gate inspected candidate dependencies");},
+      ownKeys() {reads += 1; throw new Error("production gate enumerated candidate dependencies");},
+    });
+    let published: unknown;
+    assert.throws(() => {published = createHostCustodiedContainedTurn(input as never);}, error =>
+      error instanceof ProviderRouteEnforcementUnsupportedError &&
+      error.reason === "route-enforcement-unqualified" &&
+      error.message === "route-enforcement-unqualified" && Object.isFrozen(error));
+    assert.equal(published, undefined);
+    assert.equal(reads, 0);
   }
 });
 

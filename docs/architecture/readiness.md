@@ -359,6 +359,18 @@ Contained Agent Turn V1 accepted:
 
 Contained Agent Turn V1 implementation present; qualification remains open:
 
+- Codex `0.150.1` and Claude Agent SDK `0.3.251` are candidate
+  implementations only. The production/default Embedded Runtime selection path
+  fails closed with `route-enforcement-unqualified` before provider-owner or
+  seven-port feature construction because no exact Provider Access enforced
+  network-route target is registered. A route reference, authority digest,
+  canary receipt, or provider manifest is identity or implementation evidence,
+  not proof of enforced egress. Successor qualification requires independent
+  evidence for the exact package/binary, platform, credential route, and
+  enforced network boundary, followed by explicit qualification-registry and
+  readiness promotion. Native Darwin physical and composite containment remain
+  `indeterminate` under ADR-0014;
+
 - Agent Execution implements one provider-neutral operation kernel with
   separate durable acceptance and dispatch claims, scope-bound observation and
   cancellation, no automatic retry, one coarse effect, exact receipt closure,

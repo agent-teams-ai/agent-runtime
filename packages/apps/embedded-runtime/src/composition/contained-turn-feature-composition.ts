@@ -58,10 +58,22 @@ export interface ContainedTurnProviderOwnerFactories {
   readonly codex: typeof createCodexCurrentKernelOwner;
 }
 
-const currentProviderOwnerFactories = Object.freeze({
-  claude: createClaudeCurrentKernelOwner,
-  codex: createCodexCurrentKernelOwner,
-});
+export const PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON =
+  "route-enforcement-unqualified" as const;
+
+/**
+ * Stable construction failure for provider candidates whose exact Provider
+ * Access network route has not been promoted in the qualification registry.
+ */
+export class ProviderRouteEnforcementUnsupportedError extends Error {
+  public readonly reason = PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON;
+
+  public constructor() {
+    super(PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON);
+    this.name = "ProviderRouteEnforcementUnsupportedError";
+    Object.freeze(this);
+  }
+}
 
 const createSelectedProviderOwner = (
   snapshot: ContainedTurnProviderSelectionSnapshot,
@@ -88,7 +100,8 @@ const createSelectedProviderOwner = (
 export const createContainedTurnFeatureFromProviderAccess = (
   dependencies: ContainedTurnOuterCompositionDependencies,
 ): ContainedTurnCapabilityBundle => {
-  // Route C is closed before the seven-port factory can run or publish a handle.
+  // Product composition gates candidates before reaching this exact seven-port
+  // binding; repository-owned synthetic evidence uses it without claiming qualification.
   const providerAccess = createContainedTurnProviderAccessPort(dependencies.providerAccess);
   return createContainedTurnFeature(Object.freeze({
     operationStore: dependencies.operationStore,
@@ -103,7 +116,7 @@ export const createContainedTurnFeatureFromProviderAccess = (
   }));
 };
 
-/** Product-owned outer assembly for one explicitly selected provider and one Host Custody authority. */
+/** Internal deterministic candidate seam used only by synthetic tests and live implementation canaries. */
 export const composeHostCustodiedContainedTurn = (
   dependencies: HostCustodiedContainedTurnDependencies,
   ownerFactories: ContainedTurnProviderOwnerFactories,
@@ -138,11 +151,21 @@ export const composeHostCustodiedContainedTurn = (
   });
 };
 
-/** Product-owned outer assembly with the only two qualified provider factories. */
-export const createHostCustodiedContainedTurn = (
+/** @internal Candidate-only assembly for repository-owned synthetic evidence. */
+export const composeCandidateHostCustodiedContainedTurnForImplementationEvidence = (
   dependencies: HostCustodiedContainedTurnDependencies,
 ): HostCustodiedContainedTurnComposition => composeHostCustodiedContainedTurn(
   dependencies,
-  currentProviderOwnerFactories,
+  Object.freeze({claude: createClaudeCurrentKernelOwner, codex: createCodexCurrentKernelOwner}),
   createContainedTurnFeatureFromProviderAccess,
 );
+
+/**
+ * Product/default composition. Codex and Claude remain candidate
+ * implementations until an exact enforced-egress route is promoted.
+ */
+export const createHostCustodiedContainedTurn = (
+  _dependencies: HostCustodiedContainedTurnDependencies,
+): HostCustodiedContainedTurnComposition => {
+  throw new ProviderRouteEnforcementUnsupportedError();
+};
