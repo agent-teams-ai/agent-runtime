@@ -45,6 +45,15 @@ const staticOwner = (): OuterContainedTurnProviderAccess => {
   return Object.freeze({ dispatchConsumptionV1: unusedDispatch, resolve: feature.resolve, revalidate: feature.revalidate });
 };
 
+const ownerWithShadowedResolveBind = (bindDescriptor: PropertyDescriptor): OuterContainedTurnProviderAccess => {
+  const valid = staticOwner();
+  const execute = async (input: Parameters<OuterContainedTurnProviderAccess["resolve"]["execute"]>[0]) =>
+    valid.resolve.execute(input);
+  Object.defineProperty(execute, "bind", { configurable: false, enumerable: false, ...bindDescriptor });
+  Object.freeze(execute);
+  return Object.freeze({ ...valid, resolve: Object.freeze({ execute }) });
+};
+
 test("real Route C owner resolves, revalidates, observes ambiguous consumption, and settles", async () => {
   const feature = createStaticContainedTurnProviderAccessFeature([{ ...record, kind: "binding" as const }]);
   const acceptedAuthorityDigest = "accepted-authority:one";
@@ -260,6 +269,81 @@ test("Route C captures sealed owner methods once and ignores later value mutatio
     grantRequestId: subject.providerAccessRequest.grantRequestId, subject,
   })).kind, "indeterminate");
   assert.equal(originalDispatchCalls, 1);
+});
+
+test("frozen Route C owners reject shadowed bind without leaking attacker failures or publishing", () => {
+  const secretObject = Object.freeze({ authority: "route-c-object-secret" });
+  const secretError = Object.assign(new Error("route-c-error-secret", { cause: secretObject }), {
+    authority: "route-c-error-custom-secret",
+  });
+  const mutableDelegate = Object.assign(() => undefined, { authority: "mutable-delegate" });
+  let returnedDelegateCalls = 0;
+  let returnedNonFunctionCalls = 0;
+  let thrownObjectCalls = 0;
+  let thrownErrorCalls = 0;
+  let getterCalls = 0;
+  const cases = [
+    {
+      bindDescriptor: { value() { returnedDelegateCalls += 1; return mutableDelegate; }, writable: false },
+      calls: () => returnedDelegateCalls,
+    },
+    {
+      bindDescriptor: { value() { returnedNonFunctionCalls += 1; return "not-callable"; }, writable: false },
+      calls: () => returnedNonFunctionCalls,
+    },
+    {
+      bindDescriptor: { value() {
+        thrownObjectCalls += 1;
+        // oxlint-disable-next-line no-throw-literal -- the boundary must contain arbitrary attacker-thrown values.
+        throw secretObject;
+      }, writable: false },
+      calls: () => thrownObjectCalls,
+    },
+    {
+      bindDescriptor: { value() { thrownErrorCalls += 1; throw secretError; }, writable: false },
+      calls: () => thrownErrorCalls,
+    },
+    {
+      bindDescriptor: { get() { getterCalls += 1; throw secretError; } },
+      calls: () => getterCalls,
+    },
+  ] satisfies ReadonlyArray<{ bindDescriptor: PropertyDescriptor; calls(): number }>;
+
+  for (const { bindDescriptor, calls } of cases) {
+    const owner = ownerWithShadowedResolveBind(bindDescriptor);
+    let downstreamReads = 0;
+    const dependencies = Object.defineProperties({}, {
+      providerAccess: { enumerable: true, value: owner },
+      operationStore: { get() { downstreamReads += 1; } },
+      security: { get() { downstreamReads += 1; } },
+      workspace: { get() { downstreamReads += 1; } },
+      artifacts: { get() { downstreamReads += 1; } },
+      custody: { get() { downstreamReads += 1; } },
+      provider: { get() { downstreamReads += 1; } },
+    });
+    let published: unknown;
+    let rejection: unknown;
+    assert.throws(() => {
+      published = createContainedTurnFeatureFromProviderAccess(dependencies as never);
+    }, (error: unknown) => {
+      rejection = error;
+      return error instanceof ProviderAccessRouteCOwnerError &&
+        error.code === "ERR_PROVIDER_ACCESS_ROUTE_C_OWNER" && error.diagnostic === "invalid_method";
+    });
+    assert.ok(rejection instanceof ProviderAccessRouteCOwnerError);
+    assert.equal(rejection.message, "Provider Access Route C owner rejected: invalid_method");
+    assert.deepEqual(
+      Object.getOwnPropertyNames(rejection).filter(key => key !== "stack").toSorted(),
+      ["code", "diagnostic", "message", "name"],
+    );
+    assert.equal("cause" in rejection, false);
+    assert.notEqual(rejection, secretObject);
+    assert.notEqual(rejection, secretError);
+    assert.doesNotMatch(`${rejection.name}:${rejection.message}:${JSON.stringify(rejection)}`, /secret|mutable-delegate/);
+    assert.equal(calls(), 0);
+    assert.equal(downstreamReads, 0);
+    assert.equal(published, undefined);
+  }
 });
 
 test("missing dispatch fails before seven-port factory reads or handle publication", () => {

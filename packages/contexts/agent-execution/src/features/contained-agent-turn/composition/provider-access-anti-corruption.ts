@@ -67,6 +67,11 @@ type CapturedOwner = Readonly<{
   settleDispatchConsumption: OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["settleDispatchConsumption"];
 }>;
 
+const trustedApply = Reflect.apply;
+const trustedBind = Function.prototype.bind;
+const trustedFreeze = Object.freeze;
+const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+
 const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
   if (value === null || typeof value !== "object") {
     throw new ProviderAccessRouteCOwnerError("not_data_record");
@@ -105,10 +110,18 @@ const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<
 };
 
 const capturedMethod = <Method>(owner: object, value: unknown): Method => {
-  if (typeof value !== "function") {
+  try {
+    if (typeof value !== "function" || trustedGetOwnPropertyDescriptor(value, "bind") !== undefined) {
+      throw new ProviderAccessRouteCOwnerError("invalid_method");
+    }
+    const bound = trustedApply(trustedBind, value, [owner]) as unknown;
+    if (typeof bound !== "function") {
+      throw new ProviderAccessRouteCOwnerError("invalid_method");
+    }
+    return trustedFreeze(bound) as unknown as Method;
+  } catch {
     throw new ProviderAccessRouteCOwnerError("invalid_method");
   }
-  return value.bind(owner) as Method;
 };
 
 const captureProviderAccessOwner = (value: unknown): CapturedOwner => {
@@ -118,13 +131,17 @@ const captureProviderAccessOwner = (value: unknown): CapturedOwner => {
   ]);
   const resolveOwner = exactStableDataRecord(outer.resolve, ["execute"]);
   const revalidateOwner = exactStableDataRecord(outer.revalidate, ["execute"]);
-  return Object.freeze({
-    consumeForDispatch: capturedMethod<CapturedOwner["consumeForDispatch"]>(dispatchOwner, dispatchOwner.consumeForDispatch),
-    observeDispatchConsumption: capturedMethod<CapturedOwner["observeDispatchConsumption"]>(dispatchOwner, dispatchOwner.observeDispatchConsumption),
-    resolve: capturedMethod<CapturedOwner["resolve"]>(resolveOwner, resolveOwner.execute),
-    revalidate: capturedMethod<CapturedOwner["revalidate"]>(revalidateOwner, revalidateOwner.execute),
-    settleDispatchConsumption: capturedMethod<CapturedOwner["settleDispatchConsumption"]>(dispatchOwner, dispatchOwner.settleDispatchConsumption),
-  });
+  try {
+    return trustedFreeze({
+      consumeForDispatch: capturedMethod<CapturedOwner["consumeForDispatch"]>(dispatchOwner, dispatchOwner.consumeForDispatch),
+      observeDispatchConsumption: capturedMethod<CapturedOwner["observeDispatchConsumption"]>(dispatchOwner, dispatchOwner.observeDispatchConsumption),
+      resolve: capturedMethod<CapturedOwner["resolve"]>(resolveOwner, resolveOwner.execute),
+      revalidate: capturedMethod<CapturedOwner["revalidate"]>(revalidateOwner, revalidateOwner.execute),
+      settleDispatchConsumption: capturedMethod<CapturedOwner["settleDispatchConsumption"]>(dispatchOwner, dispatchOwner.settleDispatchConsumption),
+    });
+  } catch {
+    throw new ProviderAccessRouteCOwnerError("invalid_method");
+  }
 };
 
 const opaqueEvidenceDigest = (evidence: OuterEvidence): string => digestContainedTurnCanonicalValue(evidence as never);
