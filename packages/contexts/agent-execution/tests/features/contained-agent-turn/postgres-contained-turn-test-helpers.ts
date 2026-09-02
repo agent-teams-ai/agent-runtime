@@ -8,7 +8,7 @@ import { containedTurnScopeDigest } from "../../../dist/features/contained-agent
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {
   authorityVector,
-  commandId,
+  commandId as fixtureCommandId,
   createOperation,
   providerAccessSnapshot,
 } from "../../contained-turn-kernel-fixtures.ts";
@@ -24,7 +24,11 @@ export const operationAuthority = (operation: ReturnType<typeof createOperation>
   scope: operation.scope,
 });
 
-export const operationForProject = (projectId: string, suffix: string) => {
+export const operationForProject = (
+  projectId: string,
+  suffix: string,
+  commandId = fixtureCommandId,
+) => {
   const selectedScope = Object.freeze({ projectId, tenantId: "tenant:postgres-durability" });
   const selectedAccess = Object.freeze({
     ...providerAccessSnapshot,

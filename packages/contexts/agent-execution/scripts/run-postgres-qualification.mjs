@@ -79,7 +79,7 @@ const createRedactor = (databaseUrl, parsed) => {
 
   const orderedSecrets = [...secrets]
     .filter((secret) => secret !== "")
-    .sort((left, right) => right.length - left.length);
+    .toSorted((left, right) => right.length - left.length);
   const pattern = new RegExp(orderedSecrets.map(escapeRegExp).join("|"), "giu");
 
   // A single replacement pass cannot rescan replacement text. Length-preserving
@@ -107,16 +107,16 @@ const capturedByteLength = (value) => {
 
 const parseDatabaseUrl = (databaseUrl) => {
   if (Buffer.byteLength(databaseUrl, "utf8") > MAX_DATABASE_URL_BYTES) {
-    return undefined;
+    return;
   }
   try {
     const parsed = new URL(databaseUrl.trim());
     if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
-      return undefined;
+      return;
     }
     return parsed;
   } catch {
-    return undefined;
+    return;
   }
 };
 

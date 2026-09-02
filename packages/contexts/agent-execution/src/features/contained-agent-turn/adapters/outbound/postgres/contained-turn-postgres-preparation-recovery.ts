@@ -33,7 +33,7 @@ interface PreparationRecoveryStateRow extends PreparationRecoveryMetadataRow {
   readonly tenant_id: string | null;
 }
 
-const RECOVERY_CANDIDATE_LIMIT = 1_000;
+const RECOVERY_SCAN_BATCH_ROWS = 1_000;
 
 const recoveryMetadataSql = (quarantine: boolean): string =>
   `SELECT p.operation_id,p.preparation_token,p.state_codec_version,p.state_digest,
@@ -55,8 +55,9 @@ const recoveryMetadataSql = (quarantine: boolean): string =>
       AND q.observed_state_digest IS NOT DISTINCT FROM p.state_digest` : ""}
     WHERE o.tenant_id = $1 AND o.project_id = $2
       ${quarantine ? "AND q.operation_id IS NULL" : ""}
+      AND (p.operation_id,p.preparation_token) > ($3,$4)
     ORDER BY p.operation_id,p.preparation_token
-    LIMIT $3${quarantine ? " FOR UPDATE OF p,o" : ""}`;
+    LIMIT $5${quarantine ? " FOR UPDATE OF p,o" : ""}`;
 
 const budgetNumber = (value: number | string): number => {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -65,7 +66,7 @@ const budgetNumber = (value: number | string): number => {
 };
 
 const assertMetadataWithinBudget = (rows: readonly PreparationRecoveryMetadataRow[]): void => {
-  if (rows.length > RECOVERY_CANDIDATE_LIMIT) {throw new ContainedTurnStateBudgetError();}
+  if (rows.length > RECOVERY_SCAN_BATCH_ROWS) {throw new ContainedTurnStateBudgetError();}
   let batchBytes = 0;
   let budgetViolated = false;
   const countedOperations = new Set<string>();
@@ -82,6 +83,24 @@ const assertMetadataWithinBudget = (rows: readonly PreparationRecoveryMetadataRo
       batchBytes > CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumBatchBytes;
   }
   if (budgetViolated) {throw new ContainedTurnStateBudgetError();}
+};
+
+const addCandidateMaterializationBytes = (
+  currentBytes: number,
+  row: PreparationRecoveryMetadataRow,
+  countedOperations: Set<string>,
+): number => {
+  let nextBytes = currentBytes + budgetNumber(row.state_bytes);
+  if (!countedOperations.has(row.operation_id)) {
+    countedOperations.add(row.operation_id);
+    nextBytes += budgetNumber(row.operation_state_bytes) + budgetNumber(row.output_bytes) +
+      budgetNumber(row.receipt_bytes);
+  }
+  if (!Number.isSafeInteger(nextBytes) ||
+      nextBytes > CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumBatchBytes) {
+    throw new ContainedTurnStateBudgetError();
+  }
+  return nextBytes;
 };
 
 const assertStableMaterialization = (
@@ -119,14 +138,28 @@ export class ContainedTurnPostgresPreparationRecovery {
       throw new TypeError("invalid dispatch preparation recovery query");
     }
     const recover = async (client: import("pg").PoolClient, quarantine: boolean) => {
-      const metadata = await client.query<PreparationRecoveryMetadataRow>(
+      const scanMetadata = async (
+        afterOperationId: string,
+        afterPreparationToken: string,
+      ) => client.query<PreparationRecoveryMetadataRow>(
         recoveryMetadataSql(quarantine),
-        [input.scope.tenantId, input.scope.projectId, RECOVERY_CANDIDATE_LIMIT + 1],
+        [input.scope.tenantId, input.scope.projectId, afterOperationId, afterPreparationToken,
+          RECOVERY_SCAN_BATCH_ROWS],
       );
-      assertMetadataWithinBudget(metadata.rows);
-      if (metadata.rows.length === 0) {return Object.freeze([]);}
+      let afterOperationId = "";
+      let afterPreparationToken = "";
+      while (true) {
+        const metadata = await scanMetadata(afterOperationId, afterPreparationToken);
+        assertMetadataWithinBudget(metadata.rows);
+        const last = metadata.rows.at(-1);
+        if (last !== undefined) {
+          afterOperationId = last.operation_id;
+          afterPreparationToken = last.preparation_token;
+        }
+        if (metadata.rows.length < RECOVERY_SCAN_BATCH_ROWS) {break;}
+      }
 
-      const states = await client.query<PreparationRecoveryStateRow>(
+      const materialize = async (metadata: readonly PreparationRecoveryMetadataRow[]) => client.query<PreparationRecoveryStateRow>(
         `WITH approved AS (
            SELECT * FROM unnest($1::text[],$2::text[],$3::integer[],$4::text[],$5::integer[])
              AS expected(operation_id,preparation_token,state_codec_version,state_digest,state_bytes)
@@ -146,26 +179,34 @@ export class ContainedTurnPostgresPreparationRecovery {
            LEFT JOIN agent_execution.contained_turn_operation_v1 AS o
              ON o.operation_id=p.operation_id
           ORDER BY expected.operation_id,expected.preparation_token`,
-        [metadata.rows.map(row => row.operation_id), metadata.rows.map(row => row.preparation_token),
-          metadata.rows.map(row => row.state_codec_version), metadata.rows.map(row => row.state_digest),
-          metadata.rows.map(row => row.state_bytes)],
+        [metadata.map(row => row.operation_id), metadata.map(row => row.preparation_token),
+          metadata.map(row => row.state_codec_version), metadata.map(row => row.state_digest),
+          metadata.map(row => row.state_bytes)],
       );
-      assertStableMaterialization(states.rows, input.scope);
       const recoveries: Array<Readonly<{
         operation: ContainedTurnKernelOperation;
         preparation: ContainedTurnDispatchPreparation;
       }>> = [];
       const operationById = new Map<string, ContainedTurnKernelOperation>();
-      for (const row of states.rows) {
-        let preparation: ContainedTurnDispatchPreparation;
-        try {
-          preparation = decodeContainedTurnPreparation(
-            row.state, row.state_digest, row.state_codec_version,
-          );
-        } catch (error) {
-          if (!quarantine || !(error instanceof ContainedTurnStateQuarantineError)) {throw error;}
-          await client.query(
-            `INSERT INTO agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+      const countedCandidateOperations = new Set<string>();
+      let candidateBytes = 0;
+      afterOperationId = "";
+      afterPreparationToken = "";
+      while (true) {
+        const metadata = await scanMetadata(afterOperationId, afterPreparationToken);
+        if (metadata.rows.length === 0) {break;}
+        const states = await materialize(metadata.rows);
+        assertStableMaterialization(states.rows, input.scope);
+        for (const row of states.rows) {
+          let preparation: ContainedTurnDispatchPreparation;
+          try {
+            preparation = decodeContainedTurnPreparation(
+              row.state, row.state_digest, row.state_codec_version,
+            );
+          } catch (error) {
+            if (!quarantine || !(error instanceof ContainedTurnStateQuarantineError)) {throw error;}
+            await client.query(
+              `INSERT INTO agent_execution.contained_turn_dispatch_preparation_quarantine_v1
                (operation_id,preparation_token,observed_codec_version,observed_state_digest,
                 quarantined_state,reason)
              VALUES ($1,$2,$3,$4,$5::jsonb,$6)
@@ -176,31 +217,39 @@ export class ContainedTurnPostgresPreparationRecovery {
                    reason=EXCLUDED.reason,
                    last_observed_at=transaction_timestamp(),
                    observation_count=agent_execution.contained_turn_dispatch_preparation_quarantine_v1.observation_count + 1`,
-            [row.operation_id, row.preparation_token, row.state_codec_version,
-              row.state_digest, row.state, error.reason],
+              [row.operation_id, row.preparation_token, row.state_codec_version,
+                row.state_digest, row.state, error.reason],
+            );
+            continue;
+          }
+          if (preparation.operationId !== row.operation_id ||
+              preparation.preparationToken !== row.preparation_token) {
+            throw new Error("dispatch preparation recovery row identity mismatch");
+          }
+          if (!kinds.includes(preparation.kind as "active" | "cleanup_pending") ||
+              recoveries.length === limit) {continue;}
+          candidateBytes = addCandidateMaterializationBytes(
+            candidateBytes, row, countedCandidateOperations,
           );
-          continue;
-        }
-        if (!kinds.includes(preparation.kind as "active" | "cleanup_pending")) {continue;}
-        if (preparation.operationId !== row.operation_id ||
-            preparation.preparationToken !== row.preparation_token) {
-          throw new Error("dispatch preparation recovery row identity mismatch");
-        }
-        let operation = operationById.get(row.operation_id);
-        if (operation === undefined) {
-          operation = await this.operations.load(client, row.operation_id, false, input.scope);
+          let operation = operationById.get(row.operation_id);
+          if (operation === undefined) {
+            operation = await this.operations.load(client, row.operation_id, false, input.scope);
+          }
           if (operation !== undefined) {operationById.set(row.operation_id, operation);}
+          if (operation === undefined) {
+            throw new Error("dispatch preparation recovery operation disappeared");
+          }
+          recoveries.push(Object.freeze({ operation, preparation }));
         }
-        if (operation === undefined) {
-          throw new Error("dispatch preparation recovery operation disappeared");
-        }
-        recoveries.push(Object.freeze({ operation, preparation }));
-        if (recoveries.length === limit) {break;}
+        const last = metadata.rows.at(-1);
+        if (last === undefined || metadata.rows.length < RECOVERY_SCAN_BATCH_ROWS) {break;}
+        afterOperationId = last.operation_id;
+        afterPreparationToken = last.preparation_token;
       }
       return Object.freeze(recoveries);
     };
     return this.runtimeSchemaVersion >= 5
-      ? this.transactions.write(client => recover(client, true))
+      ? this.transactions.write(client => recover(client, true), true)
       : this.transactions.read(client => recover(client, false));
   }
 }

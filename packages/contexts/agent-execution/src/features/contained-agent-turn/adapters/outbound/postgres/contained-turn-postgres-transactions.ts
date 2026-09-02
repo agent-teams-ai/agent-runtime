@@ -74,10 +74,10 @@ export class ContainedTurnPostgresTransactions {
     }
   }
 
-  async #begin(client: PoolClient, readOnly = false): Promise<void> {
+  async #begin(client: PoolClient, readOnly = false, repeatableRead = false): Promise<void> {
     await client.query(readOnly
       ? "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-      : "BEGIN");
+      : repeatableRead ? "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ" : "BEGIN");
     await client.query(
       `SELECT set_config('lock_timeout', $1, true),
               set_config('statement_timeout', $2, true),
@@ -103,12 +103,15 @@ export class ContainedTurnPostgresTransactions {
     );
   }
 
-  public async write<Result>(work: (client: PoolClient) => Promise<Result>): Promise<Result> {
+  public async write<Result>(
+    work: (client: PoolClient) => Promise<Result>,
+    repeatableRead = false,
+  ): Promise<Result> {
     const client = await this.#connect();
     let commitStarted = false;
     let discardClient = false;
     try {
-      await this.#begin(client);
+      await this.#begin(client, false, repeatableRead);
       const result = await work(client);
       commitStarted = true;
       await client.query("COMMIT");

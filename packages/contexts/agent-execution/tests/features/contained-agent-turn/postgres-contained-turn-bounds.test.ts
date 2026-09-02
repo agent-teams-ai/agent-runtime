@@ -108,7 +108,12 @@ test("legacy preparation digest backfill advances in deterministic bounded keyse
     runtimeSecurityGrantRequestId: null,
     workspaceId: containedTurnIdentity("workspace", "workspace:migration-batches"),
   };
-  const encoded = encodeContainedTurnPreparation(preparation);
+  const {
+    providerAccessGrantRequestId: _providerAccessGrantRequestId,
+    runtimeSecurityGrantRequestId: _runtimeSecurityGrantRequestId,
+    ...legacyPreparation
+  } = preparation;
+  const legacyJson = JSON.stringify(legacyPreparation);
   const batchSize = CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows;
   let selects = 0;
   let updates = 0;
@@ -120,9 +125,9 @@ test("legacy preparation digest backfill advances in deterministic bounded keyse
       return { rows: Array.from({ length: count }, (_unused, index) => ({
         operation_id: operationId,
         preparation_token: `${preparation.preparationToken}:${String((selects - 1) * batchSize + index).padStart(4, "0")}`,
-        state: JSON.parse(encoded.json),
-        state_bytes: Buffer.byteLength(encoded.json),
-        state_codec_version: encoded.codecVersion,
+        state: JSON.parse(legacyJson),
+        state_bytes: Buffer.byteLength(legacyJson),
+        state_codec_version: 1,
       })) };
     }
     updates += 1;
@@ -222,7 +227,11 @@ postgresTest("later operation projection overflow outranks an earlier preparatio
     await resetSchema(pool);
     const store = new PostgresContainedTurnOperationStore({ pool });
     const first = operationForProject("project:cumulative-recovery", "000-cumulative-recovery");
-    const later = operationForProject("project:cumulative-recovery", "zzz-cumulative-recovery");
+    const later = operationForProject(
+      "project:cumulative-recovery",
+      "zzz-cumulative-recovery",
+      containedTurnIdentity("command", "command:zzz-cumulative-recovery"),
+    );
     for (const operation of [first, later]) {
       assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
       await runtimeQuery(pool,

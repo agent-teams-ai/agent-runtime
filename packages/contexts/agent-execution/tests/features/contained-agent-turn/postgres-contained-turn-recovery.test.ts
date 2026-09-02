@@ -13,6 +13,7 @@ import { recoverContainedTurnDispatchPreparations } from "../../../dist/features
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
+  claimContainedTurnDispatchPreparation,
   CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT,
   retireContainedTurnDispatchPreparation,
 } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
@@ -200,6 +201,92 @@ postgresTest("unsupported preparation codecs quarantine independently and recove
   });
 });
 
+postgresTest("recovery pages retained history and validates debt and later supported corruption", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const store = new PostgresContainedTurnOperationStore({ pool });
+    const operation = operationForProject("project:paged-history", "paged-history");
+    assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
+    const base = {
+      attemptId: containedTurnIdentity("attempt", "attempt:paged-history"),
+      custodyId: containedTurnIdentity("custody", "custody:paged-history"),
+      kind: "active" as const,
+      operationCutoffRevision: operation.operationCutoff.revision,
+      operationId: operation.operationId,
+      preparationToken: containedTurnIdentity("preparation", "preparation:paged-history-base"),
+      preparedOperationRevision: operation.revision,
+      providerAccessGrantRequestId: null,
+      runtimeSecurityGrantRequestId: null,
+      workspaceId: containedTurnIdentity("workspace", "workspace:paged-history"),
+    };
+    const rows = Array.from({ length: 1_002 }, (_unused, index) => {
+      const preparationToken = containedTurnIdentity(
+        "preparation",
+        `preparation:paged-history-${String(index).padStart(4, "0")}`,
+      );
+      const encoded = encodeContainedTurnPreparation(claimContainedTurnDispatchPreparation({
+        ...base,
+        preparationToken,
+      }));
+      return {
+        preparationToken,
+        state: JSON.parse(encoded.json),
+        stateCodecVersion: encoded.codecVersion,
+        stateDigest: encoded.digest,
+      };
+    });
+    const activeToken = containedTurnIdentity(
+      "preparation", "preparation:paged-history-z-active",
+    );
+    const active = encodeContainedTurnPreparation({ ...base, preparationToken: activeToken });
+    rows.push({
+      preparationToken: activeToken,
+      state: JSON.parse(active.json),
+      stateCodecVersion: active.codecVersion,
+      stateDigest: active.digest,
+    });
+    const corruptToken = containedTurnIdentity(
+      "preparation", "preparation:paged-history-zz-corrupt",
+    );
+    const corruptState = JSON.parse(encodeContainedTurnPreparation({
+      ...base,
+      preparationToken: corruptToken,
+    }).json) as { payload: Record<string, unknown> };
+    delete corruptState.payload.kind;
+    rows.push({
+      preparationToken: corruptToken,
+      state: corruptState,
+      stateCodecVersion: 4,
+      stateDigest: digestContainedTurnPostgresJson(corruptState),
+    });
+    await runtimeQuery(
+      pool,
+      `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+         (operation_id,preparation_token,state_codec_version,state,state_digest)
+       SELECT $1,x.preparation_token,x.state_codec_version,x.state,x.state_digest
+         FROM jsonb_to_recordset($2::jsonb) AS x(
+           preparation_token text,state jsonb,state_codec_version integer,state_digest text
+         )`,
+      [operation.operationId, JSON.stringify(rows.map(row => ({
+        preparation_token: row.preparationToken,
+        state: row.state,
+        state_codec_version: row.stateCodecVersion,
+        state_digest: row.stateDigest,
+      })))],
+    );
+
+    const recovered = await store.listDispatchPreparations({ limit: 1, scope: operation.scope });
+    assert.equal(recovered.length, 1);
+    assert.equal(recovered[0]?.preparation.preparationToken, activeToken);
+    assert.deepEqual((await runtimeQuery<{ reason: string }>(
+      pool,
+      `SELECT reason FROM agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+        WHERE operation_id=$1 AND preparation_token=$2`,
+      [operation.operationId, corruptToken],
+    )).rows[0], { reason: "malformed" });
+  });
+});
+
 postgresTest("retirement rejects a payload token that disagrees with its row key", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
@@ -246,7 +333,7 @@ test("recovery verifies phase-one identity and size metadata before decoding mat
   const client = {
     async query(text: string) {
       queries.push(text);
-      if (queries.length === 1) {
+      if (text.includes("octet_length(p.state::text) AS state_bytes")) {
         return { rows: [{
           operation_state_bytes: 256,
           operation_id: "operation:two-phase",
@@ -285,12 +372,12 @@ test("recovery verifies phase-one identity and size metadata before decoding mat
     recovery.list({ scope: { projectId: "project:two-phase", tenantId: "tenant:two-phase" } }),
     /metadata changed during materialization/u,
   );
-  assert.equal(queries.length, 2);
+  assert.equal(queries.length, 3);
   assert.match(queries[0] ?? "", /octet_length\(p\.state::text\) AS state_bytes/u);
   assert.doesNotMatch(queries[0] ?? "", /THEN p\.state|p\.state AS state/u);
-  assert.match(queries[0] ?? "", /ORDER BY p\.operation_id,p\.preparation_token[\s\S]*LIMIT \$3 FOR UPDATE OF p,o/u);
+  assert.match(queries[0] ?? "", /\(p\.operation_id,p\.preparation_token\) > \(\$3,\$4\)[\s\S]*ORDER BY p\.operation_id,p\.preparation_token[\s\S]*LIMIT \$5 FOR UPDATE OF p,o/u);
   assert.doesNotMatch(queries[0] ?? "", /payload,kind|#>> '\{kind\}'/u);
-  assert.match(queries[1] ?? "", /JOIN agent_execution\.contained_turn_dispatch_preparation_v1/u);
+  assert.match(queries[2] ?? "", /JOIN agent_execution\.contained_turn_dispatch_preparation_v1/u);
 });
 
 postgresTest("a later recovery batch violation takes precedence over an earlier digest mismatch", async () => {

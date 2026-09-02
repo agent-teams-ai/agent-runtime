@@ -114,7 +114,7 @@ const deepFreeze = <Value>(value: Value): Value => {
     visited.add(candidate);
     pending.push(...Object.values(candidate));
   }
-  for (const candidate of [...visited].reverse()) {Object.freeze(candidate);}
+  for (const candidate of [...visited].toReversed()) {Object.freeze(candidate);}
   return value;
 };
 
