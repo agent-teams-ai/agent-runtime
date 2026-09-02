@@ -45,7 +45,9 @@ export {
 } from "./composition/feature-module-factory.js";
 export {
   createContainedTurnProviderAccessPort,
+  ProviderAccessRouteCOwnerError,
   type OuterContainedTurnProviderAccess,
+  type ProviderAccessRouteCOwnerDiagnostic,
 } from "./composition/provider-access-anti-corruption.js";
 export {
   createContainedTurnRuntimeSecurityPort,

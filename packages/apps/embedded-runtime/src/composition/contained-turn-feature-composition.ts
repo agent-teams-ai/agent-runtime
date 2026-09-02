@@ -50,17 +50,21 @@ export interface HostCustodiedContainedTurnComposition {
 /** The only cross-context binding from Provider Access into Agent Execution. */
 export const createContainedTurnFeatureFromProviderAccess = (
   dependencies: ContainedTurnOuterCompositionDependencies,
-): ContainedTurnCapabilityBundle => createContainedTurnFeature(Object.freeze({
-  operationStore: dependencies.operationStore,
-  security: createContainedTurnRuntimeSecurityPort(
-    dependencies.security.legacy, dependencies.security.dispatchAuthorityV1,
-  ),
-  providerAccess: createContainedTurnProviderAccessPort(dependencies.providerAccess),
-  workspace: dependencies.workspace,
-  artifacts: dependencies.artifacts,
-  custody: dependencies.custody,
-  provider: dependencies.provider,
-}));
+): ContainedTurnCapabilityBundle => {
+  // Route C is closed before the seven-port factory can run or publish a handle.
+  const providerAccess = createContainedTurnProviderAccessPort(dependencies.providerAccess);
+  return createContainedTurnFeature(Object.freeze({
+    operationStore: dependencies.operationStore,
+    security: createContainedTurnRuntimeSecurityPort(
+      dependencies.security.legacy, dependencies.security.dispatchAuthorityV1,
+    ),
+    providerAccess,
+    workspace: dependencies.workspace,
+    artifacts: dependencies.artifacts,
+    custody: dependencies.custody,
+    provider: dependencies.provider,
+  }));
+};
 
 /** Product-owned outer assembly for one explicitly selected provider and one Host Custody authority. */
 export const createHostCustodiedContainedTurn = (

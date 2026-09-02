@@ -21,6 +21,7 @@ export {
   DarwinCooperativeProcessCustody,
   NodeProviderProcessCustody,
   PostgresContainedTurnOperationStore,
+  ProviderAccessRouteCOwnerError,
   recoverContainedTurnCommittedGrantSettlements,
   recoverContainedTurnDispatchPreparations,
   rollbackContainedTurnPostgresSchemaV4,
@@ -44,6 +45,7 @@ export {
   type NodeContainedTurnWorkspaceOptions,
   type NodeProviderProcessCustodyOptions,
   type OuterContainedTurnProviderAccess,
+  type ProviderAccessRouteCOwnerDiagnostic,
   type OuterContainedTurnRuntimeSecurityAuthority,
   type PostgresContainedTurnOperationStoreOptions,
 } from "./features/contained-agent-turn/internal.js";

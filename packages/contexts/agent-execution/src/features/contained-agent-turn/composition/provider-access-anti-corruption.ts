@@ -40,6 +40,93 @@ export interface OuterContainedTurnProviderAccess {
   readonly revalidate: { execute(input: Readonly<{ binding: OuterBinding; provider: ContainedTurnProvider; scope: ContainedTurnScope }>): Promise<Readonly<{ binding: OuterBinding; evidence: OuterEvidence; kind: "valid" } | { evidence: OuterEvidence; kind: "rejected"; reason: string }>> };
 }
 
+export type ProviderAccessRouteCOwnerDiagnostic =
+  | "accessor_backed"
+  | "invalid_method"
+  | "invalid_prototype"
+  | "invalid_shape"
+  | "mutable_shape"
+  | "not_data_record";
+
+/** Bounded composition diagnostic. It contains no owner values or ambient details. */
+export class ProviderAccessRouteCOwnerError extends TypeError {
+  public readonly code = "ERR_PROVIDER_ACCESS_ROUTE_C_OWNER";
+  public readonly diagnostic: ProviderAccessRouteCOwnerDiagnostic;
+  public constructor(diagnostic: ProviderAccessRouteCOwnerDiagnostic) {
+    super(`Provider Access Route C owner rejected: ${diagnostic}`);
+    this.diagnostic = diagnostic;
+    this.name = "ProviderAccessRouteCOwnerError";
+  }
+}
+
+type CapturedOwner = Readonly<{
+  consumeForDispatch: OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["consumeForDispatch"];
+  observeDispatchConsumption: OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["observeDispatchConsumption"];
+  resolve: OuterContainedTurnProviderAccess["resolve"]["execute"];
+  revalidate: OuterContainedTurnProviderAccess["revalidate"]["execute"];
+  settleDispatchConsumption: OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["settleDispatchConsumption"];
+}>;
+
+const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
+  if (value === null || typeof value !== "object") {
+    throw new ProviderAccessRouteCOwnerError("not_data_record");
+  }
+  let descriptors: Record<PropertyKey, PropertyDescriptor>;
+  try {
+    const prototype = Object.getPrototypeOf(value) as unknown;
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new ProviderAccessRouteCOwnerError("invalid_prototype");
+    }
+    descriptors = Object.getOwnPropertyDescriptors(value) as Record<PropertyKey, PropertyDescriptor>;
+    if (Object.isExtensible(value)) {
+      throw new ProviderAccessRouteCOwnerError("mutable_shape");
+    }
+  } catch (error) {
+    if (error instanceof ProviderAccessRouteCOwnerError) { throw error; }
+    throw new ProviderAccessRouteCOwnerError("invalid_shape");
+  }
+  const ownKeys = Reflect.ownKeys(descriptors);
+  if (ownKeys.some(key => typeof key !== "string") ||
+    ownKeys.map(String).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {
+    throw new ProviderAccessRouteCOwnerError("invalid_shape");
+  }
+  const record: Record<string, unknown> = {};
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (descriptor === undefined || !("value" in descriptor)) {
+      throw new ProviderAccessRouteCOwnerError("accessor_backed");
+    }
+    if (descriptor.configurable !== false) {
+      throw new ProviderAccessRouteCOwnerError("mutable_shape");
+    }
+    record[key] = descriptor.value;
+  }
+  return record;
+};
+
+const capturedMethod = <Method>(owner: object, value: unknown): Method => {
+  if (typeof value !== "function") {
+    throw new ProviderAccessRouteCOwnerError("invalid_method");
+  }
+  return value.bind(owner) as Method;
+};
+
+const captureProviderAccessOwner = (value: unknown): CapturedOwner => {
+  const outer = exactStableDataRecord(value, ["dispatchConsumptionV1", "resolve", "revalidate"]);
+  const dispatchOwner = exactStableDataRecord(outer.dispatchConsumptionV1, [
+    "consumeForDispatch", "observeDispatchConsumption", "settleDispatchConsumption",
+  ]);
+  const resolveOwner = exactStableDataRecord(outer.resolve, ["execute"]);
+  const revalidateOwner = exactStableDataRecord(outer.revalidate, ["execute"]);
+  return Object.freeze({
+    consumeForDispatch: capturedMethod<CapturedOwner["consumeForDispatch"]>(dispatchOwner, dispatchOwner.consumeForDispatch),
+    observeDispatchConsumption: capturedMethod<CapturedOwner["observeDispatchConsumption"]>(dispatchOwner, dispatchOwner.observeDispatchConsumption),
+    resolve: capturedMethod<CapturedOwner["resolve"]>(resolveOwner, resolveOwner.execute),
+    revalidate: capturedMethod<CapturedOwner["revalidate"]>(revalidateOwner, revalidateOwner.execute),
+    settleDispatchConsumption: capturedMethod<CapturedOwner["settleDispatchConsumption"]>(dispatchOwner, dispatchOwner.settleDispatchConsumption),
+  });
+};
+
 const opaqueEvidenceDigest = (evidence: OuterEvidence): string => digestContainedTurnCanonicalValue(evidence as never);
 const proofId = (evidence: OuterEvidence, purpose: OuterEvidence["purpose"]) => containedTurnIdentity("proof", `proof:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`);
 const evidenceId = (evidence: OuterEvidence, purpose: OuterEvidence["purpose"]) => containedTurnIdentity("evidence", `evidence:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`);
@@ -61,6 +148,7 @@ const grantEvidenceId = (phase: "consume" | "settle", value: unknown) => contain
 
 /** Real ACL from both Provider Access V1 owner contracts into the single Agent Execution port. */
 export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnProviderAccess): ContainedTurnProviderAccessPort => {
+  const owner = captureProviderAccessOwner(outer);
   const port: ContainedTurnProviderAccessPort = {
   async consumeForDispatch(input) {
     const subject = input.subject;
@@ -72,9 +160,9 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
       purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE, requestDigest: subject.providerAccessRequest.requestDigest, scope,
     });
     let outcome: ProviderAccessConsumeOutcome;
-    try {outcome = await outer.dispatchConsumptionV1.consumeForDispatch(request);} catch {return { evidenceId: grantEvidenceId("consume", request), kind: "indeterminate" };}
+    try {outcome = await owner.consumeForDispatch(request);} catch {return { evidenceId: grantEvidenceId("consume", request), kind: "indeterminate" };}
     if (outcome.kind === "indeterminate") {
-      try {outcome = await outer.dispatchConsumptionV1.observeDispatchConsumption({ grantRequestId: request.grantRequestId, provider: request.provider, requestDigest: request.requestDigest, scope });}
+      try {outcome = await owner.observeDispatchConsumption({ grantRequestId: request.grantRequestId, provider: request.provider, requestDigest: request.requestDigest, scope });}
       catch {return { evidenceId: grantEvidenceId("consume", request), kind: "indeterminate" };}
     }
     if (outcome.kind === "consumed") {
@@ -102,7 +190,7 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
   async settleConsumedGrant(input) {
     const receipt = input.receipt;
     try {
-      const outcome = await outer.dispatchConsumptionV1.settleDispatchConsumption({
+      const outcome = await owner.settleDispatchConsumption({
         consumptionDigest: receipt.consumptionDigest, disposition: input.disposition,
         expectedBinding: receipt.authorityFacts, operationId: receipt.operationId, provider: receipt.provider,
         scope: receipt.scope, settlementRequestId: input.settlementRequestId,
@@ -111,7 +199,7 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
     } catch {return { evidenceId: grantEvidenceId("settle", input), kind: "indeterminate" };}
   },
   async resolveForAcceptance(input: Readonly<{ intent: ContainedTurnIntent; provider: ContainedTurnProvider; scope: ContainedTurnScope }>) {
-    const outcome = await outer.resolve.execute({ provider: input.provider, scope: input.scope });
+    const outcome = await owner.resolve({ provider: input.provider, scope: input.scope });
     if (outcome.evidence.purpose !== "acceptance") {return { evidenceId: evidenceId(outcome.evidence, "acceptance"), kind: "indeterminate", reason: "authority_unknown" };}
     if (outcome.kind === "resolved") {const binding = snapshot(outcome.binding, outcome.evidence); return { acceptanceProofId: proofId(outcome.evidence, "acceptance"), acceptanceResolutionDigest: resolutionDigest(binding, outcome.evidence, "acceptance"), kind: "resolved", snapshot: binding };}
     if (outcome.reason === "revoked" || outcome.reason === "not_found") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "acceptance"), reason: "access_denied" };}
@@ -119,7 +207,7 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
   },
   async revalidateForDispatch(input) {
     const outerBinding: OuterBinding = Object.freeze({ ...input.acceptedSnapshot, credentialBindingDigest: input.acceptedSnapshot.ownerAuthorityDigest });
-    const outcome = await outer.revalidate.execute({ binding: outerBinding, provider: input.acceptedSnapshot.provider, scope: input.scope });
+    const outcome = await owner.revalidate({ binding: outerBinding, provider: input.acceptedSnapshot.provider, scope: input.scope });
     if (outcome.evidence.purpose !== "dispatch") {return { evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate", reason: "authority_unknown" };}
     if (outcome.kind === "valid") {const binding = snapshot(outcome.binding, outcome.evidence); return { dispatchProofId: proofId(outcome.evidence, "dispatch"), dispatchResolutionDigest: resolutionDigest(binding, outcome.evidence, "dispatch"), kind: "current", snapshot: binding };}
     if (outcome.reason === "revoked" || outcome.reason.endsWith("_changed") || outcome.reason === "credential_rotated" || outcome.reason === "revision_changed") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "dispatch"), reason: "access_revoked" };}

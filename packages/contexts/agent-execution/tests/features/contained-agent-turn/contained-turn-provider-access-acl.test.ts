@@ -29,16 +29,22 @@ const evidence = (purpose: "acceptance" | "dispatch") => Object.freeze({
   proofRef: `binding:access:one:revision:11:purpose:${purpose}`,
   purpose,
 });
+const unusedDispatch = Object.freeze({
+  async consumeForDispatch() { return Object.freeze({ kind: "not_found" as const }); },
+  async observeDispatchConsumption() { return Object.freeze({ kind: "not_found" as const }); },
+  async settleDispatchConsumption() { return Object.freeze({ kind: "not_found" as const }); },
+});
 
 test("Provider Access ACL preserves owner evidence and binds the exact snapshot at acceptance and dispatch", async () => {
   let dispatchedBinding: typeof binding | undefined;
-  const port = createContainedTurnProviderAccessPort({
-    resolve: { async execute() { return { binding, evidence: evidence("acceptance"), kind: "resolved" as const }; } },
-    revalidate: { async execute(input) {
+  const port = createContainedTurnProviderAccessPort(Object.freeze({
+    dispatchConsumptionV1: unusedDispatch,
+    resolve: Object.freeze({ async execute() { return { binding, evidence: evidence("acceptance"), kind: "resolved" as const }; } }),
+    revalidate: Object.freeze({ async execute(input) {
       dispatchedBinding = input.binding as typeof binding;
       return { binding, evidence: evidence("dispatch"), kind: "valid" as const };
-    } },
-  });
+    } }),
+  }));
 
   const accepted = await port.resolveForAcceptance({
     intent: { mode: "analysis", prompt: "Inspect the disposable workspace." },
@@ -67,10 +73,11 @@ test("Provider Access ACL preserves owner evidence and binds the exact snapshot 
 });
 
 test("Provider Access ACL maps owner rejection evidence without exposing owner reasons", async () => {
-  const port = createContainedTurnProviderAccessPort({
-    resolve: { async execute() { return { evidence: evidence("acceptance"), kind: "unavailable" as const, reason: "revoked" }; } },
-    revalidate: { async execute() { return { evidence: evidence("dispatch"), kind: "rejected" as const, reason: "revoked" }; } },
-  });
+  const port = createContainedTurnProviderAccessPort(Object.freeze({
+    dispatchConsumptionV1: unusedDispatch,
+    resolve: Object.freeze({ async execute() { return { evidence: evidence("acceptance"), kind: "unavailable" as const, reason: "revoked" }; } }),
+    revalidate: Object.freeze({ async execute() { return { evidence: evidence("dispatch"), kind: "rejected" as const, reason: "revoked" }; } }),
+  }));
   const outcome = await port.resolveForAcceptance({
     intent: { mode: "analysis", prompt: "Inspect the disposable workspace." },
     provider: "codex",
@@ -119,15 +126,15 @@ test("Provider Access ambiguous consumption is observed once and settled without
     operationId: subject.operationId, provider: subject.provider, purpose: "contained-turn.provider-dispatch/v1" as const,
     requestDigest: subject.providerAccessRequest.requestDigest, scope: { ...scope, scopeDigest },
   };
-  const port = createContainedTurnProviderAccessPort({
-    dispatchConsumptionV1: {
+  const port = createContainedTurnProviderAccessPort(Object.freeze({
+    dispatchConsumptionV1: Object.freeze({
       async consumeForDispatch() {calls.push("consume"); return { kind: "indeterminate" as const };},
       async observeDispatchConsumption() {calls.push("observe"); return { kind: "consumed" as const, receipt: ownerReceipt };},
       async settleDispatchConsumption(input) {calls.push(`settle:${input.disposition}`); return { kind: "settled" as const, receipt: {} };},
-    },
-    resolve: { async execute() {throw new Error("unused resolve");} },
-    revalidate: { async execute() {throw new Error("unused revalidate");} },
-  });
+    }),
+    resolve: Object.freeze({ async execute() {throw new Error("unused resolve");} }),
+    revalidate: Object.freeze({ async execute() {throw new Error("unused revalidate");} }),
+  }));
   const consumed = await port.consumeForDispatch({ grantRequestId: subject.providerAccessRequest.grantRequestId, subject });
   assert.equal(consumed.kind, "consumed");
   if (consumed.kind !== "consumed") {return;}
