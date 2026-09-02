@@ -257,14 +257,14 @@ class ContainedTurnSubmissionCustody {
     }
   };
 
-  public start(input: Readonly<SubmitRuntimeContainedTurnInput>): void {
+  public start(input: Readonly<SubmitRuntimeContainedTurnInput>, hostSignal: AbortSignal): void {
     let completion: Promise<unknown>;
     try {
       completion = this.#dependencies.executeCall(() =>
         this.#dependencies.capability!.submit.execute({
           ...input,
           scope: this.#dependencies.scope!,
-        }, { onAccepted: this.#accepted }));
+        }, { onAccepted: this.#accepted, signal: hostSignal }));
     } catch {
       this.#acceptanceOpen = false;
       this.#reject(containedTurnOwnerInvocationFailed);
@@ -273,6 +273,52 @@ class ContainedTurnSubmissionCustody {
     void this.#handleCompletion(completion).catch(() => {});
   }
 }
+
+const waitForSubmissionAcceptance = (
+  dependencies: ContainedTurnRuntimeAccessDependencies,
+  input: Readonly<SubmitRuntimeContainedTurnInput>,
+  callerSignal: AbortSignal | undefined,
+): Promise<SubmitRuntimeContainedTurnOutcome> => new Promise((resolve, reject) => {
+  let settled = false;
+  const signals = callerSignal === undefined
+    ? [dependencies.hostSignal]
+    : [dependencies.hostSignal, callerSignal];
+  const abortListeners: Readonly<{
+    abort: () => void;
+    signal: AbortSignal;
+  }>[] = [];
+  const settle = (callback: () => void): void => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    for (const listener of abortListeners) {
+      listener.signal.removeEventListener("abort", listener.abort);
+    }
+    callback();
+  };
+  for (const signal of signals) {
+    abortListeners.push(Object.freeze({
+      abort: () => settle(() => reject(
+        signal.reason ?? new DOMException("Agent Runtime operation was cancelled", "AbortError"),
+      )),
+      signal,
+    }));
+  }
+
+  for (const listener of abortListeners) {
+    if (listener.signal.aborted) {
+      listener.abort();
+      return;
+    }
+    listener.signal.addEventListener("abort", listener.abort, { once: true });
+  }
+  new ContainedTurnSubmissionCustody(
+    dependencies,
+    outcome => settle(() => resolve(outcome)),
+    reason => settle(() => reject(reason)),
+  ).start(input, dependencies.hostSignal);
+});
 
 export const createContainedTurnRuntimeAccess = (
   dependencies: ContainedTurnRuntimeAccessDependencies,
@@ -345,13 +391,8 @@ export const createContainedTurnRuntimeAccess = (
     if (dependencies.capability === undefined || dependencies.scope === undefined) {
       return unavailableOutcome;
     }
-    const signal = options?.signal === undefined
-      ? dependencies.hostSignal
-      : AbortSignal.any([dependencies.hostSignal, options.signal]);
-    signal.throwIfAborted();
-    const response = new Promise<SubmitRuntimeContainedTurnOutcome>((resolve, reject) => {
-      new ContainedTurnSubmissionCustody(dependencies, resolve, reject).start(input);
-    });
-    return raceWithAbort(response, signal);
+    dependencies.hostSignal.throwIfAborted();
+    options?.signal?.throwIfAborted();
+    return waitForSubmissionAcceptance(dependencies, input, options?.signal);
   },
 });

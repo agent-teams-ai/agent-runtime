@@ -235,7 +235,7 @@ test("Host applies terminal completion proof before considering shutdown cancell
   assert.equal(cancellationCalls, 0);
 });
 
-test("Host disposal is reentrant and deduplicates shutdown cancellation", async () => {
+test("Host disposal independently aborts in-flight capability work and remains reentrant", async () => {
   let releaseCompletion: (() => void) | undefined;
   const completionGate = new Promise<void>(resolve => {releaseCompletion = resolve;});
   let cancellationCalls = 0;

@@ -132,7 +132,7 @@ test("durable acceptance is published before provider execution and accepted can
   if (completed.status === "observed") {assert.equal(completed.turn.status, "reconcile_required");}
 });
 
-test("abort after durable acceptance leaves owner state unchanged while explicit cancellation still works", async () => {
+test("abort after durable acceptance leaves owner state unchanged while explicit cancellation keeps its identity", async () => {
   let releaseProvider!: () => void;
   const providerGate = new Promise<void>(resolve => {releaseProvider = resolve;});
   let providerStarted!: () => void;
@@ -168,6 +168,12 @@ test("abort after durable acceptance leaves owner state unchanged while explicit
     const afterCancellation = current();
     assert.ok(afterCancellation !== undefined);
     assert.equal(afterCancellation.cancellation.kind, "requested");
+    if (afterCancellation.cancellation.kind === "requested") {
+      assert.equal(
+        afterCancellation.cancellation.command.cancellationCommandId,
+        "cancellation-command:one",
+      );
+    }
     assert.equal(afterCancellation.operationCutoff.kind, "closed");
     assert.ok(afterCancellation.revision > beforeAbort.revision);
     assert.equal(containmentCalls.value, 1);

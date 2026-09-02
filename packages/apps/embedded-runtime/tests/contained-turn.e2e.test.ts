@@ -652,12 +652,14 @@ test("Host disposal requests durable cancellation and never exports lifecycle au
   assert.equal("dispose" in access, false);
 });
 
-test("caller abort detaches only its waiter and never manufactures durable cancellation", async t => {
+test("caller abort before durable acceptance detaches only its waiter without an unhandled rejection", async t => {
   let publishAcceptance: (() => void) | undefined;
   let releaseCompletion: (() => void) | undefined;
   const acceptanceGate = new Promise<void>(resolve => {publishAcceptance = resolve;});
   const completionGate = new Promise<void>(resolve => {releaseCompletion = resolve;});
   const calls = { cancel: 0 };
+  const ownerFailure = new Error("owner completion after caller detachment");
+  let ownerSignal: AbortSignal | undefined;
   const feature: ContainedTurnCapabilityBundle = Object.freeze({
     cancel: Object.freeze({
       async execute() {
@@ -671,10 +673,11 @@ test("caller abort detaches only its waiter and never manufactures durable cance
     }),
     submit: Object.freeze({
       async execute(input, options) {
+        ownerSignal = options?.signal;
         await acceptanceGate;
         options?.onAccepted?.({ operationId: "operation:embedded", scope: input.scope });
         await completionGate;
-        return { status: "observed", turn: turnView("succeeded") };
+        throw ownerFailure;
       },
     }),
   });
@@ -691,6 +694,7 @@ test("caller abort detaches only its waiter and never manufactures durable cance
   }, { signal: controller.signal });
   controller.abort(new DOMException("caller detached", "AbortError"));
   await assert.rejects(submission, { name: "AbortError" });
+  assert.equal(ownerSignal?.aborted, false);
   assert.equal(calls.cancel, 0);
   publishAcceptance?.();
   await new Promise<void>(resolve => {setImmediate(resolve);});
@@ -698,12 +702,12 @@ test("caller abort detaches only its waiter and never manufactures durable cance
   releaseCompletion?.();
 });
 
-test("composed caller abort preserves the real operation while explicit cancel remains durable", async t => {
+test("caller abort after accepted response preserves the operation and explicit cancel identity", async t => {
   let releaseProvider!: () => void;
   const providerGate = new Promise<void>(resolve => {releaseProvider = resolve;});
   const controller = new AbortController();
   let fixture: ReturnType<typeof createDependencies>;
-  let beforeAbort: ReturnType<ReturnType<typeof createDependencies>["current"]> = undefined;
+  let beforeAbort: ReturnType<ReturnType<typeof createDependencies>["current"]>;
   fixture = createDependencies({
     providerGate,
     providerStarted: () => {
@@ -727,7 +731,7 @@ test("composed caller abort preserves the real operation while explicit cancel r
     expectedProvider: "codex",
     intent: { mode: "analysis", prompt: "inspect disposable state" },
   }, { signal: controller.signal });
-  await assert.rejects(submission, { name: "AbortError" });
+  assert.deepEqual(await submission, { operationId: fixtureOperationId, status: "accepted" });
   await new Promise<void>(resolve => {setImmediate(resolve);});
 
   assert.ok(beforeAbort !== undefined);
@@ -745,6 +749,12 @@ test("composed caller abort preserves the real operation while explicit cancel r
   const afterCancellation = fixture.current();
   assert.ok(afterCancellation !== undefined);
   assert.equal(afterCancellation.cancellation.kind, "requested");
+  if (afterCancellation.cancellation.kind === "requested") {
+    assert.equal(
+      afterCancellation.cancellation.command.cancellationCommandId,
+      "cancellation-command:one",
+    );
+  }
   assert.equal(afterCancellation.operationCutoff.kind, "closed");
   assert.ok(afterCancellation.revision > beforeAbort.revision);
   assert.equal(fixture.containmentCalls.value, 1);
