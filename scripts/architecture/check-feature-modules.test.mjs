@@ -69,26 +69,45 @@ const makeFixtureRoot = async () => {
 };
 
 const fullCasefoldCollisionFixture = "unicode-full-casefold-file-collision-fails-closed";
+const hdiutilTimeoutMs = 15_000;
+const hdiutilExecutionOptions = Object.freeze({ timeout: hdiutilTimeoutMs, killSignal: "SIGKILL" });
+const runHdiutilCommand = (arguments_, execute = execFileAsync) => execute("hdiutil", arguments_, hdiutilExecutionOptions);
+const defaultHdiutilRunner = (arguments_) => runHdiutilCommand(arguments_);
 
-const allocateFixtureRoot = async (fixture) => {
-  const root = await makeFixtureRoot();
-  if (process.platform !== "darwin" || fixture.name !== fullCasefoldCollisionFixture) {
-    return { root, cleanup: [root] };
-  }
+const detachCaseSensitiveVolume = async (mount, runHdiutil = defaultHdiutilRunner) => {
+  try {await runHdiutil(["detach", mount]);}
+  catch {await runHdiutil(["detach", "-force", mount]);}
+};
+
+const allocateCaseSensitiveFixtureRoot = async (root, {
+  runHdiutil = defaultHdiutilRunner,
+  schedule = scheduleDisposablePaths,
+} = {}) => {
   const image = join(root, "case-sensitive.dmg"), mount = join(root, "case-sensitive-volume");
-  await mkdir(mount);
-  await execFileAsync("hdiutil", ["create", "-size", "32m", "-fs", "Case-sensitive APFS", "-volname", `feature-module-${process.pid}`, image]);
+  let attachAttempted = false;
   try {
-    await execFileAsync("hdiutil", ["attach", "-nobrowse", "-noverify", "-mountpoint", mount, image]);
+    await mkdir(mount);
+    await runHdiutil(["create", "-size", "32m", "-fs", "Case-sensitive APFS", "-volname", `feature-module-${process.pid}`, image]);
+    attachAttempted = true;
+    await runHdiutil(["attach", "-nobrowse", "-noverify", "-mountpoint", mount, image]);
   } catch (error) {
-    scheduleDisposablePaths([root]);
+    if (attachAttempted) {await detachCaseSensitiveVolume(mount, runHdiutil).catch(() => {});}
+    schedule([root]);
     throw error;
   }
   return {
     root: mount,
     cleanup: [root],
-    teardown: () => execFileAsync("hdiutil", ["detach", mount]),
+    teardown: () => detachCaseSensitiveVolume(mount, runHdiutil),
   };
+};
+
+const allocateFixtureRoot = async (fixture, options) => {
+  const root = await makeFixtureRoot();
+  if (process.platform !== "darwin" || fixture.name !== fullCasefoldCollisionFixture) {
+    return { root, cleanup: [root] };
+  }
+  return allocateCaseSensitiveFixtureRoot(root, options);
 };
 
 const disposableBases = await Promise.all([tmpdir(), process.cwd()].map(async (path) => ({
@@ -123,6 +142,11 @@ const cleanupDisposablePaths = async (paths) => {
 const scheduledCleanupPaths = [];
 const scheduleDisposablePaths = (paths) => {scheduledCleanupPaths.push(...paths);};
 after(async () => cleanupDisposablePaths(scheduledCleanupPaths));
+
+const releaseFixtureAllocation = async (allocation, state, schedule = scheduleDisposablePaths) => {
+  try {await allocation.teardown?.();}
+  finally {schedule(state.cleanup);}
+};
 
 const fixtureActivation = (status) => status === "active"
   ? { blockers: [], acceptance: ["zero diagnostics"], authority: { acceptedAdr: "ADR-0013", decisionPath: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", owner: "architecture", governedRecords: [] }, evidence: { fixtureCommand: "pnpm test:feature-modules", candidateCommand: "pnpm architecture:feature-modules:candidate", productionDiagnostics: 0 } }
@@ -416,12 +440,49 @@ for (const fixture of expandedFixtures) {
     const allocation = await allocateFixtureRoot(fixture);
     const state = { cleanup: allocation.cleanup };
     try {await runFixture(fixture, allocation.root, state);}
-    finally {
-      await allocation.teardown?.();
-      scheduleDisposablePaths(state.cleanup);
-    }
+    finally {await releaseFixtureAllocation(allocation, state);}
   });
 }
+
+test("case-sensitive fixture cleanup is bounded and scheduled after detach failures", async () => {
+  const executions = [];
+  await runHdiutilCommand(["detach", "/exact/scratch-mount"], async (...arguments_) => {executions.push(arguments_);});
+  assert.deepEqual(executions, [[
+    "hdiutil",
+    ["detach", "/exact/scratch-mount"],
+    { timeout: hdiutilTimeoutMs, killSignal: "SIGKILL" },
+  ]]);
+
+  const calls = [];
+  const runHdiutil = async (arguments_) => {
+    calls.push(arguments_);
+    if (!arguments_.includes("-force")) {throw new Error("ordinary detach failed");}
+  };
+  await detachCaseSensitiveVolume("/exact/scratch-mount", runHdiutil);
+  assert.deepEqual(calls, [["detach", "/exact/scratch-mount"], ["detach", "-force", "/exact/scratch-mount"]]);
+
+  const scheduled = [];
+  await assert.rejects(() => releaseFixtureAllocation(
+    { teardown: () => Promise.reject(new Error("forced detach failed")) },
+    { cleanup: ["/exact/scratch-root"] },
+    (paths) => scheduled.push(...paths),
+  ));
+  assert.deepEqual(scheduled, ["/exact/scratch-root"]);
+
+  const scratchRoot = await makeFixtureRoot(), attachFailureSchedule = [], allocationCalls = [];
+  const failingAttach = async (arguments_) => {
+    allocationCalls.push(arguments_);
+    if (arguments_[0] === "attach") {throw new Error("attach timed out after an ambiguous mount");}
+  };
+  try {
+    await assert.rejects(() => allocateCaseSensitiveFixtureRoot(scratchRoot, {
+      runHdiutil: failingAttach,
+      schedule: (paths) => attachFailureSchedule.push(...paths),
+    }));
+    assert.deepEqual(attachFailureSchedule, [scratchRoot]);
+    assert.deepEqual(allocationCalls.at(-1), ["detach", join(scratchRoot, "case-sensitive-volume")]);
+  } finally {await cleanupDisposablePaths([scratchRoot]);}
+});
 
 test("CLI failures redact external profile locations and are location-independent", async () => {
   const roots = [await makeFixtureRoot(), await makeFixtureRoot()];
