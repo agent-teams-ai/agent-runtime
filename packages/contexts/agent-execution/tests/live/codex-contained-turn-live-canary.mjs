@@ -8,6 +8,7 @@ import {
   createProviderCandidateEvidenceEnvelope,
   resolveCanaryExecutionProvenance,
 } from "./provider-candidate-evidence-envelope.mjs";
+import { runContainedTurnLiveCanaryLifecycle } from "./contained-turn-live-canary-lifecycle.mjs";
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const requiredEnvironment = name => {
@@ -299,38 +300,38 @@ const run = async () => {
   const kernelIdentity = Object.freeze({...ids, adapterSnapshot: snapshot, authorityVectorDigest, providerAccessSnapshot});
   const output = [];
   let finalCursor = 0;
-  let physicalContainment;
-  try {
-    const opened = await owner.custody.open({...kernelIdentity, intentMode: intent.mode});
-    assert.equal(opened.custodyId, ids.custodyId);
-    const started = await owner.custody.start({
-      attemptId: ids.attemptId, custodyId: ids.custodyId,
-      execute: start => owner.provider.execute({
-        ...kernelIdentity,
-        emit: async chunk => {
-          assert.equal(chunk.cursor, finalCursor);
-          finalCursor += 1;
-          output.push(chunk.text);
-        },
-        intent, isCancellationRequested: async () => false, start,
-      }),
-      intent, operationId: ids.operationId,
-      startAuthority: `start-authority:${authorityVectorDigest}`, workspaceId: ids.workspaceId,
-    });
-    assert.equal(started.kind, "execution_started");
-    const outcome = await started.execution;
-    assert.deepEqual(outcome, {kind: "completed", outcome: "succeeded"});
-    assert.equal(output.join(""), "AR_CODEX_CANARY_OK");
-    const closure = await owner.custody.attestExecutionClosure({
-      attemptId: ids.attemptId, custodyId: ids.custodyId, finalCursor, operationId: ids.operationId,
-    });
-    assert.equal(closure.kind, "proved");
-  } finally {
-    physicalContainment = await owner.custody.requestPhysicalContainment({
+  const {physicalContainment} = await runContainedTurnLiveCanaryLifecycle({
+    dispose: () => owner.dispose(),
+    open: () => owner.custody.open({...kernelIdentity, intentMode: intent.mode}),
+    execute: async opened => {
+      assert.equal(opened.custodyId, ids.custodyId);
+      const started = await owner.custody.start({
+        attemptId: ids.attemptId, custodyId: ids.custodyId,
+        execute: start => owner.provider.execute({
+          ...kernelIdentity,
+          emit: async chunk => {
+            assert.equal(chunk.cursor, finalCursor);
+            finalCursor += 1;
+            output.push(chunk.text);
+          },
+          intent, isCancellationRequested: async () => false, start,
+        }),
+        intent, operationId: ids.operationId,
+        startAuthority: `start-authority:${authorityVectorDigest}`, workspaceId: ids.workspaceId,
+      });
+      assert.equal(started.kind, "execution_started");
+      const outcome = await started.execution;
+      assert.deepEqual(outcome, {kind: "completed", outcome: "succeeded"});
+      assert.equal(output.join(""), "AR_CODEX_CANARY_OK");
+      const closure = await owner.custody.attestExecutionClosure({
+        attemptId: ids.attemptId, custodyId: ids.custodyId, finalCursor, operationId: ids.operationId,
+      });
+      assert.equal(closure.kind, "proved");
+    },
+    requestPhysicalContainment: () => owner.custody.requestPhysicalContainment({
       attemptId: ids.attemptId, custodyId: ids.custodyId, operationId: ids.operationId,
-    });
-    owner.dispose();
-  }
+    }),
+  });
   const containmentEvidence = safeContainmentEvidence(
     custody, observedCustody.opened(), physicalContainment, platformTarget,
   );
