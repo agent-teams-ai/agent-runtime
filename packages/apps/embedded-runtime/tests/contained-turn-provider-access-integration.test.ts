@@ -80,7 +80,8 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
     initialControlTime: 50,
   });
   let hideFirstConsumption = true;
-  let hostileDispatchPhase: "consume" | "none" | "observe" | "primitive" | "settle" = "none";
+  let hostileDispatchPhase:
+    "consume" | "crossed-settle" | "malformed-settle" | "none" | "observe" | "prevented" | "primitive" | "settle" = "none";
   const dispatchSecret = "provider-dispatch-output-secret";
   const owner = Object.freeze({
     dispatchConsumptionV1: Object.freeze({
@@ -91,6 +92,9 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
           }) as never;
         }
         if (hostileDispatchPhase === "observe") {return Object.freeze({kind: "indeterminate" as const});}
+        if (hostileDispatchPhase === "prevented") {
+          return Object.freeze({kind: "prevented" as const, prevention: Object.freeze({})}) as never;
+        }
         if (hostileDispatchPhase === "primitive") {return null as never;}
         const outcome = await harness.access.consumeForDispatch(input);
         if (hideFirstConsumption) { hideFirstConsumption = false; return Object.freeze({ kind: "indeterminate" as const }); }
@@ -108,7 +112,17 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
         if (hostileDispatchPhase === "settle") {
           throw Object.assign(new Error(dispatchSecret), {cause: dispatchSecret});
         }
-        return harness.access.settleDispatchConsumption(input);
+        if (hostileDispatchPhase === "malformed-settle") {
+          return Object.freeze({kind: "settled" as const}) as never;
+        }
+        const outcome = await harness.access.settleDispatchConsumption(input);
+        if (hostileDispatchPhase === "crossed-settle" && outcome.kind === "settled") {
+          return Object.freeze({
+            kind: "settled" as const,
+            receipt: Object.freeze({...outcome.receipt, operationId: "operation:foreign"}),
+          });
+        }
+        return outcome;
       },
     }),
     resolve: feature.resolve,
@@ -179,6 +193,20 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
   hostileDispatchPhase = "primitive";
   assert.equal((await port.consumeForDispatch({
     grantRequestId: subject.providerAccessRequest.grantRequestId, subject,
+  })).kind, "indeterminate");
+  hostileDispatchPhase = "prevented";
+  assert.equal((await port.consumeForDispatch({
+    grantRequestId: subject.providerAccessRequest.grantRequestId, subject,
+  })).kind, "indeterminate");
+  hostileDispatchPhase = "malformed-settle";
+  assert.equal((await port.settleConsumedGrant({
+    disposition: "claim_committed", receipt: consumed.receipt,
+    settlementRequestId: containedTurnGrantSettlementRequestId(consumed.receipt, "claim_committed"),
+  })).kind, "indeterminate");
+  hostileDispatchPhase = "crossed-settle";
+  assert.equal((await port.settleConsumedGrant({
+    disposition: "claim_committed", receipt: consumed.receipt,
+    settlementRequestId: containedTurnGrantSettlementRequestId(consumed.receipt, "claim_committed"),
   })).kind, "indeterminate");
   hostileDispatchPhase = "settle";
   const failedSettlement = await port.settleConsumedGrant({

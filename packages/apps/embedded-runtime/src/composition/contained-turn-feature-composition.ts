@@ -211,6 +211,9 @@ export const composeHostCustodiedContainedTurn = (
   ownerFactories: ContainedTurnProviderOwnerFactories,
   featureFactory: typeof createContainedTurnFeatureFromProviderAccess,
 ): HostCustodiedContainedTurnComposition => {
+  const providerAccess = captureProviderAccessDependency(
+    dependencies as unknown as ContainedTurnOuterCompositionDependencies,
+  );
   const selectedProvider = snapshotContainedTurnProviderSelection(dependencies);
   const owner = createSelectedProviderOwner(
     selectedProvider, dependencies.hostCustody, ownerFactories,
@@ -220,7 +223,7 @@ export const composeHostCustodiedContainedTurn = (
     feature = featureFactory(Object.freeze({
       operationStore: dependencies.operationStore,
       security: dependencies.security,
-      providerAccess: dependencies.providerAccess,
+      providerAccess,
       workspace: dependencies.workspace,
       artifacts: dependencies.artifacts,
       custody: owner.custody,

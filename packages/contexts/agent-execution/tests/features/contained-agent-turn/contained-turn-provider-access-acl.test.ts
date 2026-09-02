@@ -130,7 +130,17 @@ test("Provider Access ambiguous consumption is observed once and settled without
     dispatchConsumptionV1: Object.freeze({
       async consumeForDispatch() {calls.push("consume"); return { kind: "indeterminate" as const };},
       async observeDispatchConsumption() {calls.push("observe"); return { kind: "consumed" as const, receipt: ownerReceipt };},
-      async settleDispatchConsumption(input) {calls.push(`settle:${input.disposition}`); return { kind: "settled" as const, receipt: {} };},
+      async settleDispatchConsumption(input) {
+        calls.push(`settle:${input.disposition}`);
+        return Object.freeze({
+          kind: "settled" as const,
+          receipt: Object.freeze({
+            ...input,
+            settledAtControlTime: 51,
+            settlementDigest: "settlement-digest:one",
+          }),
+        });
+      },
     }),
     resolve: Object.freeze({ async execute() {throw new Error("unused resolve");} }),
     revalidate: Object.freeze({ async execute() {throw new Error("unused revalidate");} }),

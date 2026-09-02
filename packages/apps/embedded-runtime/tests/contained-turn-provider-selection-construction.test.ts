@@ -56,10 +56,15 @@ const captureThrown = (operation: () => unknown): unknown => {
   assert.fail("expected operation to throw");
 };
 
-const assertRedactedValidationError = (published: unknown, original: unknown, markers: readonly string[]) => {
+const assertRedactedValidationError = (
+  published: unknown,
+  original: unknown,
+  markers: readonly string[],
+  message = invalidSelectionMessage,
+) => {
   assert.ok(published instanceof TypeError);
   assert.notEqual(published, original);
-  assert.equal(published.message, invalidSelectionMessage);
+  assert.equal(published.message, message);
   assert.equal("cause" in published, false);
   assert.equal("custom" in published, false);
   assert.deepEqual(Reflect.ownKeys(published).toSorted(), ["message", "stack"]);
@@ -173,14 +178,20 @@ test("hostile selection traps and trap accessors cannot publish thrown validatio
         input as never, probe.factories, probe.featureFactory,
       ));
 
-      assertRedactedValidationError(published, original, [secret, path, provider]);
+      assertRedactedValidationError(
+        published, original, [secret, path, provider],
+        seam === "proxy-trap" ? "Contained turn Provider Access dependency is invalid" : invalidSelectionMessage,
+      );
       assert.deepEqual(probe.calls, {claude: 0, codex: 0, dispose: 0, feature: 0});
     }
   }
 });
 
 test("own descriptor snapshot rejects accessor dependencies and observable mutation races", () => {
-  const selectionAccessor = Object.freeze(Object.defineProperty({}, "selectedProvider", {
+  const selectionAccessor = Object.freeze(Object.defineProperty({
+    artifacts: Object.freeze({}), hostCustody: Object.freeze({}), operationStore: Object.freeze({}),
+    providerAccess: Object.freeze({}), security: Object.freeze({}), workspace: Object.freeze({}),
+  }, "selectedProvider", {
     enumerable: true, get: () => Object.freeze({kind: "codex", owner: Object.freeze({})}),
   }));
   const probe = harness();
@@ -302,6 +313,32 @@ test("provider owner result is captured as exact data before feature dependencie
     assert.equal(featureCalls, 0);
   }
   assert.equal(hostileTrapCalls, 0);
+});
+
+test("real Host composition rejects Provider Access accessors before all other ports and owners", () => {
+  const secret = "provider-access-getter-secret";
+  let providerAccessReads = 0;
+  let otherReads = 0;
+  const hostile = Object.defineProperties({}, {
+    providerAccess: {enumerable: true, get() {providerAccessReads += 1; throw new Error(secret);}},
+    operationStore: {get() {otherReads += 1;}},
+    security: {get() {otherReads += 1;}},
+    workspace: {get() {otherReads += 1;}},
+    artifacts: {get() {otherReads += 1;}},
+    hostCustody: {get() {otherReads += 1;}},
+    selectedProvider: {get() {otherReads += 1;}},
+  });
+  const probe = harness();
+  const error = captureThrown(() => composeHostCustodiedContainedTurn(
+    hostile as never, probe.factories, probe.featureFactory,
+  ));
+  assert.ok(error instanceof TypeError);
+  assert.equal(error.message, "Contained turn Provider Access dependency is invalid");
+  assert.equal("cause" in error, false);
+  assert.doesNotMatch(`${error.name}:${error.message}:${error.stack ?? ""}`, /provider-access-getter-secret/u);
+  assert.equal(providerAccessReads, 0);
+  assert.equal(otherReads, 0);
+  assert.deepEqual(probe.calls, {claude: 0, codex: 0, dispose: 0, feature: 0});
 });
 
 test("contained owner disposal is retryable and redacts the failed attempt", () => {

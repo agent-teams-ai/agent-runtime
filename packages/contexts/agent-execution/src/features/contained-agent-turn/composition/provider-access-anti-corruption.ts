@@ -24,9 +24,14 @@ interface ProviderAccessDispatchReceipt extends DispatchBinding {
   readonly provider: ContainedTurnProvider; readonly purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE;
   readonly requestDigest: string; readonly scope: DispatchScope;
 }
+interface ProviderAccessPrevention {
+  readonly grantRequestId: string; readonly observedAtControlTime: number;
+  readonly opaqueOwnerEvidenceRef: string; readonly reason: string;
+  readonly requestDigest: string; readonly scope: DispatchScope;
+}
 type ProviderAccessConsumeOutcome =
   | { readonly kind: "consumed"; readonly receipt: ProviderAccessDispatchReceipt }
-  | { readonly kind: "prevented"; readonly prevention: Readonly<{ grantRequestId: string; observedAtControlTime: number; opaqueOwnerEvidenceRef: string; reason: string; requestDigest: string; scope: DispatchScope }> }
+  | { readonly kind: "prevented"; readonly prevention: ProviderAccessPrevention }
   | { readonly kind: "conflict" | "invalid" | "indeterminate" | "not_found"; readonly reason?: string };
 
 /** Exact structural view of Provider Access ContainedTurnDispatchConsumptionV1. */
@@ -184,6 +189,92 @@ const boundaryFailureEvidenceId = (
   "evidence", `evidence:provider-access:boundary:${phase}:${digestContainedTurnCanonicalValue(value as never)}`,
 );
 
+const dispatchBindingKeys = [
+  "acceptedAuthorityDigest", "accessRef", "authorityHeadDigest", "bindingDigest", "bindingRevision",
+  "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "providerAccountRef", "providerRouteRef",
+] as const;
+const dispatchScopeKeys = ["projectId", "scopeDigest", "tenantId"] as const;
+
+const exactBoundedToken = (value: unknown): value is string => {
+  if (typeof value !== "string" || value.length === 0 || value.length > 512) {return false;}
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 31 || code === 127) {return false;}
+  }
+  return true;
+};
+
+const scopeMatches = (value: unknown, expected: DispatchScope): boolean => {
+  const scope = exactStableDataRecord(value, dispatchScopeKeys);
+  return scope.projectId === expected.projectId && scope.scopeDigest === expected.scopeDigest &&
+    scope.tenantId === expected.tenantId;
+};
+
+const bindingMatches = (value: unknown, expected: DispatchBinding): boolean => {
+  const binding = exactStableDataRecord(value, dispatchBindingKeys);
+  for (const key of dispatchBindingKeys) {
+    if (binding[key] !== expected[key]) {return false;}
+  }
+  return true;
+};
+
+const preventionReason = (value: unknown): value is string => {
+  switch (value) {
+    case "accepted_authority_changed": case "access_changed": case "account_changed":
+    case "already_consumed": case "authority_head_changed": case "binding_changed":
+    case "claim_binding_mismatch": case "credential_changed": case "credential_rotated":
+    case "expired": case "invalid_request": case "provider_mismatch":
+    case "request_digest_mismatch": case "revision_changed": case "revoked":
+    case "route_changed": case "scope_mismatch": case "unavailable": return true;
+    default: return false;
+  }
+};
+
+const snapshotBoundPrevention = (
+  value: unknown,
+  request: Readonly<{grantRequestId: string; requestDigest: string; scope: DispatchScope}>,
+): ProviderAccessPrevention => {
+  const data = exactStableDataRecord(value, [
+    "grantRequestId", "observedAtControlTime", "opaqueOwnerEvidenceRef", "reason", "requestDigest", "scope",
+  ]);
+  if (data.grantRequestId !== request.grantRequestId || data.requestDigest !== request.requestDigest ||
+      !Number.isSafeInteger(data.observedAtControlTime) || (data.observedAtControlTime as number) < 1 ||
+      !exactBoundedToken(data.opaqueOwnerEvidenceRef) || !preventionReason(data.reason) ||
+      !scopeMatches(data.scope, request.scope)) {
+    throw new TypeError("Provider Access prevention is not bound to the request");
+  }
+  return trustedFreeze({
+    grantRequestId: data.grantRequestId as string,
+    observedAtControlTime: data.observedAtControlTime as number,
+    opaqueOwnerEvidenceRef: data.opaqueOwnerEvidenceRef,
+    reason: data.reason,
+    requestDigest: data.requestDigest as string,
+    scope: request.scope,
+  });
+};
+
+const settlementMatches = (
+  value: unknown,
+  request: Readonly<{
+    consumptionDigest: string; disposition: "abandoned_without_claim" | "claim_committed";
+    expectedBinding: DispatchBinding; operationId: string; provider: ContainedTurnProvider;
+    scope: DispatchScope; settlementRequestId: string;
+  }>,
+): boolean => {
+  const outcome = exactStableDataRecord(value, ["kind", "receipt"]);
+  if (outcome.kind !== "settled") {return false;}
+  const receipt = exactStableDataRecord(outcome.receipt, [
+    "consumptionDigest", "disposition", "expectedBinding", "operationId", "provider", "scope",
+    "settledAtControlTime", "settlementDigest", "settlementRequestId",
+  ]);
+  return receipt.consumptionDigest === request.consumptionDigest &&
+    receipt.disposition === request.disposition && receipt.operationId === request.operationId &&
+    receipt.provider === request.provider && receipt.settlementRequestId === request.settlementRequestId &&
+    Number.isSafeInteger(receipt.settledAtControlTime) && (receipt.settledAtControlTime as number) > 0 &&
+    exactBoundedToken(receipt.settlementDigest) &&
+    bindingMatches(receipt.expectedBinding, request.expectedBinding) && scopeMatches(receipt.scope, request.scope);
+};
+
 /** Real ACL from both Provider Access V1 owner contracts into the single Agent Execution port. */
 export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnProviderAccess): ContainedTurnProviderAccessPort => {
   const owner = captureProviderAccessOwner(outer);
@@ -223,7 +314,8 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
         }) };
       }
       if (outcome.kind === "prevented") {
-        return { kind: "prevented", preventionProofId: containedTurnIdentity("proof", `proof:provider-access:dispatch:${digestContainedTurnCanonicalValue(outcome.prevention as never)}`) };
+        const prevention = snapshotBoundPrevention(outcome.prevention, request);
+        return { kind: "prevented", preventionProofId: containedTurnIdentity("proof", `proof:provider-access:dispatch:${digestContainedTurnCanonicalValue(prevention as never)}`) };
       }
       return { evidenceId: boundaryFailureEvidenceId("consume", request), kind: "indeterminate" };
     } catch {
@@ -233,12 +325,14 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
   async settleConsumedGrant(input) {
     const receipt = input.receipt;
     try {
-      const outcome = await owner.settleDispatchConsumption({
+      const request = Object.freeze({
         consumptionDigest: receipt.consumptionDigest, disposition: input.disposition,
         expectedBinding: receipt.authorityFacts, operationId: receipt.operationId, provider: receipt.provider,
         scope: receipt.scope, settlementRequestId: input.settlementRequestId,
       });
-      return outcome.kind === "settled" ? { kind: "settled" } : { evidenceId: grantEvidenceId("settle", { input, outcome }), kind: "indeterminate" };
+      const outcome = await owner.settleDispatchConsumption(request);
+      return settlementMatches(outcome, request) ? { kind: "settled" } :
+        { evidenceId: grantEvidenceId("settle", { input, outcome }), kind: "indeterminate" };
     } catch {return { evidenceId: boundaryFailureEvidenceId("settle", input), kind: "indeterminate" };}
   },
   async resolveForAcceptance(input: Readonly<{ intent: ContainedTurnIntent; provider: ContainedTurnProvider; scope: ContainedTurnScope }>) {
