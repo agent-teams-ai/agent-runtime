@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 5;
+export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 6;
 
 const V1_SQL = `
 CREATE SCHEMA IF NOT EXISTS agent_execution;
@@ -303,6 +303,12 @@ BEFORE INSERT OR UPDATE OR DELETE ON agent_execution.contained_turn_dispatch_pre
 FOR EACH ROW EXECUTE FUNCTION agent_execution.reject_incompatible_contained_turn_runtime_write();
 `;
 
+const V6_SQL = `
+ALTER TABLE agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+  ADD COLUMN owner_debt_evidence_id text
+  CHECK (owner_debt_evidence_id ~ '^evidence:.+');
+`;
+
 export const V4_DOWN_SQL = `
 DO $$
 BEGIN
@@ -335,6 +341,7 @@ const V2_DIGEST = digest(V2_SQL);
 export const V3_DIGEST = digest(`${V3_OPERATION_DIGEST_VALIDATION_REVISION}\n${V3_SQL}`);
 export const V4_DIGEST = digest(`${V4_PREPARATION_DIGEST_BACKFILL_REVISION}\n${V4_SQL}`);
 const V5_DIGEST = digest(V5_SQL);
+const V6_DIGEST = digest(V6_SQL);
 
 export interface ContainedTurnPostgresMigrationIdentity {
   readonly digest: string;
@@ -349,14 +356,16 @@ export const CONTAINED_TURN_POSTGRES_MIGRATIONS: readonly ContainedTurnPostgresM
     Object.freeze({ digest: V3_DIGEST, predecessorDigest: V2_DIGEST, version: 3 }),
     Object.freeze({ digest: V4_DIGEST, predecessorDigest: V3_DIGEST, version: 4 }),
     Object.freeze({ digest: V5_DIGEST, predecessorDigest: V4_DIGEST, version: 5 }),
+    Object.freeze({ digest: V6_DIGEST, predecessorDigest: V5_DIGEST, version: 6 }),
   ]);
 
-export const CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST = V5_DIGEST;
+export const CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST = V6_DIGEST;
 
 export const migrationFor = (version: number): ContainedTurnPostgresMigrationIdentity & { readonly sql: string } => {
   const identity = CONTAINED_TURN_POSTGRES_MIGRATIONS[version - 1];
   const sql = version === 1 ? V1_SQL : version === 2 ? V2_SQL :
-    version === 3 ? V3_SQL : version === 4 ? V4_SQL : version === 5 ? V5_SQL : undefined;
+    version === 3 ? V3_SQL : version === 4 ? V4_SQL : version === 5 ? V5_SQL :
+      version === 6 ? V6_SQL : undefined;
   if (identity === undefined || sql === undefined) {
     throw new RangeError(`unsupported contained turn PostgreSQL migration target ${String(version)}`);
   }

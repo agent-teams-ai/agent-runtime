@@ -15,6 +15,7 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
 import { encodeContainedTurnPreparation } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-preparation-codec.js";
 import { PostgresContainedTurnOperationStore } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
+import { containedTurnApplicationView } from "../../../dist/features/contained-agent-turn/application/contained-turn-engine.js";
 import { retireContainedTurnDispatchPreparation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {
@@ -195,10 +196,35 @@ postgresTest("supported-codec active and cleanup debt cannot disappear through u
         digestContainedTurnPostgresJson(missingKind)],
     );
     assert.deepEqual(await store.listDispatchPreparations({ scope: operation.scope }), []);
-    assert.deepEqual((await runtimeQuery<{ reason: string }>(pool,
-      `SELECT reason FROM agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+    const observedActiveDebt = await store.read({
+      operationId: operation.operationId,
+      scope: operation.scope,
+    });
+    assert.ok(observedActiveDebt);
+    assert.equal(containedTurnApplicationView(observedActiveDebt).status, "reconcile_required");
+    assert.equal(observedActiveDebt.reconciliation.kind, "required");
+    assert.deepEqual(observedActiveDebt.providerExecution, operation.providerExecution);
+    assert.deepEqual(observedActiveDebt.cancellation, operation.cancellation);
+    assert.deepEqual(observedActiveDebt.terminal, operation.terminal);
+    const activeDebtRevision = observedActiveDebt.revision;
+    const activeEvidenceIds = observedActiveDebt.reconciliation.kind === "required"
+      ? observedActiveDebt.reconciliation.evidenceIds
+      : [];
+    assert.equal(activeEvidenceIds.length, 1);
+    const quarantine = await runtimeQuery<{ owner_debt_evidence_id: string; reason: string }>(pool,
+      `SELECT owner_debt_evidence_id,reason
+         FROM agent_execution.contained_turn_dispatch_preparation_quarantine_v1
         WHERE operation_id=$1 AND preparation_token=$2`,
-      [operation.operationId, missingToken])).rows[0], { reason: "malformed" });
+      [operation.operationId, missingToken]);
+    assert.deepEqual(quarantine.rows[0], {
+      owner_debt_evidence_id: activeEvidenceIds[0],
+      reason: "malformed",
+    });
+    assert.deepEqual(await store.listDispatchPreparations({ scope: operation.scope }), []);
+    assert.equal((await store.read({
+      operationId: operation.operationId,
+      scope: operation.scope,
+    }))?.revision, activeDebtRevision);
 
     const cleanupToken = "preparation:100-altered-cleanup-kind";
     const cleanup = retireContainedTurnDispatchPreparation({
@@ -213,12 +239,24 @@ postgresTest("supported-codec active and cleanup debt cannot disappear through u
       `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
          (operation_id,preparation_token,state_codec_version,state,state_digest)
        VALUES ($1,$2,4,$3::jsonb,$4)`,
-      [operation.operationId, cleanupToken, JSON.stringify(alteredCleanup), encodedCleanup.digest],
+      [operation.operationId, cleanupToken, JSON.stringify(alteredCleanup),
+        digestContainedTurnPostgresJson(alteredCleanup)],
     );
-    await assert.rejects(
-      store.listDispatchPreparations({ scope: operation.scope }),
-      /preparation digest mismatch/u,
-    );
+    assert.deepEqual(await store.listDispatchPreparations({ scope: operation.scope }), []);
+    const observedCleanupDebt = await store.read({
+      operationId: operation.operationId,
+      scope: operation.scope,
+    });
+    assert.ok(observedCleanupDebt);
+    assert.equal(containedTurnApplicationView(observedCleanupDebt).status, "reconcile_required");
+    assert.equal(observedCleanupDebt.reconciliation.kind, "required");
+    if (observedCleanupDebt.reconciliation.kind === "required") {
+      assert.equal(observedCleanupDebt.reconciliation.evidenceIds.length, 2);
+      assert.deepEqual(observedCleanupDebt.reconciliation.evidenceIds.slice(0, 1), activeEvidenceIds);
+    }
+    assert.deepEqual(observedCleanupDebt.providerExecution, operation.providerExecution);
+    assert.deepEqual(observedCleanupDebt.cancellation, operation.cancellation);
+    assert.deepEqual(observedCleanupDebt.terminal, operation.terminal);
   });
 });
 

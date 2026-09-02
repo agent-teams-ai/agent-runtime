@@ -1,8 +1,12 @@
 import type { PoolClient } from "pg";
 
 import type { ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
-import type { ContainedTurnOperationId } from "../../../domain/contained-turn-identities.js";
+import type {
+  ContainedTurnEvidenceId,
+  ContainedTurnOperationId,
+} from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
+import { mutateContainedTurnOperation } from "../../../domain/contained-turn-transitions.js";
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
 import {
   CONTAINED_TURN_POSTGRES_JSON_BUDGET,
@@ -89,6 +93,31 @@ const validateProjections = (
 };
 
 export class ContainedTurnPostgresOperationRepository {
+  public async attachPreparationQuarantineDebt(
+    client: PoolClient,
+    input: Readonly<{
+      evidenceId: ContainedTurnEvidenceId;
+      operationId: string;
+      scope: ContainedTurnScope;
+    }>,
+  ): Promise<ContainedTurnKernelOperation> {
+    const current = await this.load(client, input.operationId, true, input.scope);
+    if (current === undefined) {
+      throw new Error("dispatch preparation quarantine operation disappeared");
+    }
+    if (current.reconciliation.kind === "required" &&
+        current.reconciliation.evidenceIds.includes(input.evidenceId)) {
+      return current;
+    }
+    const debt = mutateContainedTurnOperation(current, {
+      evidenceId: input.evidenceId,
+      kind: "record_reconciliation_debt",
+      source: "dispatch_authority",
+    });
+    await this.persist(client, current, debt);
+    return debt;
+  }
+
   async #authoritativeRow(
     client: PoolClient,
     operationId: string,

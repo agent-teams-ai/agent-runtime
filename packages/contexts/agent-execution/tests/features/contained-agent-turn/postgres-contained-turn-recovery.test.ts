@@ -9,6 +9,7 @@ import {
   digestContainedTurnPostgresJson,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
 import { PostgresContainedTurnOperationStore } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
+import { containedTurnApplicationView } from "../../../dist/features/contained-agent-turn/application/contained-turn-engine.js";
 import { recoverContainedTurnDispatchPreparations } from "../../../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
@@ -198,6 +199,71 @@ postgresTest("unsupported preparation codecs quarantine independently and recove
     );
     assert.deepEqual(oversizedQuarantine.rows[0], { reason: "malformed" });
     assert.equal((await store.listDispatchPreparations({ limit: 1, scope: bound.scope })).length, 1);
+  });
+});
+
+postgresTest("legacy quarantine is linked atomically to scoped owner debt and replay is idempotent", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const store = new PostgresContainedTurnOperationStore({ pool });
+    const owned = operationForProject("project:quarantine-owner", "quarantine-owner");
+    const other = operationForProject("project:quarantine-other", "quarantine-other");
+    assert.equal((await store.accept(owned, operationAuthority(owned))).kind, "accepted");
+    assert.equal((await store.accept(other, operationAuthority(other))).kind, "accepted");
+    const preparationToken = "preparation:legacy-unlinked-quarantine";
+    const corruptState = { codecVersion: 99, payload: { kind: "active" } };
+    const corruptDigest = digestContainedTurnPostgresJson(corruptState);
+    await runtimeQuery(
+      pool,
+      `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+         (operation_id,preparation_token,state_codec_version,state,state_digest)
+       VALUES ($1,$2,99,$3::jsonb,$4)`,
+      [owned.operationId, preparationToken, JSON.stringify(corruptState), corruptDigest],
+    );
+    await runtimeQuery(
+      pool,
+      `INSERT INTO agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+         (operation_id,preparation_token,observed_codec_version,observed_state_digest,
+          quarantined_state,reason)
+       VALUES ($1,$2,99,$3,$4::jsonb,'unsupported_version')`,
+      [owned.operationId, preparationToken, corruptDigest, JSON.stringify(corruptState)],
+    );
+
+    assert.deepEqual(await store.listDispatchPreparations({ scope: other.scope }), []);
+    assert.equal((await store.read({ operationId: owned.operationId, scope: owned.scope }))?.revision,
+      owned.revision);
+    assert.equal((await runtimeQuery<{ owner_debt_evidence_id: string | null }>(
+      pool,
+      `SELECT owner_debt_evidence_id
+         FROM agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+        WHERE operation_id=$1 AND preparation_token=$2`,
+      [owned.operationId, preparationToken],
+    )).rows[0]?.owner_debt_evidence_id, null);
+
+    assert.deepEqual(await store.listDispatchPreparations({ scope: owned.scope }), []);
+    const indebted = await store.read({ operationId: owned.operationId, scope: owned.scope });
+    assert.ok(indebted);
+    assert.equal(containedTurnApplicationView(indebted).status, "reconcile_required");
+    assert.equal(indebted.reconciliation.kind, "required");
+    const evidenceId = indebted.reconciliation.kind === "required"
+      ? indebted.reconciliation.evidenceIds[0]
+      : undefined;
+    assert.ok(evidenceId);
+    assert.deepEqual(indebted.providerExecution, owned.providerExecution);
+    assert.deepEqual(indebted.cancellation, owned.cancellation);
+    assert.deepEqual(indebted.terminal, owned.terminal);
+    const linked = await runtimeQuery<{
+      observation_count: string;
+      owner_debt_evidence_id: string;
+    }>(pool,
+      `SELECT observation_count::text,owner_debt_evidence_id
+         FROM agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+        WHERE operation_id=$1 AND preparation_token=$2`,
+      [owned.operationId, preparationToken]);
+    assert.deepEqual(linked.rows[0], { observation_count: "2", owner_debt_evidence_id: evidenceId });
+    assert.deepEqual(await store.listDispatchPreparations({ scope: owned.scope }), []);
+    assert.equal((await store.read({ operationId: owned.operationId, scope: owned.scope }))?.revision,
+      indebted.revision);
   });
 });
 

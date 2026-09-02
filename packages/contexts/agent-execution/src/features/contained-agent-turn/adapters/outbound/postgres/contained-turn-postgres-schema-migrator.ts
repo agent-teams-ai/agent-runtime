@@ -259,6 +259,17 @@ const validateCurrentCatalog = async (client: PoolClient, version: number): Prom
   if (version >= 5) {
     await validateV5RuntimeFenceCatalog(client, triggers.rows[0]?.definition);
   }
+  if (version >= 6) {
+    const quarantineDebt = await client.query<{ is_nullable: "NO" | "YES" }>(
+      `SELECT is_nullable FROM information_schema.columns
+        WHERE table_schema = 'agent_execution'
+          AND table_name = 'contained_turn_dispatch_preparation_quarantine_v1'
+          AND column_name = 'owner_debt_evidence_id'`,
+    );
+    if (quarantineDebt.rows[0]?.is_nullable !== "YES") {
+      throw new Error("contained turn PostgreSQL v6 quarantine debt catalog drift detected");
+    }
+  }
 };
 
 const addMigrationBytes = (total: number, candidate: number): number => {
@@ -420,7 +431,7 @@ export interface ApplyContainedTurnPostgresSchemaOptions {
   /** V4 is an internal rollback fixture only; production contract migration must commit V4 and V5 atomically. */
   readonly allowUnfencedV4ForTest?: true;
   /** Used only by migration/rolling-binary tests and staged deploys. */
-  readonly targetVersion?: 1 | 2 | 3 | 4 | 5;
+  readonly targetVersion?: 1 | 2 | 3 | 4 | 5 | 6;
 }
 
 export const applyContainedTurnPostgresSchema = async (

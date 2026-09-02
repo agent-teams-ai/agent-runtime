@@ -1,5 +1,7 @@
 import type { ContainedTurnKernelOperationStore } from "../../../application/ports/outbound/contained-turn-ports.js";
+import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
 import type { ContainedTurnDispatchPreparation } from "../../../domain/contained-turn-dispatch-preparation.js";
+import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
 import { decodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
 import {
@@ -35,7 +37,7 @@ interface PreparationRecoveryStateRow extends PreparationRecoveryMetadataRow {
 
 const RECOVERY_SCAN_BATCH_ROWS = 1_000;
 
-const recoveryMetadataSql = (quarantine: boolean): string =>
+const recoveryMetadataSql = (quarantine: boolean, linkedQuarantineDebt: boolean): string =>
   `SELECT p.operation_id,p.preparation_token,p.state_codec_version,p.state_digest,
           octet_length(p.state::text) AS state_bytes,
           octet_length(o.state::text) AS operation_state_bytes,
@@ -54,10 +56,41 @@ const recoveryMetadataSql = (quarantine: boolean): string =>
       AND q.observed_codec_version = p.state_codec_version
       AND q.observed_state_digest IS NOT DISTINCT FROM p.state_digest` : ""}
     WHERE o.tenant_id = $1 AND o.project_id = $2
-      ${quarantine ? "AND q.operation_id IS NULL" : ""}
+      ${quarantine ? linkedQuarantineDebt
+        ? "AND (q.operation_id IS NULL OR q.owner_debt_evidence_id IS NULL)"
+        : "AND q.operation_id IS NULL" : ""}
       AND (p.operation_id,p.preparation_token) > ($3,$4)
     ORDER BY p.operation_id,p.preparation_token
     LIMIT $5${quarantine ? " FOR UPDATE OF p,o" : ""}`;
+
+const quarantineWriteSql = (linkedQuarantineDebt: boolean): string =>
+  `INSERT INTO agent_execution.contained_turn_dispatch_preparation_quarantine_v1
+     (operation_id,preparation_token,observed_codec_version,observed_state_digest,
+      quarantined_state,reason${linkedQuarantineDebt ? ",owner_debt_evidence_id" : ""})
+   VALUES ($1,$2,$3,$4,$5::jsonb,$6${linkedQuarantineDebt ? ",$7" : ""})
+   ON CONFLICT (operation_id,preparation_token) DO UPDATE
+     SET observed_codec_version=EXCLUDED.observed_codec_version,
+         observed_state_digest=EXCLUDED.observed_state_digest,
+         quarantined_state=EXCLUDED.quarantined_state,
+         reason=EXCLUDED.reason,
+         ${linkedQuarantineDebt ? "owner_debt_evidence_id=EXCLUDED.owner_debt_evidence_id," : ""}
+         last_observed_at=transaction_timestamp(),
+         observation_count=agent_execution.contained_turn_dispatch_preparation_quarantine_v1.observation_count + 1`;
+
+const quarantineWriteValues = (
+  row: PreparationRecoveryStateRow,
+  reason: ContainedTurnStateQuarantineError["reason"],
+  evidenceId: string,
+  linkedQuarantineDebt: boolean,
+): unknown[] => [
+  row.operation_id,
+  row.preparation_token,
+  row.state_codec_version,
+  row.state_digest,
+  row.state,
+  reason,
+  ...(linkedQuarantineDebt ? [evidenceId] : []),
+];
 
 const budgetNumber = (value: number | string): number => {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -138,11 +171,12 @@ export class ContainedTurnPostgresPreparationRecovery {
       throw new TypeError("invalid dispatch preparation recovery query");
     }
     const recover = async (client: import("pg").PoolClient, quarantine: boolean) => {
+      const linkedQuarantineDebt = this.runtimeSchemaVersion >= 6;
       const scanMetadata = async (
         afterOperationId: string,
         afterPreparationToken: string,
       ) => client.query<PreparationRecoveryMetadataRow>(
-        recoveryMetadataSql(quarantine),
+        recoveryMetadataSql(quarantine, linkedQuarantineDebt),
         [input.scope.tenantId, input.scope.projectId, afterOperationId, afterPreparationToken,
           RECOVERY_SCAN_BATCH_ROWS],
       );
@@ -212,20 +246,26 @@ export class ContainedTurnPostgresPreparationRecovery {
             );
           } catch (error) {
             if (!quarantine || !(error instanceof ContainedTurnStateQuarantineError)) {throw error;}
+            const evidenceId = containedTurnIdentity(
+              "evidence",
+              `evidence:postgres-preparation-quarantine:${digestContainedTurnCanonicalValue({
+                observedCodecVersion: row.state_codec_version,
+                observedStateDigest: row.state_digest,
+                operationId: row.operation_id,
+                preparationToken: row.preparation_token,
+                reason: error.reason,
+              })}`,
+            );
+            await this.operations.attachPreparationQuarantineDebt(client, {
+              evidenceId,
+              operationId: row.operation_id,
+              scope: input.scope,
+            });
             await client.query(
-              `INSERT INTO agent_execution.contained_turn_dispatch_preparation_quarantine_v1
-               (operation_id,preparation_token,observed_codec_version,observed_state_digest,
-                quarantined_state,reason)
-             VALUES ($1,$2,$3,$4,$5::jsonb,$6)
-             ON CONFLICT (operation_id,preparation_token) DO UPDATE
-               SET observed_codec_version=EXCLUDED.observed_codec_version,
-                   observed_state_digest=EXCLUDED.observed_state_digest,
-                   quarantined_state=EXCLUDED.quarantined_state,
-                   reason=EXCLUDED.reason,
-                   last_observed_at=transaction_timestamp(),
-                   observation_count=agent_execution.contained_turn_dispatch_preparation_quarantine_v1.observation_count + 1`,
-              [row.operation_id, row.preparation_token, row.state_codec_version,
-                row.state_digest, row.state, error.reason],
+              quarantineWriteSql(linkedQuarantineDebt),
+              quarantineWriteValues(
+                row, error.reason, evidenceId, linkedQuarantineDebt,
+              ),
             );
             continue;
           }
