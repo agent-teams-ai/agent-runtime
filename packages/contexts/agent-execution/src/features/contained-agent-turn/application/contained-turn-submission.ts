@@ -7,6 +7,7 @@ import {
 } from "../domain/contained-turn-authority.js";
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
+import { mutateContainedTurnOperation } from "../domain/contained-turn-transitions.js";
 import {
   assertContainedTurnExactRecord,
   detachAndFreezeContainedTurnValue,
@@ -106,6 +107,38 @@ const continueAfterAcceptance = async (
     }
     return { operation: cleaned, status: "observed" };
   }
+};
+
+const finishContainedTurnAcceptance = async (
+  dependencies: ContainedTurnKernelDependencies,
+  accepted: ReturnType<typeof sanitizeContainedTurnAcceptanceOutcome>,
+  trustedScope: ContainedTurnApplicationSubmitInput["scope"],
+  options?: SubmitOptions,
+): Promise<ContainedTurnApplicationSubmitOutcome> => {
+  if (accepted.kind === "not_found") {return { status: "denied" };}
+  if (accepted.kind === "fingerprint_conflict") {
+    return { code: "command_fingerprint_conflict", status: "conflict" };
+  }
+  if (accepted.kind === "potential_acceptance") {
+    const potential = mutateContainedTurnOperation(accepted.candidateOperation, {
+      evidenceId: accepted.evidenceId,
+      kind: "record_reconciliation_debt",
+      source: "store_commit",
+    });
+    try {options?.onAccepted?.(potential);} catch {}
+    return { operation: potential, status: "observed" };
+  }
+  if (accepted.kind === "replayed") {
+    try {options?.onAccepted?.(accepted.operation);} catch {}
+    return {
+      operation: await resumeReplayedTerminalization(
+        dependencies, accepted.operation, trustedScope,
+      ),
+      status: "observed",
+    };
+  }
+  try {options?.onAccepted?.(accepted.operation);} catch {}
+  return continueAfterAcceptance(dependencies, accepted.operation, trustedScope);
 };
 
 const unsupportedSubmission = (
@@ -231,17 +264,5 @@ export const submitContainedTurn = async (
     ),
     scope: input.scope,
   });
-  if (accepted.kind === "not_found") {return { status: "denied" };}
-  if (accepted.kind === "fingerprint_conflict") {
-    return { code: "command_fingerprint_conflict", status: "conflict" };
-  }
-  if (accepted.kind === "replayed") {
-    try {options?.onAccepted?.(accepted.operation);} catch {}
-    return {
-      operation: await resumeReplayedTerminalization(dependencies, accepted.operation, input.scope),
-      status: "observed",
-    };
-  }
-  try {options?.onAccepted?.(accepted.operation);} catch {}
-  return continueAfterAcceptance(dependencies, accepted.operation, input.scope);
+  return finishContainedTurnAcceptance(dependencies, accepted, input.scope, options);
 };

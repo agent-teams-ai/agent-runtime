@@ -21,6 +21,7 @@ import {
   defaultContainedTurnPostgresIdentities,
 } from "./contained-turn-postgres-operation-authority.js";
 import { ContainedTurnPostgresOperationEvidence } from "./contained-turn-postgres-operation-evidence.js";
+import { containedTurnPostgresAcceptanceMatches } from "./contained-turn-postgres-acceptance-reconciliation.js";
 import {
   CONTAINED_TURN_POSTGRES_MIGRATIONS,
   CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
@@ -208,32 +209,89 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
 
   public async accept(candidate: ContainedTurnKernelOperation, authority: ContainedTurnOwnerStoreAuthority) {
     assertAuthority(authority, candidate);
-    return this.#transactions.write(async client => {
-      const encoded = encodeContainedTurnState(candidate);
-      const inserted = await client.query(
-        `INSERT INTO agent_execution.contained_turn_operation_v1(operation_id,tenant_id,project_id,command_id,command_fingerprint,effect_id,revision,state,state_codec_version,state_digest,terminal)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,false)
-         ON CONFLICT (tenant_id,project_id,command_id) DO NOTHING RETURNING operation_id`,
-        [candidate.operationId, candidate.scope.tenantId, candidate.scope.projectId,
-          candidate.commandId, candidate.commandFingerprint, candidate.effectId, candidate.revision,
-          encoded.json, encoded.codecVersion, encoded.digest],
+    type AttemptOutcome =
+      | { readonly kind: "accepted"; readonly operation: ContainedTurnKernelOperation }
+      | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }
+      | { readonly kind: "fingerprint_conflict" }
+      | { readonly kind: "not_found" };
+    let attempted: AttemptOutcome | undefined;
+    try {
+      return await this.#transactions.write(async client => {
+        const encoded = encodeContainedTurnState(candidate);
+        const inserted = await client.query(
+          `INSERT INTO agent_execution.contained_turn_operation_v1(operation_id,tenant_id,project_id,command_id,command_fingerprint,effect_id,revision,state,state_codec_version,state_digest,terminal)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,false)
+           ON CONFLICT (tenant_id,project_id,command_id) DO NOTHING RETURNING operation_id`,
+          [candidate.operationId, candidate.scope.tenantId, candidate.scope.projectId,
+            candidate.commandId, candidate.commandFingerprint, candidate.effectId, candidate.revision,
+            encoded.json, encoded.codecVersion, encoded.digest],
+        );
+        if (inserted.rowCount === 1) {
+          await this.#project(client, undefined, candidate);
+          attempted = { kind: "accepted", operation: candidate };
+          return attempted;
+        }
+        const existing = await client.query<{ operation_id: string }>(
+          "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3 FOR UPDATE",
+          [candidate.scope.tenantId, candidate.scope.projectId, candidate.commandId],
+        );
+        const operationId = existing.rows[0]?.operation_id;
+        if (operationId === undefined) {
+          attempted = { kind: "not_found" };
+          return attempted;
+        }
+        const operation = await this.#load(client, operationId, false, candidate.scope);
+        if (operation === undefined) {
+          attempted = { kind: "not_found" };
+          return attempted;
+        }
+        attempted = operation.commandFingerprint === candidate.commandFingerprint
+          ? { kind: "replayed", operation }
+          : { kind: "fingerprint_conflict" };
+        return attempted;
+      });
+    } catch (error) {
+      if (!(error instanceof PostgresCommitIndeterminateError)) {throw error;}
+      const evidenceId = containedTurnIdentity(
+        "evidence", `evidence:postgres-acceptance-commit:${digestContainedTurnCanonicalValue({
+          commandId: candidate.commandId,
+          operationId: candidate.operationId,
+          stateDigest: encodeContainedTurnState(candidate).digest,
+          scope: {
+            projectId: candidate.scope.projectId,
+            tenantId: candidate.scope.tenantId,
+          },
+        })}`,
       );
-      if (inserted.rowCount === 1) {
-        await this.#project(client, undefined, candidate);
-        return { kind: "accepted" as const, operation: candidate };
+      try {
+        const observed = await this.#transactions.read(async client => {
+          const result = await client.query<{ operation_id: string }>(
+            "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3",
+            [candidate.scope.tenantId, candidate.scope.projectId, candidate.commandId],
+          );
+          const operationId = result.rows[0]?.operation_id;
+          return operationId === undefined
+            ? undefined
+            : this.#load(client, operationId, false, candidate.scope);
+        });
+        if (attempted?.kind === "accepted" && observed !== undefined &&
+            containedTurnPostgresAcceptanceMatches(observed, candidate)) {
+          return { kind: "accepted" as const, operation: observed };
+        }
+        if (attempted?.kind === "replayed" && observed !== undefined &&
+            observed.commandFingerprint === candidate.commandFingerprint &&
+            containedTurnPostgresAcceptanceMatches(observed, attempted.operation)) {
+          return { kind: "replayed" as const, operation: observed };
+        }
+        if (attempted?.kind === "fingerprint_conflict" && observed !== undefined &&
+            observed.commandFingerprint !== candidate.commandFingerprint) {
+          return { kind: "fingerprint_conflict" as const };
+        }
+      } catch {
+        // The single bounded exact observation did not establish durable truth.
       }
-      const existing = await client.query<{ operation_id: string }>(
-        "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3 FOR UPDATE",
-        [candidate.scope.tenantId, candidate.scope.projectId, candidate.commandId],
-      );
-      const operationId = existing.rows[0]?.operation_id;
-      if (operationId === undefined) {return { kind: "not_found" as const };}
-      const operation = await this.#load(client, operationId, false, candidate.scope);
-      if (operation === undefined) {return { kind: "not_found" as const };}
-      return operation.commandFingerprint === candidate.commandFingerprint
-        ? { kind: "replayed" as const, operation }
-        : { kind: "fingerprint_conflict" as const };
-    });
+      return { candidateOperation: candidate, evidenceId, kind: "potential_acceptance" as const };
+    }
   }
 
   public commit(input: Parameters<ContainedTurnKernelOperationStore["commit"]>[0]) {return this.#cas(input);}

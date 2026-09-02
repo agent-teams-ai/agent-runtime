@@ -56,6 +56,12 @@ export type IdentifyContainedTurnAcceptanceOutcome =
 
 export type AcceptContainedTurnKernelOperationOutcome =
   | { readonly kind: "accepted"; readonly operation: ContainedTurnKernelOperation }
+  | {
+    /** COMMIT may have accepted this exact candidate, but bounded observation could not prove durable truth. */
+    readonly candidateOperation: ContainedTurnKernelOperation;
+    readonly evidenceId: ContainedTurnEvidenceId;
+    readonly kind: "potential_acceptance";
+  }
   | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }
   | { readonly kind: "fingerprint_conflict" }
   | { readonly kind: "not_found" };

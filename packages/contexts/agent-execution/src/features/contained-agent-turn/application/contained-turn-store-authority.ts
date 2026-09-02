@@ -150,6 +150,15 @@ export const sanitizeContainedTurnAcceptanceOutcome = (input: Readonly<{
       ? input.outcome
       : Object.freeze({ kind: "not_found" });
   }
+  if (input.outcome.kind === "potential_acceptance") {
+    const potential = input.outcome.candidateOperation;
+    return isOwnedOperation(potential, input.candidate.operationId, input.scope) &&
+        potential.commandId === input.candidate.commandId &&
+        potential.commandFingerprint === input.candidate.commandFingerprint &&
+        potential.effectId === input.candidate.effectId
+      ? input.outcome
+      : Object.freeze({ kind: "not_found" });
+  }
   return input.outcome;
 };
 

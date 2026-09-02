@@ -183,6 +183,26 @@ test("abort after durable acceptance leaves owner state unchanged while explicit
   assert.equal(completed.status, "observed");
   if (completed.status === "observed") {assert.equal(completed.turn.status, "reconcile_required");}
 });
+test("potential command acceptance enters Host lifecycle custody without dispatch", async () => {
+  const { createdWorkspaces, dependencies, providerCalls } = createDependencies({
+    potentialAcceptance: true,
+  });
+  let acceptedOperationId: string | undefined;
+  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "inspect potential durable acceptance" },
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }, { onAccepted: operation => {acceptedOperationId = operation.operationId;} });
+
+  assert.equal(outcome.status, "observed");
+  if (outcome.status === "observed") {
+    assert.equal(outcome.turn.operationId, acceptedOperationId);
+    assert.equal(outcome.turn.status, "reconcile_required");
+  }
+  assert.equal(createdWorkspaces.length, 0);
+  assert.equal(providerCalls.value, 0);
+});
 
 test("lost store acknowledgement is returned only with durable reconciliation debt and no provider retry", async () => {
   const { dependencies, providerCalls } = createDependencies({ indeterminateFirstCommit: true });

@@ -136,6 +136,7 @@ const createDependencies = (options: Readonly<{
   neverExecution?: boolean;
   neverStart?: boolean;
   providerGate?: Promise<void>;
+  potentialAcceptance?: boolean;
   providerSettlementIndeterminateOnce?: boolean;
   providerStarted?: () => void;
   revalidationThrows?: boolean;
@@ -175,6 +176,13 @@ const createDependencies = (options: Readonly<{
   const operationStore: ContainedTurnKernelDependencies["operationStore"] = {
     accept: async (candidate, authority) => {
       assertOwnerAuthority(authority, candidate);
+      if (options.potentialAcceptance === true) {
+        return {
+          candidateOperation: candidate,
+          evidenceId: identity("evidence", "potential-acceptance"),
+          kind: "potential_acceptance",
+        };
+      }
       current = candidate;
       return { kind: "accepted", operation: candidate };
     },
