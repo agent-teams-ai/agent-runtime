@@ -48,6 +48,10 @@ jobs:
       - name: Run quality gate
         run: pnpm check
 
+      - name: Run advisory quality diagnostics
+        continue-on-error: true
+        run: pnpm quality:diagnostic
+
   postgres-durability:
     name: postgres-durability
     runs-on: ubuntu-24.04
@@ -99,6 +103,7 @@ jobs:
         env:
           POSTGRES_DURABILITY_URL: postgresql://postgres:postgres@127.0.0.1:5432/contained_turn_test
         run: pnpm --filter @agent-teams/agent-execution test:postgres
+
   runtime-macos:
     name: runtime-macos
     runs-on: macos-15

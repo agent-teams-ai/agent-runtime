@@ -2,6 +2,8 @@ schemaVersion: 1
 project:
   id: agent-runtime
 capabilities:
+  quality.gate-runner:
+    configPath: architecture/foundation/quality-gate-runner.yaml
   quality.executable-specifications:
     configPath: architecture/foundation/executable-specifications.yaml
   architecture.source-dependencies:

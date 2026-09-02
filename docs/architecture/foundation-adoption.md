@@ -26,6 +26,7 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 | Foundation surface | AR state | Evidence or gate |
 | --- | --- | --- |
 | `repository.agent-workflow` | enabled | Canonical `AGENTS.md`, agent pointers, changed/fast/full checks |
+| `quality.gate-runner` | enabled for advisory CI diagnostics | AR-owned `ci-diagnostics` profile containing only the existing root `lint` and no-emit `typecheck` scripts; canonical JSON is emitted in the Ubuntu `check` job after the independent complete gate |
 | `workspace.dependency-declarations` | enabled | Exact pnpm catalog and workspace protocol policy |
 | `architecture.source-dependencies` | enabled for current TypeScript evidence code | All current TypeScript experiment roots form one explicitly non-production boundary; production package boundaries are added when scaffolded |
 | `quality.executable-specifications` | enabled for synthetic architecture evidence | The ADR-0006 JSON oracle, ADR-0010 disposition, independent evaluator, property/mutation checks, and XState path evidence support accepted ADR-0009 and ADR-0010 authority; they do not bind or implement a production runtime or establish implementation/deployment qualification |
@@ -43,6 +44,24 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 "Gated" is an applicability decision, not forgotten work. Its trigger must be
 re-evaluated in the same PR that introduces the corresponding public contract or
 publishing workflow.
+
+## Advisory quality diagnostics
+
+Agent Runtime owns `architecture/foundation/quality-gate-runner.yaml`. Its only
+profile, `ci-diagnostics`, allows only the root `lint` and no-emit `typecheck`
+scripts, runs them with concurrency two, and gives each a 120000 ms deadline.
+Those deadlines cap the concurrent diagnostic at two minutes against the
+Ubuntu job's 20-minute budget, which has remained unchanged since that job was
+introduced. This is a safety ceiling, not timing evidence or a speed claim.
+
+The CI invocation is diagnostic and `continue-on-error`; it runs only after
+the independent `pnpm check` succeeds and neither removes nor replaces any
+required gate. The profile does not authorize product, architecture,
+documentation, Foundation, scaffolding, test, Rust, spike, evidence-capture,
+runtime, agent, or wrapper
+scripts. It does not run on macOS and provides no macOS or Windows evidence.
+Rollback removes the Ubuntu diagnostic step, package script, capability
+declaration, and owned profile together.
 
 ## Maintainability budgets
 

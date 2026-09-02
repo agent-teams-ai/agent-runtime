@@ -35,13 +35,13 @@ test("canonical qualification v2 covers every Runtime authorable type exactly on
     readFile(join(repositoryRoot, "package.json"), "utf8").then(JSON.parse),
   ]);
   assert.equal(integration.schemaVersion, 2);
-  assert.equal(integration.cohort.cohortId, "docs-2026-08-28-stable8");
+  assert.equal(integration.cohort.cohortId, "docs-2026-08-31-stable10");
   assert.deepEqual(integration.qualification, {
     contractPath: "architecture/foundation/docs-protocol-qualification.json",
     gateCommand: "pnpm docs:protocol:check"
   });
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.2.0");
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "0.20.0");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.4.1");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "0.21.0");
   assert.match(protocolProfileSource, /^schemaVersion: 2$/mu);
   assert.match(protocolProfileSource, /^  path: architecture\/foundation\/document-authoring\.yaml$/mu);
   assert.match(protocolProfileSource, /^  schemaVersion: 3$/mu);
