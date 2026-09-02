@@ -317,6 +317,20 @@ test("fails before turn bytes when initialize reports the wrong private Codex ho
   assert.equal(process.requests.some(message => message.method === "turn/start"), false);
   assert.equal(process.closeCount, 1);
 });
+test("rejects malformed normal response envelopes before dispatch", async () => {
+  const envelopes = [
+    (id: unknown) => ({id, result: {}, unknown: true}),
+    (id: unknown) => ({error: {code: -32_000, message: "rejected"}, id, result: {}}),
+    (id: unknown) => ({error: {code: "-32000", message: "rejected"}, id}),
+  ];
+  for (const envelope of envelopes) {
+    const process = new FakeCodexProcess((message, target) => {
+      if (message.method === "initialize") {target.emit(envelope(message.id));}
+    });
+    assert.equal((await createProvider(process).execute(executeInput(process))).kind, "not_accepted");
+    assert.equal(process.requests.some(message => message.method === "turn/start"), false);
+  }
+});
 test("fails before turn bytes for absent, disallowed, or wrong permission profiles", async () => {
   const variants = [
     [] as Message[],
@@ -620,7 +634,13 @@ test("stderr iterator failure remains ambiguous before dispatch and after a prot
   assert.equal("protocolTerminalObserved" in outcome && outcome.protocolTerminalObserved, true);
 });
 test("accepts one exact empty interrupt result and rejects duplicate or malformed acknowledgements", async () => {
-  for (const results of [[{}, {}], [{ accepted: true }]]) {
+  for (const responses of [
+    [{result: {}}, {result: {}}],
+    [{result: {accepted: true}}],
+    [{result: {}, unknown: true}],
+    [{error: {code: -32_000, message: "rejected"}, result: {}}],
+    [{error: {code: -32_000}}],
+  ]) {
     const process = new FakeCodexProcess((message, target) => {
       if (standardHandshake(message, target)) {return;}
       if (message.method === "turn/start") {
@@ -628,7 +648,7 @@ test("accepts one exact empty interrupt result and rejects duplicate or malforme
         emitTurnStarted(target, "turn:interrupt-shape");
       }
       if (message.method === "turn/interrupt") {
-        for (const result of results) {target.emit({ id: message.id, result });}
+        for (const response of responses) {target.emit({id: message.id, ...response});}
         target.emit({ method: "turn/completed", params: {
           threadId: "thread:test",
           turn: generatedTurn("turn:interrupt-shape", "interrupted"),

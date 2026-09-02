@@ -31,16 +31,51 @@ export const codexServerRequestMethod = (message: CodexJsonRecord): string | und
 export const codexNotificationMethod = (message: CodexJsonRecord): string | undefined =>
   !(`id` in message) ? codexStringField(message, "method") : undefined;
 
+type CodexResponseEnvelope = Readonly<
+  | { readonly id: string; readonly kind: "result"; readonly result: unknown }
+  | { readonly error: CodexJsonRecord; readonly id: string; readonly kind: "error" }
+>;
+
+const exactKeys = (record: CodexJsonRecord, expected: readonly string[]): boolean => {
+  const keys = Object.keys(record);
+  return keys.length === expected.length && expected.every(key => Object.hasOwn(record, key));
+};
+
+/** App Server uses the JSON-RPC response member shapes without a `jsonrpc` member. */
+export const decodeCodexResponseEnvelope = (message: CodexJsonRecord): CodexResponseEnvelope => {
+  if (typeof message.id !== "string" || message.id.length === 0) {
+    throw new CodexAppServerProtocolError("Codex App Server response identity is malformed", false);
+  }
+  const hasResult = Object.hasOwn(message, "result");
+  const hasError = Object.hasOwn(message, "error");
+  if (hasResult === hasError) {
+    throw new CodexAppServerProtocolError("Codex App Server response result shape is malformed", false);
+  }
+  if (hasResult) {
+    if (!exactKeys(message, ["id", "result"])) {
+      throw new CodexAppServerProtocolError("Codex App Server response envelope is malformed", false);
+    }
+    return Object.freeze({id: message.id, kind: "result", result: message.result});
+  }
+  if (!exactKeys(message, ["error", "id"]) || !isCodexRecord(message.error)
+    || !exactKeys(message.error, Object.hasOwn(message.error, "data")
+      ? ["code", "data", "message"] : ["code", "message"])
+    || !Number.isSafeInteger(message.error.code) || typeof message.error.message !== "string") {
+    throw new CodexAppServerProtocolError("Codex App Server error response is malformed", false);
+  }
+  return Object.freeze({error: message.error, id: message.id, kind: "error"});
+};
+
 export const codexResponseResult = (
   message: CodexJsonRecord,
   requestId: string,
 ): unknown | typeof CODEX_APP_SERVER_TIMEOUT => {
-  if (message.id !== requestId) {return CODEX_APP_SERVER_TIMEOUT;}
-  if (isCodexRecord(message.error)) {
+  const response = decodeCodexResponseEnvelope(message);
+  if (response.id !== requestId) {return CODEX_APP_SERVER_TIMEOUT;}
+  if (response.kind === "error") {
     throw new CodexAppServerProtocolError("Codex App Server request was rejected", false, true);
   }
-  if (!("result" in message)) {throw new Error("Codex App Server response has no result");}
-  return message.result;
+  return response.result;
 };
 
 export class BoundedCodexJsonLineReader {

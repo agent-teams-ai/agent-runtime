@@ -269,6 +269,24 @@ test("provider-controlled JSON-RPC detail, method, path, and output never enter 
     error instanceof Error && !error.message.includes(hostile) && !error.message.includes("/private/path"));
 });
 
+test("accepts only exact official App Server response envelopes", () => {
+  assert.deepEqual(codexResponseResult({id: "request:1", result: null}, "request:1"), null);
+  assert.throws(() => codexResponseResult({
+    error: {code: -32_000, data: {reason: "bounded"}, message: "rejected"}, id: "request:1",
+  }, "request:1"), error => error instanceof Error && "explicitlyRejected" in error && error.explicitlyRejected === true);
+  for (const message of [
+    {id: "request:1"},
+    {error: {code: -32_000, message: "rejected"}, id: "request:1", result: {}},
+    {id: "request:1", result: {}, unknown: true},
+    {error: {code: -32_000}, id: "request:1"},
+    {error: {code: -32_000.5, message: "rejected"}, id: "request:1"},
+    {error: {code: -32_000, message: "rejected", unknown: true}, id: "request:1"},
+  ]) {
+    assert.throws(() => codexResponseResult(message, "request:1"), error =>
+      error instanceof Error && "explicitlyRejected" in error && error.explicitlyRejected === false);
+  }
+});
+
 test("terminal admission retains every credential, exact-token, and normalized private-path prefix", () => {
   const basePolicy = Object.freeze({exactSensitiveTokens: Object.freeze([]), privatePaths: Object.freeze([]),
     privatePathPlatform: "linux" as const});
@@ -326,6 +344,27 @@ test("terminal path admission covers every decomposed and Windows grammar prefix
   assert.equal(codexTerminalOutputText(byteDistinctLinuxText, {
     exactSensitiveTokens: [], privatePaths: [linuxNfc], privatePathPlatform: "linux",
   }), byteDistinctLinuxText, "Linux must retain byte-sensitive decomposition identity");
+});
+
+test("canonicalizes repeated separators and dot-segment aliases before private-path comparison", () => {
+  const cases = [
+    {path: "/srv/private/codex", platform: "linux" as const, text: "/srv//private/./stage/../codex"},
+    {path: "/Users/Private/Codex", platform: "darwin" as const,
+      text: "/users///private/cache/.././CODEX"},
+    {path: "C:\\Users\\Private\\Codex", platform: "win32" as const,
+      text: "\\\\?\\C:\\Users\\Public\\..\\Private\\.\\Codex"},
+    {path: "\\\\Server\\Private Share\\Codex", platform: "win32" as const,
+      text: "//?/UNC//server/decoy/../private share/./codex"},
+  ];
+  for (const entry of cases) {
+    assert.equal(codexTextContainsPrivatePath(entry.text, [entry.path], entry.platform), true);
+    assert.throws(() => assertCodexCanonicalOutputAllowed(entry.text, {
+      exactSensitiveTokens: [], privatePaths: [entry.path], privatePathPlatform: entry.platform,
+    }), error => error instanceof Error && !error.message.includes(entry.path));
+  }
+  assert.equal(codexTextContainsPrivatePath("/srv/private-other/./codex", ["/srv/private/codex"], "linux"), false);
+  assert.equal(codexTextContainsPrivatePath("C:\\Users\\PrivateOther\\..\\Public\\Codex",
+    ["C:\\Users\\Private\\Codex"], "win32"), false);
 });
 
 test("whole-turn admission clears terminal prefixes and uses bounded notification retention", async () => {

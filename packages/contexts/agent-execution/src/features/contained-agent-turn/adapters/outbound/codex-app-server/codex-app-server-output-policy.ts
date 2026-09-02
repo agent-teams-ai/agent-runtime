@@ -51,17 +51,30 @@ const CREDENTIAL_PATTERNS: Readonly<Record<(typeof CODEX_CREDENTIAL_POLICY_FAMIL
 const canonicalCaseFold = (value: string): string =>
   value.normalize("NFD").toUpperCase().toLowerCase().normalize("NFD");
 
+const collapseLexicalPathAliases = (value: string): string => {
+  const segments = value.replace(/\/{2,}/gu, "/").split("/");
+  const canonical: string[] = [];
+  for (const segment of segments) {
+    if (segment === ".") {continue;}
+    if (segment === ".." && canonical.length > 0 && canonical.at(-1) !== "" && canonical.at(-1) !== "..") {
+      canonical.pop();
+      continue;
+    }
+    canonical.push(segment);
+  }
+  return canonical.join("/");
+};
+
 const windowsLexicalComparable = (value: string): string => canonicalCaseFold(value).replaceAll("\\", "/");
 
 const windowsPathComparable = (value: string): string => windowsLexicalComparable(value)
-  .replace(/(^|[^/])\/\/[?.]\/unc\//gu, "$1//")
-  .replace(/(^|[^/])\/\/[?.]\//gu, "$1")
-  .replace(/(^|[^/])\/\?\?\/unc\//gu, "$1//")
-  .replace(/(^|[^/])\/\?\?\//gu, "$1");
+  .replace(/(^|[^/])\/{2,}[?.]\/+(?:unc\/+)?/gu, "$1/")
+  .replace(/(^|[^/])\/+\?\?\/+(?:unc\/+)?/gu, "$1/");
 
 const pathComparable = (value: string, platform: CodexPrivatePathPlatform): string => {
-  if (platform === "linux") {return value;}
-  return platform === "win32" ? windowsPathComparable(value) : canonicalCaseFold(value);
+  const lexical = platform === "linux" ? value
+    : platform === "win32" ? windowsPathComparable(value) : canonicalCaseFold(value);
+  return collapseLexicalPathAliases(lexical);
 };
 
 export const codexTextContainsPrivatePath = (
@@ -102,12 +115,7 @@ const terminalPrivatePathTargets = (
   platform: CodexPrivatePathPlatform,
 ): readonly string[] => {
   if (platform !== "win32") {return [pathComparable(path, platform)];}
-  const canonical = windowsPathComparable(path);
-  if (canonical.startsWith("//")) {
-    const uncBody = canonical.slice(2);
-    return [canonical, `//?/unc/${uncBody}`, `//./unc/${uncBody}`, `/??/unc/${uncBody}`];
-  }
-  return [canonical, `//?/${canonical}`, `//./${canonical}`, `/??/${canonical}`];
+  return [pathComparable(path, platform)];
 };
 
 const CREDENTIAL_SKELETONS = Object.freeze([
@@ -164,8 +172,7 @@ export const codexTerminalOutputText = (
   text: string,
   policy: CodexCanonicalOutputPolicy,
 ): string => {
-  const pathText = policy.privatePathPlatform === "win32"
-    ? windowsLexicalComparable(text) : pathComparable(text, policy.privatePathPlatform);
+  const pathText = pathComparable(text, policy.privatePathPlatform);
   const unsafeExactPrefix = policy.exactSensitiveTokens.some(token => textEndsWithProperPrefix(text, token));
   const unsafePathPrefix = policy.privatePaths.some(path => terminalPrivatePathTargets(path, policy.privatePathPlatform)
     .some(target => textEndsWithProperPrefix(pathText, target)));

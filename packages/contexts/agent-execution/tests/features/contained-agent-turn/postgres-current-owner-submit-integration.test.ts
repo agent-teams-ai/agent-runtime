@@ -215,7 +215,7 @@ const createOwner = async (
       platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async input => ({boundary: createCodexAppServerPermissionBoundary({codexHome,
         workspaceRef: input.workspaceAuthority.canonicalPath}),
-        executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp})}, workspaceOwner,
+        executablePath: "/synthetic/codex", privateRootPath, sensitiveOutputTokens: [], tmpDir: temp})}, workspaceOwner,
     });
   }
   const configRoot = join(privateRootPath, "config");

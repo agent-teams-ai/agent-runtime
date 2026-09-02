@@ -1,6 +1,7 @@
 import type { ContainedTurnProviderPort } from "../legacy/legacy-contained-turn-ports.js";
 import {
   CodexAppServerProtocolError,
+  decodeCodexResponseEnvelope,
   codexNotificationMethod as notificationMethod,
   codexServerRequestMethod as serverRequestMethod,
   codexStringField as stringField,
@@ -515,11 +516,12 @@ export const handleCodexActiveMessage = async (input: {
 };
 
 const observeInterruptResponse = (message: JsonRecord, progress: CodexActiveTurnProgress): void => {
-  if (message.id !== progress.interruptRequestId || progress.interruptAcknowledged) {
+  const response = decodeCodexResponseEnvelope(message);
+  if (response.id !== progress.interruptRequestId || progress.interruptAcknowledged) {
     throw new CodexAppServerProtocolError("Codex App Server returned an unexpected response identity", true);
   }
-  if (isRecord(message.error)) {throw new CodexAppServerProtocolError("Codex rejected turn interruption", true);}
-  if (!isRecord(message.result) || Object.keys(message.result).length !== 0) {
+  if (response.kind === "error") {throw new CodexAppServerProtocolError("Codex rejected turn interruption", true);}
+  if (!isRecord(response.result) || Object.keys(response.result).length !== 0) {
     throw new CodexAppServerProtocolError("Codex turn interruption acknowledgement is malformed", true);
   }
   progress.interruptAcknowledged = true;

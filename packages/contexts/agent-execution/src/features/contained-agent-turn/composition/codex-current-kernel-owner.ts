@@ -35,6 +35,8 @@ export interface CodexCurrentKernelLaunchRecord {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly executablePath: string;
   readonly privateRootPath: string;
+  /** Exact Host-custodied credential values and derived digests that must never reach canonical output. */
+  readonly sensitiveOutputTokens: readonly string[];
   readonly tmpDir: string;
 }
 export interface CodexCurrentKernelLaunchRecordResolver {
@@ -142,6 +144,7 @@ export const createCodexCurrentKernelOwner = (
             },
             privateRootPath: record.plan.privateRootPath,
             processes,
+            sensitiveOutputTokens: record.record.sensitiveOutputTokens,
             tmpDir: record.record.tmpDir,
           });
           return Object.freeze({
