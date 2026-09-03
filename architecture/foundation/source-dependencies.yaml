@@ -6,11 +6,149 @@ governedRoots:
   - experiments
   - packages/apps/embedded-runtime/src
   - packages/contexts/agent-execution/src
+  - packages/contexts/provider-access/src
   - packages/contexts/runtime-configuration/src
   - packages/contexts/runtime-security/src
   - packages/platform/filesystem-custody/src
   - scripts/foundation
 boundaries:
+  - id: core.agent-execution.contained-turn
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/application
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/contracts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-cleanup.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-recovery.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-kernel-model.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-limits.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-output-authority.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-output-transitions.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-proofs.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-satisfaction.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-transitions.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins: []
+      runtimeReferences: []
+  - id: adapter.agent-execution.docker-engine
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins:
+        - node:crypto
+        - node:fs
+        - node:fs/promises
+        - node:http
+        - node:net
+        - node:path
+        - node:util
+      runtimeReferences: []
+  - id: adapter.agent-execution.docker-custody
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker
+    entrypoints: []
+    allow:
+      boundaries:
+        - adapter.agent-execution.docker-engine
+      packages: []
+      builtins:
+        - node:child_process
+        - node:crypto
+        - node:fs
+        - node:fs/promises
+        - node:path
+        - node:stream
+      runtimeReferences: []
+  - id: adapter.agent-execution.host-custody
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts
+    allow:
+      boundaries:
+        - core.agent-execution.contained-turn
+      packages:
+        - "@agent-teams/filesystem-custody"
+      builtins:
+        - node:child_process
+        - node:crypto
+        - node:fs
+        - node:fs/promises
+        - node:os
+        - node:path
+        - node:stream
+        - node:timers/promises
+      runtimeReferences: []
+  - id: adapter.agent-execution.claude-agent-sdk
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.ts
+    allow:
+      boundaries:
+        - adapter.agent-execution.provider-delegation-ports
+        - core.agent-execution.contained-turn
+      packages:
+        - "@anthropic-ai/claude-agent-sdk"
+      builtins:
+        - node:crypto
+        - node:path
+        - node:perf_hooks
+        - node:stream
+        - node:timers/promises
+      runtimeReferences: []
+  - id: adapter.agent-execution.provider-delegation-ports
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/contained-turn-provider-delegation-port.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/private-directory-custody-port.ts
+    allow:
+      boundaries:
+        - adapter.agent-execution.host-custody
+        - adapter.agent-execution.legacy-contained-turn-ports
+      packages: []
+      builtins: []
+      runtimeReferences: []
+  - id: adapter.agent-execution.legacy-contained-turn-ports
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts
+    allow:
+      boundaries:
+        - adapter.agent-execution.host-custody
+        - core.agent-execution.contained-turn
+      packages: []
+      builtins: []
+      runtimeReferences: []
   - id: production.agent-execution
     dependencyMode: runtime
     roots:
@@ -18,14 +156,37 @@ boundaries:
     entrypoints:
       - packages/contexts/agent-execution/src/index.ts
       - packages/contexts/agent-execution/src/composition.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts
     allow:
-      boundaries: []
+      boundaries:
+        - adapter.agent-execution.claude-agent-sdk
+        - adapter.agent-execution.host-custody
+        - adapter.agent-execution.legacy-contained-turn-ports
+        - adapter.agent-execution.provider-delegation-ports
+        - core.agent-execution.contained-turn
       packages:
         - "@agent-teams/filesystem-custody"
+        - pg
+        - zod
       builtins:
+        - node:child_process
         - node:crypto
         - node:fs
         - node:fs/promises
+        - node:path
+        - node:timers/promises
+      runtimeReferences: []
+  - id: production.provider-access
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/provider-access/src
+    entrypoints:
+      - packages/contexts/provider-access/src/index.ts
+      - packages/contexts/provider-access/src/composition.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins: []
       runtimeReferences: []
   - id: production.runtime-configuration
     dependencyMode: runtime
@@ -61,6 +222,7 @@ boundaries:
         - node:fs
         - node:fs/promises
         - node:path
+        - node:util
       runtimeReferences: []
   - id: production.filesystem-custody
     dependencyMode: runtime
@@ -103,6 +265,8 @@ boundaries:
     allow:
       boundaries: []
       packages:
+        - "@agent-teams/agent-execution"
+        - "@agentclientprotocol/sdk"
         - "@xstate/graph"
         - ajv
         - fast-check
@@ -116,14 +280,17 @@ boundaries:
         - node:crypto
         - node:fs
         - node:fs/promises
+        - node:module
         - node:os
         - node:path
         - node:perf_hooks
         - node:readline
+        - node:stream
         - node:test
         - node:timers/promises
         - node:url
         - node:util
+        - node:worker_threads
       runtimeReferences: []
   - id: tooling.foundation-scaffolding
     dependencyMode: development

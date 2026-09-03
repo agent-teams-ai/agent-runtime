@@ -1,0 +1,6 @@
+{
+  "name": "cancellation-ambiguity",
+  "provenance": "synthetic_policy_case_no_live_cancellation_retained",
+  "activeSessionId": "session-1",
+  "cancel": { "sessionId": "session-1" }
+}

@@ -1,0 +1,230 @@
+{
+  "name": "opencode-contained-turn-port-conformance",
+  "provenance": "fully_synthetic_opencode_acp_sdk_semantic_observations_no_provider_launch",
+  "conformanceStatus": "contract_gap",
+  "evidenceKind": "synthetic_acp_characterization_with_current_kernel_contract_checks_not_opencode_conformance",
+  "scope": {
+    "acpFramingAndCorrelationAuthority": "@agentclientprotocol/sdk@1.3.0",
+    "liveProvider": false,
+    "network": false,
+    "productionAdapter": false,
+    "providerProcess": false
+  },
+  "authoritySeparation": {
+    "fixtureRole": "acp_semantic_observations_only_no_expected_kernel_outcomes",
+    "acpTerminalAuthority": "@agentclientprotocol/sdk@1.3.0/schema/schema.json#/$defs/StopReason",
+    "kernelImplementation": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts",
+    "kernelExpectationAuthority": [
+      "docs/decisions/0010-contained-agent-turn-v1-operation-authority.md",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-kernel-model.ts"
+    ],
+    "kernelHarnessProviderIdentity": "codex_contract_only_not_opencode_identity"
+  },
+  "contractPin": {
+    "adapterIdentity": "synthetic-opencode-acp-v1-projection",
+    "provider": "opencode",
+    "providerRevision": "opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
+    "supportedModes": ["analysis"]
+  },
+  "neutralPortGap": {
+    "status": "not_expressible_without_production_contract_widening",
+    "providerIdentity": {
+      "required": "opencode",
+      "currentClosedMembers": [],
+      "source": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts"
+    },
+    "forbiddenWorkarounds": [
+      "cast_opencode_to_existing_provider",
+      "mislabel_opencode_as_claude_or_codex",
+      "widen_production_api_from_characterization"
+    ],
+    "acceptanceDetail": {
+      "observation": "closure_timeout_with_provider_accepted_true",
+      "currentAmbiguousMembers": ["evidenceId", "kind"],
+      "lostFact": "providerAccepted_true",
+      "required": "retain_known_provider_acceptance_independently_of_execution_ambiguity",
+      "status": "proposed_contract_gap_not_kernel_exercised"
+    },
+    "requestRejection": {
+      "observation": "request_rejected_with_provider_accepted_false_and_proved_no_start",
+      "currentProviderObservationKinds": ["completed", "indeterminate"],
+      "lostFacts": ["providerAccepted_false", "proved_no_start"],
+      "required": "neutral_provider_observation_for_proved_request_no_start",
+      "status": "proposed_contract_gap_not_kernel_exercised"
+    }
+  },
+  "characterizationBoundary": {
+    "capabilityDisposition": {
+      "required": ["supported", "deferred", "unknown", "unsupported"],
+      "currentManifestMembers": [
+        "effectCardinality",
+        "effectClass",
+        "manifestRevision",
+        "manifestVersion",
+        "provider",
+        "providerAttemptCardinality",
+        "requiredProofKinds",
+        "resourceScopeRevision",
+        "supportedModes",
+        "unknownCapabilityPolicy"
+      ],
+      "source": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts"
+    },
+    "anomalyDetail": {
+      "currentNeutralOutcome": "indeterminate_with_opaque_bounded_evidence_id",
+      "requiredSyntheticClasses": [
+        "request_timeout_ambiguity",
+        "late_request_rejected_after_timeout",
+        "request_rejected_without_no_start_proof"
+      ],
+      "proposedContractGaps": [
+        "closure_timeout_with_provider_accepted_true_loses_acceptance",
+        "request_rejected_with_proved_no_start_is_not_a_provider_access_prevention"
+      ]
+    }
+  },
+  "evidencePolicy": {
+    "maxIdentifierCharacters": 128,
+    "maxRetainedTextBytes": 256,
+    "indeterminateEvidenceId": "sha256_digest_only",
+    "rawFieldsNeverRetained": [
+      "workspace",
+      "session",
+      "tool",
+      "provider_output"
+    ]
+  },
+  "initializeResponse": {
+    "protocolVersion": 1,
+    "agentInfo": {
+      "name": "OpenCodeSyntheticFixture",
+      "version": "1.18.5"
+    },
+    "agentCapabilities": {
+      "loadSession": true,
+      "sessionCapabilities": {
+        "close": {},
+        "fork": {},
+        "futureSessionOperation": {}
+      }
+    }
+  },
+  "capabilityCases": [
+    {
+      "capability": "prompt",
+      "observedStatus": "baseline",
+      "characterizationDisposition": "supported"
+    },
+    {
+      "capability": "close",
+      "observedStatus": "supported",
+      "characterizationDisposition": "supported"
+    },
+    {
+      "capability": "fork",
+      "observedStatus": "deferred",
+      "characterizationDisposition": "deferred"
+    },
+    {
+      "capability": "futureSessionOperation",
+      "observedStatus": "unknown",
+      "characterizationDisposition": "unknown"
+    },
+    {
+      "capability": "list",
+      "observedStatus": "unsupported",
+      "characterizationDisposition": "unsupported"
+    }
+  ],
+  "outcomeCases": [
+    {
+      "id": "completed-succeeded",
+      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "sdkSemanticObservation": {
+        "kind": "terminal",
+        "providerAccepted": true,
+        "stopReason": "end_turn"
+      }
+    },
+    {
+      "id": "completed-failed",
+      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "sdkSemanticObservation": {
+        "kind": "terminal",
+        "providerAccepted": true,
+        "stopReason": "refusal"
+      }
+    },
+    {
+      "id": "completed-cancelled",
+      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "sdkSemanticObservation": {
+        "kind": "terminal",
+        "providerAccepted": true,
+        "stopReason": "cancelled"
+      }
+    },
+    {
+      "id": "terminal-max-tokens",
+      "evidenceClassification": "proposed_deferred_distinct_terminal_reason",
+      "sdkSemanticObservation": {
+        "kind": "terminal",
+        "providerAccepted": true,
+        "stopReason": "max_tokens"
+      }
+    },
+    {
+      "id": "terminal-max-turn-requests",
+      "evidenceClassification": "proposed_deferred_distinct_terminal_reason",
+      "sdkSemanticObservation": {
+        "kind": "terminal",
+        "providerAccepted": true,
+        "stopReason": "max_turn_requests"
+      }
+    },
+    {
+      "id": "explicit-pre-acceptance-rejection",
+      "evidenceClassification": "proposed_no_start_request_rejection_contract_gap",
+      "sdkSemanticObservation": {
+        "kind": "request_rejected",
+        "providerAccepted": false,
+        "explicitNoStartProof": true
+      }
+    },
+    {
+      "id": "request-timeout-after-dispatch",
+      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "sdkSemanticObservation": {
+        "kind": "request_timeout_ambiguity",
+        "providerAccepted": "unknown"
+      }
+    },
+    {
+      "id": "request-rejection-without-no-start-proof",
+      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "sdkSemanticObservation": {
+        "kind": "request_rejected",
+        "providerAccepted": "unknown",
+        "explicitNoStartProof": false
+      }
+    },
+    {
+      "id": "late-rejection-after-timeout",
+      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "sdkSemanticObservation": {
+        "kind": "late_request_rejected_after_timeout",
+        "providerAccepted": "unknown"
+      }
+    },
+    {
+      "id": "sdk-closure-timeout",
+      "evidenceClassification": "proposed_acceptance_detail_contract_gap",
+      "sdkSemanticObservation": {
+        "kind": "closure_timeout",
+        "providerAccepted": true
+      }
+    }
+  ]
+}

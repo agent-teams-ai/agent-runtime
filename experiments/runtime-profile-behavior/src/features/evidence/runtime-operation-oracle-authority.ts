@@ -14,11 +14,18 @@ import type {
   Case,
   CaseFragment,
   Catalog,
+  ContainedTurnV1Contract,
+  ContainedTurnV1Disposition,
   CrossAxis,
   ExampleFragment,
   Fact,
   Manifest,
 } from "../../../fixtures/proof-artifacts/runtime-operation-oracle/runtime-operation-oracle-types.generated.ts";
+
+import {
+  validateContainedTurnV1Authority,
+  type ContainedTurnV1Validation,
+} from "./runtime-operation-contained-turn-v1.ts";
 
 const SCHEMA_ID = "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json";
 const SPEC_DIRECTORY = "experiments/runtime-profile-behavior/spec/runtime-operation-oracle";
@@ -296,6 +303,9 @@ export type RuntimeOperationOracleAuthority = {
   manifest: Manifest;
   catalog: Catalog;
   crossAxis: CrossAxis;
+  containedTurnV1Contract: ContainedTurnV1Contract;
+  containedTurnV1Disposition: ContainedTurnV1Disposition;
+  containedTurnV1Validation: ContainedTurnV1Validation;
   oracle: ADR0006RuntimeOperationOracle;
   schema: Record<string, unknown>;
 };
@@ -322,11 +332,35 @@ export const loadRuntimeOperationOracleAuthority = async (
     await readJson(join(specificationRoot, manifest.crossAxis), manifest.crossAxis),
     manifest.crossAxis,
   );
+  const containedTurnV1Disposition = validate<ContainedTurnV1Disposition>(
+    requireValidator(ajv, "containedTurnV1Disposition"),
+    await readJson(
+      join(specificationRoot, manifest.containedTurnV1Disposition),
+      manifest.containedTurnV1Disposition,
+    ),
+    manifest.containedTurnV1Disposition,
+  );
+  const containedTurnV1Contract = validate<ContainedTurnV1Contract>(
+    requireValidator(ajv, "containedTurnV1Contract"),
+    await readJson(
+      join(specificationRoot, manifest.containedTurnV1Contract),
+      manifest.containedTurnV1Contract,
+    ),
+    manifest.containedTurnV1Contract,
+  );
   const actualRootJson = (await readdir(specificationRoot))
     .filter((path) => path.endsWith(".json")).toSorted();
   exactArray(
     actualRootJson,
-    ["authority.schema.json", "schema.json", "manifest.json", manifest.catalog, manifest.crossAxis].toSorted(),
+    [
+      "authority.schema.json",
+      "schema.json",
+      "manifest.json",
+      manifest.catalog,
+      manifest.crossAxis,
+      manifest.containedTurnV1Disposition,
+      manifest.containedTurnV1Contract,
+    ].toSorted(),
     "root authority-file membership",
   );
   const caseValidator = requireValidator(ajv, "caseFragment");
@@ -365,10 +399,20 @@ export const loadRuntimeOperationOracleAuthority = async (
     oracle,
     "assembled oracle",
   );
+  const containedTurnV1Validation = await validateContainedTurnV1Authority({
+    repositoryRoot,
+    contract: containedTurnV1Contract,
+    disposition: containedTurnV1Disposition,
+    cases,
+    catalog,
+  });
   return {
     manifest,
     catalog,
     crossAxis,
+    containedTurnV1Contract,
+    containedTurnV1Disposition,
+    containedTurnV1Validation,
     oracle,
     schema,
   };

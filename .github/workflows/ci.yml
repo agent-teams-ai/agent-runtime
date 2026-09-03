@@ -52,6 +52,58 @@ jobs:
         continue-on-error: true
         run: pnpm quality:diagnostic
 
+  postgres-durability:
+    name: postgres-durability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18.4-trixie@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_DB: contained_turn_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d contained_turn_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify checkout revision
+        shell: bash
+        env:
+          EXPECTED_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack install --global pnpm@11.18.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build PostgreSQL test target
+        run: pnpm --filter @agent-teams/agent-execution... build
+
+      - name: Run disposable PostgreSQL durability gate
+        env:
+          POSTGRES_DURABILITY_URL: postgresql://postgres:postgres@127.0.0.1:5432/contained_turn_test
+        run: pnpm --filter @agent-teams/agent-execution test:postgres
+
   runtime-macos:
     name: runtime-macos
     runs-on: macos-15

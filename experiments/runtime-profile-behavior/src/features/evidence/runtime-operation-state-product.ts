@@ -78,10 +78,10 @@ export const generatedStateIsValid = (state: GeneratedState): boolean => {
     state.satisfaction === "complete";
 };
 
-const stateProductSize = (axes: StateProductAxes): number =>
+export const stateProductSize = (axes: StateProductAxes): number =>
   Object.values(axes).reduce((product, values) => product * values.length, 1);
 
-const stateAt = (axes: StateProductAxes, index: number): GeneratedState => {
+export const stateAt = (axes: StateProductAxes, index: number): GeneratedState => {
   let quotient = index;
   const take = <Axis extends keyof GeneratedState>(axis: Axis): GeneratedState[Axis] => {
     const values = axes[axis];

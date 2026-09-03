@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
 
 import {
+  benchmarkSourceRevision,
   changes,
   evidenceRoots,
   ownership,
@@ -338,7 +339,7 @@ const loadProspectiveBenchmarks = async () => {
   const document = JSON.parse(await readFile(benchmarkEnvelopePath, "utf8"));
   assert.equal(document.schemaVersion, 1);
   assert.equal(document.evidenceKind, "redacted-hosted-worker-result-envelopes");
-  assert.equal(document.sourceRevision, changes.at(-1)?.revision);
+  assert.equal(document.sourceRevision, benchmarkSourceRevision);
   assert.equal(document.envelopes.length, prospectiveBenchmarks.length);
 
   const envelopes = new Map(document.envelopes.map(envelope => [envelope.jobId, envelope]));
@@ -405,7 +406,7 @@ const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
     "codex-and-claude-code-are-sibling-capabilities-not-one-provider-slot",
     "no-runtime-provider-selection-without-rebuild-is-proved",
     "host-disposal-does-not-prove-generic-module-lifecycle",
-    "prospective-benchmarks-are-exploratory-and-do-not-satisfy-the-promotion-rule",
+    "prospective-benchmarks-are-exploratory-historical-evidence-and-do-not-satisfy-the-promotion-rule",
     "no-shared-foundation-runtime-is-authorized",
   ],
 });
@@ -463,7 +464,7 @@ const validateStoredReport = async report => {
     "retained prospective benchmark evidence drifted",
   );
   for (const benchmark of report.prospectiveBenchmarks) {
-    assert.equal(benchmark.sourceRevision, changes.at(-1)?.revision);
+    assert.equal(benchmark.sourceRevision, benchmarkSourceRevision);
     assert.equal(benchmark.execution.editMode, "read-only");
     assert.equal(benchmark.verdict, "hold");
     assert.equal(benchmark.promotionEvidence, false);

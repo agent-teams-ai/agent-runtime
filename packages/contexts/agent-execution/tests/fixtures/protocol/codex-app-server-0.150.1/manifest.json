@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 2,
+  "wrapperPackage": "@openai/codex@0.150.1",
+  "package": "@openai/codex-linux-x64@0.150.1",
+  "npmSri": {
+    "wrapper": "sha512-knrbhpJH3mEULAVStcZW4F5WEt9MQhBj6KFOonBSIUGTLcHlu9CE7FRmr95E33y94+sWNZSeVBBV/kYvlfgxkQ==",
+    "native": "sha512-B3Bu5MF/G9qFhbSMrdyZz9ocknXOo45DnOdWrREJaxWTjiuUO1ogoDR0/ttdc29JRFkbbXs3aC+Td8vIx3X0oA=="
+  },
+  "tarballSha256": "35a87cf024345cf2d9350e5220401c8d3967ff6feee04055a89c73524927c0a6",
+  "nativeTarget": "x86_64-unknown-linux-musl",
+  "binarySha256": "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
+  "candidateTargets": {
+    "darwin-arm64": {
+      "authority": "checked-in-package-binary-initialize-candidate",
+      "binaryPath": "vendor/aarch64-apple-darwin/codex/codex",
+      "binarySha256": "a14f9a907c12c8812878b70e6b7d65f81c39ed795513e46a55817d7428c0ca6b",
+      "initialize": {
+        "platformFamily": "unix",
+        "platformOs": "macos",
+        "userAgent": "agent-runtime/0.150.1 (Mac OS 15.6.1; arm64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)"
+      },
+      "nativePackage": "@openai/codex-darwin-arm64@0.150.1",
+      "nativeTarget": "aarch64-apple-darwin",
+      "qualification": "candidate-pending-exact-local-canary",
+      "wrapperPackage": "@openai/codex@0.150.1"
+    }
+  },
+  "generatorCommands": [
+    "codex app-server generate-json-schema --out <marked-disposable-root>/schema",
+    "codex app-server generate-ts --out <marked-disposable-root>/types"
+  ],
+  "source": "schema/v2/ItemCompletedNotification.json",
+  "sourceSha256": "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370",
+  "regenerationVerifier": {
+    "command": "pnpm --filter @agent-teams/agent-execution verify:codex-schema-regeneration",
+    "executionBinding": "retained-verified-descriptor",
+    "executionEvidenceField": "executedBinarySha256",
+    "optInEnvironment": "AR_CODEX_SCHEMA_REGEN_VERIFY=1",
+    "externalProof": true,
+    "runsInStaticTests": false
+  },
+  "artifact": "ItemCompletedNotification.json",
+  "artifactBytes": 41664,
+  "artifactSha256": "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370",
+  "generatedRuntimeBinding": {
+    "artifact": "src/features/contained-agent-turn/adapters/outbound/codex-app-server/generated-codex-item-schema.ts",
+    "generator": "protocol/codex-app-server-0.150.1/generate-runtime-item-schema.mjs",
+    "sha256": "b9bdb38db25eb5d49368bd6b7850d4d23b51f908de6fb8cfb5e2f7cfb218f8ef",
+    "sourceExecutionBinding": "retained-open-descriptor"
+  }
+}

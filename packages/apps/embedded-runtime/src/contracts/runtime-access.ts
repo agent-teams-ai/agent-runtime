@@ -206,6 +206,74 @@ export interface ClaudeCodeRuntimeAccessHandle {
   readonly claudeCodeSetup: ClaudeCodeRuntimeSetupQueries;
 }
 
+/** Stable provider identity. Exact provider support is decided by composition. */
+export type RuntimeContainedTurnProvider = string;
+
+export type RuntimeContainedTurnMode = "analysis" | "workspace-write";
+
+export type RuntimeContainedTurnOutputKind = "assistant" | "diagnostic" | "progress";
+
+export interface RuntimeContainedTurnOutputView {
+  readonly cursor: number;
+  readonly kind: RuntimeContainedTurnOutputKind;
+  readonly text: string;
+}
+
+export type RuntimeContainedTurnStatus =
+  | "accepted"
+  | "cancelled"
+  | "failed"
+  | "reconcile_required"
+  | "running"
+  | "succeeded";
+
+export interface RuntimeContainedTurnView {
+  readonly artifactManifestRef?: string;
+  readonly commandId: string;
+  readonly effectId: string;
+  readonly operationId: string;
+  readonly output: readonly RuntimeContainedTurnOutputView[];
+  readonly provider: RuntimeContainedTurnProvider;
+  readonly resultRef?: string;
+  readonly status: RuntimeContainedTurnStatus;
+}
+
+export interface SubmitRuntimeContainedTurnInput {
+  readonly commandId: string;
+  readonly expectedProvider: RuntimeContainedTurnProvider;
+  readonly intent: {
+    readonly mode: RuntimeContainedTurnMode;
+    readonly prompt: string;
+  };
+}
+
+export type SubmitRuntimeContainedTurnOutcome =
+  | { readonly code: "capability_unavailable"; readonly status: "unsupported" }
+  | { readonly code: "command_fingerprint_conflict"; readonly status: "conflict" }
+  | { readonly code: "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
+  | { readonly status: "denied" }
+  | { readonly operationId: string; readonly status: "accepted" };
+
+export type ObserveRuntimeContainedTurnOutcome =
+  | { readonly code: "capability_unavailable"; readonly status: "unsupported" }
+  | { readonly status: "not_found" }
+  | { readonly status: "observed"; readonly turn: RuntimeContainedTurnView };
+
+export type CancelRuntimeContainedTurnOutcome = ObserveRuntimeContainedTurnOutcome;
+
+export interface RuntimeContainedTurnAccess {
+  cancel(
+    operationId: string,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<CancelRuntimeContainedTurnOutcome>;
+  observe(operationId: string): Promise<ObserveRuntimeContainedTurnOutcome>;
+  submit(
+    input: SubmitRuntimeContainedTurnInput,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<SubmitRuntimeContainedTurnOutcome>;
+}
+
 export interface RuntimeAccessHandle extends ClaudeCodeRuntimeAccessHandle {
+  readonly containedTurn: RuntimeContainedTurnAccess;
   readonly codexSetup: CodexRuntimeSetupQueries;
 }

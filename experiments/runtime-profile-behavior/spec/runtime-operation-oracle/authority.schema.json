@@ -13,6 +13,12 @@
       "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/crossAxis"
     },
     {
+      "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/containedTurnV1Disposition"
+    },
+    {
+      "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/containedTurnV1Contract"
+    },
+    {
       "$ref": "https://agent-teams.ai/schemas/adr-0006-runtime-operation-oracle.schema.json#/$defs/caseFragment"
     },
     {

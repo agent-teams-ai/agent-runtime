@@ -1,0 +1,68 @@
+import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
+
+declare const containedTurnIdentityBrand: unique symbol;
+
+export type ContainedTurnIdentity<Namespace extends string> = string & {
+  readonly [containedTurnIdentityBrand]: Namespace;
+};
+
+export type ContainedTurnAttemptId = ContainedTurnIdentity<"attempt">;
+export type ContainedTurnCancellationCommandId = ContainedTurnIdentity<"cancellation_command">;
+export type ContainedTurnCleanupPermitIdentity = ContainedTurnIdentity<"cleanup_permit">;
+export type ContainedTurnClosureDebtIdentity = ContainedTurnIdentity<"closure_debt">;
+export type ContainedTurnClosureRequestIdentity = ContainedTurnIdentity<"closure_request">;
+export type ContainedTurnCommandId = ContainedTurnIdentity<"command">;
+export type ContainedTurnCustodyId = ContainedTurnIdentity<"custody">;
+export type ContainedTurnEffectId = ContainedTurnIdentity<"effect">;
+export type ContainedTurnEvidenceId = ContainedTurnIdentity<"evidence">;
+export type ContainedTurnExecutionGenerationId = ContainedTurnIdentity<"execution_generation">;
+export type ContainedTurnHostBootId = ContainedTurnIdentity<"host_boot">;
+export type ContainedTurnHostInstanceId = ContainedTurnIdentity<"host_instance">;
+export type ContainedTurnOperationId = ContainedTurnIdentity<"operation">;
+/** Operation-scoped custody preparation identity, distinct from the eventual attempt. */
+export type ContainedTurnPreparationToken = ContainedTurnIdentity<"preparation">;
+export type ContainedTurnProofId = ContainedTurnIdentity<"proof">;
+export type ContainedTurnWorkspaceId = ContainedTurnIdentity<"workspace">;
+/** Private owner-store credential. It must never enter caller-facing projections. */
+export type ContainedTurnWriterFence = ContainedTurnIdentity<"writer_fence">;
+
+export const CONTAINED_TURN_IDENTITY_PREFIXES = Object.freeze({
+  attempt: "attempt:",
+  cancellation_command: "cancellation-command:",
+  cleanup_permit: "cleanup-permit:",
+  closure_debt: "closure-debt:",
+  closure_request: "closure-request:",
+  command: "command:",
+  custody: "custody:",
+  effect: "effect:",
+  evidence: "evidence:",
+  execution_generation: "execution-generation:",
+  host_boot: "host-boot:",
+  host_instance: "host-instance:",
+  operation: "operation:",
+  preparation: "preparation:",
+  proof: "proof:",
+  workspace: "workspace:",
+  writer_fence: "writer-fence:",
+} as const);
+
+export type ContainedTurnIdentityNamespace = keyof typeof CONTAINED_TURN_IDENTITY_PREFIXES;
+
+export const validateContainedTurnIdentity = <Namespace extends ContainedTurnIdentityNamespace>(
+  namespace: Namespace,
+  value: string,
+): ContainedTurnIdentity<Namespace> => {
+  validateContainedTurnText(`${namespace} identity`, value, CONTAINED_TURN_LIMITS.text.identifier);
+  if (!value.startsWith(CONTAINED_TURN_IDENTITY_PREFIXES[namespace])) {
+    throw new TypeError(`${namespace} identity must use its exact disjoint namespace prefix`);
+  }
+  if (value.length === CONTAINED_TURN_IDENTITY_PREFIXES[namespace].length) {
+    throw new TypeError(`${namespace} identity must have a non-empty suffix`);
+  }
+  return value as ContainedTurnIdentity<Namespace>;
+};
+
+export const containedTurnIdentity = <Namespace extends ContainedTurnIdentityNamespace>(
+  namespace: Namespace,
+  value: string,
+): ContainedTurnIdentity<Namespace> => validateContainedTurnIdentity(namespace, value);

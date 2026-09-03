@@ -21,6 +21,10 @@ independent competing source of truth.
 
 Documents:
 
+- [Feature Module Standard v1 scoped active adoption](feature-module-standard-v1-candidate.md):
+  exact immutable authority binding, narrow Agent Execution and Provider Access
+  active scope, deterministic gates, and zero-diagnostic evidence. This is not
+  repository-wide conformance.
 - [Architecture foundation](architecture-foundation.md): ownership, DDD
   boundaries, dependency rules, persistence, public API, and quality gates.
 - [Execution generation model](execution-generation-model.md): execution
@@ -30,6 +34,9 @@ Documents:
   runtime commands, provider protocols, observations, and consumer transports.
 - [OpenCode integration](opencode-integration.md): ACP-first execution plus
   isolated native OpenCode management and reconciliation.
+- [Contained Agent Turn V1 delivery plan](contained-agent-turn-v1-delivery-plan.md):
+  staged implementation, provider, module, custody, qualification, and hosted
+  worker plan for the first contained execution turn.
 - [Provider setup delivery roadmap](provider-setup-delivery-roadmap.md): legacy
   capability disposition and delivery order for Codex, Claude Code, and
   OpenCode setup.

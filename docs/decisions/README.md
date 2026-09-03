@@ -12,6 +12,11 @@ related:
   - ADR-0005
   - ADR-0006
   - ADR-0008
+  - ADR-0009
+  - ADR-0010
+  - ADR-0012
+  - ADR-0013
+  - ADR-0014
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -26,6 +31,8 @@ immutable evidence; a later change uses an explicit superseding decision.
 ## Proposed
 
 - [ADR-0006: Orthogonal runtime-operation state and effect continuity](0006-orthogonal-runtime-operation-state-and-effect-continuity.md)
+  remains the broader design proposal. ADR-0010 accepts only its narrow V1
+  subset without mutating this document.
 
 ## Accepted
 
@@ -44,6 +51,22 @@ immutable evidence; a later change uses an explicit superseding decision.
   query does not qualify a Claude executable, provider route, production
   collector, deployment, or any access, trust, installation, or execution
   capability; ADR-0008 remains immutable historical authority.
+- [ADR-0009: Contained turn private access and Host shutdown boundary](0009-contained-turn-private-access-and-host-shutdown-boundary.md)
+  adds the trusted contained-turn handle, durable-cancellation meaning, and
+  Host-shutdown truth boundary without changing ADR-0008.
+- [ADR-0010: Contained Agent Turn V1 operation authority](0010-contained-agent-turn-v1-operation-authority.md)
+  accepts the narrow one-attempt operation contract while preserving the
+  broader proposed ADR-0006 as design input.
+- [ADR-0012: Provider Access authority in contained-turn composition](0012-provider-access-authority-in-contained-turn-composition.md)
+  replaces only ADR-0009's six-member composition enumeration with the exact
+  seven-member dependency object; every other ADR-0009 invariant remains in
+  force.
+- [ADR-0013: Scoped Feature Module Standard v1 adoption](0013-feature-module-standard-v1-candidate-adoption.md)
+  accepts active conformance only for the three named features in Agent
+  Execution and Provider Access; it does not claim repository-wide conformance.
+- [ADR-0014: Darwin provider candidate platform qualification](0014-darwin-provider-candidate-platform-qualification.md)
+  accepts exact Codex and Claude Darwin arm64 revisions as unqualified
+  candidates without changing Linux authority or ADR-0010 operation semantics.
 
 ## Superseded
 

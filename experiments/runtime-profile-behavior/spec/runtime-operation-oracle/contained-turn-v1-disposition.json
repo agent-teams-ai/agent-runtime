@@ -1,0 +1,1685 @@
+{
+  "$schema": "./schema.json#/$defs/containedTurnV1Disposition",
+  "schemaVersion": 1,
+  "adr": "ADR-0010",
+  "companionAdr": "ADR-0009",
+  "requirements": [
+    {
+      "requirement": 1,
+      "caseId": "output-terminal-order",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 2,
+      "caseId": "dispatch-cutoff-race",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 3,
+      "caseId": "requirement-closure-race",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 4,
+      "caseId": "terminal-command-race",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 5,
+      "caseId": "indeterminate-evidence-race",
+      "disposition": "deferred",
+      "reason": "Terminal outcome_indeterminate is deferred; V1 preserves ambiguity as nonterminal reconcile_required."
+    },
+    {
+      "requirement": 6,
+      "caseId": "seal-outbox-recovery",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 7,
+      "caseId": "dispatch-claim-crash",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 8,
+      "caseId": "provider-acceptance-observation",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 9,
+      "caseId": "terminal-lost-ack",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 10,
+      "caseId": "successor-effect-identity",
+      "disposition": "deferred",
+      "reason": "Successor-operation effect continuity is deferred; V1 has one operation and one coarse effect."
+    },
+    {
+      "requirement": 11,
+      "caseId": "effect-fingerprint-conflict",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 12,
+      "caseId": "distinct-identity-equal-payload",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 13,
+      "caseId": "completed-effect-replay",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 14,
+      "caseId": "known-not-accepted-retry",
+      "disposition": "not_applicable",
+      "reason": "Fresh provider retry is not applicable; V1 permits at most one provider attempt and no redispatch."
+    },
+    {
+      "requirement": 15,
+      "caseId": "tombstone-restore",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 16,
+      "caseId": "effect-cardinality",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 17,
+      "caseId": "receipt-ordering",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 18,
+      "caseId": "stale-authority-restore",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 19,
+      "caseId": "model-generation",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 20,
+      "caseId": "cutoff-before-boundary",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 21,
+      "caseId": "normal-provider-termination",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 22,
+      "caseId": "zero-attempt-effect-cutoff",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 23,
+      "caseId": "post-seal-receipt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 24,
+      "caseId": "atomic-indeterminate-clear",
+      "disposition": "deferred",
+      "reason": "Atomic transition to terminal outcome_indeterminate is deferred because V1 has no such terminal result."
+    },
+    {
+      "requirement": 25,
+      "caseId": "deployment-continuity",
+      "disposition": "deferred",
+      "reason": "Deployment and resume continuity are deferred from the contained-turn V1 slice."
+    },
+    {
+      "requirement": 26,
+      "caseId": "manifest-coverage",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "caseId": "cross-axis-transitions",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 28,
+      "caseId": "binary-revision-semantic-retention",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    }
+  ],
+  "examples": [
+    {
+      "requirement": 1,
+      "exampleId": "output-before-seal",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 1,
+      "exampleId": "seal-before-output",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 2,
+      "exampleId": "claim-wins-cutoff-race",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 2,
+      "exampleId": "operation-cutoff-wins-dispatch",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 2,
+      "exampleId": "session-cutoff-wins-dispatch",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 2,
+      "exampleId": "scope-cutoff-wins-dispatch",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 3,
+      "exampleId": "reservation-before-seal",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 3,
+      "exampleId": "seal-before-reservation",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 4,
+      "exampleId": "terminal-command-before-final-receipt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 4,
+      "exampleId": "final-receipt-before-duplicate-terminal",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 4,
+      "exampleId": "conflicting-terminal-replay",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 5,
+      "exampleId": "positive-evidence-before-indeterminate",
+      "disposition": "deferred",
+      "reason": "Terminal outcome_indeterminate is deferred; V1 preserves ambiguity as nonterminal reconcile_required."
+    },
+    {
+      "requirement": 5,
+      "exampleId": "positive-evidence-after-indeterminate",
+      "disposition": "deferred",
+      "reason": "Terminal outcome_indeterminate is deferred; V1 preserves ambiguity as nonterminal reconcile_required."
+    },
+    {
+      "requirement": 5,
+      "exampleId": "invalid-indeterminate-race-shape",
+      "disposition": "deferred",
+      "reason": "Terminal outcome_indeterminate is deferred; V1 preserves ambiguity as nonterminal reconcile_required."
+    },
+    {
+      "requirement": 6,
+      "exampleId": "recover-sealed-unpublished-outbox",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 6,
+      "exampleId": "uncommitted-seal-cannot-publish",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 7,
+      "exampleId": "claimed-without-provider-bytes",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 7,
+      "exampleId": "normal-dispatch-after-claim",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 7,
+      "exampleId": "new-claim-after-durable-claim",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 7,
+      "exampleId": "unclaimed-provider-dispatch",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 7,
+      "exampleId": "absence-is-not-nonacceptance-proof",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 8,
+      "exampleId": "accepted-and-observed",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 8,
+      "exampleId": "accepted-before-durable-observation",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 9,
+      "exampleId": "exact-terminal-replay-after-lost-ack",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 9,
+      "exampleId": "conflicting-terminal-replay-after-lost-ack",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 10,
+      "exampleId": "successors-share-qualified-effect",
+      "disposition": "deferred",
+      "reason": "Successor-operation effect continuity is deferred; V1 has one operation and one coarse effect."
+    },
+    {
+      "requirement": 10,
+      "exampleId": "successors-conflict-on-fingerprint",
+      "disposition": "deferred",
+      "reason": "Successor-operation effect continuity is deferred; V1 has one operation and one coarse effect."
+    },
+    {
+      "requirement": 11,
+      "exampleId": "new-external-identity-new-fingerprint",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 11,
+      "exampleId": "same-external-identity-conflicting-fingerprint",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 12,
+      "exampleId": "equal-payload-distinct-effects",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 12,
+      "exampleId": "same-identity-cannot-create-distinct-effect",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 13,
+      "exampleId": "completed-effect-zero-provider-calls",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 13,
+      "exampleId": "completed-effect-provider-call-forbidden",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 14,
+      "exampleId": "one-fresh-attempt-after-proof",
+      "disposition": "not_applicable",
+      "reason": "Fresh provider retry is not applicable; V1 permits at most one provider attempt and no redispatch."
+    },
+    {
+      "requirement": 14,
+      "exampleId": "stale-attempt-after-proof",
+      "disposition": "not_applicable",
+      "reason": "Fresh provider retry is not applicable; V1 permits at most one provider attempt and no redispatch."
+    },
+    {
+      "requirement": 15,
+      "exampleId": "ordinary-restored-effect",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 15,
+      "exampleId": "restored-tombstone-still-blocks-retry",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 16,
+      "exampleId": "operation-with-zero-effects",
+      "disposition": "not_applicable",
+      "reason": "V1 accepts exactly one coarse EffectId; the zero-effect optional policy is not applicable."
+    },
+    {
+      "requirement": 16,
+      "exampleId": "operation-with-one-coarse-effect",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 16,
+      "exampleId": "operation-with-multiple-mediated-effects",
+      "disposition": "not_applicable",
+      "reason": "V1 does not expose multiple mediated child or transcript effects."
+    },
+    {
+      "requirement": 16,
+      "exampleId": "operation-with-invalid-effect-cardinality",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 17,
+      "exampleId": "delayed-receipt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 17,
+      "exampleId": "reordered-receipt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 17,
+      "exampleId": "exact-duplicate-receipt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 17,
+      "exampleId": "conflicting-receipt-rejected",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 18,
+      "exampleId": "monotonic-authority-restore",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 18,
+      "exampleId": "restore-reopens-authority",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 19,
+      "exampleId": "generated-valid-axis-product",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 19,
+      "exampleId": "generated-invalid-axis-product",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 20,
+      "exampleId": "boundary-reuses-cutoff-fences",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 20,
+      "exampleId": "boundary-advances-cutoff-cursor",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 21,
+      "exampleId": "normal-termination-needs-no-containment",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 21,
+      "exampleId": "uncertain-containment-blocks-terminal",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 22,
+      "exampleId": "registered-effect-cutoff-before-attempt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 22,
+      "exampleId": "zero-attempt-effect-without-cutoff",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 23,
+      "exampleId": "bound-receipt-after-seal",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 23,
+      "exampleId": "unbound-receipt-after-seal",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 24,
+      "exampleId": "all-tombstones-clear-and-terminal-atomically",
+      "disposition": "deferred",
+      "reason": "Atomic transition to terminal outcome_indeterminate is deferred because V1 has no such terminal result."
+    },
+    {
+      "requirement": 24,
+      "exampleId": "indeterminate-debt-cleared-separately",
+      "disposition": "deferred",
+      "reason": "Atomic transition to terminal outcome_indeterminate is deferred because V1 has no such terminal result."
+    },
+    {
+      "requirement": 24,
+      "exampleId": "missing-tombstone-blocks-clear",
+      "disposition": "deferred",
+      "reason": "Atomic transition to terminal outcome_indeterminate is deferred because V1 has no such terminal result."
+    },
+    {
+      "requirement": 25,
+      "exampleId": "verified-continuity-allows-dispatch",
+      "disposition": "deferred",
+      "reason": "Deployment and resume continuity are deferred from the contained-turn V1 slice."
+    },
+    {
+      "requirement": 25,
+      "exampleId": "missing-continuity-fails-closed",
+      "disposition": "deferred",
+      "reason": "Deployment and resume continuity are deferred from the contained-turn V1 slice."
+    },
+    {
+      "requirement": 26,
+      "exampleId": "complete-manifest-satisfaction",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 26,
+      "exampleId": "missing-child-satisfaction",
+      "disposition": "not_applicable",
+      "reason": "Child-effect receipt membership is not part of the immutable V1 RequiredReceiptSet."
+    },
+    {
+      "requirement": 26,
+      "exampleId": "missing-transcript-satisfaction",
+      "disposition": "not_applicable",
+      "reason": "Transcript-effect receipt membership is not part of the immutable V1 RequiredReceiptSet."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-dispatch-unclaimed-to-claimed",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-dispatch-claimed-to-unknown",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-dispatch-claimed-to-not-accepted",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-dispatch-claimed-to-accepted",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-dispatch-unknown-to-not-accepted",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-dispatch-unknown-to-accepted",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-dispatch-not-accepted-to-fresh-claim",
+      "disposition": "not_applicable",
+      "reason": "V1 forbids redispatch and has no fresh retry attempt."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-dispatch-accepted-to-claimed",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-execution-start-with-claim",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-execution-reset-with-proof",
+      "disposition": "not_applicable",
+      "reason": "V1 forbids resetting execution for a retry attempt."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-execution-termination-with-receipt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-execution-reopen",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-execution-start-without-claim",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-execution-reset-without-proof",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-execution-termination-without-receipt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-containment-request",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-containment-completion",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-containment-uncertainty",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-containment-retry-from-uncertain",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-containment-late-exact-proof",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-qualified-containment-not-required",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-qualified-containment-not-required-after-termination",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-qualified-containment-with-open-admission",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-qualified-containment-with-open-output",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-qualified-containment-with-active-execution",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-qualified-containment-with-contradictory-execution",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-qualified-containment-without-capability-evidence",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-qualified-containment-without-qualification-receipt",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-containment-reopen",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-qualified-containment-reopen",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-cutoff-open-to-fenced",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-cutoff-reopen",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-manifest-seal-with-both-fences",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-manifest-seal-with-open-admission",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-manifest-seal-with-open-output",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-terminal-with-complete-closure",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "allow-terminal-not-started-with-complete-closure",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-terminal-with-active-execution",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-terminal-reopen",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 27,
+      "exampleId": "forbid-claim-without-execution-activation",
+      "disposition": "required",
+      "reason": "The contained-turn V1 contract retains this existing operation invariant."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "root-before-provider-or-effect-work",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "work-without-semantic-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "session-release-before-root-establishment",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "nonterminal-operation-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "effect-reconciliation-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "terminal-projection-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "transcript-projection-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "closed-operation-releases-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "exact-release-replay-is-idempotent",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-replay-with-stale-manifest-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-replay-with-wrong-scope-manifest-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-replay-with-unknown-manifest-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-replay-with-incomplete-manifest-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "terminal-without-effect-closure-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "unknown-release-outcome-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "gc-with-zero-semantic-roots",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "gc-with-retained-semantic-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "semantic-root-does-not-authorize-dispatch",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "authorized-dispatch-after-retention",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "work-before-operation-acceptance-commit",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "shared-effect-roots-every-attempting-operation",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "shared-effect-missing-attempting-operation-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "root-cas-wins-gc-race",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "gc-cas-wins-root-race",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "contradictory-zero-and-retained-roots",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "gc-with-existing-blocker",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "gc-without-winning-collection-cas",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "lost-root-receipt-ack-replays",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "lost-root-receipt-ack-unresolved",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "unknown-acceptance-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "ttl-does-not-release-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "durable-abandon-releases-unaccepted-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "exact-abandon-release-replay",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "abandon-replay-with-stale-abort-receipt-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "abandon-replay-with-wrong-scope-abort-receipt-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "stale-abandon-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "wrong-scope-abandon-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "unknown-abandon-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-closure-without-root-rejected",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-without-identity-binding-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-without-obligation-digest-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-without-terminal-satisfaction-digests-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-without-effect-receipts-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-without-projection-independence-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-without-typed-non-applicability-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "incomplete-release-manifest-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "stale-release-manifest-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "wrong-scope-release-manifest-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "unknown-release-manifest-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "duplicate-release-evidence-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-manifest-digest-conflict",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "post-release-manifest-digest-conflict",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-crash-reconciles-claim",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-completes-with-durable-receipt",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-exact-replay",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-replay-without-completion-reconciles",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-partial-reconciles",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-unknown-reconciles",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-with-active-root-blocked",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-with-root-cas-winner-blocked",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-with-contradictory-root-evidence-blocked",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-without-durable-claim-blocked",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-wrong-scope-claim-blocked",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-wrong-set-digest-blocked",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-stale-store-fence-blocked",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "shared-effect-work-complete-roots",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "shared-effect-work-missing-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "shared-effect-conflicting-root-facts-reject",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "accept-cas-wins-pending-revision",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "abort-cas-wins-pending-revision",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "abort-loses-after-accept",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "accept-loses-after-abort",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "accept-exact-replay-returns-current-receipt",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "abort-exact-replay-returns-current-receipt",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "accepted-operation-with-abort-receipt-quarantines",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "accepted-state-with-abort-cas-quarantines",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "aborted-state-with-accept-cas-quarantines",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "nonconcurrent-both-terminal-states-quarantine",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "nonconcurrent-both-cas-winners-quarantine",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "valid-abort-proof-after-ttl-releases-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "work-without-complete-obligation-set-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "work-with-wrong-obligation-digest-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "work-with-weaker-obligation-set-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "dynamic-obligation-reserved-before-use",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "dynamic-obligation-use-without-reservation-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "dynamic-obligation-sealed-before-release",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "dynamic-obligation-unsealed-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-with-wrong-obligation-digest-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "release-with-weaker-obligation-set-retains-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "normal-abort-releases-established-root",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "abort-first-persists-forbidden-tombstone",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "abort-first-forbids-delayed-ensure",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "abort-first-crash-replay-stays-forbidden",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "ensure-first-abort-releases-and-forbids",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "root-establish-and-abort-same-revision-both-win-forbidden",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "ensure-establishes-open-obligation-set",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "ensure-without-durable-establishment-receipt-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "concurrent-accept-abort-accept-wins",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "concurrent-accept-abort-abort-wins",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "concurrent-accept-abort-both-cas-win-forbidden",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "reserve-and-seal-same-revision-both-win-forbidden",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-completed-receipt-lost-reconciles",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-deletion-preclaim-request-blocked",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "physical-absence-before-claim-is-integrity-contradiction",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "predelete-tombstone-is-not-final-deleted",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "active-shared-reference-after-delete-start-is-integrity-contradiction",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "wrong-scope-delete-start-is-integrity-contradiction",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "stale-fence-delete-start-is-integrity-contradiction",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "established-root-lost-ack-replays-original-receipt",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "established-root-stale-generation-replay-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "established-root-replay-with-conflicting-digest-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "established-root-replay-with-weaker-set-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "concurrent-accept-winner-with-both-terminal-states-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "concurrent-accept-winner-with-abort-receipt-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "concurrent-accept-winner-without-pending-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "final-deleted-state-without-completion-receipt-quarantines",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "completion-receipt-without-final-deleted-state-quarantines",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "acceptance-command-cannot-bypass-work-authorization",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "acceptance-command-cannot-bypass-dispatch-authorization",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "root-request-cannot-bypass-work-authorization",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "root-request-cannot-bypass-dispatch-authorization",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "gc-command-cannot-bypass-work-authorization",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "gc-command-cannot-bypass-dispatch-authorization",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "deletion-command-cannot-bypass-work-authorization",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "deletion-command-cannot-bypass-dispatch-authorization",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "authorized-work-with-acceptance-command-intent-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "authorized-work-with-release-replay-intent-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "authorized-work-with-abandon-replay-intent-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "authorized-work-with-session-release-intent-rejects",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "sealed-obligation-set-rejects-provider-work",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "sealed-obligation-set-rejects-dispatch",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "ensure-cannot-establish-sealed-obligation-set",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "shared-effect-missing-root-dominates-mixed-command",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "shared-effect-absent-roots-dominate-mixed-command",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "shared-effect-conflicting-roots-dominate-mixed-command",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "historical-root-cas-evidence-does-not-mix-with-work",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    },
+    {
+      "requirement": 28,
+      "exampleId": "historical-accept-cas-evidence-does-not-mix-with-dispatch",
+      "disposition": "deferred",
+      "reason": "The general BinaryRevision retention and garbage-collection protocol is deferred; V1 only freezes the exact revision at command acceptance."
+    }
+  ],
+  "stateCategories": [
+    {
+      "id": "effect-resolution-none",
+      "precedence": 1,
+      "predicate": "effect_resolution_none",
+      "disposition": "not_applicable",
+      "reason": "V1 accepts exactly one coarse EffectId, so zero-effect states are outside the slice."
+    },
+    {
+      "id": "ambiguity-or-terminal-indeterminate",
+      "precedence": 2,
+      "predicate": "effect_resolution_indeterminate_or_terminal_outcome_indeterminate",
+      "disposition": "deferred",
+      "reason": "V1 keeps ambiguity nonterminal with reconcile_required and accepts no outcome_indeterminate terminal result."
+    },
+    {
+      "id": "remaining-one-effect-v1-space",
+      "precedence": 3,
+      "predicate": "remaining_state_product",
+      "disposition": "required",
+      "reason": "All remaining states are evaluated by the accepted one-effect V1 invariants."
+    }
+  ],
+  "expected": {
+    "requirementCount": 28,
+    "exampleCount": 242,
+    "stateCount": 48000,
+    "requirements": {
+      "required": 22,
+      "deferred": 5,
+      "notApplicable": 1
+    },
+    "examples": {
+      "required": 87,
+      "deferred": 147,
+      "notApplicable": 8
+    },
+    "states": {
+      "required": {
+        "total": 19200,
+        "valid": 599,
+        "invalid": 18601
+      },
+      "deferred": {
+        "total": 16800,
+        "valid": 321,
+        "invalid": 16479
+      },
+      "notApplicable": {
+        "total": 12000,
+        "valid": 357,
+        "invalid": 11643
+      }
+    }
+  }
+}

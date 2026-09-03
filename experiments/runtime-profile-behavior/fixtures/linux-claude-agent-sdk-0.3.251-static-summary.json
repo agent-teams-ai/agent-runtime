@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "campaign": "linux-claude-agent-sdk-static-characterization",
+  "date": "2026-08-29",
+  "scope": {
+    "platform": "Linux 6.8.0-138-generic x86_64 glibc 2.39",
+    "syntheticHomeOnly": true,
+    "providerTurnRun": false,
+    "authenticatedSessionInitialized": false,
+    "realUserProjectsUsed": false,
+    "credentialValuesInspectedOrRetained": false,
+    "lifecycleScriptsEnabled": false
+  },
+  "package": {
+    "name": "@anthropic-ai/claude-agent-sdk",
+    "version": "0.3.251",
+    "npmIntegrity": "sha512-DqSi8mH2tQYRlVV0G+lJnQ/WbjJZ/a+8cJ3vPuYoqh8esIIvXHm1ZOXV1UPGsFYRnbBytEoiSGitguEXd+sQ+Q==",
+    "nativePackageVersion": "0.3.251",
+    "nativePackageIntegrity": "sha512-qCD87XPjcNM1u4ukqmcgpHDl3Y6l+cW8j7kPzH91Y5yLBYJ5xYZA2KtJ7AYNEPOteVyOGJw/efmva0S8CRr0fg==",
+    "nativeBinarySha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "bundledCliExpectedVersion": "2.1.251",
+    "nodeEngine": ">=18.0.0"
+  },
+  "staticContracts": {
+    "customProcessSpawnerSupported": true,
+    "spawnClaudeCodeProcessReplacesDefaultLauncher": true,
+    "abortControllerSupported": true,
+    "persistSessionFalseSupported": true,
+    "externalSessionStoreSupported": true,
+    "settingSourcesIsolationSupported": true,
+    "allowedAndDisallowedToolsSupported": true,
+    "permissionModeSupported": true
+  },
+  "assertions": {
+    "exactSdkRevision": true,
+    "exactNativeRevision": true,
+    "exactBundledCliRevision": true,
+    "exactBinaryDigest": true,
+    "behaviorQualified": false
+  }
+}

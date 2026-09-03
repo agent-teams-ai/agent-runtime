@@ -1,12 +1,36 @@
 export {
-  AgentRuntimeHostDisposalIncompleteError,
   createAgentRuntimeHost,
   createDefaultAgentRuntimeHost,
+  AgentRuntimeHostDisposalIncompleteError,
+  AgentRuntimeHostLifecycleError,
+  ContainedTurnOwnerContractError,
   type AgentRuntimeHost,
+  type AgentRuntimeHostContainedTurnDisposalIssue,
+  type AgentRuntimeHostContainedTurnDisposalStatus,
   type AgentRuntimeHostDependencies,
+  type AgentRuntimeHostDisposalStatus,
+  type AgentRuntimeHostLifecycleErrorCode,
+  type ContainedTurnOwnerContractErrorCode,
   type ClaudeCodeSetupCapabilityBundle,
   type CodexSetupCapabilityBundle,
 } from "./composition/agent-runtime-host.js";
+export type { ContainedTurnCapabilityBundle } from "./composition/contained-turn-runtime-access.js";
+export {
+  createContainedTurnFeatureFromProviderAccess,
+  createHostCustodiedContainedTurn,
+  PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON,
+  ProviderRouteEnforcementUnsupportedError,
+  type ContainedTurnHostProviderSelection,
+  type ContainedTurnOuterCompositionDependencies,
+  type HostCustodiedContainedTurnComposition,
+  type HostCustodiedContainedTurnDependencies,
+} from "./composition/contained-turn-feature-composition.js";
+export { ContainedTurnConstructionCleanupError } from
+  "./composition/contained-turn-construction-failure.js";
+export {
+  createHostCustodiedAgentRuntimeHost,
+  type HostCustodiedAgentRuntimeHostDependencies,
+} from "./composition/host-custodied-agent-runtime-host.js";
 export type { BuildCodexSetupViewDependencies } from "./application/build-codex-setup-view.js";
 export type { BuildClaudeCodeSetupViewDependencies } from "./application/build-claude-code-setup-view.js";
 export {

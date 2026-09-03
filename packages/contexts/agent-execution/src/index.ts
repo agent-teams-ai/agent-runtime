@@ -6,7 +6,7 @@ export type {
   InstallationCandidateSource,
   RuntimeInstallationDiagnostic,
   RuntimeInstallationObservation,
-} from "./features/runtime-installation-discovery/contracts/runtime-installation-observation.js";
+} from "./features/runtime-installation-discovery/index.js";
 export type {
   ClaudeCodeInstallationCandidate,
   ClaudeCodeInstallationCandidateSource,
@@ -15,4 +15,26 @@ export type {
   DiscoverClaudeCodeInstallations,
   DiscoverClaudeCodeInstallationsInput,
   DiscoverClaudeCodeInstallationsResult,
-} from "./features/runtime-installation-discovery/contracts/claude-code-installation-observation.js";
+} from "./features/runtime-installation-discovery/index.js";
+export type {
+  ContainedTurnFeatureApi,
+  ContainedTurnMode,
+  ContainedTurnOperationRef,
+  ContainedTurnOutputKind,
+  ContainedTurnOutputView,
+  ContainedTurnProvider,
+  ContainedTurnProviderBinding,
+  ContainedTurnScope,
+  ContainedTurnStatus,
+  ContainedTurnView,
+  ObserveContainedTurn,
+  ObserveContainedTurnInput,
+  ObserveContainedTurnOutcome,
+  RequestContainedTurnCancellation,
+  RequestContainedTurnCancellationInput,
+  RequestContainedTurnCancellationOutcome,
+  SubmitContainedTurn,
+  SubmitContainedTurnInput,
+  SubmitContainedTurnOptions,
+  SubmitContainedTurnOutcome,
+} from "./features/contained-agent-turn/index.js";

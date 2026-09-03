@@ -1,0 +1,10 @@
+{
+  "name": "initialize-v1",
+  "provenance": "synthetic_normalized_acp_v1_shape",
+  "requestedVersion": 1,
+  "response": {
+    "protocolVersion": 1,
+    "agentInfo": { "name": "OpenCodeFixture", "version": "fixture-v1" },
+    "agentCapabilities": {}
+  }
+}

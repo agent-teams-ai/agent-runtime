@@ -264,12 +264,12 @@ The machine-readable authority is the
 [`claude-code-setup-freeze.json`](claude-code-setup-freeze.json) packet and its
 [schema](claude-code-setup-freeze.schema.json). The packet is validated by the
 deterministic `test:ar2-contract` gate, which runs exactly once through the
-authoritative `pnpm check` chain. The gate requires each of the 21 frozen
+authoritative `pnpm check` chain. The gate requires each of the 26 frozen
 fixture rows to map to exactly one declared Node test selected by its owning
 package test script, and rejects fixture, title, file, or package-script drift.
 Its documented settings dialect does not qualify or establish compatibility of
 any executable.
-Revision 3 of the linked content-addressed
+Revision 4 of the linked content-addressed
 [`semantic artifact`](claude-code-official-semantics.snapshot.json) binds five
 compact normalized evidence records to exactly five official response bodies
 retained as deterministic gzip artifacts. Every frozen fact cites a retained

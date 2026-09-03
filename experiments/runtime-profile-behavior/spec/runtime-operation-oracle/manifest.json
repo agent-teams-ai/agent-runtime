@@ -4,6 +4,8 @@
   "adr": "ADR-0006",
   "catalog": "catalog.json",
   "crossAxis": "cross-axis.json",
+  "containedTurnV1Disposition": "contained-turn-v1-disposition.json",
+  "containedTurnV1Contract": "contained-turn-v1-contract.json",
   "cases": [
     {
       "requirement": 1,

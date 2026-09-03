@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import {
   createNodeExecutableFileObserver,
   createRuntimeInstallationDiscoveryFeature,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 
 const execFile = promisify(execFileCallback);
 

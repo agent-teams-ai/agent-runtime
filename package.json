@@ -10,9 +10,9 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm lint && pnpm test",
+    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm lint && pnpm test",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm lint",
+    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm lint",
     "docs:check": "agent-teams-docs check --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:doctor": "agent-teams-docs doctor --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:find": "agent-teams-docs find --consumer . --profile architecture/foundation/docs-protocol.yaml",
@@ -25,7 +25,8 @@
     "foundation:assert-dev-only": "agent-teams-foundation assert-dev-only",
     "foundation:assert-registry": "agent-teams-foundation assert-registry",
     "foundation:attach": "agent-teams-foundation attach",
-    "foundation:check": "agent-teams-foundation check && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry",
+    "foundation:boundaries:negative": "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs",
+    "foundation:check": "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry",
     "foundation:detach": "agent-teams-foundation detach",
     "foundation:status": "agent-teams-foundation status",
     "foundation:scaffold:plan": "agent-teams-foundation scaffold-plan --config architecture/foundation/scaffolding.yaml",
@@ -37,6 +38,9 @@
     "product:check": "pnpm --filter './packages/**' -r run clean && pnpm product:build && pnpm --filter './packages/**' -r run test",
     "quality:diagnostic": "agent-teams-foundation gate run ci-diagnostics --format json",
     "architecture:registry": "node experiments/runtime-profile-behavior/src/features/evidence/validate-qualification-registry.ts",
+    "architecture:feature-modules:candidate": "node scripts/architecture/check-feature-modules.mjs --allow-diagnostics",
+    "architecture:feature-modules:active": "node scripts/architecture/check-feature-modules.mjs --require-active",
+    "test:feature-modules": "node --test scripts/architecture/check-feature-modules.test.mjs",
     "architecture:runtime-setup-l0-evidence": "node --test scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs && node scripts/architecture/runtime-setup-l0-evidence.mjs --check",
     "architecture:runtime-setup-l0-evidence:capture": "node scripts/architecture/runtime-setup-l0-evidence.mjs --capture",
     "architecture:ar2-contract": "node scripts/architecture/validate-ar2-contract-artifacts.mjs",
@@ -68,12 +72,14 @@
     "spike:rust-boundaries:client": "node --test --test-concurrency=1 experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
     "spike:rust-boundaries:evidence": "node --test experiments/runtime-profile-behavior/test/rust-system-boundary-evidence.test.ts",
     "test": "node --test --test-concurrency=1 experiments/runtime-profile-behavior/test/*.test.ts experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
+    "test:contained-turn:acceptance": "pnpm --filter @agent-teams/agent-execution run test:contained-turn:acceptance",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.synthetic-oracle.json --noEmit --pretty false"
   },
   "dependencies": {
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@agent-teams/agent-execution": "workspace:*",
     "@agent-teams/docs-protocol": "0.4.1",
     "@agent-teams/engineering-foundation": "0.21.0",
     "@agentclientprotocol/sdk": "catalog:",

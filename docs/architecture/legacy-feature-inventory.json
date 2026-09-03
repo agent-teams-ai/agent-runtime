@@ -2,7 +2,7 @@
   "$schema": "./legacy-feature-inventory.schema.json",
   "schemaVersion": 2,
   "legacyCommit": "f6afac73cced62d943a0e891ad08d7b8f88f802f",
-  "currentCommit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+  "currentCommit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
   "crossCuttingInvariants": [
     {
       "id": "INV-REDACTED-TYPED-DIAGNOSTICS",
@@ -12,7 +12,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/contexts/runtime-configuration/tests/semantic-boundary.test.ts",
             "locator": "test:rejects secret-shaped classifier output without exposing it",
             "claim": "Current semantic-boundary tests reject secret-shaped output without disclosure; every future capability must supply equivalent owner-local evidence."
@@ -54,7 +54,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -92,8 +92,8 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
-            "path": "packages/contexts/agent-execution/tests/runtime-installation-discovery.test.ts",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
+            "path": "packages/contexts/agent-execution/tests/features/runtime-installation-discovery/runtime-installation-discovery.test.ts",
             "locator": "test:discovers distinct binaries and groups symbolic aliases",
             "claim": "Discovery groups aliases without executing provider code."
           }
@@ -135,7 +135,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -168,7 +168,7 @@
           "kind": "not_applicable",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The invariant is enforced across active capabilities rather than as this standalone row."
@@ -209,7 +209,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -247,7 +247,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance requires real version-bound fixtures that exhaust structural forms and closed enums; the current passive slice does not inspect executable versions."
@@ -288,7 +288,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -326,7 +326,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/contexts/runtime-configuration/tests/codex-configuration-inspection.test.ts",
             "locator": "test:applies user, selected external profile, and project precedence deterministically",
             "claim": "Codex user, selected-profile, and workspace precedence is tested."
@@ -367,7 +367,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -400,7 +400,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/contexts/runtime-configuration/tests/codex-configuration-inspection.test.ts",
             "locator": "test:Codex semantic classifier v1 owns dialect and portable-value policy",
             "claim": "The versioned Codex classifier owns portable intent policy."
@@ -441,7 +441,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -484,7 +484,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/contexts/runtime-configuration/tests/semantic-boundary.test.ts",
             "locator": "test:rejects secret-shaped classifier output without exposing it",
             "claim": "Secret-shaped classifier output is rejected without disclosure."
@@ -525,7 +525,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -558,7 +558,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/contexts/runtime-configuration/tests/codex-configuration-inspection.test.ts",
             "locator": "test:reports a selected native profile missing only from the merged configuration",
             "claim": "A missing selected native profile remains an explicit observation."
@@ -599,7 +599,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -632,7 +632,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance requires a reviewed saved-profile publication flow plus mutable-head race evidence; passive inspection does not implement that lifecycle."
@@ -673,7 +673,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -706,7 +706,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance requires a separate installation-status and update capability with no mutation hidden inside setup inspection."
@@ -747,7 +747,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -780,7 +780,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance requires real-package provenance, corruption, helper-closure, rollout, rollback, retention, and garbage-collection evidence."
@@ -821,7 +821,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -854,7 +854,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Required acceptance includes serialized durable ownership, crash recovery at every boundary, atomic head change, prior-revision rollback, exact manifest/revision evidence, and no partial publication. No current AR implementation exists."
@@ -895,7 +895,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -933,7 +933,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future tests must cover each route, competing sources, route/account revision changes, stale review, and no secret values in setup/profile/log output. No current AR Provider Access package slice exists."
@@ -974,7 +974,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1012,7 +1012,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Required tests include concurrent refresh/revoke CAS, generation mismatch, secret redaction, route binding, and final-materialization-only injection. Current AR-1 correctly emits only provider_access_setting_deferred/secret_setting_ignored."
@@ -1053,7 +1053,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1091,7 +1091,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future contract tests must prove account revision monotonicity, stale/ambiguous observation blocking, logout races, and detached secret-free snapshots."
@@ -1132,7 +1132,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1165,7 +1165,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance must cover idempotent start/cancel, HTTPS policy, correlation, timeout, disposal, persisted mutation state, and no auth URL/code leakage outside the intended view."
@@ -1206,7 +1206,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1239,7 +1239,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future state-machine and command-ledger tests must cover every race and exact replay."
@@ -1280,7 +1280,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1313,7 +1313,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future tests must prove revocation CAS, no stale launch binding, credential garbage-collection intent, exact replay, and honest provider-deletion outcomes."
@@ -1357,7 +1357,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1390,7 +1390,7 @@
           "kind": "not_applicable",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The invariant is enforced across active capabilities rather than as this standalone row."
@@ -1431,7 +1431,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1469,7 +1469,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future tests require owner revision, freshness metadata, account binding, partial-result semantics, and no effect on immutable profile identity."
@@ -1510,7 +1510,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1553,7 +1553,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future revision-bound provider tests must cover every supported binary/account route and partial failure. AR-1 currently accepts model only as an open bounded string, not catalog truth."
@@ -1594,7 +1594,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1627,7 +1627,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future tests must fail closed on unknown closed forms and bind normalization revision to BinaryRevision."
@@ -1668,7 +1668,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1711,7 +1711,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future tests must prove account/config/binary isolation, explicit freshness, no fallback launch without compatibility, and review when semantic risk changes."
@@ -1752,7 +1752,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1795,7 +1795,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance requires an exact immutable profile, binary revision, route/account/credential generation, security authorization, capacity, materialization, and staleness vector. Legacy boolean launchAllowed is insufficient."
@@ -1836,7 +1836,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1879,7 +1879,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future stale-review and manifest-delta tests are explicitly open in READINESS."
@@ -1920,7 +1920,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -1958,7 +1958,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future tests must bind model capability, route, account, billing semantics, binary revision, and adapter revision, and require review on semantic change."
@@ -1999,7 +1999,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2052,7 +2052,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/apps/embedded-runtime/tests/codex-setup.e2e.test.ts",
             "locator": "test:inspects a synthetic Codex setup deterministically without leaking paths or secrets",
             "claim": "The detached Codex setup query is exercised end to end."
@@ -2100,7 +2100,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2138,8 +2138,8 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
-            "path": "packages/contexts/agent-execution/tests/claude-code-installation-discovery.test.ts",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
+            "path": "packages/contexts/agent-execution/tests/features/runtime-installation-discovery/claude-code-installation-discovery.test.ts",
             "locator": "test:orders explicit, PATH, and frozen known-location aliases deterministically",
             "claim": "Claude installation candidates are ordered deterministically without execution."
           }
@@ -2181,7 +2181,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/claude-code-official-semantics.snapshot.json",
             "locator": "json-pointer:/frozenFacts/portableSourcesLowToHigh",
             "claim": "Retained official evidence defines the three portable source slots and precedence."
@@ -2194,7 +2194,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2242,7 +2242,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/apps/embedded-runtime/tests/claude-code-semantic-correction.e2e.test.ts",
             "locator": "test:keeps rejected higher source slots and simultaneous system locations across all four owners",
             "claim": "All three declared portable source roles are observed, while untrusted project roles are rejected without selecting a cross-source winner."
@@ -2278,7 +2278,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/claude-code-official-semantics.snapshot.json",
             "locator": "json-pointer:/documents/1/retainedBytesUtf8",
             "claim": "Retained schema bytes define model as string and the portable effort enum."
@@ -2291,7 +2291,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2324,7 +2324,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/contexts/runtime-configuration/tests/claude-code-configuration-inspection.test.ts",
             "locator": "test:classifies default, every alias, exact dated names and 1m names without claiming compatibility",
             "claim": "The current preview tests its frozen model/effort classifier; this does not qualify live model availability."
@@ -2360,14 +2360,14 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/claude-code-official-semantics.snapshot.json",
             "locator": "json-pointer:/frozenFacts/routeAccountFactsProviderAccessOwned",
             "claim": "Retained official evidence keeps provider route and account facts outside portable intent."
           },
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/claude-code-official-semantics.snapshot.json",
             "locator": "json-pointer:/frozenFacts/providerDeploymentsDeferredUntilRouteBinding",
             "claim": "Retained official evidence defers provider deployment identifiers until a route is bound."
@@ -2380,7 +2380,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2423,7 +2423,7 @@
           "kind": "observed_current",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "packages/contexts/runtime-configuration/tests/claude-code-configuration-inspection.test.ts",
             "locator": "test:returns value-free provider deployment and arbitrary selector deferrals with redaction equality",
             "claim": "Provider deployment and arbitrary selector values are deferred without exposing their original values."
@@ -2464,7 +2464,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2502,7 +2502,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "AR-2 performs no auth command or credential-file inspection. Required negative fixture: Presence of .credentials.json, a Keychain hint, or an API-key environment name must not change the result."
@@ -2578,7 +2578,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2616,7 +2616,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "No download, checksum, chmod, update, or install behavior is reachable from inspection. Required negative fixture: Network/process spies remain at zero even when no installation is found."
@@ -2685,7 +2685,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2723,7 +2723,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "No access mutation or secret reference is created by passive inspection. Required negative fixture: Switching route-related environment values in the host process must not affect a bound inspection scope."
@@ -2764,7 +2764,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2802,7 +2802,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Synthetic passive collector returns found_unverified, typed missing/corrupt outcomes, opaque references, and never executes the candidate."
@@ -2843,7 +2843,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2881,7 +2881,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Same authorized observation bundle yields deterministic alias-grouped candidates; shell failure is a typed partial result, not a hang."
@@ -2922,7 +2922,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -2960,7 +2960,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Platform corpus proves every supported alias is grouped without executing it; cmd-only installs remain found_unverified or incompatible, never ready."
@@ -3001,7 +3001,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3034,7 +3034,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Every supported binary/dialect pair has exact fixtures; unknown or changed closed forms fail closed."
@@ -3075,7 +3075,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3108,7 +3108,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Final default-deny environment projection names one attested binary closure and rejects key/path collisions before exec."
@@ -3153,7 +3153,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3191,7 +3191,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Captured bytes, file identity, provenance, source category, and dialect are stable; drift, ambiguity, and unreadable sources are typed."
@@ -3234,7 +3234,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3272,7 +3272,7 @@
           "kind": "not_applicable",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The invariant is enforced across active capabilities rather than as this standalone row."
@@ -3316,7 +3316,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3354,7 +3354,7 @@
           "kind": "not_applicable",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The invariant is enforced across active capabilities rather than as this standalone row."
@@ -3395,7 +3395,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3438,7 +3438,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Typed tool-server specification produces collision-free provider materialization, exact capability bounds, and separate technical readiness evidence."
@@ -3479,7 +3479,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3517,7 +3517,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Complete stable traversal or typed truncation/failure; explicit symlink policy; content identity independent of host path and timestamp."
@@ -3560,7 +3560,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3593,7 +3593,7 @@
           "kind": "not_applicable",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The invariant is enforced across active capabilities rather than as this standalone row."
@@ -3636,7 +3636,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3669,7 +3669,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Immutable release selection, bounded fetch/extraction, cross-process serialization, recoverable activation/rollback, and exact installed BinaryRevision receipt."
@@ -3710,7 +3710,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3743,7 +3743,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Versioned provider directory returns provenance and freshness; project/global scopes cannot leak credentials or configuration."
@@ -3787,7 +3787,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3830,7 +3830,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Each owner returns separate revisioned evidence; inspection is offline; explicit proof is cancellable, budgeted, and never inferred from catalog presence."
@@ -3871,7 +3871,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3909,7 +3909,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Stage, verify, and CAS-activate a credential generation; cancellation/timeout returns an honest potentially-committed state and reconciles before retry."
@@ -3950,7 +3950,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -3983,7 +3983,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Opaque credential reference and generation CAS; exact replacement/forget receipts; no secret in profiles, logs, digests, events, or detached views."
@@ -4024,7 +4024,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -4067,7 +4067,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Exact route/address/TLS policy is authorized immediately before bytes; inspection only reports configuration; explicit proof is bounded and cancellable."
@@ -4108,7 +4108,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -4146,7 +4146,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Mutation is explicit, previewed, optimistic-concurrency protected, atomic, and reports partial outcomes honestly; passive inspection remains read-only."
@@ -4187,7 +4187,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -4220,7 +4220,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Immutable credential generations, affected-row CAS, exact binding scope, redacted audit, rollback, and no deletion before replacement proof."
@@ -4261,7 +4261,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -4294,7 +4294,7 @@
           "kind": "not_applicable",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The invariant is enforced across active capabilities rather than as this standalone row."
@@ -4335,7 +4335,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -4368,7 +4368,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Not applicable to AR; AR may expose revisioned provider facts without ranking business suitability."
@@ -4409,7 +4409,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -4442,7 +4442,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "AR accepts only provider-neutral technical runtime commands with its own identities, authority, fences, and receipts."
@@ -4483,7 +4483,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Ownership boundary",
             "claim": "The active architecture assigns the relevant bounded-context responsibilities and separates observation from mutation."
@@ -4516,7 +4516,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future AR input operation exposes accepted/rejected/uncertain receipts and reconciliation without team or inbox vocabulary."
@@ -4564,7 +4564,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The roadmap separates passive inspection from trust, access, installation, and execution capabilities."
@@ -4602,7 +4602,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance must prove: untrusted or moved workspace, stale consent, symlink/identity change, cancellation, and no implicit mutation"
@@ -4650,7 +4650,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The roadmap separates passive inspection from trust, access, installation, and execution capabilities."
@@ -4690,7 +4690,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance must prove: inspection versus consent separation, stale/moved workspace, PTY timeout, ambiguous completion, cancellation, and no provider execution during inspection"
@@ -4755,7 +4755,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The roadmap separates passive inspection from trust, access, installation, and execution capabilities."
@@ -4800,7 +4800,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance must prove: stale catalogs, exact model IDs, provider deployment names, route/account changes, incompatible effort, Fast ineligibility, partial live facts, and cancellation"
@@ -4844,7 +4844,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The roadmap separates passive inspection from trust, access, installation, and execution capabilities."
@@ -4889,7 +4889,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance must prove: stale catalog, stale selected model, scope collision, concurrent mutation, partial write, rollback, and preserved unrelated configuration"
@@ -4933,7 +4933,7 @@
         "evidence": [
           {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "The roadmap separates passive inspection from trust, access, installation, and execution capabilities."
@@ -4978,7 +4978,7 @@
           "kind": "required_future",
           "evidence": {
             "repository": "current",
-            "commit": "493c6c37e247f021fc110c5fc624b72f1502d743",
+            "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
             "path": "docs/architecture/provider-setup-delivery-roadmap.md",
             "locator": "heading:Invariants",
             "claim": "Future acceptance must prove: timeout, cancellation, ambiguous provider completion, budget exhaustion, credential generation change, model removal, route change, and redacted output"

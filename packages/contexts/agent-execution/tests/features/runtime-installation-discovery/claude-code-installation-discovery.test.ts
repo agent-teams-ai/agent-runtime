@@ -24,14 +24,14 @@ import {
   createNodeExecutableFileObserver,
   createRuntimeInstallationDiscoveryFeature,
   type ExecutableFileObserver,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 import {
   isExecutableByEffectiveIdentity,
   isSupportedExecutableAliasKind,
-} from "../dist/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.js";
+} from "../../../dist/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.js";
 
 const execFile = promisify(execFileCallback);
-const packageRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), "..");
+const packageRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 const fileIdentity = async (path: string): Promise<string> => {
   const observation = await stat(path, { bigint: true });
@@ -150,6 +150,13 @@ test("orders explicit, PATH, and frozen known-location aliases deterministically
         "$HOMEBREW/bin/claude",
         "$LOCAL/bin/claude",
       ],
+    ],
+  );
+  assert.deepEqual(
+    first.installations.map(installation => installation.installationRef),
+    [
+      "claude-code-installation:a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e",
+      "claude-code-installation:a4d26868017c0ccffe2efe50944ef4211834660cca834c6e9f86dec6a88246fa",
     ],
   );
   assert.ok(
@@ -713,16 +720,25 @@ test("snapshots caller-owned candidates and returns detached deeply frozen outpu
 
 test("Claude production discovery graph has no process, network, ambient-state, or shell dependency", async () => {
   const sourceRoot = join(packageRoot, "src/features/runtime-installation-discovery");
-  const productionSource = (
-    await Promise.all(
-      (await collectTypeScriptSources(sourceRoot)).map(path => readFile(path, "utf8")),
-    )
-  ).join("\n");
+  const sources = await Promise.all(
+    (await collectTypeScriptSources(sourceRoot)).map(async path => ({
+      path,
+      source: await readFile(path, "utf8"),
+    })),
+  );
+  const productionSource = sources.map(item => item.source).join("\n");
 
   assert.doesNotMatch(
     productionSource,
     /from\s+["']node:(?:child_process|cluster|dgram|dns|http|https|net|readline|repl|tls|worker_threads)["']|process\.(?:cwd|env)|\b(?:fetch|spawn|exec|execFile|fork)\s*\(|interactive[- ]?shell/iu,
   );
+
+  const inwardSources = sources
+    .filter(item => /\/application\//u.test(item.path))
+    .map(item => item.source)
+    .join("\n");
+  assert.doesNotMatch(inwardSources, /from\s+["']node:/u);
+  assert.doesNotMatch(inwardSources, /from\s+["'][^"']*\/contracts\//u);
 });
 
 test("reports frozen candidate overflow without observing or truncating", async () => {

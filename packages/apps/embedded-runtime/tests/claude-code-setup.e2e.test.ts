@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { readCustodiedRepositoryFile } from "../../../../scripts/architecture/ar2-evidence-custody.mjs";
 import { semanticCorrectionProofsRegistered } from "./claude-code-semantic-correction.e2e.test.ts";
 import { createSyntheticClaudeOwners } from "./helpers/synthetic-claude-owners.ts";
 
@@ -23,7 +24,9 @@ const unavailable = (): never => {
 assert.equal(semanticCorrectionProofsRegistered, true);
 
 const execFile = promisify(execFileCallback);
-const readJson = async (path: URL) => JSON.parse(await readFile(path, "utf8"));
+const readAr2FixtureJson = async (path: string, allowedRoot: string) => JSON.parse(
+  (await readCustodiedRepositoryFile(path, { allowedRoot })).toString("utf8"),
+);
 
 const codexDependencies = Object.freeze({
   authorizeSetupInspection: { execute: unavailable },
@@ -156,10 +159,10 @@ test("redacts every declared sentinel at the public Claude setup boundary", asyn
     mkdir(join(home, ".claude"), { recursive: true }),
     mkdir(join(workspace, ".claude"), { recursive: true }),
   ]);
-  const negativeFixtures = await readJson(new URL(
-    "../../../contexts/runtime-configuration/tests/fixtures/claude-code-settings/negative-fixtures.json",
-    import.meta.url,
-  ));
+  const fixtureRoot = "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings";
+  const negativeFixtures = await readAr2FixtureJson(
+    `${fixtureRoot}/negative-fixtures.json`, fixtureRoot,
+  );
   const sentinels = negativeFixtures.redactionSentinels as readonly string[];
   assert.ok(sentinels.length > 0);
   assert.ok(sentinels.every(sentinel => typeof sentinel === "string" && sentinel.length > 0));

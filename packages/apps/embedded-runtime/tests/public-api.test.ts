@@ -6,6 +6,30 @@ import { fileURLToPath } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+const readDeclarationClosure = async (entrypoint: string): Promise<string> => {
+  const pending = [entrypoint];
+  const visited = new Set<string>();
+  const declarations: string[] = [];
+  while (pending.length > 0) {
+    const declarationPath = pending.pop()!;
+    if (visited.has(declarationPath)) {
+      continue;
+    }
+    visited.add(declarationPath);
+    const declaration = await readFile(declarationPath, "utf8");
+    declarations.push(declaration);
+    for (const match of declaration.matchAll(/["'](\.[^"']+)["']/gu)) {
+      const specifier = match[1]!;
+      const referencedPath = resolve(
+        dirname(declarationPath),
+        specifier.endsWith(".js") ? `${specifier.slice(0, -3)}.d.ts` : specifier,
+      );
+      pending.push(referencedPath);
+    }
+  }
+  return declarations.join("\n");
+};
+
 test("root API exposes only product capabilities and keeps Host in composition", async () => {
   const rootDeclaration = await readFile(join(packageRoot, "dist", "index.d.ts"), "utf8");
   const capabilityDeclaration = await readFile(
@@ -16,6 +40,10 @@ test("root API exposes only product capabilities and keeps Host in composition",
   assert.match(publicSurface, /RuntimeAccessHandle/u);
   assert.match(publicSurface, /codexSetup/u);
   assert.match(publicSurface, /claudeCodeSetup/u);
+  assert.match(publicSurface, /containedTurn/u);
+  assert.match(publicSurface, /submit/u);
+  assert.match(publicSurface, /observe/u);
+  assert.match(publicSurface, /cancel/u);
   assert.match(publicSurface, /inspect/u);
   assert.doesNotMatch(
     publicSurface,
@@ -28,11 +56,52 @@ test("root API exposes only product capabilities and keeps Host in composition",
   assert.deepEqual(Object.keys(manifest.exports).toSorted(), [".", "./composition"]);
 });
 
-test("production slice has no process, network, ambient env or write adapter", async () => {
+test("contained-turn declarations stay owned across root and composition closure", async () => {
+  const runtimeAccessSource = await readFile(
+    join(packageRoot, "src", "contracts", "runtime-access.ts"),
+    "utf8",
+  );
+  const runtimeAccessDeclaration = await readFile(
+    join(packageRoot, "dist", "contracts", "runtime-access.d.ts"),
+    "utf8",
+  );
+
+  for (const contract of [runtimeAccessSource, runtimeAccessDeclaration]) {
+    assert.doesNotMatch(contract, /@agent-teams\/agent-execution/u);
+    assert.doesNotMatch(contract, /\bContainedTurnView\b/u);
+    assert.match(contract, /interface RuntimeContainedTurnView/u);
+    assert.match(contract, /readonly artifactManifestRef\?: string/u);
+    assert.match(contract, /readonly commandId: string/u);
+    assert.match(contract, /readonly effectId: string/u);
+    assert.match(contract, /readonly operationId: string/u);
+    assert.match(contract, /readonly output: readonly RuntimeContainedTurnOutputView\[\]/u);
+    assert.match(contract, /readonly provider: RuntimeContainedTurnProvider/u);
+    assert.match(contract, /readonly resultRef\?: string/u);
+    assert.doesNotMatch(contract, /readonly revision:/u);
+    assert.match(contract, /readonly status: RuntimeContainedTurnStatus/u);
+  }
+  assert.doesNotMatch(
+    runtimeAccessSource,
+    /interface\s+RuntimeContainedTurnView\s+extends|type\s+RuntimeContainedTurnView\s*=\s*ContainedTurnView/u,
+  );
+
+  const [rootClosure, compositionClosure] = await Promise.all([
+    readDeclarationClosure(join(packageRoot, "dist", "index.d.ts")),
+    readDeclarationClosure(join(packageRoot, "dist", "composition.d.ts")),
+  ]);
+  assert.doesNotMatch(rootClosure, /@agent-teams\/agent-execution|\bContainedTurnView\b|ContainedTurnFeatureApi/u);
+  assert.doesNotMatch(compositionClosure, /\bContainedTurnView\b|ContainedTurnFeatureApi/u);
+  assert.doesNotMatch(rootClosure, /readonly revision:/u);
+  assert.doesNotMatch(compositionClosure, /readonly revision:/u);
+  assert.match(compositionClosure, /interface ContainedTurnCapabilityBundle/u);
+  assert.match(compositionClosure, /expectedProvider: string/u);
+});
+
+test("passive setup slice has no process, network, ambient env or write adapter", async () => {
   const repositoryRoot = resolve(packageRoot, "../../..");
   const roots = [
     join(repositoryRoot, "packages", "apps", "embedded-runtime", "src"),
-    join(repositoryRoot, "packages", "contexts", "agent-execution", "src"),
+    join(repositoryRoot, "packages", "contexts", "agent-execution", "src", "features", "runtime-installation-discovery"),
     join(repositoryRoot, "packages", "contexts", "runtime-configuration", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-security", "src"),
     join(repositoryRoot, "packages", "platform", "filesystem-custody", "src"),

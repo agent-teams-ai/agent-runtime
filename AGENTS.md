@@ -10,6 +10,8 @@ Start here:
 - Current readiness gates: [docs/architecture/readiness.md](docs/architecture/readiness.md)
 - Exact qualified runtime targets:
   [docs/architecture/qualification-registry.json](docs/architecture/qualification-registry.json)
+- Scoped Feature Module Standard v1 active adoption:
+  [docs/architecture/feature-module-standard-v1-candidate.md](docs/architecture/feature-module-standard-v1-candidate.md)
 <!-- agent-teams-docs:route/v1 begin -->
 Use [.agents/skills/docs-authoring/SKILL.md](.agents/skills/docs-authoring/SKILL.md) for documentation.
 <!-- agent-teams-docs:route/v1 end -->

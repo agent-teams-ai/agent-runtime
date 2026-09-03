@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const fixtureRoot = new URL("./fixtures/claude-code-settings/", import.meta.url);
-const repositoryRoot = new URL("../../../..", import.meta.url);
-const readJson = async (path: URL) => JSON.parse(await readFile(path, "utf8"));
+import { readCustodiedRepositoryFile } from "../../../../scripts/architecture/ar2-evidence-custody.mjs";
+import { readAr2CoverageTestSource } from "../../../../scripts/architecture/validate-ar2-contract-artifacts.mjs";
+
+const fixtureRoot = "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings";
+const readJson = async (path: string, allowedRoot: string) => JSON.parse(
+  (await readCustodiedRepositoryFile(path, { allowedRoot })).toString("utf8"),
+);
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 const testScriptExecutes = (script: string, relativeTestFile: string) => script
   .split(/\s+/u)
@@ -15,13 +18,10 @@ const testScriptExecutes = (script: string, relativeTestFile: string) => script
 
 test("requires exact executable coverage for every frozen AR-2 fixture", async t => {
   const [freeze, manifest, negatives, coverage] = await Promise.all([
-    readJson(new URL(
-      "../../../../docs/architecture/claude-code-setup-freeze.json",
-      import.meta.url,
-    )),
-    readJson(new URL("manifest.json", fixtureRoot)),
-    readJson(new URL("negative-fixtures.json", fixtureRoot)),
-    readJson(new URL("contract-coverage.json", fixtureRoot)),
+    readJson("docs/architecture/claude-code-setup-freeze.json", "docs/architecture"),
+    readJson(`${fixtureRoot}/manifest.json`, fixtureRoot),
+    readJson(`${fixtureRoot}/negative-fixtures.json`, fixtureRoot),
+    readJson(`${fixtureRoot}/contract-coverage.json`, fixtureRoot),
   ]);
 
   assert.equal(manifest.negativeManifest, "./negative-fixtures.json");
@@ -44,7 +44,7 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         Object.keys(entry).toSorted(),
         ["id", entry.diagnostic === undefined ? "expected" : "diagnostic", "testFile", "testName"].toSorted(),
       );
-      const source = await readFile(new URL(entry.testFile, repositoryRoot), "utf8");
+      const { packageRoot, relativeTestFile, source } = await readAr2CoverageTestSource(entry.testFile);
       const declaration = new RegExp(
         `\\btest\\(\\s*${escapeRegExp(JSON.stringify(entry.testName))}\\s*,`,
         "gu",
@@ -54,10 +54,7 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         1,
         `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
       );
-      const coordinates = /^(packages\/[^/]+\/[^/]+)\/(tests\/[^/]+\.test\.ts)$/u.exec(entry.testFile);
-      assert.ok(coordinates, `${entry.testFile} must be a package-owned top-level test file`);
-      const [, packageRoot, relativeTestFile] = coordinates;
-      const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
+      const packageManifest = await readJson(`${packageRoot}/package.json`, packageRoot);
       assert.equal(
         testScriptExecutes(packageManifest.scripts?.test ?? "", relativeTestFile),
         true,

@@ -1,0 +1,14 @@
+{
+  "name": "permission-tool-callbacks",
+  "provenance": "synthetic_policy_case_not_observed_in_live_run",
+  "activeSessionId": "session-1",
+  "permission": {
+    "sessionId": "session-1",
+    "toolCall": { "toolCallId": "tool-1", "title": "shell" },
+    "options": [{ "optionId": "deny", "name": "Reject", "kind": "reject_once" }]
+  },
+  "toolUpdate": {
+    "sessionId": "session-1",
+    "update": { "sessionUpdate": "tool_call", "toolCallId": "tool-1", "title": "shell" }
+  }
+}

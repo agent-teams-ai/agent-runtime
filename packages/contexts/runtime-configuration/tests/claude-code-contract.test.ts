@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { readCustodiedRepositoryFile } from "../../../../scripts/architecture/ar2-evidence-custody.mjs";
+
 import {
   CLAUDE_CODE_CONFIGURATION_BUDGETS,
   CLAUDE_CODE_EFFORT_VALUES,
@@ -26,10 +28,10 @@ test("freezes the Claude Code dialect, allowlists, budgets and test-fixture exam
   assert.equal(CLAUDE_CODE_CONFIGURATION_BUDGETS.rootSlots, 16);
   assert.equal(Object.isFrozen(claudeCodePortableIntentExample), true);
 
-  const manifest = JSON.parse(await readFile(
-    new URL("./fixtures/claude-code-settings/manifest.json", import.meta.url),
-    "utf8",
-  ));
+  const manifest = JSON.parse((await readCustodiedRepositoryFile(
+    "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings/manifest.json",
+    { allowedRoot: "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings" },
+  )).toString("utf8"));
   assert.equal(manifest.qualifiesExecutable, false);
   assert.equal(manifest.sourceModel.claim, "observed-files-only");
   assert.equal(manifest.sourceModel.precedence, "not-evaluated");

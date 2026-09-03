@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   copyTrustedClaudeCodeSetupScope,
   copyTrustedCodexSetupScope,
+  copyTrustedContainedTurnScope,
   TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS,
 } from "../dist/composition/trusted-runtime-access-scope.js";
 
@@ -121,6 +122,51 @@ test("accepts every bounded path, profile, epoch, and scope string at its limit"
 
   assert.ok(copyTrustedCodexSetupScope(codex) !== undefined);
   assert.ok(copyTrustedClaudeCodeSetupScope(claude) !== undefined);
+  const containedText = TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.containedTurn.text;
+  const contained = copyTrustedContainedTurnScope({
+    projectId: "p".repeat(containedText.projectId),
+    tenantId: "t".repeat(containedText.tenantId),
+  });
+  assert.ok(contained !== undefined && isDeeplyFrozen(contained));
+});
+
+test("copies contained-turn scope once and preserves valid opaque references", () => {
+  let projectReads = 0;
+  let tenantReads = 0;
+  const scope = Object.defineProperties({}, {
+    projectId: {
+      enumerable: true,
+      get() {
+        projectReads += 1;
+        return projectReads === 1 ? "project:opaque/reference" : "changed";
+      },
+    },
+    tenantId: {
+      enumerable: true,
+      get() {
+        tenantReads += 1;
+        return tenantReads === 1 ? "tenant:opaque/reference" : "changed";
+      },
+    },
+  });
+  assert.deepEqual(copyTrustedContainedTurnScope(scope as never), {
+    projectId: "project:opaque/reference",
+    tenantId: "tenant:opaque/reference",
+  });
+  assert.equal(projectReads, 1);
+  assert.equal(tenantReads, 1);
+  for (const invalid of [
+    { projectId: "", tenantId: "tenant" },
+    { projectId: "project", tenantId: "" },
+    { projectId: "project\u0000secret", tenantId: "tenant" },
+    { projectId: "project", tenantId: "tenant\u0000secret" },
+    {
+      projectId: "p".repeat(TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.containedTurn.text.projectId + 1),
+      tenantId: "tenant",
+    },
+  ]) {
+    assert.equal(copyTrustedContainedTurnScope(invalid), undefined);
+  }
 });
 
 test("rejects each over-limit collection before reading an element", () => {

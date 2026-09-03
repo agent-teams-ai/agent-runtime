@@ -24,9 +24,12 @@ Read documents in this order:
    automated external-effect identity requirements. Then read
    `decisions/0005-runtime-context-package-identities.md` - the accepted private
    package identities and the rule that scaffolding accompanies a real vertical
-   slice. Before the first Agent Execution implementation, review proposed
+   slice. Then read proposed
    `decisions/0006-orthogonal-runtime-operation-state-and-effect-continuity.md`
-   and its synthetic executable oracle at
+   as the broader design input, followed by accepted
+   `decisions/0010-contained-agent-turn-v1-operation-authority.md`, the
+   deliberately narrow Contained Agent Turn V1 authority, and its
+   synthetic executable oracle at
    `../experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md`.
    Documentation changes follow accepted
    `decisions/0007-deterministic-documentation-governance.md`, which is pinned
@@ -34,7 +37,16 @@ Read documents in this order:
    composition follows accepted
    `decisions/0008-private-embedded-runtime-access-entrypoint.md`, which owns
    the private scope-bound Runtime access entrypoint and its direct Pure DI
-   boundary.
+   boundary. Read companion
+   `decisions/0009-contained-turn-private-access-and-host-shutdown-boundary.md`
+   for the ordinary caller handle, durable cancellation, identity separation,
+   and Host-shutdown truth boundary. Then read
+   `decisions/0012-provider-access-authority-in-contained-turn-composition.md`,
+   which corrects only ADR-0009's closed dependency enumeration to include the
+   Provider Access consumer port. Then read
+   `decisions/0014-darwin-provider-candidate-platform-qualification.md`, which
+   accepts only the narrow unqualified Darwin arm64 provider candidate
+   direction without changing ADR-0010 operation semantics or Linux authority.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
@@ -151,9 +163,15 @@ Read documents in this order:
 40. `architecture/foundation-adoption.md` - executable Engineering Foundation
    capabilities, deferred applicability gates, maintainability budgets, and the
    reviewed bounded-context scaffolding workflow.
-41. `spikes/runtime-setup-l0-dogfooding-evidence.md` - executable evidence for
+41. `architecture/feature-module-standard-v1-candidate.md` - the narrowly
+   scoped Feature Module Standard v1 candidate profile, deterministic checker,
+   current blockers, and activation boundary; it is not a conformance claim.
+42. `spikes/runtime-setup-l0-dogfooding-evidence.md` - executable evidence for
    the product-owned Runtime Setup Pure DI baseline and fail-closed gates for
    any later module layer.
+42. `spikes/opencode-acp-1-18-25-contract-validation.md` - synthetic official
+   SDK and Host/OpenCode policy characterization, retained normalized OpenCode
+   observation boundaries, and explicit production deferrals.
 
 Document status vocabulary:
 
@@ -164,11 +182,12 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005, ADR-0008, and the
+of truth. Accepted ADR-0001 through ADR-0010 and ADR-0012 through ADR-0014,
+excluding proposed ADR-0006 and the unassigned ADR identities, plus the
 promoted-rule column of the traceability matrix are normative for production
-architecture. ADR-0007 governs deterministic documentation changes. Supporting
-architecture documents are accepted only as amended by the ADRs. Readiness
-status is intentionally separate and cannot change domain ownership. A spike's
+architecture. ADR-0007 governs deterministic documentation changes.
+Supporting architecture documents are accepted only as amended by the ADRs.
+Readiness status is intentionally separate and cannot change domain ownership. A spike's
 `Remaining gates` section is historical as of that campaign;
 `architecture/readiness.md` is the current gate register.
 

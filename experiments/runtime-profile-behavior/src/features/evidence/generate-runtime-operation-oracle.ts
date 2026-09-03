@@ -29,6 +29,29 @@ const generatedUnionMembers = (source: string, name: string): string[] => {
   return [...body.matchAll(/"([^"]+)"/g)].map((match) => match[1]!);
 };
 
+const projectExactTuplesForTypeGeneration = (value: unknown): void => {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      projectExactTuplesForTypeGeneration(item);
+    }
+    return;
+  }
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+
+  const schema = value as Record<string, unknown>;
+  const prefixItems = schema.prefixItems;
+  if (Array.isArray(prefixItems) && schema.items === false) {
+    schema.items = prefixItems;
+    schema.additionalItems = false;
+    delete schema.prefixItems;
+  }
+  for (const child of Object.values(schema)) {
+    projectExactTuplesForTypeGeneration(child);
+  }
+};
+
 const renderTypes = async (
   schema: Record<string, unknown>,
   catalog: Catalog,
@@ -38,6 +61,7 @@ const renderTypes = async (
   definitions.check = { ...definitions.check, enum: [...catalog.checks] };
   definitions.fact = { ...definitions.fact, enum: [...catalog.facts] };
   definitions.resultCode = { ...definitions.resultCode, enum: [...catalog.resultCodes] };
+  projectExactTuplesForTypeGeneration(projectionSchema);
   const generated = await compile(projectionSchema, "RuntimeOperationOracle", {
     bannerComment: BANNER.trimEnd(),
     format: true,

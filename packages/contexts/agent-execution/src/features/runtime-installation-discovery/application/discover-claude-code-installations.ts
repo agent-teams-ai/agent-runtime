@@ -1,13 +1,12 @@
-import { createHash } from "node:crypto";
-
 import type {
   ClaudeCodeInstallationCandidate,
   ClaudeCodeInstallationDiagnostic,
-  ClaudeCodeInstallationObservation,
   DiscoverClaudeCodeInstallations,
   DiscoverClaudeCodeInstallationsResult,
-} from "../contracts/claude-code-installation-observation.js";
+  InstallationObservation,
+} from "./models/installation-observation.js";
 import type { ExecutableFileObserver } from "./ports/outbound/executable-file-observation.js";
+import type { StableIdentityHasher } from "./ports/outbound/stable-identity-hashing.js";
 
 const MAXIMUM_CANDIDATES = 256;
 const MAXIMUM_EXPLICIT_CANDIDATES = 16;
@@ -23,15 +22,6 @@ const diagnosticCode = {
 
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
-
-const hashRef = (domain: string, value: string): string =>
-  `${domain}:${createHash("sha256").update(value).digest("hex")}`;
-
-const installationRef = (identity: string): string =>
-  hashRef("claude-code-installation", identity);
-
-const candidateRef = (candidate: ClaudeCodeInstallationCandidate): string =>
-  hashRef("claude-code-candidate", candidate.candidateIdentity);
 
 const compareCandidates = (
   left: ClaudeCodeInstallationCandidate,
@@ -95,7 +85,7 @@ const freezeDiagnostic = (
 
 const freezeResult = (
   diagnostics: ClaudeCodeInstallationDiagnostic[],
-  installations: ClaudeCodeInstallationObservation[],
+  installations: InstallationObservation[],
 ): DiscoverClaudeCodeInstallationsResult =>
   Object.freeze({
     diagnostics: Object.freeze(diagnostics.map(freezeDiagnostic)),
@@ -134,6 +124,7 @@ const candidateOverflowRef = (
 
 export const createDiscoverClaudeCodeInstallations = (
   fileObserver: ExecutableFileObserver,
+  identityHasher: StableIdentityHasher,
 ): DiscoverClaudeCodeInstallations => ({
   async execute(input, options): Promise<DiscoverClaudeCodeInstallationsResult> {
     options?.signal?.throwIfAborted();
@@ -178,7 +169,7 @@ export const createDiscoverClaudeCodeInstallations = (
       if (observation.kind === "missing") {
         if (candidate.required) {
           diagnostics.push({
-            candidateRef: candidateRef(candidate),
+            candidateRef: `claude-code-candidate:${identityHasher.digest(candidate.candidateIdentity)}`,
             code: "candidate_invalid",
           });
         }
@@ -186,7 +177,7 @@ export const createDiscoverClaudeCodeInstallations = (
       }
       if (observation.kind !== "found") {
         diagnostics.push({
-          candidateRef: candidateRef(candidate),
+          candidateRef: `claude-code-candidate:${identityHasher.digest(candidate.candidateIdentity)}`,
           code: diagnosticCode[observation.kind],
         });
         continue;
@@ -198,7 +189,7 @@ export const createDiscoverClaudeCodeInstallations = (
       };
       if (installation.aliases.length >= MAXIMUM_ALIASES_PER_INSTALLATION) {
         diagnostics.push({
-          candidateRef: candidateRef(candidate),
+          candidateRef: `claude-code-candidate:${identityHasher.digest(candidate.candidateIdentity)}`,
           code: "candidate_invalid",
         });
         continue;
@@ -220,7 +211,7 @@ export const createDiscoverClaudeCodeInstallations = (
 
     const installations = [...grouped.values()].map(installation => ({
       aliases: installation.aliases,
-      installationRef: installationRef(installation.identity),
+      installationRef: `claude-code-installation:${identityHasher.digest(installation.identity)}`,
       status: "found_unverified" as const,
     }));
 

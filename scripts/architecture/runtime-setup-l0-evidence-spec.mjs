@@ -27,20 +27,122 @@ export const changes = Object.freeze([
     id: "provider-symmetric-scope-contract-evidence",
     revision: "d490a2308be1b777931d2de0df7196d6b5f128a4",
   }),
+  Object.freeze({
+    id: "contained-turn-private-access",
+    revision: "82800ba50e1060d9c93176a2a6ddb2bc0928fb00",
+  }),
+  Object.freeze({
+    id: "contained-turn-platform-canaries",
+    revision: "735f2422d2095a6a9eefbb9491d5dc369bc7e49f",
+  }),
+  Object.freeze({
+    id: "contained-turn-v1-integration",
+    revision: "51f6b18989b0c2274eecd8961658a15a3d947cf3",
+  }),
+  Object.freeze({
+    id: "contained-turn-v1-final-lint-hardening",
+    revision: "699eda7614bb2145b1ee758aa79c1fb2d68668a2",
+  }),
+  Object.freeze({
+    id: "contained-turn-core-srp-refactor",
+    revision: "5816f832f10bd48b1e4b83d2efbe00573dda3006",
+  }),
+  Object.freeze({
+    id: "host-custody-srp-refactor",
+    revision: "a2d5fbc197af64de7cc03444e230018780cd68c8",
+  }),
+  Object.freeze({
+    id: "postgres-contained-turn-srp-refactor",
+    revision: "d8442bdc456e1cc937b3ee753c237d479ca8baab",
+  }),
+  Object.freeze({
+    id: "codex-effect-custody",
+    revision: "fb2932fb8b846cc9c92ace7aa208df1d8bd93c5e",
+  }),
+  Object.freeze({
+    id: "contained-turn-dispatch-authority-binding",
+    revision: "35133bd87c904545879f59eabea956179bc62e3c",
+  }),
+  Object.freeze({
+    id: "claude-host-custody-binding",
+    revision: "a261f14c84643e2fa5c87b4b397a6d11d7174f12",
+  }),
+  Object.freeze({
+    id: "contained-turn-host-custody-composition",
+    revision: "cdda9783e7654b3a25e4510e69b1b5f2d550553b",
+  }),
+  Object.freeze({
+    id: "scoped-feature-module-activation",
+    revision: "da91fc9ad67e4a5d3f34f9f34db737fe7035ebaa",
+  }),
+  Object.freeze({
+    id: "claude-custody-contract-alignment",
+    revision: "5ef273653d767173f5eccbdd0d6d95292cd28909",
+  }),
+  Object.freeze({
+    id: "claude-stream-redaction-qualification",
+    revision: "d813450a018c2558ae8b711fc6d726e9eb542899",
+  }),
+  Object.freeze({
+    id: "provider-integration-path-repair",
+    revision: "77217bc0cebb4b12ed65e8fd59ed7cea81863394",
+  }),
+  Object.freeze({
+    id: "provider-grant-receipt-fixture-binding",
+    revision: "79f72b5f8772d1fc7c6ee103dbd3ba627096e91c",
+  }),
+  Object.freeze({
+    id: "provider-grant-receipt-qualification-binding",
+    revision: "5f6d00bebac4864024c4ccdf4ff79d231ff3fb3f",
+  }),
+  Object.freeze({
+    id: "contained-turn-qualification-alignment",
+    revision: "214de4b11f30cc188d206a3093ef9d2285dd7d9a",
+  }),
+  Object.freeze({
+    id: "postgres-grant-recovery-qualification",
+    revision: "ab722373179e9426e74f74dd1639a0ff7d5fb5b5",
+  }),
+  Object.freeze({
+    id: "provider-composition-boundary-closure",
+    revision: "7ba071f5f6409f08522d0cdf2120e071c2f4caa9",
+  }),
+  Object.freeze({
+    id: "host-composition-platform-qualification",
+    revision: "c4f48ccd255a2cfef1aed4a6e439810b5aeddfce",
+  }),
+  Object.freeze({
+    id: "composition-boundary-package-qualification",
+    revision: "29101e00041bdf736ca3549bdb38ad477dd916ed",
+  }),
+  Object.freeze({
+    id: "contained-turn-v1-final-integration",
+    revision: "20ae786fdb5846081854597646940f773c5dbaf2",
+  }),
+  Object.freeze({
+    id: "darwin-guardian-descriptor-forwarding-fix",
+    revision: "990b488c9f83a1490994ef75a6e7c97bb996dd87",
+  }),
+  Object.freeze({
+    id: "strict-provider-settlement-receipt-fixture",
+    revision: "ae88bb2498963cd5eb90c7b62917419910cd42fa",
+  }),
 ]);
+
+export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
 
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
-    fileCount: 4,
-    sha256: "0f1f9f916883c35abae1761f19271062c3825382b943434361eb8160ee145c19",
+    fileCount: 16,
+    sha256: "6c3dc86c204045403af01c2f5750df260bd7298cd011db91c164269ea7b4fe1b",
   }),
   sources: Object.freeze({
-    fileCount: 59,
-    sha256: "4a2ff3522d563b36125c55505c9c4cfaad25de30e99a9b36152c654be9ce211a",
+    fileCount: 297,
+    sha256: "4f61a4d1fd9c593643763f81c1341a237601d10ed52f83a0fbea98ebfc20dd54",
   }),
   tests: Object.freeze({
-    fileCount: 27,
-    sha256: "775eac71209c9904a6fcd15a6ec761e8c7ba824db9044b6b79420572fe57c1c6",
+    fileCount: 129,
+    sha256: "2369ea76d0e8e67e43e3f889ed7d7d8194aa9dc2e2c9e1578ce4aa12a1370ab7",
   }),
 });
 

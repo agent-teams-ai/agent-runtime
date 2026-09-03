@@ -15,7 +15,7 @@
     "$schema": { "const": "./legacy-feature-inventory.schema.json" },
     "schemaVersion": { "const": 2 },
     "legacyCommit": { "const": "f6afac73cced62d943a0e891ad08d7b8f88f802f" },
-    "currentCommit": { "const": "493c6c37e247f021fc110c5fc624b72f1502d743" },
+    "currentCommit": { "const": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0" },
     "crossCuttingInvariants": {
       "type": "array",
       "minItems": 1,

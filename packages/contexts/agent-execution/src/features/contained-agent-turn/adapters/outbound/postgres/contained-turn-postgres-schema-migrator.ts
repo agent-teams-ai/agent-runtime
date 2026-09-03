@@ -1,0 +1,506 @@
+import { createHash } from "node:crypto";
+
+import type { Pool, PoolClient } from "pg";
+
+import {
+  canonicalContainedTurnPostgresJson,
+  CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET,
+  ContainedTurnStateBudgetError,
+  digestContainedTurnPostgresJson,
+} from "./contained-turn-state-codec.js";
+import { decodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
+import {
+  BOOTSTRAP_SQL,
+  CONTAINED_TURN_POSTGRES_MIGRATIONS,
+  CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
+  HISTORY_BOOTSTRAP_SQL,
+  migrationFor,
+  V3_DIGEST,
+  V4_DIGEST,
+  V4_DOWN_SQL,
+} from "./contained-turn-postgres-migration-artifacts.js";
+
+const MIGRATION_ADVISORY_NAMESPACE = 730;
+const MIGRATION_ADVISORY_COMPONENT = 251_001;
+export const CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE = Object.freeze({
+  advisoryComponent: MIGRATION_ADVISORY_COMPONENT,
+  /** Preserves serialization with the v1/v2 one-key lock while naming its components. */
+  advisoryLockId: MIGRATION_ADVISORY_NAMESPACE * 1_000_000 + MIGRATION_ADVISORY_COMPONENT,
+  advisoryNamespace: MIGRATION_ADVISORY_NAMESPACE,
+  component: "contained-agent-turn",
+});
+export const CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS = Object.freeze({
+  connectionTimeoutMs: 5_000,
+  idleInTransactionTimeoutMs: 30_000,
+  lockTimeoutMs: 5_000,
+  statementTimeoutMs: 30_000,
+});
+export const CONTAINED_TURN_POSTGRES_V1_DATA_DIAGNOSTIC =
+  "contained turn PostgreSQL populated v1 schema requires an exact legacy conversion";
+
+export class ContainedTurnPostgresLegacyConversionRequiredError extends Error {
+  public readonly code = "CONTAINED_TURN_POSTGRES_LEGACY_CONVERSION_REQUIRED";
+
+  public constructor() {
+    super(CONTAINED_TURN_POSTGRES_V1_DATA_DIAGNOSTIC);
+    this.name = "ContainedTurnPostgresLegacyConversionRequiredError";
+  }
+}
+
+interface MigrationRow {
+  readonly migration_digest: string;
+  readonly version: number;
+}
+
+interface MigrationHistoryRow extends MigrationRow {
+  readonly predecessor_digest: string | null;
+}
+
+const beginMigration = async (client: PoolClient): Promise<void> => {
+  await client.query("BEGIN");
+  await client.query(
+    `SELECT set_config('lock_timeout', $1, true),
+            set_config('statement_timeout', $2, true),
+            set_config('idle_in_transaction_session_timeout', $3, true)`,
+    [`${String(CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS.lockTimeoutMs)}ms`,
+      `${String(CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS.statementTimeoutMs)}ms`,
+      `${String(CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS.idleInTransactionTimeoutMs)}ms`],
+  );
+  await client.query("SELECT pg_advisory_xact_lock($1)", [
+    CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.advisoryLockId,
+  ]);
+};
+
+const rollbackQuietly = async (client: PoolClient): Promise<boolean> => {
+  try {await client.query("ROLLBACK"); return true;} catch {return false;}
+};
+
+const connectForMigration = async (pool: Pool): Promise<PoolClient> => {
+  const pending = pool.connect();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("contained turn PostgreSQL migration pool acquisition timed out")),
+      CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS.connectionTimeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([pending, timeout]);
+  } catch (error) {
+    void pending.then(client => client.release(true)).catch(() => {});
+    throw error;
+  } finally {
+    if (timer !== undefined) {clearTimeout(timer);}
+  }
+};
+
+const currentMigration = (client: PoolClient): Promise<import("pg").QueryResult<MigrationRow>> =>
+  client.query(
+    "SELECT version, migration_digest FROM agent_execution.schema_migration WHERE component = $1 FOR UPDATE",
+    [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component],
+  );
+
+const ensureBootstrap = async (client: PoolClient): Promise<void> => {
+  const catalog = await client.query<{ history: string | null; migration: string | null }>(
+    `SELECT to_regclass('agent_execution.schema_migration')::text AS migration,
+            to_regclass('agent_execution.schema_migration_history')::text AS history`,
+  );
+  const current = catalog.rows[0];
+  if (current === undefined) {
+    throw new Error("contained turn PostgreSQL migration catalog lookup failed");
+  }
+  if (current.migration === null && current.history === null) {
+    await client.query(BOOTSTRAP_SQL);
+    return;
+  }
+  if (current.migration !== null && current.history === null) {
+    const legacy = await currentMigration(client);
+    const row = legacy.rows[0];
+    const identity = row === undefined
+      ? undefined
+      : CONTAINED_TURN_POSTGRES_MIGRATIONS[row.version - 1];
+    if (row === undefined || row.version > 2 || identity?.digest !== row.migration_digest) {
+      throw new Error("contained turn PostgreSQL legacy migration identity mismatch");
+    }
+    await client.query(HISTORY_BOOTSTRAP_SQL);
+    for (const migration of CONTAINED_TURN_POSTGRES_MIGRATIONS.slice(0, row.version)) {
+      await client.query(
+        `INSERT INTO agent_execution.schema_migration_history
+           (component, version, migration_digest, predecessor_digest)
+         VALUES ($1, $2, $3, $4)`,
+        [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component, migration.version,
+          migration.digest, migration.predecessorDigest ?? null],
+      );
+    }
+    return;
+  }
+  if (current.migration === null || current.history === null) {
+    throw new Error("contained turn PostgreSQL migration catalog is incomplete");
+  }
+};
+
+const verifyHistory = async (client: PoolClient, currentVersion: number): Promise<void> => {
+  const rows = await client.query<MigrationHistoryRow>(
+    `SELECT version, migration_digest, predecessor_digest
+       FROM agent_execution.schema_migration_history
+      WHERE component = $1 AND version <= $2
+      ORDER BY version`,
+    [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component, currentVersion],
+  );
+  if (rows.rows.length !== currentVersion) {
+    throw new Error("contained turn PostgreSQL migration history is incomplete");
+  }
+  for (const expected of CONTAINED_TURN_POSTGRES_MIGRATIONS.slice(0, currentVersion)) {
+    const actual = rows.rows[expected.version - 1];
+    if (actual?.version !== expected.version || actual.migration_digest !== expected.digest ||
+        actual.predecessor_digest !== (expected.predecessorDigest ?? null)) {
+      throw new Error("contained turn PostgreSQL migration history identity mismatch");
+    }
+  }
+};
+
+const validateV5RuntimeFenceCatalog = async (
+  client: PoolClient,
+  triggerDefinition: string | undefined,
+): Promise<void> => {
+  const quarantine = await client.query<{ relforcerowsecurity: boolean; relrowsecurity: boolean }>(
+    `SELECT relforcerowsecurity, relrowsecurity
+       FROM pg_class
+      WHERE oid = 'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass`,
+  );
+  const fencedTables = await client.query(
+    `SELECT policyname
+       FROM pg_policies
+      WHERE schemaname = 'agent_execution'
+        AND policyname = 'contained_turn_runtime_schema_fence'
+        AND tablename IN (
+          'contained_turn_operation_v1',
+          'contained_turn_output_v1',
+          'contained_turn_receipt_v1',
+          'contained_turn_dispatch_preparation_v1',
+          'contained_turn_dispatch_preparation_quarantine_v1'
+        )`,
+  );
+  const writeFences = await client.query(
+    `SELECT tgname
+       FROM pg_trigger
+      WHERE NOT tgisinternal
+        AND tgname = 'contained_turn_runtime_schema_write_fence'
+        AND tgrelid IN (
+          'agent_execution.contained_turn_operation_v1'::regclass,
+          'agent_execution.contained_turn_output_v1'::regclass,
+          'agent_execution.contained_turn_receipt_v1'::regclass,
+          'agent_execution.contained_turn_dispatch_preparation_v1'::regclass,
+          'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass
+        )`,
+  );
+  if (triggerDefinition === undefined || !triggerDefinition.includes("tenant_id") ||
+      quarantine.rows[0]?.relrowsecurity !== true ||
+      quarantine.rows[0]?.relforcerowsecurity !== true || fencedTables.rowCount !== 5 ||
+      writeFences.rowCount !== 5) {
+    throw new Error("contained turn PostgreSQL v5 runtime fence drift detected");
+  }
+};
+
+const validateCurrentCatalog = async (client: PoolClient, version: number): Promise<void> => {
+  if (version < 3) {return;}
+  const columns = await client.query<{ column_name: string; is_nullable: "NO" | "YES" }>(
+    `SELECT column_name, is_nullable
+       FROM information_schema.columns
+      WHERE table_schema = 'agent_execution'
+        AND table_name = 'contained_turn_dispatch_preparation_v1'
+        AND column_name IN ('state_codec_version', 'state_digest')`,
+  );
+  const operationColumns = await client.query<{ column_name: string; is_nullable: "NO" | "YES" }>(
+    `SELECT column_name, is_nullable FROM information_schema.columns
+      WHERE table_schema = 'agent_execution'
+        AND table_name = 'contained_turn_operation_v1'
+        AND column_name IN ('project_id', 'state_codec_version')`,
+  );
+  const indexes = await client.query<{ indexname: string }>(
+    `SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'agent_execution'
+        AND tablename = 'contained_turn_operation_v1'
+        AND indexname IN ('contained_turn_operation_v1_scoped_command_key', 'contained_turn_operation_v1_scoped_effect_key')`,
+  );
+  const triggers = await client.query<{ definition: string; tgname: string }>(
+    `SELECT tgname, pg_get_triggerdef(oid) AS definition FROM pg_trigger
+      WHERE tgrelid = 'agent_execution.contained_turn_operation_v1'::regclass
+        AND NOT tgisinternal AND tgname = 'contained_turn_fill_project_id'`,
+  );
+  const historyTriggers = await client.query<{ tgname: string }>(
+    `SELECT tgname FROM pg_trigger
+      WHERE tgrelid = 'agent_execution.schema_migration_history'::regclass
+        AND NOT tgisinternal AND tgname = 'schema_migration_history_immutable'`,
+  );
+  const expectedPreparationNullability = version < 4 ? "YES" : "NO";
+  const stateDigest = columns.rows.find(row => row.column_name === "state_digest");
+  const stateCodecVersion = columns.rows.find(row => row.column_name === "state_codec_version");
+  if (columns.rows.length !== 2 || stateDigest?.is_nullable !== expectedPreparationNullability ||
+      stateCodecVersion?.is_nullable !== "NO" ||
+      operationColumns.rows.length !== 2 ||
+      operationColumns.rows.some(row => row.is_nullable !== "NO") || indexes.rows.length !== 2 ||
+      triggers.rowCount !== 1 || historyTriggers.rowCount !== 1) {
+    throw new Error("contained turn PostgreSQL catalog drift detected");
+  }
+  const legacy = await client.query(
+    `SELECT constraint_name FROM information_schema.table_constraints
+      WHERE table_schema = 'agent_execution'
+        AND table_name = 'contained_turn_operation_v1'
+        AND constraint_name IN (
+          'contained_turn_operation_v1_tenant_id_command_id_key',
+          'contained_turn_operation_v1_tenant_id_effect_id_key'
+        )`,
+  );
+  if (legacy.rowCount !== (version < 4 ? 2 : 0)) {
+    throw new Error("contained turn PostgreSQL contract migration drift detected");
+  }
+  if (version >= 5) {
+    await validateV5RuntimeFenceCatalog(client, triggers.rows[0]?.definition);
+  }
+  if (version >= 6) {
+    const quarantineDebt = await client.query<{ is_nullable: "NO" | "YES" }>(
+      `SELECT is_nullable FROM information_schema.columns
+        WHERE table_schema = 'agent_execution'
+          AND table_name = 'contained_turn_dispatch_preparation_quarantine_v1'
+          AND column_name = 'owner_debt_evidence_id'`,
+    );
+    if (quarantineDebt.rows[0]?.is_nullable !== "YES") {
+      throw new Error("contained turn PostgreSQL v6 quarantine debt catalog drift detected");
+    }
+  }
+};
+
+const addMigrationBytes = (total: number, candidate: number): number => {
+  const next = total + candidate;
+  if (!Number.isSafeInteger(candidate) || candidate < 0 || !Number.isSafeInteger(next) ||
+      candidate > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes ||
+      next > CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumMigrationBytes) {
+    throw new ContainedTurnStateBudgetError();
+  }
+  return next;
+};
+
+export const backfillContainedTurnPreparationDigests = async (client: PoolClient): Promise<void> => {
+  await client.query(
+    "LOCK TABLE agent_execution.contained_turn_dispatch_preparation_v1 IN SHARE ROW EXCLUSIVE MODE",
+  );
+  let afterOperationId = "";
+  let afterPreparationToken = "";
+  let totalBytes = 0;
+  while (true) {
+    const rows = await client.query<{
+      operation_id: string;
+      preparation_token: string;
+      state: unknown;
+      state_bytes: number;
+      state_codec_version: number;
+    }>(
+      `SELECT operation_id, preparation_token, state_codec_version,
+              octet_length(state::text) AS state_bytes,
+              CASE WHEN octet_length(state::text) <= $1 THEN state END AS state
+         FROM agent_execution.contained_turn_dispatch_preparation_v1
+        WHERE state_digest IS NULL
+          AND (operation_id,preparation_token) > ($2,$3)
+        ORDER BY operation_id,preparation_token
+        LIMIT $4 FOR UPDATE`,
+      [CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes, afterOperationId,
+        afterPreparationToken, CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows],
+    );
+    for (const row of rows.rows) {
+      totalBytes = addMigrationBytes(totalBytes, row.state_bytes);
+      decodeContainedTurnPreparation(row.state, null, row.state_codec_version);
+      const stateDigest = createHash("sha256")
+        .update(canonicalContainedTurnPostgresJson(row.state))
+        .digest("hex");
+      const updated = await client.query(
+        `UPDATE agent_execution.contained_turn_dispatch_preparation_v1
+            SET state_digest = $3
+          WHERE operation_id = $1 AND preparation_token = $2 AND state_digest IS NULL`,
+        [row.operation_id, row.preparation_token, stateDigest],
+      );
+      if (updated.rowCount !== 1) {
+        throw new Error("contained turn PostgreSQL preparation digest backfill lost its row fence");
+      }
+      afterOperationId = row.operation_id;
+      afterPreparationToken = row.preparation_token;
+    }
+    if (rows.rows.length < CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows) {return;}
+  }
+};
+
+export const validateContainedTurnLegacyOperationDigests = async (client: PoolClient): Promise<void> => {
+  await client.query(
+    "LOCK TABLE agent_execution.contained_turn_operation_v1 IN SHARE ROW EXCLUSIVE MODE",
+  );
+  let afterOperationId = "";
+  let totalBytes = 0;
+  while (true) {
+    const rows = await client.query<{
+      operation_id: string;
+      state: unknown;
+      state_bytes: number;
+      state_digest: string;
+    }>(
+      `SELECT operation_id,state_digest,octet_length(state::text) AS state_bytes,
+              CASE WHEN octet_length(state::text) <= $1 THEN state END AS state
+         FROM agent_execution.contained_turn_operation_v1
+        WHERE operation_id > $2 ORDER BY operation_id LIMIT $3 FOR UPDATE`,
+      [CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumSerializedBytes, afterOperationId,
+        CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows],
+    );
+    for (const row of rows.rows) {
+      totalBytes = addMigrationBytes(totalBytes, row.state_bytes);
+      if (digestContainedTurnPostgresJson(row.state) !== row.state_digest) {
+        throw new Error("contained turn PostgreSQL legacy operation digest mismatch");
+      }
+      afterOperationId = row.operation_id;
+    }
+    if (rows.rows.length < CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.migrationBatchRows) {return;}
+  }
+};
+
+const rejectPopulatedV1WithoutExactConversion = async (client: PoolClient): Promise<void> => {
+  const result = await client.query<{
+    has_operations: boolean;
+    has_outputs: boolean;
+    has_receipts: boolean;
+  }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM agent_execution.contained_turn_operation_v1 LIMIT 1
+     ) AS has_operations,
+     EXISTS (
+       SELECT 1 FROM agent_execution.contained_turn_output_v1 LIMIT 1
+     ) AS has_outputs,
+     EXISTS (
+       SELECT 1 FROM agent_execution.contained_turn_receipt_v1 LIMIT 1
+     ) AS has_receipts`,
+  );
+  const presence = result.rows[0];
+  if (presence?.has_operations === true || presence?.has_outputs === true ||
+      presence?.has_receipts === true) {
+    throw new ContainedTurnPostgresLegacyConversionRequiredError();
+  }
+};
+
+const applyMigration = async (
+  client: PoolClient,
+  migration: ReturnType<typeof migrationFor>,
+): Promise<void> => {
+  const current = await currentMigration(client);
+  const row = current.rows[0];
+  if (migration.version === 1 ? row !== undefined :
+      row?.version !== migration.version - 1 || row.migration_digest !== migration.predecessorDigest) {
+    throw new Error("contained turn PostgreSQL migration predecessor identity mismatch");
+  }
+  const history = await client.query<MigrationHistoryRow>(
+    `SELECT version, migration_digest, predecessor_digest
+       FROM agent_execution.schema_migration_history
+      WHERE component = $1 AND version = $2`,
+    [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component, migration.version],
+  );
+  const recorded = history.rows[0];
+  if (recorded !== undefined && (recorded.migration_digest !== migration.digest ||
+      recorded.predecessor_digest !== (migration.predecessorDigest ?? null))) {
+    throw new Error("contained turn PostgreSQL migration history cannot be rewritten");
+  }
+  if (migration.version === 2) {await rejectPopulatedV1WithoutExactConversion(client);}
+  if (migration.version === 3) {await validateContainedTurnLegacyOperationDigests(client);}
+  if (migration.version === 4) {await backfillContainedTurnPreparationDigests(client);}
+  await client.query(migration.sql);
+  if (recorded === undefined) {
+    await client.query(
+      `INSERT INTO agent_execution.schema_migration_history
+         (component, version, migration_digest, predecessor_digest)
+       VALUES ($1, $2, $3, $4)`,
+      [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component, migration.version,
+        migration.digest, migration.predecessorDigest ?? null],
+    );
+  }
+  await client.query(
+    `INSERT INTO agent_execution.schema_migration(component, version, migration_digest)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (component) DO UPDATE
+       SET version = EXCLUDED.version, migration_digest = EXCLUDED.migration_digest`,
+    [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component, migration.version, migration.digest],
+  );
+};
+
+export interface ApplyContainedTurnPostgresSchemaOptions {
+  /** V4 is an internal rollback fixture only; production contract migration must commit V4 and V5 atomically. */
+  readonly allowUnfencedV4ForTest?: true;
+  /** Used only by migration/rolling-binary tests and staged deploys. */
+  readonly targetVersion?: 1 | 2 | 3 | 4 | 5 | 6;
+}
+
+export const applyContainedTurnPostgresSchema = async (
+  pool: Pool,
+  options: ApplyContainedTurnPostgresSchemaOptions = {},
+): Promise<void> => {
+  const targetVersion = options.targetVersion ?? CONTAINED_TURN_POSTGRES_SCHEMA_VERSION;
+  if (!Number.isSafeInteger(targetVersion) || targetVersion < 1 ||
+      targetVersion > CONTAINED_TURN_POSTGRES_SCHEMA_VERSION) {
+    throw new RangeError(`unsupported contained turn PostgreSQL migration target ${String(targetVersion)}`);
+  }
+  if ((targetVersion === 4) !== (options.allowUnfencedV4ForTest === true)) {
+    throw new TypeError("contained turn PostgreSQL v4 requires the explicit disposable-test fence bypass");
+  }
+  const client = await connectForMigration(pool);
+  let discardClient = false;
+  try {
+    await beginMigration(client);
+    await ensureBootstrap(client);
+    const current = await currentMigration(client);
+    const row = current.rows[0];
+    if (row !== undefined) {
+      const identity = CONTAINED_TURN_POSTGRES_MIGRATIONS[row.version - 1];
+      if (identity === undefined || identity.digest !== row.migration_digest) {
+        throw new Error("contained turn PostgreSQL schema identity mismatch");
+      }
+      if (row.version > targetVersion) {
+        throw new Error("contained turn PostgreSQL schema is newer than this binary target");
+      }
+      await verifyHistory(client, row.version);
+    }
+    for (let version = (row?.version ?? 0) + 1; version <= targetVersion; version += 1) {
+      await applyMigration(client, migrationFor(version));
+    }
+    await verifyHistory(client, targetVersion);
+    await validateCurrentCatalog(client, targetVersion);
+    await client.query("COMMIT");
+  } catch (error) {
+    discardClient = !(await rollbackQuietly(client));
+    throw error;
+  } finally {
+    client.release(discardClient);
+  }
+};
+
+/** Rolls back v4 only before current-codec or cross-project writes make it unsafe. */
+export const rollbackContainedTurnPostgresSchemaV4 = async (pool: Pool): Promise<void> => {
+  const client = await connectForMigration(pool);
+  let discardClient = false;
+  try {
+    await beginMigration(client);
+    await ensureBootstrap(client);
+    const current = await currentMigration(client);
+    const row = current.rows[0];
+    if (row?.version !== 4 || row.migration_digest !== V4_DIGEST) {
+      throw new Error("contained turn PostgreSQL rollback requires exact v4 identity");
+    }
+    await verifyHistory(client, 4);
+    await client.query(V4_DOWN_SQL);
+    await client.query(
+      "UPDATE agent_execution.schema_migration SET version = 3, migration_digest = $2 WHERE component = $1",
+      [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component, V3_DIGEST],
+    );
+    await validateCurrentCatalog(client, 3);
+    await client.query("COMMIT");
+  } catch (error) {
+    discardClient = !(await rollbackQuietly(client));
+    throw error;
+  } finally {
+    client.release(discardClient);
+  }
+};

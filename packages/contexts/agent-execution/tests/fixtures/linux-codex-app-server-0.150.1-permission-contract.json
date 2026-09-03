@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "provenance": {
+    "capturedAtUtc": "2026-08-29",
+    "generationEnvironment": "brand-new disposable directory with empty mode-0700 HOME/CODEX_HOME/TMPDIR; no credentials, network, app-server turn, or user project",
+    "installedPackage": "@openai/codex-linux-x64@0.150.1",
+    "nativeTarget": "x86_64-unknown-linux-musl",
+    "binarySha256": "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
+    "schemaCommand": "codex app-server generate-json-schema --out <disposable-root>/schema",
+    "typesCommand": "codex app-server generate-ts --out <disposable-root>/types",
+    "experimentalFlagUsed": false,
+    "schemaTreeManifestSha256": "8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3",
+    "typesTreeManifestSha256": "a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338",
+    "v2SchemaBundleSha256": "8cdccfc35582696d7141e7f916e0d5a664ab5b5e90b732f104284d2507f369f8",
+    "treeManifestAlgorithm": "sha256 of the byte stream emitted by sha256sum over all regular files sorted by relative path without a leading ./"
+  },
+  "limitations": {
+    "candidateStatus": "pinned candidate and admitted implementation tuple; not qualification-registry qualified",
+    "codexItemPaths": "untrusted provider endpoint observations and progress only",
+    "nodePathToctou": "lstat/realpath endpoint comparisons cannot prove continuous interval custody and cannot detect a transient substitution restored between observations",
+    "authoritativeContainment": "Host sandbox/mount/guardian custody plus workspace and artifact closure receipts; never Codex item pathnames"
+  },
+  "generatedTypeFragments": [
+    {
+      "source": "InitializeResponse.ts",
+      "sourceSha256": "4feabcb66d4bf01869d2780beaec1838d41b30213cdf57de175298aed01f5379",
+      "fragment": "export type InitializeResponse = { userAgent: string, codexHome: AbsolutePathBuf, platformFamily: string, platformOs: string, };"
+    },
+    {
+      "source": "v2/ConfigReadResponse.ts",
+      "sourceSha256": "9efa2d02c6ccb42cf509010727c9d27b4ac3783ac8b47e41f92eb6556848cb15",
+      "fragment": "export type ConfigReadResponse = { config: Config, origins: { [key in string]?: ConfigLayerMetadata }, layers: Array<ConfigLayer> | null, };"
+    },
+    {
+      "source": "v2/PermissionProfileListResponse.ts",
+      "sourceSha256": "5ff6a99f0a0cc3956de6e980ad45d50c48e5319a9d421f11a85c7c96d3d92644",
+      "fragment": "export type PermissionProfileListResponse = { data: Array<PermissionProfileSummary>, nextCursor: string | null, };"
+    },
+    {
+      "source": "v2/PermissionProfileSummary.ts",
+      "sourceSha256": "1202513133554ed4a96b916b5117ff2a0e5bbded9d326f44d39d622a418944c7",
+      "fragment": "export type PermissionProfileSummary = { id: string, description: string | null, allowed: boolean, };"
+    },
+    {
+      "source": "v2/TurnInterruptResponse.ts",
+      "sourceSha256": "3994cb114b2c4a2e81ba3a349c3a7d1f13ce1b165776b2162b52c9a114c24bc4",
+      "fragment": "export type TurnInterruptResponse = Record<string, never>;"
+    },
+    {
+      "source": "v2/TurnCompletedNotification.ts",
+      "sourceSha256": "1f56d73cb06876533fb224cd285634d3e090b21b647009be0e7c622937e40d3e",
+      "fragment": "export type TurnCompletedNotification = { threadId: string, turn: Turn, };"
+    },
+    {
+      "source": "v2/AgentMessageDeltaNotification.ts",
+      "sourceSha256": "bb538862f093bd22278bea3b3343037525a9218fbddef534e37e048347c10805",
+      "fragment": "export type AgentMessageDeltaNotification = { threadId: string, turnId: string, itemId: string, delta: string, };"
+    },
+    {
+      "source": "v2/TurnStatus.ts",
+      "sourceSha256": "c69049363f97e97844e9fc851f0cd4122da057ba1371de003a28c00ab7a6ef1a",
+      "fragment": "export type TurnStatus = \"completed\" | \"interrupted\" | \"failed\" | \"inProgress\";"
+    }
+  ]
+}

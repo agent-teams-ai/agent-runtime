@@ -21,6 +21,16 @@
       }
     },
     {
+      "files": [
+        "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/**",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/**",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/**"
+      ],
+      "rules": {
+        "max-lines": "off"
+      }
+    },
+    {
       "files": ["experiments/**", "**/*.test.ts", "**/fixtures/**"],
       "rules": {
         "complexity": ["error", 30],

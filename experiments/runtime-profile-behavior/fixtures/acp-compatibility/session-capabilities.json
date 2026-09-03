@@ -1,0 +1,11 @@
+{
+  "name": "session-capabilities",
+  "provenance": "synthetic_normalized_acp_v1_shape",
+  "response": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "loadSession": true,
+      "sessionCapabilities": { "list": {}, "resume": {}, "close": {}, "fork": {} }
+    }
+  }
+}

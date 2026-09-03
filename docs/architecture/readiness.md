@@ -12,6 +12,10 @@ related:
   - ADR-0005
   - ADR-0006
   - ADR-0008
+  - ADR-0009
+  - ADR-0010
+  - ADR-0012
+  - ADR-0014
 blocked_by: []
 code_anchors: []
 ---
@@ -20,16 +24,17 @@ code_anchors: []
 
 Status: current qualification register, not a production-readiness claim
 
-The canonical domain, dependency, package-identity, and private application
-entrypoint decisions are in ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005,
-and ADR-0008. Proposed ADR-0006 must be accepted before the first Agent
-Execution operation/effect-ledger slice.
-The committed ADR-0006 JSON oracle, independent evaluator, property/mutation
-checks, and synthetic XState requirement-27 verifier are executable architecture
-evidence governed through Foundation `quality.executable-specifications`. They do
-not bind or implement a production runtime, change ADR-0006 from `proposed`,
-authorize an Agent Execution slice, or establish implementation/deployment
-qualification.
+The canonical domain, dependency, package-identity, private application
+entrypoint, and narrow contained-turn decisions are the accepted ADRs listed
+above, including ADR-0012 and ADR-0014; ADR-0006 remains proposed and ADR-0011
+is unassigned. ADR-0009, ADR-0010, ADR-0012, and ADR-0014 authorize only the
+Contained Agent Turn V1 contract and narrow Darwin candidate direction; they do
+not authorize a production implementation or deployment.
+The committed ADR-0006 JSON oracle plus the ADR-0010 V1 disposition and contract fixtures,
+independent evaluators, property/mutation checks, and synthetic XState
+requirement-27 verifier are executable architecture evidence governed through
+Foundation `quality.executable-specifications`. They do not bind or implement a
+production runtime or establish implementation/deployment qualification.
 Evidence promotion is in `architecture/evidence-traceability.md`. Exact scoped
 target matches and evidence hashes are in
 `architecture/qualification-registry.json`. This document owns the mutable list
@@ -161,7 +166,7 @@ AR-2 implementation present; synthetic evidence present; qualification open:
   [`Legacy Feature Inventory`](legacy-feature-inventory.json) and the
   machine-readable Claude Code
   [`freeze packet`](claude-code-setup-freeze.json) are present and pass a
-  deterministic artifact gate. Each of its 21 frozen fixture rows maps to
+  deterministic artifact gate. Each of its 26 frozen fixture rows maps to
   exactly one declared Node test selected by its owning package test script;
 - inventory schema V2 does not use a fixed row count or authored ID list as
   completeness proof. It validates unique IDs, provider/ID consistency,
@@ -182,7 +187,7 @@ AR-2 implementation present; synthetic evidence present; qualification open:
 - the frozen `claude-code-settings@2026-08-28` dialect identifies official
   documentation semantics only. It does not qualify, version, or prove
   compatibility of a discovered executable;
-- revision 3 of the content-addressed
+- revision 4 of the content-addressed
   [official-semantics artifact](claude-code-official-semantics.snapshot.json)
   binds five normalized evidence records to five exact official response bodies
   retained as deterministic gzip artifacts. The offline artifact gate reads
@@ -331,6 +336,79 @@ Foundation accepted:
 - cross-revision transcript resume is exact-compatible or explicitly migrated,
   never best effort.
 
+Contained Agent Turn V1 accepted:
+
+- one accepted operation has exactly one coarse `EffectId`, at most one fresh
+  provider attempt, no fallback or provider-session reuse, and no blind retry;
+- command acceptance and dispatch claim are separate durable transitions;
+  ambiguous acceptance remains nonterminal with `reconcile_required`;
+- the exact versioned `AdapterCapabilityManifest` classifies the provider-turn
+  path as `contained_unmediated_effect` and declares the worst-case workspace,
+  process-tree, Provider Access, credential, output, artifact, and custody
+  scope;
+- command acceptance freezes the immutable `RequiredReceiptSet`, and
+  `ContainmentExecutionReceipt` binds exact operation, effect, attempt, scope,
+  binary, adapter-manifest, policy, workspace, route, credential, Host custody,
+  provider-observation, output-drain, artifact, cutoff, and execution evidence;
+- ordinary callers receive only the trusted scope-bound `RuntimeAccessHandle`;
+  caller abort and Host disposal cannot manufacture durable cancellation,
+  provider containment, effect resolution, or terminal truth;
+- module identity and lifecycle remain disjoint from operation, effect,
+  attempt, workspace, custody, receipt, Host, and authority identities. V1 has
+  no Module Kit dependency.
+
+Contained Agent Turn V1 implementation present; qualification remains open:
+
+- Codex `0.150.1` and Claude Agent SDK `0.3.251` are candidate
+  implementations only. The production/default Embedded Runtime selection path
+  fails closed with `route-enforcement-unqualified` before provider-owner or
+  seven-port feature construction because no exact Provider Access enforced
+  network-route target is registered. A route reference, authority digest,
+  canary receipt, or provider manifest is identity or implementation evidence,
+  not proof of enforced egress. Successor qualification requires independent
+  evidence for the exact package/binary, platform, credential route, and
+  enforced network boundary, followed by explicit qualification-registry and
+  readiness promotion. Native Darwin physical and composite containment remain
+  `indeterminate` under ADR-0014;
+
+- Agent Execution implements one provider-neutral operation kernel with
+  separate durable acceptance and dispatch claims, scope-bound observation and
+  cancellation, no automatic retry, one coarse effect, exact receipt closure,
+  and explicit `reconcile_required` outcomes;
+- PostgreSQL persistence, disposable workspace/artifact custody, process-tree
+  custody, Codex App Server, and Claude Agent SDK adapters are present behind
+  the exact seven-port Pure DI feature factory accepted by ADR-0012. Its Provider
+  Access consumer port and outer-composition ACL mapping are implemented, with
+  Provider Access resolution at acceptance and exact revalidation before
+  dispatch crossing that authority boundary. No Module Kit or framework type
+  enters domain, application, contracts, persistence, or provider adapters;
+- Embedded Runtime exposes only detached `submit`, `observe`, and `cancel`
+  methods through the trusted tenant/project-bound `RuntimeAccessHandle`.
+  Caller abort detaches a waiter; Host disposal issues a durable cancellation
+  command and waits within a bounded deadline without asserting containment or
+  terminal truth;
+- focused synthetic evidence includes 58 Agent Execution tests, 63 Embedded
+  Runtime tests, and five PostgreSQL restart/concurrency/corruption tests;
+- the exact Codex `0.150.1` hosted Linux x64 canary is retained implementation
+  evidence. Darwin arm64 has independently checked-in immutable package,
+  binary-SHA, and initialize candidate authority, plus synthetic cooperative
+  composition coverage, but no registered exact-SHA local macOS canary and no
+  qualification-registry target. Claude SDK `0.3.251` adapter/custody
+  conformance is green for explicit tuples: Linux x64 binds bundled CLI
+  `2.1.251` SHA
+  `fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7`
+  to strict descriptor-bound cgroup-v2 custody, while Darwin arm64 binds the
+  same SDK and CLI versions with SHA
+  `625869b01e0050f260b2980fac248fd9cef9e462612bded4ec9d3d49ff8969a5`
+  to canonical-path cooperative POSIX process-group custody. ADR-0014 records
+  the Darwin direction as candidate-only: no Darwin Claude qualification row or
+  registered qualification claim exists. The tuple remains unqualified until
+  an exact-SHA disposable local macOS canary produces honest evidence for later
+  registry promotion; the hosted Linux live canary remains blocked at
+  authentication by an expired test OAuth session. None of this is production
+  or deployment qualification;
+- OpenCode remains contract-only and no production ACP adapter is claimed.
+
 Scoped qualified:
 
 - AR-owned operation/command identity, effect-ledger counterexamples, output
@@ -344,14 +422,28 @@ Scoped qualified:
 
 Remaining:
 
-- production implementation of authorization, admission and dispatch-claim
-  ports, command/effect ledger, effect receipts, child-operation state,
-  custody transfer, cancellation fan-out, and transcript envelopes;
+- complete implementation qualification for the existing V1 security,
+  operation-store, workspace, artifact, custody, provider, and private-handle
+  paths across their declared target tuples;
+- deferred generalized authorization/admission, child-operation state, custody
+  transfer, cancellation fan-out, transcript envelopes, resume, and multi-host
+  behavior remain outside Contained Agent Turn V1;
 - one authoritative-interceptor conformance suite for every enabled
   provider/binary effect path; Codex shell, patch, and MCP plus OpenCode ACP
   and native tool paths are separate qualification rows;
 - contained-unmediated scope, containment-receipt, required-receipt-set, and
-  terminal-barrier tests;
+  terminal-barrier implementation tests for the exact V1 manifests and target
+  platforms;
+- Claude hosted and exact-SHA local macOS arm64 disposable live canaries with a
+  valid isolated test credential binding; the macOS canary must record SDK
+  `0.3.251`, bundled CLI `2.1.251`, and binary SHA
+  `625869b01e0050f260b2980fac248fd9cef9e462612bded4ec9d3d49ff8969a5` before
+  the cooperative candidate can be promoted; OpenCode ACP fixture qualification
+  also remains open. The exact-SHA Codex Darwin arm64 local canary and
+  qualification-registry promotion remain open. Codex and Claude live canaries
+  are implementation evidence, not production or deployment qualification;
+- adversarial private-handle, Host-shutdown, durable cancellation, immutable
+  identity, and persistence fault campaigns beyond the focused V1 suite;
 - spoofed/corrupted provider owner IDs proving adapters cannot replace trusted
   invocation scope;
 - duplicate/multi-hook admission tests proving one budget/capacity claim,

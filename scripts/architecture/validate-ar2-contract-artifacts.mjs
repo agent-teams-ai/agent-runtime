@@ -1,28 +1,31 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { isAbsolute, resolve, win32 } from "node:path";
+import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
+
+import { readCustodiedRepositoryFile } from "./ar2-evidence-custody.mjs";
 
 export { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
 import { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
 
-const inventoryPath = new URL("../../docs/architecture/legacy-feature-inventory.json", import.meta.url);
-const inventorySchemaPath = new URL("../../docs/architecture/legacy-feature-inventory.schema.json", import.meta.url);
-const freezePath = new URL("../../docs/architecture/claude-code-setup-freeze.json", import.meta.url);
-const freezeSchemaPath = new URL("../../docs/architecture/claude-code-setup-freeze.schema.json", import.meta.url);
-const fixtureRoot = new URL("../../packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings/", import.meta.url);
-const fixtureManifestPath = new URL("manifest.json", fixtureRoot);
-const negativeFixturesPath = new URL("negative-fixtures.json", fixtureRoot);
-const contractCoveragePath = new URL("contract-coverage.json", fixtureRoot);
-const packagePath = new URL("../../package.json", import.meta.url);
-const roadmapPath = new URL("../../docs/architecture/provider-setup-delivery-roadmap.md", import.meta.url);
-const readinessPath = new URL("../../docs/architecture/readiness.md", import.meta.url);
-const runtimeAccessPath = new URL("../../packages/apps/embedded-runtime/src/contracts/runtime-access.ts", import.meta.url);
+const inventoryPath = "docs/architecture/legacy-feature-inventory.json";
+const inventorySchemaPath = "docs/architecture/legacy-feature-inventory.schema.json";
+const freezePath = "docs/architecture/claude-code-setup-freeze.json";
+const freezeSchemaPath = "docs/architecture/claude-code-setup-freeze.schema.json";
+const fixtureRoot = "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings";
+const fixtureManifestPath = `${fixtureRoot}/manifest.json`;
+const negativeFixturesPath = `${fixtureRoot}/negative-fixtures.json`;
+const contractCoveragePath = `${fixtureRoot}/contract-coverage.json`;
+const packagePath = "package.json";
+const roadmapPath = "docs/architecture/provider-setup-delivery-roadmap.md";
+const readinessPath = "docs/architecture/readiness.md";
+const runtimeAccessPath = "packages/apps/embedded-runtime/src/contracts/runtime-access.ts";
 const repositoryRoot = new URL("../../", import.meta.url);
 
-const readJson = async path => JSON.parse(await readFile(path, "utf8"));
+const readEvidence = async (path, options) => readCustodiedRepositoryFile(path, options);
+const readText = async (path, options) => (await readEvidence(path, options)).toString("utf8");
+const readJson = async (path, options) => JSON.parse(await readText(path, options));
 const exactKeys = (value, keys, label) => {
   assert.deepEqual(Object.keys(value).toSorted(), [...keys].toSorted(), `${label} keys`);
 };
@@ -43,38 +46,34 @@ const fixtureProjection = ({ id, expected, diagnostic }) => ({
 });
 
 export const EXPECTED_FIXTURE_MATRIX = Object.freeze([
-  { id: "installation-absent", expected: "observed-with-install-action" },
-  { id: "installation-one-alias", expected: "found-unverified" },
-  { id: "installation-multiple-aliases", expected: "identity-grouped" },
-  { id: "source-user-only", expected: "source-bound-intent" },
-  { id: "source-shared-project-only", expected: "source-bound-intent" },
-  { id: "source-project-local-only", expected: "source-bound-intent" },
-  { id: "sources-conflict", expected: "two-observations-no-winner" },
-  { id: "malformed-higher-precedence", expected: "unrelated-source-preserved" },
-  { id: "duplicate-json-keys", diagnostic: "config_duplicate_key" },
-  { id: "bom", diagnostic: "config_parse_failed" },
-  { id: "invalid-utf8", diagnostic: "config_invalid_utf8" },
-  { id: "oversized-json", diagnostic: "config_too_large" },
-  { id: "deep-json", diagnostic: "config_parse_failed" },
-  { id: "unsupported-effort-max", diagnostic: "setting_value_unsupported" },
-  { id: "provider-route-model", expected: "provider-deployment-deferred" },
-  { id: "secret-sentinels", diagnostic: "secret_setting_rejected" },
-  { id: "credential-material", diagnostic: "credential_material_rejected" },
-  { id: "untrusted-workspace", diagnostic: "source_untrusted" },
-  { id: "stale-source", diagnostic: "source_epoch_stale" },
-  { id: "unsupported-platform", diagnostic: "unsupported_platform" },
-  { id: "unsupported-dialect", diagnostic: "configuration_dialect_unsupported" },
-  { id: "access-scope-limit-exceeded", diagnostic: "access_scope_limit_exceeded" },
-  { id: "capability-unavailable", diagnostic: "capability_unavailable" },
-  { id: "model-default-special", expected: "provider-default" },
-  { id: "model-exact-name", expected: "exact-name" },
-  { id: "model-arbitrary-selector-deferred", expected: "unclassified-selector-deferred" },
+  { id: "installation-absent", expected: "observed-with-install-action" }, { id: "installation-one-alias", expected: "found-unverified" }, { id: "installation-multiple-aliases", expected: "identity-grouped" }, { id: "source-user-only", expected: "source-bound-intent" },
+  { id: "source-shared-project-only", expected: "source-bound-intent" }, { id: "source-project-local-only", expected: "source-bound-intent" }, { id: "sources-conflict", expected: "two-observations-no-winner" }, { id: "malformed-higher-precedence", expected: "unrelated-source-preserved" },
+  { id: "duplicate-json-keys", diagnostic: "config_duplicate_key" }, { id: "bom", diagnostic: "config_parse_failed" }, { id: "invalid-utf8", diagnostic: "config_invalid_utf8" }, { id: "oversized-json", diagnostic: "config_too_large" },
+  { id: "deep-json", diagnostic: "config_parse_failed" }, { id: "unsupported-effort-max", diagnostic: "setting_value_unsupported" }, { id: "provider-route-model", expected: "provider-deployment-deferred" }, { id: "secret-sentinels", diagnostic: "secret_setting_rejected" },
+  { id: "credential-material", diagnostic: "credential_material_rejected" }, { id: "untrusted-workspace", diagnostic: "source_untrusted" }, { id: "stale-source", diagnostic: "source_epoch_stale" }, { id: "unsupported-platform", diagnostic: "unsupported_platform" },
+  { id: "unsupported-dialect", diagnostic: "configuration_dialect_unsupported" }, { id: "access-scope-limit-exceeded", diagnostic: "access_scope_limit_exceeded" }, { id: "capability-unavailable", diagnostic: "capability_unavailable" }, { id: "model-default-special", expected: "provider-default" },
+  { id: "model-exact-name", expected: "exact-name" }, { id: "model-arbitrary-selector-deferred", expected: "unclassified-selector-deferred" },
 ]);
 
+const lexicalCustodyFailure = reason => assert.fail(`<invalid> AR-2 evidence custody rejected: ${reason}`);
+
 const packageTestCoordinates = testFile => {
-  const match = /^(packages\/[^/]+\/[^/]+)\/(tests\/[^/]+\.test\.ts)$/u.exec(testFile);
-  assert.ok(match, `${testFile} must be a package-owned top-level test file`);
+  if (typeof testFile !== "string") {lexicalCustodyFailure("the path must be a string");}
+  if (isAbsolute(testFile) || win32.isAbsolute(testFile) || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(testFile)) {lexicalCustodyFailure("the path must be repository-relative");} if (!/^[A-Za-z0-9._/-]+$/u.test(testFile)) {lexicalCustodyFailure("the path must use unencoded portable separators and ASCII segments");}
+  if (testFile.split("/").some(segment => segment === "" || segment === "." || segment === "..")) {lexicalCustodyFailure("the path must not contain empty or dot segments");}
+  const match = /^(packages\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)\/(tests\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\.test\.ts)$/u.exec(testFile);
+  if (!match) {lexicalCustodyFailure("the path must name a package-owned test file");}
   return { packageRoot: match[1], relativeTestFile: match[2] };
+};
+
+export const readAr2CoverageTestSource = async (testFile, options = {}) => {
+  const { packageRoot, relativeTestFile } = packageTestCoordinates(testFile);
+  const source = (await readEvidence(testFile, {
+    ...options,
+    allowedRoot: `${packageRoot}/tests`,
+    evidenceRoot: options.evidenceRoot ?? repositoryRoot,
+  })).toString("utf8");
+  return { packageRoot, relativeTestFile, source };
 };
 
 const testScriptExecutes = (script, relativeTestFile) => script
@@ -176,20 +175,20 @@ export const validateClaudeExpectedLimitationsParity = (frozenLimitations, runti
 
 const loadContractCoverageEvidence = async contractCoverage => {
   const testFiles = [...new Set(contractCoverage.cases.map(entry => entry.testFile))];
-  const testSources = new Map(await Promise.all(testFiles.map(async testFile => [
-    testFile,
-    await readFile(new URL(testFile, repositoryRoot), "utf8"),
-  ])));
-  const packageRoots = [...new Set(testFiles.map(testFile => packageTestCoordinates(testFile).packageRoot))];
+  const retainedSources = await Promise.all(testFiles.map(testFile => readAr2CoverageTestSource(testFile)));
+  const testSources = new Map(retainedSources.map(({ source }, index) => [testFiles[index], source]));
+  const packageRoots = [...new Set(retainedSources.map(({ packageRoot }) => packageRoot))];
   const packageTestScripts = new Map(await Promise.all(packageRoots.map(async packageRoot => {
-    const packageManifest = await readJson(new URL(`${packageRoot}/package.json`, repositoryRoot));
+    const packageManifest = await readJson(`${packageRoot}/package.json`, {
+      allowedRoot: packageRoot,
+    });
     return [packageRoot, packageManifest.scripts?.test];
   })));
   return { packageTestScripts, testSources };
 };
 
 const LEGACY_COMMIT = "f6afac73cced62d943a0e891ad08d7b8f88f802f";
-const CURRENT_COMMIT = "493c6c37e247f021fc110c5fc624b72f1502d743";
+const CURRENT_COMMIT = "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0";
 const BOUNDED_CONTEXT_IDS = new Set([
   "runtime-configuration", "runtime-security", "provider-access", "agent-execution",
 ]);
@@ -305,10 +304,9 @@ const resolveJsonPointer = (value, pointer) => pointer
   .reduce((current, token) => current?.[token.replaceAll("~1", "/").replaceAll("~0", "~")], value);
 
 const validateEvidenceAnchor = async (entry, evidenceRoot) => {
-  const path = new URL(entry.path, evidenceRoot);
   let source;
   await assert.doesNotReject(async () => {
-    source = await readFile(path, "utf8");
+    source = await readText(entry.path, { evidenceRoot });
   }, `${entry.repository}:${entry.path} evidence path must exist`);
   const [kind, coordinate] = entry.locator.split(/:(.*)/su, 2);
   if (kind === "line") {
@@ -326,12 +324,6 @@ const validateEvidenceAnchor = async (entry, evidenceRoot) => {
   }
 };
 
-const asDirectoryUrl = root => {
-  const url = root instanceof URL ? new URL(root) : pathToFileURL(resolve(root));
-  if (!url.pathname.endsWith("/")) {url.pathname += "/";}
-  return url;
-};
-
 const validateInventoryEvidenceFor = async (inventory, repository, evidenceRoot) => {
   const entries = evidenceEntries(inventory).filter(entry => entry.repository === repository);
   await Promise.all(entries.map(entry => validateEvidenceAnchor(entry, evidenceRoot)));
@@ -342,7 +334,7 @@ export const auditLegacyInventoryEvidence = async (exactLegacyRoot, inventoryOve
   assert.ok(exactLegacyRoot, "an explicit exact legacy root is required");
   const inventory = inventoryOverride ?? await readJson(inventoryPath);
   validateInventory(inventory);
-  return validateInventoryEvidenceFor(inventory, "legacy", asDirectoryUrl(exactLegacyRoot));
+  return validateInventoryEvidenceFor(inventory, "legacy", exactLegacyRoot);
 };
 
 const validateFreeze = async freeze => {
@@ -409,8 +401,9 @@ const validateFreeze = async freeze => {
   assert.ok(freeze.resultSemantics.sections.includes("observedPortableIntent"));
   assert.ok(freeze.resultSemantics.sections.includes("deferredObservations"));
   unique(freeze.snapshot.documents.map(document => document.id), "snapshot document IDs");
-  const semanticArtifactUrl = new URL(`../../${freeze.snapshot.semanticArtifact.path}`, import.meta.url);
-  const semanticArtifactBytes = await readFile(semanticArtifactUrl);
+  const semanticArtifactBytes = await readEvidence(freeze.snapshot.semanticArtifact.path, {
+    allowedRoot: "docs/architecture",
+  });
   assert.equal(sha256(semanticArtifactBytes), freeze.snapshot.semanticArtifact.sha256, "official semantic artifact content hash");
   const semanticArtifact = JSON.parse(semanticArtifactBytes.toString("utf8"));
   const frozenFacts = await validateOfficialSemantics(semanticArtifact);
@@ -455,9 +448,9 @@ export const validateAr2ContractArtifacts = async () => {
     readJson(negativeFixturesPath),
     readJson(contractCoveragePath),
     readJson(packagePath),
-    readFile(roadmapPath, "utf8"),
-    readFile(readinessPath, "utf8"),
-    readFile(runtimeAccessPath, "utf8"),
+    readText(roadmapPath),
+    readText(readinessPath),
+    readText(runtimeAccessPath),
   ]);
   validateSchema(inventorySchema, inventory, "legacy inventory");
   validateSchema(freezeSchema, freeze, "Claude freeze");
@@ -516,7 +509,19 @@ export const validateAr2ContractArtifacts = async () => {
   };
 };
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
-  const result = await validateAr2ContractArtifacts();
-  process.stdout.write(`AR-2 contract artifacts valid (${result.inventoryItems} inventory items, ${result.snapshotDocuments} snapshots)\n`);
+export const runAr2ContractArtifactsCli = async ({
+  stderr = process.stderr, stdout = process.stdout, validate = validateAr2ContractArtifacts,
+} = {}) => {
+  try {
+    const result = await validate();
+    stdout.write(`AR-2 contract artifacts valid (${result.inventoryItems} inventory items, ${result.snapshotDocuments} snapshots)\n`);
+    return 0;
+  } catch {
+    stderr.write("AR-2 contract artifact validation failed\n");
+    return 1;
+  }
+};
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = await runAr2ContractArtifactsCli();
 }

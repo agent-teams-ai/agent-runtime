@@ -15,9 +15,10 @@ topology/transport-topology/failure-domain whole tuple to `unqualified`;
 
 Current runtime-profile and execution evidence:
 
-- `spec/runtime-operation-oracle/README.md` - synthetic executable evidence for
-  proposed ADR-0006, with JSON authority, generated review artifacts, and an
-  explicit validity-versus-reachability boundary;
+- `spec/runtime-operation-oracle/README.md` - executable ADR-0006 design oracle
+  and architecture evidence for accepted ADR-0009 and ADR-0010, with V1 disposition/contract fixtures,
+  generated review artifacts, and an explicit validity-versus-reachability
+  boundary;
 - `docs/spikes/opencode-hosting-e2e-results.md` - human-readable accepted
   scoped results and adapter consequences;
 - `fixtures/opencode-hosting-e2e-summary.json` - redacted machine-readable
@@ -57,11 +58,17 @@ Current runtime-profile and execution evidence:
   interrupt, and crash-recovery behavior;
 - `fixtures/macos-codex-app-server-effects-summary.json` - allowlist-projected
   effect facts, exact binary/schema closure, assertions, and cleanup.
+- `fixtures/linux-codex-app-server-0.150.1-static-summary.json` - exact Linux
+  package, binary, and generated stable-contract closure for the current V1
+  candidate; it deliberately contains no provider-turn behavior evidence.
 - `docs/spikes/macos-claude-agent-sdk-conformance-results.md` - scoped current
   TypeScript SDK isolation, environment, stream-drain, concurrency,
   cwd-scoped resume, macOS sandbox, queued-interrupt, and abort observations;
 - `fixtures/macos-claude-agent-sdk-summary.json` - allowlist-projected SDK
   closure, protocol counterexamples, sandbox facts, invariants, and cleanup.
+- `fixtures/linux-claude-agent-sdk-0.3.251-static-summary.json` - exact Linux
+  SDK, bundled CLI, native binary, and public launcher-contract closure for the
+  current V1 candidate; it deliberately contains no provider-turn evidence.
 - `docs/spikes/macos-claude-session-store-conformance-results.md` - scoped
   current-SDK restore, placement, opaque-entry integrity, append retry, mirror
   failure, timeout, and capability observations;

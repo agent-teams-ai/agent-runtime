@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
+
+import { readCustodiedRepositoryFile } from "./ar2-evidence-custody.mjs";
 
 const repositoryRoot = new URL("../../", import.meta.url);
 const EVIDENCE_DIRECTORY = "docs/architecture/evidence/claude-code-settings-semantics-2026-08-28/";
@@ -227,7 +228,11 @@ const validateDocument = async (document, context) => {
   assert.ok(document.rawResponseByteLength > 0 && document.rawResponseByteLength < 500_000, `${document.id} raw response size`);
   assert.ok(document.gzipByteLength > 0 && document.gzipByteLength < document.rawResponseByteLength, `${document.id} gzip size`);
 
-  const gzipBytes = await readFile(new URL(document.artifactPath, root));
+  const gzipBytes = await readCustodiedRepositoryFile(document.artifactPath, {
+    allowedRoot: EVIDENCE_DIRECTORY.slice(0, -1),
+    evidenceRoot: root,
+    maxBytes: 500_000,
+  });
   assert.equal(gzipBytes.byteLength, document.gzipByteLength, `${document.id} deterministic gzip byte length`);
   assert.equal(sha256(gzipBytes), document.gzipSha256, `${document.id} deterministic gzip hash`);
   assert.equal(gzipBytes.readUInt32LE(4), 0, `${document.id} gzip -n timestamp`);

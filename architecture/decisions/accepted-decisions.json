@@ -36,6 +36,31 @@
       "id": "ADR-0008",
       "path": "docs/decisions/0008-private-embedded-runtime-access-entrypoint.md",
       "immutableDigest": "sha256:cc01253865e4292e1160363f211b0ccb675fb50860fab7c23c3925fa6bb033c7"
+    },
+    {
+      "id": "ADR-0009",
+      "path": "docs/decisions/0009-contained-turn-private-access-and-host-shutdown-boundary.md",
+      "immutableDigest": "sha256:43e03f0db43ca6df7316089e28fec146536be0061e497e408dacdea798b870ca"
+    },
+    {
+      "id": "ADR-0010",
+      "path": "docs/decisions/0010-contained-agent-turn-v1-operation-authority.md",
+      "immutableDigest": "sha256:ae93100d235748090f441b12d98a7cfe7075ba886a126ab78df4037138c5f89e"
+    },
+    {
+      "id": "ADR-0012",
+      "path": "docs/decisions/0012-provider-access-authority-in-contained-turn-composition.md",
+      "immutableDigest": "sha256:65084ea45ec06419bbbd859c0835e51125014a184f2e5b746289fc092593c297"
+    },
+    {
+      "id": "ADR-0013",
+      "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
+      "immutableDigest": "sha256:a925f597fc3ae0a5b4c241650582d534df2254ca45384a7008085370dbda83da"
+    },
+    {
+      "id": "ADR-0014",
+      "path": "docs/decisions/0014-darwin-provider-candidate-platform-qualification.md",
+      "immutableDigest": "sha256:b923c5f780461715861e829391fd7a01f7f7cb81586760655f5f8218c6d9b7e3"
     }
   ]
 }

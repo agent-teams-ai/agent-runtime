@@ -1,0 +1,11 @@
+{
+  "name": "unknown-unsupported-capabilities",
+  "provenance": "synthetic_adversarial_acp_v1_shape",
+  "response": {
+    "protocolVersion": 1,
+    "agentCapabilities": {
+      "futureTopLevel": {},
+      "sessionCapabilities": { "close": {}, "futureSessionOperation": {} }
+    }
+  }
+}

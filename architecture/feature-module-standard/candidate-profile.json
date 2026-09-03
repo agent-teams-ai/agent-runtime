@@ -1,0 +1,203 @@
+{
+  "$schema": "./profile.schema.json",
+  "schemaVersion": 1,
+  "status": "active",
+  "authority": {
+    "id": "agent-teams.feature-module-standard",
+    "version": "v1",
+    "repository": "agent-teams-ai/.github",
+    "path": "docs/architecture/feature-module-standard/v1.md",
+    "gitBlob": "d0bfff2033faf544fe65268c1dcdfd524d093015",
+    "sha256": "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa"
+  },
+  "scope": {
+    "productionRoots": [
+      "packages/contexts/agent-execution/src",
+      "packages/contexts/provider-access/src"
+    ],
+    "outOfScope": [
+      "Embedded Runtime",
+      "Runtime Configuration",
+      "Runtime Security",
+      "Filesystem Custody",
+      "Module Kit",
+      "experiments",
+      "tooling other than scripts/architecture/check-feature-modules.mjs"
+    ]
+  },
+  "moduleRoles": [
+    "contracts",
+    "domain",
+    "application",
+    "adapters",
+    "composition"
+  ],
+  "features": [
+    {
+      "id": "runtime-installation-discovery",
+      "root": "packages/contexts/agent-execution/src/features/runtime-installation-discovery",
+      "roles": [
+        "contracts",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
+        "internal": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts"
+      }
+    },
+    {
+      "id": "contained-agent-turn",
+      "root": "packages/contexts/agent-execution/src/features/contained-agent-turn",
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/agent-execution/src/features/contained-agent-turn/index.ts",
+        "internal": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-access",
+      "root": "packages/contexts/provider-access/src/features/contained-turn-access",
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
+        "internal": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts"
+      }
+    }
+  ],
+  "assemblyFiles": [
+    "packages/contexts/agent-execution/src/index.ts",
+    "packages/contexts/agent-execution/src/composition.ts",
+    "packages/contexts/provider-access/src/index.ts",
+    "packages/contexts/provider-access/src/composition.ts"
+  ],
+  "featureEdges": [],
+  "extensions": [],
+  "deviations": [],
+  "exceptions": [],
+  "enforcement": {
+    "candidate": "pnpm architecture:feature-modules:candidate",
+    "active": "pnpm architecture:feature-modules:active",
+    "fixtures": "pnpm test:feature-modules"
+  },
+  "activation": {
+    "blockers": [],
+    "acceptance": [
+      "The fixture command passes with all positive and negative conformance cases.",
+      "The candidate command reports zero production diagnostics without exceptions or scope widening.",
+      "Accepted ADR-0013 at its exact governed path authorizes activation, names every exact governed record, and the profile records the exact passing fixture command and zero-diagnostic candidate evidence.",
+      "The final integration change sets status active and adds the active checker alongside the fixture suite in check and check:fast."
+    ],
+    "authority": {
+      "acceptedAdr": "ADR-0013",
+      "decisionPath": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
+      "owner": "architecture",
+      "governedRecords": []
+    },
+    "evidence": {
+      "fixtureCommand": "pnpm test:feature-modules",
+      "candidateCommand": "pnpm architecture:feature-modules:candidate",
+      "productionDiagnostics": 0
+    }
+  },
+  "adoption": {
+    "moduleRoots": [
+      "packages/contexts/agent-execution",
+      "packages/contexts/provider-access"
+    ],
+    "applicationRoots": [],
+    "excludedRoots": [
+      "experiments",
+      "packages/apps/embedded-runtime",
+      "packages/contexts/runtime-configuration",
+      "packages/contexts/runtime-security",
+      "packages/platform/filesystem-custody"
+    ],
+    "abstractLayout": {
+      "modules": [
+        {
+          "moduleRoot": "packages/contexts/agent-execution",
+          "sourceRoot": "packages/contexts/agent-execution/src",
+          "featuresRoot": "packages/contexts/agent-execution/src/features",
+          "moduleComposition": "packages/contexts/agent-execution/src/composition.ts",
+          "publicEntrypoint": "packages/contexts/agent-execution/src/index.ts",
+          "testRoot": "packages/contexts/agent-execution/tests",
+          "featureTestsRoot": "packages/contexts/agent-execution/tests/features",
+          "moduleTestsRoot": "packages/contexts/agent-execution/tests/package"
+        },
+        {
+          "moduleRoot": "packages/contexts/provider-access",
+          "sourceRoot": "packages/contexts/provider-access/src",
+          "featuresRoot": "packages/contexts/provider-access/src/features",
+          "moduleComposition": "packages/contexts/provider-access/src/composition.ts",
+          "publicEntrypoint": "packages/contexts/provider-access/src/index.ts",
+          "testRoot": "packages/contexts/provider-access/tests",
+          "featureTestsRoot": "packages/contexts/provider-access/tests/features",
+          "moduleTestsRoot": "packages/contexts/provider-access/tests/package"
+        }
+      ],
+      "applications": []
+    },
+    "localExtensions": {
+      "language": {
+        "sourceExtensions": [
+          ".js",
+          ".jsx",
+          ".mjs",
+          ".cjs",
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ]
+      },
+      "packaging": {
+        "manifest": "package.json",
+        "curatedExports": [
+          ".",
+          "./composition"
+        ]
+      },
+      "transport": {
+        "publicContractRole": "contracts"
+      },
+      "composition": {
+        "moduleFiles": [
+          "index.ts",
+          "composition.ts"
+        ],
+        "featureEntrypoints": [
+          "index.ts",
+          "internal.ts"
+        ],
+        "syntax": "imports-and-named-reexports-only"
+      }
+    },
+    "localOwnership": {
+      "architectureDocument": {
+        "path": "docs/architecture/feature-module-standard-v1-candidate.md",
+        "owner": "architecture"
+      },
+      "decisionRecords": [
+        {
+          "id": "ADR-0013",
+          "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
+          "owner": "architecture"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,1692 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "name": "minimal-valid-feature-and-supported-syntax",
+      "alphaRoles": ["contracts", "domain", "adapters"],
+      "files": {
+        "src/features/alpha/index.ts": "export type { PublicValue } from \"./contracts/public-value.js\";\n",
+        "src/features/alpha/internal.ts": "export { value } from \"./domain/value.js\";\nexport { adapterValue } from \"./adapters/value.js\";\n",
+        "src/features/alpha/contracts/public-value.ts": "export interface PublicValue { readonly value: string }\n",
+        "src/features/alpha/domain/value.ts": "// import('../beta/domain/nope.js')\nconst text = \"require('../beta/domain/nope.js')\";\nexport interface Value { readonly value: string }\nexport const value = text;\n",
+        "src/features/alpha/adapters/value.ts": "import fs = require('node:fs');\ntype External = import('node:fs').Stats;\nvoid import('node:path');\nexport const adapterValue = fs.constants.F_OK;\nvoid (null as unknown as External);\n",
+        "src/index.ts": "export type { Value } from \"./features/alpha/index.js\";\n",
+        "src/composition.ts": "export { value } from \"./features/alpha/internal.js\";\n"
+      },
+      "cliRuns": [
+        { "arguments": [], "exit": 0, "output": "Feature Module Standard candidate: 0 diagnostics" }
+      ],
+      "expected": []
+    },
+    {
+      "name": "public-entrypoint-exposes-only-own-contracts",
+      "files": {
+        "src/features/alpha/index.ts": "export { value } from \"./domain/value.js\";\n"
+      },
+      "expected": [{ "code": "FM_PUBLIC_ENTRYPOINT_EXPORT", "path": "src/features/alpha/index.ts", "line": 1 }]
+    },
+    {
+      "name": "behavior-outside-feature",
+      "files": { "src/legacy.ts": "export const legacy = true;\n" },
+      "expected": [{ "code": "FM_BEHAVIOR_OUTSIDE_FEATURE", "path": "src/legacy.ts", "line": 1 }]
+    },
+    {
+      "name": "cross-feature-deep-import",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "edges": [{ "from": "beta", "to": "alpha", "kinds": ["runtime"] }],
+      "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/domain/value.js\";\nexport const adapterValue = value;\n" },
+      "cliRuns": [
+        { "arguments": [], "exit": 1, "output": "No conformance claim" },
+        { "arguments": ["--allow-diagnostics"], "exit": 0, "output": "FM_FEATURE_DEEP_IMPORT" },
+        { "arguments": ["--allow-diagnostics", "--require-active"], "exit": 1, "output": "FM_PROFILE_STATUS" }
+      ],
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "undeclared-edge",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "files": { "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/index.js\";\nexport const adapterValue = value;\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "unused-declared-edge-is-future-state-metadata",
+      "secondFeature": true,
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "expected": [{ "code": "FM_UNUSED_EDGE", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "edge-must-reference-declared-features",
+      "edges": [{ "from": "alpha", "to": "unknown", "kinds": ["runtime"] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "runtime-cycle",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "secondRoles": ["domain", "adapters"],
+      "edges": [
+        { "from": "alpha", "to": "beta", "kinds": ["runtime"] },
+        { "from": "beta", "to": "alpha", "kinds": ["runtime"] }
+      ],
+      "files": {
+        "src/features/alpha/adapters/value.ts": "import { beta } from \"../../beta/index.js\";\nexport const adapterValue = beta;\n",
+        "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/index.js\";\nexport const adapterBeta = value;\n"
+      },
+      "expected": [
+        { "code": "FM_RUNTIME_CYCLE", "path": "src/features/alpha/adapters/value.ts", "line": 1 },
+        { "code": "FM_RUNTIME_CYCLE", "path": "src/features/beta/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "type-only-cycle",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "secondRoles": ["domain", "adapters"],
+      "edges": [
+        { "from": "alpha", "to": "beta", "kinds": ["type"] },
+        { "from": "beta", "to": "alpha", "kinds": ["type"] }
+      ],
+      "files": {
+        "src/features/alpha/adapters/value.ts": "import type { Beta } from \"../../beta/index.js\";\nexport interface AlphaAdapter { beta: Beta }\n",
+        "src/features/beta/adapters/value.ts": "import type { Value } from \"../../alpha/index.js\";\nexport interface BetaAdapter { value: Value }\n"
+      },
+      "expected": [
+        { "code": "FM_TYPE_CYCLE", "path": "src/features/alpha/adapters/value.ts", "line": 1 },
+        { "code": "FM_TYPE_CYCLE", "path": "src/features/beta/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "empty-ceremonial-layer",
+      "alphaRoles": ["domain", "application"],
+      "files": { "src/features/alpha/application/placeholder.ts": "// later\nexport { value } from '../domain/value.js';\n" },
+      "expected": [{ "code": "FM_EMPTY_LAYER", "path": "src/features/alpha/application", "line": 1 }]
+    },
+    {
+      "name": "undeclared-module-and-ownership",
+      "files": {
+        "src/features/alpha/helpers/tool.ts": "export const tool = true;\n",
+        "src/shared/value.ts": "export const shared = true;\n"
+      },
+      "expected": [
+        { "code": "FM_UNDECLARED_MODULE", "path": "src/features/alpha/helpers/tool.ts", "line": 1 },
+        { "code": "FM_UNDECLARED_OWNERSHIP", "path": "src/shared/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "invalid-layer-direction",
+      "alphaRoles": ["domain", "application"],
+      "files": {
+        "src/features/alpha/application/use.ts": "export const use = true;\n",
+        "src/features/alpha/domain/value.ts": "import { use } from \"../application/use.js\";\nexport const value = use;\n"
+      },
+      "cliRuns": [
+        { "arguments": [], "exit": 1, "output": "No conformance claim" },
+        { "arguments": ["--allow-diagnostics"], "exit": 0, "output": "FM_INVALID_LAYER_DIRECTION" },
+        { "arguments": ["--allow-diagnostics", "--require-active"], "exit": 1, "output": "FM_PROFILE_STATUS" }
+      ],
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "domain-cannot-import-public-contracts",
+      "alphaRoles": ["contracts", "domain"],
+      "files": {
+        "src/features/alpha/contracts/public.ts": "export interface PublicContract { readonly value: string }\n",
+        "src/features/alpha/domain/value.ts": "import type { PublicContract } from \"../contracts/public.js\";\nexport const value: PublicContract = { value: 'domain' };\n"
+      },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "application-cannot-import-public-contracts",
+      "alphaRoles": ["contracts", "domain", "application"],
+      "files": {
+        "src/features/alpha/contracts/public.ts": "export interface PublicContract { readonly value: string }\n",
+        "src/features/alpha/application/use.ts": "import type { PublicContract } from \"../contracts/public.js\";\nexport const use = (value: PublicContract): string => value.value;\n"
+      },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/application/use.ts", "line": 1 }]
+    },
+    {
+      "name": "application-cannot-import-another-feature-public-contract",
+      "alphaRoles": ["domain", "application"],
+      "secondFeature": true,
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["type"] }],
+      "files": {
+        "src/features/alpha/application/use.ts": "import type { Beta } from \"../../beta/index.js\";\nexport interface Use { readonly beta: Beta }\n"
+      },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/application/use.ts", "line": 1 }]
+    },
+    {
+      "name": "invalid-authority",
+      "authorityId": "mutable.local-standard",
+      "expected": [{ "code": "FM_INVALID_AUTHORITY", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "profile-schema-marker-is-required",
+      "omitSchemaMarker": true,
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "profile-schema-marker-is-exact",
+      "schemaMarker": "https://example.invalid/profile.schema.json",
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "duplicate-profile-properties-fail-closed",
+      "profileDuplicate": { "key": "$schema", "value": "https://example.invalid/profile.schema.json" },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "malformed-profile-json-fails-closed",
+      "profileSource": "{\n",
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "non-object-profile-json-fails-closed",
+      "profileSource": "null",
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "authority-rejects-undeclared-fields",
+      "authorityExtra": { "mutableRef": "main" },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "future-state-metadata",
+      "profileExtra": { "futureState": { "automaticallyWiden": true } },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "wildcard-exception",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "exceptions": [{ "id": "all", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "src/features/alpha/**", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "readme-extension-requires-accepted-adr",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "extensions": [{ "id": "alpha-readme-extension", "acceptedAdr": "ADR-0013", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "readme-deviation-requires-accepted-adr",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "alpha-readme-deviation", "acceptedAdr": "ADR-0013", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "readme-exception-requires-accepted-adr",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "exceptions": [{ "id": "alpha-readme-exception", "acceptedAdr": "ADR-0013", "owner": "architecture", "rationale": "temporary", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "candidate-requires-explicit-blockers",
+      "activation": { "blockers": [], "acceptance": ["zero diagnostics"], "authority": null, "evidence": null },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-requires-zero-blockers-and-accepted-authority-evidence",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activation": { "blockers": ["not clean"], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "decisionPath": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture", "governedRecords": [] }, "evidence": null },
+      "expected": [
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }
+      ]
+    },
+    {
+      "name": "require-active-rejects-candidate-profile",
+      "requiredStatus": "active",
+      "cliRequireActive": true,
+      "cliAllowDiagnostics": true,
+      "expected": [{ "code": "FM_PROFILE_STATUS", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-with-accepted-authority-and-evidence",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "cliRuns": [
+        { "arguments": ["--require-active"], "exit": 0, "output": "Feature Module Standard active: 0 diagnostics" }
+      ],
+      "expected": []
+    },
+    {
+      "name": "active-profile-requires-check-gate",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "rootScripts": {
+        "check": "pnpm test:feature-modules && pnpm fixture:check",
+        "check:fast": "pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm fixture:fast"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-check-fast-gate-order",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "rootScripts": {
+        "check": "pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm fixture:check",
+        "check:fast": "pnpm architecture:feature-modules:active && pnpm test:feature-modules && pnpm fixture:fast"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-central-adoption",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "omitActiveAdoption": true,
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-module-roots",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["moduleRoots"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-explicit-application-roots",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["applicationRoots"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-excluded-roots",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["excludedRoots"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-abstract-layout-mapping",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["abstractLayout"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-module-layout-mapping",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["abstractLayout.modules"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-application-layout-mapping",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["abstractLayout.applications"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-local-extension-rules",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["localExtensions"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-language-extension-rules",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["localExtensions.language"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-packaging-extension-rules",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["localExtensions.packaging"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-transport-extension-rules",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["localExtensions.transport"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-composition-extension-rules",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["localExtensions.composition"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-local-ownership",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["localOwnership"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-local-architecture-ownership",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["localOwnership.architectureDocument"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-local-decision-ownership",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmit": ["localOwnership.decisionRecords"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-requires-every-central-adoption-leaf",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionOmitEach": [
+        "abstractLayout.modules.0.moduleRoot",
+        "abstractLayout.modules.0.sourceRoot",
+        "abstractLayout.modules.0.featuresRoot",
+        "abstractLayout.modules.0.moduleComposition",
+        "abstractLayout.modules.0.publicEntrypoint",
+        "abstractLayout.modules.0.testRoot",
+        "abstractLayout.modules.0.featureTestsRoot",
+        "abstractLayout.modules.0.moduleTestsRoot",
+        "localExtensions.language.sourceExtensions",
+        "localExtensions.packaging.manifest",
+        "localExtensions.packaging.curatedExports",
+        "localExtensions.transport.publicContractRole",
+        "localExtensions.composition.moduleFiles",
+        "localExtensions.composition.featureEntrypoints",
+        "localExtensions.composition.syntax",
+        "localOwnership.architectureDocument.path",
+        "localOwnership.architectureDocument.owner",
+        "localOwnership.decisionRecords.0.id",
+        "localOwnership.decisionRecords.0.path",
+        "localOwnership.decisionRecords.0.owner"
+      ],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-rejects-empty-module-root-cardinality",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionSet": { "moduleRoots": [] },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-rejects-empty-module-layout-cardinality",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionSet": { "abstractLayout.modules": [] },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-rejects-empty-decision-record-cardinality",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionSet": { "localOwnership.decisionRecords": [] },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-extension-order-matches-schema",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionReverse": ["localExtensions.language.sourceExtensions"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-rejects-duplicate-source-extension-cardinality",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "activeAdoptionSet": { "localExtensions.language.sourceExtensions": [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".mts"] },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-rejects-missing-decision-registry",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "useDecisionRegistry": true,
+      "files": { "architecture/decisions/accepted-decisions.json": null },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-rejects-duplicate-accepted-decision-ids",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "useDecisionRegistry": true,
+      "files": {
+        "architecture/decisions/accepted-decisions.json": "{\"decisions\":[{\"id\":\"ADR-0013\",\"path\":\"docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md\"},{\"id\":\"ADR-0013\",\"path\":\"docs/decisions/0013-shadow.md\"}]}\n"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-rejects-proposed-authority",
+      "status": "active",
+      "cliAllowDiagnosticsFails": true,
+      "activation": { "blockers": [], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "decisionPath": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture", "governedRecords": [] }, "evidence": { "fixtureCommand": "pnpm test:feature-modules", "candidateCommand": "pnpm architecture:feature-modules:candidate", "productionDiagnostics": 0 } },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-authority-names-exact-governed-records",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "alpha-readme-owner", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "activation": { "blockers": [], "acceptance": ["zero diagnostics"], "authority": { "acceptedAdr": "ADR-0013", "decisionPath": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture", "governedRecords": ["deviations:alpha-readme-owner:ADR-0007"] }, "evidence": { "fixtureCommand": "pnpm test:feature-modules", "candidateCommand": "pnpm architecture:feature-modules:candidate", "productionDiagnostics": 0 } },
+      "expected": []
+    },
+    {
+      "name": "active-profile-authority-cannot-omit-governed-record",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "alpha-readme-owner", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "activeGovernedRecords": [],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-authority-cannot-add-unknown-governed-record",
+      "status": "active",
+      "requiredStatus": "active",
+      "acceptActivationAdr": true,
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "alpha-readme-owner", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "activeGovernedRecords": ["deviations:alpha-readme-owner:ADR-0007", "deviations:unknown:ADR-0007"],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "package-index-must-use-public-entrypoint",
+      "files": { "src/index.ts": "export { value } from './features/alpha/internal.js';\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/index.ts", "line": 1 }]
+    },
+    {
+      "name": "package-composition-must-use-internal-entrypoint",
+      "files": { "src/composition.ts": "export { value } from './features/alpha/index.js';\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/composition.ts", "line": 1 }]
+    },
+    {
+      "name": "package-assembly-rejects-non-feature-target",
+      "files": { "src/index.ts": "export { legacy } from './legacy.js';\n" },
+      "expected": [{ "code": "FM_ASSEMBLY_IMPORT_TARGET", "path": "src/index.ts", "line": 1 }]
+    },
+    {
+      "name": "package-assembly-rejects-inline-behavior",
+      "files": { "src/composition.ts": "export const compose = () => true;\n" },
+      "expected": [{ "code": "FM_INLINE_BEHAVIOR", "path": "src/composition.ts", "line": 1 }]
+    },
+    {
+      "name": "feature-entrypoint-rejects-inline-behavior",
+      "files": { "src/features/alpha/internal.ts": "export const value = true;\n" },
+      "expected": [{ "code": "FM_INLINE_BEHAVIOR", "path": "src/features/alpha/internal.ts", "line": 1 }]
+    },
+    {
+      "name": "feature-rejects-undeclared-local-dependency",
+      "files": { "src/features/alpha/domain/value.ts": "import type { Legacy } from '../../../legacy.js';\nexport type Value = Legacy;\n" },
+      "expected": [{ "code": "FM_UNDECLARED_LOCAL_DEPENDENCY", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "domain-rejects-node-builtins",
+      "files": { "src/features/alpha/domain/value.ts": "import type { Stats } from 'node:fs';\nexport type Value = Stats;\n" },
+      "cliRuns": [
+        { "arguments": [], "exit": 1, "output": "No conformance claim" },
+        { "arguments": ["--allow-diagnostics"], "exit": 0, "output": "FM_NODE_BUILTIN_IMPORT" },
+        { "arguments": ["--allow-diagnostics", "--require-active"], "exit": 1, "output": "FM_PROFILE_STATUS" }
+      ],
+      "expected": [{ "code": "FM_NODE_BUILTIN_IMPORT", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "contracts-reject-external-packages",
+      "alphaRoles": ["contracts", "domain"],
+      "files": { "src/features/alpha/contracts/public.ts": "import type { Schema } from 'external-schema';\nexport type Public = Schema;\n" },
+      "expected": [{ "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/contracts/public.ts", "line": 1 }]
+    },
+    {
+      "name": "application-rejects-external-packages",
+      "alphaRoles": ["domain", "application"],
+      "files": { "src/features/alpha/application/use.ts": "import type { Schema } from 'external-schema';\nexport type Use = Schema;\n" },
+      "expected": [{ "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/application/use.ts", "line": 1 }]
+    },
+    {
+      "name": "path-alias-cannot-bypass-feature-boundary",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { value } from '@/features/alpha/domain/value.js';\nexport const adapterValue = value;\n" },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "package-self-import-cannot-bypass-feature-boundary",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { value } from '@fixture/runtime';\nexport const adapterValue = value;\n" },
+      "expected": [{ "code": "FM_UNDECLARED_LOCAL_DEPENDENCY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "comments-and-strings-versus-real-syntax",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/beta/adapters/value.ts": "// import { value } from '../../alpha/index.js';\nconst sample = \"require('../../alpha/index.js')\";\nexport { value } from \"../../alpha/index.js\";\nexport { sample };\n"
+      },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "compiler-comment-references-within-the-same-feature-are-allowed",
+      "files": {
+        "src/features/alpha/domain/reference.js": "/// <reference path=\"./value.ts\" />\n/** @type {import(\"./value.js\").Value} */\nexport const reference = true;\n/** @import type { Value } from \"./value.js\" */\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "triple-slash-cross-feature-deep-reference-is-forbidden",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "edges": [{ "from": "beta", "to": "alpha", "kinds": ["type"] }],
+      "files": {
+        "src/features/beta/adapters/value.ts": "/// <reference path=\"../../alpha/domain/value.ts\" />\nexport const adapterValue = true;\n"
+      },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/beta/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "compiler-comment-package-and-lib-references-are-forbidden-in-domain",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "/// <reference types=\"external-types\" />\n/// <reference lib=\"es2024\" />\n/** @type {import(\"external-schema\").Schema} */\nexport const value = true;\n/** @import type { External } from \"external-package\" */\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 2 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 3 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 5 }
+      ]
+    },
+    {
+      "name": "typescript-recognized-jsdoc-type-tags-are-forbidden-in-domain",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "/** @throws {import(\"external-throws\").Failure} */\nexport function fail() {}\n/** @template {import(\"external-template\").Constraint} T */\nexport function identity(value) { return value; }\n/** @type import(\"external-type\").Value */\nexport const value = undefined;\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 3 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 5 }
+      ]
+    },
+    {
+      "name": "multiline-compiler-jsdoc-imports-are-forbidden-in-domain",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "/** @type {import(\n * \"external-multiline-braced\"\n *).Braced} */\nexport const braced = undefined;\n/**\n * @type\n * import(\n *   \"external-multiline-braceless\"\n * ).Braceless\n */\nexport const braceless = undefined;\n/**\n * @import {\n *   External\n * } from \"external-multiline-tag\"\n */\nexport const imported = undefined;\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 7 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 13 }
+      ]
+    },
+    {
+      "name": "compiler-attached-jsdoc-hosts-are-forbidden-in-domain",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "export function host(/** @type {import(\"external-parameter\").Parameter} */ parameter) {}\nconst local = 1;\nexport {\n  /** @type {import(\"external-export-specifier\").Exported} */ local,\n};\nswitch (local) {\n  /** @type {import(\"external-switch-case\").Case} */\n  case 1: break;\n}\nexport const object = {\n  /** @type {import(\"external-object-property\").Property} */\n  property: true,\n};\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 4 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 7 },
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 11 }
+      ]
+    },
+    {
+      "name": "same-line-class-member-and-source-lookalikes-are-not-jsdoc-dependencies",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "export const beforeClass = true; /** @type {import(\"external-class\").Class} */ class Hidden {}\nexport class Example {\n  first = true; /** @type {import(\"external-member\").Member} */ second = true;\n}\nconst stringValue = 'import(\"external-string\")';\nconst templateValue = `import(\"external-template\")`;\nconst regexValue = /import\\(\"external-regex\"\\)/u;\n// /** @type {import(\"external-line-comment\").Comment} */\nexport const value = Boolean(stringValue && templateValue && regexValue);\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "syntactically-valid-unattached-jsdoc-is-not-a-dependency",
+      "files": {
+        "src/features/alpha/domain/value.ts": "export const values = [\n  true /** @type {import(\"external-inline\").Value} */,\n  false,\n];\nexport function value() {\n  return true;\n  /** @throws {import(\"external-block-end\").Failure} */\n}\nexport /** @type {import(\"external-after-modifier\").Value} */ const exported = true;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "compiler-reference-precedence-and-malformed-references-are-enforced",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "/// <reference path=\"./value.js\" types=\"external\" />\n/// <reference path=target />\n/** @type {import(target).Value} */\nexport const value = true;\n/** @import type { Value } from target */\n"
+      },
+      "expected": [
+        { "code": "FM_EXTERNAL_IMPORT", "path": "src/features/alpha/domain/value.js", "line": 1 },
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.js", "line": 2 },
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.js", "line": 3 },
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.js", "line": 5 }
+      ]
+    },
+    {
+      "name": "arbitrary-comment-text-is-not-scanned-for-imports",
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/value.js": "// prose: /// <reference types=\"external\" />\n/** prose import(\"external-package\") and @import { X } from \"external-package\" */\nexport const value = true;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "all-import-and-reexport-syntax-is-enforced",
+      "secondFeature": true,
+      "secondRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/beta/adapters/value.ts": "import { value } from \"../../alpha/index.js\";\nexport { value as exportedValue } from \"../../alpha/index.js\";\nexport const load = () => import(\"../../alpha/index.js\");\nexport type Imported = import(\"../../alpha/index.js\").Value;\nimport Alpha = require(\"../../alpha/index.js\");\nexport const required = require(\"../../alpha/index.js\");\nvoid value; void Alpha;\n"
+      },
+      "expected": [
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 1 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 2 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 3 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 4 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 5 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/beta/adapters/value.ts", "line": 6 }
+      ]
+    },
+    {
+      "name": "nonliteral-loading",
+      "files": { "src/features/alpha/domain/value.ts": "const target = './other.js';\nexport const value = import(target);\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/domain/value.ts", "line": 2 }]
+    },
+    {
+      "name": "declared-assembly-file-must-exist",
+      "files": { "src/composition.ts": null },
+      "expected": [{ "code": "FM_ASSEMBLY_MISSING", "path": "src/composition.ts", "line": 1 }]
+    },
+    {
+      "name": "declared-entrypoints-must-exist",
+      "files": { "src/features/alpha/internal.ts": null },
+      "expected": [{ "code": "FM_ENTRYPOINT_MISSING", "path": "src/features/alpha/internal.ts", "line": 1 }]
+    },
+    {
+      "name": "internal-entrypoint-cannot-export-another-feature",
+      "secondFeature": true,
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/internal.ts": "export { beta } from '../beta/index.js';\n" },
+      "expected": [{ "code": "FM_INTERNAL_ENTRYPOINT_EXPORT", "path": "src/features/alpha/internal.ts", "line": 1 }]
+    },
+    {
+      "name": "assembly-and-entrypoints-forbid-wildcard-reexports",
+      "files": {
+        "src/features/alpha/index.ts": "export * from './domain/value.js';\n",
+        "src/features/alpha/internal.ts": "export * from './domain/value.js';\n",
+        "src/composition.ts": "export * from './features/alpha/internal.js';\n"
+      },
+      "expected": [
+        { "code": "FM_WILDCARD_REEXPORT", "path": "src/composition.ts", "line": 1 },
+        { "code": "FM_PUBLIC_ENTRYPOINT_EXPORT", "path": "src/features/alpha/index.ts", "line": 1 },
+        { "code": "FM_WILDCARD_REEXPORT", "path": "src/features/alpha/index.ts", "line": 1 },
+        { "code": "FM_WILDCARD_REEXPORT", "path": "src/features/alpha/internal.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "module-require-is-enforced",
+      "secondFeature": true,
+      "files": { "src/features/alpha/domain/value.ts": "export const value = module.require('../../beta/index.js');\n" },
+      "expected": [
+        { "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 1 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/domain/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "create-require-alias-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire as makeRequire } from 'node:module';\nconst load = makeRequire(import.meta.url);\nexport const value = load('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "default-parameter-create-require-alias-fails-closed",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire as makeRequire } from 'node:module';\nexport function value(load = makeRequire(import.meta.url)) { return load('../../beta/domain/value.js'); }\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 2 }]
+    },
+    {
+      "name": "bare-module-create-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'module';\nconst load = createRequire(import.meta.url);\nexport const value = load('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "inline-namespace-create-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import * as Module from 'node:module';\nexport const value = Module.createRequire(import.meta.url)('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 2 }]
+    },
+    {
+      "name": "commonjs-destructured-create-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "const { createRequire: makeRequire } = require('node:module');\nconst load = makeRequire(__filename);\nexport const value = load('../../beta/domain/value.js');\n" },
+      "expected": [
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 3 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 3 }
+      ]
+    },
+    {
+      "name": "commonjs-inline-create-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "export const value = require('module').createRequire(__filename)('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "esm-default-module-create-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import Module from 'node:module';\nconst load = Module.createRequire(import.meta.url);\nexport const value = load('../../beta/domain/value.js');\n" },
+      "expected": [
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 3 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 3 }
+      ]
+    },
+    {
+      "name": "esm-default-as-module-create-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { default as Module } from 'module';\nconst factory = Module.createRequire;\nconst load = factory(import.meta.filename);\nconst alias = load;\nexport const value = alias('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 5 }]
+    },
+    {
+      "name": "scoped-require-shadow-cannot-hide-global-loader",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "const decoy = (require: unknown) => require;\nexport const value = require('../../beta/index.js');\nvoid decoy;\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 2 }]
+    },
+    {
+      "name": "same-name-loader-aliases-remain-lexically-scoped",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'node:module';\nconst load = (input: string) => input;\nexport function deep() {\n  const load = createRequire(import.meta.url);\n  return load('../../beta/index.js');\n}\nexport { load };\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 5 }]
+    },
+    {
+      "name": "commonjs-destructured-loader-alias-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "const { createRequire } = require('node:module');\nconst load = createRequire(__filename);\nconst alias = load;\nexport const value = alias('../../beta/domain/value.js');\n" },
+      "expected": [
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 4 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 4 }
+      ]
+    },
+    {
+      "name": "commonjs-namespace-factory-and-bounded-loader-aliases-are-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "const Module = require('module');\nconst factory = Module.createRequire;\nconst make = factory;\nconst load = make(__filename);\nconst aliasOne = load;\nconst aliasTwo = aliasOne;\nexport const value = aliasTwo('../../beta/index.js');\n" },
+      "expected": [{ "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 7 }]
+    },
+    {
+      "name": "commonjs-module-load-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "const Module = require('node:module');\nexport const value = Module._load('../../beta/domain/value.js');\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 2 }]
+    },
+    {
+      "name": "esm-module-load-alias-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "import Module from 'node:module';\nconst load = Module._load;\nexport const value = load('../../beta/domain/value.js');\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "require-main-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "export const value = require.main.require('../../beta/domain/value.js');\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "module-parent-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "export const value = module.parent.require('../../beta/domain/value.js');\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "constructed-module-require-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "const Module = require('node:module');\nconst instance = new Module(__filename);\nexport const value = instance.require('../../beta/domain/value.js');\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "new-require-call-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "export const value = new require('../../beta/domain/value.js');\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "new-create-require-loader-call-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'node:module';\nconst load = createRequire(import.meta.url);\nexport const value = new load('../../beta/domain/value.js');\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "nested-module-create-require-destructuring-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "const { Module: { createRequire } } = require('node:module');\nconst load = createRequire(__filename);\nexport const value = load('../../beta/domain/value.js');\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "typescript-namespace-shadow-cannot-hide-global-require",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "namespace Decoy { export var require = () => undefined; }\nexport const value = require('../../beta/domain/value.js');\nvoid Decoy;\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 2 }]
+    },
+    {
+      "name": "class-static-shadow-cannot-hide-global-require",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "class Decoy { static { var require = () => undefined; void require; } }\nexport const value = require('../../beta/domain/value.js');\nvoid Decoy;\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 2 }]
+    },
+    {
+      "name": "default-parameter-cannot-see-body-require-shadow",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "beta", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "export function value(result = require('../../beta/domain/value.js')) { var require = () => undefined; return result; }\n" },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "reassigned-create-require-filename-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'node:module';\n__filename = '/private/runtime.cjs';\nconst load = createRequire(__filename);\nexport const value = load('../domain/value.js');\n" },
+      "expected": [
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 2 },
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 4 }
+      ]
+    },
+    {
+      "name": "mutated-import-meta-create-require-base-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'node:module';\nimport.meta.url = 'file:///private/runtime.mjs';\nconst load = createRequire(import.meta.url);\nexport const value = load('../domain/value.js');\n" },
+      "expected": [
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 2 },
+        { "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 4 }
+      ]
+    },
+    {
+      "name": "computed-create-require-member-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import Module from 'node:module';\nconst factoryName = 'createRequire';\nconst load = Module[factoryName](import.meta.url);\nexport const value = load('../domain/value.js');\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "computed-loader-member-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'node:module';\nconst load = createRequire(import.meta.url);\nconst member = 'call';\nexport const value = load[member](null, '../domain/value.js');\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 4 }]
+    },
+    {
+      "name": "computed-create-require-target-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'node:module';\nconst load = createRequire(import.meta.url);\nconst target = '../domain/value.js';\nexport const value = load(target);\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 4 }]
+    },
+    {
+      "name": "unsupported-create-require-base-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'node:module';\nconst load = createRequire(process.cwd());\nexport const value = load('../domain/value.js');\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 3 }]
+    },
+    {
+      "name": "create-require-alias-depth-overflow-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { createRequire } from 'node:module';\nconst load = createRequire(import.meta.url);\nconst a1 = load;\nconst a2 = a1;\nconst a3 = a2;\nconst a4 = a3;\nconst a5 = a4;\nconst a6 = a5;\nconst a7 = a6;\nconst a8 = a7;\nconst a9 = a8;\nexport const value = a9('../domain/value.js');\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/value.ts", "line": 12 }]
+    },
+    {
+      "name": "process-get-builtin-module-loader-enforces-layer-deep-and-builtin-rules",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/alpha/adapters/adapter.ts": "export const adapter = true;\n",
+        "src/features/alpha/domain/value.ts": "const load = process.getBuiltinModule('node:module').createRequire(import.meta.url);\nload('../adapters/adapter.js');\nload('../../beta/domain/value.js');\nexport const value = load('node:fs');\n"
+      },
+      "expected": [
+        { "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 2 },
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/domain/value.ts", "line": 3 },
+        { "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 3 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/domain/value.ts", "line": 3 },
+        { "code": "FM_NODE_BUILTIN_IMPORT", "path": "src/features/alpha/domain/value.ts", "line": 4 }
+      ]
+    },
+    {
+      "name": "aliased-process-get-builtin-module-loader-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "const { getBuiltinModule: getBuiltin } = process;\nconst Module = getBuiltin('node:module');\nconst load = Module.createRequire(import.meta.url);\nexport const value = load('../../beta/domain/value.js');\n" },
+      "expected": [
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 4 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 4 }
+      ]
+    },
+    {
+      "name": "local-reexported-loader-capability-fails-closed",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/alpha/adapters/loader.ts": "export { createRequire as makeLoader } from 'node:module';\n",
+        "src/features/alpha/adapters/value.ts": "import { makeLoader } from './loader.js';\nconst load = makeLoader(import.meta.url);\nexport const value = load('../../beta/domain/value.js');\n"
+      },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "src/features/alpha/adapters/loader.ts", "line": 1 }]
+    },
+    {
+      "name": "hard-link-across-production-roots-fails-closed",
+      "profileExtra": {
+        "scope": { "productionRoots": ["src", "other/src"], "outOfScope": ["everything else"] },
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "other/src/index.ts", "other/src/composition.ts"]
+      },
+      "files": {
+        "other/package.json": "{\"name\":\"@fixture/other\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
+        "other/src/index.ts": "export {};\n",
+        "other/src/composition.ts": "export {};\n"
+      },
+      "hardlinks": [{ "source": "src/features/alpha/domain/value.ts", "path": "other/src/value.ts" }],
+      "expected": [
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "other/src/value.ts", "line": 1 },
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "typescript-base-url-is-fatal-unsupported-config",
+      "files": { "tsconfig.json": "{\"compilerOptions\":{\"baseUrl\":\".\"}}\n" },
+      "expected": [{ "code": "FM_UNSUPPORTED_CONFIG", "path": "tsconfig.json", "line": 1 }]
+    },
+    {
+      "name": "relative-tsconfig-extends-alias-is-enforced",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "tsconfig.json": "{\"extends\":\"./config/base\"}\n",
+        "config/base.json": "{\"compilerOptions\":{\"paths\":{\"@inherited/*\":[\"src/*\"]}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '@inherited/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "array-tsconfig-extends-alias-is-enforced",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "tsconfig.json": "{\"extends\":[\"./config/one.json\",\"./config/two.json\"]}\n",
+        "config/one.json": "{}\n",
+        "config/two.json": "{\"compilerOptions\":{\"paths\":{\"@array/*\":[\"src/*\"]}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '@array/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "unresolvable-package-tsconfig-extends-is-fatal",
+      "files": { "tsconfig.json": "{\"extends\":\"@missing/tsconfig\"}\n" },
+      "cliRuns": [{ "arguments": [], "exit": 1, "output": "FM_UNSUPPORTED_CONFIG", "notOutput": ["Require stack:", "feature-module-check-"] }],
+      "expected": [{ "code": "FM_UNSUPPORTED_CONFIG", "path": "tsconfig.json", "line": 1 }]
+    },
+    {
+      "name": "missing-relative-tsconfig-extends-is-fatal",
+      "files": { "tsconfig.json": "{\"extends\":\"./config/missing\"}\n" },
+      "expected": [{ "code": "FM_UNSUPPORTED_CONFIG", "path": "config/missing.json", "line": 1 }]
+    },
+    {
+      "name": "array-tsconfig-inspects-every-parent-after-missing-parent",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "tsconfig.json": "{\"extends\":[\"./config/missing.json\",\"./config/aliases.json\"]}\n",
+        "config/aliases.json": "{\"compilerOptions\":{\"paths\":{\"@later/*\":[\"src/*\"]}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '@later/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [
+        { "code": "FM_UNSUPPORTED_CONFIG", "path": "config/missing.json", "line": 1 },
+        { "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "malformed-relative-tsconfig-parent-is-fatal-and-redacted",
+      "files": {
+        "tsconfig.json": "{\"extends\":\"./config/broken.json\"}\n",
+        "config/broken.json": "{ this is not JSON and /Users/example must not leak }\n"
+      },
+      "cliRuns": [{ "arguments": [], "exit": 1, "output": "FM_UNSUPPORTED_CONFIG", "notOutput": ["Users/example", "this is not JSON", "feature-module-check-"] }],
+      "expected": [{ "code": "FM_UNSUPPORTED_CONFIG", "path": "config/broken.json", "line": 1 }]
+    },
+    {
+      "name": "configured-typescript-alias-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "tsconfig.json": "{\"compilerOptions\":{\"paths\":{\"@runtime/*\":[\"src/*\"]}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '@runtime/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "configured-package-alias-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "package.json": "{\"name\":\"@fixture/runtime\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"imports\":{\"#runtime/*\":\"./dist/*\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '#runtime/features/alpha/domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_PATH_ALIAS_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "emitted-and-source-extension-cardinality-fails-closed",
+      "files": { "src/features/alpha/domain/value.js": "export const value = false;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/internal.ts", "line": 1 }]
+    },
+    {
+      "name": "portable-posix-local-import-is-safe",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { value } from '../domain/value.js';\nexport const adapterValue = value;\n" },
+      "expected": []
+    },
+    {
+      "name": "portable-windows-separator-local-import-is-safe",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { value } from '..\\\\domain\\\\value.js';\nexport const adapterValue = value;\n" },
+      "expected": []
+    },
+    {
+      "name": "portable-windows-separator-cross-feature-import-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { beta } from '..\\\\..\\\\beta\\\\domain\\\\value.js';\nexport const adapterValue = beta;\n" },
+      "expected": [
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "portable-mixed-separator-cross-feature-import-is-enforced",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { beta } from '../..\\\\beta/domain\\\\value.js';\nexport const adapterValue = beta;\n" },
+      "expected": [
+        { "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 },
+        { "code": "FM_UNDECLARED_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "portable-posix-absolute-import-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import value from '/private/value.js';\nexport { value };\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "portable-windows-drive-import-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import value from 'C:\\\\private\\\\value.js';\nexport { value };\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "portable-windows-unc-import-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import value from '\\\\\\\\server\\\\share\\\\value.js';\nexport { value };\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "portable-root-traversal-import-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import value from '../../../../../../private/value.js';\nexport { value };\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "portable-case-ambiguous-import-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/alpha/domain/value.ts": null,
+        "src/features/alpha/domain/Value.ts": "export const value = true;\n",
+        "src/features/alpha/internal.ts": "export { value } from './domain/Value.js';\n",
+        "src/features/alpha/adapters/value.ts": "import { value } from '../domain/value.js';\nexport const adapterValue = value;\n"
+      },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "portable-unicode-nfc-import-is-safe",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/alpha/domain/café.ts": "export const café = true;\n",
+        "src/features/alpha/adapters/value.ts": "import { café } from '../domain/café.js';\nexport const adapterValue = café;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "portable-unicode-nfd-import-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": {
+        "src/features/alpha/domain/café.ts": "export const café = true;\n",
+        "src/features/alpha/adapters/value.ts": "import { café } from '../domain/café.js';\nexport const adapterValue = café;\n"
+      },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "missing-relative-import-target-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import './missing.js';\nexport const adapterValue = true;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "windows-reserved-relative-import-targets-fail-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import './CON.js';\nimport './COM¹.js';\nimport './value.js:stream';\nimport './folder./value.js';\nimport './space /value.js';\nimport './C:/value.js';\nexport const adapterValue = true;\n" },
+      "expected": [
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 },
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 2 },
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 3 },
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 4 },
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 5 },
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 6 }
+      ]
+    },
+    {
+      "name": "nonrelative-backslash-import-alias-fails-closed",
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import '@fixture\\\\internal';\nexport const adapterValue = true;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "unicode-full-casefold-file-collision-fails-closed",
+      "files": {
+        "src/features/alpha/domain/strasse.ts": "export const strasse = true;\n",
+        "src/features/alpha/domain/straße.ts": "export const strasseAlias = true;\n"
+      },
+      "expected": [
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/strasse.ts", "line": 1 },
+        { "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/straße.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "diagnostic-filename-controls-are-escaped-stably",
+      "files": { "src/features/alpha/domain/bad\n\u001b\u202e.ts": "export const unsafe = true;\n" },
+      "doubleRun": true,
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/bad\\u{0a}\\u{1b}\\u{202e}.ts", "line": 1 }]
+    },
+    {
+      "name": "symlinked-source-file-fails-closed",
+      "files": { "src/features/alpha/domain/other.ts": "export const other = true;\n" },
+      "symlinks": [{ "path": "src/features/alpha/domain/value.ts", "target": "symlink-targets/value.fixture", "kind": "file" }],
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "symlinked-source-ancestor-directory-fails-closed",
+      "symlinks": [{ "path": "src/features/alpha/domain", "target": "symlink-targets/domain", "kind": "directory" }],
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/domain", "line": 1 }]
+    },
+    {
+      "name": "symlinked-entrypoint-fails-closed",
+      "secondFeature": true,
+      "symlinks": [{ "path": "src/features/alpha/internal.ts", "target": "src/features/beta/internal.ts", "kind": "file", "existingTarget": true }],
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "src/features/alpha/internal.ts", "line": 1 }]
+    },
+    {
+      "name": "symlinked-profile-fails-closed",
+      "symlinks": [{ "path": "profile.json", "target": "symlink-targets/profile.json", "kind": "file" }],
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "symlinked-profile-ancestor-fails-closed",
+      "profilePath": "config/profile.json",
+      "symlinks": [{ "path": "config", "target": "symlink-targets/config", "kind": "directory" }],
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "config/profile.json", "line": 1 }]
+    },
+    {
+      "name": "symlinked-root-is-safely-canonicalized",
+      "rootMode": "symlink",
+      "expected": []
+    },
+    {
+      "name": "symlinked-root-ancestor-is-safely-canonicalized",
+      "rootMode": "symlink-ancestor",
+      "expected": []
+    },
+    {
+      "name": "feature-readme-must-declare-ownership",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-requires-feature-type",
+      "files": { "src/features/alpha/README.md": "---\ntype: module\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-requires-accepted-status",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: proposed\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-requires-package-owner",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: another-package\nowner_document: ADR-0005\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-requires-package-owner-document",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-9999\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "owned-package-requires-bounded-context-marker",
+      "files": {
+        "package.json": "{\"name\":\"@fixture/runtime\",\"agentTeamsArchitecture\":{\"ownerDocument\":\"ADR-0005\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "owned-package-rejects-empty-readme-identities",
+      "files": {
+        "package.json": "{\"name\":\"\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
+        "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"\"\nowner_document: \"\"\n---\n"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-ignores-prose-and-fenced-metadata-examples",
+      "files": { "src/features/alpha/README.md": "# Alpha\n\nThe metadata example follows.\n\n```yaml\ntype: feature\nstatus: accepted\nowner: @fixture/runtime\nowner_document: ADR-0005\n```\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-rejects-duplicate-frontmatter-keys",
+      "files": { "src/features/alpha/README.md": "---\ntype: module\ntype: feature\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-accepts-quoted-reordered-frontmatter",
+      "files": { "src/features/alpha/README.md": "---\nowner_document: \"ADR-0005\"\nowner: '@fixture/runtime'\nstatus: \"accepted\"\ntype: 'feature'\n---\n\n# Alpha\n" },
+      "expected": []
+    },
+    {
+      "name": "feature-readme-rejects-malformed-yaml",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\nbad: [\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-rejects-quoted-equivalent-duplicate-key",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\n\"type\": module\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-rejects-extra-frontmatter-fields",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\nextra: forbidden\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-rejects-yaml-anchor-and-alias",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: &owner \"@fixture/runtime\"\nowner_document: *owner\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-rejects-yaml-tags",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: !!str \"@fixture/runtime\"\nowner_document: ADR-0005\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-rejects-yaml-merge-keys",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\n<<: { type: feature }\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-rejects-ambiguous-core-scalars",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: true\nowner: \"@fixture/runtime\"\nowner_document: 0005\n---\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "feature-readme-rejects-unterminated-frontmatter",
+      "files": { "src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/runtime\"\nowner_document: ADR-0005\n" },
+      "expected": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }]
+    },
+    {
+      "name": "exact-accepted-deviation-governs-readme-diagnostic",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "alpha-readme-owner", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": []
+    },
+    {
+      "name": "exact-accepted-extension-governs-readme-diagnostic",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "extensions": [{ "id": "alpha-readme-extension", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/README.md changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": []
+    },
+    {
+      "name": "whitespace-only-governed-values-are-rejected",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": " ", "acceptedAdr": "ADR-0007", "owner": " ", "rationale": " ", "reviewTrigger": " ", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": [
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }
+      ]
+    },
+    {
+      "name": "padded-governed-values-are-rejected",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": " alpha-readme-owner ", "acceptedAdr": "ADR-0007", "owner": " architecture ", "rationale": " fixture exercise ", "reviewTrigger": " README changes ", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": [
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }
+      ]
+    },
+    {
+      "name": "governed-record-ids-are-globally-unique",
+      "files": {
+        "src/features/alpha/README.md": "# Alpha\n",
+        "package.json": "{\"name\":\"@fixture/runtime\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"exports\":{\".\":\"./dist/index.js\"}}\n"
+      },
+      "deviations": [{ "id": "shared-id", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "readme fixture", "reviewTrigger": "README changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "exceptions": [{ "id": "shared-id", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "exports fixture", "reviewTrigger": "package changes", "diagnostics": [{ "code": "FM_PACKAGE_EXPORT_MAP", "path": "package.json", "line": 1 }] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "governed-diagnostic-references-are-globally-unique",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "readme-deviation", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "readme fixture", "reviewTrigger": "README changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "exceptions": [{ "id": "readme-exception", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "readme fixture", "reviewTrigger": "ownership changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "governed-diagnostic-reference-must-match-exact-line",
+      "files": { "src/features/alpha/README.md": "# Alpha\n" },
+      "deviations": [{ "id": "wrong-line", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "readme fixture", "reviewTrigger": "README changes", "diagnostics": [{ "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 2 }] }],
+      "expected": [
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_README_OWNERSHIP", "path": "src/features/alpha/README.md", "line": 1 }
+      ]
+    },
+    {
+      "name": "feature-tests-must-be-colocated",
+      "files": { "tests/alpha.test.ts": "import { value } from '../src/features/alpha/domain/value.js';\nvoid value;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/alpha.test.ts", "line": 1 }]
+    },
+    {
+      "name": "colocated-feature-tests-are-allowed",
+      "files": { "src/features/alpha/domain/value.test.ts": "import { value } from './value.js';\nvoid value;\n" },
+      "expected": []
+    },
+    {
+      "name": "package-feature-test-directory-is-allowed",
+      "files": { "tests/features/alpha/value.test.ts": "import { value } from '../../../dist/composition.js';\nvoid value;\n" },
+      "expected": []
+    },
+    {
+      "name": "package-level-composition-test-is-inventoried",
+      "files": { "tests/composed.test.ts": "import { value } from '../dist/composition.js';\nvoid value;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/composed.test.ts", "line": 1 }]
+    },
+    {
+      "name": "composition-import-then-local-export-is-inventoried",
+      "files": {
+        "src/composition.ts": "import { value as alphaValue } from './features/alpha/internal.js';\nexport { alphaValue as value };\n",
+        "tests/composed.test.ts": "import { value } from '../dist/composition.js';\nvoid value;\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/composed.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-self-composition-import-is-inventoried",
+      "files": { "tests/composed.test.ts": "import { value } from '@fixture/runtime/composition';\nvoid value;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/composed.test.ts", "line": 1 }]
+    },
+    {
+      "name": "orphan-test-without-feature-import-is-rejected",
+      "files": { "tests/orphan.test.ts": "test('orphan', () => {});\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/orphan.test.ts", "line": 1 }]
+    },
+    {
+      "name": "configured-package-import-owns-colocated-test",
+      "files": {
+        "package.json": "{\"name\":\"@fixture/runtime\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"imports\":{\"#features/*\":\"./dist/features/*\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
+        "tests/features/alpha/value.test.ts": "import { value } from '#features/alpha/domain/value.js';\nvoid value;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "configured-package-import-rejects-misowned-test",
+      "secondFeature": true,
+      "files": {
+        "package.json": "{\"name\":\"@fixture/runtime\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"imports\":{\"#features/*\":\"./dist/features/*\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"},\"./composition\":{\"types\":\"./dist/composition.d.ts\",\"import\":\"./dist/composition.js\"}}}\n",
+        "tests/features/alpha/value.test.ts": "import { beta } from '#features/beta/domain/value.js';\nvoid beta;\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-self-import-rejects-misowned-test",
+      "secondFeature": true,
+      "files": {
+        "src/composition.ts": "export { beta } from './features/beta/internal.js';\n",
+        "tests/features/alpha/value.test.ts": "import { beta } from '@fixture/runtime/composition';\nvoid beta;\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "tsconfig-alias-owns-colocated-test",
+      "files": {
+        "tsconfig.json": "{\"compilerOptions\":{\"paths\":{\"@features/*\":[\"src/features/*\"]}}}\n",
+        "tests/features/alpha/value.test.ts": "import { value } from '@features/alpha/domain/value.js';\nvoid value;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "tsconfig-alias-rejects-misowned-test",
+      "secondFeature": true,
+      "files": {
+        "tsconfig.json": "{\"compilerOptions\":{\"paths\":{\"@features/*\":[\"src/features/*\"]}}}\n",
+        "tests/features/alpha/value.test.ts": "import { beta } from '@features/beta/domain/value.js';\nvoid beta;\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "tests-outside-conventional-directories-are-inventoried",
+      "files": { "quality/orphan.test.ts": "test('orphan', () => {});\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "quality/orphan.test.ts", "line": 1 }]
+    },
+    {
+      "name": "transitive-test-helper-imports-cannot-hide-misownership",
+      "secondFeature": true,
+      "files": {
+        "tests/features/alpha/value.test.ts": "import { helper } from './helper.js';\nvoid helper;\n",
+        "tests/features/alpha/helper.ts": "import { beta } from '../../../src/features/beta/domain/value.js';\nexport const helper = beta;\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "transitive-tsconfig-alias-test-helpers-cannot-hide-misownership",
+      "secondFeature": true,
+      "files": {
+        "tsconfig.json": "{\"compilerOptions\":{\"paths\":{\"@test/*\":[\"tests/support/*\"]}}}\n",
+        "tests/features/alpha/value.test.ts": "import { helper } from '@test/helper.js';\nvoid helper;\n",
+        "tests/support/helper.ts": "import { beta } from '../../src/features/beta/domain/value.js';\nexport const helper = beta;\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "ambiguous-multi-feature-test-is-rejected",
+      "secondFeature": true,
+      "files": { "tests/features/alpha/value.test.ts": "import { value } from '../../../src/features/alpha/domain/value.js';\nimport { beta } from '../../../src/features/beta/domain/value.js';\nvoid value; void beta;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "test-parser-error-fails-closed",
+      "files": { "tests/features/alpha/broken.test.ts": "import {\n" },
+      "expected": [{ "code": "FM_PARSE_FAILURE", "path": "tests/features/alpha/broken.test.ts", "line": 1 }]
+    },
+    {
+      "name": "test-computed-loader-fails-closed",
+      "files": { "tests/features/alpha/value.test.ts": "const target = '../../../src/features/alpha/domain/value.js';\nconst value = require(target);\nvoid value;\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/features/alpha/value.test.ts", "line": 2 }]
+    },
+    {
+      "name": "test-ownership-detects-jsdoc-import-types",
+      "secondFeature": true,
+      "files": {
+        "tests/features/alpha/value.test.js": "/** @type {import(\"../../../src/features/beta/domain/value.js\").Beta} */\nconst value = undefined;\nvoid value;\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.js", "line": 1 }]
+    },
+    {
+      "name": "test-ownership-detects-triple-slash-path-references",
+      "secondFeature": true,
+      "files": {
+        "tests/features/alpha/value.test.ts": "/// <reference path=\"../../../src/features/beta/domain/value.ts\" />\nexport {};\n"
+      },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "test-default-parameter-loader-cannot-hide-misownership",
+      "secondFeature": true,
+      "files": { "tests/features/alpha/value.test.ts": "import { createRequire as makeRequire } from 'node:module';\nfunction value(load = makeRequire(import.meta.url)) { return load('../../../src/features/beta/domain/value.js'); }\nvoid value();\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/features/alpha/value.test.ts", "line": 2 }]
+    },
+    {
+      "name": "process-get-builtin-module-loader-cannot-hide-test-misownership",
+      "secondFeature": true,
+      "files": { "tests/features/alpha/value.test.ts": "const load = process.getBuiltinModule('node:module').createRequire(import.meta.url);\nconst value = load('../../../src/features/beta/domain/value.js');\nvoid value;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-owned-test-directory-is-allowed",
+      "files": { "tests/package/smoke.test.ts": "test('package', () => {});\n" },
+      "expected": []
+    },
+    {
+      "name": "package-owned-test-rejects-feature-deep-import",
+      "files": { "tests/package/deep.test.ts": "import { value } from '../../src/features/alpha/domain/value.js';\nvoid value;\n" },
+      "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/package/deep.test.ts", "line": 1 }]
+    },
+    {
+      "name": "symlinked-test-file-fails-closed",
+      "files": { "tests/features/alpha/value.test.ts": "import { value } from '../../../src/features/alpha/domain/value.js';\nvoid value;\n" },
+      "symlinks": [{ "path": "tests/features/alpha/value.test.ts", "target": "symlink-targets/value.fixture", "kind": "file" }],
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "symlinked-test-ancestor-directory-fails-closed",
+      "files": { "tests/features/alpha/value.test.ts": "import { value } from '../../../src/features/alpha/domain/value.js';\nvoid value;\n" },
+      "symlinks": [{ "path": "tests/features", "target": "test-features", "kind": "directory", "outsideRoot": true }],
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/features", "line": 1 }]
+    },
+    {
+      "name": "package-export-map-is-curated",
+      "files": { "package.json": "{\"name\":\"@fixture/runtime\",\"agentTeamsArchitecture\":{\"role\":\"bounded-context\",\"ownerDocument\":\"ADR-0005\"},\"exports\":{\".\":\"./dist/index.js\",\"./deep\":\"./dist/features/alpha/domain/value.js\"}}\n" },
+      "cliAllowDiagnosticsFails": true,
+      "expected": [{ "code": "FM_PACKAGE_EXPORT_MAP", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "parse-failure",
+      "files": { "src/features/alpha/domain/value.ts": "export const value = ;\n" },
+      "expected": [{ "code": "FM_PARSE_FAILURE", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "domain-counted-production-line-limit-is-enforced",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/too-long.ts", "lines": 501 },
+      "cliRuns": [{ "arguments": [], "exit": 1, "output": "src/features/alpha/domain/too-long.ts:1 FM_MAX_LINES 501 counted production lines exceeds limit 500", "notOutput": ["src<path>", "feature-module-check-"] }],
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "lf-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/lf-too-long.ts", "lines": 501, "separator": "\n" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/lf-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "crlf-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/crlf-too-long.ts", "lines": 501, "separator": "\r\n" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/crlf-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "lone-cr-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/cr-too-long.ts", "lines": 501, "separator": "\r" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/cr-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "unicode-line-separator-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/ls-too-long.ts", "lines": 501, "separator": "\u2028" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/ls-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "unicode-paragraph-separator-cannot-bypass-domain-line-limit",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/ps-too-long.ts", "lines": 501, "separator": "\u2029" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/ps-too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "application-counted-production-line-limit-is-enforced",
+      "alphaRoles": ["domain", "application"],
+      "generatedSourceFile": { "path": "src/features/alpha/application/too-long.ts", "lines": 500, "prefix": "export const applicationValue = true;\n" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/application/too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "adapter-counted-production-line-limit-is-enforced",
+      "alphaRoles": ["domain", "adapters"],
+      "generatedSourceFile": { "path": "src/features/alpha/adapters/too-long.ts", "lines": 600, "prefix": "export const adapterValue = true;\n" },
+      "expected": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/adapters/too-long.ts", "line": 1 }]
+    },
+    {
+      "name": "counted-production-line-limit-skips-comments-and-blank-lines",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/at-limit.ts", "lines": 500, "prefix": "// leading comment\n\n/* block\n * comment\n */\n", "suffix": "\n// trailing comment\n" },
+      "expected": []
+    },
+    {
+      "name": "colocated-tests-retain-the-800-line-lint-policy",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/large.test.ts", "lines": 700 },
+      "expected": []
+    },
+    {
+      "name": "generated-production-files-retain-maintainability-exclusion",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/generated/large.ts", "lines": 501 },
+      "expected": []
+    },
+    {
+      "name": "accepted-extension-can-govern-an-exact-maintainability-diagnostic",
+      "generatedSourceFile": { "path": "src/features/alpha/domain/extended.ts", "lines": 501 },
+      "extensions": [{ "id": "alpha-domain-size", "acceptedAdr": "ADR-0007", "owner": "architecture", "rationale": "fixture exercise", "reviewTrigger": "src/features/alpha/domain/extended.ts changes", "diagnostics": [{ "code": "FM_MAX_LINES", "path": "src/features/alpha/domain/extended.ts", "line": 1 }] }],
+      "expected": []
+    },
+    {
+      "name": "import-and-diagnostic-ceilings-are-bounded-and-deterministic",
+      "secondFeature": true,
+      "alphaRoles": ["domain", "adapters"],
+      "generatedImports": { "path": "src/features/alpha/adapters/many.ts", "count": 2200, "specifier": "../../beta/domain/value.js" },
+      "assertOverflow": true
+    },
+    {
+      "name": "traversal-entry-ceiling-cannot-be-bypassed-by-irrelevant-files",
+      "generatedFiles": { "directory": "src/generated", "count": 4100, "extension": ".txt" },
+      "assertOverflow": true
+    },
+    {
+      "name": "source-byte-ceiling-is-bounded-and-deterministic",
+      "generatedLargeFile": { "path": "src/features/alpha/domain/oversized.ts", "bytes": 1048577 },
+      "assertOverflow": true
+    },
+    {
+      "name": "configuration-byte-ceiling-is-bounded-and-deterministic",
+      "generatedLargeFile": { "path": "tsconfig.json", "bytes": 1048577 },
+      "assertOverflow": true
+    }
+  ]
+}

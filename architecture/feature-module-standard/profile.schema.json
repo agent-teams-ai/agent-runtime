@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-runtime.feature-module-profile/v1",
+  "title": "Agent Runtime Feature Module Standard profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "status", "authority", "scope", "moduleRoles", "features", "assemblyFiles", "featureEdges", "extensions", "deviations", "exceptions", "enforcement", "activation"],
+  "properties": {
+    "$schema": { "const": "./profile.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "status": { "enum": ["candidate", "active"] },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "repository", "path", "gitBlob", "sha256"],
+      "properties": {
+        "id": { "const": "agent-teams.feature-module-standard" },
+        "version": { "const": "v1" },
+        "repository": { "const": "agent-teams-ai/.github" },
+        "path": { "const": "docs/architecture/feature-module-standard/v1.md" },
+        "gitBlob": { "const": "d0bfff2033faf544fe65268c1dcdfd524d093015" },
+        "sha256": { "const": "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["productionRoots", "outOfScope"],
+      "properties": {
+        "productionRoots": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "outOfScope": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "moduleRoles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["contracts", "domain", "application", "adapters", "composition"] } },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "root", "roles", "entrypoints"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "root": { "type": "string" },
+          "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["contracts", "domain", "application", "adapters", "composition"] } },
+          "entrypoints": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["public", "internal"],
+            "properties": { "public": { "type": "string" }, "internal": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "assemblyFiles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+    "featureEdges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "kinds"],
+        "properties": {
+          "from": { "type": "string" }, "to": { "type": "string" },
+          "kinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["runtime", "type"] } }
+        }
+      }
+    },
+    "extensions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/governedRecord" } },
+    "deviations": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/governedRecord" } },
+    "exceptions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/governedRecord" } },
+    "adoption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleRoots", "applicationRoots", "excludedRoots", "abstractLayout", "localExtensions", "localOwnership"],
+      "properties": {
+        "moduleRoots": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryRoot" } },
+        "applicationRoots": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryRoot" } },
+        "excludedRoots": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryPath" } },
+        "abstractLayout": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["modules", "applications"],
+          "properties": {
+            "modules": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["moduleRoot", "sourceRoot", "featuresRoot", "moduleComposition", "publicEntrypoint", "testRoot", "featureTestsRoot", "moduleTestsRoot"],
+                "properties": {
+                  "moduleRoot": { "$ref": "#/$defs/repositoryRoot" },
+                  "sourceRoot": { "$ref": "#/$defs/repositoryPath" },
+                  "featuresRoot": { "$ref": "#/$defs/repositoryPath" },
+                  "moduleComposition": { "$ref": "#/$defs/repositoryPath" },
+                  "publicEntrypoint": { "$ref": "#/$defs/repositoryPath" },
+                  "testRoot": { "$ref": "#/$defs/repositoryPath" },
+                  "featureTestsRoot": { "$ref": "#/$defs/repositoryPath" },
+                  "moduleTestsRoot": { "$ref": "#/$defs/repositoryPath" }
+                }
+              }
+            },
+            "applications": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["applicationRoot", "compositionRoot"],
+                "properties": {
+                  "applicationRoot": { "$ref": "#/$defs/repositoryRoot" },
+                  "compositionRoot": { "$ref": "#/$defs/repositoryPath" }
+                }
+              }
+            }
+          }
+        },
+        "localExtensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["language", "packaging", "transport", "composition"],
+          "properties": {
+            "language": {
+              "type": "object", "additionalProperties": false, "required": ["sourceExtensions"],
+              "properties": { "sourceExtensions": { "const": [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"] } }
+            },
+            "packaging": {
+              "type": "object", "additionalProperties": false, "required": ["manifest", "curatedExports"],
+              "properties": {
+                "manifest": { "const": "package.json" },
+                "curatedExports": { "const": [".", "./composition"] }
+              }
+            },
+            "transport": {
+              "type": "object", "additionalProperties": false, "required": ["publicContractRole"],
+              "properties": { "publicContractRole": { "const": "contracts" } }
+            },
+            "composition": {
+              "type": "object", "additionalProperties": false, "required": ["moduleFiles", "featureEntrypoints", "syntax"],
+              "properties": {
+                "moduleFiles": { "const": ["index.ts", "composition.ts"] },
+                "featureEntrypoints": { "const": ["index.ts", "internal.ts"] },
+                "syntax": { "const": "imports-and-named-reexports-only" }
+              }
+            }
+          }
+        },
+        "localOwnership": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["architectureDocument", "decisionRecords"],
+          "properties": {
+            "architectureDocument": {
+              "type": "object", "additionalProperties": false, "required": ["path", "owner"],
+              "properties": {
+                "path": { "const": "docs/architecture/feature-module-standard-v1-candidate.md" },
+                "owner": { "const": "architecture" }
+              }
+            },
+            "decisionRecords": {
+              "const": [{ "id": "ADR-0013", "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture" }]
+            }
+          }
+        }
+      }
+    },
+    "enforcement": {
+      "type": "object", "additionalProperties": false, "required": ["candidate", "active", "fixtures"],
+      "properties": {
+        "candidate": { "const": "pnpm architecture:feature-modules:candidate" },
+        "active": { "const": "pnpm architecture:feature-modules:active" },
+        "fixtures": { "const": "pnpm test:feature-modules" }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockers", "acceptance", "authority", "evidence"],
+      "properties": {
+        "blockers": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "acceptance": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "authority": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["acceptedAdr", "decisionPath", "owner", "governedRecords"],
+              "properties": {
+                "acceptedAdr": { "const": "ADR-0013" },
+                "decisionPath": { "const": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md" },
+                "owner": { "type": "string", "minLength": 1 },
+                "governedRecords": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^(extensions|deviations|exceptions):[a-z0-9]+(?:-[a-z0-9]+)*:ADR-[0-9]{4}$" } }
+              }
+            }
+          ]
+        },
+        "evidence": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["fixtureCommand", "candidateCommand", "productionDiagnostics"],
+              "properties": {
+                "fixtureCommand": { "const": "pnpm test:feature-modules" },
+                "candidateCommand": { "const": "pnpm architecture:feature-modules:candidate" },
+                "productionDiagnostics": { "const": 0 }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "candidate" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "activation": {
+            "type": "object",
+            "properties": {
+              "blockers": { "type": "array", "minItems": 1 },
+              "authority": { "type": "null" },
+              "evidence": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "active" } }, "required": ["status"] },
+      "then": {
+        "required": ["adoption"],
+        "properties": {
+          "adoption": { "type": "object" },
+          "activation": {
+            "type": "object",
+            "properties": {
+              "blockers": { "type": "array", "maxItems": 0 },
+              "authority": { "type": "object" },
+              "evidence": { "type": "object" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[!-~](?:[ -~]*[!-~])?$"
+    },
+    "repositoryRoot": {
+      "anyOf": [
+        { "const": "." },
+        { "$ref": "#/$defs/repositoryPath" }
+      ]
+    },
+    "governedRecord": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "acceptedAdr", "owner", "rationale", "reviewTrigger", "diagnostics"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "acceptedAdr": { "type": "string", "pattern": "^ADR-[0-9]{4}$" },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[!-~](?:[ -~]*[!-~])?$" },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^[!-~](?:[ -~]*[!-~])?$" },
+        "reviewTrigger": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?!.*\\*)[!-~](?:[ -~]*[!-~])?$" },
+        "diagnostics": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["code", "path", "line"],
+            "properties": {
+              "code": { "type": "string", "pattern": "^FM_[A-Z0-9_]+$" },
+              "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?!.*\\*)[!-~](?:[ -~]*[!-~])?$" },
+              "line": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

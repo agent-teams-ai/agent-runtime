@@ -25,6 +25,24 @@ export type RuntimeOperationOracleValidation = {
     valid: number;
     invalid: number;
   };
+  containedTurnV1: {
+    requirementDispositions: {
+      required: number;
+      deferred: number;
+      notApplicable: number;
+    };
+    exampleDispositions: {
+      required: number;
+      deferred: number;
+      notApplicable: number;
+    };
+    stateDispositions: {
+      required: { total: number; valid: number; invalid: number };
+      deferred: { total: number; valid: number; invalid: number };
+      notApplicable: { total: number; valid: number; invalid: number };
+    };
+    negativeGuardExamples: number;
+  };
 };
 
 export const evaluateGeneratedAxisProducts = async (
@@ -53,6 +71,7 @@ export const validateRuntimeOperationOracle = async (
   return {
     ...manifest.expected,
     stateProduct,
+    containedTurnV1: authority.containedTurnV1Validation,
   };
 };
 
