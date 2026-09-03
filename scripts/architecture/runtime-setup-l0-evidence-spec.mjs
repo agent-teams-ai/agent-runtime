@@ -191,6 +191,10 @@ export const changes = Object.freeze([
     id: "codex-contract-fixture-test-srp",
     revision: "f5c62275018835f1a0990e2be75874b5e2b4cc1e",
   }),
+  Object.freeze({
+    id: "codex-credential-canary-claim-boundary",
+    revision: "374404ee9a105844ef41a5272bd07d7239e54176",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -206,7 +210,7 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   tests: Object.freeze({
     fileCount: 133,
-    sha256: "4f15c19a69025ca96731d19a02ef12d7bc7ddb34aac01cf42f2d53412cd5ee71",
+    sha256: "548560d0d46e0c7fe7a8f6ee51beb53429f394b7529a7b5f4d6d48cf9cfff32f",
   }),
 });
 
