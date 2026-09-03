@@ -114,12 +114,12 @@ class ProtocolProcess implements CustodiedProviderProcess {
       this.emit({ id: message.id, result: {
         config: {
           default_permissions: boundary.permissionProfileId,
-          permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(codexHome) },
+          permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(codexHome, this.#mode) },
         },
         layers: [
           { config: {}, disabledReason: null, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
           {
-            config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(codexHome) } },
+            config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(codexHome, this.#mode) } },
             disabledReason: null,
             name: { file: `${codexHome}/config.toml`, profile: null, type: "user" },
             version: "2",
@@ -169,8 +169,10 @@ const execute = async (
   } = {},
 ) => {
   const process = new ProtocolProcess(active, mode, options.interrupt);
+  const executionBoundary = mode === "analysis" ? boundary
+    : createCodexAppServerPermissionBoundary({ codexHome, intentMode: mode, workspaceRef: workspace });
   const provider = new CodexAppServerContainedTurnProvider({
-    boundary,
+    boundary: executionBoundary,
     cancellationPollMs: 2,
     effectCustody: options.effectCustody,
     manifest: Object.freeze({
