@@ -273,7 +273,7 @@ const layerType = (layer: CodexJsonRecord): string | undefined =>
   isCodexRecord(layer.name) ? codexStringField(layer.name, "type") : undefined;
 
 const exactLayerName = (name: CodexJsonRecord, type: string): boolean => {
-  if (type === "packagedDefaults") {
+  if (type === "packagedDefaults" || type === "system") {
     return hasExactKeys(name, ["file", "type"]) && typeof name.file === "string";
   }
   if (type === "user") {
@@ -309,19 +309,25 @@ const validateUserLayer = (
   }
 };
 
+const isActiveConfigLayer = (
+  value: unknown,
+): value is CodexJsonRecord & { config: CodexJsonRecord; name: CodexJsonRecord; version: string } =>
+  isCodexRecord(value) && hasExactKeys(value, ["config", "name", "version",
+    ...(Object.hasOwn(value, "disabledReason") ? ["disabledReason"] : [])])
+  && isCodexRecord(value.config) && isCodexRecord(value.name) && typeof value.version === "string"
+  && (!Object.hasOwn(value, "disabledReason") || value.disabledReason === null);
+
 const validateCodexConfigLayers = (
   layers: readonly unknown[],
   boundary: CodexAppServerPermissionBoundary,
 ): void => {
   const expectedConfigFile = `${boundary.codexHome}/config.toml`;
   let packagedLayerCount = 0;
+  let emptySystemLayerCount = 0;
   let userLayerCount = 0;
   let sessionLayerCount = 0;
   for (const value of layers) {
-    if (!isCodexRecord(value) || !hasExactKeys(value, ["config", "disabledReason", "name", "version"])
-      || !isCodexRecord(value.config) || !isCodexRecord(value.name)
-      || typeof value.version !== "string"
-      || (value.disabledReason !== null && typeof value.disabledReason !== "string")) {
+    if (!isActiveConfigLayer(value)) {
       throw evidenceError("config layer is malformed");
     }
     const type = layerType(value);
@@ -338,11 +344,17 @@ const validateCodexConfigLayers = (
       sessionLayerCount += 1;
     } else if (type === "packagedDefaults") {
       packagedLayerCount += 1;
+    } else if (type === "system" && value.name.file === "/etc/codex/config.toml"
+      && hasExactKeys(value.config, [])) {
+      // 0.150.1 includes this empty layer even when the system file is absent.
+      // Any system policy remains unqualified; never silently ignore its contents.
+      emptySystemLayerCount += 1;
     } else {
       throw evidenceError("config contains an unqualified or unknown effective layer");
     }
   }
-  if (packagedLayerCount !== 1 || userLayerCount !== 1 || sessionLayerCount !== 1) {
+  if (packagedLayerCount > 1 || emptySystemLayerCount > 1
+    || packagedLayerCount + emptySystemLayerCount === 0 || userLayerCount !== 1 || sessionLayerCount !== 1) {
     throw evidenceError("effective config layers are absent or non-unique");
   }
 };

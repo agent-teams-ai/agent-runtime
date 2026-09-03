@@ -141,7 +141,7 @@ export const exactConfigResult = (): Message => ({
     permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(boundary.codexHome) },
   },
   layers: [
-    { config: {}, disabledReason: null, name: { file: "/opt/codex/defaults.toml", type: "packagedDefaults" }, version: "1" },
+    { config: {}, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
     {
       config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(boundary.codexHome) } },
       disabledReason: null,
