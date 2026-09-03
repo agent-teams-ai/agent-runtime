@@ -359,29 +359,26 @@ const validateCodexConfigLayers = (
   }
 };
 
-export const validateCodexConfigEvidence = (
-  result: unknown,
+const validateCodexEffectiveConfig = (
+  config: CodexJsonRecord,
   boundary: CodexAppServerPermissionBoundary,
 ): void => {
-  if (!isCodexRecord(result) || !hasExactKeys(result, ["config", "layers", "origins"])
-    || !isCodexRecord(result.config)
-    || !isCodexRecord(result.origins) || !Array.isArray(result.layers)) {
-    throw evidenceError("config/read evidence is incomplete");
-  }
-  if (!hasExactKeys(result.config, ["default_permissions", "permissions"])) {
+  if (!hasExactKeys(config, ["default_permissions", "permissions"])) {
     throw evidenceError("effective config contains unknown keys");
   }
-  const profiles = result.config.permissions;
-  if (result.config.default_permissions !== boundary.permissionProfileId || !isCodexRecord(profiles)
+  const profiles = config.permissions;
+  if (config.default_permissions !== boundary.permissionProfileId || !isCodexRecord(profiles)
     || !hasExactKeys(profiles, [boundary.permissionProfileId])
     || !isExactCodexPermissionProfile(profiles[boundary.permissionProfileId], boundary)) {
     throw evidenceError("effective permission policy does not match the launch boundary");
   }
-  validateCodexConfigLayers(result.layers, boundary);
-  if (!hasExactKeys(result.origins, ["default_permissions", "permissions"])) {
+};
+
+const validateCodexConfigOrigins = (origins: CodexJsonRecord): void => {
+  if (!hasExactKeys(origins, ["default_permissions", "permissions"])) {
     throw evidenceError("config provenance contains unknown origins");
   }
-  for (const metadata of Object.values(result.origins)) {
+  for (const metadata of Object.values(origins)) {
     if (!isCodexRecord(metadata) || !hasExactKeys(metadata, ["name", "version"])
       || typeof metadata.version !== "string" || !isCodexRecord(metadata.name)) {
       throw evidenceError("config origin metadata is malformed");
@@ -391,24 +388,44 @@ export const validateCodexConfigEvidence = (
       throw evidenceError("config origin layer name is malformed");
     }
   }
-  const expectedConfigFile = `${boundary.codexHome}/config.toml`;
-  const sessionLayer = result.layers.find(value => isCodexRecord(value)
+};
+
+const originMatchesLayer = (origin: unknown, layer: unknown): boolean =>
+  isCodexRecord(origin) && isCodexRecord(layer) && isCodexRecord(layer.name)
+  && typeof layer.version === "string"
+  && canonicalCodexJson(origin.name) === canonicalCodexJson(layer.name)
+  && origin.version === layer.version;
+
+const validateCodexConfigProvenance = (
+  layers: readonly unknown[],
+  origins: CodexJsonRecord,
+  boundary: CodexAppServerPermissionBoundary,
+): void => {
+  const sessionLayer = layers.find(value => isCodexRecord(value)
     && layerType(value) === "sessionFlags");
-  const userLayer = result.layers.find(value => isCodexRecord(value)
+  const userLayer = layers.find(value => isCodexRecord(value)
     && layerType(value) === "user");
-  const sessionOrigin = result.origins.default_permissions;
-  const userOrigin = result.origins.permissions;
-  if (!isCodexRecord(sessionLayer) || !isCodexRecord(userLayer)
-    || !isCodexRecord(sessionLayer.name) || !isCodexRecord(userLayer.name)
-    || typeof sessionLayer.version !== "string" || typeof userLayer.version !== "string"
-    || !isCodexRecord(sessionOrigin) || !isCodexRecord(userOrigin)
-    || canonicalCodexJson(sessionOrigin.name) !== canonicalCodexJson(sessionLayer.name)
-    || sessionOrigin.version !== sessionLayer.version
-    || canonicalCodexJson(userOrigin.name) !== canonicalCodexJson(userLayer.name)
-    || userOrigin.version !== userLayer.version
-    || userLayer.name.file !== expectedConfigFile) {
+  if (!originMatchesLayer(origins.default_permissions, sessionLayer)
+    || !originMatchesLayer(origins.permissions, userLayer)
+    || !isCodexRecord(userLayer) || !isCodexRecord(userLayer.name)
+    || userLayer.name.file !== `${boundary.codexHome}/config.toml`) {
     throw evidenceError("config provenance is incomplete");
   }
+};
+
+export const validateCodexConfigEvidence = (
+  result: unknown,
+  boundary: CodexAppServerPermissionBoundary,
+): void => {
+  if (!isCodexRecord(result) || !hasExactKeys(result, ["config", "layers", "origins"])
+    || !isCodexRecord(result.config)
+    || !isCodexRecord(result.origins) || !Array.isArray(result.layers)) {
+    throw evidenceError("config/read evidence is incomplete");
+  }
+  validateCodexEffectiveConfig(result.config, boundary);
+  validateCodexConfigLayers(result.layers, boundary);
+  validateCodexConfigOrigins(result.origins);
+  validateCodexConfigProvenance(result.layers, result.origins, boundary);
 };
 
 export const validateCodexPermissionProfileEvidence = (
@@ -438,6 +455,9 @@ export const observeCodexActiveProfileEvidence = (
   boundary: CodexAppServerPermissionBoundary,
   mode: CodexContainedTurnMode,
 ): boolean => {
+  if (boundary.intentMode !== mode) {
+    throw evidenceError("notification turn mode does not match the immutable launch boundary");
+  }
   const method = codexNotificationMethod(message);
   if (method === "remoteControl/status/changed") {
     if (!isCodexRecord(message.params) || !hasExactKeys(message.params, ["environmentId", "installationId", "serverName", "status"])
