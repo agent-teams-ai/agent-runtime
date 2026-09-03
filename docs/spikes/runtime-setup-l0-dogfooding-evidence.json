@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "374404ee9a105844ef41a5272bd07d7239e54176",
+  "sourceRevision": "739cc9bfdea7dc0527989b42cb8dd89a11387ea8",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "11c0d02261667ec916d7f6fe4d6572f4ed41b288de031b32a495e32fb4c14d5f",
+    "outputSha256": "0c9bdc0819b12f7753dc31598d9982993095a1ccf04e6dd447e40f703be29d2e",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -55,15 +55,15 @@
   "artifactDigests": {
     "fixtures": {
       "fileCount": 16,
-      "sha256": "383a52969308b2a5b4a25484992e4b004217ab4aecd85b5b3a8501fc37046d62"
+      "sha256": "694a67d5823c72e08ca3dfb9e96750d6fa5d5f2a298268f835a8452f2f12fb7a"
     },
     "sources": {
       "fileCount": 298,
-      "sha256": "57ef06fe1bbfe44f345915bd1294818dabd31a0a1d602efcf7e56241412f0c30"
+      "sha256": "e9a6918a66517bf37b5843a6aca41afd635c0c022f0889ca857ed69970c7f68c"
     },
     "tests": {
-      "fileCount": 133,
-      "sha256": "548560d0d46e0c7fe7a8f6ee51beb53429f394b7529a7b5f4d6d48cf9cfff32f"
+      "fileCount": 135,
+      "sha256": "9603cd4c0567c9ffd6cc7c71b882965ca192b832819cd35a948535e4213f51fa"
     }
   },
   "historicalChanges": [
@@ -1480,6 +1480,180 @@
         "files": 2,
         "additions": 8,
         "deletions": 2
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-protocol-adversarial-test-srp",
+      "revision": "f13d4173c6a92835a42d60e776073f23c66b1a76",
+      "files": 2,
+      "additions": 260,
+      "deletions": 76,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 2,
+        "additions": 260,
+        "deletions": 76
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-regeneration-claim-binding",
+      "revision": "159e2faf0871b353c45ed4d0365dffbf18af679c",
+      "files": 2,
+      "additions": 273,
+      "deletions": 59,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 2,
+        "additions": 273,
+        "deletions": 59
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-aggregate-pre-turn-budget",
+      "revision": "85bc7ba3226a3d5211aab9fe1c6c23ba70001a2d",
+      "files": 2,
+      "additions": 33,
+      "deletions": 10,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 18,
+        "deletions": 10
+      },
+      "tests": {
+        "files": 1,
+        "additions": 15,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-regeneration-verifier-test-srp",
+      "revision": "9df8b3b54a9b9e2fce39a933f41e3ca35203425b",
+      "files": 2,
+      "additions": 106,
+      "deletions": 91,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 2,
+        "additions": 106,
+        "deletions": 91
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-regeneration-verifier-lint-hardening",
+      "revision": "7135a4a054d48e40eb81ba77e4cad4cd158ad495",
+      "files": 1,
+      "additions": 2,
+      "deletions": 1,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 2,
+        "deletions": 1
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-native-package-provenance",
+      "revision": "739cc9bfdea7dc0527989b42cb8dd89a11387ea8",
+      "files": 5,
+      "additions": 37,
+      "deletions": 14,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 6,
+        "deletions": 3
+      },
+      "tests": {
+        "files": 4,
+        "additions": 31,
+        "deletions": 11
       },
       "behaviorFixtures": {
         "before": 123,
