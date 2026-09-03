@@ -37,12 +37,9 @@ export const codexContainedThreadConfig = (): CodexJsonRecord => ({
 
 export type CodexContainedTurnMode = "analysis" | "workspace-write";
 
-export const codexThreadSandbox = (mode: CodexContainedTurnMode): "read-only" | "workspace-write" =>
-  mode === "analysis" ? "read-only" : "workspace-write";
-
 export const codexTurnSandboxPolicy = (
   mode: CodexContainedTurnMode,
-  workspaceRef: string,
+  _workspaceRef: string,
 ): Readonly<CodexJsonRecord> => mode === "analysis"
   ? Object.freeze({ networkAccess: false, type: "readOnly" })
   : Object.freeze({
@@ -50,7 +47,7 @@ export const codexTurnSandboxPolicy = (
     excludeTmpdirEnvVar: true,
     networkAccess: false,
     type: "workspaceWrite",
-    writableRoots: Object.freeze([workspaceRef]),
+    writableRoots: Object.freeze([]),
   });
 
 export const codexEffectiveTurnPolicyDigest = (
@@ -142,19 +139,21 @@ export interface CodexAppServerPermissionBoundary {
   readonly codexHomeIdentity: CodexDirectoryIdentity;
   readonly effectivePolicyDigest: string;
   readonly permissionProfile: Readonly<{
-    readonly extends: ":workspace";
+    readonly extends: ":read-only" | ":workspace";
     readonly file_system: Readonly<{
-      readonly entries: readonly Readonly<{ readonly access: "deny"; readonly path: string }>[];
+      readonly entries: readonly Readonly<{ readonly access: "deny" | "read"; readonly path: string }>[];
     }>;
     readonly network: Readonly<{ readonly enabled: false }>;
   }>;
   readonly permissionProfileId: typeof CODEX_PERMISSION_PROFILE_ID;
+  readonly intentMode: CodexContainedTurnMode;
   readonly workspaceRef: string;
   readonly workspaceIdentity: CodexDirectoryIdentity;
 }
 
 export const createCodexAppServerPermissionBoundary = (input: {
   readonly codexHome: string;
+  readonly intentMode: CodexContainedTurnMode;
   readonly workspaceRef: string;
 }): CodexAppServerPermissionBoundary => {
   const privateHome = normalizedAbsoluteDirectory("codexHome", input.codexHome, true);
@@ -164,16 +163,25 @@ export const createCodexAppServerPermissionBoundary = (input: {
   if (contains(codexHome, workspaceRef) || contains(workspaceRef, codexHome)) {
     throw new TypeError("Codex private home and workspace must be disjoint");
   }
+  const intentMode = input.intentMode;
+  if (intentMode !== "analysis" && intentMode !== "workspace-write") {
+    throw new TypeError("intentMode must be analysis or workspace-write");
+  }
   const permissionProfile = Object.freeze({
-    extends: ":workspace" as const,
+    extends: (intentMode === "analysis" ? ":read-only" : ":workspace") as ":read-only" | ":workspace",
     file_system: Object.freeze({
-      entries: Object.freeze([Object.freeze({ access: "deny" as const, path: codexHome })]),
+      entries: Object.freeze([
+        Object.freeze({ access: "deny" as const, path: codexHome }),
+        Object.freeze({ access: "read" as const, path: ":tmpdir" }),
+        Object.freeze({ access: "read" as const, path: ":slash_tmp" }),
+      ]),
     }),
     network: Object.freeze({ enabled: false as const }),
   });
   const policyPreimage = Object.freeze({
     permissionProfile,
     permissionProfileId: CODEX_PERMISSION_PROFILE_ID,
+    intentMode,
     schema: "agent-runtime/codex-contained-permission-policy/v1",
     workspaceRef,
   });
@@ -181,6 +189,7 @@ export const createCodexAppServerPermissionBoundary = (input: {
     codexHome,
     codexHomeIdentity: privateHome.identity,
     effectivePolicyDigest: `sha256:${createHash("sha256").update(canonicalCodexJson(policyPreimage)).digest("hex")}`,
+    intentMode,
     permissionProfile,
     permissionProfileId: CODEX_PERMISSION_PROFILE_ID,
     workspaceRef,
@@ -219,8 +228,9 @@ const normalizeCodexProviderPermissionProfile = (
     || !isCodexRecord(actual.network)) {return undefined;}
 
   const filesystem = actual.filesystem;
-  if (!hasExactKeys(filesystem, [boundary.codexHome, "glob_scan_max_depth"])
-    || filesystem[boundary.codexHome] !== "deny" || filesystem.glob_scan_max_depth !== null) {
+  if (!hasExactKeys(filesystem, [boundary.codexHome, ":tmpdir", ":slash_tmp", "glob_scan_max_depth"])
+    || filesystem[boundary.codexHome] !== "deny" || filesystem[":tmpdir"] !== "read"
+    || filesystem[":slash_tmp"] !== "read" || filesystem.glob_scan_max_depth !== null) {
     return undefined;
   }
   const network = actual.network;
@@ -238,8 +248,9 @@ const isExactCodexUserPermissionProfile = (
   boundary: CodexAppServerPermissionBoundary,
 ): boolean => isCodexRecord(actual) && hasExactKeys(actual, ["extends", "filesystem", "network"])
   && actual.extends === boundary.permissionProfile.extends
-  && isCodexRecord(actual.filesystem) && hasExactKeys(actual.filesystem, [boundary.codexHome])
+  && isCodexRecord(actual.filesystem) && hasExactKeys(actual.filesystem, [boundary.codexHome, ":tmpdir", ":slash_tmp"])
   && actual.filesystem[boundary.codexHome] === "deny"
+  && actual.filesystem[":tmpdir"] === "read" && actual.filesystem[":slash_tmp"] === "read"
   && isCodexRecord(actual.network) && hasExactKeys(actual.network, ["enabled"])
   && actual.network.enabled === false;
 
@@ -322,7 +333,6 @@ const validateCodexConfigLayers = (
   boundary: CodexAppServerPermissionBoundary,
 ): void => {
   const expectedConfigFile = `${boundary.codexHome}/config.toml`;
-  let packagedLayerCount = 0;
   let emptySystemLayerCount = 0;
   let userLayerCount = 0;
   let sessionLayerCount = 0;
@@ -342,8 +352,6 @@ const validateCodexConfigLayers = (
         throw evidenceError("launch flag did not select the permission profile");
       }
       sessionLayerCount += 1;
-    } else if (type === "packagedDefaults") {
-      packagedLayerCount += 1;
     } else if (type === "system" && value.name.file === "/etc/codex/config.toml"
       && hasExactKeys(value.config, [])) {
       // 0.150.1 includes this empty layer even when the system file is absent.
@@ -353,8 +361,7 @@ const validateCodexConfigLayers = (
       throw evidenceError("config contains an unqualified or unknown effective layer");
     }
   }
-  if (packagedLayerCount > 1 || emptySystemLayerCount > 1
-    || packagedLayerCount + emptySystemLayerCount === 0 || userLayerCount !== 1 || sessionLayerCount !== 1) {
+  if (emptySystemLayerCount !== 1 || userLayerCount !== 1 || sessionLayerCount !== 1) {
     throw evidenceError("effective config layers are absent or non-unique");
   }
 };
@@ -422,23 +429,36 @@ export const observeCodexActiveProfileEvidence = (
   mode: CodexContainedTurnMode,
 ): boolean => {
   const method = codexNotificationMethod(message);
-  if (method !== "thread/settings/updated") {
-    if (method === "thread/started" || method === "thread/status/changed") {return false;}
-    throw evidenceError("unexpected pre-turn notification");
+  if (method === "remoteControl/status/changed") {
+    if (!isCodexRecord(message.params) || !hasExactKeys(message.params, ["environmentId", "installationId", "serverName", "status"])
+      || message.params.status !== "disabled" || message.params.environmentId !== null
+      || typeof message.params.installationId !== "string" || typeof message.params.serverName !== "string") {
+      throw evidenceError("remote control status is not the qualified disabled state");
+    }
+    return false;
   }
-  if (!isCodexRecord(message.params) || message.params.threadId !== threadId
-    || !isCodexRecord(message.params.threadSettings)) {
-    throw evidenceError("active permission provenance identity is invalid");
+  if (method === "thread/started") {
+    if (!isCodexRecord(message.params)) {throw evidenceError("thread-start notification is malformed");}
+    const id = message.params.threadId ?? (isCodexRecord(message.params.thread) ? message.params.thread.id : undefined);
+    if (id !== threadId) {throw evidenceError("thread-start notification identity changed");}
+    return false;
   }
-  const settings = message.params.threadSettings;
-  const active = settings.activePermissionProfile;
-  if (settings.cwd !== boundary.workspaceRef || settings.approvalPolicy !== "never" || !isCodexRecord(active)
-    || !hasExactKeys(active, ["extends", "id"])
+  throw evidenceError("unexpected pre-turn notification");
+};
+
+export const validateCodexThreadStartEvidence = (
+  result: unknown,
+  boundary: CodexAppServerPermissionBoundary,
+  mode: CodexContainedTurnMode,
+): string => {
+  if (!isCodexRecord(result) || !isCodexRecord(result.thread)) {throw evidenceError("thread/start response is incomplete");}
+  const threadId = codexStringField(result.thread, "id");
+  const active = result.activePermissionProfile;
+  if (threadId === undefined || !isCodexRecord(active) || !hasExactKeys(active, ["extends", "id"])
     || active.id !== boundary.permissionProfileId || active.extends !== boundary.permissionProfile.extends
-    || canonicalCodexJson(settings.sandboxPolicy) !== canonicalCodexJson(
-      codexTurnSandboxPolicy(mode, boundary.workspaceRef),
-    )) {
-    throw evidenceError("active permission provenance does not match the qualified profile");
+    || result.cwd !== boundary.workspaceRef || result.approvalPolicy !== "never"
+    || canonicalCodexJson(result.sandbox) !== canonicalCodexJson(codexTurnSandboxPolicy(mode, boundary.workspaceRef))) {
+    throw evidenceError("thread/start permission provenance does not match the qualified profile");
   }
-  return true;
+  return threadId;
 };

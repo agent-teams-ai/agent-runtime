@@ -214,7 +214,7 @@ const createOwner = async (
       hostBootId: "host-boot:pg-codex", hostCustody: host as never, hostInstanceId: "host-instance:pg-codex",
       platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async input => ({boundary: createCodexAppServerPermissionBoundary({codexHome,
-        workspaceRef: input.workspaceAuthority.canonicalPath}),
+        intentMode: input.intentMode, workspaceRef: input.workspaceAuthority.canonicalPath}),
         credentialOutputInventory: Object.freeze({
           credentialBindingDigest: input.credentialBindingDigest,
           credentialGeneration: input.credentialGeneration,

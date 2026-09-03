@@ -40,6 +40,7 @@ after(() => rmSync(syntheticRoot, { force: true, recursive: true }));
 
 export const boundary = createCodexAppServerPermissionBoundary({
   codexHome: syntheticCodexHome,
+  intentMode: "analysis",
   workspaceRef: syntheticWorkspace,
 });
 export const manifest = Object.freeze({
@@ -141,7 +142,7 @@ export const exactConfigResult = (): Message => ({
     permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(boundary.codexHome) },
   },
   layers: [
-    { config: {}, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
+      { config: {}, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
     {
       config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(boundary.codexHome) } },
       disabledReason: null,
@@ -182,29 +183,19 @@ export const standardHandshake = (message: Message, process: FakeCodexProcess): 
     return true;
   }
   if (message.method === "thread/start") {
-    const sandbox = (message.params as Message).sandbox;
-    const sandboxPolicy = sandbox === "read-only"
+    const permissions = (message.params as Message).permissions;
+    const sandboxPolicy = permissions === boundary.permissionProfileId && boundary.intentMode === "analysis"
       ? { networkAccess: false, type: "readOnly" }
       : {
           excludeSlashTmp: true,
           excludeTmpdirEnvVar: true,
           networkAccess: false,
           type: "workspaceWrite",
-          writableRoots: [boundary.workspaceRef],
+          writableRoots: [],
         };
     process.emit({
-      method: "thread/settings/updated",
-      params: {
-        threadId: "thread:test",
-        threadSettings: {
-          activePermissionProfile: { extends: ":workspace", id: boundary.permissionProfileId },
-          approvalPolicy: "never",
-          cwd: boundary.workspaceRef,
-          sandboxPolicy,
-        },
-      },
+      id: message.id, result: { thread: { id: "thread:test" }, activePermissionProfile: { extends: boundary.permissionProfile.extends, id: boundary.permissionProfileId }, approvalPolicy: "never", cwd: boundary.workspaceRef, sandbox: sandboxPolicy },
     });
-    process.emit({ id: message.id, result: { thread: { id: "thread:test" } } });
     return true;
   }
   return false;

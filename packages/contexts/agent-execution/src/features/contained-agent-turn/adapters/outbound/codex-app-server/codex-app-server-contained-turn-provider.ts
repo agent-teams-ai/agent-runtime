@@ -20,7 +20,6 @@ import {
 import {
   createCodexActiveTurnProgress,
   handleCodexActiveMessage,
-  parseCodexThreadId,
   parseCodexTurn,
   type CodexActiveTurnCompletion,
 } from "./codex-app-server-active-turn.js";
@@ -30,13 +29,12 @@ import type {
 } from "./codex-app-server-effect-custody.js";
 import {
   codexContainedThreadConfig,
-  codexThreadSandbox,
-  codexTurnSandboxPolicy,
   observeCodexActiveProfileEvidence,
   type CodexAppServerPermissionBoundary,
   validateCodexConfigEvidence,
   validateCodexInitializeEvidence,
   validateCodexPermissionProfileEvidence,
+  validateCodexThreadStartEvidence,
 } from "./codex-app-server-permission-boundary.js";
 import {
   codexAppServerTupleForBinaryRevision,
@@ -244,40 +242,12 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     }
   }
 
-  async #awaitActiveProfile(
-    reader: BoundedCodexJsonLineReader,
-    threadId: string,
-    buffered: readonly JsonRecord[],
-    mode: "analysis" | "workspace-write",
-  ): Promise<void> {
-    let active = false;
-    for (const message of buffered) {
-      active = observeCodexActiveProfileEvidence(message, threadId, this.#boundary, mode) || active;
-    }
-    if (active) {return;}
-    const deadline = deadlineAfter(this.#requestTimeoutMs);
-    let notificationCount = buffered.length;
-    while (true) {
-      const message = await reader.read(deadline);
-      if (message === TIMEOUT || message === undefined) {
-        throw new CodexAppServerProtocolError("Codex active permission provenance was not observed", false);
-      }
-      if (serverRequestMethod(message) !== undefined || "id" in message) {
-        throw new CodexAppServerProtocolError("Codex emitted an unexpected message before permission proof", false);
-      }
-      notificationCount += 1;
-      if (notificationCount > MAX_PRE_TURN_NOTIFICATIONS) {
-        throw new CodexAppServerProtocolError("Codex exceeded the pre-turn notification bound before permission proof", false);
-      }
-      if (observeCodexActiveProfileEvidence(message, threadId, this.#boundary, mode)) {return;}
-    }
-  }
-
   async #awaitTurnCompletion(
     process: CustodiedProviderProcess,
     reader: BoundedCodexJsonLineReader,
     input: Parameters<ContainedTurnProviderPort["execute"]>[0],
     active: {
+      readonly buffered: readonly JsonRecord[];
       readonly effectCustody?: CodexEffectCustodyBinding;
       readonly observeProtocolTerminal: () => void;
       readonly outputPolicy: CodexCanonicalOutputPolicy;
@@ -288,6 +258,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     const progress = createCodexActiveTurnProgress();
     const deadline = deadlineAfter(this.#turnTimeoutMs);
     let nextCancellationCheck = performance.now();
+    const buffered = [...active.buffered];
     try {while (true) {
       if (progress.interruptRequestId === undefined && performance.now() >= nextCancellationCheck) {
         const cancellationDeadline = Math.min(deadline, deadlineAfter(this.#requestTimeoutMs));
@@ -306,7 +277,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       const pollDeadline = progress.interruptRequestId === undefined
         ? Math.min(deadline, nextCancellationCheck)
         : Math.min(deadline, progress.interruptDeadline ?? deadline);
-      const message = await reader.read(pollDeadline);
+      const message = buffered.shift() ?? await reader.read(pollDeadline);
       if (message === TIMEOUT) {
         if (performance.now() >= deadline) {throw new CodexAppServerProtocolError("Codex turn timed out", true);}
         if (progress.interruptDeadline !== undefined && performance.now() >= progress.interruptDeadline) {
@@ -422,6 +393,9 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       if (input.workspaceRef !== this.#boundary.workspaceRef) {
         throw new CodexAppServerProtocolError("Codex workspace does not match the immutable permission boundary", false);
       }
+      if (input.intent.mode !== this.#boundary.intentMode) {
+        throw new CodexAppServerProtocolError("Codex intent mode does not match the immutable permission boundary", false);
+      }
       if (codexTextContainsPrivatePath(input.intent.prompt, privatePaths, this.#platformTuple.platform)
         || this.#additionalSensitiveOutputTokens.some(token => input.intent.prompt.includes(token))) {
         throw new CodexAppServerProtocolError("Codex prompt contains a private path or marker", false);
@@ -430,7 +404,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         id: `${input.attemptId}:initialize`,
         method: "initialize",
         params: {
-          capabilities: { experimentalApi: false, requestAttestation: false },
+          capabilities: { experimentalApi: true, requestAttestation: false },
           clientInfo: {
             name: this.#platformTuple.clientName,
             title: "Agent Runtime",
@@ -464,12 +438,15 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           config: codexContainedThreadConfig(),
           cwd: input.workspaceRef,
           ephemeral: true,
-          sandbox: codexThreadSandbox(input.intent.mode),
+          permissions: this.#boundary.permissionProfileId,
         },
       }, false, preTurnNotifications);
-      threadId = parseCodexThreadId(threadResult);
-      await this.#awaitActiveProfile(reader, threadId, preTurnNotifications, input.intent.mode);
+      threadId = validateCodexThreadStartEvidence(threadResult, this.#boundary, input.intent.mode);
+      for (const message of preTurnNotifications) {
+        observeCodexActiveProfileEvidence(message, threadId, this.#boundary, input.intent.mode);
+      }
       turnRequestWritten = true;
+      const bufferedTurnNotifications: JsonRecord[] = [];
       const turnResult = await this.#request(process, reader, {
         id: `${input.attemptId}:turn-start`,
         method: "turn/start",
@@ -477,11 +454,20 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           approvalPolicy: "never",
           cwd: input.workspaceRef,
           input: [{ text: input.intent.prompt, text_elements: [], type: "text" }],
-          sandboxPolicy: codexTurnSandboxPolicy(input.intent.mode, input.workspaceRef),
+          permissions: this.#boundary.permissionProfileId,
           threadId,
         },
-      }, true);
+      }, true, bufferedTurnNotifications);
       turnId = parseCodexTurn(turnResult).id;
+      const activeNotifications: JsonRecord[] = [];
+      for (const message of bufferedTurnNotifications) {
+        const method = typeof message.method === "string" ? message.method : undefined;
+        if (method === "thread/started" || method === "remoteControl/status/changed") {
+          observeCodexActiveProfileEvidence(message, threadId, this.#boundary, input.intent.mode);
+        } else {
+          activeNotifications.push(message);
+        }
+      }
       const effectCustody = this.#effectCustody === undefined ? undefined : Object.freeze({
         authority: this.#effectCustody,
         execution: Object.freeze({
@@ -496,7 +482,8 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         process,
         reader,
         input,
-        { ...(effectCustody === undefined ? {} : { effectCustody }), observeProtocolTerminal: () => {protocolTerminalObserved = true;},
+        { ...(effectCustody === undefined ? {} : { effectCustody }), buffered: activeNotifications,
+          observeProtocolTerminal: () => {protocolTerminalObserved = true;},
           outputPolicy, threadId, turnId },
       );
       await proveCodexOutputDrain({ process, reader, stderrDrain, timeoutMs: this.#requestTimeoutMs });

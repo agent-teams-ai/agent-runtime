@@ -35,7 +35,7 @@ const fixture = () => {
   for (const path of [codexHome, codexTmp, claudeConfig, claudeHome, claudeTmp]) {
     mkdirSync(path, { mode: 0o700, recursive: true });
   }
-  const boundary = createCodexAppServerPermissionBoundary({ codexHome, workspaceRef });
+  const boundary = createCodexAppServerPermissionBoundary({ codexHome, intentMode: "analysis", workspaceRef });
   const privateProjection = createClaudeAgentSdkPrivateProjection({
     configRoot: claudeConfig,
     homeRoot: claudeHome,

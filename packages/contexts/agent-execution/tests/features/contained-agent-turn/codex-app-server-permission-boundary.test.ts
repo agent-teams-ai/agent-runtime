@@ -163,7 +163,7 @@ test("validates private roots, disjointness, and stable filesystem identity", as
     mkdirSync(workspace, { mode: 0o755 });
     mkdirSync(home, { mode: 0o700, recursive: true });
     mkdirSync(temp, { mode: 0o700 });
-    const exactBoundary = createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace });
+    const exactBoundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
     const plan = createCodexAppServerLaunchPlan({
       boundary: exactBoundary,
       executablePath: "/opt/codex",
@@ -182,19 +182,19 @@ test("validates private roots, disjointness, and stable filesystem identity", as
     assert.equal(plan.effectivePolicyDigest, exactBoundary.effectivePolicyDigest);
 
     chmodSync(home, 0o755);
-    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace }), /0700/u);
+    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace }), /0700/u);
     chmodSync(home, 0o700);
     chmodSync(workspace, 0o777);
-    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace }), /writable/u);
+    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace }), /writable/u);
     chmodSync(workspace, 0o755);
 
     const file = join(caseRoot, "file");
     writeFileSync(file, "not-a-directory");
-    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: file, workspaceRef: workspace }), /directory/u);
+    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: file, intentMode: "analysis", workspaceRef: workspace }), /directory/u);
     const link = join(caseRoot, "home-link");
     symlinkSync(home, link);
-    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: link, workspaceRef: workspace }), /symlink/u);
-    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: "/", workspaceRef: workspace }), /root/u);
+    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: link, intentMode: "analysis", workspaceRef: workspace }), /symlink/u);
+    assert.throws(() => createCodexAppServerPermissionBoundary({ codexHome: "/", intentMode: "analysis", workspaceRef: workspace }), /root/u);
 
     const nestedTemp = join(workspace, "temp");
     mkdirSync(nestedTemp, { mode: 0o700 });
@@ -221,7 +221,7 @@ test("observes provider endpoints with exact workspace identity and portable Uni
     mkdirSync(workspace);
     mkdirSync(other);
     mkdirSync(home, { mode: 0o700 });
-    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace });
+    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
     assert.throws(() => observeCodexWorkspaceEndpoint("safe.txt", { ...boundary, workspaceRef: other }), /identity/u);
     assert.throws(() => observeCodexWorkspaceEndpoint("safe.txt", {
       ...boundary,
@@ -245,7 +245,7 @@ test("fails closed on permanent hardlink, type, and missing/new endpoint substit
     const home = join(caseRoot, "home");
     mkdirSync(workspace);
     mkdirSync(home, { mode: 0o700 });
-    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace });
+    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
 
     const hardlinked = join(workspace, "hardlinked.txt");
     writeFileSync(hardlinked, "bounded");
@@ -278,7 +278,7 @@ test("types restored endpoint substitutions as non-authoritative Node observatio
     mkdirSync(workspace);
     mkdirSync(home, { mode: 0o700 });
     writeFileSync(endpoint, "original");
-    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace });
+    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
     const observation = observeCodexWorkspaceEndpoint(endpoint, boundary).endpointObservation;
     renameSync(endpoint, displaced);
     writeFileSync(endpoint, "transient-substitute");
@@ -308,7 +308,7 @@ test("decodes initialize as exact own enumerable plain 0.150.1 data", () => {
     const home = join(caseRoot, "home");
     mkdirSync(workspace);
     mkdirSync(home, { mode: 0o700 });
-    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace });
+    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
     const exact = { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux",
       userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)" };
     validateCodexInitializeEvidence(exact, boundary, CODEX_APP_SERVER_LINUX_X64_TUPLE);
@@ -335,9 +335,9 @@ test("rejects unknown keys throughout config and profile evidence shapes", () =>
     const home = join(caseRoot, "home");
     mkdirSync(workspace, { mode: 0o755 });
     mkdirSync(home, { mode: 0o700 });
-    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, workspaceRef: workspace });
+    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
     const layerNames = {
-      packaged: { file: "/opt/codex/defaults.toml", type: "packagedDefaults" },
+      system: { file: "/etc/codex/config.toml", type: "system" },
       session: { type: "sessionFlags" },
       user: { file: `${home}/config.toml`, profile: null, type: "user" },
     };
@@ -346,7 +346,7 @@ test("rejects unknown keys throughout config and profile evidence shapes", () =>
         [boundary.permissionProfileId]: codexEffectivePermissionProfile(home),
       } },
       layers: [
-        { config: {}, disabledReason: null, name: layerNames.packaged, version: "1" },
+        { config: {}, disabledReason: null, name: layerNames.system, version: "1" },
         { config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(home) } },
           disabledReason: null, name: layerNames.user, version: "2" },
         { config: { default_permissions: boundary.permissionProfileId }, disabledReason: null,
@@ -410,6 +410,39 @@ test("rejects unknown keys throughout config and profile evidence shapes", () =>
   } finally {
     rmSync(caseRoot, { force: true, recursive: true });
   }
+});
+
+test("requires the exact empty system baseline and rejects packaged or mixed layers", () => {
+  const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-layer-baseline-")));
+  try {
+    const workspace = join(caseRoot, "workspace"); const home = join(caseRoot, "home");
+    mkdirSync(workspace); mkdirSync(home, { mode: 0o700 });
+    const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
+    const exact = {
+      config: { default_permissions: boundary.permissionProfileId, permissions: {
+        [boundary.permissionProfileId]: codexEffectivePermissionProfile(home),
+      }},
+      layers: [
+        { config: {}, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
+        { config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(home) } }, disabledReason: null,
+          name: { file: `${home}/config.toml`, profile: null, type: "user" }, version: "2" },
+        { config: { default_permissions: boundary.permissionProfileId }, disabledReason: null,
+          name: { type: "sessionFlags" }, version: "3" },
+      ],
+      origins: {
+        default_permissions: { name: { type: "sessionFlags" }, version: "3" },
+        permissions: { name: { file: `${home}/config.toml`, profile: null, type: "user" }, version: "2" },
+      },
+    };
+    validateCodexConfigEvidence(exact, boundary);
+    for (const layers of [
+      exact.layers.map((layer, index) => index === 0 ? { config: {}, name: { file: "/opt/defaults.toml", type: "packagedDefaults" }, version: "1" } : layer),
+      [...exact.layers, { config: {}, name: { file: "/opt/defaults.toml", type: "packagedDefaults" }, version: "4" }],
+      exact.layers.map((layer, index) => index === 0 ? { config: { unsafe: true }, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" } : layer),
+    ]) {
+      assert.throws(() => validateCodexConfigEvidence({ ...exact, layers }, boundary), /rejected/u);
+    }
+  } finally { rmSync(caseRoot, { force: true, recursive: true }); }
 });
 
 test("binds exact response assumptions to the generated Codex 0.150.1 contract", () => {

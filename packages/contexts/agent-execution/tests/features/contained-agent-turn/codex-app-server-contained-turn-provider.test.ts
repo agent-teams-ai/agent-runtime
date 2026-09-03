@@ -78,10 +78,10 @@ test("maps one exact Codex App Server turn to provider-neutral receipts", async 
       remote_plugin: false,
     },
   });
-  assert.equal((threadStart.params as Message).sandbox, "read-only");
+  assert.equal((threadStart.params as Message).permissions, boundary.permissionProfileId);
   const turnStart = process.requests.find(message => message.method === "turn/start");
   assert.ok(turnStart);
-  assert.deepEqual((turnStart.params as Message).sandboxPolicy, { networkAccess: false, type: "readOnly" });
+  assert.equal((turnStart.params as Message).permissions, boundary.permissionProfileId);
 });
 test("binds completed receipts to operation, effect, attempt, and the exact Codex implementation tuple", async () => {
   const identity = { attemptId: "attempt:receipt", effectId: "effect:receipt", operationId: "operation:receipt" };
@@ -468,7 +468,7 @@ test("rejects semantic error, plan, and passive-item replays with substituted fi
       if (message.method === "turn/start") {target.emit({ id: message.id, result: { turn: generatedTurn("turn:replay", "inProgress") } }); emitTurnStarted(target, "turn:replay"); emitAdversary(target);}
     });
     assertContainmentRequired(await createProvider(process).execute(
-      executeInput(process, async () => false, "workspace-write"),
+      executeInput(process, async () => false, "analysis"),
     ));
   }
 });

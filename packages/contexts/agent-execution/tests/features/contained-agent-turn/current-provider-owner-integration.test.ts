@@ -206,7 +206,7 @@ const createClaimPathOwner = async (provider: "claude" | "codex", root: string, 
       platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async input => {
         return ({
-        boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+        boundary: createCodexAppServerPermissionBoundary({codexHome, intentMode: input.intentMode, workspaceRef}),
         credentialOutputInventory: codexCredentialOutputInventory(input),
         executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp,
         });
@@ -281,7 +281,7 @@ test("provider owners keep stable kernel and random Host identities distinct and
       hostInstanceId: "host-instance:current-owner",
       platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async input => ({
-        boundary: createCodexAppServerPermissionBoundary({ codexHome, workspaceRef: codexWorkspace }),
+        boundary: createCodexAppServerPermissionBoundary({ codexHome, intentMode: input.intentMode, workspaceRef: codexWorkspace }),
         credentialOutputInventory: codexCredentialOutputInventory(input),
         executablePath: "/synthetic/codex", privateRootPath: codexPrivate, tmpDir: codexTemp,
       })},
@@ -381,7 +381,7 @@ test("Codex Darwin owner delegates the canonical workspace to cooperative Host C
       effectCustody: syntheticCodexEffectCustody(), hostBootId: "host-boot:darwin-cwd",
       hostCustody: host as any, hostInstanceId: "host-instance:darwin-cwd",
       launchRecords: {resolve: async input => ({
-        boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+        boundary: createCodexAppServerPermissionBoundary({codexHome, intentMode: input.intentMode, workspaceRef}),
         credentialOutputInventory: codexCredentialOutputInventory(input),
         executablePath: "/synthetic/codex-darwin-arm64", privateRootPath, tmpDir,
       })},
@@ -445,7 +445,7 @@ test("Codex owner immutably snapshots a valid exact Array and rejects its arbitr
     effectCustody: syntheticCodexEffectCustody(), hostBootId: "host-boot:sensitive-output",
     hostCustody: host as any, hostInstanceId: "host-instance:sensitive-output",
     launchRecords: {resolve: async () => ({
-      boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+      boundary: createCodexAppServerPermissionBoundary({codexHome, intentMode: "analysis", workspaceRef}),
       credentialOutputInventory: mutableInventory,
       executablePath: "/synthetic/codex", privateRootPath, tmpDir,
     })},
@@ -636,7 +636,7 @@ test("prevention retires a prepared attempt without a Host or provider start", a
       hostInstanceId: "host-instance:prevention",
       platformTarget: {architecture: "x64", platform: "linux"},
       launchRecords: {resolve: async input => ({
-        boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+        boundary: createCodexAppServerPermissionBoundary({codexHome, intentMode: input.intentMode, workspaceRef}),
         credentialOutputInventory: codexCredentialOutputInventory(input),
         executablePath: "/synthetic/codex", privateRootPath, tmpDir: temp,
       })},
@@ -682,7 +682,7 @@ test("same-provider attempts retain distinct exact plans and reject crossed work
         const record = records.get(input.workspaceId);
         if (record === undefined || record.workspaceRef !== input.workspaceAuthority.canonicalPath) {return;}
         return {
-          boundary: createCodexAppServerPermissionBoundary(record), executablePath: "/synthetic/codex",
+          boundary: createCodexAppServerPermissionBoundary({...record, intentMode: input.intentMode}), executablePath: "/synthetic/codex",
           credentialOutputInventory: codexCredentialOutputInventory(input),
           privateRootPath: record.privateRootPath, tmpDir: record.temp,
         };

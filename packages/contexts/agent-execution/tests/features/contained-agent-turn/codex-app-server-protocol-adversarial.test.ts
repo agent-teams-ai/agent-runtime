@@ -51,7 +51,7 @@ mkdirSync(codexHome, { mode: 0o700 });
 mkdirSync(workspace);
 mkdirSync(privateTmp, { mode: 0o700 });
 after(() => rmSync(root, { force: true, recursive: true }));
-const boundary = createCodexAppServerPermissionBoundary({ codexHome, workspaceRef: workspace });
+const boundary = createCodexAppServerPermissionBoundary({ codexHome, intentMode: "analysis", workspaceRef: workspace });
 
 class ProtocolProcess implements CustodiedProviderProcess {
   public readonly custodyRef = "custody:protocol-adversarial";
@@ -117,7 +117,7 @@ class ProtocolProcess implements CustodiedProviderProcess {
           permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(codexHome) },
         },
         layers: [
-          { config: {}, disabledReason: null, name: { file: "/opt/codex/defaults.toml", type: "packagedDefaults" }, version: "1" },
+          { config: {}, disabledReason: null, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
           {
             config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(codexHome) } },
             disabledReason: null,
@@ -149,17 +149,8 @@ class ProtocolProcess implements CustodiedProviderProcess {
       const sandboxPolicy = this.#mode === "analysis"
         ? { networkAccess: false, type: "readOnly" }
         : { excludeSlashTmp: true, excludeTmpdirEnvVar: true, networkAccess: false,
-          type: "workspaceWrite", writableRoots: [workspace] };
-      this.emit({ method: "thread/settings/updated", params: {
-        threadId: "thread:test",
-        threadSettings: {
-          activePermissionProfile: { extends: ":workspace", id: boundary.permissionProfileId },
-          approvalPolicy: "never",
-          cwd: workspace,
-          sandboxPolicy,
-        },
-      } });
-      this.emit({ id: message.id, result: { thread: { id: "thread:test" } } });
+          type: "workspaceWrite", writableRoots: [] };
+      this.emit({ id: message.id, result: { thread: { id: "thread:test" }, activePermissionProfile: { extends: this.#mode === "analysis" ? ":read-only" : ":workspace", id: boundary.permissionProfileId }, approvalPolicy: "never", cwd: workspace, sandbox: sandboxPolicy } });
       return true;
     }
     return false;

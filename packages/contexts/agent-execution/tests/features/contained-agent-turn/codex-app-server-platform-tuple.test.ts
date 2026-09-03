@@ -138,7 +138,7 @@ test("derives Darwin launch identity and requests only the reviewed cooperative 
   try {
     const codexHome = join(privateRoot, "home"); const tmp = join(privateRoot, "tmp");
     mkdirSync(codexHome, { mode: 0o700 }); mkdirSync(tmp, { mode: 0o700 }); mkdirSync(workspace);
-    const exactBoundary = createCodexAppServerPermissionBoundary({ codexHome, workspaceRef: workspace });
+    const exactBoundary = createCodexAppServerPermissionBoundary({ codexHome, intentMode: "analysis", workspaceRef: workspace });
     const plan = createCodexAppServerLaunchPlan({
       boundary: exactBoundary,
       executablePath: "/synthetic/codex-darwin-arm64",
