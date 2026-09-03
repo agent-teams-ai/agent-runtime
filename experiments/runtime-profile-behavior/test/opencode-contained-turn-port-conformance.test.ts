@@ -150,7 +150,7 @@ const providerContractPath = join(
   repositoryRoot,
   "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
 );
-const fixtureDigest = "6ac1b5cd57e31684e8f3a83bfa5e0bf4072b976effc82006f6b15c4658ff4ef6";
+const fixtureDigest = "076f8830c29f10ebf9d40e0fb344f9f1a44a6b7291f3f29066080785beccf9fb";
 
 const expectedCapabilityCases: readonly CapabilityCase[] = Object.freeze([
   { capability: "prompt", observedStatus: "baseline", characterizationDisposition: "supported" },
@@ -668,14 +668,14 @@ test("enforces the exact 256-byte projected text boundary without splitting code
   assert.equal(unicode, "x".repeat(255));
 });
 
-test("records the exact provider-identity gap and capability characterization boundary", async () => {
+test("records the provider-neutral identity and capability characterization boundary", async () => {
   const fixture = await loadFixture();
   const providerContract = await readFile(providerContractPath, "utf8");
 
-  assert.match(providerContract, /export type ContainedTurnProvider = "claude" \| "codex";/u);
+  assert.match(providerContract, /export type ContainedTurnProvider = string;/u);
   assert.doesNotMatch(providerContract, /ContainedTurnProvider[^;]*"opencode"/u);
   assert.deepEqual(fixture.neutralPortGap.providerIdentity, {
-    currentClosedMembers: ["claude", "codex"],
+    currentClosedMembers: [],
     required: "opencode",
     source: "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
   });

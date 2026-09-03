@@ -32,7 +32,7 @@
     "status": "not_expressible_without_production_contract_widening",
     "providerIdentity": {
       "required": "opencode",
-      "currentClosedMembers": ["claude", "codex"],
+      "currentClosedMembers": [],
       "source": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts"
     },
     "forbiddenWorkarounds": [
