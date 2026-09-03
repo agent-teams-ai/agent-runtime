@@ -450,29 +450,95 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     "../../fixtures/linux-codex-app-server-0.150.1-permission-contract.json",
     import.meta.url,
   );
-  const fixture = JSON.parse(readFileSync(fixtureUrl, "utf8")) as {
-    readonly generatedTypeFragments: readonly { readonly source: string; readonly sourceSha256: string }[];
+  const fixtureBytes = readFileSync(fixtureUrl);
+  const fixture = JSON.parse(fixtureBytes.toString("utf8")) as {
+    readonly schemaVersion: number;
+    readonly generatedTypeFragments: readonly {
+      readonly fragment: string; readonly fragmentPurpose?: string;
+      readonly source: string; readonly sourceSha256: string;
+    }[];
+    readonly limitations: { readonly permissionProfileBody: string };
     readonly provenance: {
       readonly binarySha256: string;
+      readonly experimentalFlagUsed: boolean;
       readonly installedPackage: string;
+      readonly nativeTarget: string;
+      readonly schemaCommand: string;
+      readonly schemaTreeFileCount: number;
       readonly schemaTreeManifestSha256: string;
+      readonly treeManifestAlgorithm: string;
+      readonly typesCommand: string;
+      readonly typesTreeFileCount: number;
       readonly typesTreeManifestSha256: string;
     };
   };
-  assert.equal(fixture.provenance.installedPackage, "@openai/codex-linux-x64@0.150.1");
+  assert.equal(createHash("sha256").update(fixtureBytes).digest("hex"),
+    "85486350f4b585f4b460d970f94cf7132eb070ef8d2cc3d8d8cee7931d3f3351");
+  assert.equal(fixture.schemaVersion, 2);
+  assert.equal(fixture.provenance.installedPackage, "@openai/codex@0.150.1-linux-x64");
+  assert.equal(fixture.provenance.nativeTarget, "x86_64-unknown-linux-musl");
   assert.equal(fixture.provenance.binarySha256, CODEX_APP_SERVER_BINARY_SHA256);
+  assert.equal(fixture.provenance.experimentalFlagUsed, true);
+  assert.equal(fixture.provenance.schemaCommand,
+    "codex app-server generate-json-schema --out <disposable-root>/schema-experimental --experimental");
+  assert.equal(fixture.provenance.typesCommand,
+    "codex app-server generate-ts --out <disposable-root>/generated-experimental --experimental");
+  assert.equal(fixture.provenance.schemaTreeFileCount, 411);
+  assert.equal(fixture.provenance.typesTreeFileCount, 812);
   assert.equal(fixture.provenance.schemaTreeManifestSha256, CODEX_APP_SERVER_SCHEMA_SHA256);
   assert.equal(fixture.provenance.typesTreeManifestSha256, CODEX_APP_SERVER_BINDINGS_SHA256);
-  assert.deepEqual(fixture.generatedTypeFragments.map(fragment => fragment.source), [
-    "InitializeResponse.ts",
-    "v2/ConfigReadResponse.ts",
-    "v2/PermissionProfileListResponse.ts",
-    "v2/PermissionProfileSummary.ts",
-    "v2/TurnInterruptResponse.ts",
-    "v2/TurnCompletedNotification.ts",
-    "v2/AgentMessageDeltaNotification.ts",
-    "v2/TurnStatus.ts",
+  assert.equal(fixture.provenance.treeManifestAlgorithm,
+    "sha256 of the byte stream emitted by sha256sum over all regular files sorted by relative path without a leading ./");
+  assert.deepEqual(fixture.generatedTypeFragments.map(({ fragment, source, sourceSha256 }) =>
+    ({ fragment, source, sourceSha256 })), [
+    { source: "v2/ActivePermissionProfile.ts",
+      sourceSha256: "9d137fa5e3cdbd3392e9a6d373b45e50f2f2643662a735ac90c6f1103e0f97a7",
+      fragment: "id: string,\n/**\n * Parent profile identifier from the selected permissions profile's\n * `extends` setting, when present.\n */\nextends: string | null, };" },
+    { source: "v2/Config.ts",
+      sourceSha256: "7130dcb6ffeff35935b9b65a3698c6fca97d814bdbc961e2bd367c62e0474c98",
+      fragment: "} & ({ [key in string]?: number | string | boolean | Array<JsonValue> | { [key in string]?: JsonValue } | null });" },
+    { source: "v2/ConfigLayer.ts",
+      sourceSha256: "24d1d2c7e0c774e0df55d767bb6d1874f92776daa96f2856f184a296de203161",
+      fragment: "export type ConfigLayer = { name: ConfigLayerSource, version: string, config: JsonValue, disabledReason: string | null, };" },
+    { source: "v2/ConfigLayerMetadata.ts",
+      sourceSha256: "bc6dac6f3c9ac7fa7d7a40c15abc4114cfe230f4777cabf8e0e130d70b78a515",
+      fragment: "export type ConfigLayerMetadata = { name: ConfigLayerSource, version: string, };" },
+    { source: "v2/ThreadStartResponse.ts",
+      sourceSha256: "056e252e32c78761d250c7688cb102752ce8b6f445e509ae87766ba5588a8924",
+      fragment: "activePermissionProfile: ActivePermissionProfile | null," },
+    { source: "v2/ThreadStartParams.ts",
+      sourceSha256: "7a3fddbb0cf0585c52edbf19e3a1f6e691681f18ab509f7abfa416da7f0ac824",
+      fragment: "permissions?: string | null," },
+    { source: "v2/TurnStartParams.ts",
+      sourceSha256: "b876212f33e15754db8242ce9367318c6ee3a96686216663a37869c40a8b3d7f",
+      fragment: "permissions?: string | null," },
+    { source: "InitializeResponse.ts",
+      sourceSha256: "4feabcb66d4bf01869d2780beaec1838d41b30213cdf57de175298aed01f5379",
+      fragment: "export type InitializeResponse = { userAgent: string," },
+    { source: "v2/ConfigReadResponse.ts",
+      sourceSha256: "9efa2d02c6ccb42cf509010727c9d27b4ac3783ac8b47e41f92eb6556848cb15",
+      fragment: "export type ConfigReadResponse = { config: Config, origins: { [key in string]?: ConfigLayerMetadata }, layers: Array<ConfigLayer> | null, };" },
+    { source: "v2/PermissionProfileListResponse.ts",
+      sourceSha256: "5ff6a99f0a0cc3956de6e980ad45d50c48e5319a9d421f11a85c7c96d3d92644",
+      fragment: "export type PermissionProfileListResponse = { data: Array<PermissionProfileSummary>," },
+    { source: "v2/PermissionProfileSummary.ts",
+      sourceSha256: "1202513133554ed4a96b916b5117ff2a0e5bbded9d326f44d39d622a418944c7",
+      fragment: "allowed: boolean, };" },
+    { source: "v2/TurnInterruptResponse.ts",
+      sourceSha256: "3994cb114b2c4a2e81ba3a349c3a7d1f13ce1b165776b2162b52c9a114c24bc4",
+      fragment: "export type TurnInterruptResponse = Record<string, never>;" },
+    { source: "v2/TurnCompletedNotification.ts",
+      sourceSha256: "1f56d73cb06876533fb224cd285634d3e090b21b647009be0e7c622937e40d3e",
+      fragment: "export type TurnCompletedNotification = { threadId: string, turn: Turn, };" },
+    { source: "v2/AgentMessageDeltaNotification.ts",
+      sourceSha256: "bb538862f093bd22278bea3b3343037525a9218fbddef534e37e048347c10805",
+      fragment: "export type AgentMessageDeltaNotification = { threadId: string, turnId: string, itemId: string, delta: string, };" },
+    { source: "v2/TurnStatus.ts",
+      sourceSha256: "c69049363f97e97844e9fc851f0cd4122da057ba1371de003a28c00ab7a6ef1a",
+      fragment: "export type TurnStatus = \"completed\" | \"interrupted\" | \"failed\" | \"inProgress\";" },
   ]);
+  assert.match(fixture.limitations.permissionProfileBody, /no PermissionProfile body type/u);
+  assert.match(fixture.limitations.permissionProfileBody, /Config's open JSON intersection/u);
   for (const fragment of fixture.generatedTypeFragments) {
     assert.match(fragment.sourceSha256, /^[a-f0-9]{64}$/u);
   }
@@ -485,12 +551,16 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   const authorityManifest = JSON.parse(readFileSync(new URL(
     "../../fixtures/protocol/codex-app-server-0.150.1/manifest.json", import.meta.url), "utf8")) as {
     readonly artifactBytes: number; readonly artifactSha256: string; readonly binarySha256: string;
+    readonly experimentalFlagUsed: boolean;
     readonly generatorCommands: readonly string[]; readonly npmSri: Readonly<Record<string, string>>;
     readonly regenerationVerifier: { readonly executionBinding: string; readonly executionEvidenceField: string;
       readonly externalProof: boolean; readonly runsInStaticTests: boolean };
     readonly generatedRuntimeBinding: { readonly artifact: string; readonly generator: string;
       readonly sha256: string; readonly sourceExecutionBinding: string };
-    readonly sourceSha256: string; readonly tarballSha256: string;
+    readonly schemaTreeFileCount: number; readonly schemaTreeManifestSha256: string;
+    readonly schemaVersion: number; readonly sourceSha256: string; readonly tarballSha256: string;
+    readonly treeManifestAlgorithm: string; readonly typesTreeFileCount: number;
+    readonly typesTreeManifestSha256: string;
   };
   assert.deepEqual(authorityManifest, { ...authorityManifest,
     artifactBytes: 41_664,
@@ -499,9 +569,16 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     sourceSha256: "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370",
     tarballSha256: "35a87cf024345cf2d9350e5220401c8d3967ff6feee04055a89c73524927c0a6",
   });
+  assert.equal(authorityManifest.schemaVersion, 3);
+  assert.equal(authorityManifest.experimentalFlagUsed, true);
+  assert.equal(authorityManifest.schemaTreeFileCount, 411);
+  assert.equal(authorityManifest.typesTreeFileCount, 812);
+  assert.equal(authorityManifest.schemaTreeManifestSha256, CODEX_APP_SERVER_SCHEMA_SHA256);
+  assert.equal(authorityManifest.typesTreeManifestSha256, CODEX_APP_SERVER_BINDINGS_SHA256);
+  assert.equal(authorityManifest.treeManifestAlgorithm, fixture.provenance.treeManifestAlgorithm);
   assert.deepEqual(authorityManifest.generatorCommands, [
-    "codex app-server generate-json-schema --out <marked-disposable-root>/schema",
-    "codex app-server generate-ts --out <marked-disposable-root>/types",
+    "codex app-server generate-json-schema --out <marked-disposable-root>/schema-experimental --experimental",
+    "codex app-server generate-ts --out <marked-disposable-root>/generated-experimental --experimental",
   ]);
   assert.match(authorityManifest.npmSri.wrapper ?? "", /^sha512-/u);
   assert.match(authorityManifest.npmSri.native ?? "", /^sha512-/u);
@@ -539,6 +616,7 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   assert.match(verifierSource, /skipped-not-external-proof/u);
   assert.match(verifierSource, /assert\.deepEqual\(regenerated, committed/u);
   assert.match(verifierSource, /spawnSync\("\/proc\/self\/fd\/3"/u);
+  assert.match(verifierSource, /generated, "--experimental"/u);
   assert.match(verifierSource, /stdio: \["ignore", "pipe", "pipe", binaryHandle\.fd\]/u);
   assert.match(verifierSource, /executedBinarySha256/u);
   assert.doesNotMatch(verifierSource, /spawnSync\(binary,/u);

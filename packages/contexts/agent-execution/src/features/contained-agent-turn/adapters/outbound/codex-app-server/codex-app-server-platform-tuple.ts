@@ -2,8 +2,8 @@ import type { HostCustodyContainmentProfile } from "../host-custody/custodied-pr
 
 export const CODEX_APP_SERVER_VERSION = "0.150.1";
 export const CODEX_APP_SERVER_PACKAGE_REVISION = "@openai/codex@0.150.1";
-export const CODEX_APP_SERVER_SCHEMA_SHA256 = "8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3";
-export const CODEX_APP_SERVER_BINDINGS_SHA256 = "a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338";
+export const CODEX_APP_SERVER_SCHEMA_SHA256 = "771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97";
+export const CODEX_APP_SERVER_BINDINGS_SHA256 = "9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1";
 // Native permission/configuration behavior is part of the adapter contract.
 // Keep the provider package, binary, and schema revisions stable while
 // changing the immutable adapter identity for this qualified behavior.

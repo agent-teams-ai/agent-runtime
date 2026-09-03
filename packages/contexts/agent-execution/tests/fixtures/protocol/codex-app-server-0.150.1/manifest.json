@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "wrapperPackage": "@openai/codex@0.150.1",
   "package": "@openai/codex-linux-x64@0.150.1",
   "npmSri": {
@@ -26,9 +26,15 @@
     }
   },
   "generatorCommands": [
-    "codex app-server generate-json-schema --out <marked-disposable-root>/schema",
-    "codex app-server generate-ts --out <marked-disposable-root>/types"
+    "codex app-server generate-json-schema --out <marked-disposable-root>/schema-experimental --experimental",
+    "codex app-server generate-ts --out <marked-disposable-root>/generated-experimental --experimental"
   ],
+  "experimentalFlagUsed": true,
+  "schemaTreeFileCount": 411,
+  "schemaTreeManifestSha256": "771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97",
+  "typesTreeFileCount": 812,
+  "typesTreeManifestSha256": "9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1",
+  "treeManifestAlgorithm": "sha256 of the byte stream emitted by sha256sum over all regular files sorted by relative path without a leading ./",
   "source": "schema/v2/ItemCompletedNotification.json",
   "sourceSha256": "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370",
   "regenerationVerifier": {

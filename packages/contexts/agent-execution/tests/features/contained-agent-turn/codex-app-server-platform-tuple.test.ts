@@ -15,8 +15,14 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import {
   assertExactCodexAppServerPlatformTuple,
+  CODEX_APP_SERVER_ADAPTER_REVISION,
+  CODEX_APP_SERVER_BINDINGS_SHA256,
   CODEX_APP_SERVER_DARWIN_ARM64_TUPLE,
   CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  CODEX_APP_SERVER_PACKAGE_REVISION,
+  CODEX_APP_SERVER_SCHEMA_SHA256,
+  CODEX_APP_SERVER_VERSION,
+  CODEX_CAPABILITY_MANIFEST_REVISION,
   selectCodexAppServerPlatformTuple,
   validateCodexAppServerUserAgent,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
@@ -35,6 +41,21 @@ const candidateAuthority = JSON.parse(readFileSync(new URL(
 }}};
 const darwinCandidate = candidateAuthority.candidateTargets["darwin-arm64"];
 const darwinUserAgent = darwinCandidate.initialize.userAgent;
+
+test("pins the exact experimental Codex contract and immutable capability identity", () => {
+  assert.equal(CODEX_APP_SERVER_VERSION, "0.150.1");
+  assert.equal(CODEX_APP_SERVER_PACKAGE_REVISION, "@openai/codex@0.150.1");
+  assert.equal(CODEX_APP_SERVER_ADAPTER_REVISION,
+    "codex-app-server-contained-turn:0.150.1+native-permission-config-v2");
+  assert.equal(CODEX_APP_SERVER_SCHEMA_SHA256,
+    "771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97");
+  assert.equal(CODEX_APP_SERVER_BINDINGS_SHA256,
+    "9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1");
+  assert.equal(CODEX_CAPABILITY_MANIFEST_REVISION,
+    "contained-turn:v1:codex-app-server:0.150.1:schema-771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97:bindings-9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1:agent-runtime-contained-v1:native-permission-config-v2");
+  assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.protocolRevision, CODEX_CAPABILITY_MANIFEST_REVISION);
+  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.protocolRevision, CODEX_CAPABILITY_MANIFEST_REVISION);
+});
 
 test("selects the supported Codex Linux tuple and admitted static Darwin candidate", () => {
   assert.deepEqual(selectCodexAppServerPlatformTuple({ architecture: "x64", platform: "linux" }),

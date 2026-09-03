@@ -34,7 +34,7 @@ const root = await mkdtemp(join(disposableParent, "codex-schema-regeneration-"))
 try {
   const home = join(root, "home");
   const codexHome = join(root, "codex-home");
-  const generated = join(root, "schema");
+  const generated = join(root, "schema-experimental");
   const temporary = join(root, "tmp");
   await Promise.all([
     mkdir(home, { mode: 0o700 }),
@@ -44,7 +44,8 @@ try {
   // Descriptor 3 is the same retained open-file description whose bytes were
   // hashed above. Executing /proc/self/fd/3 prevents a pathname replacement
   // between verification and exec from changing the generator bytes.
-  const result = spawnSync("/proc/self/fd/3", ["app-server", "generate-json-schema", "--out", generated], {
+  const result = spawnSync("/proc/self/fd/3",
+    ["app-server", "generate-json-schema", "--out", generated, "--experimental"], {
     cwd: root,
     encoding: "utf8",
     env: { CODEX_HOME: codexHome, HOME: home, LANG: "C.UTF-8", PATH: "/usr/local/bin:/usr/bin:/bin",
