@@ -61,8 +61,18 @@ const providerAccess = Object.freeze({
       })});
     },
     async observeDispatchConsumption() {return Object.freeze({kind: "not_found" as const});},
-    async settleDispatchConsumption() {
-      return Object.freeze({kind: "settled" as const, receipt: Object.freeze({})});
+    async settleDispatchConsumption(input: Parameters<OuterProviderAccess["dispatchConsumptionV1"]["settleDispatchConsumption"]>[0]) {
+      return Object.freeze({kind: "settled" as const, receipt: Object.freeze({
+        consumptionDigest: input.consumptionDigest,
+        disposition: input.disposition,
+        expectedBinding: input.expectedBinding,
+        operationId: input.operationId,
+        provider: input.provider,
+        scope: input.scope,
+        settledAtControlTime: 100,
+        settlementDigest: "provider-access-settlement:synthetic",
+        settlementRequestId: input.settlementRequestId,
+      })});
     },
   }),
   resolve: Object.freeze({async execute(input: Parameters<OuterProviderAccess["resolve"]["execute"]>[0]) {
