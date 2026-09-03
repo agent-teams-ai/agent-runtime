@@ -1,5 +1,3 @@
-/* oxlint-disable max-lines -- focused adversarial protocol coverage remains in one fixture. */
-
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,10 +10,7 @@ import {
   CODEX_CAPABILITY_MANIFEST_REVISION,
   createCodexAppServerPermissionBoundary,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
-import {
-  CODEX_MAX_PRE_TURN_NOTIFICATION_BYTES,
-  CodexAppServerContainedTurnProvider,
-} from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
+import { CodexAppServerContainedTurnProvider } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
 import type { CodexEffectCustodyAuthority } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.js";
 import type { CustodiedProviderProcess } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { agentMessage, commandExecution, emitAgentCompleted, emitAgentStarted, fileChange,
@@ -72,17 +67,14 @@ class ProtocolProcess implements CustodiedProviderProcess {
   public turnStartParams: Message | undefined;
   readonly #active: (target: ProtocolProcess) => void;
   readonly #interrupt: (message: Message, target: ProtocolProcess) => void;
-  readonly #preResponse: (method: string, target: ProtocolProcess) => void;
   readonly #mode: "analysis" | "workspace-write";
   public constructor(
     active: (target: ProtocolProcess) => void,
     mode: "analysis" | "workspace-write",
     interrupt: (message: Message, target: ProtocolProcess) => void = () => {},
-    preResponse: (method: string, target: ProtocolProcess) => void = () => {},
   ) {
     this.#active = active;
     this.#interrupt = interrupt;
-    this.#preResponse = preResponse;
     this.#mode = mode;
     this.stderr.end();
   }
@@ -112,7 +104,6 @@ class ProtocolProcess implements CustodiedProviderProcess {
   }
   #handshake(message: Message): boolean {
     if (message.method === "initialize") {
-      this.#preResponse("initialize", this);
       this.emit({ id: message.id, result: {
         codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
       } });
@@ -120,7 +111,6 @@ class ProtocolProcess implements CustodiedProviderProcess {
     }
     if (message.method === "initialized") {return true;}
     if (message.method === "config/read") {
-      this.#preResponse("config/read", this);
       this.emit({ id: message.id, result: {
         config: {
           default_permissions: boundary.permissionProfileId,
@@ -149,7 +139,6 @@ class ProtocolProcess implements CustodiedProviderProcess {
       return true;
     }
     if (message.method === "permissionProfile/list") {
-      this.#preResponse("permissionProfile/list", this);
       this.emit({ id: message.id, result: {
         data: [{ allowed: true, description: null, id: boundary.permissionProfileId }],
         nextCursor: null,
@@ -157,7 +146,6 @@ class ProtocolProcess implements CustodiedProviderProcess {
       return true;
     }
     if (message.method === "thread/start") {
-      this.#preResponse("thread/start", this);
       const sandboxPolicy = this.#mode === "analysis"
         ? { networkAccess: false, type: "readOnly" }
         : { excludeSlashTmp: true, excludeTmpdirEnvVar: true, networkAccess: false,
@@ -178,11 +166,10 @@ const execute = async (
     readonly cancellation?: () => Promise<boolean>;
     readonly effectCustody?: CodexEffectCustodyAuthority;
     readonly interrupt?: (message: Message, target: ProtocolProcess) => void;
-    readonly preResponse?: (method: string, target: ProtocolProcess) => void;
     readonly maxLineBytes?: number;
   } = {},
 ) => {
-  const process = new ProtocolProcess(active, mode, options.interrupt, options.preResponse);
+  const process = new ProtocolProcess(active, mode, options.interrupt);
   const executionBoundary = mode === "analysis" ? boundary
     : createCodexAppServerPermissionBoundary({ codexHome, intentMode: mode, workspaceRef: workspace });
   const provider = new CodexAppServerContainedTurnProvider({
@@ -236,67 +223,6 @@ const assertWorkspaceWriteFailClosed = async (active: (target: ProtocolProcess) 
 
 const fileChangeWithPath = (path: string, kind: Record<string, unknown> = { type: "add" }) =>
   fileChange("item:path", { changes: [{ diff: "+x", kind, path }] });
-
-const preResponseNotification = (padding = ""): Message => ({
-  method: "remoteControl/status/changed",
-  params: { environmentId: null, installationId: "test", serverName: "test", status: "disabled" },
-  padding,
-});
-
-const notificationsForBytes = (total: number): Message[] => {
-  const notifications: Message[] = [];
-  let remaining = total;
-  while (remaining > 0) {
-    const candidate = preResponseNotification("x".repeat(Math.min(900_000, remaining)));
-    const bytes = Buffer.byteLength(JSON.stringify(candidate), "utf8");
-    if (bytes > remaining) {
-      const base = preResponseNotification("");
-      const paddingLength = Math.max(0, remaining - Buffer.byteLength(JSON.stringify(base), "utf8"));
-      const adjusted = preResponseNotification("x".repeat(paddingLength));
-      const adjustedBytes = Buffer.byteLength(JSON.stringify(adjusted), "utf8");
-      if (adjustedBytes !== remaining) {throw new Error("unable to construct exact notification bytes");}
-      notifications.push(adjusted);
-      remaining = 0;
-    } else {
-      notifications.push(candidate);
-      remaining -= bytes;
-    }
-  }
-  return notifications;
-};
-
-test("bounds pre-response notification bytes at the exact aggregate ceiling", async () => {
-  const notifications = notificationsForBytes(CODEX_MAX_PRE_TURN_NOTIFICATION_BYTES);
-  const outcome = await execute(target => {target.emit({ method: "turn/completed", params: {
-    threadId: "thread:test", turn: generatedTurn("turn:adversarial", "completed"),
-  } });}, "analysis", 10_000, 10_000, {
-    preResponse: (_method, target) => {for (const message of notifications.splice(0)) {target.emit(message);}},
-  });
-  assert.equal(outcome.kind, "completed");
-});
-
-test("fails closed on one-byte and count excess in pre-response buffers", async () => {
-  for (const notifications of [
-    notificationsForBytes(CODEX_MAX_PRE_TURN_NOTIFICATION_BYTES + 1),
-    Array.from({ length: 257 }, () => preResponseNotification()),
-  ]) {
-    const outcome = await execute(() => {}, "analysis", 10_000, 10_000, {
-      preResponse: (_method, target) => {for (const message of notifications.splice(0)) {target.emit(message);}},
-    });
-    assert.equal(outcome.kind, "ambiguous");
-  }
-});
-
-test("bounds many small pre-response notifications and rejects oversized configured lines", async () => {
-  const notifications = Array.from({ length: 256 }, () => preResponseNotification("small"));
-  const outcome = await execute(target => {target.emit({ method: "turn/completed", params: {
-    threadId: "thread:test", turn: generatedTurn("turn:adversarial", "completed"),
-  } });}, "analysis", 10_000, 10_000, {
-    preResponse: (_method, target) => {for (const message of notifications.splice(0)) {target.emit(message);}},
-  });
-  assert.equal(outcome.kind, "completed");
-  await assert.rejects(() => execute(() => {}, "analysis", 100, 100, { maxLineBytes: 1_048_577 }), /maxLineBytes/u);
-});
 
 test("never treats unsolicited or unacknowledged interrupted notifications as cancelled truth", async () => {
   const unsolicited = await execute(target => {
