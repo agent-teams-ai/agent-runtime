@@ -127,6 +127,10 @@ export const changes = Object.freeze([
     id: "strict-provider-settlement-receipt-fixture",
     revision: "ae88bb2498963cd5eb90c7b62917419910cd42fa",
   }),
+  Object.freeze({
+    id: "contained-turn-domain-line-limit-follow-up",
+    revision: "ff7496a89f75794a5bfbec5a425a70adb57d8868",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -137,8 +141,8 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "6c3dc86c204045403af01c2f5750df260bd7298cd011db91c164269ea7b4fe1b",
   }),
   sources: Object.freeze({
-    fileCount: 297,
-    sha256: "4f61a4d1fd9c593643763f81c1341a237601d10ed52f83a0fbea98ebfc20dd54",
+    fileCount: 298,
+    sha256: "e23f5fbc2affae9b62bf490c255592b2d443aea959a979c345ab3470299d8855",
   }),
   tests: Object.freeze({
     fileCount: 129,

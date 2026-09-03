@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "ae88bb2498963cd5eb90c7b62917419910cd42fa",
+  "sourceRevision": "ff7496a89f75794a5bfbec5a425a70adb57d8868",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "7a9a904904b0c81e5a3668a00d5be8165e80b7d6cb19722e1deb635b29754613",
+    "outputSha256": "1b4a26f18f6c1430f48bf8d251a36aa9c0259df45347a09dc4585a27c54ea5ee",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -58,8 +58,8 @@
       "sha256": "6c3dc86c204045403af01c2f5750df260bd7298cd011db91c164269ea7b4fe1b"
     },
     "sources": {
-      "fileCount": 297,
-      "sha256": "4f61a4d1fd9c593643763f81c1341a237601d10ed52f83a0fbea98ebfc20dd54"
+      "fileCount": 298,
+      "sha256": "e23f5fbc2affae9b62bf490c255592b2d443aea959a979c345ab3470299d8855"
     },
     "tests": {
       "fileCount": 129,
@@ -987,6 +987,35 @@
         "files": 1,
         "additions": 12,
         "deletions": 2
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "contained-turn-domain-line-limit-follow-up",
+      "revision": "ff7496a89f75794a5bfbec5a425a70adb57d8868",
+      "files": 2,
+      "additions": 54,
+      "deletions": 30,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 2,
+        "additions": 54,
+        "deletions": 30
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
       },
       "behaviorFixtures": {
         "before": 123,
