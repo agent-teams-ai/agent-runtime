@@ -48,6 +48,12 @@ const receiptMatches = (receipt: DispatchConsumedReceipt, expected: DispatchExpe
   receipt.bindingRevision === expected.bindingRevision && receipt.credentialBindingDigest === expected.credentialBindingDigest &&
   receipt.credentialBindingRef === expected.credentialBindingRef && receipt.credentialGeneration === expected.credentialGeneration &&
   receipt.providerAccountRef === expected.providerAccountRef && receipt.providerRouteRef === expected.providerRouteRef;
+const bindingHeadMatchesExpectation = (head: DispatchBindingHead, expected: DispatchExpectationValue): boolean =>
+  head.acceptedAuthorityDigest === expected.acceptedAuthorityDigest && head.accessRef === expected.accessRef &&
+  head.authorityHeadDigest === expected.authorityHeadDigest && head.bindingDigest === expected.bindingDigest &&
+  head.bindingRevision === expected.bindingRevision && head.credentialBindingDigest === expected.credentialBindingDigest &&
+  head.credentialBindingRef === expected.credentialBindingRef && head.credentialGeneration === expected.credentialGeneration &&
+  head.providerAccountRef === expected.providerAccountRef && head.providerRouteRef === expected.providerRouteRef;
 const settlementReplayMatches = (
   receipt: Extract<DispatchSettlementOutcome, { readonly kind: "settled" }>["receipt"], input: DispatchSettlementCommand,
 ): boolean => canonicalJson({
@@ -124,6 +130,12 @@ const settleInTransaction = async (
     if (replay.kind !== "settled") {return replay;}
     return settlementReplayMatches(replay.receipt, input) ? replay :
       Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });
+  }
+  const rawHead = await transaction.findBindingHead();
+  if (rawHead === undefined) {return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });}
+  const head = verifiedBindingHead(rawHead, selector);
+  if (!bindingHeadMatchesExpectation(head, input.expectedBinding)) {
+    return Object.freeze({ kind: "conflict", reason: "settlement_request_conflict" });
   }
   const rawConsumption = await transaction.findConsumption();
   if (rawConsumption === undefined) {return Object.freeze({ kind: "not_found" });}
