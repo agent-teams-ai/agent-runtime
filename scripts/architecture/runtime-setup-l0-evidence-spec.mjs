@@ -123,6 +123,10 @@ export const changes = Object.freeze([
     id: "darwin-guardian-descriptor-forwarding-fix",
     revision: "990b488c9f83a1490994ef75a6e7c97bb996dd87",
   }),
+  Object.freeze({
+    id: "strict-provider-settlement-receipt-fixture",
+    revision: "ae88bb2498963cd5eb90c7b62917419910cd42fa",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -138,7 +142,7 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   tests: Object.freeze({
     fileCount: 129,
-    sha256: "ea9ff3c9559a9d02b871e2c9a5152f5e27f50bac0996c5749b6a32731490d22c",
+    sha256: "2369ea76d0e8e67e43e3f889ed7d7d8194aa9dc2e2c9e1578ce4aa12a1370ab7",
   }),
 });
 
