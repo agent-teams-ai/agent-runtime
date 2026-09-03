@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "9b996eef3a26f53248038113384a9e367fe13421",
+  "sourceRevision": "20ae786fdb5846081854597646940f773c5dbaf2",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "1d4c410669d65f279f9062f914fa28dedcfbc6e07536a40e239f741ea9326dea",
+    "outputSha256": "8e179d41dc231c4377c067820da155aae47709a21f01b390ed25b8370863d961",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -910,10 +910,10 @@
     },
     {
       "id": "contained-turn-v1-final-integration",
-      "revision": "9b996eef3a26f53248038113384a9e367fe13421",
-      "files": 5,
-      "additions": 56,
-      "deletions": 6,
+      "revision": "20ae786fdb5846081854597646940f773c5dbaf2",
+      "files": 1,
+      "additions": 12,
+      "deletions": 0,
       "binaryFiles": 0,
       "composition": {
         "files": 0,
@@ -921,14 +921,14 @@
         "deletions": 0
       },
       "production": {
-        "files": 3,
-        "additions": 27,
-        "deletions": 2
+        "files": 1,
+        "additions": 12,
+        "deletions": 0
       },
       "tests": {
-        "files": 2,
-        "additions": 29,
-        "deletions": 4
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
       },
       "behaviorFixtures": {
         "before": 123,
