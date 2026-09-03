@@ -21,7 +21,7 @@ const unavailable = (): never => {throw new Error("setup dependency must not be 
 const codexInitialization = Object.freeze({
   platformFamily: "unix" as const,
   platformOs: "linux" as const,
-  userAgent: "agent-runtime/0.150.1 (Ubuntu 24.04; x86_64) synthetic (agent-runtime; codex-app-server-contained-turn:0.150.1)",
+  userAgent: "agent-runtime/0.150.1 (Ubuntu 24.04; x86_64) synthetic (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
 });
 const setupCapabilities = Object.freeze({
   claudeCodeSetup: Object.freeze({
@@ -168,7 +168,7 @@ const createCompositionInput = async (hostCustody: DeterministicCurrentOwnerHost
           platformTarget: Object.freeze({architecture: "x64" as const, platform: "linux" as const}),
           launchRecords: Object.freeze({async resolve(input) {
             return Object.freeze({
-              boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+              boundary: createCodexAppServerPermissionBoundary({codexHome, intentMode: input.intentMode, workspaceRef}),
               credentialOutputInventory: Object.freeze({
                 credentialBindingDigest: input.credentialBindingDigest,
                 credentialGeneration: input.credentialGeneration,

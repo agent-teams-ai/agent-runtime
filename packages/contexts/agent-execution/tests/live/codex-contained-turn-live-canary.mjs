@@ -298,7 +298,7 @@ const run = async () => {
       }
       const credentialOutputInventory = await readBoundCredentialOutputInventory(codexHome, input);
       return Object.freeze({
-        boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+        boundary: createCodexAppServerPermissionBoundary({codexHome, intentMode: input.intentMode, workspaceRef}),
         credentialOutputInventory,
         executablePath, privateRootPath, tmpDir,
       });

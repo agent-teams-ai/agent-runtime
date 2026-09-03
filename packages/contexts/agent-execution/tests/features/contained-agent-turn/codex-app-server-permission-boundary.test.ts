@@ -310,14 +310,14 @@ test("decodes initialize as exact own enumerable plain 0.150.1 data", () => {
     mkdirSync(home, { mode: 0o700 });
     const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
     const exact = { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux",
-      userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)" };
+      userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)" };
     validateCodexInitializeEvidence(exact, boundary, CODEX_APP_SERVER_LINUX_X64_TUPLE);
     const inherited = Object.assign(Object.create({ substituted: true }) as Record<string, unknown>, exact);
     const hidden = { ...exact };
     Object.defineProperty(hidden, "substituted", { enumerable: false, value: true });
     const symbol = { ...exact, [Symbol("substituted")]: true };
     const accessor = { ...exact };
-    Object.defineProperty(accessor, "userAgent", { enumerable: true, get: () => "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)" });
+    Object.defineProperty(accessor, "userAgent", { enumerable: true, get: () => "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)" });
     for (const malformed of [{ ...exact, substituted: true }, inherited, hidden, symbol, accessor]) {
       assert.throws(() => validateCodexInitializeEvidence(
         malformed, boundary, CODEX_APP_SERVER_LINUX_X64_TUPLE,

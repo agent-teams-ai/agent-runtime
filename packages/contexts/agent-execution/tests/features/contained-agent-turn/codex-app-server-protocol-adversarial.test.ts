@@ -105,7 +105,7 @@ class ProtocolProcess implements CustodiedProviderProcess {
   #handshake(message: Message): boolean {
     if (message.method === "initialize") {
       this.emit({ id: message.id, result: {
-        codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)",
+        codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
       } });
       return true;
     }

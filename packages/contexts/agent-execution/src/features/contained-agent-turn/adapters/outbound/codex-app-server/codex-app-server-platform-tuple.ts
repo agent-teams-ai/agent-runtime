@@ -4,10 +4,13 @@ export const CODEX_APP_SERVER_VERSION = "0.150.1";
 export const CODEX_APP_SERVER_PACKAGE_REVISION = "@openai/codex@0.150.1";
 export const CODEX_APP_SERVER_SCHEMA_SHA256 = "8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3";
 export const CODEX_APP_SERVER_BINDINGS_SHA256 = "a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338";
-export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.150.1";
+// Native permission/configuration behavior is part of the adapter contract.
+// Keep the provider package, binary, and schema revisions stable while
+// changing the immutable adapter identity for this qualified behavior.
+export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.150.1+native-permission-config-v2";
 export const CODEX_PERMISSION_PROFILE_ID = "agent-runtime-contained-v1";
 export const CODEX_CAPABILITY_MANIFEST_REVISION =
-  `contained-turn:v1:codex-app-server:0.150.1:schema-${CODEX_APP_SERVER_SCHEMA_SHA256}:bindings-${CODEX_APP_SERVER_BINDINGS_SHA256}:agent-runtime-contained-v1`;
+  `contained-turn:v1:codex-app-server:0.150.1:schema-${CODEX_APP_SERVER_SCHEMA_SHA256}:bindings-${CODEX_APP_SERVER_BINDINGS_SHA256}:agent-runtime-contained-v1:native-permission-config-v2`;
 
 export type CodexAppServerPlatform = "darwin" | "linux";
 export type CodexAppServerArchitecture = "arm64" | "x64";

@@ -166,7 +166,7 @@ export const standardHandshake = (message: Message, process: FakeCodexProcess): 
   if (message.method === "initialize") {
     process.emit({
       id: message.id,
-      result: { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)" },
+      result: { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)" },
     });
     return true;
   }

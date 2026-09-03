@@ -24,7 +24,7 @@ import { codexReceipt } from "../../../dist/features/contained-agent-turn/adapte
 import { boundary } from "../../codex-app-server-contained-turn-provider-fixture.ts";
 
 const linuxUserAgent =
-  "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)";
+  "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)";
 const candidateAuthority = JSON.parse(readFileSync(new URL(
   "../../fixtures/protocol/codex-app-server-0.150.1/manifest.json", import.meta.url,
 ), "utf8")) as {readonly candidateTargets: {readonly "darwin-arm64": {
@@ -70,7 +70,7 @@ test("accepts the two real initialize observations without pinning patch or buil
   validateCodexAppServerUserAgent(linuxUserAgent, CODEX_APP_SERVER_LINUX_X64_TUPLE);
   validateCodexAppServerUserAgent(darwinUserAgent, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE);
   validateCodexAppServerUserAgent(
-    "agent-runtime/0.150.1 (Ubuntu 26.10; x86_64) release.7 (agent-runtime; codex-app-server-contained-turn:0.150.1)",
+    "agent-runtime/0.150.1 (Ubuntu 26.10; x86_64) release.7 (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
     CODEX_APP_SERVER_LINUX_X64_TUPLE,
   );
   validateCodexInitializeEvidence({
@@ -89,7 +89,7 @@ test("rejects hostile, malformed, crossed, prefixed, suffixed, and oversized ini
     linuxUserAgent.replace("Ubuntu", "Mac OS"),
     linuxUserAgent.replace("agent-runtime/", "other-client/"),
     linuxUserAgent.replace("(agent-runtime;", "(other-client;"),
-    linuxUserAgent.replace("codex-app-server-contained-turn:0.150.1", "codex-app-server-contained-turn:other"),
+    linuxUserAgent.replace("codex-app-server-contained-turn:0.150.1+native-permission-config-v2", "codex-app-server-contained-turn:other"),
     `prefix-${linuxUserAgent}`,
     `${linuxUserAgent}-suffix`,
     `${linuxUserAgent}\nprivate-path`,
