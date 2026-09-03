@@ -13,7 +13,12 @@ test("live canary inventories exact credential values and digests without an emp
   try {
     const file = join(root, "auth.json");
     const token = "synthetic-credential-fixture-only";
-    const content = JSON.stringify({tokens: {access_token: token, refresh_token: "synthetic-refresh"}});
+    const content = `{
+  "tokens": {
+    "access_token": "${token}",
+    "refresh_token": "synthetic-refresh"
+  }
+}`;
     await writeFile(file, content, {mode: 0o600});
     const inventory = await readCodexCanaryCredentialInventory(file, 1);
     assert.equal(inventory.credentialBindingDigest, `sha256:${digest(content)}`);
@@ -37,10 +42,17 @@ test("canary credential inventory fails closed on malformed, empty and excessive
   const root = await mkdtemp(join(tmpdir(), "ar-codex-canary-inventory-invalid-"));
   try {
     const file = join(root, "auth.json");
-    for (const content of ["", "null", "[]", "{", "{}", JSON.stringify({token: "x".repeat(4_097)}),
+    for (const content of ["", "null", "[]", "{", "{}", "{\"token\":\"first\",\"token\":\"second\"}",
+      "{\"nested\": [{\"token\":\"first\",\"token\":\"second\"}]}",
+      "{\"nested\": {\"tok\\u0065n\":\"first\",\"token\":\"second\"}}",
+      JSON.stringify({token: "x".repeat(4_097)}),
       JSON.stringify({tokens: Array.from({length: 86}, (_, i) => `synthetic-${i}`)}), " ".repeat(65_537)]) {
       await writeFile(file, content, {mode: 0o600});
-      await assert.rejects(readCodexCanaryCredentialInventory(file, 1), /invalid disposable/u);
+      await assert.rejects(readCodexCanaryCredentialInventory(file, 1), error => {
+        assert.match(error.message, /^invalid disposable Codex credential inventory$/u);
+        assert.doesNotMatch(error.message, /first|second|token|nested/u);
+        return true;
+      });
     }
   } finally {await rm(root, {recursive: true, force: true});}
 });

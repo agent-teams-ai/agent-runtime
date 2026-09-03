@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
+import { parseStrictJson } from "../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/strict-json.js";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const invalid = () => new Error("invalid disposable Codex credential inventory");
@@ -22,7 +23,7 @@ export const readCodexCanaryCredentialInventory = async (path, credentialGenerat
   } finally {await handle.close();}
   if (!Number.isSafeInteger(credentialGeneration) || credentialGeneration < 1) {throw invalid();}
   let parsed;
-  try {parsed = JSON.parse(new TextDecoder("utf-8", {fatal: true}).decode(bytes));}
+  try {parsed = parseStrictJson(bytes);}
   catch {throw invalid();}
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {throw invalid();}
   const values = new Set();
