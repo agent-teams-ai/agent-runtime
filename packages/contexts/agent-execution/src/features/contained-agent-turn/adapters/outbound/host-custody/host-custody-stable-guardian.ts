@@ -103,12 +103,17 @@ process.on("message", message => {
     publishStream("stderr");
     return;
   }
-  const maximumDescriptor = Math.max(2, ...message.inheritedDescriptors);
+  // Cooperative Darwin uses canonical path authority; proof descriptors stay
+  // with the guardian and are not forwarded into the provider spawn.
+  const providerInheritedDescriptors = message.canonicalAuthority === undefined
+    ? message.inheritedDescriptors
+    : [];
+  const maximumDescriptor = Math.max(2, ...providerInheritedDescriptors);
   const stdio = Array.from({ length: maximumDescriptor + 1 }, () => "ignore");
   stdio[0] = "pipe";
   stdio[1] = "pipe";
   stdio[2] = "pipe";
-  for (const descriptor of message.inheritedDescriptors) { stdio[descriptor] = descriptor; }
+  for (const descriptor of providerInheritedDescriptors) { stdio[descriptor] = descriptor; }
   try {
     provider = spawn(message.command, message.arguments, {
       cwd: message.cwd,
