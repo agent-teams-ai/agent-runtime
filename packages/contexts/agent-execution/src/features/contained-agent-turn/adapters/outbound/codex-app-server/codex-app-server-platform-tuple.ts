@@ -6,7 +6,8 @@ export const CODEX_APP_SERVER_SCHEMA_SHA256 = "771c11d73b369e67eb4f59fb2fa3caac3
 export const CODEX_APP_SERVER_BINDINGS_SHA256 = "9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1";
 // Native permission/configuration behavior is part of the adapter contract.
 // Keep the provider package, binary, and schema revisions stable while
-// changing the immutable adapter identity for this qualified behavior.
+// changing the immutable adapter identity for this admitted candidate behavior;
+// retained evidence does not qualify behavior, route, or deployment.
 export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.150.1+native-permission-config-v2";
 export const CODEX_PERMISSION_PROFILE_ID = "agent-runtime-contained-v1";
 export const CODEX_CAPABILITY_MANIFEST_REVISION =

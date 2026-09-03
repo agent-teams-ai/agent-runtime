@@ -1,8 +1,10 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "provenance": {
     "capturedAtUtc": "2026-09-03",
     "generationEnvironment": "brand-new disposable directory with empty mode-0700 HOME/CODEX_HOME/TMPDIR; no credentials, network, app-server turn, or user project",
+    "dependencyAlias": "@openai/codex-linux-x64",
+    "dependencyAliasRevision": "@openai/codex-linux-x64@0.150.1",
     "installedPackage": "@openai/codex@0.150.1-linux-x64",
     "nativeTarget": "x86_64-unknown-linux-musl",
     "binarySha256": "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",

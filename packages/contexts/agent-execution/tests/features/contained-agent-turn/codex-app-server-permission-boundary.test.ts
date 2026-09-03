@@ -460,6 +460,8 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     readonly limitations: { readonly permissionProfileBody: string };
     readonly provenance: {
       readonly binarySha256: string;
+      readonly dependencyAlias: string;
+      readonly dependencyAliasRevision: string;
       readonly experimentalFlagUsed: boolean;
       readonly installedPackage: string;
       readonly nativeTarget: string;
@@ -473,8 +475,10 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     };
   };
   assert.equal(createHash("sha256").update(fixtureBytes).digest("hex"),
-    "85486350f4b585f4b460d970f94cf7132eb070ef8d2cc3d8d8cee7931d3f3351");
-  assert.equal(fixture.schemaVersion, 2);
+    "0e3535c9f1d03c434dd77ba32c4adb58abde28e08d67cf500de32c804f4e037b");
+  assert.equal(fixture.schemaVersion, 3);
+  assert.equal(fixture.provenance.dependencyAlias, "@openai/codex-linux-x64");
+  assert.equal(fixture.provenance.dependencyAliasRevision, "@openai/codex-linux-x64@0.150.1");
   assert.equal(fixture.provenance.installedPackage, "@openai/codex@0.150.1-linux-x64");
   assert.equal(fixture.provenance.nativeTarget, "x86_64-unknown-linux-musl");
   assert.equal(fixture.provenance.binarySha256, CODEX_APP_SERVER_BINARY_SHA256);
@@ -553,6 +557,7 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     readonly artifactBytes: number; readonly artifactSha256: string; readonly binarySha256: string;
     readonly experimentalFlagUsed: boolean;
     readonly generatorCommands: readonly string[]; readonly npmSri: Readonly<Record<string, string>>;
+    readonly dependencyAlias: string; readonly package: string; readonly resolvedPackageTarget: string;
     readonly regenerationVerifier: { readonly executionBinding: string; readonly executionEvidenceField: string;
       readonly externalProof: boolean; readonly runsInStaticTests: boolean };
     readonly generatedRuntimeBinding: { readonly artifact: string; readonly generator: string;
@@ -569,7 +574,11 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     sourceSha256: "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370",
     tarballSha256: "35a87cf024345cf2d9350e5220401c8d3967ff6feee04055a89c73524927c0a6",
   });
-  assert.equal(authorityManifest.schemaVersion, 3);
+  assert.equal(authorityManifest.schemaVersion, 4);
+  assert.equal(authorityManifest.dependencyAlias, fixture.provenance.dependencyAlias);
+  assert.equal(authorityManifest.package, fixture.provenance.dependencyAliasRevision);
+  assert.equal(authorityManifest.package, CODEX_APP_SERVER_LINUX_X64_TUPLE.nativePackageRevision);
+  assert.equal(authorityManifest.resolvedPackageTarget, fixture.provenance.installedPackage);
   assert.equal(authorityManifest.experimentalFlagUsed, true);
   assert.equal(authorityManifest.schemaTreeFileCount, 411);
   assert.equal(authorityManifest.typesTreeFileCount, 812);
@@ -616,7 +625,20 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   assert.match(verifierSource, /skipped-not-external-proof/u);
   assert.match(verifierSource, /assert\.deepEqual\(regenerated, committed/u);
   assert.match(verifierSource, /spawnSync\("\/proc\/self\/fd\/3"/u);
-  assert.match(verifierSource, /generated, "--experimental"/u);
+  assert.match(verifierSource,
+    /runGenerator\(binaryHandle, root, environment, "generate-json-schema", generatedSchema\)/u);
+  assert.match(verifierSource,
+    /runGenerator\(binaryHandle, root, environment, "generate-ts", generatedTypes\)/u);
+  assert.match(verifierSource, /assertTree\("schema", generatedSchema, EXPECTED_TREES\.schema\)/u);
+  assert.match(verifierSource, /assertTree\("types", generatedTypes, EXPECTED_TREES\.types\)/u);
+  assert.match(verifierSource, /assert\.equal\(observation\.fileCount, expected\.fileCount/u);
+  assert.match(verifierSource, /assert\.equal\(observation\.manifestSha256, expected\.manifestSha256/u);
+  assert.match(verifierSource, /fileCount: 411/u);
+  assert.match(verifierSource, /fileCount: 812/u);
+  assert.match(verifierSource, new RegExp(CODEX_APP_SERVER_SCHEMA_SHA256, "u"));
+  assert.match(verifierSource, new RegExp(CODEX_APP_SERVER_BINDINGS_SHA256, "u"));
+  assert.match(verifierSource, /\["app-server", generator, "--out", output, "--experimental"\]/u);
+  assert.match(verifierSource, /assert\.equal\(entry\.isFile\(\), true/u);
   assert.match(verifierSource, /stdio: \["ignore", "pipe", "pipe", binaryHandle\.fd\]/u);
   assert.match(verifierSource, /executedBinarySha256/u);
   assert.doesNotMatch(verifierSource, /spawnSync\(binary,/u);
