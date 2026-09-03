@@ -38,10 +38,10 @@
       "packageRevision": "@openai/codex@0.150.1",
       "packageIntegrity": "sha512-knrbhpJH3mEULAVStcZW4F5WEt9MQhBj6KFOonBSIUGTLcHlu9CE7FRmr95E33y94+sWNZSeVBBV/kYvlfgxkQ==",
       "binaryRevision": "sha256:abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
-      "schemaRevision": "sha256:8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3",
-      "typescriptRevision": "sha256:a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338",
+      "schemaRevision": "sha256:771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97",
+      "typescriptRevision": "sha256:9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1",
       "evidenceFixture": "experiments/runtime-profile-behavior/fixtures/linux-codex-app-server-0.150.1-static-summary.json",
-      "evidenceFixtureDigest": "sha256:930387719d7817bc0d8d99cb87aa0c3b0611ed2e5339346b92edec05dacaf923",
+      "evidenceFixtureDigest": "sha256:2110a6103a2db616225afa0a66ac508ff5436df0f9d6cf3eba38c397d0116d17",
       "evidencePlatform": "linux-x64",
       "qualification": "candidate_static_evidence_only"
     },

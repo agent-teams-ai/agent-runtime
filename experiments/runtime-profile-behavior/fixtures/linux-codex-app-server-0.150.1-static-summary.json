@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "campaign": "linux-codex-app-server-static-characterization",
-  "date": "2026-08-29",
+  "date": "2026-09-03",
   "scope": {
     "platform": "Linux 6.8.0-138-generic x86_64 glibc 2.39",
     "syntheticCodexHomeOnly": true,
@@ -18,8 +18,14 @@
     "nativePackageIntegrity": "sha512-B3Bu5MF/G9qFhbSMrdyZz9ocknXOo45DnOdWrREJaxWTjiuUO1ogoDR0/ttdc29JRFkbbXs3aC+Td8vIx3X0oA==",
     "nativeTarget": "x86_64-unknown-linux-musl",
     "nativeBinarySha256": "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
-    "generatedV2SchemaSha256": "8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3",
-    "generatedV2TypesSha256": "a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338"
+    "generatedV2SchemaSha256": "771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97",
+    "generatedV2SchemaFileCount": 411,
+    "generatedV2TypesSha256": "9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1",
+    "generatedV2TypesFileCount": 812,
+    "generationCommands": {
+      "generateJsonSchema": ["generate-json-schema", "--experimental"],
+      "generateTypeScript": ["generate-ts", "--experimental"]
+    }
   },
   "stableV2Surface": {
     "initialize": true,
@@ -29,7 +35,16 @@
     "turnCompleted": true,
     "assistantOutputDelta": true,
     "serverRequests": true,
-    "generatedWithoutExperimentalApis": true
+    "generatedWithoutExperimentalApis": false,
+    "generatedWithExperimentalApis": true,
+    "experimentalAdapterDependencies": [
+      "ActivePermissionProfile",
+      "ThreadStartParams.permissions",
+      "TurnStartParams.permissions",
+      "ConfigLayer",
+      "ConfigLayerMetadata",
+      "ThreadStartResponse.activePermissionProfile"
+    ]
   },
   "assertions": {
     "exactWrapperRevision": true,
@@ -37,6 +52,10 @@
     "exactBinaryDigest": true,
     "generatedSchemaCaptured": true,
     "generatedTypesCaptured": true,
-    "behaviorQualified": false
+    "exactExperimentalProtocolDependencyShapes": true,
+    "staticCandidateEvidenceOnly": true,
+    "behaviorQualified": false,
+    "routeQualified": false,
+    "deploymentQualified": false
   }
 }
