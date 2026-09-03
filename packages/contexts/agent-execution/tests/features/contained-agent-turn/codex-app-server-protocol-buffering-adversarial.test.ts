@@ -88,6 +88,7 @@ class BufferingProcess implements CustodiedProviderProcess {
       const message = JSON.parse(line) as Message;
       if (this.#handshake(message)) {continue;}
       if (message.method === "turn/start") {
+        this.#preResponse("turn/start", this);
         this.emit({ id: message.id, result: { turn: generatedTurn("turn:adversarial", "inProgress") } });
         this.emit({
           method: "turn/started",
@@ -255,4 +256,18 @@ test("bounds many small pre-response notifications and rejects oversized configu
   });
   assert.equal(outcome.kind, "completed");
   await assert.rejects(() => execute(() => {}, 100, 100, { maxLineBytes: 1_048_577 }), /maxLineBytes/u);
+});
+
+test("shares the notification count budget across split-phase 256-plus-1 buffering", async () => {
+  for (const [handshakeCount, expectedKind] of [[255, "completed"], [256, "ambiguous"]] as const) {
+    const outcome = await execute(target => {target.emit({ method: "turn/completed", params: {
+      threadId: "thread:test", turn: generatedTurn("turn:adversarial", "completed"),
+    } });}, 10_000, 10_000, {
+      preResponse: (method, target) => {
+        const count = method === "thread/start" ? handshakeCount : method === "turn/start" ? 1 : 0;
+        for (let index = 0; index < count; index += 1) {target.emit(preResponseNotification());}
+      },
+    });
+    assert.equal(outcome.kind, expectedKind);
+  }
 });

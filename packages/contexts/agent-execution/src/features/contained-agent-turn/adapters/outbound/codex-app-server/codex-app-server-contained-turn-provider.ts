@@ -78,6 +78,11 @@ export const CODEX_MAX_PRE_TURN_NOTIFICATION_BYTES = 16_777_216;
 const DEFAULT_MAX_ACTIVE_NOTIFICATION_BYTES = 16_777_216;
 const DEFAULT_MAX_ACTIVE_NOTIFICATIONS = 16_384;
 
+interface CodexPreTurnNotificationBudget {
+  bytes: number;
+  count: number;
+}
+
 export interface CodexAppServerContainedTurnProviderOptions {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly cancellationPollMs?: number;
@@ -209,7 +214,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     request: JsonRecord,
     afterTurnRequest: boolean,
     notifications?: JsonRecord[],
-    bufferedBytes?: { value: number },
+    preTurnBudget?: CodexPreTurnNotificationBudget,
   ): Promise<unknown> {
     const requestId = String(request.id);
     const deadline = deadlineAfter(this.#requestTimeoutMs);
@@ -241,14 +246,17 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       if (notifications === undefined) {
         throw new CodexAppServerProtocolError("Codex App Server emitted an unexpected pre-response notification", afterTurnRequest);
       }
-      if (notifications.length >= MAX_PRE_TURN_NOTIFICATIONS) {
+      if (preTurnBudget !== undefined && preTurnBudget.count >= MAX_PRE_TURN_NOTIFICATIONS) {
         throw new CodexAppServerProtocolError("Codex App Server exceeded the pre-turn notification bound", afterTurnRequest);
       }
       const messageBytes = codexMessageByteLength(message);
-      if (bufferedBytes !== undefined && bufferedBytes.value + messageBytes > this.#maxPreTurnNotificationBytes) {
+      if (preTurnBudget !== undefined && preTurnBudget.bytes + messageBytes > this.#maxPreTurnNotificationBytes) {
         throw new CodexAppServerProtocolError("Codex App Server exceeded the pre-turn notification byte bound", afterTurnRequest);
       }
-      if (bufferedBytes !== undefined) {bufferedBytes.value += messageBytes;}
+      if (preTurnBudget !== undefined) {
+        preTurnBudget.bytes += messageBytes;
+        preTurnBudget.count += 1;
+      }
       notifications.push(message);
     }
   }
@@ -381,7 +389,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     }
     const stderrDrain = drainCodexStderr(process);
     const preTurnNotifications: JsonRecord[] = [];
-    const preTurnNotificationBytes = { value: 0 };
+    const preTurnBudget: CodexPreTurnNotificationBudget = { bytes: 0, count: 0 };
     let turnRequestWritten = false;
     let protocolTerminalObserved = false;
     let threadId: string | undefined; let turnId: string | undefined;
@@ -423,7 +431,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
             version: this.#platformTuple.adapterRevision,
           },
         },
-      }, false, preTurnNotifications, preTurnNotificationBytes);
+      }, false, preTurnNotifications, preTurnBudget);
       validateCodexInitializeEvidence(initializeResult, this.#boundary, this.#platformTuple);
       await beforeDeadline(
         process.write(encode({ method: "initialized" })),
@@ -434,13 +442,13 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         id: `${input.attemptId}:config-read`,
         method: "config/read",
         params: { cwd: input.workspaceRef, includeLayers: true },
-      }, false, preTurnNotifications, preTurnNotificationBytes);
+      }, false, preTurnNotifications, preTurnBudget);
       validateCodexConfigEvidence(configResult, this.#boundary);
       const profileResult = await this.#request(process, reader, {
         id: `${input.attemptId}:permission-profiles`,
         method: "permissionProfile/list",
         params: { cwd: input.workspaceRef },
-      }, false, preTurnNotifications, preTurnNotificationBytes);
+      }, false, preTurnNotifications, preTurnBudget);
       validateCodexPermissionProfileEvidence(profileResult, this.#boundary);
       const threadResult = await this.#request(process, reader, {
         id: `${input.attemptId}:thread-start`,
@@ -452,7 +460,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           ephemeral: true,
           permissions: this.#boundary.permissionProfileId,
         },
-      }, false, preTurnNotifications, preTurnNotificationBytes);
+      }, false, preTurnNotifications, preTurnBudget);
       threadId = validateCodexThreadStartEvidence(threadResult, this.#boundary, input.intent.mode);
       for (const message of preTurnNotifications) {
         observeCodexActiveProfileEvidence(message, threadId, this.#boundary, input.intent.mode);
@@ -469,7 +477,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           permissions: this.#boundary.permissionProfileId,
           threadId,
         },
-      }, true, bufferedTurnNotifications, preTurnNotificationBytes);
+      }, true, bufferedTurnNotifications, preTurnBudget);
       turnId = parseCodexTurn(turnResult).id;
       const activeNotifications: JsonRecord[] = [];
       for (const message of bufferedTurnNotifications) {
