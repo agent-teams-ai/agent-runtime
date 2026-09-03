@@ -15,6 +15,7 @@ import type { CodexEffectCustodyAuthority } from "../../../dist/features/contain
 import type { CustodiedProviderProcess } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { agentMessage, commandExecution, emitAgentCompleted, emitAgentStarted, fileChange,
   generatedTurn } from "../../codex-app-server-test-messages.mjs";
+import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./codex-permission-profile-fixture.ts";
 
 type Message = Record<string, unknown>;
 
@@ -113,12 +114,12 @@ class ProtocolProcess implements CustodiedProviderProcess {
       this.emit({ id: message.id, result: {
         config: {
           default_permissions: boundary.permissionProfileId,
-          permissions: { [boundary.permissionProfileId]: boundary.permissionProfile },
+          permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(codexHome) },
         },
         layers: [
           { config: {}, disabledReason: null, name: { file: "/opt/codex/defaults.toml", type: "packagedDefaults" }, version: "1" },
           {
-            config: { permissions: { [boundary.permissionProfileId]: boundary.permissionProfile } },
+            config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(codexHome) } },
             disabledReason: null,
             name: { file: `${codexHome}/config.toml`, profile: null, type: "user" },
             version: "2",

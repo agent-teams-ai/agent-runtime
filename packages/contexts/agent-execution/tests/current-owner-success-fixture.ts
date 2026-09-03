@@ -1,3 +1,5 @@
+import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./features/contained-agent-turn/codex-permission-profile-fixture.ts";
+
 type Message = Record<string, any>;
 
 export interface CodexInitializeFixture {
@@ -158,11 +160,7 @@ class CodexProtocolProcess {
     const codexHome = this.#plan.codexHome as string;
     const permissionProfileId = this.#plan.permissionProfileId as string;
     const workspaceRef = this.#plan.workspaceRef as string;
-    const permissionProfile = {
-      extends: ":workspace",
-      file_system: {entries: [{access: "deny", path: codexHome}]},
-      network: {enabled: false},
-    };
+    const permissionProfile = codexEffectivePermissionProfile(codexHome);
     if (message.method === "initialize") {
       this.#emit({id: message.id, result: {codexHome, ...this.#initialization}});
     } else if (message.method === "config/read") {
@@ -170,7 +168,7 @@ class CodexProtocolProcess {
         config: {default_permissions: permissionProfileId, permissions: {[permissionProfileId]: permissionProfile}},
         layers: [
           {config: {}, disabledReason: null, name: {file: "/opt/codex/defaults.toml", type: "packagedDefaults"}, version: "1"},
-          {config: {permissions: {[permissionProfileId]: permissionProfile}}, disabledReason: null,
+          {config: {permissions: {[permissionProfileId]: codexUserPermissionProfile(codexHome)}}, disabledReason: null,
             name: {file: `${codexHome}/config.toml`, profile: null, type: "user"}, version: "2"},
           {config: {default_permissions: permissionProfileId}, disabledReason: null,
             name: {type: "sessionFlags"}, version: "3"},

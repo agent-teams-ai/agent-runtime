@@ -15,6 +15,7 @@ import {
 import { CodexAppServerContainedTurnProvider } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
 import type { CustodiedProviderProcess } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { emitTurnStarted, generatedTurn } from "./codex-app-server-test-messages.mjs";
+import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./features/contained-agent-turn/codex-permission-profile-fixture.ts";
 
 export type Message = Record<string, unknown>;
 interface FakeCodexProcessBehavior {
@@ -137,12 +138,12 @@ export class FakeCodexProcess implements CustodiedProviderProcess {
 export const exactConfigResult = (): Message => ({
   config: {
     default_permissions: boundary.permissionProfileId,
-    permissions: { [boundary.permissionProfileId]: boundary.permissionProfile },
+    permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(boundary.codexHome) },
   },
   layers: [
     { config: {}, disabledReason: null, name: { file: "/opt/codex/defaults.toml", type: "packagedDefaults" }, version: "1" },
     {
-      config: { permissions: { [boundary.permissionProfileId]: boundary.permissionProfile } },
+      config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(boundary.codexHome) } },
       disabledReason: null,
       name: { file: `${boundary.codexHome}/config.toml`, profile: null, type: "user" },
       version: "2",

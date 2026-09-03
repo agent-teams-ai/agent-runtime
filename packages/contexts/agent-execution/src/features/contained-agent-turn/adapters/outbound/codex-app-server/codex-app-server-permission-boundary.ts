@@ -191,7 +191,57 @@ export const createCodexAppServerPermissionBoundary = (input: {
 export const isExactCodexPermissionProfile = (
   actual: unknown,
   boundary: CodexAppServerPermissionBoundary,
-): boolean => canonicalCodexJson(actual) === canonicalCodexJson(boundary.permissionProfile);
+): boolean => {
+  return normalizeCodexProviderPermissionProfile(actual, boundary) !== undefined;
+};
+
+/**
+ * Codex's config/read response is not the same shape as our internal policy.
+ * Keep that wire translation in this adapter and
+ * accept only the exact 0.150.1 response shape.  In particular, do not
+ * silently accept new provider fields: a changed policy shape must fail
+ * closed until it is qualified.
+ */
+const CODEX_PROVIDER_NETWORK_KEYS = [
+  "allow_local_binding", "allow_upstream_proxy", "dangerously_allow_all_unix_sockets",
+  "dangerously_allow_non_loopback_proxy", "domains", "enable_socks5", "enable_socks5_udp",
+  "enabled", "mitm", "mode", "proxy_url", "socks_url", "unix_sockets",
+] as const;
+
+const normalizeCodexProviderPermissionProfile = (
+  actual: unknown,
+  boundary: CodexAppServerPermissionBoundary,
+): CodexAppServerPermissionBoundary["permissionProfile"] | undefined => {
+  if (!isCodexRecord(actual) || !hasExactKeys(actual, [
+    "description", "extends", "filesystem", "network", "workspace_roots",
+  ]) || actual.description !== null || actual.extends !== boundary.permissionProfile.extends
+    || actual.workspace_roots !== null || !isCodexRecord(actual.filesystem)
+    || !isCodexRecord(actual.network)) {return undefined;}
+
+  const filesystem = actual.filesystem;
+  if (!hasExactKeys(filesystem, [boundary.codexHome, "glob_scan_max_depth"])
+    || filesystem[boundary.codexHome] !== "deny" || filesystem.glob_scan_max_depth !== null) {
+    return undefined;
+  }
+  const network = actual.network;
+  if (!hasExactKeys(network, CODEX_PROVIDER_NETWORK_KEYS)
+    || network.enabled !== false
+    || CODEX_PROVIDER_NETWORK_KEYS.some(key => key !== "enabled" && network[key] !== null)) {
+    return undefined;
+  }
+  return boundary.permissionProfile;
+};
+
+/** User layers retain raw TOML fields; effective config materializes nullable defaults. */
+const isExactCodexUserPermissionProfile = (
+  actual: unknown,
+  boundary: CodexAppServerPermissionBoundary,
+): boolean => isCodexRecord(actual) && hasExactKeys(actual, ["extends", "filesystem", "network"])
+  && actual.extends === boundary.permissionProfile.extends
+  && isCodexRecord(actual.filesystem) && hasExactKeys(actual.filesystem, [boundary.codexHome])
+  && actual.filesystem[boundary.codexHome] === "deny"
+  && isCodexRecord(actual.network) && hasExactKeys(actual.network, ["enabled"])
+  && actual.network.enabled === false;
 
 const evidenceError = (message: string): Error => new Error(`Codex permission evidence rejected: ${message}`);
 
@@ -254,7 +304,7 @@ const validateUserLayer = (
   const name = layer.name as CodexJsonRecord;
   const layerProfiles = (layer.config as CodexJsonRecord).permissions;
   if (name.file !== expectedConfigFile || name.profile !== null || !isCodexRecord(layerProfiles)
-    || !isExactCodexPermissionProfile(layerProfiles[boundary.permissionProfileId], boundary)) {
+    || !isExactCodexUserPermissionProfile(layerProfiles[boundary.permissionProfileId], boundary)) {
     throw evidenceError("user config layer substituted the permission policy");
   }
 };

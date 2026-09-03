@@ -9,6 +9,7 @@ import {
   resolveCanaryExecutionProvenance,
 } from "./provider-candidate-evidence-envelope.mjs";
 import { runContainedTurnLiveCanaryLifecycle } from "./contained-turn-live-canary-lifecycle.mjs";
+import { readCodexCanaryCredentialInventory } from "./codex-canary-credential-inventory.mjs";
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const requiredEnvironment = name => {
@@ -203,6 +204,16 @@ const prepareCandidateEvidence = (platformTuple, executionProvenance) => {
   });
 };
 
+const readBoundCredentialOutputInventory = async (codexHome, input) => {
+  const inventory = await readCodexCanaryCredentialInventory(
+    join(codexHome, "auth.json"), input.credentialGeneration,
+  );
+  if (inventory.credentialBindingDigest !== input.credentialBindingDigest) {
+    throw new Error("disposable Codex credential binding changed before launch");
+  }
+  return inventory;
+};
+
 const run = async () => {
   const platformTarget = exactPlatformTarget();
   const executionProvenance = await resolveCandidateExecution();
@@ -233,7 +244,8 @@ const run = async () => {
   assert.equal(suppliedExecutableSha256, platformTuple.binarySha256);
   assert.equal(sha256(await readFile(executablePath)), platformTuple.binarySha256);
 
-  const credentialBindingDigest = `sha256:${sha256(await readFile(join(codexHome, "auth.json")))}`;
+  const credentialInventory = await readCodexCanaryCredentialInventory(join(codexHome, "auth.json"), 1);
+  const credentialBindingDigest = credentialInventory.credentialBindingDigest;
   const providerAccessSnapshot = Object.freeze({
     accessRef: "access:codex-live-canary", credentialBindingDigest,
     credentialBindingRef: "credential-binding:codex-live-canary", credentialGeneration: 1,
@@ -284,8 +296,10 @@ const run = async () => {
         assert.equal(input.workspaceAuthority.descriptorPath, workspaceRef);
         assert.equal(input.workspaceAuthority.identity.mountId, "darwin-statfs:unqualified-candidate");
       }
+      const credentialOutputInventory = await readBoundCredentialOutputInventory(codexHome, input);
       return Object.freeze({
         boundary: createCodexAppServerPermissionBoundary({codexHome, workspaceRef}),
+        credentialOutputInventory,
         executablePath, privateRootPath, tmpDir,
       });
     }}),

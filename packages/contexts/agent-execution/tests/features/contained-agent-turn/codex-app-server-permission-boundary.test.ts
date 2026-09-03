@@ -5,6 +5,7 @@ import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./codex-permission-profile-fixture.ts";
 
 import {
   CODEX_APP_SERVER_BINDINGS_SHA256,
@@ -342,11 +343,11 @@ test("rejects unknown keys throughout config and profile evidence shapes", () =>
     };
     const exactConfig = {
       config: { default_permissions: boundary.permissionProfileId, permissions: {
-        [boundary.permissionProfileId]: boundary.permissionProfile,
+        [boundary.permissionProfileId]: codexEffectivePermissionProfile(home),
       } },
       layers: [
         { config: {}, disabledReason: null, name: layerNames.packaged, version: "1" },
-        { config: { permissions: { [boundary.permissionProfileId]: boundary.permissionProfile } },
+        { config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(home) } },
           disabledReason: null, name: layerNames.user, version: "2" },
         { config: { default_permissions: boundary.permissionProfileId }, disabledReason: null,
           name: layerNames.session, version: "3" },
@@ -357,6 +358,40 @@ test("rejects unknown keys throughout config and profile evidence shapes", () =>
       },
     };
     validateCodexConfigEvidence(exactConfig, boundary);
+    const effective = codexEffectivePermissionProfile(home);
+    const user = codexUserPermissionProfile(home);
+    const invalidEffective: unknown[] = [
+      undefined, null, boundary.permissionProfile, user,
+      { ...effective, substituted: true },
+      { ...effective, description: "unqualified" },
+      { ...effective, workspace_roots: [workspace] },
+      { ...effective, filesystem: { ...effective.filesystem, glob_scan_max_depth: 10 } },
+      { ...effective, filesystem: { glob_scan_max_depth: null, [workspace]: "deny" } },
+      { ...effective, filesystem: { ...effective.filesystem, [home]: "read" } },
+      { ...effective, network: { ...effective.network, enabled: true } },
+      { ...effective, network: { ...effective.network, allow_local_binding: true } },
+      { ...effective, network: { enabled: false } },
+    ];
+    for (const profile of invalidEffective) {
+      assert.throws(() => validateCodexConfigEvidence({ ...exactConfig,
+        config: { ...exactConfig.config, permissions: { [boundary.permissionProfileId]: profile } },
+      }, boundary), /rejected/u);
+    }
+    const invalidUsers: unknown[] = [
+      undefined, null, boundary.permissionProfile, effective,
+      { ...user, substituted: true },
+      { ...user, filesystem: { [workspace]: "deny" } },
+      { ...user, filesystem: { [home]: "read" } },
+      { ...user, network: { enabled: true } },
+      { ...user, network: { enabled: false, domains: ["unqualified.invalid"] } },
+    ];
+    for (const profile of invalidUsers) {
+      assert.throws(() => validateCodexConfigEvidence({ ...exactConfig,
+        layers: exactConfig.layers.map(layer => layer.name.type === "user"
+          ? { ...layer, config: { permissions: { [boundary.permissionProfileId]: profile } } } : layer),
+      }, boundary), /rejected/u);
+    }
+
     const firstLayer = exactConfig.layers[0]!;
     for (const malformed of [
       { ...exactConfig, extra: true },

@@ -5,6 +5,7 @@ import {
   CodexAppServerContainedTurnProvider,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
 import { agentMessage, commandExecution, emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../codex-app-server-test-messages.mjs";
+import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./codex-permission-profile-fixture.ts";
 import {
   FakeCodexProcess,
   boundary,
@@ -386,10 +387,10 @@ test("rejects project config substitution before creating a Codex thread or turn
         result: {
           config: {
             default_permissions: boundary.permissionProfileId,
-            permissions: { [boundary.permissionProfileId]: boundary.permissionProfile },
+            permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(boundary.codexHome) },
           },
           layers: [{
-            config: { permissions: { [boundary.permissionProfileId]: boundary.permissionProfile } },
+            config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(boundary.codexHome) } },
             disabledReason: null,
             name: { dotCodexFolder: `${boundary.workspaceRef}/.codex`, type: "project" },
             version: "hostile",
