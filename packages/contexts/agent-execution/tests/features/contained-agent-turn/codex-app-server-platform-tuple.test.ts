@@ -48,11 +48,11 @@ test("pins the exact experimental Codex contract and immutable capability identi
   assert.equal(CODEX_APP_SERVER_ADAPTER_REVISION,
     "codex-app-server-contained-turn:0.150.1+native-permission-config-v2");
   assert.equal(CODEX_APP_SERVER_SCHEMA_SHA256,
-    "771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97");
+    "9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56");
   assert.equal(CODEX_APP_SERVER_BINDINGS_SHA256,
-    "9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1");
+    "3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc");
   assert.equal(CODEX_CAPABILITY_MANIFEST_REVISION,
-    "contained-turn:v1:codex-app-server:0.150.1:schema-771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97:bindings-9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1:agent-runtime-contained-v1:native-permission-config-v2");
+    "contained-turn:v1:codex-app-server:0.150.1:schema-9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56:bindings-3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc:agent-runtime-contained-v1:native-permission-config-v2");
   assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.protocolRevision, CODEX_CAPABILITY_MANIFEST_REVISION);
   assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.protocolRevision, CODEX_CAPABILITY_MANIFEST_REVISION);
 });

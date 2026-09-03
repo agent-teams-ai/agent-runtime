@@ -452,6 +452,21 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   );
   const fixtureBytes = readFileSync(fixtureUrl);
   const fixture = JSON.parse(fixtureBytes.toString("utf8")) as {
+    readonly configLayerEvidence: {
+      readonly jsonSchema: {
+        readonly disabledReason: {readonly required: false; readonly types: readonly ["string", "null"]};
+        readonly required: readonly ["config", "name", "version"];
+        readonly source: string;
+        readonly sourceSha256: string;
+      };
+      readonly typeScript: {
+        readonly disabledReasonRequired: true;
+        readonly fragment: string;
+        readonly source: string;
+        readonly sourceSha256: string;
+      };
+      readonly wireValidationBasis: string;
+    };
     readonly schemaVersion: number;
     readonly generatedTypeFragments: readonly {
       readonly fragment: string; readonly fragmentPurpose?: string;
@@ -475,8 +490,8 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     };
   };
   assert.equal(createHash("sha256").update(fixtureBytes).digest("hex"),
-    "0e3535c9f1d03c434dd77ba32c4adb58abde28e08d67cf500de32c804f4e037b");
-  assert.equal(fixture.schemaVersion, 3);
+    "e692b97c71ce58c3ef2bb3ea109bc33bcd624768ac3cac1de520971da66aa7fb");
+  assert.equal(fixture.schemaVersion, 4);
   assert.equal(fixture.provenance.dependencyAlias, "@openai/codex-linux-x64");
   assert.equal(fixture.provenance.dependencyAliasRevision, "@openai/codex-linux-x64@0.150.1");
   assert.equal(fixture.provenance.installedPackage, "@openai/codex@0.150.1-linux-x64");
@@ -492,7 +507,25 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   assert.equal(fixture.provenance.schemaTreeManifestSha256, CODEX_APP_SERVER_SCHEMA_SHA256);
   assert.equal(fixture.provenance.typesTreeManifestSha256, CODEX_APP_SERVER_BINDINGS_SHA256);
   assert.equal(fixture.provenance.treeManifestAlgorithm,
-    "sha256 of the byte stream emitted by sha256sum over all regular files sorted by relative path without a leading ./");
+    "SHA-256 of the concatenated UTF-8 records `<lowercase file SHA-256>  <relative path>\\n` for every regular file; "
+    + "relative paths have no leading `./`, contain neither backslash nor LF, and are sorted lexicographically "
+    + "by unsigned UTF-8 bytes "
+    + "(the order returned by Buffer.compare(Buffer.from(path, \"utf8\")))");
+  assert.deepEqual(fixture.configLayerEvidence.jsonSchema, {
+    disabledReason: { required: false, types: ["string", "null"] },
+    required: ["config", "name", "version"],
+    source: "v2/ConfigReadResponse.json",
+    sourceSha256: "2de702bfaedcf8f4362b0122299ae412bdc0c244564a376a30fc9624c7df2514",
+  });
+  assert.deepEqual(fixture.configLayerEvidence.typeScript, {
+    disabledReasonRequired: true,
+    fragment: "export type ConfigLayer = { name: ConfigLayerSource, version: string, config: JsonValue, disabledReason: string | null, };",
+    source: "v2/ConfigLayer.ts",
+    sourceSha256: "24d1d2c7e0c774e0df55d767bb6d1874f92776daa96f2856f184a296de203161",
+  });
+  assert.match(fixture.configLayerEvidence.wireValidationBasis, /follows the generated JSON Schema/u);
+  assert.match(fixture.configLayerEvidence.wireValidationBasis, /observed Codex 0\.150\.1 wire/u);
+  assert.match(fixture.configLayerEvidence.wireValidationBasis, /TypeScript rendering is retained as contradictory/u);
   assert.deepEqual(fixture.generatedTypeFragments.map(({ fragment, source, sourceSha256 }) =>
     ({ fragment, source, sourceSha256 })), [
     { source: "v2/ActivePermissionProfile.ts",
@@ -639,6 +672,8 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   assert.match(verifierSource, new RegExp(CODEX_APP_SERVER_BINDINGS_SHA256, "u"));
   assert.match(verifierSource, /\["app-server", generator, "--out", output, "--experimental"\]/u);
   assert.match(verifierSource, /assert\.equal\(entry\.isFile\(\), true/u);
+  assert.match(verifierSource,
+    /Buffer\.from\(left\.relativePath, "utf8"\)\.compare\(Buffer\.from\(right\.relativePath, "utf8"\)\)/u);
   assert.match(verifierSource, /stdio: \["ignore", "pipe", "pipe", binaryHandle\.fd\]/u);
   assert.match(verifierSource, /executedBinarySha256/u);
   assert.doesNotMatch(verifierSource, /spawnSync\(binary,/u);

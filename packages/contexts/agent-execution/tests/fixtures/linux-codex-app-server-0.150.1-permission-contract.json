@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "provenance": {
     "capturedAtUtc": "2026-09-03",
     "generationEnvironment": "brand-new disposable directory with empty mode-0700 HOME/CODEX_HOME/TMPDIR; no credentials, network, app-server turn, or user project",
@@ -12,10 +12,10 @@
     "typesCommand": "codex app-server generate-ts --out <disposable-root>/generated-experimental --experimental",
     "experimentalFlagUsed": true,
     "schemaTreeFileCount": 411,
-    "schemaTreeManifestSha256": "771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97",
+    "schemaTreeManifestSha256": "9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56",
     "typesTreeFileCount": 812,
-    "typesTreeManifestSha256": "9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1",
-    "treeManifestAlgorithm": "sha256 of the byte stream emitted by sha256sum over all regular files sorted by relative path without a leading ./"
+    "typesTreeManifestSha256": "3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc",
+    "treeManifestAlgorithm": "SHA-256 of the concatenated UTF-8 records `<lowercase file SHA-256>  <relative path>\\n` for every regular file; relative paths have no leading `./`, contain neither backslash nor LF, and are sorted lexicographically by unsigned UTF-8 bytes (the order returned by Buffer.compare(Buffer.from(path, \"utf8\")))"
   },
   "limitations": {
     "candidateStatus": "pinned candidate and admitted implementation tuple; not qualification-registry qualified",
@@ -23,6 +23,31 @@
     "nodePathToctou": "lstat/realpath endpoint comparisons cannot prove continuous interval custody and cannot detect a transient substitution restored between observations",
     "authoritativeContainment": "Host sandbox/mount/guardian custody plus workspace and artifact closure receipts; never Codex item pathnames",
     "permissionProfileBody": "Codex 0.150.1 generates no PermissionProfile body type. The default_permissions and permissions bodies used by this adapter are admitted only through Config's open JSON intersection and are therefore runtime-validated adapter assumptions, not generated named body shapes."
+  },
+  "configLayerEvidence": {
+    "jsonSchema": {
+      "source": "v2/ConfigReadResponse.json",
+      "sourceSha256": "2de702bfaedcf8f4362b0122299ae412bdc0c244564a376a30fc9624c7df2514",
+      "required": [
+        "config",
+        "name",
+        "version"
+      ],
+      "disabledReason": {
+        "required": false,
+        "types": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "typeScript": {
+      "source": "v2/ConfigLayer.ts",
+      "sourceSha256": "24d1d2c7e0c774e0df55d767bb6d1874f92776daa96f2856f184a296de203161",
+      "fragment": "export type ConfigLayer = { name: ConfigLayerSource, version: string, config: JsonValue, disabledReason: string | null, };",
+      "disabledReasonRequired": true
+    },
+    "wireValidationBasis": "Runtime wire shape follows the generated JSON Schema, while the admissible active-evidence subset follows the observed Codex 0.150.1 wire: omitted or null disabledReason is accepted, any non-null string denotes a disabled layer and is rejected, and non-string values are malformed and rejected. The generated TypeScript rendering is retained as contradictory generator evidence and does not make the wire field required."
   },
   "generatedTypeFragments": [
     {
@@ -40,7 +65,8 @@
     {
       "source": "v2/ConfigLayer.ts",
       "sourceSha256": "24d1d2c7e0c774e0df55d767bb6d1874f92776daa96f2856f184a296de203161",
-      "fragment": "export type ConfigLayer = { name: ConfigLayerSource, version: string, config: JsonValue, disabledReason: string | null, };"
+      "fragment": "export type ConfigLayer = { name: ConfigLayerSource, version: string, config: JsonValue, disabledReason: string | null, };",
+      "fragmentPurpose": "The generated TypeScript renders disabledReason as required, unlike the generated JSON Schema and observed 0.150.1 wire."
     },
     {
       "source": "v2/ConfigLayerMetadata.ts",

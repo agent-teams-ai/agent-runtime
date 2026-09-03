@@ -9,11 +9,11 @@ const EXPECTED_SOURCE_SHA256 = "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe56
 const EXPECTED_TREES = Object.freeze({
   schema: Object.freeze({
     fileCount: 411,
-    manifestSha256: "771c11d73b369e67eb4f59fb2fa3caac3e789a3c51f3ad326dc19f1ef1504b97",
+    manifestSha256: "9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56",
   }),
   types: Object.freeze({
     fileCount: 812,
-    manifestSha256: "9f2ae4a23ad7b60b65f2b4a26cddf1b72ca6d3cff3081171c8badd5630ebefe1",
+    manifestSha256: "3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc",
   }),
 });
 
@@ -44,7 +44,7 @@ const regularFiles = async (root, directory = root) => {
 
 const observeTree = async root => {
   const files = (await regularFiles(root)).toSorted((left, right) =>
-    Buffer.from(left.relativePath).compare(Buffer.from(right.relativePath)));
+    Buffer.from(left.relativePath, "utf8").compare(Buffer.from(right.relativePath, "utf8")));
   const manifest = createHash("sha256");
   for (const file of files) {
     manifest.update(`${digest(await readFile(file.path))}  ${file.relativePath}\n`);
