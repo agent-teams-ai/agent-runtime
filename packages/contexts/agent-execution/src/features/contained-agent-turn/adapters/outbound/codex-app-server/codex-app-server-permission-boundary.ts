@@ -484,7 +484,7 @@ export const validateCodexThreadStartEvidence = (
   if (!isCodexRecord(result) || !isCodexRecord(result.thread)) {throw evidenceError("thread/start response is incomplete");}
   const threadId = codexStringField(result.thread, "id");
   const active = result.activePermissionProfile;
-  if (threadId === undefined || !isCodexRecord(active) || !hasExactKeys(active, ["extends", "id"])
+  if (threadId === undefined || threadId.length === 0 || !isCodexRecord(active) || !hasExactKeys(active, ["extends", "id"])
     || active.id !== boundary.permissionProfileId || active.extends !== boundary.permissionProfile.extends
     || result.cwd !== boundary.workspaceRef || result.approvalPolicy !== "never"
     || canonicalCodexJson(result.sandbox) !== canonicalCodexJson(codexTurnSandboxPolicy(mode, boundary.workspaceRef))) {

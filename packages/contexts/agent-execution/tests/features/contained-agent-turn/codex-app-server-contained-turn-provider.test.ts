@@ -417,6 +417,29 @@ test("requires active profile provenance before sending turn bytes", async () =>
   assert.equal((await createProvider(process, { turnTimeoutMs: 20 }).execute(executeInput(process))).kind, "not_accepted");
   assert.equal(process.requests.some(message => message.method === "turn/start"), false);
 });
+test("rejects an empty Codex thread identity before sending turn bytes", async () => {
+  const process = new FakeCodexProcess((message, target) => {
+    if (message.method === "thread/start") {
+      target.emit({
+        id: message.id,
+        result: {
+          activePermissionProfile: {
+            extends: boundary.permissionProfile.extends,
+            id: boundary.permissionProfileId,
+          },
+          approvalPolicy: "never",
+          cwd: boundary.workspaceRef,
+          sandbox: { networkAccess: false, type: "readOnly" },
+          thread: { id: "" },
+        },
+      });
+      return;
+    }
+    standardHandshake(message, target);
+  });
+  assert.equal((await createProvider(process).execute(executeInput(process))).kind, "not_accepted");
+  assert.equal(process.requests.some(message => message.method === "turn/start"), false);
+});
 test("rejects wrong active profile provenance before sending turn bytes", async () => {
   const process = new FakeCodexProcess((message, target) => {
     if (message.method === "thread/start") {
