@@ -119,6 +119,10 @@ export const changes = Object.freeze([
     id: "contained-turn-v1-final-integration",
     revision: "20ae786fdb5846081854597646940f773c5dbaf2",
   }),
+  Object.freeze({
+    id: "darwin-guardian-descriptor-forwarding-fix",
+    revision: "990b488c9f83a1490994ef75a6e7c97bb996dd87",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -130,7 +134,7 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   sources: Object.freeze({
     fileCount: 297,
-    sha256: "995575a693d92e9fc14b02dbf5f4f425c5ac02772fbe1c49160bd87fa2303a19",
+    sha256: "4f61a4d1fd9c593643763f81c1341a237601d10ed52f83a0fbea98ebfc20dd54",
   }),
   tests: Object.freeze({
     fileCount: 129,

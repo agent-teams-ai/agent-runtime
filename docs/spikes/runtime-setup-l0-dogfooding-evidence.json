@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "20ae786fdb5846081854597646940f773c5dbaf2",
+  "sourceRevision": "990b488c9f83a1490994ef75a6e7c97bb996dd87",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "8e179d41dc231c4377c067820da155aae47709a21f01b390ed25b8370863d961",
+    "outputSha256": "f652c05f39bdc3f6a522cc0bd7845b5a6e88629a77fd334091bc19b8e404d2f9",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -59,7 +59,7 @@
     },
     "sources": {
       "fileCount": 297,
-      "sha256": "995575a693d92e9fc14b02dbf5f4f425c5ac02772fbe1c49160bd87fa2303a19"
+      "sha256": "4f61a4d1fd9c593643763f81c1341a237601d10ed52f83a0fbea98ebfc20dd54"
     },
     "tests": {
       "fileCount": 129,
@@ -924,6 +924,35 @@
         "files": 1,
         "additions": 12,
         "deletions": 0
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "darwin-guardian-descriptor-forwarding-fix",
+      "revision": "990b488c9f83a1490994ef75a6e7c97bb996dd87",
+      "files": 1,
+      "additions": 7,
+      "deletions": 2,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 7,
+        "deletions": 2
       },
       "tests": {
         "files": 0,
