@@ -29,12 +29,13 @@ export interface CodexAppServerPlatformTuple {
   readonly binarySha256: string;
   readonly clientName: "agent-runtime";
   readonly containmentProfile: HostCustodyContainmentProfile;
-  readonly nativePackageRevision: string;
+  readonly nativeDependencyAliasRevision: string;
   readonly packageRevision: typeof CODEX_APP_SERVER_PACKAGE_REVISION;
   readonly platform: CodexAppServerPlatform;
   readonly platformFamily: "unix";
   readonly platformOs: "linux" | "macos";
   readonly protocolRevision: typeof CODEX_CAPABILITY_MANIFEST_REVISION;
+  readonly resolvedNativePackageRevision: string;
   readonly userAgentArchitecture: "arm64" | "x86_64";
   readonly userAgentOsName: "Mac OS" | "Ubuntu";
   readonly version: typeof CODEX_APP_SERVER_VERSION;
@@ -49,12 +50,13 @@ export const CODEX_APP_SERVER_LINUX_X64_TUPLE = tuple({
   binarySha256: "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
   clientName: "agent-runtime",
   containmentProfile: "strict-linux-cgroup-v2",
-  nativePackageRevision: "@openai/codex-linux-x64@0.150.1",
+  nativeDependencyAliasRevision: "@openai/codex-linux-x64@0.150.1",
   packageRevision: CODEX_APP_SERVER_PACKAGE_REVISION,
   platform: "linux",
   platformFamily: "unix",
   platformOs: "linux",
   protocolRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
+  resolvedNativePackageRevision: "@openai/codex@0.150.1-linux-x64",
   userAgentArchitecture: "x86_64",
   userAgentOsName: "Ubuntu",
   version: CODEX_APP_SERVER_VERSION,
@@ -67,12 +69,13 @@ export const CODEX_APP_SERVER_DARWIN_ARM64_TUPLE = tuple({
   binarySha256: "a14f9a907c12c8812878b70e6b7d65f81c39ed795513e46a55817d7428c0ca6b",
   clientName: "agent-runtime",
   containmentProfile: "cooperative-darwin-posix-process-group",
-  nativePackageRevision: "@openai/codex-darwin-arm64@0.150.1",
+  nativeDependencyAliasRevision: "@openai/codex-darwin-arm64@0.150.1",
   packageRevision: CODEX_APP_SERVER_PACKAGE_REVISION,
   platform: "darwin",
   platformFamily: "unix",
   platformOs: "macos",
   protocolRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
+  resolvedNativePackageRevision: "@openai/codex@0.150.1-darwin-arm64",
   userAgentArchitecture: "arm64",
   userAgentOsName: "Mac OS",
   version: CODEX_APP_SERVER_VERSION,

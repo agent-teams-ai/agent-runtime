@@ -608,11 +608,14 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     sourceSha256: "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370",
     tarballSha256: "35a87cf024345cf2d9350e5220401c8d3967ff6feee04055a89c73524927c0a6",
   });
-  assert.equal(authorityManifest.schemaVersion, 4);
+  assert.equal(authorityManifest.schemaVersion, 5);
   assert.equal(authorityManifest.dependencyAlias, fixture.provenance.dependencyAlias);
   assert.equal(authorityManifest.package, fixture.provenance.dependencyAliasRevision);
-  assert.equal(authorityManifest.package, CODEX_APP_SERVER_LINUX_X64_TUPLE.nativePackageRevision);
+  assert.equal(authorityManifest.package,
+    CODEX_APP_SERVER_LINUX_X64_TUPLE.nativeDependencyAliasRevision);
   assert.equal(authorityManifest.resolvedPackageTarget, fixture.provenance.installedPackage);
+  assert.equal(authorityManifest.resolvedPackageTarget,
+    CODEX_APP_SERVER_LINUX_X64_TUPLE.resolvedNativePackageRevision);
   assert.equal(authorityManifest.experimentalFlagUsed, true);
   assert.equal(authorityManifest.schemaTreeFileCount, 411);
   assert.equal(authorityManifest.typesTreeFileCount, 812);

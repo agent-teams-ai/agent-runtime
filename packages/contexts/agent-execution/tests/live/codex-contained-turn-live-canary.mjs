@@ -194,8 +194,9 @@ const prepareCandidateEvidence = (platformTuple, executionProvenance) => {
     binaryRevision: platformTuple.binaryRevision,
     binarySha256: platformTuple.binarySha256,
     packageIdentity: Object.freeze({
-      nativeRevision: platformTuple.nativePackageRevision,
-      wrapperRevision: platformTuple.packageRevision,
+      nativeDependencyAliasRevision: platformTuple.nativeDependencyAliasRevision,
+      resolvedNativePackageRevision: platformTuple.resolvedNativePackageRevision,
+      wrapperPackageRevision: platformTuple.packageRevision,
     }),
     platformTuple,
     provider: "codex-app-server-current-kernel",

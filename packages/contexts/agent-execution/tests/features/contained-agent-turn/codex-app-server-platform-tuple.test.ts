@@ -33,11 +33,13 @@ const linuxUserAgent =
   "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)";
 const candidateAuthority = JSON.parse(readFileSync(new URL(
   "../../fixtures/protocol/codex-app-server-0.150.1/manifest.json", import.meta.url,
-), "utf8")) as {readonly candidateTargets: {readonly "darwin-arm64": {
+), "utf8")) as {
+  readonly dependencyAlias: string; readonly package: string; readonly resolvedPackageTarget: string;
+  readonly schemaVersion: number; readonly candidateTargets: {readonly "darwin-arm64": {
   readonly authority: string; readonly binaryPath: string; readonly binarySha256: string;
   readonly initialize: {readonly platformFamily: string; readonly platformOs: string; readonly userAgent: string};
-  readonly nativePackage: string; readonly nativeTarget: string; readonly qualification: string;
-  readonly wrapperPackage: string;
+  readonly nativeDependencyAliasRevision: string; readonly nativeTarget: string; readonly qualification: string;
+  readonly resolvedNativePackageRevision: string; readonly wrapperPackage: string;
 }}};
 const darwinCandidate = candidateAuthority.candidateTargets["darwin-arm64"];
 const darwinUserAgent = darwinCandidate.initialize.userAgent;
@@ -66,8 +68,21 @@ test("selects the supported Codex Linux tuple and admitted static Darwin candida
     "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386");
   assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.binarySha256,
     darwinCandidate.binarySha256);
-  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.nativePackageRevision,
-    darwinCandidate.nativePackage);
+  assert.equal(candidateAuthority.schemaVersion, 5);
+  assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.nativeDependencyAliasRevision,
+    candidateAuthority.package);
+  assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.resolvedNativePackageRevision,
+    candidateAuthority.resolvedPackageTarget);
+  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.nativeDependencyAliasRevision,
+    darwinCandidate.nativeDependencyAliasRevision);
+  assert.equal(darwinCandidate.nativeDependencyAliasRevision,
+    "@openai/codex-darwin-arm64@0.150.1");
+  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.resolvedNativePackageRevision,
+    darwinCandidate.resolvedNativePackageRevision);
+  assert.equal(darwinCandidate.resolvedNativePackageRevision,
+    "@openai/codex@0.150.1-darwin-arm64");
+  assert.equal("nativePackageRevision" in CODEX_APP_SERVER_LINUX_X64_TUPLE, false);
+  assert.equal("nativePackageRevision" in CODEX_APP_SERVER_DARWIN_ARM64_TUPLE, false);
   assert.equal(darwinCandidate.wrapperPackage, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.packageRevision);
   assert.equal(darwinCandidate.nativeTarget, "aarch64-apple-darwin");
   assert.equal(darwinCandidate.binaryPath, "vendor/aarch64-apple-darwin/codex/codex");

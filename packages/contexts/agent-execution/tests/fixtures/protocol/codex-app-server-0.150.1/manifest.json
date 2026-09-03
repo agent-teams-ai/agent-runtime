@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "wrapperPackage": "@openai/codex@0.150.1",
   "dependencyAlias": "@openai/codex-linux-x64",
   "package": "@openai/codex-linux-x64@0.150.1",
@@ -21,9 +21,10 @@
         "platformOs": "macos",
         "userAgent": "agent-runtime/0.150.1 (Mac OS 15.6.1; arm64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)"
       },
-      "nativePackage": "@openai/codex-darwin-arm64@0.150.1",
+      "nativeDependencyAliasRevision": "@openai/codex-darwin-arm64@0.150.1",
       "nativeTarget": "aarch64-apple-darwin",
       "qualification": "candidate-pending-exact-local-canary",
+      "resolvedNativePackageRevision": "@openai/codex@0.150.1-darwin-arm64",
       "wrapperPackage": "@openai/codex@0.150.1"
     }
   },
