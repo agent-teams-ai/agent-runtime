@@ -20,7 +20,6 @@ import { validateContainedTurnOperationShape } from "./contained-turn-operation-
 import {
   CONTAINED_TURN_LIMITS,
   isContainedTurnSchemaVersion,
-  utf8ByteLength,
   validateContainedTurnText,
 } from "./contained-turn-limits.js";
 import {
@@ -33,6 +32,7 @@ import { containedTurnSatisfactionDigest } from "./contained-turn-satisfaction.j
 import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord } from "./contained-turn-record.js";
 import { containedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 import { validateContainedTurnRequiredReceiptSnapshot } from "./contained-turn-required-receipts.js";
+import { validateContainedTurnOutput } from "./contained-turn-state-validation.js";
 
 // The count exhaustively validates every disjoint identity axis and evidence source.
 // oxlint-disable-next-line complexity
@@ -158,34 +158,6 @@ const validateAuthorityReferences = (operation: ContainedTurnKernelOperation): v
       Number.isSafeInteger(operation.providerAccessSnapshot.revision) && operation.providerAccessSnapshot.revision >= 1,
     "Provider Access generation and revision must be positive safe integers",
   );
-};
-
-const validateOutput = (operation: ContainedTurnKernelOperation): void => {
-  invariant(operation.output.chunks.length <= CONTAINED_TURN_LIMITS.collections.outputChunks, "output chunk limit exceeded");
-  let totalBytes = 0;
-  operation.output.chunks.forEach((chunk, index) => {
-    assertContainedTurnExactRecord("output chunk", chunk, ["cursor", "kind", "text"]);
-    invariant(chunk.cursor === index, "output cursors must be contiguous from zero");
-    invariant(
-      chunk.kind === "assistant" || chunk.kind === "diagnostic" || chunk.kind === "progress",
-      "unknown output kind fails closed",
-    );
-    validateContainedTurnText("output chunk", chunk.text, CONTAINED_TURN_LIMITS.text.outputChunk);
-    totalBytes += utf8ByteLength(chunk.text);
-  });
-  invariant(totalBytes <= CONTAINED_TURN_LIMITS.text.outputTotal.maximumBytes, "output total byte limit exceeded");
-  if (operation.output.fence.kind === "fenced") {
-    invariant(operation.output.fence.finalCursor === operation.output.chunks.length, "output final cursor must equal the contiguous next cursor");
-    if (operation.output.fence.proofId !== undefined) {
-      requireContainedTurnProof(
-        operation,
-        operation.output.fence.proofId,
-        operation.dispatch.kind === "prevented" || operation.providerProcessStart.kind === "proved_no_start"
-          ? "output_no_start_drain"
-          : "output_drain",
-      );
-    }
-  }
 };
 
 const hasAmbiguity = (operation: ContainedTurnKernelOperation): boolean =>
@@ -494,7 +466,7 @@ export const validateContainedTurnOperation = (
   invariant(firstProof !== undefined, "command acceptance requires its own exact proof");
   if (firstProof !== undefined) {requireContainedTurnProof(candidate, firstProof.proofId, "acceptance");}
   validateContainedTurnAxisProofs(candidate);
-  validateOutput(candidate);
+  validateContainedTurnOutput(candidate);
   validateExecutionAxes(candidate);
   validateCutoffAndPhysicalContainment(candidate);
   if (hasAmbiguity(candidate)) {
