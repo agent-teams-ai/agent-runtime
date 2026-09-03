@@ -14,6 +14,7 @@ import {
   CODEX_APP_SERVER_TIMEOUT as TIMEOUT,
   codexResponseResult as responseResult,
   codexServerRequestMethod as serverRequestMethod,
+  codexMessageByteLength,
   encodeCodexMessage as encode,
   type CodexJsonRecord as JsonRecord,
 } from "./codex-app-server-jsonl.js";
@@ -73,6 +74,7 @@ export type {
 const DEFAULT_MAX_LINE_BYTES = 1_048_576; const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_TURN_TIMEOUT_MS = 1_200_000; const DEFAULT_CANCELLATION_POLL_MS = 100;
 const MAX_PRE_TURN_NOTIFICATIONS = 256;
+export const CODEX_MAX_PRE_TURN_NOTIFICATION_BYTES = 16_777_216;
 const DEFAULT_MAX_ACTIVE_NOTIFICATION_BYTES = 16_777_216;
 const DEFAULT_MAX_ACTIVE_NOTIFICATIONS = 16_384;
 
@@ -134,6 +136,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
   readonly #cancellationPollMs: number;
   readonly #effectCustody: CodexEffectCustodyAuthority | undefined;
   readonly #maxLineBytes: number;
+  readonly #maxPreTurnNotificationBytes: number;
   readonly #maxActiveNotificationBytes: number;
   readonly #maxActiveNotifications: number;
   readonly #processes: CustodiedProviderProcessRegistry;
@@ -182,7 +185,8 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     this.#privateRootPath = options.privateRootPath;
     this.#processes = options.processes;
     this.#effectCustody = options.effectCustody;
-    this.#maxLineBytes = positiveInteger("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES);
+    this.#maxLineBytes = boundedPositiveInteger("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES);
+    this.#maxPreTurnNotificationBytes = CODEX_MAX_PRE_TURN_NOTIFICATION_BYTES;
     this.#maxActiveNotificationBytes = boundedPositiveInteger(
       "maxActiveNotificationBytes", options.maxActiveNotificationBytes, DEFAULT_MAX_ACTIVE_NOTIFICATION_BYTES,
     );
@@ -198,12 +202,14 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     this.#cancellationPollMs = positiveInteger("cancellationPollMs", options.cancellationPollMs, DEFAULT_CANCELLATION_POLL_MS);
   }
 
+  // oxlint-disable-next-line max-params -- request correlation and bounded buffer state are explicit protocol seams.
   async #request(
     process: CustodiedProviderProcess,
     reader: BoundedCodexJsonLineReader,
     request: JsonRecord,
     afterTurnRequest: boolean,
     notifications?: JsonRecord[],
+    bufferedBytes?: { value: number },
   ): Promise<unknown> {
     const requestId = String(request.id);
     const deadline = deadlineAfter(this.#requestTimeoutMs);
@@ -238,6 +244,11 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       if (notifications.length >= MAX_PRE_TURN_NOTIFICATIONS) {
         throw new CodexAppServerProtocolError("Codex App Server exceeded the pre-turn notification bound", afterTurnRequest);
       }
+      const messageBytes = codexMessageByteLength(message);
+      if (bufferedBytes !== undefined && bufferedBytes.value + messageBytes > this.#maxPreTurnNotificationBytes) {
+        throw new CodexAppServerProtocolError("Codex App Server exceeded the pre-turn notification byte bound", afterTurnRequest);
+      }
+      if (bufferedBytes !== undefined) {bufferedBytes.value += messageBytes;}
       notifications.push(message);
     }
   }
@@ -370,6 +381,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     }
     const stderrDrain = drainCodexStderr(process);
     const preTurnNotifications: JsonRecord[] = [];
+    const preTurnNotificationBytes = { value: 0 };
     let turnRequestWritten = false;
     let protocolTerminalObserved = false;
     let threadId: string | undefined; let turnId: string | undefined;
@@ -411,7 +423,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
             version: this.#platformTuple.adapterRevision,
           },
         },
-      }, false, preTurnNotifications);
+      }, false, preTurnNotifications, preTurnNotificationBytes);
       validateCodexInitializeEvidence(initializeResult, this.#boundary, this.#platformTuple);
       await beforeDeadline(
         process.write(encode({ method: "initialized" })),
@@ -422,13 +434,13 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         id: `${input.attemptId}:config-read`,
         method: "config/read",
         params: { cwd: input.workspaceRef, includeLayers: true },
-      }, false, preTurnNotifications);
+      }, false, preTurnNotifications, preTurnNotificationBytes);
       validateCodexConfigEvidence(configResult, this.#boundary);
       const profileResult = await this.#request(process, reader, {
         id: `${input.attemptId}:permission-profiles`,
         method: "permissionProfile/list",
         params: { cwd: input.workspaceRef },
-      }, false, preTurnNotifications);
+      }, false, preTurnNotifications, preTurnNotificationBytes);
       validateCodexPermissionProfileEvidence(profileResult, this.#boundary);
       const threadResult = await this.#request(process, reader, {
         id: `${input.attemptId}:thread-start`,
@@ -440,7 +452,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           ephemeral: true,
           permissions: this.#boundary.permissionProfileId,
         },
-      }, false, preTurnNotifications);
+      }, false, preTurnNotifications, preTurnNotificationBytes);
       threadId = validateCodexThreadStartEvidence(threadResult, this.#boundary, input.intent.mode);
       for (const message of preTurnNotifications) {
         observeCodexActiveProfileEvidence(message, threadId, this.#boundary, input.intent.mode);
@@ -457,7 +469,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           permissions: this.#boundary.permissionProfileId,
           threadId,
         },
-      }, true, bufferedTurnNotifications);
+      }, true, bufferedTurnNotifications, preTurnNotificationBytes);
       turnId = parseCodexTurn(turnResult).id;
       const activeNotifications: JsonRecord[] = [];
       for (const message of bufferedTurnNotifications) {

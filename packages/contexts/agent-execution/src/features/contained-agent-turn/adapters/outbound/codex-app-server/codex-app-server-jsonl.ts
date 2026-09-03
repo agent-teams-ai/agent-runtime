@@ -25,6 +25,10 @@ export const codexStringField = (record: CodexJsonRecord, name: string): string 
 export const encodeCodexMessage = (message: CodexJsonRecord): Uint8Array =>
   Buffer.from(`${JSON.stringify(message)}\n`, "utf8");
 
+/** Canonical JSONL payload bytes, excluding the line delimiter. */
+export const codexMessageByteLength = (message: CodexJsonRecord): number =>
+  Buffer.byteLength(JSON.stringify(message), "utf8");
+
 export const codexServerRequestMethod = (message: CodexJsonRecord): string | undefined =>
   "id" in message ? codexStringField(message, "method") : undefined;
 
