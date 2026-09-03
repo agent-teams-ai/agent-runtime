@@ -115,6 +115,10 @@ export const changes = Object.freeze([
     id: "composition-boundary-package-qualification",
     revision: "29101e00041bdf736ca3549bdb38ad477dd916ed",
   }),
+  Object.freeze({
+    id: "contained-turn-v1-final-integration",
+    revision: "9b996eef3a26f53248038113384a9e367fe13421",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -122,15 +126,15 @@ export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
     fileCount: 16,
-    sha256: "d18a15357cca9e9ba21713e5afbd3797ef71d9577f6565f1ce0914cea3483111",
+    sha256: "6c3dc86c204045403af01c2f5750df260bd7298cd011db91c164269ea7b4fe1b",
   }),
   sources: Object.freeze({
-    fileCount: 283,
-    sha256: "30f2773aa610bc1263205bdc6bc71fa97ccbefc604abbf39a9f3e4b020e37c06",
+    fileCount: 297,
+    sha256: "995575a693d92e9fc14b02dbf5f4f425c5ac02772fbe1c49160bd87fa2303a19",
   }),
   tests: Object.freeze({
-    fileCount: 99,
-    sha256: "baf1c719fdcf876f48f7d88a876d21a935ebd91419dc96fa98d243fda1fa8221",
+    fileCount: 129,
+    sha256: "ea9ff3c9559a9d02b871e2c9a5152f5e27f50bac0996c5749b6a32731490d22c",
   }),
 });
 

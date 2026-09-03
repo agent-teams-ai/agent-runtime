@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "29101e00041bdf736ca3549bdb38ad477dd916ed",
+  "sourceRevision": "9b996eef3a26f53248038113384a9e367fe13421",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,13 +40,13 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "0104ff938b35766f00ecffbd8066591431d48f889d4a9674ce4e1a9c91dd7bf9",
+    "outputSha256": "1d4c410669d65f279f9062f914fa28dedcfbc6e07536a40e239f741ea9326dea",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
     "testSummary": {
-      "tests": 119,
-      "pass": 119,
+      "tests": 152,
+      "pass": 152,
       "fail": 0,
       "cancelled": 0,
       "skipped": 0
@@ -55,15 +55,15 @@
   "artifactDigests": {
     "fixtures": {
       "fileCount": 16,
-      "sha256": "d18a15357cca9e9ba21713e5afbd3797ef71d9577f6565f1ce0914cea3483111"
+      "sha256": "6c3dc86c204045403af01c2f5750df260bd7298cd011db91c164269ea7b4fe1b"
     },
     "sources": {
-      "fileCount": 283,
-      "sha256": "30f2773aa610bc1263205bdc6bc71fa97ccbefc604abbf39a9f3e4b020e37c06"
+      "fileCount": 297,
+      "sha256": "995575a693d92e9fc14b02dbf5f4f425c5ac02772fbe1c49160bd87fa2303a19"
     },
     "tests": {
-      "fileCount": 99,
-      "sha256": "baf1c719fdcf876f48f7d88a876d21a935ebd91419dc96fa98d243fda1fa8221"
+      "fileCount": 129,
+      "sha256": "ea9ff3c9559a9d02b871e2c9a5152f5e27f50bac0996c5749b6a32731490d22c"
     }
   },
   "historicalChanges": [
@@ -905,6 +905,35 @@
         "before": 90,
         "after": 90,
         "retained": 90,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "contained-turn-v1-final-integration",
+      "revision": "9b996eef3a26f53248038113384a9e367fe13421",
+      "files": 5,
+      "additions": 56,
+      "deletions": 6,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 3,
+        "additions": 27,
+        "deletions": 2
+      },
+      "tests": {
+        "files": 2,
+        "additions": 29,
+        "deletions": 4
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
         "reusePercent": 100
       }
     }
