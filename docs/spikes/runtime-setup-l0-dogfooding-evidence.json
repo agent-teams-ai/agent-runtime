@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "ff7496a89f75794a5bfbec5a425a70adb57d8868",
+  "sourceRevision": "497c84280169c06e3ad4df8d5864c365780e248c",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "1b4a26f18f6c1430f48bf8d251a36aa9c0259df45347a09dc4585a27c54ea5ee",
+    "outputSha256": "5eb61cbbb70978f70875b1e31811e9d7f6c3b75ea5ee7abcfffa0be07ca7a94b",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -59,11 +59,11 @@
     },
     "sources": {
       "fileCount": 298,
-      "sha256": "e23f5fbc2affae9b62bf490c255592b2d443aea959a979c345ab3470299d8855"
+      "sha256": "bef7a0adf9eb741be0d1a58c4b357474d8a2d9d44ed134a3aaaa27c57b40fa66"
     },
     "tests": {
-      "fileCount": 129,
-      "sha256": "2369ea76d0e8e67e43e3f889ed7d7d8194aa9dc2e2c9e1578ce4aa12a1370ab7"
+      "fileCount": 133,
+      "sha256": "afdf20e0566bc757b3b4645325ad5ff9e48c8ad6d7437b0d49c2fce8fdd8086e"
     }
   },
   "historicalChanges": [
@@ -1016,6 +1016,209 @@
         "files": 0,
         "additions": 0,
         "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "contained-turn-output-validation-follow-up",
+      "revision": "11bfa8ba29a5c828903ab1fba8caeb8d2c226af1",
+      "files": 4,
+      "additions": 93,
+      "deletions": 36,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 2,
+        "additions": 54,
+        "deletions": 30
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-permission-wire-profile-validation",
+      "revision": "937c5520b10fa6b5ca9e7ce7c4a7b1319c4cf914",
+      "files": 10,
+      "additions": 237,
+      "deletions": 17,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 52,
+        "deletions": 2
+      },
+      "tests": {
+        "files": 9,
+        "additions": 185,
+        "deletions": 15
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-empty-system-config-acceptance",
+      "revision": "5886746fc54b06f5ed712273b3e2db63f47fd5b8",
+      "files": 3,
+      "additions": 63,
+      "deletions": 7,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 18,
+        "deletions": 6
+      },
+      "tests": {
+        "files": 2,
+        "additions": 45,
+        "deletions": 1
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-canary-credential-json-hardening",
+      "revision": "9845418aaa9a2460100395e663f8b381fe34d3a8",
+      "files": 2,
+      "additions": 17,
+      "deletions": 4,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 2,
+        "additions": 17,
+        "deletions": 4
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-native-permission-profile-selection",
+      "revision": "5f01a0a7da79f82cdace15cbec4650d3b42b7a60",
+      "files": 14,
+      "additions": 178,
+      "deletions": 145,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 4,
+        "additions": 95,
+        "deletions": 78
+      },
+      "tests": {
+        "files": 10,
+        "additions": 83,
+        "deletions": 67
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-permission-fixture-intent-binding",
+      "revision": "f0c3ed55f91257f1860561e2f6dbf5e2d1f4521b",
+      "files": 1,
+      "additions": 5,
+      "deletions": 3,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 5,
+        "deletions": 3
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-launch-plan-fixture-intent-alignment",
+      "revision": "497c84280169c06e3ad4df8d5864c365780e248c",
+      "files": 1,
+      "additions": 7,
+      "deletions": 2,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 7,
+        "deletions": 2
       },
       "behaviorFixtures": {
         "before": 123,

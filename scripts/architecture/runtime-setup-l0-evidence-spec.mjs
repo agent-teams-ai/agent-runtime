@@ -131,6 +131,34 @@ export const changes = Object.freeze([
     id: "contained-turn-domain-line-limit-follow-up",
     revision: "ff7496a89f75794a5bfbec5a425a70adb57d8868",
   }),
+  Object.freeze({
+    id: "contained-turn-output-validation-follow-up",
+    revision: "11bfa8ba29a5c828903ab1fba8caeb8d2c226af1",
+  }),
+  Object.freeze({
+    id: "codex-permission-wire-profile-validation",
+    revision: "937c5520b10fa6b5ca9e7ce7c4a7b1319c4cf914",
+  }),
+  Object.freeze({
+    id: "codex-empty-system-config-acceptance",
+    revision: "5886746fc54b06f5ed712273b3e2db63f47fd5b8",
+  }),
+  Object.freeze({
+    id: "codex-canary-credential-json-hardening",
+    revision: "9845418aaa9a2460100395e663f8b381fe34d3a8",
+  }),
+  Object.freeze({
+    id: "codex-native-permission-profile-selection",
+    revision: "5f01a0a7da79f82cdace15cbec4650d3b42b7a60",
+  }),
+  Object.freeze({
+    id: "codex-permission-fixture-intent-binding",
+    revision: "f0c3ed55f91257f1860561e2f6dbf5e2d1f4521b",
+  }),
+  Object.freeze({
+    id: "codex-launch-plan-fixture-intent-alignment",
+    revision: "497c84280169c06e3ad4df8d5864c365780e248c",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -142,11 +170,11 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   sources: Object.freeze({
     fileCount: 298,
-    sha256: "e23f5fbc2affae9b62bf490c255592b2d443aea959a979c345ab3470299d8855",
+    sha256: "bef7a0adf9eb741be0d1a58c4b357474d8a2d9d44ed134a3aaaa27c57b40fa66",
   }),
   tests: Object.freeze({
-    fileCount: 129,
-    sha256: "2369ea76d0e8e67e43e3f889ed7d7d8194aa9dc2e2c9e1578ce4aa12a1370ab7",
+    fileCount: 133,
+    sha256: "afdf20e0566bc757b3b4645325ad5ff9e48c8ad6d7437b0d49c2fce8fdd8086e",
   }),
 });
 
