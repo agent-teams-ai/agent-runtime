@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "497c84280169c06e3ad4df8d5864c365780e248c",
+  "sourceRevision": "f24c5c42cf8fd6ba3b97eb054c706cd2e8904239",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "5eb61cbbb70978f70875b1e31811e9d7f6c3b75ea5ee7abcfffa0be07ca7a94b",
+    "outputSha256": "e188738ab0ca4bafefa6d0b7795a1be59ae16a6c90ce4af1ef03cf67c0ddc5a6",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -55,15 +55,15 @@
   "artifactDigests": {
     "fixtures": {
       "fileCount": 16,
-      "sha256": "6c3dc86c204045403af01c2f5750df260bd7298cd011db91c164269ea7b4fe1b"
+      "sha256": "25aeacc70e67120858590d7e09a859f2e32ff858f5f668057744566052996abf"
     },
     "sources": {
       "fileCount": 298,
-      "sha256": "bef7a0adf9eb741be0d1a58c4b357474d8a2d9d44ed134a3aaaa27c57b40fa66"
+      "sha256": "28b79e24e0846a33bfdc340b35c72a839287e677a40e80e8681f5bc398ac6269"
     },
     "tests": {
       "fileCount": 133,
-      "sha256": "afdf20e0566bc757b3b4645325ad5ff9e48c8ad6d7437b0d49c2fce8fdd8086e"
+      "sha256": "9283cae2c3427da42b0b4da1228404d82615a5bfb346d41729048aec133d6997"
     }
   },
   "historicalChanges": [
@@ -1219,6 +1219,122 @@
         "files": 1,
         "additions": 7,
         "deletions": 2
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-native-permission-contract-versioning",
+      "revision": "0e2ef08a5d31a01bb1ee81028bad2f72f8dd320d",
+      "files": 9,
+      "additions": 18,
+      "deletions": 15,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 5,
+        "deletions": 2
+      },
+      "tests": {
+        "files": 8,
+        "additions": 13,
+        "deletions": 13
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-pre-turn-buffer-bounds",
+      "revision": "3d3d4e5b3155ac3e5e160675b691e93c0cbd5711",
+      "files": 3,
+      "additions": 100,
+      "deletions": 8,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 2,
+        "additions": 22,
+        "deletions": 6
+      },
+      "tests": {
+        "files": 1,
+        "additions": 78,
+        "deletions": 2
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-exact-config-evidence-validation",
+      "revision": "6e929d2be072358de547b6cef2083c32052b813f",
+      "files": 2,
+      "additions": 55,
+      "deletions": 21,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 31,
+        "deletions": 21
+      },
+      "tests": {
+        "files": 1,
+        "additions": 24,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-experimental-wire-evidence-binding",
+      "revision": "f24c5c42cf8fd6ba3b97eb054c706cd2e8904239",
+      "files": 6,
+      "additions": 183,
+      "deletions": 35,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 2,
+        "deletions": 2
+      },
+      "tests": {
+        "files": 5,
+        "additions": 181,
+        "deletions": 33
       },
       "behaviorFixtures": {
         "before": 123,
