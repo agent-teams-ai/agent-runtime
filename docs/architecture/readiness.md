@@ -389,8 +389,10 @@ Contained Agent Turn V1 implementation present; qualification remains open:
   terminal truth;
 - focused synthetic evidence includes 58 Agent Execution tests, 63 Embedded
   Runtime tests, and five PostgreSQL restart/concurrency/corruption tests;
-- the exact Codex `0.150.1` hosted Linux x64 canary is retained implementation
-  evidence. Darwin arm64 has independently checked-in immutable package,
+- the exact Codex `0.150.1` hosted Linux x64 canary harness and static tuple are
+  retained candidate implementation evidence. No content-addressed successful
+  live-turn receipt bound to the current source SHA is committed. Darwin arm64
+  has independently checked-in immutable package,
   binary-SHA, and initialize candidate authority, plus synthetic cooperative
   composition coverage, but no registered exact-SHA local macOS canary and no
   qualification-registry target. Claude SDK `0.3.251` adapter/custody
