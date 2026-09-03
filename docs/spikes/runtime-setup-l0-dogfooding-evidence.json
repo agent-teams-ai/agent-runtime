@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "f24c5c42cf8fd6ba3b97eb054c706cd2e8904239",
+  "sourceRevision": "f5c62275018835f1a0990e2be75874b5e2b4cc1e",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "e188738ab0ca4bafefa6d0b7795a1be59ae16a6c90ce4af1ef03cf67c0ddc5a6",
+    "outputSha256": "1066b3520ed0aa31bfd2b5541020473506ed5caeb0c3ea32c3a29b265581d07e",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -55,15 +55,15 @@
   "artifactDigests": {
     "fixtures": {
       "fileCount": 16,
-      "sha256": "25aeacc70e67120858590d7e09a859f2e32ff858f5f668057744566052996abf"
+      "sha256": "383a52969308b2a5b4a25484992e4b004217ab4aecd85b5b3a8501fc37046d62"
     },
     "sources": {
       "fileCount": 298,
-      "sha256": "28b79e24e0846a33bfdc340b35c72a839287e677a40e80e8681f5bc398ac6269"
+      "sha256": "57ef06fe1bbfe44f345915bd1294818dabd31a0a1d602efcf7e56241412f0c30"
     },
     "tests": {
       "fileCount": 133,
-      "sha256": "9283cae2c3427da42b0b4da1228404d82615a5bfb346d41729048aec133d6997"
+      "sha256": "4f15c19a69025ca96731d19a02ef12d7bc7ddb34aac01cf42f2d53412cd5ee71"
     }
   },
   "historicalChanges": [
@@ -1335,6 +1335,122 @@
         "files": 5,
         "additions": 181,
         "deletions": 33
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-config-evidence-srp-refactor",
+      "revision": "e708cdafb2dcbab1f5e18c1a5663f6f50c4ca77c",
+      "files": 1,
+      "additions": 47,
+      "deletions": 27,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 47,
+        "deletions": 27
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-empty-thread-identity-rejection",
+      "revision": "c61af8515031793c64ccbb3616011cf62eaca7d0",
+      "files": 2,
+      "additions": 24,
+      "deletions": 1,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 1,
+        "deletions": 1
+      },
+      "tests": {
+        "files": 1,
+        "additions": 23,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-deterministic-contract-evidence",
+      "revision": "d7650584ffe76b07c5bc0355fe8fef0c4f1a88dc",
+      "files": 9,
+      "additions": 109,
+      "deletions": 24,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 2,
+        "deletions": 2
+      },
+      "tests": {
+        "files": 6,
+        "additions": 102,
+        "deletions": 17
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-contract-fixture-test-srp",
+      "revision": "f5c62275018835f1a0990e2be75874b5e2b4cc1e",
+      "files": 1,
+      "additions": 40,
+      "deletions": 38,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 40,
+        "deletions": 38
       },
       "behaviorFixtures": {
         "before": 123,
