@@ -6,7 +6,11 @@ import { parseStrictJson } from "../../dist/features/contained-agent-turn/adapte
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const invalid = () => new Error("invalid disposable Codex credential inventory");
 
-/** Test-only outer composition: secret values never become Provider Access facts or evidence. */
+/**
+ * Test-only outer composition: secret values never become Provider Access facts or evidence.
+ * This is a bounded pre-spawn observation, not proof of the bytes later opened by Codex;
+ * same-UID mutation after the descriptor closes remains outside candidate qualification.
+ */
 export const readCodexCanaryCredentialInventory = async (path, credentialGeneration) => {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   let bytes;

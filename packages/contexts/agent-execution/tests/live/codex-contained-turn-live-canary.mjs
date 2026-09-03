@@ -205,11 +205,13 @@ const prepareCandidateEvidence = (platformTuple, executionProvenance) => {
 };
 
 const readBoundCredentialOutputInventory = async (codexHome, input) => {
+  // Candidate-only re-observation: route qualification must separately bind the
+  // exact material later opened by Codex through custody-owned provisioning.
   const inventory = await readCodexCanaryCredentialInventory(
     join(codexHome, "auth.json"), input.credentialGeneration,
   );
   if (inventory.credentialBindingDigest !== input.credentialBindingDigest) {
-    throw new Error("disposable Codex credential binding changed before launch");
+    throw new Error("disposable Codex credential inventory changed before launch planning");
   }
   return inventory;
 };
