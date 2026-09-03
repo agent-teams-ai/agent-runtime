@@ -70,6 +70,45 @@ interface ItemCompletedSchema extends SchemaDefinition {
   readonly definitions: Readonly<Record<string, SchemaDefinition>>;
 }
 
+interface PermissionContractFixture {
+  readonly configLayerEvidence: {
+    readonly jsonSchema: {
+      readonly disabledReason: {readonly required: false; readonly types: readonly ["string", "null"]};
+      readonly required: readonly ["config", "name", "version"];
+      readonly source: string;
+      readonly sourceSha256: string;
+    };
+    readonly typeScript: {
+      readonly disabledReasonRequired: true;
+      readonly fragment: string;
+      readonly source: string;
+      readonly sourceSha256: string;
+    };
+    readonly wireValidationBasis: string;
+  };
+  readonly schemaVersion: number;
+  readonly generatedTypeFragments: readonly {
+    readonly fragment: string; readonly fragmentPurpose?: string;
+    readonly source: string; readonly sourceSha256: string;
+  }[];
+  readonly limitations: { readonly permissionProfileBody: string };
+  readonly provenance: {
+    readonly binarySha256: string;
+    readonly dependencyAlias: string;
+    readonly dependencyAliasRevision: string;
+    readonly experimentalFlagUsed: boolean;
+    readonly installedPackage: string;
+    readonly nativeTarget: string;
+    readonly schemaCommand: string;
+    readonly schemaTreeFileCount: number;
+    readonly schemaTreeManifestSha256: string;
+    readonly treeManifestAlgorithm: string;
+    readonly typesCommand: string;
+    readonly typesTreeFileCount: number;
+    readonly typesTreeManifestSha256: string;
+  };
+}
+
 const resolveSchema = (schema: ItemCompletedSchema, definition: SchemaDefinition): SchemaDefinition => {
   if (definition.$ref !== undefined) {
     const match = /^#\/definitions\/([^/]+)$/u.exec(definition.$ref);
@@ -451,44 +490,7 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     import.meta.url,
   );
   const fixtureBytes = readFileSync(fixtureUrl);
-  const fixture = JSON.parse(fixtureBytes.toString("utf8")) as {
-    readonly configLayerEvidence: {
-      readonly jsonSchema: {
-        readonly disabledReason: {readonly required: false; readonly types: readonly ["string", "null"]};
-        readonly required: readonly ["config", "name", "version"];
-        readonly source: string;
-        readonly sourceSha256: string;
-      };
-      readonly typeScript: {
-        readonly disabledReasonRequired: true;
-        readonly fragment: string;
-        readonly source: string;
-        readonly sourceSha256: string;
-      };
-      readonly wireValidationBasis: string;
-    };
-    readonly schemaVersion: number;
-    readonly generatedTypeFragments: readonly {
-      readonly fragment: string; readonly fragmentPurpose?: string;
-      readonly source: string; readonly sourceSha256: string;
-    }[];
-    readonly limitations: { readonly permissionProfileBody: string };
-    readonly provenance: {
-      readonly binarySha256: string;
-      readonly dependencyAlias: string;
-      readonly dependencyAliasRevision: string;
-      readonly experimentalFlagUsed: boolean;
-      readonly installedPackage: string;
-      readonly nativeTarget: string;
-      readonly schemaCommand: string;
-      readonly schemaTreeFileCount: number;
-      readonly schemaTreeManifestSha256: string;
-      readonly treeManifestAlgorithm: string;
-      readonly typesCommand: string;
-      readonly typesTreeFileCount: number;
-      readonly typesTreeManifestSha256: string;
-    };
-  };
+  const fixture = JSON.parse(fixtureBytes.toString("utf8")) as PermissionContractFixture;
   assert.equal(createHash("sha256").update(fixtureBytes).digest("hex"),
     "e692b97c71ce58c3ef2bb3ea109bc33bcd624768ac3cac1de520971da66aa7fb");
   assert.equal(fixture.schemaVersion, 4);
