@@ -5,6 +5,7 @@ import { validateCodexConfigEvidence } from "../../../dist/features/contained-ag
 
 type Layer = {config: Record<string, unknown>; disabledReason?: unknown;
   name: Record<string, unknown>; version: string};
+type Origin = {name: Record<string, unknown>; version: string};
 const layersOf = (config: ReturnType<typeof exactConfigResult>) => config.layers as Layer[];
 
 test("accepts omitted or null disabledReason from the exact 0.150.1 config wire", () => {
@@ -40,5 +41,28 @@ test("does not treat disabled or malformed config layers as active policy eviden
       layersOf(config)[index]!.disabledReason = disabledReason;
       assert.throws(() => validateCodexConfigEvidence(config, boundary), /rejected/u);
     }
+  }
+});
+
+test("rejects extra effective, layer, origin, and policy-bearing keys", () => {
+  const exact = exactConfigResult();
+  const layers = layersOf(exact);
+  const effectiveConfig = exact.config as Record<string, unknown>;
+  const effectivePermissions = effectiveConfig.permissions as Record<string, unknown>;
+  const origins = exact.origins as Record<string, Origin>;
+  const user = layers.find(layer => layer.name.type === "user")!;
+  const session = layers.find(layer => layer.name.type === "sessionFlags")!;
+  const mutations = [
+    { ...exact, config: { ...effectiveConfig, mcp_servers: {} } },
+    { ...exact, config: { ...effectiveConfig, permissions: { ...effectivePermissions, extra: {} } } },
+    { ...exact, layers: layers.map(layer => layer === user ? { ...layer, config: { ...layer.config, instructions: "unsafe" } } : layer) },
+    { ...exact, layers: layers.map(layer => layer === session ? { ...layer, config: { ...layer.config, policy: "unsafe" } } : layer) },
+    { ...exact, origins: { ...origins, extra: origins.permissions } },
+    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, version: "1" } } },
+    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, name: { ...origins.permissions.name, file: "/other/config.toml" } } } },
+    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, name: { ...origins.permissions.name, type: "system", file: "/etc/codex/config.toml" } } } },
+  ];
+  for (const mutation of mutations) {
+    assert.throws(() => validateCodexConfigEvidence(mutation, boundary), /rejected/u);
   }
 });

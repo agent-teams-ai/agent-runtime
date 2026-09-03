@@ -294,27 +294,19 @@ const exactLayerName = (name: CodexJsonRecord, type: string): boolean => {
   return type === "sessionFlags" && hasExactKeys(name, ["type"]);
 };
 
-const hasExactOrigin = (
-  origins: CodexJsonRecord,
-  keys: readonly string[],
-  expectedType: string,
-  expectedFile?: string,
-): boolean => keys.some(key => {
-  const metadata = origins[key];
-  if (!isCodexRecord(metadata) || !hasExactKeys(metadata, ["name", "version"])
-    || typeof metadata.version !== "string" || !isCodexRecord(metadata.name)
-    || metadata.name.type !== expectedType || !exactLayerName(metadata.name, expectedType)) {return false;}
-  return expectedFile === undefined || metadata.name.file === expectedFile;
-});
-
 const validateUserLayer = (
   layer: CodexJsonRecord,
   boundary: CodexAppServerPermissionBoundary,
   expectedConfigFile: string,
 ): void => {
   const name = layer.name as CodexJsonRecord;
-  const layerProfiles = (layer.config as CodexJsonRecord).permissions;
-  if (name.file !== expectedConfigFile || name.profile !== null || !isCodexRecord(layerProfiles)
+  const config = layer.config as CodexJsonRecord;
+  if (name.file !== expectedConfigFile || name.profile !== null || !hasExactKeys(config, ["permissions"])) {
+    throw evidenceError("user config layer substituted the permission policy");
+  }
+  const layerProfiles = config.permissions;
+  if (!isCodexRecord(layerProfiles)
+    || !hasExactKeys(layerProfiles, [boundary.permissionProfileId])
     || !isExactCodexUserPermissionProfile(layerProfiles[boundary.permissionProfileId], boundary)) {
     throw evidenceError("user config layer substituted the permission policy");
   }
@@ -348,7 +340,8 @@ const validateCodexConfigLayers = (
       validateUserLayer(value, boundary, expectedConfigFile);
       userLayerCount += 1;
     } else if (type === "sessionFlags") {
-      if (value.config.default_permissions !== boundary.permissionProfileId) {
+      if (!hasExactKeys(value.config, ["default_permissions"])
+        || value.config.default_permissions !== boundary.permissionProfileId) {
         throw evidenceError("launch flag did not select the permission profile");
       }
       sessionLayerCount += 1;
@@ -375,12 +368,19 @@ export const validateCodexConfigEvidence = (
     || !isCodexRecord(result.origins) || !Array.isArray(result.layers)) {
     throw evidenceError("config/read evidence is incomplete");
   }
+  if (!hasExactKeys(result.config, ["default_permissions", "permissions"])) {
+    throw evidenceError("effective config contains unknown keys");
+  }
   const profiles = result.config.permissions;
   if (result.config.default_permissions !== boundary.permissionProfileId || !isCodexRecord(profiles)
+    || !hasExactKeys(profiles, [boundary.permissionProfileId])
     || !isExactCodexPermissionProfile(profiles[boundary.permissionProfileId], boundary)) {
     throw evidenceError("effective permission policy does not match the launch boundary");
   }
   validateCodexConfigLayers(result.layers, boundary);
+  if (!hasExactKeys(result.origins, ["default_permissions", "permissions"])) {
+    throw evidenceError("config provenance contains unknown origins");
+  }
   for (const metadata of Object.values(result.origins)) {
     if (!isCodexRecord(metadata) || !hasExactKeys(metadata, ["name", "version"])
       || typeof metadata.version !== "string" || !isCodexRecord(metadata.name)) {
@@ -392,11 +392,21 @@ export const validateCodexConfigEvidence = (
     }
   }
   const expectedConfigFile = `${boundary.codexHome}/config.toml`;
-  const permissionOriginKeys = Object.keys(result.origins).filter(key =>
-    key === "permissions" || key === `permissions.${boundary.permissionProfileId}`
-      || key.startsWith(`permissions.${boundary.permissionProfileId}.`));
-  if (!hasExactOrigin(result.origins, ["default_permissions"], "sessionFlags")
-    || !hasExactOrigin(result.origins, permissionOriginKeys, "user", expectedConfigFile)) {
+  const sessionLayer = result.layers.find(value => isCodexRecord(value)
+    && layerType(value) === "sessionFlags");
+  const userLayer = result.layers.find(value => isCodexRecord(value)
+    && layerType(value) === "user");
+  const sessionOrigin = result.origins.default_permissions;
+  const userOrigin = result.origins.permissions;
+  if (!isCodexRecord(sessionLayer) || !isCodexRecord(userLayer)
+    || !isCodexRecord(sessionLayer.name) || !isCodexRecord(userLayer.name)
+    || typeof sessionLayer.version !== "string" || typeof userLayer.version !== "string"
+    || !isCodexRecord(sessionOrigin) || !isCodexRecord(userOrigin)
+    || canonicalCodexJson(sessionOrigin.name) !== canonicalCodexJson(sessionLayer.name)
+    || sessionOrigin.version !== sessionLayer.version
+    || canonicalCodexJson(userOrigin.name) !== canonicalCodexJson(userLayer.name)
+    || userOrigin.version !== userLayer.version
+    || userLayer.name.file !== expectedConfigFile) {
     throw evidenceError("config provenance is incomplete");
   }
 };
