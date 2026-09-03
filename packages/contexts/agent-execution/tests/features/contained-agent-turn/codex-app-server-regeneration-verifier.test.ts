@@ -17,6 +17,8 @@ interface PermissionContractFixture {
   }[];
 }
 
+const digestBytes = (bytes: string | Buffer): string => createHash("sha256").update(bytes).digest("hex");
+
 test("regeneration claim verification fails closed on retained permission/config evidence drift", async () => {
   const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-regeneration-claims-")));
   try {
@@ -26,7 +28,6 @@ test("regeneration claim verification fails closed on retained permission/config
       "../../fixtures/linux-codex-app-server-0.150.1-permission-contract.json", import.meta.url), "utf8")) as
       PermissionContractFixture;
     const evidence = structuredClone(fixture);
-    const digestBytes = (bytes: string | Buffer): string => createHash("sha256").update(bytes).digest("hex");
     for (const source of new Set(evidence.generatedTypeFragments.map(claim => claim.source))) {
       const contents = evidence.generatedTypeFragments.filter(claim => claim.source === source)
         .map(claim => claim.fragment).join("\n");
