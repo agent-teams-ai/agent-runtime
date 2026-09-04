@@ -36,21 +36,35 @@ const immutableReceipt = (operation: HttpEgressOperation, state: HttpEgressMutab
   attemptId: operation.attemptId, requestId: operation.expectedRequest.requestId, ...state});
 
 const applyHttpClosureDisposition = (state: HttpEgressMutableState, hasAttempt: boolean): void => {
+  hasAttempt ||= state.attemptCount === 1;
   if (state.inboundClosure !== "closed" || (hasAttempt && state.upstreamClosure !== "closed")) {
     state.anomalyCode = "closure_unproved";
     if (hasAttempt || state.firstByteState !== "not_sent") {state.outcome = "reconcile_required";}}
 };
 
+// Initiation is custody work, not an acknowledgement-budget decision. Observe
+// rejections immediately, including when the deadline prevents awaiting the result.
+const initiateHttpClosure = (close: () => Promise<unknown>) => {
+  try {const pending = close(); void pending.catch(() => {}); return pending;}
+  catch {return Promise.resolve();}
+};
+
 export const closeAndRecordHttpEgress = async (ports: HttpEgressBrokerPorts, operation: HttpEgressOperation,
   state: HttpEgressMutableState, attempt?: HttpEgressTransportAttempt): Promise<Readonly<{
     receipt: HttpEgressReceipt; fullyAcknowledged: boolean}>> => {
-  if (attempt !== undefined) {try {const value = snapshotHttpClosureDecision(await ports.clock.within(
-    operation.limits.closureDeadline, () => attempt.close())); state.upstreamClosure = value?.state ?? "unknown";
-    state.upstreamClosureReceiptDigest = value?.receiptDigest ?? "";} catch {state.upstreamClosure = "unknown";}}
-  try {const value = snapshotHttpClosureDecision(await ports.clock.within(operation.limits.closureDeadline,
-    () => operation.connection.close(state.outcome === "completed" ? "complete" : "abort")));
-  state.inboundClosure = value?.state ?? "unknown"; state.inboundClosureReceiptDigest = value?.receiptDigest ?? "";
-  } catch {state.inboundClosure = "unknown";}
+  const upstream = attempt === undefined ? undefined : initiateHttpClosure(() => attempt.close());
+  const inbound = initiateHttpClosure(() => operation.connection.close(state.outcome === "completed" ? "complete" : "abort"));
+  const acknowledge = async (pending: ReturnType<typeof initiateHttpClosure>) => {
+    try {return snapshotHttpClosureDecision(await ports.clock.within(operation.limits.closureDeadline, () => pending));}
+    catch {return;}
+  };
+  const [upstreamValue, inboundValue] = await Promise.all([
+    upstream === undefined ? undefined : acknowledge(upstream), acknowledge(inbound),
+  ]);
+  if (upstream !== undefined) {state.upstreamClosure = upstreamValue?.state ?? "unknown";
+    state.upstreamClosureReceiptDigest = upstreamValue?.receiptDigest ?? "";}
+  state.inboundClosure = inboundValue?.state ?? "unknown";
+  state.inboundClosureReceiptDigest = inboundValue?.receiptDigest ?? "";
   applyHttpClosureDisposition(state, attempt !== undefined);
   let receipt = immutableReceipt(operation, state); let recorded = false;
   try {const result = await ports.clock.within(operation.limits.closureDeadline, () => ports.evidence.record(receipt));
@@ -95,7 +109,8 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
     return closeAndRecordHttpEgress(ports, operation, state, attempt);}
   state.firstByteState = "sent"; state.upstreamRequestBytes = observed.upstreamRequestBytes;
   let rejectedStatus: HttpEgressAnomalyCode | undefined;
-  Object.assign(state, await observeHttpResponse(observed.response, operation, ports.clock, status => {
+  Object.assign(state, await observeHttpResponse(observed.response, {...operation, limits: {...operation.limits,
+    maxOutputBytes: Math.min(operation.limits.maxOutputBytes, grant.payload.limits.responseBytes)}}, ports.clock, status => {
     rejectedStatus = retryAnomaly(status); if (rejectedStatus !== undefined) {ports.guard.invalidate(lease); return false;}
     return true;}));
   if (rejectedStatus !== undefined) {state.anomalyCode = rejectedStatus; state.outcome = "denied";}
