@@ -27,6 +27,7 @@ const binding = Object.freeze({credentialBindingRef: "credential-binding-1", cre
 const route = (overrides: Record<string, unknown> = {}) => Object.freeze({
   contractVersion: "provider-route-authority/v1", tenantId: "tenant-1", projectId: "project-1",
   providerId: "provider-1", providerAccountRef: "account-1", providerRouteRef: "route-1", ...binding,
+  scopeDigest: sha("scope"), resolutionAuthorityId: "resolver-1", resolutionGeneration: "resolver-generation-1",
   routeRevision: "route-revision-1", authorityDigest: sha("route-authority"), scheme: "https",
   host: "api.example.com", port: 443, tlsServerName: "api.example.com", pathConstraint: "/v1/turn", ...overrides,
   allowedTlsSpkiDigests: Object.freeze([sha("spki")]),
@@ -68,7 +69,8 @@ const receipt = (overrides: Record<string, unknown> = {}) => Object.freeze({
 });
 const request = (overrides: Record<string, unknown> = {}): ContainedTurnEgressRequest => ({
   scope: dispatch.scope, providerId: "provider-1", providerAccountRef: "account-1", providerRouteRef: "route-1",
-  ...binding, operationId: "operation-1", dispatch, requestId: "request-1", requestNonce: "nonce-1", method: "POST",
+  ...binding, resolutionAuthorityId: "resolver-1", resolutionGeneration: "resolver-generation-1",
+  operationId: "operation-1", dispatch, requestId: "request-1", requestNonce: "nonce-1", method: "POST",
   path: "/v1/turn", headers: [{name: "content-type", value: "application/json"},
     {name: "x-request-class", value: "synthetic"}], body: Uint8Array.from([1, 2, 3, 4]),
   budgets: {requestBytes: 1_000, responseBytes: 2_000, deadlineMs: 200}, ...overrides,
@@ -78,6 +80,15 @@ const wire = (candidate: ContainedTurnEgressRequest) => Buffer.concat([Buffer.fr
 const applicationBytes = (candidate: ContainedTurnEgressRequest) => wire(candidate).byteLength;
 const deferred = () => {let release!: () => void; const promise = new Promise<void>(resolve => {release = resolve;});
   return {promise, resolve: release};};
+const spoof = <Value>(values: Value[]) => {Object.defineProperties(values, {every: {value() {return true;}, enumerable: true},
+  some: {value() {return false;}, enumerable: true}, map: {value() {return [];}, enumerable: true},
+  [Symbol.iterator]: {value() {throw new Error("iterator called");}, enumerable: false}}); return values;};
+const deniedRequest = async (candidate: ContainedTurnEgressRequest) => {
+  const fixture = harness();
+  const result = await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(candidate);
+  assert.deepEqual(result, {status: "denied", reason: "invalid_request", deniedApplicationBytes: 0});
+  assert.deepEqual(fixture.events, []);
+};
 
 interface HarnessOptions {
   route?: unknown; policy?: unknown; observation?: unknown; routeOutcome?: unknown; dispatchOutcome?: unknown;
@@ -85,15 +96,20 @@ interface HarnessOptions {
   skipCallback?: boolean; completedWithoutCallback?: boolean; reentrantCallback?: boolean; doubleConsume?: boolean;
   unawaitedCallback?: boolean; writeIndeterminate?: boolean; transportResult?: unknown; responseBytes?: number;
   partialWrite?: boolean; signerThenable?: boolean; verifierThenable?: boolean; consumptionThenable?: boolean;
+  onSign?: () => void; onVerify?: () => void;
   mutateAuthorization?: boolean; repeatedWrite?: boolean;
+  mutateRetainedWrite?: boolean; mutateResultDuringClose?: boolean; onClose?: () => void | Promise<void>;
   holdOpen?: Promise<void>; holdAuthority?: Promise<void>; holdExecute?: Promise<void>; holdClose?: Promise<void>;
   mutateAtResolve?: () => void;
 }
 const harness = (options: HarnessOptions = {}) => {
   const events: string[] = []; const authorizations: EgressAuthorizationBodyV1[] = [];
   const canonicalBodies: Uint8Array[] = []; const dispatchInputs: unknown[] = [];
+  const routeInputs: unknown[] = []; let retainedWrite: {authorization: {canonicalBody: Uint8Array}; applicationBytes: Uint8Array} | undefined;
+  const emittedApplicationBytes: Uint8Array[] = []; let writerUsed = false;
+  let returnedResult: Record<string, unknown> | undefined;
   const transported: {headers?: readonly Readonly<{name: string; value: string}>[]; body?: Uint8Array} = {};
-  let callback: ((value: unknown, write: (authorization: unknown) => unknown) => Promise<unknown>) | undefined;
+  let callback: ((value: unknown) => Promise<unknown>) | undefined;
   let closeCount = 0;
   const transport: EgressTransportV1 = {
     async execute(input) {
@@ -103,65 +119,69 @@ const harness = (options: HarnessOptions = {}) => {
         headers: input.request.headers, body: input.request.body}); const applicationBytesDigest = sha(exactWire);
       const observed = {applicationBytesDigest, applicationBytes: exactWire.byteLength,
         ...(options.observation ?? observation())};
-      const write = (authorization: unknown) => {events.push("transport:write");
-        const safe = authorization as {body: EgressAuthorizationBodyV1; canonicalBody: Uint8Array;
-          envelope: {digest: string}}; authorizations.push(safe.body); canonicalBodies.push(Uint8Array.from(safe.canonicalBody));
-        if (options.mutateAuthorization) {safe.canonicalBody[0] ^= 1;}
-        const value = {status: "written", authorizationDigest: safe.envelope.digest, applicationBytesDigest,
-          applicationBytesWritten: options.partialWrite ? 1 : exactWire.byteLength,
-          ...(options.repeatedWrite ? {writeCount: 2} : {})};
-        return options.consumptionThenable ? Promise.resolve(value) : value;};
       if (options.executeThrows) {throw new Error("ambiguous write");}
-      if (options.completedWithoutCallback) {events.push("transport:write"); return {status: "completed",
-        applicationBytesDigest, applicationBytesWritten: exactWire.byteLength, responseBytes: 12,
-        responseDigest: sha("response"), boundaryReceipt: {}};}
-      if (options.skipCallback) {return {status: "not_sent", applicationBytesWritten: 0};}
-      if (options.unawaitedCallback) {void input.beforeFirstWrite(observed, write);
-        return {status: "completed", applicationBytesDigest, applicationBytesWritten: exactWire.byteLength,
-          responseBytes: 12, responseDigest: sha("response"), boundaryReceipt: {}};}
-      if (options.reentrantCallback) {const first = input.beforeFirstWrite(observed, write);
-        const second = input.beforeFirstWrite(observed, write); await Promise.all([first, second]);
-        return {status: "not_sent", applicationBytesWritten: 0};}
-      events.push("transport:ready"); const admission = await input.beforeFirstWrite(observed, write) as
+      if (options.completedWithoutCallback) {events.push("transport:write"); return Object.freeze({status: "completed",
+        responseBytes: 12, responseDigest: sha("response"), boundaryReceipt: {}});}
+      if (options.skipCallback) {return Object.freeze({status: "not_sent"});}
+      if (options.unawaitedCallback) {void input.beforeFirstWrite(observed);
+        return Object.freeze({status: "completed", responseBytes: 12, responseDigest: sha("response"), boundaryReceipt: {}});}
+      if (options.reentrantCallback) {const first = input.beforeFirstWrite(observed);
+        const second = input.beforeFirstWrite(observed); await Promise.all([first, second]); return Object.freeze({status: "not_sent"});}
+      events.push("transport:ready"); const admission = await input.beforeFirstWrite(observed) as
         {status: string; boundaryReceipt?: unknown};
-      if (admission.status !== "written") {
-        return {status: "not_sent", applicationBytesWritten: 0};
-      }
-      if (options.doubleConsume) {await input.beforeFirstWrite(observed, write);}
+      if (admission.status !== "written") {return Object.freeze({status: "not_sent"});}
+      if (options.doubleConsume) {await input.beforeFirstWrite(observed);}
       await options.holdExecute;
-      if (options.writeIndeterminate) {return {status: "write_indeterminate"};}
+      if (options.mutateRetainedWrite && retainedWrite !== undefined) {retainedWrite.authorization.canonicalBody.fill(9);
+        retainedWrite.applicationBytes.fill(9);}
+      if (options.writeIndeterminate) {return Object.freeze({status: "write_indeterminate"});}
       if (options.transportResult !== undefined) {return options.transportResult;}
-      return {status: "completed", applicationBytesDigest, applicationBytesWritten: options.partialWrite ? 1 : exactWire.byteLength,
-        responseBytes: options.responseBytes ?? 12, responseDigest: sha("response"), boundaryReceipt: admission.boundaryReceipt};
+      returnedResult = {status: "completed", responseBytes: options.responseBytes ?? 12,
+        responseDigest: sha("response"), boundaryReceipt: admission.boundaryReceipt};
+      return options.mutateResultDuringClose ? returnedResult : Object.freeze(returnedResult);
     },
-    async close() {events.push("transport:close"); closeCount += 1; await options.holdClose;
+    async close() {events.push("transport:close"); closeCount += 1; await options.onClose?.(); await options.holdClose;
+      if (options.mutateResultDuringClose && returnedResult !== undefined) {returnedResult.boundaryReceipt = {};
+        returnedResult.responseDigest = sha("repaired");}
       if (options.closeFails) {throw new Error("close failed");}},
   };
   const realSigner = signer();
+  const firstWrite = {writeExact(value: unknown) {
+    if (writerUsed) {throw new Error("exact writer already used");} writerUsed = true;
+    events.push("transport:write"); const safe = value as {authorization: {body: EgressAuthorizationBodyV1;
+      canonicalBody: Uint8Array}; applicationBytes: Uint8Array}; authorizations.push(safe.authorization.body);
+    retainedWrite = safe; canonicalBodies.push(safe.authorization.canonicalBody.slice());
+    emittedApplicationBytes.push(safe.applicationBytes.slice());
+    if (options.mutateAuthorization) {safe.authorization.canonicalBody[0] ^= 1;}
+    if (options.partialWrite || options.repeatedWrite) {return {applicationBytesWritten: options.partialWrite ? 1 : 2};}
+    if (options.consumptionThenable) {return Promise.resolve();}
+  }};
   const dependencies: ContainedTurnEgressDependencies = {
     routeAuthority: {
-      async resolveExact() {events.push("route:resolve"); options.mutateAtResolve?.(); return options.route ?? route();},
-      async revalidateExact() {events.push("route:revalidate"); return options.routeOutcome ?? {status: "current"};},
+      async resolveExact(input) {events.push("route:resolve"); routeInputs.push(input); options.mutateAtResolve?.();
+        return options.route ?? route();},
+      async revalidateExact() {events.push("route:revalidate"); return options.routeOutcome ?? Object.freeze({status: "current" as const});},
     },
     dispatchAuthority: {async observeDispatchConsumption(input) {events.push("dispatch:observe");
       dispatchInputs.push(input); await options.holdAuthority; return options.dispatchOutcome ??
-        {status: "consumed", receipt: receipt(), lifecycleState: "claim_committed"};}},
+        Object.freeze({status: "consumed" as const, receipt: receipt(), lifecycleState: "claim_committed" as const});}},
     policyAuthority: {
       async resolve() {events.push("policy:resolve"); return options.policy ?? policy();},
-      async revalidateExact() {events.push("policy:revalidate"); return options.policyOutcome ?? {status: "current", observedAt: 101};},
+      async revalidateExact() {events.push("policy:revalidate"); return options.policyOutcome ??
+        Object.freeze({status: "current" as const, observedAt: 101});},
     },
     signer: {
-      sign(body, key) {const value = realSigner.sign(body, key);
+      sign(body, key) {options.onSign?.(); const value = realSigner.sign(body, key);
         // oxlint-disable-next-line unicorn/no-thenable -- adversarial boundary fixture
         return options.signerThenable ? {...value as object, then() {}} : value;},
       // oxlint-disable-next-line unicorn/no-thenable -- adversarial boundary fixture
-      verify(body, envelope) {return options.verifierThenable ? {then() {}} : realSigner.verify(body, envelope);},
+      verify(body, envelope) {options.onVerify?.(); return options.verifierThenable ? {then() {}} : realSigner.verify(body, envelope);},
     },
     transportGateway: {async openOneShotHttps() {events.push("transport:open"); await options.holdOpen;
-      if (options.openFails) {throw new Error("open failed");} return transport;}},
+      if (options.openFails) {throw new Error("open failed");} return {transport, firstWrite};}},
   };
-  return {dependencies, transport, events, authorizations, canonicalBodies, dispatchInputs, transported,
-    get callback() {return callback;}, get closeCount() {return closeCount;}};
+  return {dependencies, transport, events, authorizations, canonicalBodies, dispatchInputs, routeInputs, transported,
+    firstWrite, emittedApplicationBytes, get callback() {return callback;}, get closeCount() {return closeCount;}};
 };
 
 test("binds exact route, credential, committed authority receipt, canonical request, policy, and peer", async () => {
@@ -169,11 +189,14 @@ test("binds exact route, credential, committed authority receipt, canonical requ
   assert.deepEqual(outcome, {status: "completed", responseDigest: sha("response"), responseBytes: 12,
     applicationBytesDigest: sha(wire(request())), applicationBytesWritten: applicationBytes(request())});
   assert.deepEqual(fixture.events, ["route:resolve", "policy:resolve", "transport:open", "transport:execute",
-    "transport:ready", "route:revalidate", "dispatch:observe", "policy:revalidate", "transport:write", "transport:close"]);
+    "transport:ready", "dispatch:observe", "policy:revalidate", "route:revalidate", "transport:write", "transport:close"]);
   const body = fixture.authorizations[0]!;
   assert.deepEqual({credentialBindingRef: body.credentialBindingRef, credentialBindingDigest: body.credentialBindingDigest,
     credentialGeneration: body.credentialGeneration, credentialRevision: body.credentialRevision}, binding);
   assert.deepEqual(body.dispatchReceipt, receipt()); assert.deepEqual(fixture.dispatchInputs, [dispatch]);
+  assert.deepEqual(fixture.routeInputs, [{tenantId: "tenant-1", projectId: "project-1", scopeDigest: sha("scope"),
+    providerId: "provider-1", providerAccountRef: "account-1", providerRouteRef: "route-1", ...binding,
+    resolutionAuthorityId: "resolver-1", resolutionGeneration: "resolver-generation-1"}]);
   assert.equal(body.routeRevision, "route-revision-1"); assert.equal(body.routeAuthorityDigest, sha("route-authority"));
   assert.equal(body.applicationBytes, applicationBytes(request())); assert.equal(body.applicationBytesDigest, sha(wire(request())));
   assert.match(body.requestDigest, /^sha256:/u); assert.equal("path" in body.target, false);
@@ -227,11 +250,36 @@ test("rejects hostile request graphs and every route or credential authority mis
   for (const mutation of [{tenantId: "tenant-2"}, {projectId: "project-2"}, {providerId: "provider-2"},
     {providerAccountRef: "account-2"}, {providerRouteRef: "route-2"}, {credentialBindingRef: "credential-binding-2"},
     {credentialBindingDigest: sha("other")}, {credentialGeneration: "other"}, {credentialRevision: "other"},
+    {scopeDigest: sha("other")}, {resolutionAuthorityId: "attacker-resolver"}, {resolutionGeneration: "attacker-generation"},
     {routeRevision: ""}, {authorityDigest: "opaque"}, {scheme: "http"}, {host: "93.184.216.34"},
     {tlsServerName: "other.example.com"}, {pathConstraint: "/other"}, {tlsPinSetDigest: sha("wrong")},
     {allowedTlsSpkiDigests: ["opaque"]}, {tlsPinSetGeneration: ""}, {tlsPinSetRevision: ""}, {extra: true}]) {
     const fixture = harness({route: route(mutation)}); assert.equal((await createContainedTurnEgressGateway(host(), fixture.dependencies)
       .exchange(request())).status, "denied", JSON.stringify(mutation)); assert.equal(fixture.events.includes("transport:open"), false);}
+});
+
+test("snapshots typed-array internal slots before allocation without species, methods, or accessors", async () => {
+  const hostileSpecies = {get [Symbol.species](): never {throw new Error("species accessed");}};
+  const shared = new Uint8Array(new SharedArrayBuffer(4));
+  Object.defineProperties(shared, {buffer: {get(): ArrayBuffer {throw new Error("shadowed buffer accessed");}},
+    constructor: {value: hostileSpecies}});
+  await deniedRequest(request({body: shared}));
+
+  const detached = new Uint8Array(4); structuredClone(detached.buffer, {transfer: [detached.buffer]});
+  await deniedRequest(request({body: detached}));
+
+  class HostileBytes extends Uint8Array {public static get [Symbol.species](): never {throw new Error("species accessed");}}
+  await deniedRequest(request({body: new HostileBytes([1, 2, 3, 4])}));
+  await deniedRequest(request({body: new Proxy(Uint8Array.from([1, 2, 3, 4]), {})}));
+
+  let overLimitSpeciesReads = 0; const overLimit = new Uint8Array(1_048_577);
+  Object.defineProperty(overLimit, "constructor", {value: {get [Symbol.species](): never {
+    overLimitSpeciesReads += 1; throw new Error("over-limit copy allocated");}}});
+  await deniedRequest(request({body: overLimit})); assert.equal(overLimitSpeciesReads, 0);
+
+  const resizable = new ArrayBuffer(8, {maxByteLength: 16}); const resizableView = new Uint8Array(resizable);
+  Object.defineProperty(resizableView, "buffer", {get(): ArrayBuffer {throw new Error("shadowed buffer accessed");}});
+  await deniedRequest(request({body: resizableView}));
 });
 
 test("only the existing authority's exact claim_committed receipt permits bytes", async () => {
@@ -251,7 +299,8 @@ test("denies private, reserved, metadata, mapped, zoned, noncanonical, duplicate
     v4("c6120001"), v4("c6336401"), v4("cb007101"), v4("e0000001"), v6("00000000000000000000000000000001"),
     v6("fe800000000000000000000000000001"), v6("fc000000000000000000000000000001"),
     v6("00000000000000000000ffff5db8d822"), v6("0000000000000000000000005db8d822"),
-    v6("0064ff9b00000000000000005db8d822"), v6("5f000000000000000000000000000001"),
+    v6("0064ff9b00000000000000005db8d822"), v6("40000000000000000000000000000001"),
+    v6("5f000000000000000000000000000001"),
     v6("fec00000000000000000000000000001"), {family: "ipv6", bytesHex: "::ffff:5db8:d822"},
     {family: "ipv6", bytesHex: "0000:0000:0000:0000:0000:ffff:5db8:d822"},
     {family: "ipv6", bytesHex: "fe80::1%eth0"}, {family: "ipv4", bytesHex: "5DB8D822"}];
@@ -266,6 +315,36 @@ test("denies private, reserved, metadata, mapped, zoned, noncanonical, duplicate
   for (const mutation of [{answerSetDigest: sha("substitution")}, {resolutionAuthorityId: ""},
     {resolutionGeneration: ""}]) {const fixture = harness({observation: observation(mutation)});
     assert.equal((await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(request())).status, "denied");}
+});
+
+test("IPv6 V1 denies special-purpose ranges at exact boundaries while allowing adjacent globals", async () => {
+  const denied = ["20010000000000000000000000000000", "200101ffffffffffffffffffffffffff",
+    "20010db8000000000000000000000000", "20010db8ffffffffffffffffffffffff",
+    "20020000000000000000000000000000", "2002ffffffffffffffffffffffffffff",
+    "3fff0000000000000000000000000000", "3fff0fffffffffffffffffffffffffff"];
+  const allowed = ["2000ffffffffffffffffffffffffffff", "20010200000000000000000000000000",
+    "20010db7ffffffffffffffffffffffff", "20010db9000000000000000000000000",
+    "2001ffffffffffffffffffffffffffff", "20030000000000000000000000000000",
+    "3ffeffffffffffffffffffffffffffff", "3fff1000000000000000000000000000",
+    "24040000000000000000000000000001", "26060000000000000000000000000001", "2a000000000000000000000000000001"];
+  for (const bytesHex of denied) {const address = v6(bytesHex); const fixture = harness({observation:
+    observation({canonicalAddresses: [address], peerAddress: address})});
+    assert.equal((await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(request())).status, "denied", bytesHex);}
+  for (const bytesHex of allowed) {const address = v6(bytesHex); const fixture = harness({observation:
+    observation({canonicalAddresses: [address], peerAddress: address})});
+    assert.equal((await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(request())).status, "completed", bytesHex);}
+});
+
+test("stateful exact writer emits the authorized bytes once and execute remains held after write", async () => {
+  const hold = deferred(); const fixture = harness({holdExecute: hold.promise});
+  const pending = createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(request());
+  while (!fixture.events.includes("transport:write")) {await Promise.resolve();}
+  let settled = false; void pending.then(() => {settled = true; return settled;}); await Promise.resolve();
+  assert.equal(settled, false); assert.equal(fixture.emittedApplicationBytes.length, 1);
+  assert.deepEqual(fixture.emittedApplicationBytes[0], Uint8Array.from(wire(request())));
+  assert.throws(() => fixture.firstWrite.writeExact({}), /already used/u);
+  assert.equal(fixture.emittedApplicationBytes.length, 1); hold.resolve();
+  assert.equal((await pending).status, "completed");
 });
 
 test("TLS pin set membership and exact wire observations deny before any write", async () => {
@@ -288,7 +367,61 @@ test("final boundary rejects skipped, unawaited, reentrant, double, and thenable
     if (outcome.status === "denied") {assert.equal(outcome.deniedApplicationBytes, 0);}
   }
   const skipped = harness({skipCallback: true}); await createContainedTurnEgressGateway(host(), skipped.dependencies).exchange(request());
-  assert.deepEqual(await skipped.callback?.(observation(), () => ({})), {status: "denied"});
+  assert.deepEqual(await skipped.callback?.(observation()), {status: "denied"});
+});
+
+test("rejects mutable authority claims, hostile dense arrays, and detached request buffers", async () => {
+  const mutableRoute = {...route()}; const mutableCurrent = {status: "current"};
+  const mutablePrevented = {status: "prevented", evidence: {}};
+  for (const options of [{route: mutableRoute}, {routeOutcome: mutableCurrent}, {dispatchOutcome: mutablePrevented}]) {
+    const fixture = harness(options); assert.notEqual((await createContainedTurnEgressGateway(host(), fixture.dependencies)
+      .exchange(request())).status, "completed");
+  }
+  const hostileRequests = [request({headers: spoof([{name: "content-type", value: "application/json"}])})];
+  for (const candidate of hostileRequests) {const fixture = harness(); assert.deepEqual(
+    await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(candidate),
+    {status: "denied", reason: "invalid_request", deniedApplicationBytes: 0});}
+  for (const mutation of [{allowedTlsSpkiDigests: spoof([sha("spki")])}]) {const fixture = harness({route: route(mutation)});
+    assert.notEqual((await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(request())).status, "completed");}
+  const hostileAddresses = spoof([v4()]); const hostileObservation = observation({canonicalAddresses: hostileAddresses});
+  const addressFixture = harness({observation: hostileObservation});
+  assert.notEqual((await createContainedTurnEgressGateway(host(), addressFixture.dependencies).exchange(request())).status, "completed");
+  const bytes = new Uint8Array(4); structuredClone(bytes.buffer, {transfer: [bytes.buffer]});
+  const detached = harness(); assert.deepEqual(await createContainedTurnEgressGateway(host(), detached.dependencies)
+    .exchange(request({body: bytes})), {status: "denied", reason: "invalid_request", deniedApplicationBytes: 0});
+});
+
+test("quarantines lying writers, retained-byte mutation, mutable completion, and late callbacks", async () => {
+  for (const options of [{partialWrite: true}, {mutateRetainedWrite: true}, {mutateResultDuringClose: true}]) {
+    const fixture = harness(options); const gateway = createContainedTurnEgressGateway(host(), fixture.dependencies);
+    assert.equal((await gateway.exchange(request())).status, "indeterminate", JSON.stringify(options));
+    assert.equal(await gateway.dispose(), "quarantined");
+  }
+  const late = harness(); const gateway = createContainedTurnEgressGateway(host(), late.dependencies);
+  assert.equal((await gateway.exchange(request())).status, "completed");
+  assert.deepEqual(await late.callback?.(observation()), {status: "denied"}); assert.equal(await gateway.dispose(), "quarantined");
+});
+
+test("reentrant disposal during transport close quarantines without cyclic await", async () => {
+  let gateway: ReturnType<typeof createContainedTurnEgressGateway>; let reentrant: Promise<"closed" | "quarantined"> | undefined;
+  const fixture = harness({onClose() {reentrant = gateway.dispose(); return reentrant;}});
+  gateway = createContainedTurnEgressGateway(host(), fixture.dependencies);
+  assert.equal((await gateway.exchange(request())).status, "indeterminate"); assert.equal(await reentrant, "quarantined");
+  assert.equal(await gateway.dispose(), "quarantined"); assert.equal(fixture.closeCount, 1);
+});
+
+test("reentrant signer and verifier disposal writes zero application bytes", async () => {
+  for (const boundary of ["sign", "verify"] as const) {
+    let gateway: ReturnType<typeof createContainedTurnEgressGateway>;
+    let disposal: Promise<"closed" | "quarantined"> | undefined;
+    const dispose = () => {disposal = gateway.dispose();};
+    const fixture = harness(boundary === "sign" ? {onSign: dispose} : {onVerify: dispose});
+    gateway = createContainedTurnEgressGateway(host(), fixture.dependencies);
+    const outcome = await gateway.exchange(request());
+    assert.deepEqual(outcome, {status: "denied", reason: "authorization_invalid", deniedApplicationBytes: 0});
+    assert.equal(fixture.events.includes("transport:write"), false); assert.equal(await disposal, "closed");
+    assert.equal(fixture.closeCount, 1);
+  }
 });
 
 test("native await assimilates each foreign async owner and transport result exactly once", async () => {
@@ -312,10 +445,8 @@ test("native await assimilates each foreign async owner and transport result exa
 
 test("completed binds exact authorization consumption and all authorized application bytes", async () => {
   for (const options of [{partialWrite: true}, {completedWithoutCallback: true},
-    {transportResult: {status: "completed", applicationBytesDigest: sha(wire(request())),
-      applicationBytesWritten: applicationBytes(request()), responseBytes: 1,
-      responseDigest: sha("response"), boundaryReceipt: {}}},
-    {transportResult: {status: "redirect", applicationBytesWritten: applicationBytes(request())}}]) {
+    {transportResult: {status: "completed", responseBytes: 1, responseDigest: sha("response"), boundaryReceipt: {}}},
+    {transportResult: {status: "redirect"}}]) {
     const fixture = harness(options); const outcome = await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(request());
     assert.equal(outcome.status, "indeterminate", JSON.stringify(options));
   }

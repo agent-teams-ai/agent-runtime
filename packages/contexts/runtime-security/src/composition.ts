@@ -33,12 +33,54 @@ const exactObject = <Name extends string>(value: unknown, names: readonly Name[]
     for (const name of names) {const descriptor = descriptors[name]; if (descriptor === undefined || !("value" in descriptor)) {return;}
       result[name] = descriptor.value;} return result as Readonly<Record<Name, unknown>>;} catch {return;}
 };
+const intrinsicUint8Array = Uint8Array;
+const intrinsicDataView = DataView;
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer")?.get as
+  (this: Uint8Array) => ArrayBufferLike;
+const typedArrayByteLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLength")?.get as
+  (this: Uint8Array) => number;
+const typedArrayByteOffset = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteOffset")?.get as
+  (this: Uint8Array) => number;
+const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "length")?.get as
+  (this: Uint8Array) => number;
+const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get as
+  (this: ArrayBuffer) => number;
+const arrayBufferResizable = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "resizable")?.get as
+  ((this: ArrayBuffer) => boolean) | undefined;
+const sharedArrayBufferByteLength = typeof SharedArrayBuffer === "undefined" ? undefined :
+  Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, "byteLength")?.get as
+    ((this: SharedArrayBuffer) => number) | undefined;
+
+const snapshotUint8Array = (value: unknown, maximumByteLength: number): Uint8Array | undefined => {
+  try {
+    if (!nodeTypes.isUint8Array(value) || nodeTypes.isProxy(value) || Object.getPrototypeOf(value) !== Uint8Array.prototype) {return;}
+    const source = value as Uint8Array;
+    const byteLength = Reflect.apply(typedArrayByteLength, source, []);
+    if (!Number.isSafeInteger(byteLength) || byteLength < 0 || byteLength > maximumByteLength) {return;}
+    const backing = Reflect.apply(typedArrayBuffer, source, []);
+    if (sharedArrayBufferByteLength !== undefined) {
+      try {Reflect.apply(sharedArrayBufferByteLength, backing, []); return;} catch {/* Ordinary ArrayBuffer. */}
+    }
+    const backingByteLength = Reflect.apply(arrayBufferByteLength, backing, []);
+    if (arrayBufferResizable !== undefined && Reflect.apply(arrayBufferResizable, backing, [])) {return;}
+    // DataView construction rejects detached ArrayBuffers, including detached zero-length buffers.
+    const detachedProof = new intrinsicDataView(backing as ArrayBuffer, 0, 0);
+    if (detachedProof.byteLength !== 0) {return;}
+    const byteOffset = Reflect.apply(typedArrayByteOffset, source, []);
+    const length = Reflect.apply(typedArrayLength, source, []);
+    if (!Number.isSafeInteger(byteOffset) || byteOffset < 0 || byteOffset + byteLength > backingByteLength ||
+        length !== byteLength) {return;}
+    const output = new intrinsicUint8Array(byteLength);
+    for (let index = 0; index < byteLength; index += 1) {output[index] = source[index]!;}
+    return output;
+  } catch {return;}
+};
 const primitives = Object.freeze({
   sha256: (bytes: Uint8Array) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
   exactObject,
   callable: (value: unknown): value is (...args: never[]) => unknown => typeof value === "function" && !nodeTypes.isProxy(value),
-  byteArray: (value: unknown): value is Uint8Array => value instanceof Uint8Array && !nodeTypes.isProxy(value) &&
-    Object.getPrototypeOf(value) === Uint8Array.prototype && value.buffer instanceof ArrayBuffer,
+  copyBytes: snapshotUint8Array,
   array: (value: unknown): value is unknown[] => Array.isArray(value) && !nodeTypes.isProxy(value),
   thenable: (value: unknown) => {if ((typeof value !== "object" || value === null) && typeof value !== "function") {return false;}
     try {return typeof Reflect.get(value as object, "then") === "function";} catch {return true;}},
@@ -58,13 +100,13 @@ export type {
   ContainedTurnEgressResult,
   EgressAuthorizationBodyV1,
   EgressAuthorizationEnvelopeV1,
-  ExactFirstWriteReceiptV1,
   EgressTransportObservationV1,
   EgressAuthorizationSignerV1,
   EgressPolicyTimeAuthorityV1,
   EgressPolicyTimeSnapshotV1,
   EgressTransportGatewayV1,
   EgressTransportV1,
+  TrustedEgressFirstWriteV1,
   NetworkAddressV1,
   ProviderRouteAuthorityV1,
   ProviderRouteAuthoritySnapshotV1,
