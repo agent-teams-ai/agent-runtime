@@ -111,6 +111,70 @@ describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
     } finally {await server.close();}
   });
 
+  test("uses intrinsic trust lengths and copies despite hostile own byteLength and length properties", async () => {
+    const server = await startLoopbackTlsServer();
+    try {
+      const mutableCa = Buffer.from(SYNTHETIC_LOOPBACK_CA);
+      const mutableCaAlias = new Uint8Array(mutableCa.buffer, mutableCa.byteOffset, mutableCa.byteLength);
+      let hostileLengthRead = false;
+      Object.defineProperties(mutableCa, {
+        byteLength: { get: () => {hostileLengthRead = true; throw new Error("hostile byteLength");} },
+        length: { get: () => {hostileLengthRead = true; throw new Error("hostile length");} },
+      });
+      const fixedTransport = transport(mutableCa);
+      mutableCaAlias.fill(0);
+      assert.equal(hostileLengthRead, false);
+      const attempt = fixedTransport.beginOpen(target(server.port));
+      await attempt.ready();
+      await expectClosed(attempt);
+    } finally {await server.close();}
+  });
+
+  test("enforces the exact aggregate one MiB trust bound and canonicalizes adversarial traversal", () => {
+    const paddedCa = SYNTHETIC_LOOPBACK_CA.padEnd(1_048_576, " ");
+    assert.doesNotThrow(() => {transport(paddedCa);});
+    assert.throws(
+      () => new NodeTlsHttpEgressTransport({certificateAuthorities: [paddedCa, SYNTHETIC_LOOPBACK_CA]}),
+      (error: unknown) => error instanceof NodeTlsHttpEgressError && error.code === "invalid_configuration",
+    );
+
+    const byteLengthDescriptor = Object.getOwnPropertyDescriptor(Buffer, "byteLength");
+    if (byteLengthDescriptor?.value === undefined) {throw new Error("Buffer.byteLength descriptor unavailable");}
+    let oversizedMeasurements = 0;
+    Object.defineProperty(Buffer, "byteLength", {
+      ...byteLengthDescriptor,
+      value: (...args: Parameters<typeof Buffer.byteLength>) => {
+        oversizedMeasurements += 1;
+        return Reflect.apply(byteLengthDescriptor.value as typeof Buffer.byteLength, Buffer, args);
+      },
+    });
+    try {
+      assert.throws(
+        () => transport("x".repeat(1_048_577)),
+        (error: unknown) => error instanceof NodeTlsHttpEgressError && error.code === "invalid_configuration",
+      );
+    } finally {Object.defineProperty(Buffer, "byteLength", byteLengthDescriptor);}
+    assert.equal(oversizedMeasurements, 0);
+
+    const hostileAuthorities = [SYNTHETIC_LOOPBACK_CA];
+    Object.defineProperty(hostileAuthorities, "0", {get: () => {throw new Error("hostile authority getter");}});
+    assert.throws(
+      () => new NodeTlsHttpEgressTransport({certificateAuthorities: hostileAuthorities}),
+      (error: unknown) => error instanceof NodeTlsHttpEgressError && error.code === "invalid_configuration",
+    );
+
+    let hostileLengthRead = false;
+    const hostileArrayLike = Object.defineProperties({}, {
+      byteLength: {get: () => {hostileLengthRead = true; throw new Error("hostile byteLength");}},
+      length: {get: () => {hostileLengthRead = true; throw new Error("hostile length");}},
+    });
+    assert.throws(
+      () => new NodeTlsHttpEgressTransport({certificateAuthorities: [hostileArrayLike as Uint8Array]}),
+      (error: unknown) => error instanceof NodeTlsHttpEgressError && error.code === "invalid_configuration",
+    );
+    assert.equal(hostileLengthRead, false);
+  });
+
   for (const scenario of [
     { name: "wrong CA chain", ca: SYNTHETIC_OTHER_CA, server: {} },
     { name: "wrong hostname SAN", ca: SYNTHETIC_LOOPBACK_CA,

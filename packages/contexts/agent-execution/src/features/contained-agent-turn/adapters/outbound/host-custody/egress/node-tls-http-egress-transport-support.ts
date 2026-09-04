@@ -1,8 +1,10 @@
+import { Buffer } from "node:buffer";
 import { createHash, type X509Certificate } from "node:crypto";
 import { isIP, SocketAddress } from "node:net";
 import { createSecureContext, type PeerCertificate, type SecureContext } from "node:tls";
 
 import type { HttpEgressTransportBinding } from "./http-egress-ports.js";
+import { intrinsicUint8ArrayLength } from "./http-byte-intrinsics.js";
 
 export type NodeTlsHttpEgressErrorCode =
   | "invalid_configuration"
@@ -33,26 +35,47 @@ export type FixedNodeTlsTrust = Readonly<{
   secureContext: SecureContext;
 }>;
 
+const MAXIMUM_TRUST_BYTES = 1_048_576;
+const uint8ArraySet = Uint8Array.prototype.set;
+
+const invalidConfiguration = (): NodeTlsHttpEgressError => new NodeTlsHttpEgressError("invalid_configuration");
+
 const validBoundedInteger = (value: number, minimum: number, maximum: number): boolean =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
 export const fixTrust = (authorities: readonly NodeTlsTrustInput[]): FixedNodeTlsTrust => {
-  if (!Array.isArray(authorities) || authorities.length === 0 || authorities.length > 32) {
-    throw new NodeTlsHttpEgressError("invalid_configuration");
-  }
-  const copied = authorities.map(authority => {
-    if (typeof authority === "string") {
-      if (authority.length === 0 || authority.length > 1_048_576) {
-        throw new NodeTlsHttpEgressError("invalid_configuration");
-      }
-      return authority;
-    }
-    if (!(authority instanceof Uint8Array) || authority.byteLength === 0 || authority.byteLength > 1_048_576) {
-      throw new NodeTlsHttpEgressError("invalid_configuration");
-    }
-    return Buffer.from(authority);
-  });
   try {
+    if (!Array.isArray(authorities)) {throw invalidConfiguration();}
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(authorities, "length");
+    const count = lengthDescriptor?.value;
+    if (!Number.isSafeInteger(count) || count < 1 || count > 32) {throw invalidConfiguration();}
+
+    const copied: Array<string | Buffer> = [];
+    let aggregateByteLength = 0;
+    for (let index = 0; index < count; index += 1) {
+      const authorityDescriptor = Object.getOwnPropertyDescriptor(authorities, String(index));
+      if (authorityDescriptor === undefined || !("value" in authorityDescriptor)) {throw invalidConfiguration();}
+      const authority: unknown = authorityDescriptor.value;
+      if (typeof authority === "string") {
+        const remainingByteLength = MAXIMUM_TRUST_BYTES - aggregateByteLength;
+        if (authority.length === 0 || authority.length > remainingByteLength) {throw invalidConfiguration();}
+        const byteLength = Buffer.byteLength(authority, "utf8");
+        if (byteLength > remainingByteLength) {
+          throw invalidConfiguration();
+        }
+        aggregateByteLength += byteLength;
+        copied[index] = authority;
+        continue;
+      }
+      const byteLength = intrinsicUint8ArrayLength(authority);
+      if (byteLength === undefined || byteLength === 0 || byteLength > MAXIMUM_TRUST_BYTES - aggregateByteLength) {
+        throw invalidConfiguration();
+      }
+      const snapshot = Buffer.allocUnsafe(byteLength);
+      Reflect.apply(uint8ArraySet, snapshot, [authority]);
+      aggregateByteLength += byteLength;
+      copied[index] = snapshot;
+    }
     return Object.freeze({
       secureContext: createSecureContext({
         ca: copied,
@@ -61,7 +84,7 @@ export const fixTrust = (authorities: readonly NodeTlsTrustInput[]): FixedNodeTl
       }),
     });
   } catch {
-    throw new NodeTlsHttpEgressError("invalid_configuration");
+    throw invalidConfiguration();
   }
 };
 
