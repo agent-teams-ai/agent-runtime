@@ -4,12 +4,19 @@ import type {
   ContainedTurnProviderAccessFeatureApi, ProviderAccessProvider, ProviderAccessScope,
 } from "../contracts/contained-turn-provider-access.js";
 import type { ConsumeForDispatchInput, ContainedTurnDispatchConsumptionV1 } from "../contracts/dispatch-consumption-v1.js";
+import type {
+  AuthorizeCredentialMaterializationInput, CredentialMaterializationAuthorizationV1,
+} from "../contracts/materialization-authorization-v1.js";
 import { createContainedTurnDispatchConsumptionV1 } from "./dispatch-consumption-v1-factory.js";
+import { createContainedTurnCredentialMaterializationAuthorizationV1 } from "./materialization-authorization-v1-factory.js";
 import { createInMemoryDispatchConsumptionRepository } from "../adapters/outbound/in-memory-dispatch-consumption-repository.js";
 import { createSha256DispatchConsumptionDigest } from "../adapters/outbound/sha256-dispatch-consumption-digest.js";
 import {
   claimBindingDigestPayload, requestDigestPayload, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumeCommand,
 } from "../domain/dispatch-consumption.js";
+import {
+  materializationRequestPayload, snapshotMaterializationCommand, type MaterializationCommand,
+} from "../domain/materialization-authorization.js";
 import { exactDispatchDataRecord } from "../adapters/dispatch-consumption-data.js";
 import { unsignedConsumeCommandFromContract } from "../adapters/inbound/dispatch-consumption-mapper.js";
 
@@ -62,6 +69,7 @@ export interface InMemoryDispatchBindingSeed {
 
 export interface InMemoryDispatchConsumptionHarness {
   readonly access: ContainedTurnDispatchConsumptionV1;
+  readonly materialization: CredentialMaterializationAuthorizationV1;
   readonly control: Readonly<{
     advanceControlTime(value: number): Promise<void>;
     observeOwnerState(input: { readonly provider: ProviderAccessProvider; readonly scopeDigest: string }):
@@ -87,6 +95,7 @@ const seedToHead = (seed: InMemoryDispatchBindingSeed): DispatchBindingHead => {
   });
 };
 
+/** In-memory checkpoint harness: at-most-once state is process-local and does not survive restart. */
 export const createInMemoryContainedTurnDispatchConsumptionV1 = (input: {
   readonly bindings: readonly InMemoryDispatchBindingSeed[];
   readonly initialControlTime: number;
@@ -98,10 +107,11 @@ export const createInMemoryContainedTurnDispatchConsumptionV1 = (input: {
   if (!Number.isSafeInteger(initialControlTime) || (initialControlTime as number) < 1) {
     throw new TypeError("initial control time must be a positive safe integer");
   }
-  const { control, repository } = createInMemoryDispatchConsumptionRepository(bindings.map(seedToHead), initialControlTime as number);
+  const { control, materializationRepository, repository } = createInMemoryDispatchConsumptionRepository(bindings.map(seedToHead), initialControlTime as number);
   const digest = createSha256DispatchConsumptionDigest();
   return Object.freeze({
     access: createContainedTurnDispatchConsumptionV1({ digest, repository }),
+    materialization: createContainedTurnCredentialMaterializationAuthorizationV1({ digest, repository: materializationRepository }),
     control: Object.freeze({
       async advanceControlTime(value: number) {
         if (!Number.isSafeInteger(value) || value < 1) {throw new TypeError("control time must be a positive safe integer");}
@@ -123,4 +133,13 @@ export const createDispatchConsumptionRequestDigests = async (
   const claimBindingDigest = await digest.digest(claimBindingDigestPayload(command));
   const { requestDigest: _requestDigest, ...unsigned } = { ...command, claimBindingDigest };
   return Object.freeze({ claimBindingDigest, requestDigest: await digest.digest(requestDigestPayload(unsigned)) });
+};
+
+/** Produces the exact non-secret PA-M1 request digest. */
+export const createCredentialMaterializationRequestDigest = async (
+  input: Omit<AuthorizeCredentialMaterializationInput, "requestDigest">,
+): Promise<string> => {
+  const command = snapshotMaterializationCommand({ ...input, requestDigest: "pending" });
+  const { requestDigest: _requestDigest, ...unsigned } = command as MaterializationCommand;
+  return createSha256DispatchConsumptionDigest().digest(materializationRequestPayload(unsigned));
 };

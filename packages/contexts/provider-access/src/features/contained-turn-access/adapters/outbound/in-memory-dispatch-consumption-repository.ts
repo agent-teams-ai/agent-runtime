@@ -2,10 +2,14 @@ import type {
   DispatchConsumptionJournalEntry, DispatchConsumptionRepository, DispatchConsumptionTransaction,
   DispatchConsumptionTransactionSelector,
 } from "../../application/ports/outbound/dispatch-consumption-repository.js";
+import type {
+  MaterializationAuthorizationRepository, MaterializationAuthorizationTransaction,
+} from "../../application/ports/outbound/materialization-authorization-repository.js";
 import {
   canonicalJson, snapshotDispatchBindingHead, snapshotDispatchConsumedReceipt, snapshotDispatchSettlementOutcome,
   type DispatchBindingHead, type DispatchConsumedReceipt, type DispatchDisposition, type DispatchScopeValue, type DispatchSettlementOutcome,
 } from "../../domain/dispatch-consumption.js";
+import { snapshotMaterializationRecord, type MaterializationRecord } from "../../domain/materialization-authorization.js";
 import { canonicalDispatchJournalEntry, detachedDispatchData } from "../dispatch-consumption-data.js";
 
 type OwnerState = "absent" | "consumed_pending" | "claim_committed" | "abandoned_without_claim";
@@ -16,6 +20,8 @@ interface State {
   readonly grants: Map<string, DispatchConsumptionJournalEntry>;
   readonly settlements: Map<string, DispatchSettlementOutcome>;
   readonly settlementsByConsumption: Map<string, DispatchSettlementOutcome>;
+  readonly materializations: Map<string, MaterializationRecord>;
+  readonly materializationsByConsumption: Map<string, MaterializationRecord>;
   readonly slots: Map<string, Map<"claude" | "codex", BindingSlot>>;
 }
 const scopeKey = (scope: DispatchScopeValue): string => canonicalJson({
@@ -25,6 +31,11 @@ const grantKey = (input: { readonly grantRequestId: string; readonly provider: "
   canonicalJson({ grantRequestId: input.grantRequestId, provider: input.provider, scope: input.scope });
 const settlementKey = (input: Extract<DispatchConsumptionTransactionSelector, { readonly kind: "settle" }>): string =>
   canonicalJson({ operationId: input.operationId, provider: input.provider, scope: input.scope, settlementRequestId: input.settlementRequestId });
+const materializationConsumptionKey = (input: {
+  readonly projectId: string; readonly provider: "claude" | "codex"; readonly scopeDigest: string;
+  readonly settledConsumptionDigest: string; readonly tenantId: string;
+}): string => canonicalJson({ projectId: input.projectId, provider: input.provider, scopeDigest: input.scopeDigest,
+  settledConsumptionDigest: input.settledConsumptionDigest, tenantId: input.tenantId });
 
 export interface InMemoryDispatchConsumptionControl {
   advanceControlTime(value: number): Promise<void>;
@@ -112,8 +123,12 @@ const commit = (state: State, selector: DispatchConsumptionTransactionSelector, 
 
 export const createInMemoryDispatchConsumptionRepository = (
   initialHeads: readonly DispatchBindingHead[], initialControlTime: number,
-): { readonly control: InMemoryDispatchConsumptionControl; readonly repository: DispatchConsumptionRepository } => {
-  const state: State = { consumptions: new Map(), historicalOwnerState: new Map(), grants: new Map(), settlements: new Map(), settlementsByConsumption: new Map(), slots: new Map() };
+): { readonly control: InMemoryDispatchConsumptionControl; readonly materializationRepository: MaterializationAuthorizationRepository;
+  readonly repository: DispatchConsumptionRepository } => {
+  const state: State = {
+    consumptions: new Map(), historicalOwnerState: new Map(), grants: new Map(), materializations: new Map(),
+    materializationsByConsumption: new Map(), settlements: new Map(), settlementsByConsumption: new Map(), slots: new Map(),
+  };
   let controlTime = initialControlTime;
   const detachedHeads = detachedDispatchData("initial binding heads", initialHeads);
   if (!Array.isArray(detachedHeads)) {throw new TypeError("initial binding heads must be an array");}
@@ -142,6 +157,55 @@ export const createInMemoryDispatchConsumptionRepository = (
       const entry = state.grants.get(grantKey(input)); return entry === undefined ? undefined : canonicalDispatchJournalEntry(entry);
     },
   });
+  const materializationRepository: MaterializationAuthorizationRepository = Object.freeze({
+    async observeMaterializationRequest(materializationRequestId: string) {
+      await tail;
+      const found = state.materializations.get(materializationRequestId);
+      return found === undefined ? undefined : snapshotMaterializationRecord(structuredClone(found));
+    },
+    async transact<T>(selector: Parameters<MaterializationAuthorizationRepository["transact"]>[0], work: (transaction: MaterializationAuthorizationTransaction) => Promise<T>) {
+      return serialize(async () => {
+        const slot = state.slots.get(scopeKey(selector))?.get(selector.provider);
+        let pending: MaterializationRecord | undefined;
+        const transaction: MaterializationAuthorizationTransaction = Object.freeze({
+          async controlTime() {return controlTime;},
+          async findBindingHead() {return slot === undefined ? undefined : snapshotDispatchBindingHead(structuredClone(slot.head));},
+          async findConsumption() {
+            const found = state.consumptions.get(selector.settledConsumptionDigest)?.receipt;
+            return found === undefined ? undefined : snapshotDispatchConsumedReceipt(structuredClone(found));
+          },
+          async findMaterializationByConsumption() {
+            const found = state.materializationsByConsumption.get(materializationConsumptionKey(selector));
+            return found === undefined ? undefined : snapshotMaterializationRecord(structuredClone(found));
+          },
+          async findMaterializationRequest() {
+            const found = state.materializations.get(selector.materializationRequestId);
+            return found === undefined ? undefined : snapshotMaterializationRecord(structuredClone(found));
+          },
+          async findSettlementByConsumption() {
+            const found = state.settlementsByConsumption.get(selector.settledConsumptionDigest);
+            return found === undefined ? undefined : snapshotDispatchSettlementOutcome(structuredClone(found));
+          },
+          async saveMaterialization(record: MaterializationRecord) {pending = snapshotMaterializationRecord(structuredClone(record));},
+        });
+        const result = await work(transaction);
+        if (pending !== undefined) {
+          const existing = state.materializations.get(pending.materializationRequestId);
+          if (existing !== undefined && existing.requestDigest !== pending.requestDigest) {
+            throw new Error("materialization request identity cannot be rebound");
+          }
+          state.materializations.set(pending.materializationRequestId, pending);
+          const consumptionKey = materializationConsumptionKey(pending);
+          if (!state.materializationsByConsumption.has(consumptionKey)) {
+            state.materializationsByConsumption.set(consumptionKey, pending);
+          } else if (state.materializationsByConsumption.get(consumptionKey)?.materializationRequestId === pending.materializationRequestId) {
+            state.materializationsByConsumption.set(consumptionKey, pending);
+          }
+        }
+        return result;
+      });
+    },
+  });
   return Object.freeze({
     control: Object.freeze({
       advanceControlTime: (value: number) => serialize(async () => {
@@ -155,6 +219,6 @@ export const createInMemoryDispatchConsumptionRepository = (
         return matches.length === 1 ? matches[0]?.state : undefined;
       },
       replaceBindingHead: (head: DispatchBindingHead) => serialize(async () => { putHead(state, head); }),
-    }), repository,
+    }), materializationRepository, repository,
   });
 };
