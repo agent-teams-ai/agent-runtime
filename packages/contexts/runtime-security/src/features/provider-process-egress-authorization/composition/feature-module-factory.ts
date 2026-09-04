@@ -20,6 +20,9 @@ import type { EgressCanonicalDigest, EgressDecisionSigner, EgressDecisionVerifie
 import type {
   EgressAuthorityReadOutcomeV1,
   EgressControlTimeV1,
+  EgressCurrentAuthorityV1,
+  EgressDecisionSignatureV1,
+  EgressSigningKeyMetadataV1,
   FirstApplicationByteGrantPayloadV1,
   ProvisionalEgressAuthorizationV1,
   RequestFinalEgressAuthorizationOutcomeV1,
@@ -32,6 +35,7 @@ import type {
 import type {
   EgressAuthorityReadOutcome,
   EgressControlTime,
+  EgressCurrentAuthority,
   EgressDecisionSignature,
   FirstApplicationByteGrantPayload,
   ProvisionalEgressAuthorization,
@@ -106,14 +110,28 @@ const finalInputFromDto = (input: RequestFinalEgressAuthorizationV1):
   tls: { ...input.tls }, request: requestFromDto(input.request), redirectHop: input.redirectHop,
 });
 
+const signingKeyToV1 = (key: EgressCurrentAuthority["policy"]["signingKey"]):
+  EgressSigningKeyMetadataV1 => {
+  if (key.algorithm !== "hmac-sha256-synthetic") {throw new TypeError("invalid V1 signing key");}
+  return key;
+};
+
+const signatureToV1 = (signature: EgressDecisionSignature): EgressDecisionSignatureV1 => {
+  if (signature.algorithm !== "hmac-sha256-synthetic") {throw new TypeError("invalid V1 signature");}
+  return signature;
+};
+
+const policyToV1 = (policy: EgressCurrentAuthority["policy"]):
+  EgressCurrentAuthorityV1["policy"] => ({ ...policy, signingKey: signingKeyToV1(policy.signingKey) });
+
 const provisionalToDto = (decision: ProvisionalEgressAuthorization):
   ProvisionalEgressAuthorizationV1 => ({
   contractVersion: "provider-process-egress-provisional-decision/v1",
   authorizationRequestId: decision.authorizationRequestId, authorityRef: decision.authorityRef,
-  scope: decision.scope, policy: decision.policy, providerAccess: decision.providerAccess,
+  scope: decision.scope, policy: policyToV1(decision.policy), providerAccess: decision.providerAccess,
   request: decision.request, requestDigest: decision.requestDigest, time: decision.time,
-  signingKey: decision.signingKey, decisionDigest: decision.decisionDigest,
-  signature: decision.signature,
+  signingKey: signingKeyToV1(decision.signingKey), decisionDigest: decision.decisionDigest,
+  signature: signatureToV1(decision.signature),
 });
 
 const provisionalSigningDocument = (decision: Omit<ProvisionalEgressAuthorization,
@@ -130,7 +148,7 @@ const GRANT_EVIDENCE_CONTRACT_VERSION = "provider-process-egress-grant-evidence/
 const grantPayloadFieldsToDto = (payload: GrantPayloadBeforeFingerprint) => ({
   contractVersion: "provider-process-first-application-byte-grant/v1" as const,
   authorizationRequestId: payload.authorizationRequestId, authorityRef: payload.authorityRef,
-  scope: payload.scope, policy: payload.policy, providerAccess: payload.providerAccess,
+  scope: payload.scope, policy: policyToV1(payload.policy), providerAccess: payload.providerAccess,
   resolver: payload.resolver, selectedPeer: payload.selectedPeer, tls: payload.tls,
   limits: payload.limits, request: payload.request, requestDigest: payload.requestDigest,
   time: payload.time, boundaryUseId: payload.boundaryUseId,
@@ -142,12 +160,14 @@ const grantPayloadFieldsToDto = (payload: GrantPayloadBeforeFingerprint) => ({
 });
 
 const grantConsumptionDocument = (payload: GrantPayloadBeforeFingerprint) => ({
-  ...grantPayloadFieldsToDto(payload), consumption: payload.consumption,
+  ...grantPayloadFieldsToDto(payload), consumption: { ...payload.consumption,
+    journalKey: { ...payload.consumption.journalKey, namespace: "provider-process-egress/v1" as const } },
 });
 
 const grantPayloadToDto = (payload: FirstApplicationByteGrantPayload):
   FirstApplicationByteGrantPayloadV1 => ({
-  ...grantPayloadFieldsToDto(payload), consumption: payload.consumption,
+  ...grantPayloadFieldsToDto(payload), consumption: { ...payload.consumption,
+    journalKey: { ...payload.consumption.journalKey, namespace: "provider-process-egress/v1" } },
 });
 
 const grantSigningDocument = (payload: FirstApplicationByteGrantPayload) => ({
@@ -165,7 +185,7 @@ const finalOutcomeToDto = (outcome: RequestFinalEgressAuthorizationOutcome):
   RequestFinalEgressAuthorizationOutcomeV1 => outcome.status === "authorized"
   ? { status: "authorized", grant: { payload: grantPayloadToDto(outcome.grant.payload),
     finalAuthorizationDigest: outcome.grant.finalAuthorizationDigest,
-    signature: outcome.grant.signature,
+    signature: signatureToV1(outcome.grant.signature),
     evidence: { contractVersion: GRANT_EVIDENCE_CONTRACT_VERSION,
       authorizationRef: outcome.grant.payload.authorizationRequestId,
       boundaryUseRef: outcome.grant.payload.boundaryUseId,
@@ -231,6 +251,9 @@ const snapshotDependencies = (input: ProviderProcessEgressAuthorizationDependenc
       deepFreezeEgress(detachEgressDecisionSignature(sign(value, key)) as EgressDecisionSignature) }),
     verifier: Object.freeze({ verify: (value: string, signature: EgressDecisionSignature) =>
       verify(value, signature) === true }),
+    validSigningKey: (key: EgressCurrentAuthority["policy"]["signingKey"]) =>
+      key.algorithm === "hmac-sha256-synthetic",
+    journalNamespace: "provider-process-egress/v1" as const,
     signedDocuments: Object.freeze({ provisional: provisionalSigningDocument,
       consumption: grantConsumptionDocument, grant: grantSigningDocument }),
   });

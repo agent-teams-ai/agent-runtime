@@ -36,3 +36,19 @@ export type {
   ClaudeCodeSetupAuthorizationDiagnostic,
   TrustedClaudeCodeSetupInspectionScope,
 } from "./features/setup-source-inspection-authorization/contracts/claude-code-setup-inspection-authorization.js";
+export type {
+  EgressAuthorityReadOutcomeV2,
+  EgressCurrentAuthorityV2,
+  EgressDecisionSignatureV2,
+  EgressSignatureAlgorithmV2,
+  EgressSignatureEncodingV2,
+  EgressSigningKeyMetadataV2,
+  HostEgressVerifierV2,
+  ProvisionalEgressAuthorizationV2,
+  ProviderProcessEgressAuthorizationV2,
+  RequestFinalEgressAuthorizationV2,
+  RequestProvisionalEgressAuthorizationV2,
+  SignedFirstApplicationByteGrantV2,
+  TrustedEgressCompositionScopeV2,
+  TrustedHostRequestProjectionV2,
+} from "./features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.js";
