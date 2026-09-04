@@ -49,3 +49,6 @@ export const zeroHttpBytes = (value: unknown): void => {
   // detached-view condition. Do not convert it into successful cleanup.
   Reflect.apply(uint8ArrayFill, value, [0]);
 };
+
+export const zeroLateHttpBytes = (pending: Promise<Uint8Array> | undefined): void =>
+  void pending?.then(value => zeroHttpBytes(value), () => {});
