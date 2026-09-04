@@ -9,6 +9,7 @@ import {
   DockerEgressJournalCorruptionError,
   type DockerEgressAuthorityBinding,
   type DockerEgressCleanupObservation,
+  type DockerEgressCleanupObserverAuthority,
   type DockerEgressIdentity,
   type DockerEgressJournalEvent,
   type DockerEgressJournalLimits,
@@ -45,6 +46,7 @@ const OBSERVATION_KEYS = [
   "capabilityRevisionSha256", "cleanupHandle", "daemonGenerationId", "daemonId", "executionGenerationId", "hostBootId",
   "hostInstanceId", "observationSha256", "observerId", "resource", "result", "scopeSha256", "slotGenerationId",
 ] as const;
+const OBSERVER_AUTHORITY_KEYS = ["capabilityRevisionSha256", "observerId"] as const;
 const TRUSTED_KEYS = [
   "daemonGenerationId", "daemonId", "executionGenerationId", "hostBootId", "hostInstanceId", "hostSlotId", "scopeSha256",
   "slotGenerationId",
@@ -168,6 +170,13 @@ export const validateDockerEgressTrustedIdentity = (value: unknown): DockerEgres
     daemonId: fixed(value.daemonId, "daemon:", "daemonId"),
     daemonGenerationId: fixed(value.daemonGenerationId, "daemon-generation:", "daemonGenerationId"),
     slotGenerationId: fixed(value.slotGenerationId, "slot-generation:", "slotGenerationId"),
+  });
+};
+export const validateDockerEgressCleanupObserverAuthority = (value: unknown): DockerEgressCleanupObserverAuthority => {
+  assertExact(value, OBSERVER_AUTHORITY_KEYS, "cleanup observer authority");
+  return Object.freeze({
+    observerId: fixed(value.observerId, "observer:", "observerId"),
+    capabilityRevisionSha256: digest(value.capabilityRevisionSha256, "capabilityRevisionSha256"),
   });
 };
 export const dockerEgressCleanupHandle = (subject: DockerEgressJournalSubject, resource: DockerEgressResourceKind): string =>

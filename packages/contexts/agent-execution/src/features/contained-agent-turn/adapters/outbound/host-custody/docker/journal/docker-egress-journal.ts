@@ -10,6 +10,7 @@ import {
   encodeDockerEgressTombstone,
   replayDockerEgressBytes,
   type DockerEgressReplay,
+  validateDockerEgressCleanupObserverAuthority,
   validateDockerEgressSubject,
   validateDockerEgressTrustedIdentity,
 } from "./docker-egress-journal-codec.js";
@@ -23,6 +24,7 @@ import {
   DockerEgressJournalCorruptionError,
   type DockerEgressCleanupDirective,
   type DockerEgressCleanupObservation,
+  type DockerEgressCleanupObserverAuthority,
   type DockerEgressJournalEvent,
   type DockerEgressJournalFile,
   type DockerEgressJournalLimits,
@@ -65,13 +67,14 @@ const requiredReservation = (state: ReplayState, kind: "materialize" | "cleanup"
   : 4 + (state.possible.size + 1) * 2;
 
 const observationMatches = (subject: DockerEgressJournalSubject, resource: DockerEgressResourceKind,
-  observation: DockerEgressCleanupObservation): boolean => {
+  observation: DockerEgressCleanupObservation, observer: DockerEgressCleanupObserverAuthority): boolean => {
   const identity = subject.identity;
   return observation.resource === resource && observation.cleanupHandle === dockerEgressCleanupHandle(subject, resource) &&
     observation.scopeSha256 === subject.authority.scopeSha256 && observation.hostInstanceId === identity.hostInstanceId &&
     observation.hostBootId === identity.hostBootId && observation.executionGenerationId === identity.executionGenerationId &&
     observation.daemonId === identity.daemonId && observation.daemonGenerationId === identity.daemonGenerationId &&
-    observation.slotGenerationId === identity.slotGenerationId && observation.result === "absent";
+    observation.slotGenerationId === identity.slotGenerationId && observation.observerId === observer.observerId &&
+    observation.capabilityRevisionSha256 === observer.capabilityRevisionSha256 && observation.result === "absent";
 };
 const applyMaterializeIntent = (state: ReplayState, event: Extract<DockerEgressJournalEvent, {kind: "materialize_intent"}>): void => {
     if (state.cleanupStarted || state.reconcileRequired || state.materializePending !== null || state.cleanupPending !== null ||
@@ -91,8 +94,8 @@ const applyCleanupIntent = (state: ReplayState, event: Extract<DockerEgressJourn
     state.cleanupStarted = true; state.cleanupPending = event.resource;
 };
 const applyCleanupReceipt = (state: ReplayState, subject: DockerEgressJournalSubject,
-  event: Extract<DockerEgressJournalEvent, {kind: "cleanup_receipt"}>): void => {
-    if (state.cleanupPending !== event.resource || !observationMatches(subject, event.resource, event.observation)) { invalid(); }
+  event: Extract<DockerEgressJournalEvent, {kind: "cleanup_receipt"}>, observer: DockerEgressCleanupObserverAuthority): void => {
+    if (state.cleanupPending !== event.resource || !observationMatches(subject, event.resource, event.observation, observer)) { invalid(); }
     state.cleaned.add(event.resource); state.cleanupPending = null;
     if (nextCleanup(state) === null) { state.reconcileRequired = state.unscopedReconciliation; }
 };
@@ -113,7 +116,7 @@ const applyClosed = (state: ReplayState): void => {
       state.reconcileRequired || state.quarantined) { invalid(); }
   state.terminal = true;
 };
-const applyEvent = (state: ReplayState, record: DockerEgressJournalRecord): void => {
+const applyEvent = (state: ReplayState, record: DockerEgressJournalRecord, observer: DockerEgressCleanupObserverAuthority): void => {
   const event = record.event;
   if (state.terminal || (record.sequence === 0 && event.kind !== "open_intent") ||
       (record.sequence !== 0 && event.kind === "open_intent")) { invalid(); }
@@ -122,7 +125,7 @@ const applyEvent = (state: ReplayState, record: DockerEgressJournalRecord): void
     case "materialize_intent": return applyMaterializeIntent(state, event);
     case "materialize_receipt": return applyMaterializeReceipt(state, event);
     case "cleanup_intent": return applyCleanupIntent(state, event);
-    case "cleanup_receipt": return applyCleanupReceipt(state, record.subject, event);
+    case "cleanup_receipt": return applyCleanupReceipt(state, record.subject, event, observer);
     case "reconcile_required": return applyReconciliation(state, event);
     case "quarantined": {
       if (state.quarantined) { invalid(); }
@@ -131,11 +134,25 @@ const applyEvent = (state: ReplayState, record: DockerEgressJournalRecord): void
     case "closed": return applyClosed(state);
   }
 };
-const replayState = (records: readonly DockerEgressJournalRecord[]): ReplayState => {
+const replayState = (records: readonly DockerEgressJournalRecord[], observer: DockerEgressCleanupObserverAuthority): ReplayState => {
   if (records.length === 0) { invalid(); }
-  const state = initialState(); records.forEach(record => applyEvent(state, record)); return state;
+  const state = initialState(); records.forEach(record => applyEvent(state, record, observer)); return state;
 };
-export const validateDockerEgressJournalTransitions = (records: readonly DockerEgressJournalRecord[]): void => { replayState(records); };
+const replayValidPrefix = (records: readonly DockerEgressJournalRecord[],
+  observer: DockerEgressCleanupObserverAuthority): Readonly<{
+    records: readonly DockerEgressJournalRecord[]; state: ReplayState; tail: "complete" | "partial";
+  }> => {
+  const state = initialState();
+  for (const [index, record] of records.entries()) {
+    try { applyEvent(state, record, observer); }
+    catch { return Object.freeze({ records: Object.freeze(records.slice(0, index)), state, tail: "partial" }); }
+  }
+  return Object.freeze({ records, state, tail: "complete" });
+};
+export const validateDockerEgressJournalTransitions = (records: readonly DockerEgressJournalRecord[],
+  observerInput: DockerEgressCleanupObserverAuthority): void => {
+  replayState(records, validateDockerEgressCleanupObserverAuthority(observerInput));
+};
 
 const limitsFrom = (input?: Partial<DockerEgressJournalLimits>): DockerEgressJournalLimits => {
   const result = Object.freeze({ ...DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS, ...input });
@@ -168,11 +185,17 @@ const internalCommand = (locator: string, purpose: string): string =>
 export class DockerEgressJournal {
   private readonly limits: DockerEgressJournalLimits;
   private readonly trusted: DockerEgressTrustedRuntimeIdentity;
+  private readonly observer: DockerEgressCleanupObserverAuthority;
   public constructor(
     private readonly storage: DockerEgressJournalStorage,
     trusted: DockerEgressTrustedRuntimeIdentity,
+    observer: DockerEgressCleanupObserverAuthority,
     limits?: Partial<DockerEgressJournalLimits>,
-  ) { this.trusted = validateDockerEgressTrustedIdentity(trusted); this.limits = limitsFrom(limits); }
+  ) {
+    this.trusted = validateDockerEgressTrustedIdentity(trusted);
+    this.observer = validateDockerEgressCleanupObserverAuthority(observer);
+    this.limits = limitsFrom(limits);
+  }
 
   private async replay(file: DockerEgressJournalFile): Promise<DockerEgressReplay> {
     return replayDockerEgressBytes(await file.read(this.limits.maxJournalBytes), this.limits);
@@ -180,7 +203,7 @@ export class DockerEgressJournal {
   private async read(file: DockerEgressJournalFile): Promise<readonly DockerEgressJournalRecord[]> {
     const replay = await this.replay(file);
     if (replay.tail !== "complete") { throw new DockerEgressJournalCorruptionError("partial journal tail"); }
-    replayState(replay.records); return replay.records;
+    replayState(replay.records, this.observer); return replay.records;
   }
   private precharge(entries: readonly DockerEgressStorageEntry[], used: number): number {
     let total = used;
@@ -224,10 +247,10 @@ export class DockerEgressJournal {
     let terminalRecord: DockerEgressJournalRecord | null = null;
     try {
       const prefix = await this.replay(entry.file);
-      if (prefix.records.length > 0) {
-        replayState(prefix.records);
-        if (dockerEgressJournalLocator(prefix.records[0]!.subject) === entry.locatorSha256) {
-          terminalRecord = prefix.records.at(-1)!;
+      const validated = replayValidPrefix(prefix.records, this.observer);
+      if (validated.records.length > 0) {
+        if (dockerEgressJournalLocator(validated.records[0]!.subject) === entry.locatorSha256) {
+          terminalRecord = validated.records.at(-1)!;
         }
       }
     } catch { /* Only a completely validated, locator-bound prefix is retained. */ }
@@ -276,7 +299,7 @@ export class DockerEgressJournal {
             if (records[0]?.commandId === commandId && records[0].commandDigestSha256 === candidate.commandDigestSha256) { return records[0]; }
             throw new DockerEgressJournalConflictError("open command conflicts with existing journal");
           }
-          if (!replayState(records).terminal || identitiesOverlap(first.subject, subject)) {
+          if (!replayState(records, this.observer).terminal || identitiesOverlap(first.subject, subject)) {
             throw new DockerEgressJournalConflictError("live, debt, or reused identity fences admission");
           }
         }
@@ -340,7 +363,7 @@ export class DockerEgressJournal {
         }
         const next = createDockerEgressRecord({ sequence: expectedSequence + 1, subject, commandId, event,
           previousChecksumSha256: previous.checksumSha256 });
-        try { replayState([...records, next]); } catch { throw new DockerEgressJournalConflictError("unsafe next event"); }
+        try { replayState([...records, next], this.observer); } catch { throw new DockerEgressJournalConflictError("unsafe next event"); }
         const bytes = encodeDockerEgressRecord(next, this.limits);
         const reservation = event.kind === "materialize_intent" || event.kind === "cleanup_intent" ? event.reservation : undefined;
         const requiredRecords = reservation?.recordCount ?? 1; const requiredBytes = reservation?.byteCount ?? bytes.byteLength;
@@ -438,8 +461,8 @@ export class DockerEgressJournal {
         actual.subject.bindingSha256 !== tombstone.bindingSha256 ||
         dockerEgressJournalLocator(actual.subject) !== liveEntry.locatorSha256 ||
         liveEntry.locatorSha256 !== tombstoneEntry.locatorSha256) { return false; }
-    try { replayState(replay.records); } catch { return false; }
-    if (!replayState(replay.records).terminal) { return false; }
+    try { replayState(replay.records, this.observer); } catch { return false; }
+    if (!replayState(replay.records, this.observer).terminal) { return false; }
     await this.storage.persistTombstone(tombstoneEntry.locatorSha256,
       encodeDockerEgressTombstone(tombstone, this.limits), true);
     return true;
@@ -448,20 +471,21 @@ export class DockerEgressJournal {
   private async recoverV3Entry(entry: DockerEgressStorageEntry, directives: DockerEgressCleanupDirective[],
     evidence: DockerEgressRecoveryEvidence[]): Promise<void> {
     try {
-      const replay = await this.replay(entry.file); const records = replay.records;
+      const replay = await this.replay(entry.file); const validated = replayValidPrefix(replay.records, this.observer);
+      const records = validated.records; const complete = replay.tail === "complete" && validated.tail === "complete";
       if (records.length === 0) { throw new DockerEgressJournalCorruptionError(); }
-      const subject = records[0]!.subject; const state = replayState(records);
+      const subject = records[0]!.subject; const state = validated.state;
       if (dockerEgressJournalLocator(subject) !== entry.locatorSha256 || !trustedMatches(subject, this.trusted)) {
         await this.quarantineStaleEntry(entry, records, state);
         evidence.push(Object.freeze({ kind: "quarantine_evidence", locatorSha256: entry.locatorSha256,
           bindingSha256: subject.bindingSha256, status: "quarantined" })); return;
       }
-      if (replay.tail === "complete" && state.terminal) {
+      if (complete && state.terminal) {
         await this.persistRetirement(entry.locatorSha256, records.at(-1)!);
         evidence.push(Object.freeze({ kind: "retirement_evidence", locatorSha256: entry.locatorSha256,
           bindingSha256: subject.bindingSha256, status: "retired" })); return;
       }
-      if (replay.tail === "complete" && isDebtFree(state)) {
+      if (complete && isDebtFree(state)) {
         await this.retireDebtFree(entry, records);
         evidence.push(Object.freeze({ kind: "retirement_evidence", locatorSha256: entry.locatorSha256,
           bindingSha256: subject.bindingSha256, status: "retired" })); return;
@@ -470,14 +494,14 @@ export class DockerEgressJournal {
       if (resource !== null) { directives.push(Object.freeze({ kind: "cleanup_only", subject, sequence: records.at(-1)!.sequence,
         resource, cleanupHandle: dockerEgressCleanupHandle(subject, resource),
         reconcileRequired: state.reconcileRequired || state.materializePending !== null || state.cleanupPending !== null })); }
-      if (replay.tail !== "complete") {
+      if (!complete) {
         const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256,
           bindingSha256: subject.bindingSha256, disposition: "quarantined", terminalRecord: records.at(-1)! });
         await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
       }
-      evidence.push(Object.freeze({ kind: state.quarantined || replay.tail !== "complete" ? "quarantine_evidence" : "cleanup_evidence",
+      evidence.push(Object.freeze({ kind: state.quarantined || !complete ? "quarantine_evidence" : "cleanup_evidence",
         locatorSha256: entry.locatorSha256, bindingSha256: subject.bindingSha256,
-        status: state.quarantined || replay.tail !== "complete" ? "quarantined" : "debt" }));
+        status: state.quarantined || !complete ? "quarantined" : "debt" }));
     } catch {
       const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256, bindingSha256: null,
         disposition: "quarantined", terminalRecord: null });

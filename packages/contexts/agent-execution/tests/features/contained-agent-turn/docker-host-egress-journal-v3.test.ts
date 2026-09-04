@@ -32,6 +32,10 @@ import { MemoryEgressFile, MemoryEgressStorage, key as v2Key } from "../../fixtu
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 const opaque = (prefix: string, value: string): string => `${prefix}${hash(value)}`;
 const command = (value: string): string => opaque("command:", value);
+const observerAuthority = Object.freeze({
+  observerId: opaque("observer:", "docker-absence-observer"),
+  capabilityRevisionSha256: hash("capability-revision"),
+});
 
 const subject = createDockerEgressSubject({
   identity: {
@@ -78,7 +82,7 @@ const observation = (resource: DockerEgressResourceKind, value = subject) => cre
   hostInstanceId: value.identity.hostInstanceId, hostBootId: value.identity.hostBootId,
   executionGenerationId: value.identity.executionGenerationId, daemonId: value.identity.daemonId,
   daemonGenerationId: value.identity.daemonGenerationId, slotGenerationId: value.identity.slotGenerationId,
-  observerId: opaque("observer:", "docker-absence-observer"), capabilityRevisionSha256: hash("capability-revision"), result: "absent",
+  ...observerAuthority, result: "absent",
 });
 const materialize = async (journal: DockerEgressJournal, value = subject): Promise<number> => {
   let sequence = (await journal.open(value, command("open"))).sequence;
@@ -112,7 +116,7 @@ test("V3 records are strict, chained, command-digest bound, immutable, and locat
 });
 
 test("lost append acknowledgements retry by exact command digest and conflicting reuse is rejected", async () => {
-  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
   const opened = await journal.open(subject, command("open")); const file = storage.v3Files.get(dockerEgressJournalLocator(subject));
   assert.ok(file); file.failAfterAppend = true;
   await assert.rejects(journal.materializeIntent(subject, opened.sequence, command("lost-intent"), "private_network"));
@@ -125,18 +129,18 @@ test("lost append acknowledgements retry by exact command digest and conflicting
 });
 
 test("atomic open retries a lost create acknowledgement and recovers only an exact locator-bound zero-byte publication", async () => {
-  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
   storage.failCreateAfterPublish = true;
   await assert.rejects(journal.open(subject, command("open")));
   assert.equal((await journal.open(subject, command("open"))).sequence, 0);
   const zeroStorage = new MemoryEgressStorage(); zeroStorage.v3Files.set(dockerEgressJournalLocator(subject), new MemoryEgressFile());
-  const zeroJournal = new DockerEgressJournal(zeroStorage, trusted);
+  const zeroJournal = new DockerEgressJournal(zeroStorage, trusted, observerAuthority);
   assert.equal((await zeroJournal.open(subject, command("zero-open"))).sequence, 0);
   assert.notEqual(zeroStorage.v3Files.get(dockerEgressJournalLocator(subject))?.byteLength, 0);
 });
 
 test("live debt globally fences admission and effect, attempt, generation, and cleanup handles are unique", async () => {
-  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
   await journal.open(subject, command("open"));
   const independent = changedSubject({ operationId: opaque("operation:", "other"), effectId: opaque("effect:", "other"),
     attemptId: opaque("attempt:", "other"), exactFingerprintSha256: hash("other") });
@@ -151,7 +155,7 @@ test("live debt globally fences admission and effect, attempt, generation, and c
 });
 
 test("retirement tombstone is durable, prevents resurrection, and serves a lost-close exact retry", async () => {
-  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
   const finalCleanup = await clean(journal, await materialize(journal));
   storage.failTombstoneAfterPublish = true;
   await assert.rejects(journal.close(subject, finalCleanup, command("close")));
@@ -162,7 +166,7 @@ test("retirement tombstone is durable, prevents resurrection, and serves a lost-
 });
 
 test("cleanup receipts require an immutable absence observation bound to the exact debt", async () => {
-  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
   let sequence = (await journal.open(subject, command("open"))).sequence;
   sequence = (await journal.materializeIntent(subject, sequence, command("mi"), "private_network")).sequence;
   sequence = (await journal.materializeReceipt(subject, sequence, command("mr"), "private_network")).sequence;
@@ -176,6 +180,46 @@ test("cleanup receipts require an immutable absence observation bound to the exa
   assert.equal(JSON.stringify(await journal.recoveryEvidence()).includes("private-network-handle"), false);
 });
 
+test("cleanup receipt append rejects rehashed observations from the wrong observer or capability revision", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
+  let sequence = (await journal.open(subject, command("authority-open"))).sequence;
+  sequence = (await journal.materializeIntent(subject, sequence, command("authority-mi"), "private_network")).sequence;
+  sequence = (await journal.materializeReceipt(subject, sequence, command("authority-mr"), "private_network")).sequence;
+  sequence = (await journal.cleanupIntent(subject, sequence, command("authority-ci"), "private_network")).sequence;
+  const exact = observation("private_network");
+  const wrongObservations = [
+    createDockerEgressCleanupObservation({ ...exact, observerId: opaque("observer:", "wrong-observer") }),
+    createDockerEgressCleanupObservation({ ...exact, capabilityRevisionSha256: hash("wrong-capability-revision") }),
+  ];
+  for (const [index, wrong] of wrongObservations.entries()) {
+    assert.notEqual(wrong.observationSha256, exact.observationSha256);
+    await assert.rejects(journal.cleanupReceipt(subject, sequence, command(`wrong-authority-${index}`),
+      "private_network", wrong), { name: "DockerEgressJournalConflictError" });
+  }
+  assert.deepEqual(await journal.recoverCleanupDirectives(), [{
+    kind: "cleanup_only", subject, sequence, resource: "private_network",
+    cleanupHandle: subject.resources.privateNetworkHandle, reconcileRequired: true,
+  }]);
+  sequence = (await journal.cleanupReceipt(subject, sequence, command("exact-authority"), "private_network", exact)).sequence;
+  assert.equal((await journal.close(subject, sequence, command("authority-close"))).event.kind, "closed");
+});
+
+test("cleanup observer authority is strict, required, and snapshotted at construction", async () => {
+  assert.throws(() => new DockerEgressJournal(new MemoryEgressStorage(), trusted, undefined as never), /plain non-proxy/u);
+  assert.throws(() => new DockerEgressJournal(new MemoryEgressStorage(), trusted,
+    { ...observerAuthority, unexpected: true } as never), /exact data-only shape/u);
+  const mutable = { ...observerAuthority };
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, mutable);
+  mutable.observerId = opaque("observer:", "mutated-after-construction");
+  mutable.capabilityRevisionSha256 = hash("mutated-after-construction");
+  let sequence = (await journal.open(subject, command("snapshot-open"))).sequence;
+  sequence = (await journal.materializeIntent(subject, sequence, command("snapshot-mi"), "private_network")).sequence;
+  sequence = (await journal.materializeReceipt(subject, sequence, command("snapshot-mr"), "private_network")).sequence;
+  sequence = (await journal.cleanupIntent(subject, sequence, command("snapshot-ci"), "private_network")).sequence;
+  assert.equal((await journal.cleanupReceipt(subject, sequence, command("snapshot-cr"), "private_network",
+    observation("private_network"))).event.kind, "cleanup_receipt");
+});
+
 test("cleanup observation handles must use the resource-specific prefix", () => {
   const correct = observation("private_network");
   for (const cleanupHandle of [subject.resources.providerContainerHandle, opaque("arbitrary:", "network")]) {
@@ -184,7 +228,7 @@ test("cleanup observation handles must use the resource-specific prefix", () => 
 });
 
 test("physical cleanup cannot clear unrelated unscoped reconciliation debt", async () => {
-  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
   let sequence = (await journal.open(subject, command("open"))).sequence;
   sequence = (await journal.materializeIntent(subject, sequence, command("mi"), "private_network")).sequence;
   sequence = (await journal.materializeReceipt(subject, sequence, command("mr"), "private_network")).sequence;
@@ -195,14 +239,14 @@ test("physical cleanup cannot clear unrelated unscoped reconciliation debt", asy
 });
 
 test("restart returns only a validated cleanup-only directive with private subject, sequence, and handle", async () => {
-  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
   let sequence = (await journal.open(subject, command("open"))).sequence;
   sequence = (await journal.materializeIntent(subject, sequence, command("intent"), "private_network")).sequence;
-  const directives = await new DockerEgressJournal(storage, trusted).recoverCleanupDirectives();
+  const directives = await new DockerEgressJournal(storage, trusted, observerAuthority).recoverCleanupDirectives();
   assert.deepEqual(directives, [{ kind: "cleanup_only", subject, sequence, resource: "private_network",
     cleanupHandle: subject.resources.privateNetworkHandle, reconcileRequired: true }]);
   const stale = { ...trusted, hostBootId: opaque("host-boot:", "successor") };
-  assert.deepEqual(await new DockerEgressJournal(storage, stale).recoverCleanupDirectives(), []);
+  assert.deepEqual(await new DockerEgressJournal(storage, stale, observerAuthority).recoverCleanupDirectives(), []);
   assert.equal(storage.tombstones.has(dockerEgressJournalLocator(subject)), true);
 });
 
@@ -220,14 +264,14 @@ test("V2 remains in a separate read-only namespace with original strict bounds a
   assert.equal(classifyDockerEgressLegacyV2(Buffer.from('{"version":2,"version":2}\n')).diagnostic, "legacy_corrupt");
   const storage = new MemoryEgressStorage(); const legacy = new MemoryEgressFile(); legacy.bytes = unsafeBytes;
   storage.legacyV2Files.set(hash("legacy-locator"), legacy);
-  await assert.rejects(new DockerEgressJournal(storage, trusted).open(subject, command("open")),
+  await assert.rejects(new DockerEgressJournal(storage, trusted, observerAuthority).open(subject, command("open")),
     { name: "DockerEgressJournalConflictError" });
   assert.equal(storage.v3Files.size, 0);
 });
 
 test("corrupt and misplaced V3 journals persist locator-only quarantine evidence and fence admission", async () => {
   for (const misplaced of [false, true]) {
-    const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+    const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
     await journal.open(subject, command("open")); const expected = dockerEgressJournalLocator(subject);
     if (misplaced) { const file = storage.v3Files.get(expected)!; storage.v3Files.delete(expected); storage.v3Files.set(hash("moved"), file); }
     else { storage.v3Files.get(expected)!.bytes[8] = 0xff; }
@@ -246,7 +290,7 @@ test("scan bytes are globally pre-charged before any journal read", async () => 
   first.read = async () => { reads += 1; return first.bytes; }; second.read = async () => { reads += 1; return second.bytes; };
   first.close = async () => {closes += 1;}; second.close = async () => {closes += 1;};
   storage.v3Files.set(hash("one"), first); storage.v3Files.set(hash("two"), second);
-  const bounded = new DockerEgressJournal(storage, trusted, {
+  const bounded = new DockerEgressJournal(storage, trusted, observerAuthority, {
     maxRestartScanBytes: DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxJournalBytes,
   });
   await assert.rejects(bounded.recoveryEvidence(), { name: "DockerEgressJournalCapacityError" });
@@ -271,7 +315,7 @@ test("Linux file storage persists retirement across reopen without changing lega
     const untouched = join(v2, "legacy-owner-note");
     await writeFile(untouched, "not owned by V3\n", {mode: 0o600});
     storage = await NodeDockerEgressJournalStorage.open(v3, v2);
-    const journal = new DockerEgressJournal(storage, trusted);
+    const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
     const sequence = await clean(journal, await materialize(journal));
     const closed = await journal.close(subject, sequence, command("close"));
     const tombstoneName = `docker-egress-custody-v3-${dockerEgressJournalLocator(subject)}.tombstone`;
@@ -280,7 +324,7 @@ test("Linux file storage persists retirement across reopen without changing lega
     await storage.close(); storage = undefined;
     assert.equal(await openSandboxDescriptors(root), 0);
     storage = await NodeDockerEgressJournalStorage.open(v3, v2);
-    const restarted = new DockerEgressJournal(storage, trusted);
+    const restarted = new DockerEgressJournal(storage, trusted, observerAuthority);
     for (let iteration = 0; iteration < 3; iteration += 1) {
       assert.deepEqual(await restarted.close(subject, sequence, command("close")), closed);
     }
@@ -312,7 +356,7 @@ test("canonical inputs reject network, path, secret, sparse/accessor, proxy, and
 });
 
 test("record and byte reservations cover receipt, unknown, quarantine, and every reverse cleanup", async () => {
-  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted, observerAuthority);
   let sequence = (await journal.open(subject, command("open"))).sequence;
   for (const [index, resource] of DOCKER_EGRESS_RESOURCE_KINDS.entries()) {
     const intent = await journal.materializeIntent(subject, sequence, command(`intent-${resource}`), resource); sequence = intent.sequence;

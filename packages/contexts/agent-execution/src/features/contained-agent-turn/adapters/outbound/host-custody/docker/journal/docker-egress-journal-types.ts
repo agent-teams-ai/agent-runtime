@@ -75,6 +75,12 @@ export interface DockerEgressCleanupObservation {
   readonly observationSha256: string;
 }
 
+/** Construction-owned Host authority for accepting private absence observations. */
+export interface DockerEgressCleanupObserverAuthority {
+  readonly observerId: string;
+  readonly capabilityRevisionSha256: string;
+}
+
 export interface DockerEgressReservation {
   readonly recordCount: number;
   readonly byteCount: number;

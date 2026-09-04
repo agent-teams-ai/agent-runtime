@@ -5,10 +5,12 @@ import { test } from "node:test";
 import {
   DockerEgressJournal,
   createDockerEgressCleanupObservation,
+  createDockerEgressRecord,
   createDockerEgressSubject,
   decodeDockerEgressTombstone,
   dockerEgressCleanupHandle,
   dockerEgressJournalLocator,
+  encodeDockerEgressRecord,
   replayDockerEgressBytes,
   type DockerEgressJournalSubject,
   type DockerEgressTrustedRuntimeIdentity,
@@ -18,6 +20,10 @@ import { MemoryEgressStorage } from "../../fixtures/docker-journal-test-fixture.
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 const opaque = (prefix: string, value: string): string => `${prefix}${hash(value)}`;
 const command = (value: string): string => opaque("command:", value);
+const observerAuthority = Object.freeze({
+  observerId: opaque("observer:", "absence-observer"),
+  capabilityRevisionSha256: hash("observer-capability"),
+});
 
 const makeSubject = (generation: string): DockerEgressJournalSubject => createDockerEgressSubject({
   identity: {
@@ -60,13 +66,12 @@ const observation = (subject: DockerEgressJournalSubject) => createDockerEgressC
   scopeSha256: subject.authority.scopeSha256, hostInstanceId: subject.identity.hostInstanceId,
   hostBootId: subject.identity.hostBootId, executionGenerationId: subject.identity.executionGenerationId,
   daemonId: subject.identity.daemonId, daemonGenerationId: subject.identity.daemonGenerationId,
-  slotGenerationId: subject.identity.slotGenerationId, observerId: opaque("observer:", "absence-observer"),
-  capabilityRevisionSha256: hash("observer-capability"), result: "absent",
+  slotGenerationId: subject.identity.slotGenerationId, ...observerAuthority, result: "absent",
 });
 
 test("validated prefix survives a corrupt tail only as quarantined cleanup evidence", async () => {
   const subject = makeSubject("prefix"); const storage = new MemoryEgressStorage();
-  const journal = new DockerEgressJournal(storage, trustedFor(subject));
+  const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
   const opened = await journal.open(subject, command("open-prefix"));
   const intent = await journal.materializeIntent(subject, opened.sequence, command("intent-prefix"), "private_network");
   const file = storage.v3Files.get(dockerEgressJournalLocator(subject)); assert.ok(file);
@@ -89,10 +94,46 @@ test("validated prefix survives a corrupt tail only as quarantined cleanup evide
     { name: "DockerEgressJournalCorruptionError" });
 });
 
+test("replay rejects a foreign observer even when observation and outer record chains are recomputed", async () => {
+  const subject = makeSubject("forged-observer"); const storage = new MemoryEgressStorage();
+  const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
+  let sequence = (await journal.open(subject, command("forged-open"))).sequence;
+  sequence = (await journal.materializeIntent(subject, sequence, command("forged-mi"), "private_network")).sequence;
+  sequence = (await journal.materializeReceipt(subject, sequence, command("forged-mr"), "private_network")).sequence;
+  const intent = await journal.cleanupIntent(subject, sequence, command("forged-ci"), "private_network");
+  const foreign = createDockerEgressCleanupObservation({
+    ...observation(subject), observerId: opaque("observer:", "foreign-but-well-formed"),
+  });
+  const forgedReceipt = createDockerEgressRecord({ sequence: intent.sequence + 1, subject,
+    commandId: command("forged-receipt"), event: { kind: "cleanup_receipt", resource: "private_network", observation: foreign },
+    previousChecksumSha256: intent.checksumSha256 });
+  const forgedClose = createDockerEgressRecord({ sequence: forgedReceipt.sequence + 1, subject,
+    commandId: command("forged-close"), event: { kind: "closed" }, previousChecksumSha256: forgedReceipt.checksumSha256 });
+  const locator = dockerEgressJournalLocator(subject); const file = storage.v3Files.get(locator); assert.ok(file);
+  file.bytes = Buffer.concat([
+    ...replayDockerEgressBytes(file.bytes).records.map(record => encodeDockerEgressRecord(record)),
+    encodeDockerEgressRecord(forgedReceipt), encodeDockerEgressRecord(forgedClose),
+  ]);
+  assert.equal(replayDockerEgressBytes(file.bytes).tail, "complete");
+
+  const restarted = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
+  assert.deepEqual(await restarted.recoverCleanupDirectives(), [{
+    kind: "cleanup_only", subject, sequence: intent.sequence, resource: "private_network",
+    cleanupHandle: subject.resources.privateNetworkHandle, reconcileRequired: true,
+  }]);
+  const tombstone = storage.tombstones.get(locator); assert.ok(tombstone);
+  const decoded = decodeDockerEgressTombstone(tombstone.bytes);
+  assert.equal(decoded.disposition, "quarantined");
+  assert.equal(decoded.terminalRecord?.checksumSha256, intent.checksumSha256);
+  assert.equal(storage.v3Files.has(locator), true);
+  await assert.rejects(restarted.close(subject, forgedClose.sequence, command("cannot-retire")),
+    { name: "DockerEgressJournalCorruptionError" });
+});
+
 test("restart deterministically retires debt-free open and post-cleanup journals", async () => {
   for (const withCleanup of [false, true]) {
     const suffix = withCleanup ? "cleaned" : "open-only"; const subject = makeSubject(suffix);
-    const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trustedFor(subject));
+    const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
     let sequence = (await journal.open(subject, command(`open-${suffix}`))).sequence;
     if (withCleanup) {
       sequence = (await journal.materializeIntent(subject, sequence, command("materialize-intent"), "private_network")).sequence;
@@ -101,11 +142,12 @@ test("restart deterministically retires debt-free open and post-cleanup journals
       sequence = (await journal.cleanupReceipt(subject, sequence, command("cleanup-receipt"), "private_network",
         observation(subject))).sequence;
     }
-    assert.deepEqual(await new DockerEgressJournal(storage, trustedFor(subject)).recoverCleanupDirectives(), []);
+    assert.deepEqual(await new DockerEgressJournal(storage, trustedFor(subject), observerAuthority).recoverCleanupDirectives(), []);
     assert.equal(storage.v3Files.has(dockerEgressJournalLocator(subject)), false);
     assert.equal(storage.tombstones.has(dockerEgressJournalLocator(subject)), true);
 
-    const fresh = makeSubject(`${suffix}-fresh`); const freshJournal = new DockerEgressJournal(storage, trustedFor(fresh));
+    const fresh = makeSubject(`${suffix}-fresh`);
+    const freshJournal = new DockerEgressJournal(storage, trustedFor(fresh), observerAuthority);
     assert.equal((await freshJournal.open(fresh, command(`fresh-${suffix}`))).event.kind, "open_intent");
   }
 });
@@ -113,7 +155,7 @@ test("restart deterministically retires debt-free open and post-cleanup journals
 test("exact retired tombstone heals a failed live unlink on duplicate close and recovery", async () => {
   for (const retry of ["duplicate", "recovery"] as const) {
     const subject = makeSubject(`unlink-${retry}`); const storage = new MemoryEgressStorage();
-    const journal = new DockerEgressJournal(storage, trustedFor(subject));
+    const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
     const opened = await journal.open(subject, command(`open-${retry}`));
     storage.failTombstoneAfterPublish = true;
     await assert.rejects(journal.close(subject, opened.sequence, command(`close-${retry}`)));
@@ -130,7 +172,7 @@ test("exact retired tombstone heals a failed live unlink on duplicate close and 
 
 test("retirement retry preserves a damaged tail even after a matching closed prefix", async () => {
   const subject = makeSubject("closed-damaged-tail"); const storage = new MemoryEgressStorage();
-  const journal = new DockerEgressJournal(storage, trustedFor(subject));
+  const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
   const opened = await journal.open(subject, command("open-damaged-tail"));
   storage.failTombstoneAfterPublish = true;
   await assert.rejects(journal.close(subject, opened.sequence, command("close-damaged-tail")));
@@ -145,13 +187,13 @@ test("retirement retry preserves a damaged tail even after a matching closed pre
 
 test("retirement retry preserves a valid foreign live file that does not match its tombstone", async () => {
   const subject = makeSubject("mismatch"); const storage = new MemoryEgressStorage();
-  const journal = new DockerEgressJournal(storage, trustedFor(subject));
+  const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
   const opened = await journal.open(subject, command("open-mismatch")); storage.failTombstoneAfterPublish = true;
   await assert.rejects(journal.close(subject, opened.sequence, command("close-mismatch")));
   const locator = dockerEgressJournalLocator(subject); const live = storage.v3Files.get(locator); assert.ok(live);
 
   const foreign = makeSubject("foreign"); const foreignStorage = new MemoryEgressStorage();
-  const foreignJournal = new DockerEgressJournal(foreignStorage, trustedFor(foreign));
+  const foreignJournal = new DockerEgressJournal(foreignStorage, trustedFor(foreign), observerAuthority);
   const foreignOpen = await foreignJournal.open(foreign, command("open-foreign")); foreignStorage.failTombstoneAfterPublish = true;
   await assert.rejects(foreignJournal.close(foreign, foreignOpen.sequence, command("close-foreign")));
   live.bytes = Buffer.from(foreignStorage.v3Files.get(dockerEgressJournalLocator(foreign))!.bytes);
