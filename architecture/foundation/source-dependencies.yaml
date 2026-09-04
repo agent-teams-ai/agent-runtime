@@ -25,6 +25,7 @@ boundaries:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts
@@ -44,6 +45,17 @@ boundaries:
       packages: []
       builtins: []
       runtimeReferences: []
+  - id: adapter.agent-execution.docker-json
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/serialization
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/serialization/strict-json.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins: []
+      runtimeReferences: []
   - id: adapter.agent-execution.docker-engine
     dependencyMode: runtime
     roots:
@@ -51,7 +63,8 @@ boundaries:
     entrypoints:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts
     allow:
-      boundaries: []
+      boundaries:
+        - adapter.agent-execution.docker-json
       packages: []
       builtins:
         - node:crypto
@@ -70,7 +83,9 @@ boundaries:
     allow:
       boundaries:
         - adapter.agent-execution.docker-engine
-      packages: []
+        - adapter.agent-execution.docker-json
+      packages:
+        - "@agent-teams/filesystem-custody"
       builtins:
         - node:child_process
         - node:crypto
@@ -78,6 +93,7 @@ boundaries:
         - node:fs/promises
         - node:path
         - node:stream
+        - node:util
       runtimeReferences: []
   - id: adapter.agent-execution.host-custody
     dependencyMode: runtime

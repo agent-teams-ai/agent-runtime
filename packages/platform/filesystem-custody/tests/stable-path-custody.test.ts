@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { constants } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import {
   link,
   mkdir,
@@ -579,6 +579,54 @@ test("rejects a regular-to-regular replacement before callback", async t => {
   );
 });
 
+test("rejects descriptor substitution even when the original path is restored", async t => {
+  const root = await mkdtemp(join(tmpdir(), "ar-path-descriptor-aba-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const parent = join(root, "inside");
+  const retainedOriginal = join(root, "retained-original");
+  const retainedReplacement = join(root, "retained-replacement");
+  const path = join(parent, "config.toml");
+  await mkdir(parent);
+  await writeFile(path, "original");
+  const originalIdentity = await stat(path, { bigint: true });
+  let callbackCalls = 0;
+  let replacementIdentity: BigIntStats | undefined;
+  let retainedHandle: FileHandle | undefined;
+
+  await assert.rejects(
+    openStablePath(
+      path,
+      await realpath(path),
+      async () => {
+        callbackCalls += 1;
+      },
+      {
+        async openFile(target, flags) {
+          await rename(parent, retainedOriginal);
+          await mkdir(parent);
+          await writeFile(target, "replacement");
+          retainedHandle = await open(target, flags);
+          replacementIdentity = await retainedHandle.stat({ bigint: true });
+          await rename(parent, retainedReplacement);
+          await rename(retainedOriginal, parent);
+          return retainedHandle;
+        },
+      },
+    ),
+    /Path lineage changed while it was being opened/u,
+  );
+  assert.equal(callbackCalls, 0);
+  assert.ok(replacementIdentity);
+  assert.notEqual(replacementIdentity.ino, originalIdentity.ino);
+  assert.ok(retainedHandle);
+  await assert.rejects(retainedHandle.stat(), error =>
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "EBADF"
+  );
+});
+
 test("closes descriptor custody when the operation is cancelled", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-path-custody-cancel-"));
   t.after(() => rm(root, { force: true, recursive: true }));
@@ -609,7 +657,7 @@ test("closes descriptor custody when the operation is cancelled", async t => {
   );
 });
 
-test("detects an ancestor that was renamed and restored", async t => {
+test("restores the original ancestor identity and path after a rename", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-path-lineage-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   const parent = join(root, "inside");
@@ -618,12 +666,45 @@ test("detects an ancestor that was renamed and restored", async t => {
   await mkdir(parent);
   await writeFile(path, "synthetic");
 
-  const before = await capturePathLineage(path, root);
+  const resolvedBefore = await realpath(path);
+  const [parentBefore, fileBefore] = await Promise.all([
+    stat(parent, { bigint: true }),
+    stat(path, { bigint: true }),
+  ]);
   await rename(parent, moved);
   await rename(moved, parent);
-  const after = await capturePathLineage(path, root);
+  const [parentAfter, fileAfter] = await Promise.all([
+    stat(parent, { bigint: true }),
+    stat(path, { bigint: true }),
+  ]);
 
-  assert.equal(pathLineagesEqual(before, after), false);
+  assert.equal(parentAfter.dev, parentBefore.dev);
+  assert.equal(parentAfter.ino, parentBefore.ino);
+  assert.equal(fileAfter.dev, fileBefore.dev);
+  assert.equal(fileAfter.ino, fileBefore.ino);
+  assert.equal(await realpath(path), resolvedBefore);
+});
+
+test("compares nanosecond lineage observations as exact bigints", () => {
+  const component = {
+    ctimeNs: 9_007_199_254_740_992n,
+    dev: 1n,
+    ino: 2n,
+    mode: 33_188n,
+    mtimeNs: 9_007_199_254_740_994n,
+    nlink: 1n,
+    path: "/synthetic/config.toml",
+    size: 3n,
+  };
+  const snapshot = { components: [component] };
+  const unchanged = { components: [{ ...component }] };
+  const oneNanosecondDrift = {
+    components: [{ ...component, ctimeNs: component.ctimeNs + 1n }],
+  };
+
+  assert.equal(Number(component.ctimeNs), Number(component.ctimeNs + 1n));
+  assert.equal(pathLineagesEqual(snapshot, unchanged), true);
+  assert.equal(pathLineagesEqual(snapshot, oneNanosecondDrift), false);
 });
 
 test("accepts a legitimate path component beginning with two dots", async t => {

@@ -1,10 +1,33 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { test } from "node:test";
 import type { HttpEgressTransportBinding } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 import { createStrictHttpEgressBroker } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
 import { bytes, createEgressFixture } from "./http-egress-test-fixture.ts";
 
-const allZero = (value: Uint8Array): boolean => value.every(byte => byte === 0);
+const allZero = (value: Uint8Array): boolean => {
+  for (let index = 0; index < value.byteLength; index += 1) {
+    if (value[index] !== 0) {return false;}
+  }
+  return true;
+};
+
+const overrideByteMethods = (
+  value: Uint8Array,
+  behavior: "no-op" | "throw",
+): Readonly<{ calls: () => number }> => {
+  let calls = 0;
+  const invoked = (): never | undefined => {
+    calls += 1;
+    if (behavior === "throw") {throw new Error("synthetic byte override invoked");}
+  };
+  Object.defineProperties(value, {
+    every: { configurable: true, value: () => {invoked(); return true;} },
+    includes: { configurable: true, value: () => {invoked(); return false;} },
+    fill: { configurable: true, value: () => {invoked(); return value;} },
+  });
+  return Object.freeze({ calls: () => calls });
+};
 
 test("a first evidence digest failure remains managed by inbound close", async () => {
   const fixture = createEgressFixture();
@@ -134,3 +157,116 @@ test("one-shot dispatch sealing clears a transport-retained request reference", 
   await createStrictHttpEgressBroker({...fixture.ports, transport}).execute(fixture.operation);
   assert.ok(retained !== undefined && allZero(retained));
 });
+
+for (const scenario of [
+  { name: "CR in Uint8Array with no-op overrides", authorization: new Uint8Array([66, 101, 97, 114, 101, 114, 13]), behavior: "no-op" },
+  { name: "LF in Buffer with throwing overrides", authorization: Buffer.from([66, 101, 97, 114, 101, 114, 10]), behavior: "throw" },
+  { name: "NUL in Uint8Array with throwing overrides", authorization: new Uint8Array([66, 101, 97, 114, 101, 114, 0]), behavior: "throw" },
+] as const) {
+  test(`authorization validation rejects ${scenario.name} before final authorization`, async () => {
+    const fixture = createEgressFixture();
+    const overrides = overrideByteMethods(scenario.authorization, scenario.behavior);
+    const receipt = await createStrictHttpEgressBroker({
+      ...fixture.ports,
+      credentialCustody: Object.freeze({ renderAuthorization: async () => scenario.authorization }),
+    }).execute(fixture.operation);
+    assert.notEqual(receipt.outcome, "completed");
+    assert.equal(fixture.observations.order.includes("final"), false);
+    assert.equal(fixture.observations.dispatches, 0);
+    assert.equal(allZero(scenario.authorization), true);
+    assert.equal(overrides.calls(), 0);
+    assert.equal(fixture.observations.closes, 1);
+    assert.equal(fixture.observations.order.filter(value => value === "inbound-close").length, 1);
+    assert.equal(fixture.observations.receipts.length, 1);
+  });
+}
+
+test("valid Buffer authorization bypasses throwing own methods and its original storage is cleared", async () => {
+  const fixture = createEgressFixture({ final: "timeout" });
+  const authorization = Buffer.from("Bearer synthetic-valid-marker", "ascii");
+  const overrides = overrideByteMethods(authorization, "throw");
+  await createStrictHttpEgressBroker({
+    ...fixture.ports,
+    credentialCustody: Object.freeze({ renderAuthorization: async () => authorization }),
+  }).execute(fixture.operation);
+  assert.equal(fixture.observations.order.includes("final"), true);
+  assert.equal(allZero(authorization), true);
+  assert.equal(overrides.calls(), 0);
+  assert.equal(fixture.observations.closes, 1);
+  assert.equal(fixture.observations.receipts.length, 1);
+});
+
+test("a detached authorization view fails safely before final authorization", async () => {
+  const fixture = createEgressFixture();
+  const authorization = bytes("Bearer synthetic-detached-marker");
+  structuredClone(authorization, { transfer: [authorization.buffer] });
+  const receipt = await createStrictHttpEgressBroker({
+    ...fixture.ports,
+    credentialCustody: Object.freeze({ renderAuthorization: async () => authorization }),
+  }).execute(fixture.operation);
+  assert.notEqual(receipt.outcome, "completed");
+  assert.equal(fixture.observations.order.includes("final"), false);
+  assert.equal(fixture.observations.dispatches, 0);
+  assert.equal(fixture.observations.closes, 1);
+  assert.equal(fixture.observations.receipts.length, 1);
+});
+
+test("throwing own fill on the prepared request cannot interrupt one-time closure and settlement", async () => {
+  const fixture = createEgressFixture();
+  const beginOpen = fixture.ports.transport.beginOpen;
+  let retained: Uint8Array | undefined;
+  let overrides: Readonly<{ calls: () => number }> | undefined;
+  const transport = Object.freeze({ beginOpen: (input: Parameters<typeof beginOpen>[0]) => {
+    const attempt = beginOpen(input);
+    return Object.freeze({
+      ...attempt,
+      ready: async () => {
+        const session = await attempt.ready();
+        return Object.freeze({
+          ...session,
+          dispatch: async (consume: () => Uint8Array | undefined) => {
+            retained = consume();
+            assert.ok(retained !== undefined);
+            overrides = overrideByteMethods(retained, "throw");
+            throw new Error("synthetic prepared request write failure");
+          },
+        });
+      },
+    });
+  } });
+  const receipt = await createStrictHttpEgressBroker({ ...fixture.ports, transport }).execute(fixture.operation);
+  assert.notEqual(receipt.outcome, "completed");
+  assert.ok(retained !== undefined && allZero(retained));
+  assert.equal(overrides?.calls(), 0);
+  assert.equal(fixture.observations.closes, 1);
+  assert.equal(fixture.observations.order.filter(value => value === "inbound-close").length, 1);
+  assert.equal(fixture.observations.receipts.length, 1);
+});
+
+for (const failure of [
+  { name: "downstream head", writeCall: 1, behavior: "no-op" },
+  { name: "downstream body", writeCall: 2, behavior: "throw" },
+] as const) {
+  test(`${failure.name} is cleared through own fill overrides after write failure`, async () => {
+    const fixture = createEgressFixture({ response: ["HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nx"] });
+    let writes = 0;
+    let retained: Uint8Array | undefined;
+    let overrides: Readonly<{ calls: () => number }> | undefined;
+    const operation = Object.freeze({ ...fixture.operation, connection: Object.freeze({
+      ...fixture.operation.connection,
+      write: async (value: Uint8Array) => {
+        writes += 1;
+        if (writes !== failure.writeCall) {return;}
+        retained = value;
+        overrides = overrideByteMethods(value, failure.behavior);
+        throw new Error("synthetic downstream write failure");
+      },
+    }) });
+    const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(operation);
+    assert.equal(receipt.anomalyCode, "output_backpressure_failed");
+    assert.ok(retained !== undefined && allZero(retained));
+    assert.equal(overrides?.calls(), 0);
+    assert.equal(fixture.observations.closes, 1);
+    assert.equal(fixture.observations.receipts.length, 1);
+  });
+}

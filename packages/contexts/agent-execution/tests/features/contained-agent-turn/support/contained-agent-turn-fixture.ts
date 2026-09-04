@@ -12,6 +12,7 @@ import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROO
 import { containedTurnDispatchClaimBindingDigest, validateContainedTurnConsumedGrantReceipts } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import { bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation, recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
 import { containedTurnPreparationToken } from "../../../../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
+import { committedDispatchProofV1 } from "../../../../dist/features/contained-agent-turn/domain/committed-dispatch-proof-v1.js";
 
 const identity = <Namespace extends Parameters<typeof containedTurnIdentity>[0]>(namespace: Namespace, suffix: string) =>
   containedTurnIdentity(namespace, `${String(namespace).replaceAll("_", "-")}:${suffix}`);
@@ -152,11 +153,13 @@ const createDependencies = (options: Readonly<{
   containmentCalls: { value: number };
   completionBoundaryReleases: { value: number };
   createdWorkspaces: ContainedTurnKernelOperation["workspaceId"][];
+  custodyStartInputs: Array<Parameters<ContainedTurnKernelDependencies["custody"]["start"]>[0]>;
   custodyReleases: Array<Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]>;
   current: () => ContainedTurnKernelOperation | undefined;
   dependencies: ContainedTurnKernelDependencies;
   openedCustodies: typeof custodyId[];
   providerCalls: { value: number };
+  providerExecuteInputs: Array<Parameters<ContainedTurnKernelDependencies["provider"]["execute"]>[0]>;
   workspaceQuarantines: Array<Parameters<ContainedTurnKernelDependencies["workspace"]["quarantine"]>[0]>;
 } => {
   let current: ContainedTurnKernelOperation | undefined;
@@ -168,9 +171,11 @@ const createDependencies = (options: Readonly<{
   const containmentCalls = { value: 0 };
   const completionBoundaryReleases = { value: 0 };
   const createdWorkspaces: ContainedTurnKernelOperation["workspaceId"][] = [];
+  const custodyStartInputs: Array<Parameters<ContainedTurnKernelDependencies["custody"]["start"]>[0]> = [];
   const custodyReleases: Array<Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]> = [];
   const openedCustodies: typeof custodyId[] = [];
   const providerCalls = { value: 0 };
+  const providerExecuteInputs: Array<Parameters<ContainedTurnKernelDependencies["provider"]["execute"]>[0]> = [];
   let providerSettlementCount = 0;
   const workspaceQuarantines: Array<Parameters<ContainedTurnKernelDependencies["workspace"]["quarantine"]>[0]> = [];
   const operationStore: ContainedTurnKernelDependencies["operationStore"] = {
@@ -241,7 +246,7 @@ const createDependencies = (options: Readonly<{
         binding: {
           ...operationBinding(current),
           acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(current.providerAccessSnapshot),
-          resolutionDigest: digestContainedTurnCanonicalValue({ current: true }),
+          resolutionDigest: digestContainedTurnCanonicalValue(receipts[0] as never),
         },
         kind: "provider_access_dispatch" as const,
         proofId: proofId("provider-access-dispatch"),
@@ -250,7 +255,7 @@ const createDependencies = (options: Readonly<{
         binding: {
           ...operationBinding(current),
           acceptedSecurityDecisionDigest: current.acceptedAuthorityVector.securityDecisionDigest,
-          currentSecurityDecisionDigest: digestContainedTurnCanonicalValue({ current: true }),
+          currentSecurityDecisionDigest: digestContainedTurnCanonicalValue(receipts[1] as never),
           securityAuthorityRevision: current.acceptedAuthorityVector.securityAuthorityRevision,
         },
         kind: "runtime_security_dispatch" as const,
@@ -267,20 +272,19 @@ const createDependencies = (options: Readonly<{
       if (options.claimIndeterminate === true) {
         return { evidenceId: identity("evidence", "dispatch-claim-indeterminate"), kind: "indeterminate" };
       }
+      const claimProof = {
+        binding: {
+          ...operationBinding(current), attemptId: subject.attemptId, effectId: current.effectId,
+          preparationToken: subject.preparationToken,
+          providerAccessDispatchProofId: providerAccessDispatchProof.proofId,
+          runtimeSecurityDispatchProofId: runtimeSecurityDispatchProof.proofId,
+        },
+        kind: "dispatch_claim" as const,
+        proofId: proofId("claim"),
+      };
       current = mutateContainedTurnOperation(current, {
         attemptId: subject.attemptId,
-        claimProof: {
-          binding: {
-            ...operationBinding(current),
-            attemptId: subject.attemptId,
-            effectId: current.effectId,
-            preparationToken: subject.preparationToken,
-            providerAccessDispatchProofId: providerAccessDispatchProof.proofId,
-            runtimeSecurityDispatchProofId: runtimeSecurityDispatchProof.proofId,
-          },
-          kind: "dispatch_claim",
-          proofId: proofId("claim"),
-        },
+        claimProof,
         custodyId: subject.custodyId,
         cutoffProof: { binding: operationBinding(current), kind: "cutoff", proofId: proofId("cutoff") },
         executionGenerationId: subject.executionGenerationId,
@@ -298,7 +302,27 @@ const createDependencies = (options: Readonly<{
       preparations.set(preparation.preparationToken, preparation);
       if (options.claimCommitThenThrow === true) {throw new Error("claim committed; acknowledgement lost");}
       if (options.staleOwnerAfterClaim === true) {return { current, kind: "stale" };}
-      return { kind: "claimed", operation: current, startAuthority: "test-start-authority:one" };
+      if (current.dispatch.kind !== "claimed" || current.admissionFence.kind !== "fenced") {
+        throw new TypeError("fixture committed claim is incomplete");
+      }
+      return { committedDispatchProof: committedDispatchProofV1({
+        acceptedAuthorityVectorDigest: current.acceptedAuthorityVectorDigest,
+        admissionCutoffProofId: current.admissionFence.proofId, attemptId: current.dispatch.attemptId,
+        commandFingerprint: current.commandFingerprint, commandId: current.commandId,
+        committedOperationRevision: current.revision, custodyId: subject.custodyId,
+        dispatchClaimProofId: current.dispatch.claimProofId, effectId: current.effectId,
+        executionGenerationId: current.dispatch.executionGenerationId, hostBootId: subject.hostBootId,
+        hostCustodyProofId: input.hostCustodyProof.proofId, hostInstanceId: subject.hostInstanceId,
+        operationCutoffRevision: current.dispatch.operationCutoffRevision, operationId: current.operationId,
+        preparationToken: current.dispatch.preparationToken, projectId: current.scope.projectId,
+        provider: current.adapterSnapshot.provider,
+        providerAccessDispatchProofId: current.dispatch.providerAccessDispatchProofId,
+        providerAccessGrantReceiptDigest: digestContainedTurnCanonicalValue(current.dispatch.grantReceipts[0] as never),
+        purpose: "contained_turn_committed_dispatch_v1",
+        runtimeSecurityDispatchProofId: current.dispatch.runtimeSecurityDispatchProofId,
+        runtimeSecurityGrantReceiptDigest: digestContainedTurnCanonicalValue(current.dispatch.grantReceipts[1] as never),
+        tenantId: current.scope.tenantId, version: 1, workspaceId: subject.workspaceId,
+      }), kind: "claimed", operation: current };
     },
     identifyAcceptance: async () => ({
       acceptanceProofId: proofId("acceptance"),
@@ -737,6 +761,7 @@ const createDependencies = (options: Readonly<{
         };
       },
       start: async input => {
+        custodyStartInputs.push(input);
         if (options.neverStart === true) {return new Promise(() => {});}
         const operation = current as ContainedTurnKernelOperation;
         if (operation.custodyId === undefined || operation.hostBootId === undefined ||
@@ -762,6 +787,7 @@ const createDependencies = (options: Readonly<{
       manifest,
       execute: async input => {
         providerCalls.value += 1;
+        providerExecuteInputs.push(input);
         input.start.createProcess(() => Object.freeze({}));
         if (options.neverExecution === true) {return new Promise(() => {});}
         if (options.maliciousFakeSuccess === true) {return { kind: "completed", outcome: "succeeded" };}
@@ -784,7 +810,11 @@ const createDependencies = (options: Readonly<{
       },
     },
   };
-  return { claimAuthorities, completionBoundaryReleases, containmentCalls, createdWorkspaces, custodyReleases, current: () => current, dependencies, openedCustodies, providerCalls, workspaceQuarantines };
+  return {
+    claimAuthorities, completionBoundaryReleases, containmentCalls, createdWorkspaces,
+    custodyReleases, custodyStartInputs, current: () => current, dependencies,
+    openedCustodies, providerCalls, providerExecuteInputs, workspaceQuarantines,
+  };
 };
 
 export { awaitFixtureGate, createDependencies, custodyId, operationId, proofId };

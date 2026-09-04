@@ -42,6 +42,7 @@ import {
   type KernelReservation,
   sameReservation,
 } from "./contained-turn-kernel-custody-state.js";
+import { admitCommittedDispatchStart } from "./contained-turn-kernel-custody-start-admission.js";
 
 export type {
   ContainedTurnHostCustodyPort,
@@ -180,6 +181,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     const reservation: KernelReservation = {
       attemptId: input.attemptId,
       authorityVectorDigest: input.authorityVectorDigest,
+      commandId: input.commandId,
       custodyId: input.custodyId,
       effectId: input.effectId,
       executionBoundaryOpened: false,
@@ -190,11 +192,17 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       }),
       openIdentityDigest: identityDigest,
       operationId: input.operationId,
+      operationCutoffRevision: input.operationCutoffRevision,
+      operationRevision: input.operationRevision,
+      preparationToken: input.preparationToken,
+      projectId: input.providerAccessSnapshot.projectId,
       processStartProved: false,
       providerCompletionState: "pending",
+      provider: input.adapterSnapshot.provider,
       released: false,
       startBoundaryCutoff: false,
       started: false,
+      tenantId: input.providerAccessSnapshot.tenantId,
       underlyingCustodyRef: custodyRef,
       workspaceId: input.workspaceId,
     };
@@ -231,16 +239,12 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   }
   public async start(input: StartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
     const reservation = this.#reservation(input);
-    if (reservation.started) {throw new TypeError("Host Custody start authority was already consumed");}
-    if (typeof input.startAuthority !== "string" || input.startAuthority.length === 0) {
-      throw new TypeError("Host Custody start authority is unavailable");}
-    if (reservation.workspaceId !== input.workspaceId || reservation.intentMode !== input.intent.mode) {
-      throw new TypeError("Host Custody start identity conflict");}
-    reservation.startIdentityDigest = canonicalDigest(Object.freeze({
-      intentMode: input.intent.mode, startAuthorityDigest: canonicalDigest(input.startAuthority),
-      workspaceId: input.workspaceId,
-    }));
-    reservation.started = true;
+    const hostCustodyProof = this.#openOutcome(reservation).hostCustodyProof;
+    admitCommittedDispatchStart(input, reservation, {
+      hostBootId: this.#hostBootId,
+      hostCustodyProofId: hostCustodyProof.proofId,
+      hostInstanceId: this.#hostInstanceId,
+    });
     let creatorCalled = false;
     let executionSettled = false;
     let observation!: Promise<StartObservation>;
@@ -292,7 +296,9 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
         });
       }
       return Object.freeze({
-        evidenceId: evidenceId(observed.source, observed.detail), kind: "indeterminate",
+        evidenceId: evidenceId(observed.source, Object.freeze({
+          detail: observed.detail, proofDigest: reservation.proofDigest ?? null,
+        })), kind: "indeterminate",
       });
     });
     const start = await observation;
@@ -313,7 +319,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       digest: canonicalDigest(Object.freeze({
         ...reservationIdentity(reservation),
         outcome: projected.outcome,
-        startIdentityDigest: reservation.startIdentityDigest ?? null,
+        proofDigest: reservation.proofDigest ?? null,
       })),
       outcome: projected.outcome,
     });
@@ -357,6 +363,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     const closureProjection = Object.freeze({
       completion: completionProjection(completion),
       evidence: hostEvidenceProjection(observed),
+      proofDigest: reservation.proofDigest ?? null,
       receiptRef: contained,
       reservation: reservationIdentity(reservation),
     });
@@ -454,6 +461,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
             terminalObservationProofId: input.binding.terminalObservationProofId,
           })),
           evidence: hostEvidenceProjection(observed),
+          proofDigest: reservation.proofDigest ?? null,
           receiptRef: contained,
           reservation: reservationIdentity(reservation),
         })),
@@ -572,6 +580,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     return Object.freeze({
       evidenceId: evidenceId(source, Object.freeze({
         evidence: evidence === undefined ? null : hostEvidenceProjection(evidence),
+        proofDigest: reservation.proofDigest ?? null,
         providerCompletionState: reservation.providerCompletionState,
         reservation: reservationIdentity(reservation),
       })),

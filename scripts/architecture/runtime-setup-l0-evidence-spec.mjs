@@ -219,6 +219,38 @@ export const changes = Object.freeze([
     id: "codex-native-package-provenance",
     revision: "739cc9bfdea7dc0527989b42cb8dd89a11387ea8",
   }),
+  Object.freeze({
+    id: "contained-turn-committed-dispatch-handoff",
+    revision: "ef5d93d3ecb0ac070d19669516a28f02c0d82130",
+  }),
+  Object.freeze({
+    id: "filesystem-lineage-deterministic-qualification",
+    revision: "5a712935c976ed7e2cdac2b98072c749913bb04b",
+  }),
+  Object.freeze({
+    id: "provider-process-egress-authenticated-fields",
+    revision: "9f910fc7dcb28813bcbb21ddde4d4bbe252e09ce",
+  }),
+  Object.freeze({
+    id: "provider-process-egress-current-main-integration",
+    revision: "9dc4a4253f4bd1a35888052935c7d95c5face585",
+  }),
+  Object.freeze({
+    id: "host-egress-journal-configured-retirement-limits",
+    revision: "a95c8d10ed643547d18582f0038e991bf1aa2eb1",
+  }),
+  Object.freeze({
+    id: "host-egress-journal-security-integration",
+    revision: "2d4e960b276559b39c4714fa0b7b59a44f164867",
+  }),
+  Object.freeze({
+    id: "strict-http-egress-reviewed-byte-custody",
+    revision: "d7b99516a781cc1ce24d81922da5d1c674910ad2",
+  }),
+  Object.freeze({
+    id: "strict-http-egress-current-main-integration",
+    revision: "038080795baabe54bcc4ef89dbedf334becc2acf",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -226,15 +258,15 @@ export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
     fileCount: 16,
-    sha256: "694a67d5823c72e08ca3dfb9e96750d6fa5d5f2a298268f835a8452f2f12fb7a",
+    sha256: "6708bfd7c55aa9747295893a924b44946c4edb2d528c57cff5dd4d0c3afa0bd0",
   }),
   sources: Object.freeze({
-    fileCount: 298,
-    sha256: "e9a6918a66517bf37b5843a6aca41afd635c0c022f0889ca857ed69970c7f68c",
+    fileCount: 335,
+    sha256: "60230bd4b4ca3b68025d925ccd7147bc4399a7798cdf51f8180cf50e20637971",
   }),
   tests: Object.freeze({
-    fileCount: 135,
-    sha256: "9603cd4c0567c9ffd6cc7c71b882965ca192b832819cd35a948535e4213f51fa",
+    fileCount: 163,
+    sha256: "4c517f2fb3e5e0c3a82a68f9611c650b510f8791b7199343a0c2d17b110df52b",
   }),
 });
 

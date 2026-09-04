@@ -1,5 +1,6 @@
 export {
   createDispatchConsumptionRequestDigests,
+  createCredentialMaterializationRequestDigest,
   createInMemoryContainedTurnDispatchConsumptionV1,
   createStaticContainedTurnProviderAccessFeature,
   type InMemoryDispatchBindingSeed,
