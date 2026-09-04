@@ -7,6 +7,11 @@ const CRLF = new Uint8Array([13, 10]);
 const CRLFCRLF = new Uint8Array([13, 10, 13, 10]);
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
+const addObservedBytes = (current: number, count: number): number => {
+  const total = current + count;
+  return Number.isSafeInteger(total) ? total : Number.MAX_SAFE_INTEGER;
+};
+
 export type StrictHttpResponseResult = Readonly<{
   status: number;
   upstreamBytes: number;
@@ -55,15 +60,15 @@ class DeadlineByteReader {
     }
     if (!(next.value instanceof Uint8Array)) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
     if (next.value.byteLength === 0) {return;}
+    this.bytesRead = addObservedBytes(this.bytesRead, next.value.byteLength);
     if (next.value.byteLength > this.limits.maxBufferedBytes
-      || this.bytesRead + next.value.byteLength > this.limits.maxUpstreamWireBytes) {
+      || this.bytesRead > this.limits.maxUpstreamWireBytes) {
       throw new StrictHttpResponseError("oversized", this.bytesRead, 0);
     }
     const joined = new Uint8Array(this.buffered.byteLength + next.value.byteLength);
     joined.set(this.buffered);
     joined.set(next.value, this.buffered.byteLength);
     this.buffered = joined;
-    this.bytesRead += next.value.byteLength;
   }
 
   public async through(separator: Uint8Array, maximum: number): Promise<Uint8Array> {
@@ -283,7 +288,16 @@ export const forwardStrictHttpResponse = async (
   const writeContext = Object.freeze({ connection, clock, limits, signal });
   const reader = new DeadlineByteReader(source, clock, limits, signal);
   const headBytes = await reader.through(CRLFCRLF, limits.maxUpstreamHeaderBytes);
-  const head = parseHead(headBytes);
+  let head: ParsedHead;
+  try {
+    head = parseHead(headBytes);
+  } catch (error) {
+    if (error instanceof StrictHttpResponseError) {
+      throw new StrictHttpResponseError(error.kind, reader.bytesRead, error.outboundBytes,
+        error.outboundWriteUncertain);
+    }
+    throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);
+  }
   if (head.status >= 300 && head.status <= 399) {throw new StrictHttpResponseError("redirect", reader.bytesRead, 0);}
   if ((head.contentLength ?? 0) > limits.maxOutputBytes) {
     throw new StrictHttpResponseError("oversized", reader.bytesRead, 0);

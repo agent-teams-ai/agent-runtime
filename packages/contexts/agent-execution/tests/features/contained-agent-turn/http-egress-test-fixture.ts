@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import type {
   HttpEgressAuthorizationDecision,
   HttpEgressBrokerPorts,
   HttpEgressDispatch,
+  HttpEgressFinalAuthorization,
+  HttpEgressFinalAuthorizationDecision,
   HttpEgressGenerationObservation,
   HttpEgressRoute,
   HttpEgressTransportBinding,
@@ -59,6 +62,7 @@ export const defaultRoute: HttpEgressRoute = Object.freeze({
 
 const defaultBinding: HttpEgressTransportBinding = Object.freeze({
   peerAddress: "93.184.216.34",
+  peerPort: 443,
   tlsProtocol: "TLSv1.3",
   sni: "provider.example",
   sniDigest: "sni-digest",
@@ -83,9 +87,11 @@ export type FixtureOptions = Readonly<{
   response?: readonly (string | Uint8Array)[];
   responseSource?: AsyncIterable<Uint8Array>;
   route?: HttpEgressRoute;
-  binding?: HttpEgressTransportBinding;
+  binding?: Partial<HttpEgressTransportBinding>;
+  bindingAtFirstByte?: Partial<HttpEgressTransportBinding>;
   provisional?: HttpEgressAuthorizationDecision | "timeout";
-  final?: HttpEgressAuthorizationDecision | "timeout";
+  final?: HttpEgressAuthorizationDecision | HttpEgressFinalAuthorizationDecision | "timeout"
+    | ((input: HttpEgressFinalAuthorization) => HttpEgressFinalAuthorizationDecision);
   generation?: HttpEgressGenerationObservation;
   generationAtFirstByte?: HttpEgressGenerationObservation;
   addresses?: readonly string[];
@@ -110,6 +116,7 @@ export type EgressFixture = Readonly<{
     readonly outboundWrites: Uint8Array[];
     readonly dispatchedRequests: Uint8Array[];
     readonly receipts: HttpEgressReceipt[];
+    readonly finalAuthorizationInputs: HttpEgressFinalAuthorization[];
     dispatches: number;
     opens: number;
     renders: number;
@@ -119,30 +126,24 @@ export type EgressFixture = Readonly<{
 
 export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture => {
   const route = options.route ?? defaultRoute;
-  const binding = options.binding ?? defaultBinding;
+  const binding = Object.freeze({ ...defaultBinding, ...options.binding });
   const responseSource = options.response ?? [defaultResponse];
   const observations = {
     order: [] as string[],
     outboundWrites: [] as Uint8Array[],
     dispatchedRequests: [] as Uint8Array[],
     receipts: [] as HttpEgressReceipt[],
+    finalAuthorizationInputs: [] as HttpEgressFinalAuthorization[],
     dispatches: 0,
     opens: 0,
     renders: 0,
     closes: 0,
   };
   let credentialUsed = false;
-  let digestSequence = 0;
   const provisional = options.provisional ?? decision(route, "provisional-receipt-digest");
   const baseFinal = decision(route, "final-receipt-digest");
-  const final = options.final ?? Object.freeze({
-    ...baseFinal,
-    selectedPeer: binding.peerAddress,
-    sniDigest: binding.sniDigest,
-    certificateDigest: binding.certificateDigest,
-    pinDigest: binding.pinDigest,
-    alpn: binding.alpn,
-  });
+  const final = options.final;
+  let firstByte = false;
   const defaultDispatch: HttpEgressDispatch = Object.freeze({
     status: "response",
     acceptedRequestBytes: 1,
@@ -154,7 +155,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
       resolve: async () => {
         observations.order.push("resolve");
         const selectedAddress = options.selectedAddress ?? "93.184.216.34";
-        return Object.freeze({ addresses: Object.freeze(options.addresses ?? [selectedAddress]), selectedAddress });
+        return Object.freeze({ addresses: Object.freeze([...(options.addresses ?? [selectedAddress])]), selectedAddress });
       },
     }),
     transport: Object.freeze({
@@ -163,9 +164,12 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
         observations.opens += 1;
         if (options.openThrows) {throw new Error("synthetic open failure");}
         return Object.freeze({
-          binding,
+          get binding(): HttpEgressTransportBinding {
+            return firstByte ? Object.freeze({ ...binding, ...options.bindingAtFirstByte }) : binding;
+          },
           dispatch: async (consume: () => Uint8Array | undefined) => {
             observations.order.push("dispatch");
+            firstByte = true;
             const wireRequest = consume();
             if (wireRequest === undefined) {return Object.freeze({
               status: "failed" as const, acceptedRequestBytes: 0, acknowledgement: "acknowledged" as const,
@@ -192,10 +196,17 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
       },
     }),
     finalAuthorization: Object.freeze({
-      authorize: async () => {
+      authorize: async (input: HttpEgressFinalAuthorization) => {
         observations.order.push("final");
+        observations.finalAuthorizationInputs.push(input);
         if (final === "timeout") {throw new Error("synthetic timeout");}
-        return final;
+        if (typeof final === "function") {return final(input);}
+        if (final !== undefined) {
+          return Object.freeze({ ...final,
+            bindingDigest: "bindingDigest" in final ? final.bindingDigest : "stale-binding-digest",
+          });
+        }
+        return Object.freeze({ ...baseFinal, bindingDigest: input.bindingDigest });
       },
     }),
     routeAuthority: Object.freeze({
@@ -226,7 +237,11 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
       },
     }),
     evidence: Object.freeze({
-      digest: (_parts: readonly Uint8Array[]) => `synthetic-digest-${digestSequence += 1}`,
+      digest: (parts: readonly Uint8Array[]) => {
+        const hash = createHash("sha256");
+        for (const part of parts) {hash.update(part);}
+        return hash.digest("hex");
+      },
       record: async (receipt: HttpEgressReceipt) => {
         observations.order.push("record-evidence");
         observations.receipts.push(receipt);

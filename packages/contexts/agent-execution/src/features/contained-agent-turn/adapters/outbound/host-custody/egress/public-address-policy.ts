@@ -45,23 +45,68 @@ const isPublicIpv6 = (words: readonly number[]): boolean => {
   const [first, second] = words as [number, number, ...number[]];
   // Strictly admit global-unicast 2000::/3, excluding documentation and reserved subranges.
   if ((first & 0xe000) !== 0x2000) {return false;}
+  // 6to4 exposes an embedded IPv4 route that can bypass the IPv4 deny ranges.
+  if (first === 0x2002) {return false;}
   if (first === 0x2001 && second === 0x0db8) {return false;}
   if (first === 0x2001 && (second === 0 || second === 2 || (second & 0xfff0) === 0x0010 || (second & 0xfff0) === 0x0020)) {return false;}
   if (first === 0x3fff) {return false;}
   return true;
 };
 
-export const isPublicEgressAddress = (address: string): boolean => {
+const canonicalIpv6 = (words: readonly number[]): string => {
+  let bestStart = -1;
+  let bestLength = 0;
+  for (let start = 0; start < words.length;) {
+    if (words[start] !== 0) {start += 1; continue;}
+    let end = start;
+    while (end < words.length && words[end] === 0) {end += 1;}
+    if (end - start > bestLength && end - start >= 2) {
+      bestStart = start;
+      bestLength = end - start;
+    }
+    start = end;
+  }
+  const formatted = words.map(word => word.toString(16));
+  if (bestStart < 0) {return formatted.join(":");}
+  return `${formatted.slice(0, bestStart).join(":")}::${formatted.slice(bestStart + bestLength).join(":")}`;
+};
+
+const normalizePublicAddress = (address: string): string | undefined => {
+  if (address.length === 0 || address.length > 64) {return undefined;}
   const ipv4 = parseIpv4(address);
-  if (ipv4 !== undefined) {return isPublicIpv4(ipv4);}
+  if (ipv4 !== undefined) {return isPublicIpv4(ipv4) ? ipv4.join(".") : undefined;}
   const ipv6 = expandIpv6(address);
-  return ipv6 !== undefined && isPublicIpv6(ipv6);
+  return ipv6 !== undefined && isPublicIpv6(ipv6) ? canonicalIpv6(ipv6) : undefined;
+};
+
+export const isPublicEgressAddress = (address: string): boolean => {
+  return normalizePublicAddress(address) !== undefined;
+};
+
+export type NormalizedHttpEgressResolution = Readonly<{
+  addresses: readonly string[];
+  selectedAddress: string;
+}>;
+
+export const normalizeHttpEgressResolution = (
+  addresses: readonly string[],
+  selectedAddress: string,
+): NormalizedHttpEgressResolution | undefined => {
+  if (addresses.length === 0 || addresses.length > 32) {return undefined;}
+  const normalizedSelected = normalizePublicAddress(selectedAddress);
+  if (normalizedSelected === undefined) {return undefined;}
+  const normalized = addresses.map(normalizePublicAddress);
+  if (normalized.some(address => address === undefined)) {return undefined;}
+  const exact = normalized as string[];
+  if (new Set(exact).size !== exact.length || !exact.includes(normalizedSelected)) {return undefined;}
+  return Object.freeze({
+    addresses: Object.freeze(exact.toSorted()),
+    selectedAddress: normalizedSelected,
+  });
 };
 
 export const resolutionIsSafe = (
   addresses: readonly string[],
   selectedAddress: string,
 ): boolean => addresses.length > 0
-  && addresses.includes(selectedAddress)
-  && addresses.every(isPublicEgressAddress)
-  && isPublicEgressAddress(selectedAddress);
+  && normalizeHttpEgressResolution(addresses, selectedAddress) !== undefined;

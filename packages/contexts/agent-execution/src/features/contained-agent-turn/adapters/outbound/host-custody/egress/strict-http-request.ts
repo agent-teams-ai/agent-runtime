@@ -31,11 +31,17 @@ export type StrictHttpRequest = Readonly<{
 export class StrictHttpRequestError extends Error {
   public constructor(
     public readonly kind: "cancelled" | "deadline" | "headers_oversized" | "body_oversized" | "malformed" | "smuggling" | "route_mismatch",
+    public readonly observedBytes = 0,
   ) {
     super(kind);
     this.name = "StrictHttpRequestError";
   }
 }
+
+const addObservedBytes = (current: number, count: number): number => {
+  const total = current + count;
+  return Number.isSafeInteger(total) ? total : Number.MAX_SAFE_INTEGER;
+};
 
 const concat = (left: Uint8Array, right: Uint8Array): Uint8Array => {
   const joined = new Uint8Array(left.byteLength + right.byteLength);
@@ -155,6 +161,20 @@ const nextWithDeadline = async (
   }
 };
 
+const parseBoundedRequestHead = (
+  buffered: Uint8Array,
+  headerEnd: number,
+  expected: HttpEgressExpectedRequest,
+  limits: HttpEgressLimits,
+): ParsedRequestHead => {
+  if (headerEnd + CRLFCRLF.byteLength > limits.maxInboundHeaderBytes) {
+    throw new StrictHttpRequestError("headers_oversized");
+  }
+  const parsed = parseHeaders(buffered.slice(0, headerEnd), expected);
+  if (parsed.contentLength > limits.maxInboundBodyBytes) {throw new StrictHttpRequestError("body_oversized");}
+  return parsed;
+};
+
 export const readStrictHttpRequest = async (
   chunks: AsyncIterable<Uint8Array>,
   expected: HttpEgressExpectedRequest,
@@ -164,48 +184,53 @@ export const readStrictHttpRequest = async (
 ): Promise<StrictHttpRequest> => {
   const iterator = chunks[Symbol.asyncIterator]();
   let buffered: Uint8Array = new Uint8Array();
+  let observedBytes = 0;
   let headerEnd = -1;
   let parsed: ReturnType<typeof parseHeaders> | undefined;
-  while (true) {
-    const next = await nextWithDeadline(iterator, clock, limits, signal);
-    if (next.done) {break;}
-    if (!(next.value instanceof Uint8Array) || next.value.byteLength === 0) {continue;}
-    if (next.value.byteLength > limits.maxInboundHeaderBytes + limits.maxInboundBodyBytes
-      || buffered.byteLength + next.value.byteLength > limits.maxInboundHeaderBytes + limits.maxInboundBodyBytes) {
-      throw new StrictHttpRequestError(headerEnd < 0 ? "headers_oversized" : "body_oversized");
-    }
-    buffered = concat(buffered, next.value);
-    if (headerEnd < 0) {
-      headerEnd = indexOf(buffered, CRLFCRLF);
-      if (headerEnd < 0 && buffered.byteLength > limits.maxInboundHeaderBytes) {
-        throw new StrictHttpRequestError("headers_oversized");
+  try {
+    while (true) {
+      const next = await nextWithDeadline(iterator, clock, limits, signal);
+      if (next.done) {break;}
+      if (!(next.value instanceof Uint8Array) || next.value.byteLength === 0) {continue;}
+      observedBytes = addObservedBytes(observedBytes, next.value.byteLength);
+      if (next.value.byteLength > limits.maxInboundHeaderBytes + limits.maxInboundBodyBytes
+        || buffered.byteLength + next.value.byteLength > limits.maxInboundHeaderBytes + limits.maxInboundBodyBytes) {
+        throw new StrictHttpRequestError(headerEnd < 0 ? "headers_oversized" : "body_oversized");
       }
-      if (headerEnd >= 0) {
-        if (headerEnd + CRLFCRLF.byteLength > limits.maxInboundHeaderBytes) {
+      buffered = concat(buffered, next.value);
+      if (headerEnd < 0) {
+        headerEnd = indexOf(buffered, CRLFCRLF);
+        if (headerEnd < 0 && buffered.byteLength > limits.maxInboundHeaderBytes) {
           throw new StrictHttpRequestError("headers_oversized");
         }
-        parsed = parseHeaders(buffered.slice(0, headerEnd), expected);
-        if (parsed.contentLength > limits.maxInboundBodyBytes) {throw new StrictHttpRequestError("body_oversized");}
+        if (headerEnd >= 0) {
+          parsed = parseBoundedRequestHead(buffered, headerEnd, expected, limits);
+        }
+      }
+      if (parsed !== undefined) {
+        const expectedTotal = headerEnd + CRLFCRLF.byteLength + parsed.contentLength;
+        if (buffered.byteLength > expectedTotal) {throw new StrictHttpRequestError("smuggling");}
+      }
+      if (buffered.byteLength > limits.maxInboundHeaderBytes + limits.maxInboundBodyBytes) {
+        throw new StrictHttpRequestError("body_oversized");
       }
     }
-    if (parsed !== undefined) {
-      const expectedTotal = headerEnd + CRLFCRLF.byteLength + parsed.contentLength;
-      if (buffered.byteLength > expectedTotal) {throw new StrictHttpRequestError("smuggling");}
+    if (parsed === undefined || headerEnd < 0) {throw new StrictHttpRequestError("malformed");}
+    const bodyStart = headerEnd + CRLFCRLF.byteLength;
+    if (buffered.byteLength !== bodyStart + parsed.contentLength) {throw new StrictHttpRequestError("malformed");}
+    return Object.freeze({
+      method: parsed.method,
+      path: parsed.path,
+      headers: parsed.headers,
+      body: buffered.slice(bodyStart),
+      wireBytes: buffered.byteLength,
+    });
+  } catch (error) {
+    if (error instanceof StrictHttpRequestError) {
+      throw new StrictHttpRequestError(error.kind, observedBytes);
     }
-    if (buffered.byteLength > limits.maxInboundHeaderBytes + limits.maxInboundBodyBytes) {
-      throw new StrictHttpRequestError("body_oversized");
-    }
+    throw error;
   }
-  if (parsed === undefined || headerEnd < 0) {throw new StrictHttpRequestError("malformed");}
-  const bodyStart = headerEnd + CRLFCRLF.byteLength;
-  if (buffered.byteLength !== bodyStart + parsed.contentLength) {throw new StrictHttpRequestError("malformed");}
-  return Object.freeze({
-    method: parsed.method,
-    path: parsed.path,
-    headers: parsed.headers,
-    body: buffered.slice(bodyStart),
-    wireBytes: buffered.byteLength,
-  });
 };
 
 export const canonicalRequestDigestParts = (

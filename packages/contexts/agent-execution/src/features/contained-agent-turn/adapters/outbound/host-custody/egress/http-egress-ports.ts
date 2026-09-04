@@ -1,4 +1,4 @@
-import type { HttpEgressReceipt } from "./http-egress-contracts.js";
+import type { HttpEgressLimits, HttpEgressReceipt } from "./http-egress-contracts.js";
 
 export type HttpEgressRoute = Readonly<{
   routeReceiptDigest: string;
@@ -58,11 +58,11 @@ export type HttpEgressAuthorizationDecision = Readonly<{
   routeGeneration: string;
   credentialGeneration: string;
   materializationReceiptDigest: string;
-  selectedPeer?: string;
-  sniDigest?: string;
-  certificateDigest?: string;
-  pinDigest?: string;
-  alpn?: string;
+}>;
+
+export type HttpEgressFinalAuthorizationDecision = HttpEgressAuthorizationDecision & Readonly<{
+  /** Correlation binding only; authenticity remains the authorizer's responsibility. */
+  bindingDigest: string;
 }>;
 
 export type HttpEgressProvisionalAuthorization = Readonly<{
@@ -79,12 +79,38 @@ export type HttpEgressProvisionalAuthorization = Readonly<{
   credentialGeneration: string;
 }>;
 
-export type HttpEgressFinalAuthorization = HttpEgressProvisionalAuthorization & Readonly<{
-  selectedPeer: string;
+export type HttpEgressFinalAuthorization = Readonly<{
+  operationId: string;
+  attemptId: string;
+  requestId: string;
+  requestMethod: string;
+  requestPath: string;
+  requestHost: string;
+  requestDigest: string;
+  routeReceiptDigest: string;
+  materializationReceiptDigest: string;
+  redirectHop: 0;
+  originHost: string;
+  originPort: number;
+  upstreamMethod: string;
+  upstreamPath: string;
+  resolvedAddresses: readonly string[];
+  selectedAddress: string;
+  observedPeerAddress: string;
+  observedPeerPort: number;
+  tlsProtocol: "TLSv1.2" | "TLSv1.3";
+  sni: string;
   sniDigest: string;
   certificateDigest: string;
   pinDigest: string;
-  alpn: string;
+  alpn: "http/1.1";
+  policyGeneration: string;
+  keyGeneration: string;
+  routeGeneration: string;
+  credentialGeneration: string;
+  limits: HttpEgressLimits;
+  /** Versioned, purpose-bound canonical correlation over every other field. */
+  bindingDigest: string;
 }>;
 
 export interface HttpEgressProvisionalAuthorizer {
@@ -92,7 +118,7 @@ export interface HttpEgressProvisionalAuthorizer {
 }
 
 export interface HttpEgressFinalAuthorizer {
-  authorize(input: HttpEgressFinalAuthorization): Promise<HttpEgressAuthorizationDecision>;
+  authorize(input: HttpEgressFinalAuthorization): Promise<HttpEgressFinalAuthorizationDecision>;
 }
 
 export type HttpEgressResolution = Readonly<{
@@ -106,12 +132,13 @@ export interface HttpEgressTrustedResolver {
 
 export type HttpEgressTransportBinding = Readonly<{
   peerAddress: string;
+  peerPort: number;
   tlsProtocol: "TLSv1.2" | "TLSv1.3";
   sni: string;
   sniDigest: string;
   certificateDigest: string;
   pinDigest: string;
-  alpn: string;
+  alpn: "http/1.1";
 }>;
 
 export type HttpEgressDispatch =

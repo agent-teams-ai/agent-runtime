@@ -43,12 +43,31 @@ test("canonical header order and stripped credentials cannot change the emitted 
   assert.equal(first.request, reordered.request);
 });
 
-test("custom presentation headers require explicit route admission and remain digest-bound", async () => {
-  const route = { ...defaultRoute, forwardedRequestHeaderNames: ["x-presentation"] };
-  const first = await executeHeaders("X-Presentation: first\r\n", route);
-  const second = await executeHeaders("X-Presentation: second\r\n", route);
-  assert.match(first.request, /x-presentation: first/);
-  assert.notEqual(first.receipt.requestDigest, second.receipt.requestDigest);
+test("unknown custom headers remain unsupported even when a route names them", async () => {
+  for (const name of ["x-presentation", "x-auth-token", "x-novel-credential", "x-provider-account"]) {
+    const result = await executeHeaders(`${name}: child-controlled\r\n`, {
+      ...defaultRoute, forwardedRequestHeaderNames: [name],
+    });
+    assert.equal(result.receipt.outcome, "denied");
+    assert.equal(result.fixture.observations.opens, 0);
+    assert.equal(result.fixture.observations.renders, 0);
+  }
+});
+
+test("the closed presentation allowlist accepts its known non-auth headers", async () => {
+  const result = await executeHeaders("Accept: application/json\r\nContent-Type: application/json\r\n");
+  assert.equal(result.receipt.outcome, "completed");
+  assert.match(result.request, /accept: application\/json\r\n/);
+  assert.match(result.request, /content-type: application\/json\r\n/);
+});
+
+test("a non-HTTP/1.1 route is rejected at runtime", async () => {
+  const result = await executeHeaders("Accept: application/json\r\n", {
+    ...defaultRoute, alpn: "h2",
+  } as unknown as HttpEgressRoute);
+  assert.equal(result.receipt.outcome, "denied");
+  assert.equal(result.fixture.observations.opens, 0);
+  assert.equal(result.fixture.observations.renders, 0);
 });
 
 for (const names of [["authorization"], ["api-key"], ["cookie"], ["accept-encoding"],

@@ -3,28 +3,9 @@ import type { StrictHttpRequest } from "./strict-http-request.js";
 
 const encoder = new TextEncoder();
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-const NON_FORWARDABLE_HEADERS = new Set([
-  "accept-encoding",
-  "api-key",
-  "authorization",
-  "connection",
-  "content-length",
-  "cookie",
-  "expect",
-  "host",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "proxy-connection",
-  "set-cookie",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "x-api-key",
-  "x-provider-api-key",
-  "x-provider-authorization",
-]);
+// Provider-specific and unknown headers need an explicit typed mapping before
+// they may cross the Host credential-custody boundary.
+const FORWARDABLE_PRESENTATION_HEADERS = new Set(["accept", "content-type"]);
 
 export class HttpOutboundRequestError extends Error {
   public constructor() {
@@ -44,6 +25,7 @@ const concat = (parts: readonly Uint8Array[]): Uint8Array => {
 };
 
 export const assertHttpEgressRoute = (route: HttpEgressRoute): void => {
+  if (route.alpn !== "http/1.1") {throw new HttpOutboundRequestError();}
   if (!TOKEN.test(route.upstreamMethod) || route.upstreamMethod === "CONNECT") {throw new HttpOutboundRequestError();}
   if (!route.upstreamPath.startsWith("/") || route.upstreamPath.startsWith("//")
     || /[^\x21-\x7e]|[?#]/.test(route.upstreamPath)) {
@@ -54,7 +36,8 @@ export const assertHttpEgressRoute = (route: HttpEgressRoute): void => {
   if (!Array.isArray(route.forwardedRequestHeaderNames) || route.forwardedRequestHeaderNames.length > 32
     || new Set(route.forwardedRequestHeaderNames).size !== route.forwardedRequestHeaderNames.length
     || route.forwardedRequestHeaderNames.some(name => typeof name !== "string"
-      || name.length > 128 || name !== name.toLowerCase() || !TOKEN.test(name) || NON_FORWARDABLE_HEADERS.has(name))) {
+      || name.length > 128 || name !== name.toLowerCase() || !TOKEN.test(name)
+      || !FORWARDABLE_PRESENTATION_HEADERS.has(name))) {
     throw new HttpOutboundRequestError();
   }
 };

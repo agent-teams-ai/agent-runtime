@@ -9,15 +9,22 @@ import type {
 import type {
   HttpEgressAuthorizationDecision,
   HttpEgressBrokerPorts,
+  HttpEgressFinalAuthorizationDecision,
   HttpEgressRoute,
+  HttpEgressTransportBinding,
   HttpEgressTransportSession,
 } from "./http-egress-ports.js";
+import {
+  createHttpEgressFinalAuthorization,
+  snapshotHttpEgressTransportBinding,
+} from "./http-final-authorization-binding.js";
 import { assertHttpEgressRoute, createOutboundHttpRequest, selectForwardedRequestHeaders } from "./http-outbound-request.js";
 import { snapshotHttpEgressLimits } from "./http-egress-limits.js";
 import { createHttpDispatchBoundary } from "./http-dispatch-boundary.js";
 import { observeHttpDispatch } from "./http-dispatch-observation.js";
 import { observeHttpResponse } from "./http-response-observation.js";
-import { resolutionIsSafe } from "./public-address-policy.js";
+import { normalizeHttpEgressResolution } from "./public-address-policy.js";
+import type { NormalizedHttpEgressResolution } from "./public-address-policy.js";
 import {
   canonicalRequestDigestParts,
   readStrictHttpRequest,
@@ -109,28 +116,39 @@ const authorizationMatches = (
   && decision.materializationReceiptDigest === route.materializationReceiptDigest;
 
 const finalAuthorizationMatches = (
-  decision: HttpEgressAuthorizationDecision,
+  decision: HttpEgressFinalAuthorizationDecision,
+  bindingDigest: string,
   route: HttpEgressRoute,
-  session: HttpEgressTransportSession,
   now: number,
 ): boolean => authorizationMatches(decision, route, now)
-  && decision.selectedPeer === session.binding.peerAddress
-  && decision.sniDigest === session.binding.sniDigest
-  && decision.certificateDigest === session.binding.certificateDigest
-  && decision.pinDigest === session.binding.pinDigest
-  && decision.alpn === session.binding.alpn;
+  && decision.bindingDigest === bindingDigest;
 
 const bindingMatches = (
   route: HttpEgressRoute,
   selectedAddress: string,
-  session: HttpEgressTransportSession,
-): boolean => session.binding.peerAddress === selectedAddress
-  && session.binding.sni === route.sni
-  && session.binding.sniDigest === route.sniDigest
-  && session.binding.certificateDigest === route.certificateDigest
-  && session.binding.pinDigest === route.pinDigest
-  && session.binding.alpn === route.alpn
-  && (session.binding.tlsProtocol === "TLSv1.2" || session.binding.tlsProtocol === "TLSv1.3");
+  binding: HttpEgressTransportBinding,
+): boolean => binding.peerAddress === selectedAddress
+  && Number.isSafeInteger(binding.peerPort)
+  && binding.peerPort === route.originPort
+  && binding.sni === route.sni
+  && binding.sniDigest === route.sniDigest
+  && binding.certificateDigest === route.certificateDigest
+  && binding.pinDigest === route.pinDigest
+  && binding.alpn === "http/1.1"
+  && route.alpn === "http/1.1"
+  && (binding.tlsProtocol === "TLSv1.2" || binding.tlsProtocol === "TLSv1.3");
+
+const transportBindingUnchanged = (
+  authorized: HttpEgressTransportBinding,
+  current: HttpEgressTransportBinding,
+): boolean => authorized.peerAddress === current.peerAddress
+  && authorized.peerPort === current.peerPort
+  && authorized.tlsProtocol === current.tlsProtocol
+  && authorized.sni === current.sni
+  && authorized.sniDigest === current.sniDigest
+  && authorized.certificateDigest === current.certificateDigest
+  && authorized.pinDigest === current.pinDigest
+  && authorized.alpn === current.alpn;
 
 const generationsMatch = (
   route: HttpEgressRoute,
@@ -253,7 +271,7 @@ const halt = async (
 const authorizeResolution = async (
   context: ExecutionStageContext,
   request: StrictHttpRequest,
-): Promise<StageResult<Readonly<{ route: HttpEgressRoute; selectedAddress: string }>>> => {
+): Promise<StageResult<Readonly<{ route: HttpEgressRoute; resolution: NormalizedHttpEgressResolution }>>> => {
   const { ports, operation, state, resources } = context;
   const observation = await ports.clock.within(
     operation.limits.deadline,
@@ -297,12 +315,13 @@ const authorizeResolution = async (
       () => ports.resolver.resolve(route.originHost),
       operation.signal,
     );
-    if (!resolutionIsSafe(resolution.addresses, resolution.selectedAddress)) {
+    const normalized = normalizeHttpEgressResolution(resolution.addresses, resolution.selectedAddress);
+    if (normalized === undefined) {
       state.outcome = "denied";
       state.anomalyCode = "resolution_denied";
       return await halt(ports, operation, state, resources);
     }
-    return Object.freeze({ halted: false, value: Object.freeze({ route, selectedAddress: resolution.selectedAddress }) });
+    return Object.freeze({ halted: false, value: Object.freeze({ route, resolution: normalized }) });
   } catch {
     state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "resolution_denied";
@@ -332,6 +351,7 @@ const renderAuthorizedRequest = async (
   context: ExecutionStageContext,
   request: StrictHttpRequest,
   route: HttpEgressRoute,
+  resolution: NormalizedHttpEgressResolution,
 ): Promise<StageResult<AuthorizedHttpRequest>> => {
   const { ports, operation, state, resources } = context;
   const session = resources.session as HttpEgressTransportSession;
@@ -370,14 +390,13 @@ const renderAuthorizedRequest = async (
     return await halt(ports, operation, state, resources);
   }
   authorization.fill(0);
-  const finalInput = Object.freeze({ ...provisionalAuthorizationInput(operation, state, route),
-    selectedPeer: session.binding.peerAddress,
-    sniDigest: session.binding.sniDigest,
-    certificateDigest: session.binding.certificateDigest,
-    pinDigest: session.binding.pinDigest,
-    alpn: session.binding.alpn,
+  const authorizedBinding = snapshotHttpEgressTransportBinding(session.binding);
+  const finalInput = createHttpEgressFinalAuthorization({
+    operation, requestDigest: state.requestDigest, route,
+    resolvedAddresses: resolution.addresses, selectedAddress: resolution.selectedAddress,
+    binding: authorizedBinding, digest: parts => ports.evidence.digest(parts),
   });
-  let finalDecision: HttpEgressAuthorizationDecision;
+  let finalDecision: HttpEgressFinalAuthorizationDecision;
   try {
     finalDecision = await ports.clock.within(
       operation.limits.deadline,
@@ -391,7 +410,7 @@ const renderAuthorizedRequest = async (
     return await halt(ports, operation, state, resources);
   }
   state.finalAuthorizationReceiptDigest = finalDecision.receiptDigest;
-  if (!finalAuthorizationMatches(finalDecision, route, session, ports.clock.now())) {
+  if (!finalAuthorizationMatches(finalDecision, finalInput.bindingDigest, route, ports.clock.now())) {
     outboundRequest.fill(0);
     state.outcome = "denied";
     state.anomalyCode = "final_denied";
@@ -411,7 +430,19 @@ const renderAuthorizedRequest = async (
         return false;
       }
       const now = ports.clock.now();
-      const allowed = now < operation.limits.deadline && finalAuthorizationMatches(decision, route, session, now);
+      const currentBinding = snapshotHttpEgressTransportBinding(session.binding);
+      if (!bindingMatches(route, resolution.selectedAddress, currentBinding)
+        || !transportBindingUnchanged(authorizedBinding, currentBinding)) {
+        state.anomalyCode = "transport_binding_drift";
+        return false;
+      }
+      const currentInput = createHttpEgressFinalAuthorization({
+        operation, requestDigest: state.requestDigest, route,
+        resolvedAddresses: resolution.addresses, selectedAddress: resolution.selectedAddress,
+        binding: currentBinding, digest: parts => ports.evidence.digest(parts),
+      });
+      const allowed = now < operation.limits.deadline
+        && finalAuthorizationMatches(decision, currentInput.bindingDigest, route, now);
       if (!allowed) {state.anomalyCode = "final_denied";}
       return allowed;
     },
@@ -421,7 +452,7 @@ const renderAuthorizedRequest = async (
 const openAuthorizedSession = async (
   context: ExecutionStageContext,
   request: StrictHttpRequest,
-  input: Readonly<{ route: HttpEgressRoute; selectedAddress: string }>,
+  input: Readonly<{ route: HttpEgressRoute; resolution: NormalizedHttpEgressResolution }>,
 ): Promise<StageResult<AuthorizedHttpRequest>> => {
   const { ports, operation, state, resources } = context;
   state.attemptCount = 1;
@@ -429,7 +460,7 @@ const openAuthorizedSession = async (
     resources.session = await ports.clock.within(operation.limits.deadline, () => ports.transport.open({
       originHost: input.route.originHost,
       originPort: input.route.originPort,
-      selectedAddress: input.selectedAddress,
+      selectedAddress: input.resolution.selectedAddress,
       sni: input.route.sni,
       alpn: input.route.alpn,
     }), operation.signal);
@@ -439,14 +470,15 @@ const openAuthorizedSession = async (
     return await halt(ports, operation, state, resources);
   }
   const session = resources.session;
-  state.selectedPeer = session.binding.peerAddress;
-  state.tlsProtocol = session.binding.tlsProtocol;
-  if (!bindingMatches(input.route, input.selectedAddress, session)) {
+  const binding = snapshotHttpEgressTransportBinding(session.binding);
+  state.selectedPeer = binding.peerAddress;
+  state.tlsProtocol = binding.tlsProtocol;
+  if (!bindingMatches(input.route, input.resolution.selectedAddress, binding)) {
     state.outcome = "denied";
     state.anomalyCode = "transport_binding_drift";
     return await halt(ports, operation, state, resources);
   }
-  return await renderAuthorizedRequest(context, request, input.route);
+  return await renderAuthorizedRequest(context, request, input.route, input.resolution);
 };
 
 const dispatchOnce = async (
@@ -499,7 +531,11 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
 }> => Object.freeze({
   execute: async (input: HttpEgressOperation): Promise<HttpEgressReceipt> => {
     // Invalid configuration never transfers connection custody to this broker.
-    const operation = Object.freeze({ ...input, limits: snapshotHttpEgressLimits(input.limits) });
+    const operation = Object.freeze({
+      ...input,
+      expectedRequest: Object.freeze({ ...input.expectedRequest }),
+      limits: snapshotHttpEgressLimits(input.limits),
+    });
     const state = initialState(ports, operation);
     const resources: ExecutionResources = {};
     try {
@@ -519,6 +555,7 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
       return await dispatchOnce(ports, operation, state, resources, prepared.value);
     } catch (error) {
       if (error instanceof StrictHttpRequestError) {
+        state.inboundRequestBytes = error.observedBytes;
         state.outcome = error.kind === "cancelled" ? "cancelled" : "rejected";
         state.anomalyCode = requestErrorCode(error);
       } else {
