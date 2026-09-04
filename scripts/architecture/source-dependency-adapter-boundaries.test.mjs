@@ -191,7 +191,21 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
   ]);
 
-  for (const builtin of ["node:os", "node:stream"]) {
+  assert.deepEqual(host.allowedBuiltins, [
+    "node:child_process",
+    "node:crypto",
+    "node:fs",
+    "node:fs/promises",
+    "node:net",
+    "node:os",
+    "node:path",
+    "node:stream",
+    "node:timers/promises",
+    "node:tls",
+    "node:util",
+  ]);
+
+  for (const builtin of ["node:net", "node:os", "node:stream", "node:tls"]) {
     assert.deepEqual(await analyzeFixture({
       [`${host.roots[0]}/owned-import.ts`]: `import '${builtin}';\n`,
     }), []);

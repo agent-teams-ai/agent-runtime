@@ -19,3 +19,8 @@ export type {
 } from "./http-egress-ports.js";
 export { isPublicEgressAddress, resolutionIsSafe } from "./public-address-policy.js";
 export { createStrictHttpEgressBroker } from "./strict-http-egress-broker.js";
+export {
+  NodeTlsHttpEgressError,
+  NodeTlsHttpEgressTransport,
+} from "./node-tls-http-egress-transport.js";
+export type { NodeTlsHttpEgressTransportOptions } from "./node-tls-http-egress-transport.js";
