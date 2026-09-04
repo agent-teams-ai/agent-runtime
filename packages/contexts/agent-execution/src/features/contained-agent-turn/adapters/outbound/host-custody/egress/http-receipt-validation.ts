@@ -19,6 +19,18 @@ const ownData = (record: object, name: string): unknown => {
   return descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
 };
 
+const AUTHORIZATION_FIELDS = ["decision", "receiptDigest", "validUntil", "policyGeneration",
+  "keyGeneration", "routeGeneration", "credentialGeneration", "materializationReceiptDigest"] as const;
+const exactFields = (record: object, fields: readonly string[]): boolean => {
+  const keys = Reflect.ownKeys(record);
+  return keys.length === fields.length
+    && keys.every(key => typeof key === "string" && fields.includes(key))
+    && fields.every(name => {
+      const descriptor = Object.getOwnPropertyDescriptor(record, name);
+      return descriptor !== undefined && "value" in descriptor;
+    });
+};
+
 const boundedOpaque = (value: unknown): value is string => typeof value === "string"
   && value.length > 0
   && value.length <= MAX_OPAQUE_RECEIPT_BYTES
@@ -30,7 +42,8 @@ const snapshotAuthorization = (
   final: boolean,
 ): HttpEgressAuthorizationDecision | HttpEgressFinalAuthorizationDecision | undefined => {
   const record = plainRecord(value);
-  if (record === undefined) {return undefined;}
+  const fields = final ? [...AUTHORIZATION_FIELDS, "bindingDigest"] : AUTHORIZATION_FIELDS;
+  if (record === undefined || !exactFields(record, fields)) {return undefined;}
   const decision = ownData(record, "decision");
   const receiptDigest = ownData(record, "receiptDigest");
   const validUntil = ownData(record, "validUntil");
@@ -41,7 +54,7 @@ const snapshotAuthorization = (
   const materializationReceiptDigest = ownData(record, "materializationReceiptDigest");
   const bindingDigest = final ? ownData(record, "bindingDigest") : undefined;
   if ((decision !== "allow" && decision !== "deny") || !boundedOpaque(receiptDigest)
-    || typeof validUntil !== "number" || !Number.isFinite(validUntil)
+    || typeof validUntil !== "number" || !Number.isSafeInteger(validUntil)
     || !boundedOpaque(policyGeneration) || !boundedOpaque(keyGeneration)
     || !boundedOpaque(routeGeneration) || !boundedOpaque(credentialGeneration)
     || !boundedOpaque(materializationReceiptDigest) || (final && !boundedOpaque(bindingDigest))) {
@@ -70,7 +83,7 @@ export const httpAuthorizationMatches = (
   route: HttpEgressRoute,
   now: number,
 ): boolean => decision.decision === "allow"
-  && Number.isFinite(now) && now < decision.validUntil
+  && Number.isSafeInteger(now) && now < decision.validUntil
   && decision.policyGeneration === route.policyGeneration
   && decision.keyGeneration === route.keyGeneration
   && decision.routeGeneration === route.routeGeneration
@@ -92,7 +105,7 @@ export type HttpEgressClosureDecision = Readonly<{
 
 export const snapshotHttpClosureDecision = (value: unknown): HttpEgressClosureDecision | undefined => {
   const record = plainRecord(value);
-  if (record === undefined) {return undefined;}
+  if (record === undefined || !exactFields(record, ["state", "receiptDigest"])) {return undefined;}
   const state = ownData(record, "state");
   const receiptDigest = ownData(record, "receiptDigest");
   if ((state !== "closed" && state !== "unknown") || !boundedOpaque(receiptDigest)) {return undefined;}

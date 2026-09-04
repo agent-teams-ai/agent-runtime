@@ -53,4 +53,72 @@ describe("HTTP exact boundary validation", () => {
       assert.equal(fixture.observations.dispatches, 0);
     });
   }
+
+  test("rejects an oversized route before request hashing, provisional authorization, DNS, or open", async () => {
+    const fixture = createEgressFixture({ route: routeWith(defaultRoute, "upstreamPath", `/${"x".repeat(20_000)}`) });
+    let digests = 0;
+    const ports = Object.freeze({ ...fixture.ports, evidence: Object.freeze({
+      ...fixture.ports.evidence,
+      digest: (parts: readonly Uint8Array[]) => {digests += 1; return fixture.ports.evidence.digest(parts);},
+    }) });
+    const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
+    assert.equal(receipt.anomalyCode, "provider_access_denied");
+    assert.equal(digests, 1, "only the pre-parse unavailable digest is permitted");
+    assert.equal(fixture.observations.order.includes("provisional"), false);
+    assert.equal(fixture.observations.order.includes("resolve"), false);
+    assert.equal(fixture.observations.opens, 0);
+    assert.equal(fixture.observations.renders, 0);
+  });
+
+  test("rejects route accessors without invoking them", async () => {
+    let reads = 0;
+    const route = { ...defaultRoute };
+    Object.defineProperty(route, "routeReceiptDigest", {get: () => {reads += 1; return "route";}});
+    const fixture = createEgressFixture({ route: route as never });
+    const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
+    assert.equal(receipt.anomalyCode, "provider_access_denied");
+    assert.equal(reads, 0);
+    assert.equal(fixture.observations.opens, 0);
+  });
+
+  for (const cut of ["asynchronous", "synchronous"] as const) {
+    test(`rejects unknown generation fields at the ${cut} generation cut`, async () => {
+      const fixture = createEgressFixture();
+      const generation = {
+        status: "current" as const, policyGeneration: defaultRoute.policyGeneration,
+        keyGeneration: defaultRoute.keyGeneration, routeGeneration: defaultRoute.routeGeneration,
+        credentialGeneration: defaultRoute.credentialGeneration,
+        materializationReceiptDigest: defaultRoute.materializationReceiptDigest,
+        unknown: true,
+      };
+      const ports = Object.freeze({ ...fixture.ports, routeAuthority: Object.freeze({
+        ...fixture.ports.routeAuthority,
+        ...(cut === "asynchronous" ? {revalidate: async () => generation as never} : {
+          revalidateAtFirstByte: () => generation as never,
+        }),
+      }) });
+      const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
+      assert.equal(receipt.anomalyCode, "provider_generation_drift");
+      assert.equal(fixture.observations.dispatches, 0);
+      if (cut === "asynchronous") {assert.equal(fixture.observations.renders, 0);}
+    });
+  }
+
+  test("rejects malformed operation identity before hashing or accepting connection custody", async () => {
+    const fixture = createEgressFixture();
+    let requestIdReads = 0;
+    const expected = { ...fixture.operation.expectedRequest };
+    Object.defineProperty(expected, "requestId", {get: () => {requestIdReads += 1; return "request";}});
+    await assert.rejects(createStrictHttpEgressBroker(fixture.ports).execute({
+      ...fixture.operation, expectedRequest: expected,
+    } as never));
+    assert.equal(requestIdReads, 0);
+    assert.deepEqual(fixture.observations.order, []);
+
+    await assert.rejects(createStrictHttpEgressBroker(fixture.ports).execute({
+      ...fixture.operation,
+      expectedRequest: { ...fixture.operation.expectedRequest, requestId: "request-\ud800" },
+    }));
+    assert.deepEqual(fixture.observations.order, []);
+  });
 });

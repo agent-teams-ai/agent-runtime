@@ -7,6 +7,8 @@ import type {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 import { createStrictHttpEgressBroker } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
 import { bytes, createEgressFixture, defaultRoute, denyDecision } from "./http-egress-test-fixture.ts";
+import { snapshotHttpAuthorizationDecision, snapshotHttpClosureDecision,
+  snapshotHttpFinalAuthorizationDecision } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-receipt-validation.js";
 
 const malformedDecision = (receiptDigest: unknown): HttpEgressAuthorizationDecision => Object.freeze({
   decision: "allow",
@@ -27,6 +29,14 @@ const malformedReceipts = [
 ] as const;
 
 describe("HTTP authority receipt ingress", () => {
+  test("rejects unknown own string and symbol keys on closed authority receipts", () => {
+    const base = malformedDecision("receipt");
+    assert.equal(snapshotHttpAuthorizationDecision({ ...base, unknown: true }), undefined);
+    assert.equal(snapshotHttpFinalAuthorizationDecision({ ...base, bindingDigest: "binding", unknown: true }), undefined);
+    assert.equal(snapshotHttpAuthorizationDecision({ ...base, [Symbol("unknown")]: true }), undefined);
+    assert.equal(snapshotHttpAuthorizationDecision({ ...base, validUntil: 1.5 }), undefined);
+    assert.equal(snapshotHttpAuthorizationDecision({ ...base, validUntil: Number.MAX_SAFE_INTEGER + 1 }), undefined);
+  });
   for (const [name, receiptDigest] of malformedReceipts) {
     test(`rejects a ${name} provisional receipt before resolution or transport`, async () => {
       const fixture = createEgressFixture({ provisional: malformedDecision(receiptDigest) });
@@ -131,6 +141,10 @@ describe("HTTP authority receipt ingress", () => {
 });
 
 describe("HTTP closure receipt ingress", () => {
+  test("rejects unknown own string and symbol keys on closed closure receipts", () => {
+    assert.equal(snapshotHttpClosureDecision({state: "closed", receiptDigest: "receipt", unknown: true}), undefined);
+    assert.equal(snapshotHttpClosureDecision({state: "closed", receiptDigest: "receipt", [Symbol("unknown")]: true}), undefined);
+  });
   for (const [name, closure] of [
     ["empty digest", {state: "closed", receiptDigest: ""}],
     ["oversized digest", {state: "closed", receiptDigest: "c".repeat(513)}],

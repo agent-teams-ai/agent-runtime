@@ -68,6 +68,7 @@ class DeadlineByteReader {
     const joined = new Uint8Array(this.buffered.byteLength + next.value.byteLength);
     joined.set(this.buffered);
     joined.set(next.value, this.buffered.byteLength);
+    this.buffered.fill(0);
     this.buffered = joined;
   }
 
@@ -78,8 +79,10 @@ class DeadlineByteReader {
         if (index + separator.byteLength > maximum) {
           throw new StrictHttpResponseError("oversized", this.bytesRead, 0);
         }
-        const value = this.buffered.slice(0, index);
-        this.buffered = this.buffered.slice(index + separator.byteLength);
+        const previous = this.buffered;
+        const value = previous.slice(0, index);
+        this.buffered = previous.slice(index + separator.byteLength);
+        previous.fill(0);
         return value;
       }
       if (this.buffered.byteLength > maximum) {throw new StrictHttpResponseError("oversized", this.bytesRead, 0);}
@@ -92,8 +95,10 @@ class DeadlineByteReader {
     while (this.buffered.byteLength === 0 && !this.ended) {await this.pull();}
     if (this.buffered.byteLength === 0) {return undefined;}
     const count = Math.min(maximum, this.buffered.byteLength);
-    const value = this.buffered.slice(0, count);
-    this.buffered = this.buffered.slice(count);
+    const previous = this.buffered;
+    const value = previous.slice(0, count);
+    this.buffered = previous.slice(count);
+    previous.fill(0);
     return value;
   }
 
@@ -101,6 +106,8 @@ class DeadlineByteReader {
     while (!this.ended) {await this.pull();}
     if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
   }
+
+  public dispose(): void {this.buffered.fill(0); this.buffered = new Uint8Array();}
 }
 
 const find = (source: Uint8Array, needle: Uint8Array): number => {
@@ -259,7 +266,13 @@ const forwardFramedBody = async (
   }
   let bodyBytes = 0;
   while (true) {
-    const line = decoder.decode(await reader.through(CRLF, 34));
+    const lineBytes = await reader.through(CRLF, 34);
+    let line: string;
+    try {
+      line = decoder.decode(lineBytes);
+    } finally {
+      lineBytes.fill(0);
+    }
     if (!/^[0-9A-Fa-f]+$/.test(line)) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
     const size = Number.parseInt(line, 16);
     if (!Number.isSafeInteger(size) || size > limits.maxOutputBytes - bodyBytes) {
@@ -267,14 +280,22 @@ const forwardFramedBody = async (
     }
     if (size === 0) {
       const trailers = await reader.through(CRLF, limits.maxUpstreamHeaderBytes);
-      if (trailers.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
+      try {
+        if (trailers.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
+      } finally {
+        trailers.fill(0);
+      }
       await reader.requireEnd();
       return;
     }
     await forwardSizedBody(reader, size, limits.maxBufferedBytes, emit);
     bodyBytes += size;
     const ending = await reader.through(CRLF, 2);
-    if (ending.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
+    try {
+      if (ending.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
+    } finally {
+      ending.fill(0);
+    }
   }
 };
 
@@ -287,40 +308,57 @@ export const forwardStrictHttpResponse = async (
 ): Promise<StrictHttpResponseResult> => {
   const writeContext = Object.freeze({ connection, clock, limits, signal });
   const reader = new DeadlineByteReader(source, clock, limits, signal);
-  const headBytes = await reader.through(CRLFCRLF, limits.maxUpstreamHeaderBytes);
-  let head: ParsedHead;
   try {
-    head = parseHead(headBytes);
-  } catch (error) {
-    if (error instanceof StrictHttpResponseError) {
-      throw new StrictHttpResponseError(error.kind, reader.bytesRead, error.outboundBytes,
+    const headBytes = await reader.through(CRLFCRLF, limits.maxUpstreamHeaderBytes);
+    let head: ParsedHead;
+    try {
+      head = parseHead(headBytes);
+    } catch (error) {
+      if (error instanceof StrictHttpResponseError) {
+        throw new StrictHttpResponseError(error.kind, reader.bytesRead, error.outboundBytes,
+          error.outboundWriteUncertain);
+      }
+      throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);
+    } finally {
+      headBytes.fill(0);
+    }
+    if (head.status >= 300 && head.status <= 399) {throw new StrictHttpResponseError("redirect", reader.bytesRead, 0);}
+    if ((head.contentLength ?? 0) > limits.maxOutputBytes) {
+      throw new StrictHttpResponseError("oversized", reader.bytesRead, 0);
+    }
+    const contentType = safeContentType(head.contentType);
+    const downstreamHead = encoder.encode(
+      `HTTP/1.1 ${head.status} Upstream\r\n${contentType === undefined ? "" : `Content-Type: ${contentType}\r\n`}Connection: close\r\n\r\n`,
+    );
+    let outboundBytes: number;
+    try {
+      outboundBytes = await write(writeContext, downstreamHead, reader.bytesRead, 0);
+    } finally {
+      downstreamHead.fill(0);
+    }
+    let bodyBytes = 0;
+    const emit = async (chunk: Uint8Array): Promise<void> => {
+      try {
+        bodyBytes += chunk.byteLength;
+        if (bodyBytes > limits.maxOutputBytes) {
+          throw new StrictHttpResponseError("oversized", reader.bytesRead, outboundBytes);
+        }
+        outboundBytes = await write(writeContext, chunk, reader.bytesRead, outboundBytes);
+      } finally {
+        chunk.fill(0);
+      }
+    };
+    try {
+      await forwardFramedBody(reader, head, limits, emit);
+    } catch (error) {
+      if (!(error instanceof StrictHttpResponseError)) {
+        throw new StrictHttpResponseError("malformed", reader.bytesRead, outboundBytes);
+      }
+      throw new StrictHttpResponseError(error.kind, reader.bytesRead, Math.max(outboundBytes, error.outboundBytes),
         error.outboundWriteUncertain);
     }
-    throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);
+    return Object.freeze({ status: head.status, upstreamBytes: reader.bytesRead, outboundBytes });
+  } finally {
+    reader.dispose();
   }
-  if (head.status >= 300 && head.status <= 399) {throw new StrictHttpResponseError("redirect", reader.bytesRead, 0);}
-  if ((head.contentLength ?? 0) > limits.maxOutputBytes) {
-    throw new StrictHttpResponseError("oversized", reader.bytesRead, 0);
-  }
-  const contentType = safeContentType(head.contentType);
-  const downstreamHead = encoder.encode(
-    `HTTP/1.1 ${head.status} Upstream\r\n${contentType === undefined ? "" : `Content-Type: ${contentType}\r\n`}Connection: close\r\n\r\n`,
-  );
-  let outboundBytes = await write(writeContext, downstreamHead, reader.bytesRead, 0);
-  let bodyBytes = 0;
-  const emit = async (chunk: Uint8Array): Promise<void> => {
-    bodyBytes += chunk.byteLength;
-    if (bodyBytes > limits.maxOutputBytes) {throw new StrictHttpResponseError("oversized", reader.bytesRead, outboundBytes);}
-    outboundBytes = await write(writeContext, chunk, reader.bytesRead, outboundBytes);
-  };
-  try {
-    await forwardFramedBody(reader, head, limits, emit);
-  } catch (error) {
-    if (!(error instanceof StrictHttpResponseError)) {
-      throw new StrictHttpResponseError("malformed", reader.bytesRead, outboundBytes);
-    }
-    throw new StrictHttpResponseError(error.kind, reader.bytesRead, Math.max(outboundBytes, error.outboundBytes),
-      error.outboundWriteUncertain);
-  }
-  return Object.freeze({ status: head.status, upstreamBytes: reader.bytesRead, outboundBytes });
 };

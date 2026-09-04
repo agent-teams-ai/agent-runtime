@@ -78,5 +78,10 @@ export const createOutboundHttpRequest = (
   const suffix = encoder.encode(
     `\r\nContent-Length: ${request.body.byteLength}\r\nConnection: close\r\n\r\n`,
   );
-  return concat([prefix, authorization, suffix, request.body]);
+  try {
+    return concat([prefix, authorization, suffix, request.body]);
+  } finally {
+    prefix.fill(0);
+    suffix.fill(0);
+  }
 };

@@ -4,6 +4,7 @@ import type {
   HttpEgressRoute,
   HttpEgressTransportBinding,
 } from "./http-egress-ports.js";
+import { snapshotHttpTransportBinding } from "./http-ingress-validation.js";
 
 const encoder = new TextEncoder();
 
@@ -160,16 +161,11 @@ export const canonicalFinalAuthorizationBindingParts = (
 
 export const snapshotHttpEgressTransportBinding = (
   binding: HttpEgressTransportBinding,
-): HttpEgressTransportBinding => Object.freeze({
-  peerAddress: binding.peerAddress,
-  peerPort: binding.peerPort,
-  tlsProtocol: binding.tlsProtocol,
-  sni: binding.sni,
-  sniDigest: binding.sniDigest,
-  certificateDigest: binding.certificateDigest,
-  pinDigest: binding.pinDigest,
-  alpn: binding.alpn,
-});
+): HttpEgressTransportBinding => {
+  const snapshot = snapshotHttpTransportBinding(binding);
+  if (snapshot === undefined) {throw new HttpFinalAuthorizationBindingError("transportBinding");}
+  return snapshot;
+};
 
 export const createHttpEgressFinalAuthorization = (input: Readonly<{
   operation: HttpEgressOperation;

@@ -170,7 +170,13 @@ const parseBoundedRequestHead = (
   if (headerEnd + CRLFCRLF.byteLength > limits.maxInboundHeaderBytes) {
     throw new StrictHttpRequestError("headers_oversized");
   }
-  const parsed = parseHeaders(buffered.slice(0, headerEnd), expected);
+  const head = buffered.slice(0, headerEnd);
+  let parsed: ParsedRequestHead;
+  try {
+    parsed = parseHeaders(head, expected);
+  } finally {
+    head.fill(0);
+  }
   if (parsed.contentLength > limits.maxInboundBodyBytes) {throw new StrictHttpRequestError("body_oversized");}
   return parsed;
 };
@@ -197,7 +203,9 @@ export const readStrictHttpRequest = async (
         || buffered.byteLength + next.value.byteLength > limits.maxInboundHeaderBytes + limits.maxInboundBodyBytes) {
         throw new StrictHttpRequestError(headerEnd < 0 ? "headers_oversized" : "body_oversized");
       }
-      buffered = concat(buffered, next.value);
+      const previous = buffered;
+      buffered = concat(previous, next.value);
+      previous.fill(0);
       if (headerEnd < 0) {
         headerEnd = indexOf(buffered, CRLFCRLF);
         if (headerEnd < 0 && buffered.byteLength > limits.maxInboundHeaderBytes) {
@@ -230,6 +238,8 @@ export const readStrictHttpRequest = async (
       throw new StrictHttpRequestError(error.kind, observedBytes);
     }
     throw error;
+  } finally {
+    buffered.fill(0);
   }
 };
 

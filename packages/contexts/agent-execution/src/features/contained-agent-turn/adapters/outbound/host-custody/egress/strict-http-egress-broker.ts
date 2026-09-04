@@ -15,12 +15,10 @@ import type {
   HttpEgressTransportBinding,
   HttpEgressTransportSession,
 } from "./http-egress-ports.js";
-import {
-  createHttpEgressFinalAuthorization,
-  snapshotHttpEgressTransportBinding,
-} from "./http-final-authorization-binding.js";
-import { assertHttpEgressRoute, createOutboundHttpRequest, selectForwardedRequestHeaders } from "./http-outbound-request.js";
-import { snapshotHttpEgressLimits } from "./http-egress-limits.js";
+import { createHttpEgressFinalAuthorization } from "./http-final-authorization-binding.js";
+import { createOutboundHttpRequest, selectForwardedRequestHeaders } from "./http-outbound-request.js";
+import { boundedHttpOpaque, snapshotHttpEgressOperation, snapshotHttpGenerationObservation,
+  snapshotHttpRouteObservation, snapshotHttpTransportBinding } from "./http-ingress-validation.js";
 import { createHttpDispatchBoundary } from "./http-dispatch-boundary.js";
 import { observeHttpDispatch } from "./http-dispatch-observation.js";
 import { observeHttpResponse } from "./http-response-observation.js";
@@ -36,7 +34,6 @@ import {
   StrictHttpRequestError,
 } from "./strict-http-request.js";
 import type { StrictHttpRequest } from "./strict-http-request.js";
-
 const encoder = new TextEncoder();
 const zeroLateBytes = (pending: Promise<Uint8Array> | undefined): void =>
   void pending?.then(value => value.fill(0), () => {});
@@ -72,16 +69,10 @@ type ReceiptState = {
   attemptCount: 0 | 1;
 };
 
-const initialState = (
-  ports: HttpEgressBrokerPorts,
-  operation: HttpEgressOperation,
-): ReceiptState => ({
+const initialState = (): ReceiptState => ({
   outcome: "rejected",
   anomalyCode: "inbound_malformed",
-  requestDigest: ports.evidence.digest([
-    encoder.encode("agent-runtime.host-http-request-unavailable/v1\n"),
-    encoder.encode(operation.expectedRequest.requestId),
-  ]),
+  requestDigest: "",
   provisionalAuthorizationReceiptDigest: "",
   finalAuthorizationReceiptDigest: "",
   routeReceiptDigest: "",
@@ -137,13 +128,22 @@ const transportBindingUnchanged = (
 
 const generationsMatch = (
   route: HttpEgressRoute,
-  observation: Awaited<ReturnType<HttpEgressBrokerPorts["routeAuthority"]["revalidate"]>>,
-): boolean => observation.status === "current"
+  value: unknown,
+): boolean => {
+  const observation = snapshotHttpGenerationObservation(value);
+  return observation?.status === "current"
   && observation.policyGeneration === route.policyGeneration
   && observation.keyGeneration === route.keyGeneration
   && observation.routeGeneration === route.routeGeneration
   && observation.credentialGeneration === route.credentialGeneration
   && observation.materializationReceiptDigest === route.materializationReceiptDigest;
+};
+
+const evidenceDigest = (ports: HttpEgressBrokerPorts, parts: readonly Uint8Array[]): string => {
+  const digest = ports.evidence.digest(parts);
+  if (!boundedHttpOpaque(digest)) {throw new TypeError("invalid HTTP evidence digest");}
+  return digest;
+};
 
 const requestErrorCode = (error: StrictHttpRequestError): HttpEgressAnomalyCode => ({
   cancelled: "inbound_cancelled",
@@ -263,20 +263,18 @@ const authorizeResolution = async (
   request: StrictHttpRequest,
 ): Promise<StageResult<Readonly<{ route: HttpEgressRoute; resolution: NormalizedHttpEgressResolution }>>> => {
   const { ports, operation, state, resources } = context;
-  const observation = await ports.clock.within(
+  const observation = snapshotHttpRouteObservation(await ports.clock.within(
     operation.limits.deadline,
     () => ports.routeAuthority.observe(operation.operationId, operation.attemptId),
     operation.signal,
-  );
-  if (observation.status !== "available") {
+  ));
+  if (observation?.status !== "available") {
     state.outcome = "denied";
     state.anomalyCode = "provider_access_denied";
     return await halt(ports, operation, state, resources);
   }
-  assertHttpEgressRoute(observation.route);
-  const route = Object.freeze({ ...observation.route,
-    forwardedRequestHeaderNames: Object.freeze([...observation.route.forwardedRequestHeaderNames]) });
-  state.requestDigest = ports.evidence.digest(canonicalRequestDigestParts(
+  const route = observation.route;
+  state.requestDigest = evidenceDigest(ports, canonicalRequestDigestParts(
     operation.expectedRequest.requestId, request, selectForwardedRequestHeaders(request, route),
   ));
   applyRoute(state, route);
@@ -312,13 +310,13 @@ const authorizeResolution = async (
     if (normalized === undefined) {
       state.outcome = "denied";
       state.anomalyCode = "resolution_denied";
-      return await halt(ports, operation, state, resources);
+      return halt(ports, operation, state, resources);
     }
     return Object.freeze({ halted: false, value: Object.freeze({ route, resolution: normalized }) });
   } catch {
     state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "resolution_denied";
-    return await halt(ports, operation, state, resources);
+    return halt(ports, operation, state, resources);
   }
 };
 
@@ -358,7 +356,7 @@ const renderAuthorizedRequest = async (
     state.anomalyCode = "provider_generation_drift";
     return await halt(ports, operation, state, resources);
   }
-  let authorization: Uint8Array;
+  let authorization: Uint8Array | undefined;
   let pendingAuthorization: Promise<Uint8Array> | undefined;
   try {
     authorization = await ports.clock.within(
@@ -378,24 +376,17 @@ const renderAuthorizedRequest = async (
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "credential_render_failed";
     return await halt(ports, operation, state, resources);
   }
-  let outboundRequest: Uint8Array;
+  let outboundRequest: Uint8Array | undefined;
   try {
     outboundRequest = createOutboundHttpRequest(request, route, authorization);
-  } catch {
-    authorization.fill(0);
-    state.outcome = "denied";
-    state.anomalyCode = "credential_render_failed";
-    return await halt(ports, operation, state, resources);
-  }
-  authorization.fill(0);
-  const authorizedBinding = snapshotHttpEgressTransportBinding(session.binding);
-  const finalInput = createHttpEgressFinalAuthorization({
-    operation, requestDigest: state.requestDigest, route,
-    resolvedAddresses: resolution.addresses, selectedAddress: resolution.selectedAddress,
-    binding: authorizedBinding, digest: parts => ports.evidence.digest(parts),
-  });
-  let finalDecision: HttpEgressFinalAuthorizationDecision | undefined;
-  try {
+    const authorizedBinding = snapshotHttpTransportBinding(session.binding);
+    if (authorizedBinding === undefined) {throw new TypeError("invalid transport binding");}
+    const finalInput = createHttpEgressFinalAuthorization({
+      operation, requestDigest: state.requestDigest, route,
+      resolvedAddresses: resolution.addresses, selectedAddress: resolution.selectedAddress,
+      binding: authorizedBinding, digest: parts => evidenceDigest(ports, parts),
+    });
+    let finalDecision: HttpEgressFinalAuthorizationDecision | undefined;
     finalDecision = snapshotHttpFinalAuthorizationDecision(
       await ports.clock.within(
         operation.limits.deadline,
@@ -403,52 +394,55 @@ const renderAuthorizedRequest = async (
         operation.signal,
       ),
     );
+    if (finalDecision === undefined
+      || !httpFinalAuthorizationMatches(finalDecision, finalInput.bindingDigest, route, ports.clock.now())) {
+      if (finalDecision !== undefined) {state.finalAuthorizationReceiptDigest = finalDecision.receiptDigest;}
+      state.outcome = "denied";
+      state.anomalyCode = "final_denied";
+      return halt(ports, operation, state, resources);
+    }
+    state.finalAuthorizationReceiptDigest = finalDecision.receiptDigest;
+    const decision = finalDecision;
+    const transferred = outboundRequest;
+    outboundRequest = undefined;
+    return Object.freeze({ halted: false, value: Object.freeze({
+      bytes: transferred,
+      validateFirstByte: () => {
+        state.anomalyCode = "final_denied";
+        if (operation.signal?.aborted) {
+          state.anomalyCode = "inbound_cancelled";
+          return false;
+        }
+        if (!generationsMatch(route, ports.routeAuthority.revalidateAtFirstByte(route.materializationReceiptDigest))) {
+          state.anomalyCode = "provider_generation_drift";
+          return false;
+        }
+        const now = ports.clock.now();
+        const currentBinding = snapshotHttpTransportBinding(session.binding);
+        if (currentBinding === undefined || !bindingMatches(route, resolution.selectedAddress, currentBinding)
+          || !transportBindingUnchanged(authorizedBinding, currentBinding)) {
+          state.anomalyCode = "transport_binding_drift";
+          return false;
+        }
+        const currentInput = createHttpEgressFinalAuthorization({
+          operation, requestDigest: state.requestDigest, route,
+          resolvedAddresses: resolution.addresses, selectedAddress: resolution.selectedAddress,
+          binding: currentBinding, digest: parts => evidenceDigest(ports, parts),
+        });
+        const allowed = Number.isSafeInteger(now) && now < operation.limits.deadline
+          && httpFinalAuthorizationMatches(decision, currentInput.bindingDigest, route, now);
+        if (!allowed) {state.anomalyCode = "final_denied";}
+        return allowed;
+      },
+    }) });
   } catch {
-    outboundRequest.fill(0);
     state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "final_timeout";
-    return await halt(ports, operation, state, resources);
+    return halt(ports, operation, state, resources);
+  } finally {
+    authorization?.fill(0);
+    outboundRequest?.fill(0);
   }
-  if (finalDecision === undefined
-    || !httpFinalAuthorizationMatches(finalDecision, finalInput.bindingDigest, route, ports.clock.now())) {
-    if (finalDecision !== undefined) {state.finalAuthorizationReceiptDigest = finalDecision.receiptDigest;}
-    outboundRequest.fill(0);
-    state.outcome = "denied";
-    state.anomalyCode = "final_denied";
-    return await halt(ports, operation, state, resources);
-  }
-  state.finalAuthorizationReceiptDigest = finalDecision.receiptDigest;
-  const decision = finalDecision;
-  return Object.freeze({ halted: false, value: Object.freeze({
-    bytes: outboundRequest,
-    validateFirstByte: () => {
-      state.anomalyCode = "final_denied";
-      if (operation.signal?.aborted) {
-        state.anomalyCode = "inbound_cancelled";
-        return false;
-      }
-      if (!generationsMatch(route, ports.routeAuthority.revalidateAtFirstByte(route.materializationReceiptDigest))) {
-        state.anomalyCode = "provider_generation_drift";
-        return false;
-      }
-      const now = ports.clock.now();
-      const currentBinding = snapshotHttpEgressTransportBinding(session.binding);
-      if (!bindingMatches(route, resolution.selectedAddress, currentBinding)
-        || !transportBindingUnchanged(authorizedBinding, currentBinding)) {
-        state.anomalyCode = "transport_binding_drift";
-        return false;
-      }
-      const currentInput = createHttpEgressFinalAuthorization({
-        operation, requestDigest: state.requestDigest, route,
-        resolvedAddresses: resolution.addresses, selectedAddress: resolution.selectedAddress,
-        binding: currentBinding, digest: parts => ports.evidence.digest(parts),
-      });
-      const allowed = now < operation.limits.deadline
-        && httpFinalAuthorizationMatches(decision, currentInput.bindingDigest, route, now);
-      if (!allowed) {state.anomalyCode = "final_denied";}
-      return allowed;
-    },
-  }) });
 };
 
 const openAuthorizedSession = async (
@@ -458,7 +452,7 @@ const openAuthorizedSession = async (
 ): Promise<StageResult<AuthorizedHttpRequest>> => {
   const { ports, operation, state, resources } = context;
   const beforeOpen = ports.clock.now();
-  if (operation.signal?.aborted || !Number.isFinite(beforeOpen) || beforeOpen >= operation.limits.deadline) {
+  if (operation.signal?.aborted || !Number.isSafeInteger(beforeOpen) || beforeOpen >= operation.limits.deadline) {
     state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "transport_open_failed";
     return await halt(ports, operation, state, resources);
@@ -489,7 +483,12 @@ const openAuthorizedSession = async (
     return await halt(ports, operation, state, resources);
   }
   const session = resources.session;
-  const binding = snapshotHttpEgressTransportBinding(session.binding);
+  const binding = snapshotHttpTransportBinding(session.binding);
+  if (binding === undefined) {
+    state.outcome = "denied";
+    state.anomalyCode = "transport_binding_drift";
+    return await halt(ports, operation, state, resources);
+  }
   state.selectedPeer = binding.peerAddress;
   state.tlsProtocol = binding.tlsProtocol;
   if (!bindingMatches(input.route, input.resolution.selectedAddress, binding)) {
@@ -550,15 +549,16 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
 }> => Object.freeze({
   execute: async (input: HttpEgressOperation): Promise<HttpEgressReceipt> => {
     // Invalid configuration never transfers connection custody to this broker.
-    const operation = Object.freeze({
-      ...input,
-      expectedRequest: Object.freeze({ ...input.expectedRequest }),
-      limits: snapshotHttpEgressLimits(input.limits),
-    });
-    const state = initialState(ports, operation);
+    const operation = snapshotHttpEgressOperation(input);
+    const state = initialState();
     const resources: ExecutionResources = {};
+    let request: StrictHttpRequest | undefined;
     try {
-      const request = await readStrictHttpRequest(
+      state.requestDigest = evidenceDigest(ports, [
+        encoder.encode("agent-runtime.host-http-request-unavailable/v1\n"),
+        encoder.encode(operation.expectedRequest.requestId),
+      ]);
+      request = await readStrictHttpRequest(
         operation.connection.request,
         operation.expectedRequest,
         operation.limits,
@@ -583,6 +583,8 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
         state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "provider_access_denied";
       }
       return await settleAfterClose(ports, operation, state, resources.attempt);
+    } finally {
+      request?.body.fill(0);
     }
   },
 });

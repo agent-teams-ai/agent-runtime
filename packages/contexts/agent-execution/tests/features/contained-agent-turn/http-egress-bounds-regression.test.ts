@@ -24,6 +24,8 @@ describe("HTTP egress bounded evidence regressions", () => {
     { maxUpstreamWireBytes: 0 }, { deadline: Number.NaN }, { deadline: -1 },
     { deadline: Number.POSITIVE_INFINITY }, { closureDeadline: Number.NaN },
     { closureDeadline: Number.POSITIVE_INFINITY }, { closureDeadline: 999 },
+    { deadline: 0.5 }, { closureDeadline: 1_100.5 },
+    { deadline: Number.MAX_SAFE_INTEGER + 1 }, { closureDeadline: Number.MAX_SAFE_INTEGER + 1 },
     { maxInboundHeaderBytes: Number.MAX_SAFE_INTEGER, maxInboundBodyBytes: 1 },
   ];
   for (const limits of invalidLimits) {
