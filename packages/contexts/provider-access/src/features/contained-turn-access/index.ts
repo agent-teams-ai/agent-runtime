@@ -30,3 +30,15 @@ export {
   type SettleDispatchConsumptionInput,
   type SettleDispatchConsumptionOutcome,
 } from "./contracts/dispatch-consumption-v1.js";
+export {
+  CREDENTIAL_MATERIALIZATION_PURPOSE,
+  CREDENTIAL_MATERIALIZATION_SCHEMA_VERSION,
+  type AuthorizeCredentialMaterializationInput,
+  type AuthorizeCredentialMaterializationOutcome,
+  type CredentialMaterializationAuthorizationV1,
+  type CredentialMaterializationAuthorizationReceipt,
+  type CredentialMaterializationRejectionReason,
+  type CredentialMaterializationUnsupportedReason,
+  type ObserveCredentialMaterializationAuthorizationInput,
+  type ObserveCredentialMaterializationAuthorizationOutcome,
+} from "./contracts/materialization-authorization-v1.js";
