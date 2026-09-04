@@ -39,7 +39,7 @@ export const admitCommittedDispatchStart = (
   if (!proofMatchesReservation(proof, reservation, host)) {
     throw new TypeError("Host Custody committed dispatch proof conflicts with its reservation");
   }
-  if (reservation.workspaceId !== input.workspaceId || reservation.intentMode !== input.intent.mode) {
+  if (reservation.workspaceId !== input.workspaceId || reservation.intentMode !== input.intentMode) {
     throw new TypeError("Host Custody start identity conflict");
   }
   reservation.proofDigest = proof.proofDigest;

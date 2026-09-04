@@ -183,7 +183,7 @@ const exerciseComposedOwner = async (tuple: ClaudeAgentSdkPlatformTuple, cancell
       intent: Object.freeze({mode: "analysis" as const, prompt: "synthetic composed owner"}),
       isCancellationRequested: async () => cancellation, start,
     }),
-    intent: Object.freeze({mode: "analysis" as const, prompt: "synthetic composed owner"}),
+    intentMode: "analysis",
     committedDispatchProof: committedDispatchProofFixture(openInput, opened), operationId: ids.operationId,
     workspaceId: ids.workspaceId,
   });

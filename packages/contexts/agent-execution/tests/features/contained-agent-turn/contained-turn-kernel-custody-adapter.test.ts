@@ -306,7 +306,7 @@ const startInput = (
     }
     return Object.freeze({ kind: "completed" as const, outcome });
   },
-  intent: Object.freeze({ mode: "analysis" as const, prompt: "synthetic" }),
+  intentMode: "analysis",
   operationId,
   committedDispatchProof: committedDispatchProofFixture(openInput, openedOutcomes.get(harness.custody)!),
   workspaceId,
@@ -664,7 +664,7 @@ test("start identity conflict is rejected before the provider callback", async (
   await assert.rejects(
     harness.custody.start(Object.freeze({
       ...startInput(harness, "succeeded"),
-      intent: Object.freeze({ mode: "workspace-write" as const, prompt: "synthetic" }),
+      intentMode: "workspace-write",
     })),
     /start identity conflict/u,
   );

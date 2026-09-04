@@ -153,11 +153,13 @@ const createDependencies = (options: Readonly<{
   containmentCalls: { value: number };
   completionBoundaryReleases: { value: number };
   createdWorkspaces: ContainedTurnKernelOperation["workspaceId"][];
+  custodyStartInputs: Array<Parameters<ContainedTurnKernelDependencies["custody"]["start"]>[0]>;
   custodyReleases: Array<Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]>;
   current: () => ContainedTurnKernelOperation | undefined;
   dependencies: ContainedTurnKernelDependencies;
   openedCustodies: typeof custodyId[];
   providerCalls: { value: number };
+  providerExecuteInputs: Array<Parameters<ContainedTurnKernelDependencies["provider"]["execute"]>[0]>;
   workspaceQuarantines: Array<Parameters<ContainedTurnKernelDependencies["workspace"]["quarantine"]>[0]>;
 } => {
   let current: ContainedTurnKernelOperation | undefined;
@@ -169,9 +171,11 @@ const createDependencies = (options: Readonly<{
   const containmentCalls = { value: 0 };
   const completionBoundaryReleases = { value: 0 };
   const createdWorkspaces: ContainedTurnKernelOperation["workspaceId"][] = [];
+  const custodyStartInputs: Array<Parameters<ContainedTurnKernelDependencies["custody"]["start"]>[0]> = [];
   const custodyReleases: Array<Parameters<ContainedTurnKernelDependencies["custody"]["releaseReservation"]>[0]> = [];
   const openedCustodies: typeof custodyId[] = [];
   const providerCalls = { value: 0 };
+  const providerExecuteInputs: Array<Parameters<ContainedTurnKernelDependencies["provider"]["execute"]>[0]> = [];
   let providerSettlementCount = 0;
   const workspaceQuarantines: Array<Parameters<ContainedTurnKernelDependencies["workspace"]["quarantine"]>[0]> = [];
   const operationStore: ContainedTurnKernelDependencies["operationStore"] = {
@@ -757,6 +761,7 @@ const createDependencies = (options: Readonly<{
         };
       },
       start: async input => {
+        custodyStartInputs.push(input);
         if (options.neverStart === true) {return new Promise(() => {});}
         const operation = current as ContainedTurnKernelOperation;
         if (operation.custodyId === undefined || operation.hostBootId === undefined ||
@@ -782,6 +787,7 @@ const createDependencies = (options: Readonly<{
       manifest,
       execute: async input => {
         providerCalls.value += 1;
+        providerExecuteInputs.push(input);
         input.start.createProcess(() => Object.freeze({}));
         if (options.neverExecution === true) {return new Promise(() => {});}
         if (options.maliciousFakeSuccess === true) {return { kind: "completed", outcome: "succeeded" };}
@@ -804,7 +810,11 @@ const createDependencies = (options: Readonly<{
       },
     },
   };
-  return { claimAuthorities, completionBoundaryReleases, containmentCalls, createdWorkspaces, custodyReleases, current: () => current, dependencies, openedCustodies, providerCalls, workspaceQuarantines };
+  return {
+    claimAuthorities, completionBoundaryReleases, containmentCalls, createdWorkspaces,
+    custodyReleases, custodyStartInputs, current: () => current, dependencies,
+    openedCustodies, providerCalls, providerExecuteInputs, workspaceQuarantines,
+  };
 };
 
 export { awaitFixtureGate, createDependencies, custodyId, operationId, proofId };

@@ -126,7 +126,7 @@ export interface ContainedTurnKernelCustodyPort {
     attemptId: ContainedTurnAttemptId;
     custodyId: ContainedTurnCustodyId;
     execute: (start: ContainedTurnKernelDelegatedStart) => Promise<ContainedTurnKernelProviderObservation>;
-    intent: ContainedTurnIntent;
+    intentMode: "analysis" | "workspace-write";
     operationId: ContainedTurnOperationId;
     /** Exact immutable authority returned only by the final persisted prepared-dispatch claim. */
     committedDispatchProof: CommittedDispatchProofV1;

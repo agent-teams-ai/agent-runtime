@@ -254,7 +254,7 @@ const startContainedTurnExecution = async (
         start: delegatedStart,
         workspaceId,
       }),
-      intent: claimed.intent,
+      intentMode: claimed.intent.mode,
       operationId: claimed.operationId,
       committedDispatchProof,
       workspaceId,
