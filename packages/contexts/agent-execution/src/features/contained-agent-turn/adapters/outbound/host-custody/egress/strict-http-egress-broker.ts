@@ -14,6 +14,9 @@ import type {
 } from "./http-egress-ports.js";
 import { assertHttpEgressRoute, createOutboundHttpRequest, selectForwardedRequestHeaders } from "./http-outbound-request.js";
 import { snapshotHttpEgressLimits } from "./http-egress-limits.js";
+import { createHttpDispatchBoundary } from "./http-dispatch-boundary.js";
+import { observeHttpDispatch } from "./http-dispatch-observation.js";
+import { observeHttpResponse } from "./http-response-observation.js";
 import { resolutionIsSafe } from "./public-address-policy.js";
 import {
   canonicalRequestDigestParts,
@@ -21,10 +24,6 @@ import {
   StrictHttpRequestError,
 } from "./strict-http-request.js";
 import type { StrictHttpRequest } from "./strict-http-request.js";
-import {
-  forwardStrictHttpResponse,
-  StrictHttpResponseError,
-} from "./strict-http-response.js";
 
 const encoder = new TextEncoder();
 
@@ -101,6 +100,7 @@ const authorizationMatches = (
   route: HttpEgressRoute,
   now: number,
 ): boolean => decision.decision === "allow"
+  && Number.isFinite(now) && Number.isFinite(decision.validUntil)
   && now < decision.validUntil
   && decision.policyGeneration === route.policyGeneration
   && decision.keyGeneration === route.keyGeneration
@@ -150,16 +150,6 @@ const requestErrorCode = (error: StrictHttpRequestError): HttpEgressAnomalyCode 
   malformed: "inbound_malformed",
   smuggling: "inbound_smuggling",
   route_mismatch: "inbound_route_mismatch",
-})[error.kind] as HttpEgressAnomalyCode;
-
-const responseErrorCode = (error: StrictHttpResponseError): HttpEgressAnomalyCode => ({
-  cancelled: "inbound_cancelled",
-  stalled: "upstream_stalled",
-  malformed: "upstream_malformed",
-  truncated: "upstream_truncated",
-  oversized: "output_oversized",
-  backpressure: "output_backpressure_failed",
-  redirect: "redirect_rejected",
 })[error.kind] as HttpEgressAnomalyCode;
 
 const applyRoute = (state: ReceiptState, route: HttpEgressRoute): void => {
@@ -248,6 +238,7 @@ type ExecutionStageContext = Readonly<{
 type Halted = Readonly<{ halted: true; receipt: HttpEgressReceipt }>;
 type Continuing<T> = Readonly<{ halted: false; value: T }>;
 type StageResult<T> = Halted | Continuing<T>;
+type AuthorizedHttpRequest = Readonly<{ bytes: Uint8Array; validateFirstByte(): boolean }>;
 
 const halt = async (
   ports: HttpEgressBrokerPorts,
@@ -341,7 +332,7 @@ const renderAuthorizedRequest = async (
   context: ExecutionStageContext,
   request: StrictHttpRequest,
   route: HttpEgressRoute,
-): Promise<StageResult<Uint8Array>> => {
+): Promise<StageResult<AuthorizedHttpRequest>> => {
   const { ports, operation, state, resources } = context;
   const session = resources.session as HttpEgressTransportSession;
   const current = await ports.clock.within(
@@ -406,14 +397,32 @@ const renderAuthorizedRequest = async (
     state.anomalyCode = "final_denied";
     return await halt(ports, operation, state, resources);
   }
-  return Object.freeze({ halted: false, value: outboundRequest });
+  const decision = Object.freeze({ ...finalDecision });
+  return Object.freeze({ halted: false, value: Object.freeze({
+    bytes: outboundRequest,
+    validateFirstByte: () => {
+      state.anomalyCode = "final_denied";
+      if (operation.signal?.aborted) {
+        state.anomalyCode = "inbound_cancelled";
+        return false;
+      }
+      if (!generationsMatch(route, ports.routeAuthority.revalidateAtFirstByte(route.materializationReceiptDigest))) {
+        state.anomalyCode = "provider_generation_drift";
+        return false;
+      }
+      const now = ports.clock.now();
+      const allowed = now < operation.limits.deadline && finalAuthorizationMatches(decision, route, session, now);
+      if (!allowed) {state.anomalyCode = "final_denied";}
+      return allowed;
+    },
+  }) });
 };
 
 const openAuthorizedSession = async (
   context: ExecutionStageContext,
   request: StrictHttpRequest,
   input: Readonly<{ route: HttpEgressRoute; selectedAddress: string }>,
-): Promise<StageResult<Uint8Array>> => {
+): Promise<StageResult<AuthorizedHttpRequest>> => {
   const { ports, operation, state, resources } = context;
   state.attemptCount = 1;
   try {
@@ -440,77 +449,48 @@ const openAuthorizedSession = async (
   return await renderAuthorizedRequest(context, request, input.route);
 };
 
-const responseAnomaly = (status: number): HttpEgressAnomalyCode => {
-  if (status === 401 || status === 403) {return "upstream_auth_rejected";}
-  if (status === 429) {return "upstream_rate_limited";}
-  if (status >= 500) {return "upstream_server_error";}
-  return "none";
-};
-
 const dispatchOnce = async (
   ports: HttpEgressBrokerPorts,
   operation: HttpEgressOperation,
   state: ReceiptState,
   resources: ExecutionResources,
-  outboundRequest: Uint8Array,
+  prepared: AuthorizedHttpRequest,
 ): Promise<HttpEgressReceipt> => {
   const session = resources.session as HttpEgressTransportSession;
+  const outboundRequest = prepared.bytes;
+  const boundary = createHttpDispatchBoundary(outboundRequest, prepared.validateFirstByte);
   let dispatch;
   try {
     dispatch = await ports.clock.within(
       operation.limits.deadline,
-      () => session.dispatch(outboundRequest, operation.signal),
+      () => session.dispatch(boundary.consume, operation.signal),
       operation.signal,
     );
   } catch {
-    outboundRequest.fill(0);
-    state.firstByteState = "uncertain";
-    state.outcome = "reconcile_required";
+    boundary.seal();
+    state.firstByteState = boundary.wasConsumed() ? "uncertain" : "not_sent";
+    state.outcome = boundary.wasConsumed() ? "reconcile_required" : (operation.signal?.aborted ? "cancelled" : "denied");
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "upstream_write_failed";
     return (await halt(ports, operation, state, resources)).receipt;
+  } finally {
+    boundary.seal();
   }
-  outboundRequest.fill(0);
-  if (dispatch.acceptedRequestBytes === "unknown"
-    || !Number.isSafeInteger(dispatch.acceptedRequestBytes)
-    || dispatch.acceptedRequestBytes < 0 || dispatch.acceptedRequestBytes > outboundRequest.byteLength) {
-    state.firstByteState = "uncertain";
-    state.outcome = "reconcile_required";
-    state.anomalyCode = "upstream_write_failed";
+  state.firstByteState = boundary.wasConsumed() ? "uncertain" : "not_sent";
+  if (!boundary.wasConsumed()) {
+    const provedNoWrite = dispatch.status === "failed" && dispatch.acceptedRequestBytes === 0;
+    state.outcome = provedNoWrite ? (operation.signal?.aborted ? "cancelled" : "denied") : "reconcile_required";
+    state.firstByteState = provedNoWrite ? "not_sent" : "uncertain";
+    if (!boundary.wasRequested() || !provedNoWrite) {state.anomalyCode = "upstream_write_failed";}
     return (await halt(ports, operation, state, resources)).receipt;
   }
-  state.upstreamRequestBytes = dispatch.acceptedRequestBytes;
-  state.firstByteState = dispatch.acceptedRequestBytes > 0 ? "sent" : "not_sent";
-  if (dispatch.status === "response" && dispatch.acceptedRequestBytes !== outboundRequest.byteLength) {
-    state.outcome = "reconcile_required";
-    state.anomalyCode = "upstream_write_failed";
-    if (dispatch.acceptedRequestBytes === 0) {state.firstByteState = "uncertain";}
+  const observed = observeHttpDispatch(dispatch, outboundRequest.byteLength);
+  if (observed.kind === "failed") {
+    Object.assign(state, observed.evidence);
     return (await halt(ports, operation, state, resources)).receipt;
   }
-  if (dispatch.acknowledgement === "lost" || dispatch.status === "failed") {
-    state.outcome = dispatch.acceptedRequestBytes > 0 ? "reconcile_required" : "denied";
-    state.anomalyCode = dispatch.acknowledgement === "lost" ? "upstream_ack_lost" : "upstream_write_failed";
-    return (await halt(ports, operation, state, resources)).receipt;
-  }
-  try {
-    const response = await forwardStrictHttpResponse(
-      dispatch.response,
-      operation.connection,
-      operation.limits,
-      ports.clock,
-      operation.signal,
-    );
-    state.upstreamResponseBytes = response.upstreamBytes;
-    state.outboundResponseBytes = response.outboundBytes;
-    state.outcome = "completed";
-    state.anomalyCode = responseAnomaly(response.status);
-  } catch (error) {
-    if (!(error instanceof StrictHttpResponseError)) {throw error;}
-    state.upstreamResponseBytes = error.upstreamBytes;
-    state.outboundResponseBytes = error.outboundBytes;
-    state.outboundResponseWriteUncertain = error.outboundWriteUncertain;
-    state.outcome = error.kind === "redirect" ? "denied" : "reconcile_required";
-    state.anomalyCode = responseErrorCode(error);
-  }
+  state.upstreamRequestBytes = observed.upstreamRequestBytes;
+  state.firstByteState = "sent";
+  Object.assign(state, await observeHttpResponse(observed.response, operation, ports.clock));
   return (await halt(ports, operation, state, resources)).receipt;
 };
 

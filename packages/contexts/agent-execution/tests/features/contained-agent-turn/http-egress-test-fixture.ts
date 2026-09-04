@@ -87,6 +87,7 @@ export type FixtureOptions = Readonly<{
   provisional?: HttpEgressAuthorizationDecision | "timeout";
   final?: HttpEgressAuthorizationDecision | "timeout";
   generation?: HttpEgressGenerationObservation;
+  generationAtFirstByte?: HttpEgressGenerationObservation;
   addresses?: readonly string[];
   selectedAddress?: string;
   dispatch?: HttpEgressDispatch | "throw";
@@ -163,8 +164,12 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
         if (options.openThrows) {throw new Error("synthetic open failure");}
         return Object.freeze({
           binding,
-          dispatch: async (wireRequest: Uint8Array) => {
+          dispatch: async (consume: () => Uint8Array | undefined) => {
             observations.order.push("dispatch");
+            const wireRequest = consume();
+            if (wireRequest === undefined) {return Object.freeze({
+              status: "failed" as const, acceptedRequestBytes: 0, acknowledgement: "acknowledged" as const,
+            });}
             observations.dispatches += 1;
             observations.dispatchedRequests.push(wireRequest.slice());
             options.abortOnDispatch?.abort();
@@ -200,15 +205,9 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
       },
       revalidate: async () => {
         observations.order.push("revalidate-route");
-        return options.generation ?? Object.freeze({
-          status: "current" as const,
-          policyGeneration: route.policyGeneration,
-          keyGeneration: route.keyGeneration,
-          routeGeneration: route.routeGeneration,
-          credentialGeneration: route.credentialGeneration,
-          materializationReceiptDigest: route.materializationReceiptDigest,
-        });
+        return options.generation ?? currentGeneration(route);
       },
+      revalidateAtFirstByte: () => options.generationAtFirstByte ?? currentGeneration(route),
     }),
     credentialCustody: Object.freeze({
       renderAuthorization: async () => {
@@ -258,6 +257,13 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
   });
   return Object.freeze({ ports, operation, observations });
 };
+
+const currentGeneration = (route: HttpEgressRoute): HttpEgressGenerationObservation => Object.freeze({
+  status: "current", policyGeneration: route.policyGeneration,
+  keyGeneration: route.keyGeneration, routeGeneration: route.routeGeneration,
+  credentialGeneration: route.credentialGeneration,
+  materializationReceiptDigest: route.materializationReceiptDigest,
+});
 
 export const outputText = (fixture: EgressFixture): string => decoder.decode(
   fixture.observations.outboundWrites.reduce((all, part) => {

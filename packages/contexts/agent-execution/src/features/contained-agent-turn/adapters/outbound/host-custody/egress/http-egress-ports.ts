@@ -36,6 +36,8 @@ export type HttpEgressGenerationObservation = Readonly<{
 export interface HttpEgressRouteAuthority {
   observe(operationId: string, attemptId: string): Promise<HttpEgressRouteObservation>;
   revalidate(materializationReceiptDigest: string): Promise<HttpEgressGenerationObservation>;
+  /** Current Host-enforced revocation cut, not a synchronous distributed DB query. */
+  revalidateAtFirstByte(materializationReceiptDigest: string): HttpEgressGenerationObservation;
 }
 
 /** Host-owned private materialization only. This is not a Provider Access port. */
@@ -127,7 +129,12 @@ export type HttpEgressDispatch =
 
 export interface HttpEgressTransportSession {
   readonly binding: HttpEgressTransportBinding;
-  dispatch(request: Uint8Array, signal?: AbortSignal): Promise<HttpEgressDispatch>;
+  /**
+   * Acquire the Host dispatch lane/journal latch first. Consume exactly once,
+   * immediately before the first write, with no await between consume and write.
+   * Undefined denies the write. No request bytes are available before consume.
+   */
+  dispatch(consumeAuthorizedRequest: () => Uint8Array | undefined, signal?: AbortSignal): Promise<HttpEgressDispatch>;
   close(): Promise<Readonly<{ state: "closed" | "unknown"; receiptDigest: string }>>;
 }
 
