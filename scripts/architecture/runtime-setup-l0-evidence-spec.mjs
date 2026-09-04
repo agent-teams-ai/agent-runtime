@@ -219,6 +219,14 @@ export const changes = Object.freeze([
     id: "codex-native-package-provenance",
     revision: "739cc9bfdea7dc0527989b42cb8dd89a11387ea8",
   }),
+  Object.freeze({
+    id: "contained-turn-committed-dispatch-handoff",
+    revision: "ef5d93d3ecb0ac070d19669516a28f02c0d82130",
+  }),
+  Object.freeze({
+    id: "filesystem-lineage-deterministic-qualification",
+    revision: "5a712935c976ed7e2cdac2b98072c749913bb04b",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -229,12 +237,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "694a67d5823c72e08ca3dfb9e96750d6fa5d5f2a298268f835a8452f2f12fb7a",
   }),
   sources: Object.freeze({
-    fileCount: 298,
-    sha256: "e9a6918a66517bf37b5843a6aca41afd635c0c022f0889ca857ed69970c7f68c",
+    fileCount: 300,
+    sha256: "c1a0ca653b8af1e7846d7f8ba82d1ad4a1439b70edb205d34d5558bea8ac60f2",
   }),
   tests: Object.freeze({
-    fileCount: 135,
-    sha256: "9603cd4c0567c9ffd6cc7c71b882965ca192b832819cd35a948535e4213f51fa",
+    fileCount: 139,
+    sha256: "596c219026088fb15f1a236b9d3c1fc40669e05541c291cd8100be2643b483a2",
   }),
 });
 

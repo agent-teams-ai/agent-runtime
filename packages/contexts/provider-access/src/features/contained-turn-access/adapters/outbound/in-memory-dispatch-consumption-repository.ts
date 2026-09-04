@@ -2,10 +2,15 @@ import type {
   DispatchConsumptionJournalEntry, DispatchConsumptionRepository, DispatchConsumptionTransaction,
   DispatchConsumptionTransactionSelector,
 } from "../../application/ports/outbound/dispatch-consumption-repository.js";
+import type {
+  MaterializationAuthorizationBinding, MaterializationAuthorizationRepository, MaterializationAuthorizationRequestSelector,
+  MaterializationAuthorizationTransaction,
+} from "../../application/ports/outbound/materialization-authorization-repository.js";
 import {
   canonicalJson, snapshotDispatchBindingHead, snapshotDispatchConsumedReceipt, snapshotDispatchSettlementOutcome,
   type DispatchBindingHead, type DispatchConsumedReceipt, type DispatchDisposition, type DispatchScopeValue, type DispatchSettlementOutcome,
 } from "../../domain/dispatch-consumption.js";
+import { snapshotAuthorizationRecord, type AuthorizationRecord } from "../../domain/materialization-authorization.js";
 import { canonicalDispatchJournalEntry, detachedDispatchData } from "../dispatch-consumption-data.js";
 
 type OwnerState = "absent" | "consumed_pending" | "claim_committed" | "abandoned_without_claim";
@@ -16,6 +21,7 @@ interface State {
   readonly grants: Map<string, DispatchConsumptionJournalEntry>;
   readonly settlements: Map<string, DispatchSettlementOutcome>;
   readonly settlementsByConsumption: Map<string, DispatchSettlementOutcome>;
+  readonly authorizations: Map<string, AuthorizationRecord>;
   readonly slots: Map<string, Map<"claude" | "codex", BindingSlot>>;
 }
 const scopeKey = (scope: DispatchScopeValue): string => canonicalJson({
@@ -25,7 +31,10 @@ const grantKey = (input: { readonly grantRequestId: string; readonly provider: "
   canonicalJson({ grantRequestId: input.grantRequestId, provider: input.provider, scope: input.scope });
 const settlementKey = (input: Extract<DispatchConsumptionTransactionSelector, { readonly kind: "settle" }>): string =>
   canonicalJson({ operationId: input.operationId, provider: input.provider, scope: input.scope, settlementRequestId: input.settlementRequestId });
-
+const authorizationKey = (input: MaterializationAuthorizationRequestSelector): string => canonicalJson({
+  authorizationRequestId: input.authorizationRequestId, projectId: input.projectId, provider: input.provider,
+  scopeDigest: input.scopeDigest, tenantId: input.tenantId,
+});
 export interface InMemoryDispatchConsumptionControl {
   advanceControlTime(value: number): Promise<void>;
   replaceBindingHead(head: DispatchBindingHead): Promise<void>;
@@ -110,10 +119,22 @@ const commit = (state: State, selector: DispatchConsumptionTransactionSelector, 
   }
 };
 
+const bindingProjection = (head: DispatchBindingHead): MaterializationAuthorizationBinding => Object.freeze({
+  accessRef: head.accessRef, availability: head.availability, bindingRevision: head.bindingRevision,
+  credentialBindingDigest: head.credentialBindingDigest, credentialBindingRef: head.credentialBindingRef,
+  credentialGeneration: head.credentialGeneration, projectId: head.projectId, provider: head.provider,
+  providerAccountRef: head.providerAccountRef, providerRouteRef: head.providerRouteRef, revocation: head.revocation,
+  scopeDigest: head.scopeDigest, tenantId: head.tenantId,
+});
+
 export const createInMemoryDispatchConsumptionRepository = (
   initialHeads: readonly DispatchBindingHead[], initialControlTime: number,
-): { readonly control: InMemoryDispatchConsumptionControl; readonly repository: DispatchConsumptionRepository } => {
-  const state: State = { consumptions: new Map(), historicalOwnerState: new Map(), grants: new Map(), settlements: new Map(), settlementsByConsumption: new Map(), slots: new Map() };
+): { readonly control: InMemoryDispatchConsumptionControl; readonly materializationRepository: MaterializationAuthorizationRepository;
+  readonly repository: DispatchConsumptionRepository } => {
+  const state: State = {
+    authorizations: new Map(), consumptions: new Map(), historicalOwnerState: new Map(), grants: new Map(),
+    settlements: new Map(), settlementsByConsumption: new Map(), slots: new Map(),
+  };
   let controlTime = initialControlTime;
   const detachedHeads = detachedDispatchData("initial binding heads", initialHeads);
   if (!Array.isArray(detachedHeads)) {throw new TypeError("initial binding heads must be an array");}
@@ -142,6 +163,37 @@ export const createInMemoryDispatchConsumptionRepository = (
       const entry = state.grants.get(grantKey(input)); return entry === undefined ? undefined : canonicalDispatchJournalEntry(entry);
     },
   });
+  const materializationRepository: MaterializationAuthorizationRepository = Object.freeze({
+    async observeAuthorizationRequest(selector: MaterializationAuthorizationRequestSelector) {
+      await tail;
+      const found = state.authorizations.get(authorizationKey(selector));
+      return found === undefined ? undefined : snapshotAuthorizationRecord(structuredClone(found));
+    },
+    async transact<T>(selector: Parameters<MaterializationAuthorizationRepository["transact"]>[0], work: (transaction: MaterializationAuthorizationTransaction) => Promise<T>) {
+      return serialize(async () => {
+        const slot = state.slots.get(scopeKey(selector))?.get(selector.provider);
+        let pending: AuthorizationRecord | undefined;
+        const transaction: MaterializationAuthorizationTransaction = Object.freeze({
+          async findAuthorizationRequest() {
+            const found = state.authorizations.get(authorizationKey(selector));
+            return found === undefined ? undefined : snapshotAuthorizationRecord(structuredClone(found));
+          },
+          async findBinding() {return slot === undefined ? undefined : bindingProjection(slot.head);},
+          async saveAuthorization(record: AuthorizationRecord) {pending = snapshotAuthorizationRecord(structuredClone(record));},
+        });
+        const result = await work(transaction);
+        if (pending !== undefined) {
+          const key = authorizationKey(selector);
+          const existing = state.authorizations.get(key);
+          if (existing !== undefined && existing.requestDigest !== pending.requestDigest) {
+            throw new Error("authorization request identity cannot be rebound");
+          }
+          state.authorizations.set(key, pending);
+        }
+        return result;
+      });
+    },
+  });
   return Object.freeze({
     control: Object.freeze({
       advanceControlTime: (value: number) => serialize(async () => {
@@ -155,6 +207,6 @@ export const createInMemoryDispatchConsumptionRepository = (
         return matches.length === 1 ? matches[0]?.state : undefined;
       },
       replaceBindingHead: (head: DispatchBindingHead) => serialize(async () => { putHead(state, head); }),
-    }), repository,
+    }), materializationRepository, repository,
   });
 };

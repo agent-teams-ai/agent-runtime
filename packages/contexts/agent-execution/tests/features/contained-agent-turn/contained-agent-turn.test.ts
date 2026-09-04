@@ -28,6 +28,25 @@ test("seven-port conformance reaches terminal truth through only ordered kernel 
   assert.equal(providerCalls.value, 1);
   assert.deepEqual(await feature.observe.execute({ operationId, scope: { projectId: "project:one", tenantId: "tenant:one" } }), result);
 });
+
+test("Host Custody receives only intent mode while the provider receives the full accepted intent", async () => {
+  const { custodyStartInputs, dependencies, providerExecuteInputs } = createDependencies();
+  const intent = Object.freeze({ mode: "analysis" as const, prompt: "private provider prompt payload" });
+  const result = await createContainedTurnFeature(dependencies).submit.execute({
+    commandId: "command:one",
+    expectedProvider: "codex",
+    intent,
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  });
+  assert.equal(result.status, "observed");
+  assert.equal(custodyStartInputs.length, 1);
+  assert.equal(custodyStartInputs[0]?.intentMode, intent.mode);
+  assert.equal("intent" in (custodyStartInputs[0] ?? {}), false);
+  assert.equal("prompt" in (custodyStartInputs[0] ?? {}), false);
+  assert.equal(providerExecuteInputs.length, 1);
+  assert.deepEqual(providerExecuteInputs[0]?.intent, intent);
+});
+
 test("final dispatch claim CAS carries Provider Access and Runtime Security authority fences", async () => {
   const { claimAuthorities, dependencies } = createDependencies();
   await createContainedTurnFeature(dependencies).submit.execute({
