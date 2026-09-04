@@ -35,6 +35,12 @@ const immutableReceipt = (operation: HttpEgressOperation, state: HttpEgressMutab
   schema: "agent-runtime.host-http-egress-receipt/v1", operationId: operation.operationId,
   attemptId: operation.attemptId, requestId: operation.expectedRequest.requestId, ...state});
 
+const applyHttpClosureDisposition = (state: HttpEgressMutableState, hasAttempt: boolean): void => {
+  if (state.inboundClosure !== "closed" || (hasAttempt && state.upstreamClosure !== "closed")) {
+    state.anomalyCode = "closure_unproved";
+    if (hasAttempt || state.firstByteState !== "not_sent") {state.outcome = "reconcile_required";}}
+};
+
 export const closeAndRecordHttpEgress = async (ports: HttpEgressBrokerPorts, operation: HttpEgressOperation,
   state: HttpEgressMutableState, attempt?: HttpEgressTransportAttempt): Promise<Readonly<{
     receipt: HttpEgressReceipt; fullyAcknowledged: boolean}>> => {
@@ -45,9 +51,7 @@ export const closeAndRecordHttpEgress = async (ports: HttpEgressBrokerPorts, ope
     () => operation.connection.close(state.outcome === "completed" ? "complete" : "abort")));
   state.inboundClosure = value?.state ?? "unknown"; state.inboundClosureReceiptDigest = value?.receiptDigest ?? "";
   } catch {state.inboundClosure = "unknown";}
-  if (state.inboundClosure !== "closed" || (attempt !== undefined && state.upstreamClosure !== "closed")) {
-    state.anomalyCode = "closure_unproved";
-    if (attempt !== undefined || state.firstByteState !== "not_sent") {state.outcome = "reconcile_required";}}
+  applyHttpClosureDisposition(state, attempt !== undefined);
   let receipt = immutableReceipt(operation, state); let recorded = false;
   try {const result = await ports.clock.within(operation.limits.closureDeadline, () => ports.evidence.record(receipt));
     recorded = result === "recorded";
