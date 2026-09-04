@@ -240,6 +240,7 @@ boundaries:
         - node:crypto
         - node:fs
         - node:fs/promises
+        - node:net
         - node:path
         - node:util
       runtimeReferences: []
