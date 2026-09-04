@@ -1,6 +1,7 @@
 import type { MaterializationAuthorizationDigest } from "./ports/outbound/materialization-authorization-digest.js";
 import type {
-  MaterializationAuthorizationBinding, MaterializationAuthorizationRepository, MaterializationAuthorizationTransaction,
+  MaterializationAuthorizationBinding, MaterializationAuthorizationRepository, MaterializationAuthorizationRequestSelector,
+  MaterializationAuthorizationTransaction,
 } from "./ports/outbound/materialization-authorization-repository.js";
 import {
   AUTHORIZATION_COMMAND_KEYS, authorizationRequestPayload, sameAuthorizationOwner, snapshotAuthorizationRecord,
@@ -20,7 +21,8 @@ export type AuthorizationOutcome =
   | { readonly kind: "rejected"; readonly reason: AuthorizationRejectionReason; readonly receipt: AuthorizationRecord };
 export type ObservationOutcome =
   | { readonly kind: "indeterminate" }
-  | { readonly kind: "observed"; readonly receipt: AuthorizationRecord };
+  | { readonly kind: "observed"; readonly receipt: AuthorizationRecord }
+  | { readonly kind: "rejected"; readonly reason: AuthorizationRejectionReason; readonly receipt: AuthorizationRecord };
 
 export interface MaterializationAuthorizationUseCase {
   authorize(command: AuthorizationCommand): Promise<AuthorizationOutcome>;
@@ -55,6 +57,26 @@ const rejectionFor = (command: AuthorizationCommand, binding: MaterializationAut
   return undefined;
 };
 
+const requestSelector = (selector: AuthorizationOwnerSelector): MaterializationAuthorizationRequestSelector => Object.freeze({
+  authorizationRequestId: selector.authorizationRequestId, projectId: selector.projectId, provider: selector.provider,
+  scopeDigest: selector.scopeDigest, tenantId: selector.tenantId,
+});
+const bindingOwnerMatches = (binding: MaterializationAuthorizationBinding, owner: AuthorizationOwnerSelector): boolean =>
+  binding.tenantId === owner.tenantId && binding.projectId === owner.projectId && binding.provider === owner.provider &&
+  binding.scopeDigest === owner.scopeDigest;
+
+const currentMeaning = (
+  existing: AuthorizationRecord, binding: MaterializationAuthorizationBinding | undefined,
+): Exclude<ObservationOutcome, { readonly kind: "indeterminate" }> => {
+  if (existing.decision === "rejected") {
+    return Object.freeze({ kind: "rejected", reason: existing.rejectionReason as AuthorizationRejectionReason, receipt: existing });
+  }
+  const reason = rejectionFor(existing, binding);
+  return reason === undefined
+    ? Object.freeze({ kind: "observed", receipt: existing })
+    : Object.freeze({ kind: "rejected", reason, receipt: existing });
+};
+
 const decide = async (
   command: AuthorizationCommand, transaction: MaterializationAuthorizationTransaction,
   dependencies: MaterializationAuthorizationDependencies,
@@ -69,12 +91,13 @@ const decide = async (
     if (!recordMatchesRequest(existing, command)) {
       return Object.freeze({ kind: "conflict", reason: "authorization_request_digest_conflict" });
     }
-    return Object.freeze({ kind: "observed", receipt: existing });
+    const binding = await transaction.findBinding();
+    if (binding !== undefined && !bindingOwnerMatches(binding, command)) {throw new TypeError("authorization binding owner mismatch");}
+    return currentMeaning(existing, binding);
   }
   if (!await validDigest(dependencies.digest, command)) {return Object.freeze({ kind: "invalid", reason: "invalid_request" });}
   const binding = await transaction.findBinding();
-  if (binding !== undefined && (binding.tenantId !== command.tenantId || binding.projectId !== command.projectId ||
-      binding.scopeDigest !== command.scopeDigest || binding.provider !== command.provider)) {
+  if (binding !== undefined && !bindingOwnerMatches(binding, command)) {
     throw new TypeError("authorization binding owner mismatch");
   }
   const reason = rejectionFor(command, binding);
@@ -100,15 +123,19 @@ export const createCredentialMaterializationAuthorizationV1 = (
   },
   async observe(selector: AuthorizationOwnerSelector): Promise<ObservationOutcome> {
     try {
-      const raw = await dependencies.repository.observeAuthorizationRequest(selector.authorizationRequestId);
-      if (raw === undefined) {return Object.freeze({ kind: "indeterminate" });}
-      const found = snapshotAuthorizationRecord(raw);
-      // Missing and foreign identifiers are intentionally indistinguishable.
-      if (!sameAuthorizationOwner(found, selector)) {return Object.freeze({ kind: "indeterminate" });}
-      if (!await validDigest(dependencies.digest, found) || found.requestDigest !== selector.requestDigest) {
-        return Object.freeze({ kind: "indeterminate" });
-      }
-      return Object.freeze({ kind: "observed", receipt: found });
+      return await dependencies.repository.transact(requestSelector(selector), async transaction => {
+        const raw = await transaction.findAuthorizationRequest();
+        if (raw === undefined) {return Object.freeze({ kind: "indeterminate" });}
+        const found = snapshotAuthorizationRecord(raw);
+        // Repository scoping is authoritative; retain the owner check as a corrupt-adapter guard.
+        if (!sameAuthorizationOwner(found, selector)) {throw new TypeError("authorization record owner mismatch");}
+        if (!await validDigest(dependencies.digest, found) || found.requestDigest !== selector.requestDigest) {
+          return Object.freeze({ kind: "indeterminate" });
+        }
+        const binding = await transaction.findBinding();
+        if (binding !== undefined && !bindingOwnerMatches(binding, selector)) {throw new TypeError("authorization binding owner mismatch");}
+        return currentMeaning(found, binding);
+      });
     } catch {return Object.freeze({ kind: "indeterminate" });}
   },
 });

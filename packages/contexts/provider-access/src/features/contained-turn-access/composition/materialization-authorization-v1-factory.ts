@@ -123,8 +123,9 @@ const snapshotDependencies = (value: MaterializationAuthorizationV1Dependencies)
     async digest(payload: string) {return await nativeResult("digest.digest", digestMethods.digest?.(payload as never)) as string;},
   });
   const repository: MaterializationAuthorizationRepository = Object.freeze({
-    async observeAuthorizationRequest(authorizationRequestId: string) {
-      const found = await nativeResult("repository.observeAuthorizationRequest", repositoryMethods.observeAuthorizationRequest?.(authorizationRequestId as never));
+    async observeAuthorizationRequest(selector: Parameters<MaterializationAuthorizationRepository["observeAuthorizationRequest"]>[0]) {
+      const detachedSelector = detachedDispatchData("authorization observation selector", selector);
+      const found = await nativeResult("repository.observeAuthorizationRequest", repositoryMethods.observeAuthorizationRequest?.(detachedSelector as never));
       return found === undefined ? undefined : snapshotAuthorizationRecord(detachedDispatchData("authorization observation", found));
     },
     async transact<T>(selector: Parameters<MaterializationAuthorizationRepository["transact"]>[0], work: (transaction: MaterializationAuthorizationTransaction) => Promise<T>) {

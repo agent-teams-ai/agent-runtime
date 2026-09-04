@@ -1,5 +1,13 @@
 import type { AuthorizationRecord } from "../../../domain/materialization-authorization.js";
 
+export interface MaterializationAuthorizationRequestSelector {
+  readonly authorizationRequestId: string;
+  readonly projectId: string;
+  readonly provider: "claude" | "codex";
+  readonly scopeDigest: string;
+  readonly tenantId: string;
+}
+
 /** Provider Access facts required for the final pre-materialization checkpoint. */
 export interface MaterializationAuthorizationBinding {
   readonly accessRef: string;
@@ -24,13 +32,8 @@ export interface MaterializationAuthorizationTransaction {
 }
 
 export interface MaterializationAuthorizationRepository {
-  /** Request identities are global; public callers must be owner-checked before digest comparison. */
-  observeAuthorizationRequest(authorizationRequestId: string): Promise<AuthorizationRecord | undefined>;
-  transact<T>(selector: {
-    readonly authorizationRequestId: string;
-    readonly projectId: string;
-    readonly provider: "claude" | "codex";
-    readonly scopeDigest: string;
-    readonly tenantId: string;
-  }, work: (transaction: MaterializationAuthorizationTransaction) => Promise<T>): Promise<T>;
+  /** Owner scope is part of the repository key; adapters must not perform a global lookup followed by an owner check. */
+  observeAuthorizationRequest(selector: MaterializationAuthorizationRequestSelector): Promise<AuthorizationRecord | undefined>;
+  transact<T>(selector: MaterializationAuthorizationRequestSelector,
+    work: (transaction: MaterializationAuthorizationTransaction) => Promise<T>): Promise<T>;
 }

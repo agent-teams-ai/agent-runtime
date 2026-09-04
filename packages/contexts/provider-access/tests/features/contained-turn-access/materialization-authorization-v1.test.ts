@@ -36,7 +36,8 @@ const observationFor = (request: AuthorizeCredentialMaterializationInput): Obser
   authorizationRequestId: request.authorizationRequestId, projectId: request.projectId, provider: request.provider,
   requestDigest: request.requestDigest, scopeDigest: request.scopeDigest, tenantId: request.tenantId,
 });
-const harnessFor = () => createInMemoryContainedTurnDispatchConsumptionV1({bindings: [seed()], initialControlTime: 100});
+const harnessFor = (...bindings: Parameters<typeof createInMemoryContainedTurnDispatchConsumptionV1>[0]["bindings"]) =>
+  createInMemoryContainedTurnDispatchConsumptionV1({bindings: bindings.length === 0 ? [seed()] : bindings, initialControlTime: 100});
 
 test("authorization is one-shot under concurrency and exact replay only observes", async () => {
   const harness = harnessFor();
@@ -96,20 +97,38 @@ test("missing and foreign request identities are publicly indistinguishable", as
   ]) {
     const foreignObservation = {...observationFor(request), ...change};
     assert.deepEqual(await harness.materialization.observe(foreignObservation), absent);
-    const foreignRequest = await requestFor({...change, requestDigest: undefined} as never);
-    assert.deepEqual(await harness.materialization.authorize(foreignRequest), {kind: "indeterminate"});
+    const foreignRequest = await requestFor(change);
+    const foreignOutcome = await harness.materialization.authorize(foreignRequest);
+    assert.equal(foreignOutcome.kind, "rejected");
+    if (foreignOutcome.kind === "rejected") {assert.equal(foreignOutcome.reason, "access_not_available");}
   }
   assert.deepEqual(absent, {kind: "indeterminate"});
   assert.equal((await harness.materialization.observe(observationFor(request))).kind, "observed");
 });
 
-test("a foreign attempt cannot consume or replace canonical owner authority", async () => {
+test("a foreign namespace cannot consume or replace canonical owner authority", async () => {
   const harness = harnessFor();
   const canonical = await requestFor();
   const foreign = await requestFor({projectId: "project:foreign"});
   assert.equal((await harness.materialization.authorize(canonical)).kind, "authorized");
-  assert.deepEqual(await harness.materialization.authorize(foreign), {kind: "indeterminate"});
+  const foreignOutcome = await harness.materialization.authorize(foreign);
+  assert.equal(foreignOutcome.kind, "rejected");
+  if (foreignOutcome.kind === "rejected") {assert.equal(foreignOutcome.reason, "access_not_available");}
   assert.equal((await harness.materialization.observe(observationFor(canonical))).kind, "observed");
+});
+
+test("the same request ID is independent across tenant and project namespaces", async () => {
+  for (const owner of [{tenantId: "tenant:2"}, {projectId: "project:2"}]) {
+    const harness = harnessFor(seed(), seed(owner));
+    const first = await requestFor();
+    const second = await requestFor(owner);
+    const firstOutcome = await harness.materialization.authorize(first);
+    const secondOutcome = await harness.materialization.authorize(second);
+    assert.equal(firstOutcome.kind, "authorized");
+    assert.equal(secondOutcome.kind, "authorized");
+    assert.equal((await harness.materialization.observe(observationFor(first))).kind, "observed");
+    assert.equal((await harness.materialization.observe(observationFor(second))).kind, "observed");
+  }
 });
 
 test("every Provider Access binding drift produces a final rejection ledger entry", async () => {
@@ -131,6 +150,75 @@ test("every Provider Access binding drift produces a final rejection ledger entr
       assert.equal(outcome.receipt.rejectionReason, reason);
     }
   }
+});
+
+test("replay and observation report current binding drift without rewriting historical authorization", async () => {
+  const cases = [
+    [{providerRouteRef: "route:2"}, "route_changed"], [{bindingRevision: 2}, "binding_revision_changed"],
+    [{availability: "unavailable" as const}, "availability_changed"], [{revocation: "revoked" as const}, "revoked"],
+    [{credentialBindingDigest: "credential:digest:2"}, "credential_binding_changed"],
+    [{credentialBindingRef: "credential:binding:2"}, "credential_binding_changed"],
+    [{credentialGeneration: 2}, "credential_generation_changed"],
+  ] as const;
+  for (const [change, reason] of cases) {
+    const harness = harnessFor();
+    const request = await requestFor();
+    const original = await harness.materialization.authorize(request);
+    assert.equal(original.kind, "authorized");
+    if (original.kind !== "authorized") {continue;}
+    await harness.control.replaceBindingHead(seed(change));
+    for (const outcome of [
+      await harness.materialization.authorize(request), await harness.materialization.observe(observationFor(request)),
+    ]) {
+      assert.equal(outcome.kind, "rejected", reason);
+      if (outcome.kind === "rejected") {
+        assert.equal(outcome.reason, reason);
+        assert.deepEqual(outcome.receipt, original.receipt);
+        assert.equal(outcome.receipt.decision, "authorized");
+      }
+    }
+    await harness.control.replaceBindingHead(seed());
+    for (const restored of [
+      await harness.materialization.authorize(request), await harness.materialization.observe(observationFor(request)),
+    ]) {
+      assert.equal(restored.kind, "observed");
+      if (restored.kind === "observed") {assert.deepEqual(restored.receipt, original.receipt);}
+    }
+  }
+});
+
+test("a historically rejected request remains rejected after binding recovery", async () => {
+  const harness = harnessFor(seed({revocation: "revoked"}));
+  const request = await requestFor();
+  const original = await harness.materialization.authorize(request);
+  assert.equal(original.kind, "rejected");
+  if (original.kind !== "rejected") {return;}
+  await harness.control.replaceBindingHead(seed());
+  for (const replay of [
+    await harness.materialization.authorize(request), await harness.materialization.observe(observationFor(request)),
+  ]) {
+    assert.equal(replay.kind, "rejected");
+    if (replay.kind === "rejected") {
+      assert.equal(replay.reason, "revoked");
+      assert.deepEqual(replay.receipt, original.receipt);
+      assert.equal(replay.receipt.decision, "rejected");
+    }
+  }
+});
+
+test("unsigned materialization digest rejects accessors and proxies without invoking them", async () => {
+  const valid = unsignedRequest();
+  assert.equal(await createCredentialMaterializationRequestDigest(valid),
+    "sha256:96fcc4aaf2d145ca537a257bc780f1eefa6a0b35ae50134718e883fdde7769fc");
+  let getterCalls = 0;
+  const accessor = {...valid} as Record<string, unknown>;
+  Object.defineProperty(accessor, "accessRef", {enumerable: true, get: () => {getterCalls += 1; return "access:1";}});
+  await assert.rejects(createCredentialMaterializationRequestDigest(accessor as never), TypeError);
+  assert.equal(getterCalls, 0);
+  let proxyTrapCalls = 0;
+  const proxy = new Proxy(valid, {ownKeys() {proxyTrapCalls += 1; return Reflect.ownKeys(valid);}});
+  await assert.rejects(createCredentialMaterializationRequestDigest(proxy), TypeError);
+  assert.equal(proxyTrapCalls, 0);
 });
 
 test("inputs are exact, bounded and return typed invalid or unsupported outcomes", async () => {

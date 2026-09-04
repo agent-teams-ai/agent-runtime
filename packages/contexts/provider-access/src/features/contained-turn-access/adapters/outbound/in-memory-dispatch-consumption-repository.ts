@@ -3,7 +3,8 @@ import type {
   DispatchConsumptionTransactionSelector,
 } from "../../application/ports/outbound/dispatch-consumption-repository.js";
 import type {
-  MaterializationAuthorizationBinding, MaterializationAuthorizationRepository, MaterializationAuthorizationTransaction,
+  MaterializationAuthorizationBinding, MaterializationAuthorizationRepository, MaterializationAuthorizationRequestSelector,
+  MaterializationAuthorizationTransaction,
 } from "../../application/ports/outbound/materialization-authorization-repository.js";
 import {
   canonicalJson, snapshotDispatchBindingHead, snapshotDispatchConsumedReceipt, snapshotDispatchSettlementOutcome,
@@ -30,6 +31,10 @@ const grantKey = (input: { readonly grantRequestId: string; readonly provider: "
   canonicalJson({ grantRequestId: input.grantRequestId, provider: input.provider, scope: input.scope });
 const settlementKey = (input: Extract<DispatchConsumptionTransactionSelector, { readonly kind: "settle" }>): string =>
   canonicalJson({ operationId: input.operationId, provider: input.provider, scope: input.scope, settlementRequestId: input.settlementRequestId });
+const authorizationKey = (input: MaterializationAuthorizationRequestSelector): string => canonicalJson({
+  authorizationRequestId: input.authorizationRequestId, projectId: input.projectId, provider: input.provider,
+  scopeDigest: input.scopeDigest, tenantId: input.tenantId,
+});
 export interface InMemoryDispatchConsumptionControl {
   advanceControlTime(value: number): Promise<void>;
   replaceBindingHead(head: DispatchBindingHead): Promise<void>;
@@ -159,9 +164,9 @@ export const createInMemoryDispatchConsumptionRepository = (
     },
   });
   const materializationRepository: MaterializationAuthorizationRepository = Object.freeze({
-    async observeAuthorizationRequest(authorizationRequestId: string) {
+    async observeAuthorizationRequest(selector: MaterializationAuthorizationRequestSelector) {
       await tail;
-      const found = state.authorizations.get(authorizationRequestId);
+      const found = state.authorizations.get(authorizationKey(selector));
       return found === undefined ? undefined : snapshotAuthorizationRecord(structuredClone(found));
     },
     async transact<T>(selector: Parameters<MaterializationAuthorizationRepository["transact"]>[0], work: (transaction: MaterializationAuthorizationTransaction) => Promise<T>) {
@@ -170,7 +175,7 @@ export const createInMemoryDispatchConsumptionRepository = (
         let pending: AuthorizationRecord | undefined;
         const transaction: MaterializationAuthorizationTransaction = Object.freeze({
           async findAuthorizationRequest() {
-            const found = state.authorizations.get(selector.authorizationRequestId);
+            const found = state.authorizations.get(authorizationKey(selector));
             return found === undefined ? undefined : snapshotAuthorizationRecord(structuredClone(found));
           },
           async findBinding() {return slot === undefined ? undefined : bindingProjection(slot.head);},
@@ -178,11 +183,12 @@ export const createInMemoryDispatchConsumptionRepository = (
         });
         const result = await work(transaction);
         if (pending !== undefined) {
-          const existing = state.authorizations.get(pending.authorizationRequestId);
+          const key = authorizationKey(selector);
+          const existing = state.authorizations.get(key);
           if (existing !== undefined && existing.requestDigest !== pending.requestDigest) {
             throw new Error("authorization request identity cannot be rebound");
           }
-          state.authorizations.set(pending.authorizationRequestId, pending);
+          state.authorizations.set(key, pending);
         }
         return result;
       });

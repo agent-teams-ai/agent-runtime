@@ -35,10 +35,13 @@ const authorizationDto = (outcome: AuthorizationOutcome): AuthorizeCredentialMat
   return Object.freeze({ kind: "indeterminate" });
 };
 
-const observationDto = (outcome: ObservationOutcome): ObserveCredentialMaterializationAuthorizationOutcome =>
-  outcome.kind === "observed"
-    ? Object.freeze({ kind: "observed", receipt: receiptDto(outcome.receipt) })
-    : Object.freeze({ kind: "indeterminate" });
+const observationDto = (outcome: ObservationOutcome): ObserveCredentialMaterializationAuthorizationOutcome => {
+  if (outcome.kind === "observed") {return Object.freeze({ kind: "observed", receipt: receiptDto(outcome.receipt) });}
+  if (outcome.kind === "rejected") {
+    return Object.freeze({ kind: "rejected", reason: outcome.reason, receipt: receiptDto(outcome.receipt) });
+  }
+  return Object.freeze({ kind: "indeterminate" });
+};
 
 export const createCredentialMaterializationAuthorizationAdapter = (
   useCase: MaterializationAuthorizationUseCase,

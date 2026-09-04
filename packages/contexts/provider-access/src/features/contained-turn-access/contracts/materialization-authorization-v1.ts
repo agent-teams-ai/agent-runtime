@@ -55,12 +55,15 @@ export interface ObserveCredentialMaterializationAuthorizationInput {
 export type ObserveCredentialMaterializationAuthorizationOutcome =
   | { readonly kind: "indeterminate" }
   | { readonly kind: "observed"; readonly receipt: CredentialMaterializationAuthorizationReceipt }
+  | { readonly kind: "rejected"; readonly reason: CredentialMaterializationRejectionReason; readonly receipt: CredentialMaterializationAuthorizationReceipt }
   | { readonly kind: "unsupported"; readonly reason: "unsupported_provider" };
 
 /**
  * One-shot Provider Access checkpoint immediately before credential materialization.
  * An authorized receipt is non-secret authorization evidence for a downstream Host;
- * it does not describe installation, execution, custody, reconciliation, or cleanup.
+ * only `authorize()` returning `authorized` grants fresh authority. Replayed and observed
+ * historical receipts are facts and do not describe installation, execution, custody,
+ * reconciliation, cleanup, or fresh Host start authority.
  */
 export interface CredentialMaterializationAuthorizationV1 {
   authorize(input: AuthorizeCredentialMaterializationInput): Promise<AuthorizeCredentialMaterializationOutcome>;

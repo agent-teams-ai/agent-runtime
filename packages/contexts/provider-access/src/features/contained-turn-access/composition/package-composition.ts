@@ -15,7 +15,7 @@ import {
   claimBindingDigestPayload, requestDigestPayload, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumeCommand,
 } from "../domain/dispatch-consumption.js";
 import {
-  authorizationRequestPayload, snapshotAuthorizationCommand, type AuthorizationCommand,
+  AUTHORIZATION_COMMAND_KEYS, authorizationRequestPayload, snapshotAuthorizationCommand, type AuthorizationCommand,
 } from "../domain/materialization-authorization.js";
 import { exactDispatchDataRecord } from "../adapters/dispatch-consumption-data.js";
 import { unsignedConsumeCommandFromContract } from "../adapters/inbound/dispatch-consumption-mapper.js";
@@ -142,7 +142,8 @@ export const createDispatchConsumptionRequestDigests = async (
 export const createCredentialMaterializationRequestDigest = async (
   input: Omit<AuthorizeCredentialMaterializationInput, "requestDigest">,
 ): Promise<string> => {
-  const command = snapshotAuthorizationCommand({ ...input, requestDigest: "pending" });
+  const data = exactDispatchDataRecord("unsigned authorization command", input, AUTHORIZATION_COMMAND_KEYS.filter(key => key !== "requestDigest"));
+  const command = snapshotAuthorizationCommand({ ...data, requestDigest: "pending" });
   const { requestDigest: _requestDigest, ...unsigned } = command as AuthorizationCommand;
   return createSha256DispatchConsumptionDigest().digest(authorizationRequestPayload(unsigned));
 };
