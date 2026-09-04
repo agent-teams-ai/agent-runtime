@@ -1,15 +1,15 @@
+import { types as utilTypes } from "node:util";
 import type { HttpEgressAnomalyCode, HttpEgressOperation, HttpEgressReceipt } from "./http-egress-contracts.js";
 import type { HostHttpGrant, HttpEgressBrokerPorts, HttpEgressTransportAttempt,
   HttpEgressTransportSession, HttpEgressTransportBinding } from "./http-egress-ports.js";
 import { createPreparedHttpRequestV1, type PreparedHttpRequestV1 } from "./prepared-http-request-v1.js";
-import { zeroHttpBytes, zeroLateHttpBytes } from "./http-byte-intrinsics.js";
+import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 import { snapshotHttpEgressOperation } from "./http-ingress-validation.js";
 import { normalizeHttpEgressResolution } from "./public-address-policy.js";
 import { readStrictHttpRequest, StrictHttpRequestError, type StrictHttpRequest } from "./strict-http-request.js";
 import { verifiedGrant, verifiedProvisional } from "./http-egress-runtime-security-v2.js";
 import { materializationAuthorizationRequest, observeMaterializationReceipt, presentationFields,
   projectPreparedRequest, receiptMatchesSnapshot, snapshotHostHttpRoute } from "./http-egress-session-authority.js";
-import type {HostHttpAdmissionLease} from "./host-http-admission-guard.js";
 import {closeAndRecordHttpEgress, initialHttpEgressState, settleHttpEgressDispatch, type HttpEgressMutableState} from "./http-egress-settlement.js";
 
 const encoder = new TextEncoder();
@@ -30,22 +30,52 @@ type MaterializedFields = Awaited<ReturnType<HttpEgressBrokerPorts["materializer
 
 const prepareMaterializedRequest = (ports: HttpEgressBrokerPorts, request: StrictHttpRequest,
   forwardedFields: ReturnType<typeof presentationFields>, fields: MaterializedFields): PreparedHttpRequestV1 => {
-  const names = fields.map(field => field.name);
-  if (JSON.stringify(names) !== JSON.stringify(ports.route.credentialFieldNames)) {throw new TypeError("credential fields mismatch");}
+  // Validate data descriptors before reading names; never execute materializer accessors.
+  if (!Array.isArray(fields) || utilTypes.isProxy(fields)) {throw new TypeError("credential fields mismatch");}
+  const descriptors = Object.getOwnPropertyDescriptors(fields);
+  const length = Object.getOwnPropertyDescriptor(fields, "length")?.value;
+  if (length !== ports.route.credentialFieldNames.length || Reflect.ownKeys(descriptors).length !== length + 1) {
+    throw new TypeError("credential fields mismatch");
+  }
+  for (let index = 0; index < length; index += 1) {
+    const field = descriptors[String(index)]?.value;
+    if (typeof field !== "object" || field === null || utilTypes.isProxy(field)) {throw new TypeError("credential fields mismatch");}
+    const name = Object.getOwnPropertyDescriptor(field, "name");
+    const value = Object.getOwnPropertyDescriptor(field, "valueBytes");
+    if (name === undefined || !("value" in name) || name.value !== ports.route.credentialFieldNames[index]
+      || value === undefined || !("value" in value)) {throw new TypeError("credential fields mismatch");}
+  }
   const host = ports.route.originPort === 443 ? ports.route.originHost : `${ports.route.originHost}:${ports.route.originPort}`;
   return createPreparedHttpRequestV1({methodBytes: encoder.encode(ports.route.upstreamMethod),
     targetBytes: encoder.encode(ports.route.upstreamPath), hostBytes: encoder.encode(host),
     presentationFields: forwardedFields, credentialFields: fields, bodyBytes: request.body});
 };
 
-const zeroMaterializedFields = (fields: MaterializedFields): void => {
-  for (const field of fields) {zeroHttpBytes(field.valueBytes);}
+// Walk own data properties, including malformed entries and non-index properties. Holes,
+// accessors and proxies must never interrupt cleanup of independently reachable buffers.
+const zeroMaterializedFields = (fields: unknown): boolean => {
+  const pending: unknown[] = [fields]; const seen = new Set<object>(); let certain = true;
+  while (pending.length !== 0) {
+    const value = pending.pop();
+    if ((typeof value !== "object" && typeof value !== "function") || value === null || seen.has(value)) {continue;}
+    seen.add(value);
+    if (utilTypes.isProxy(value)) {certain = false; continue;}
+    if (intrinsicUint8ArrayLength(value) !== undefined) {
+      try {zeroHttpBytes(value);} catch {certain = false;}
+    }
+    try {
+      for (const key of Reflect.ownKeys(value)) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (descriptor !== undefined && "value" in descriptor) {pending.push(descriptor.value);}
+        else {certain = false;}
+      }
+    } catch {certain = false;}
+  }
+  return certain;
 };
 
 const zeroLateMaterializedFields = (pendingFields: Promise<MaterializedFields> | undefined): void => {
-  zeroLateHttpBytes(pendingFields?.then(values => {
-    zeroMaterializedFields(values); return new Uint8Array();
-  }));
+  void pendingFields?.then(values => zeroMaterializedFields(values), () => false);
 };
 
 const normalizeSingleResolution = (rawResolution: Awaited<ReturnType<HttpEgressBrokerPorts["resolver"]["resolve"]>>) => {
@@ -64,9 +94,10 @@ const transportOpenAllowed = (ports: HttpEgressBrokerPorts, operation: HttpEgres
   return true;
 };
 
-const recordTransportOpenFailure = (operation: HttpEgressOperation, state: HttpEgressMutableState): void => {
+const recordAuthorityFailure = (operation: HttpEgressOperation, state: HttpEgressMutableState,
+  anomaly: HttpEgressAnomalyCode): void => {
   state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
-  state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "transport_open_failed";
+  state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : anomaly;
 };
 
 const observeTransportBinding = (ports: HttpEgressBrokerPorts, state: HttpEgressMutableState,
@@ -93,24 +124,33 @@ const recordExecutionError = (operation: HttpEgressOperation, state: HttpEgressM
     if (state.anomalyCode === "inbound_malformed") {state.anomalyCode = "provider_access_denied";}}
 };
 
-const finishExecution = (ports: HttpEgressBrokerPorts, lease: HostHttpAdmissionLease, successful: boolean,
-  prepared: PreparedHttpRequestV1 | undefined, request: StrictHttpRequest | undefined): void => {
-  prepared?.dispose(); zeroHttpBytes(request?.body);
-  ports.guard.finish(lease, successful ? Object.freeze({response: "observed_policy_accepted", delivery: "delivered",
-    upstreamClosure: "closed", inboundClosure: "closed", evidenceAcknowledgement: "acknowledged"}) : undefined);
-};
-
-export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Readonly<{
+export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts): Readonly<{
   execute(operation: HttpEgressOperation): Promise<HttpEgressReceipt>;
 }> => Object.freeze({execute: async (input): Promise<HttpEgressReceipt> => {
   const operation = snapshotHttpEgressOperation(input);
   const state = initialHttpEgressState(); let request: StrictHttpRequest | undefined; let attempt: HttpEgressTransportAttempt | undefined;
-  let prepared: PreparedHttpRequestV1 | undefined; const lease = ports.guard.acquire();
+  let prepared: PreparedHttpRequestV1 | undefined; const lease = dependencies.guard.acquire();
+  let cleanupCertain = true; let cleaned = false;
+  const cleanup = (): void => {
+    if (cleaned) {return;} cleaned = true;
+    // dispose can fail before clearing its second owned allocation. Clear each independently.
+    for (const action of [() => prepared?.dispose(), () => zeroHttpBytes(prepared?.wireBytes),
+      () => zeroHttpBytes(prepared?.headerProjectionBytes), () => zeroHttpBytes(request?.body)]) {
+      try {action();} catch {cleanupCertain = false;}
+    }
+    if (!cleanupCertain) {state.outcome = "reconcile_required"; state.anomalyCode = "closure_unproved";}
+  };
+  const ports: HttpEgressBrokerPorts = {...dependencies, evidence: {digest: parts => dependencies.evidence.digest(parts), record: receipt => {
+    cleanup();
+    return dependencies.evidence.record(Object.freeze({...receipt, outcome: state.outcome, anomalyCode: state.anomalyCode}));
+  }}};
+  const within = <T>(action: () => Promise<T>): Promise<T> =>
+    ports.clock.within(operation.limits.deadline, action, operation.signal);
   // Parsing is allowed before admission acquisition, but this implementation acquires first so no hostile
   // inbound stream can hold unreserved session work. No fresh boundary ID or owner call precedes this point.
   if (lease === undefined) {return (await closeAndRecordHttpEgress(ports, operation, state)).receipt;}
   let successful = false;
-  try {
+  const run = async (): Promise<HttpEgressReceipt> => {try {
     assertSessionIdentity(ports, operation);
     const route = snapshotHostHttpRoute(ports.route);
     if (route === undefined) {state.outcome = "denied";
@@ -122,8 +162,8 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
     const ids = ports.ids.fresh();
     state.requestDigest = digest(ports, [encoder.encode("agent-runtime.host-http-materialization-request/v1\n"),
       encoder.encode(operation.expectedRequest.requestId), encoder.encode(ports.route.routeReceiptDigest), request.body]);
-    const pa = await ports.providerAccess.authorize(materializationAuthorizationRequest(ports, ids.materializationAuthorizationId,
-      state.requestDigest));
+    const pa = await within(() => ports.providerAccess.authorize(materializationAuthorizationRequest(ports, ids.materializationAuthorizationId,
+      state.requestDigest)));
     if (pa.kind !== "authorized" || !receiptMatchesSnapshot(pa.receipt, ports,
       ids.materializationAuthorizationId, state.requestDigest)) {state.outcome = "denied"; state.anomalyCode = "provider_access_denied";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
@@ -133,17 +173,18 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
     let fields: readonly Readonly<{name: string; valueBytes: Uint8Array}>[];
     try {fields = await ports.clock.within(operation.limits.deadline, () => {
       pendingFields = ports.materializer.render(paReceipt); return pendingFields;
-    }, operation.signal);} catch {zeroLateMaterializedFields(pendingFields); state.outcome = "denied"; state.anomalyCode = "credential_render_failed";
+    }, operation.signal);} catch {zeroLateMaterializedFields(pendingFields); recordAuthorityFailure(operation, state, "credential_render_failed");
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     try {prepared = prepareMaterializedRequest(ports, request, forwardedFields, fields);}
-    finally {zeroMaterializedFields(fields);}
-    if (!await observeMaterializationReceipt(ports, paReceipt)) {state.outcome = "denied"; state.anomalyCode = "provider_generation_drift";
+    finally {cleanupCertain = zeroMaterializedFields(fields);}
+    if (!cleanupCertain) {throw new TypeError("credential cleanup unproved");}
+    if (!await within(() => observeMaterializationReceipt(ports, paReceipt))) {state.outcome = "denied"; state.anomalyCode = "provider_generation_drift";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     const requestProjection = projectPreparedRequest(ports, prepared, paReceipt);
     let provisionalOutcome: Awaited<ReturnType<typeof ports.runtimeSecurity.requestProvisional>>;
-    try {provisionalOutcome = await ports.runtimeSecurity.requestProvisional({contractVersion:
-      "provider-process-egress-provisional/v2", authorizationRequestId: ids.runtimeAuthorizationId, request: requestProjection});
-    } catch {state.outcome = "denied"; state.anomalyCode = "provisional_timeout";
+    try {provisionalOutcome = await within(() => ports.runtimeSecurity.requestProvisional({contractVersion:
+      "provider-process-egress-provisional/v2", authorizationRequestId: ids.runtimeAuthorizationId, request: requestProjection}));
+    } catch {recordAuthorityFailure(operation, state, "provisional_timeout");
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     const expectedKey = ports.verifier.signingKey;
     if (provisionalOutcome.status !== "authorized" || !verifiedProvisional({decision: provisionalOutcome.decision,
@@ -153,8 +194,7 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
     const provisional = provisionalOutcome.decision; state.provisionalAuthorizationReceiptDigest = provisional.decisionDigest;
     state.policyGeneration = provisional.policy.policyGeneration; state.keyGeneration = provisional.signingKey.keyGeneration;
     let rawResolution: Awaited<ReturnType<typeof ports.resolver.resolve>>;
-    try {rawResolution = await ports.resolver.resolve(ports.route.originHost);} catch {state.outcome = "denied";
-      state.anomalyCode = "resolution_denied"; return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
+    try {rawResolution = await within(() => ports.resolver.resolve(ports.route.originHost));} catch {recordAuthorityFailure(operation, state, "resolution_denied"); return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     const normalized = normalizeSingleResolution(rawResolution);
     if (normalized === undefined) {state.outcome = "denied"; state.anomalyCode = "resolution_denied";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
@@ -166,24 +206,24 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
       selectedAddress: normalized.selectedAddress, sni: ports.route.originHost, alpn: "http/1.1"});
       session = await ports.clock.within(operation.limits.deadline,
         () => (attempt as HttpEgressTransportAttempt).ready(), operation.signal);
-    } catch {recordTransportOpenFailure(operation, state);
+    } catch {recordAuthorityFailure(operation, state, "transport_open_failed");
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     const tls = session.binding;
     if (!observeTransportBinding(ports, state, tls, normalized.selectedAddress)) {
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
-    if (!await observeMaterializationReceipt(ports, paReceipt)) {state.outcome = "denied"; state.anomalyCode = "provider_generation_drift";
+    if (!await within(() => observeMaterializationReceipt(ports, paReceipt))) {state.outcome = "denied"; state.anomalyCode = "provider_generation_drift";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     const resolver = Object.freeze({resolverIdentity: rawResolution.resolverIdentity,
       resolverEpoch: rawResolution.resolverEpoch, resolutionCount: 1 as const, addresses: rawResolution.addresses});
     let finalOutcome: Awaited<ReturnType<typeof ports.runtimeSecurity.authorizeFirstApplicationByte>>;
-    try {finalOutcome = await ports.runtimeSecurity.authorizeFirstApplicationByte({contractVersion:
+    try {finalOutcome = await within(() => ports.runtimeSecurity.authorizeFirstApplicationByte({contractVersion:
       "provider-process-egress-final/v2", provisional, boundaryUseId: ids.boundaryUseId,
       connectionAttemptId: ids.connectionAttemptId, streamId: ids.streamId, transport: "tcp-tls", resolver,
       pinnedDestination: Object.freeze({address: normalized.selectedAddress, port: ports.route.originPort}),
       observedPeer: Object.freeze({address: tls.peerAddress, port: tls.peerPort}), tls: Object.freeze({
         sniHostname: tls.requestedSni, certificateValidated: tls.chainValidated, dnsIdentity: tls.dnsIdentity,
         certificateDigest: tls.certificateDigest, tlsPolicyDigest: tls.tlsPolicyDigest, alpn: tls.alpn}),
-      request: requestProjection, redirectHop: 0});} catch {state.outcome = "denied"; state.anomalyCode = "final_timeout";
+      request: requestProjection, redirectHop: 0}));} catch {recordAuthorityFailure(operation, state, "final_timeout");
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     if (finalOutcome.status !== "authorized" || !verifiedGrant({grant: finalOutcome.grant, provisional,
       verifier: ports.verifier, expectedKey, ports, request: requestProjection, receipt: paReceipt, tls,
@@ -199,7 +239,14 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
   } catch (error) {
     recordExecutionError(operation, state, error);
     return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;
-  } finally {
-    finishExecution(ports, lease, successful, prepared, request);
+  }};
+  let receipt: HttpEgressReceipt;
+  try {receipt = await run();}
+  finally {
+    try {cleanup();} finally {
+      ports.guard.finish(lease, successful && cleanupCertain ? Object.freeze({response: "observed_policy_accepted",
+        delivery: "delivered", upstreamClosure: "closed", inboundClosure: "closed", evidenceAcknowledgement: "acknowledged"}) : undefined);
+    }
   }
+  return cleanupCertain ? receipt : Object.freeze({...receipt, outcome: state.outcome, anomalyCode: state.anomalyCode});
 }});
