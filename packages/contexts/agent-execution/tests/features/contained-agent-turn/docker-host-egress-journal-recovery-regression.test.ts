@@ -7,19 +7,35 @@ import {
   createDockerEgressCleanupObservation,
   createDockerEgressRecord,
   createDockerEgressSubject,
+  createDockerEgressTombstone,
   decodeDockerEgressTombstone,
   dockerEgressCleanupHandle,
   dockerEgressJournalLocator,
   encodeDockerEgressRecord,
+  encodeDockerEgressTombstone,
   replayDockerEgressBytes,
   type DockerEgressJournalSubject,
   type DockerEgressTrustedRuntimeIdentity,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/index.js";
-import { MemoryEgressStorage } from "../../fixtures/docker-journal-test-fixture.ts";
+import { MemoryEgressFile, MemoryEgressStorage } from "../../fixtures/docker-journal-test-fixture.ts";
 
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 const opaque = (prefix: string, value: string): string => `${prefix}${hash(value)}`;
 const command = (value: string): string => opaque("command:", value);
+const canonical = (value: unknown): string => JSON.stringify(order(value));
+const order = (value: unknown): unknown => {
+  if (Array.isArray(value)) { return value.map(order); }
+  if (value === null || typeof value !== "object") { return value; }
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).toSorted(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0).map(([key, item]) => [key, order(item)]));
+};
+const uncheckedTombstone = (input: Readonly<{
+  locatorSha256: string; bindingSha256: string | null; disposition: "retired" | "quarantined";
+  terminalRecord: ReturnType<typeof createDockerEgressRecord> | null;
+}>): Uint8Array => {
+  const body = { version: 3, ...input }; const checksumSha256 = hash(canonical(body));
+  return Buffer.from(`${canonical({ ...body, checksumSha256 })}\n`);
+};
 const observerAuthority = Object.freeze({
   observerId: opaque("observer:", "absence-observer"),
   capabilityRevisionSha256: hash("observer-capability"),
@@ -67,6 +83,107 @@ const observation = (subject: DockerEgressJournalSubject) => createDockerEgressC
   hostBootId: subject.identity.hostBootId, executionGenerationId: subject.identity.executionGenerationId,
   daemonId: subject.identity.daemonId, daemonGenerationId: subject.identity.daemonGenerationId,
   slotGenerationId: subject.identity.slotGenerationId, ...observerAuthority, result: "absent",
+});
+const closedRecords = (subject: DockerEgressJournalSubject, suffix: string) => {
+  const opened = createDockerEgressRecord({ sequence: 0, subject, commandId: command(`open-${suffix}`),
+    event: { kind: "open_intent" }, previousChecksumSha256: null });
+  const closed = createDockerEgressRecord({ sequence: 1, subject, commandId: command(`close-${suffix}`),
+    event: { kind: "closed" }, previousChecksumSha256: opened.checksumSha256 });
+  return { opened, closed };
+};
+const assertOnlyIdentityReused = (prior: DockerEgressJournalSubject, successor: DockerEgressJournalSubject,
+  reused: "custodyId" | "workspaceId"): void => {
+  for (const key of Object.keys(prior.identity) as Array<keyof DockerEgressJournalSubject["identity"]>) {
+    assert.equal(prior.identity[key] === successor.identity[key], key === reused, `${String(key)} freshness`);
+  }
+  for (const key of Object.keys(prior.resources) as Array<keyof DockerEgressJournalSubject["resources"]>) {
+    assert.notEqual(prior.resources[key], successor.resources[key], `${String(key)} freshness`);
+  }
+};
+
+test("retired tombstones require an exact locator-bound closed terminal record", async () => {
+  const subject = makeSubject("invalid-retirement"); const locator = dockerEgressJournalLocator(subject);
+  const { opened, closed } = closedRecords(subject, "invalid-retirement");
+  const cases = [
+    { name: "null", storedLocator: locator, bindingSha256: null, terminalRecord: null },
+    { name: "nonclosed", storedLocator: locator, bindingSha256: subject.bindingSha256, terminalRecord: opened },
+    { name: "wrong-locator", storedLocator: hash("wrong-retirement-locator"),
+      bindingSha256: subject.bindingSha256, terminalRecord: closed },
+    { name: "inconsistent-binding", storedLocator: locator, bindingSha256: hash("wrong-retirement-binding"), terminalRecord: closed },
+  ] as const;
+  for (const item of cases) {
+    const storage = new MemoryEgressStorage(); const bytes = uncheckedTombstone({
+      locatorSha256: item.storedLocator, bindingSha256: item.bindingSha256,
+      disposition: "retired", terminalRecord: item.terminalRecord,
+    });
+    assert.throws(() => decodeDockerEgressTombstone(bytes), { name: "DockerEgressJournalCorruptionError" });
+    const file = new MemoryEgressFile(); file.bytes = Buffer.from(bytes); storage.tombstones.set(item.storedLocator, file);
+    const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
+    await assert.rejects(journal.open(subject, command(`fenced-${item.name}`)));
+    const evidence = await journal.recoveryEvidence();
+    assert.deepEqual(evidence, [{ kind: "quarantine_evidence", locatorSha256: item.storedLocator,
+      bindingSha256: null, status: "quarantined" }]);
+    assert.equal(evidence.some(entry => entry.kind === "retirement_evidence"), false);
+  }
+});
+
+test("quarantined prefix evidence remains decodable but cannot authorize tombstone retry", async () => {
+  const subject = makeSubject("quarantined-prefix"); const locator = dockerEgressJournalLocator(subject);
+  const { opened, closed } = closedRecords(subject, "quarantined-prefix");
+  const tombstone = createDockerEgressTombstone({ locatorSha256: locator, bindingSha256: subject.bindingSha256,
+    disposition: "quarantined", terminalRecord: opened });
+  assert.equal(decodeDockerEgressTombstone(encodeDockerEgressTombstone(tombstone)).terminalRecord?.checksumSha256,
+    opened.checksumSha256);
+  const storage = new MemoryEgressStorage(); const file = new MemoryEgressFile();
+  file.bytes = Buffer.from(encodeDockerEgressTombstone(tombstone)); storage.tombstones.set(locator, file);
+  const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
+  await assert.rejects(journal.close(subject, 0, opened.commandId), { name: "DockerEgressJournalConflictError" });
+  assert.deepEqual(await journal.recoveryEvidence(), [{ kind: "quarantine_evidence", locatorSha256: locator,
+    bindingSha256: subject.bindingSha256, status: "quarantined" }]);
+  const closedStorage = new MemoryEgressStorage(); const closedFile = new MemoryEgressFile();
+  const closedQuarantine = createDockerEgressTombstone({ locatorSha256: locator, bindingSha256: subject.bindingSha256,
+    disposition: "quarantined", terminalRecord: closed });
+  closedFile.bytes = Buffer.from(encodeDockerEgressTombstone(closedQuarantine));
+  closedStorage.tombstones.set(locator, closedFile);
+  await assert.rejects(new DockerEgressJournal(closedStorage, trustedFor(subject), observerAuthority)
+    .close(subject, 0, closed.commandId), { name: "DockerEgressJournalConflictError" });
+});
+
+test("a tombstone-only exact close retry succeeds only from valid retirement evidence", async () => {
+  const subject = makeSubject("tombstone-only-retry"); const locator = dockerEgressJournalLocator(subject);
+  const { closed } = closedRecords(subject, "tombstone-only-retry"); const storage = new MemoryEgressStorage();
+  const tombstone = createDockerEgressTombstone({ locatorSha256: locator, bindingSha256: subject.bindingSha256,
+    disposition: "retired", terminalRecord: closed });
+  await storage.persistTombstone(locator, encodeDockerEgressTombstone(tombstone), false);
+  const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
+  assert.deepEqual(await journal.close(subject, 0, closed.commandId), closed);
+  await assert.rejects(journal.reconcileRequired(subject, 0, closed.commandId, "journal_corrupt", null),
+    { name: "DockerEgressJournalConflictError" });
+  assert.equal(storage.v3Files.has(locator), false);
+});
+
+test("operation-private custody and workspace identities cannot cross retired or live successor generations", async () => {
+  for (const identity of ["custodyId", "workspaceId"] as const) {
+    for (const disposition of ["retired", "live"] as const) {
+      const prior = makeSubject(`${identity}-${disposition}-prior`);
+      const fresh = makeSubject(`${identity}-${disposition}-successor`);
+      const successor = createDockerEgressSubject({ ...fresh,
+        identity: { ...fresh.identity, [identity]: prior.identity[identity] } });
+      assertOnlyIdentityReused(prior, successor, identity);
+      const storage = new MemoryEgressStorage(); const locator = dockerEgressJournalLocator(prior);
+      const records = closedRecords(prior, `${identity}-${disposition}`);
+      if (disposition === "retired") {
+        const tombstone = createDockerEgressTombstone({ locatorSha256: locator, bindingSha256: prior.bindingSha256,
+          disposition: "retired", terminalRecord: records.closed });
+        await storage.persistTombstone(locator, encodeDockerEgressTombstone(tombstone), false);
+      } else {
+        const file = storage.v3Files.get(locator) ?? await storage.createWithFirstRecord(locator, encodeDockerEgressRecord(records.opened));
+        await file.append(file.byteLength, encodeDockerEgressRecord(records.closed));
+      }
+      await assert.rejects(new DockerEgressJournal(storage, trustedFor(successor), observerAuthority)
+        .open(successor, command(`${identity}-${disposition}-reuse`)), { name: "DockerEgressJournalConflictError" });
+    }
+  }
 });
 
 test("validated prefix survives a corrupt tail only as quarantined cleanup evidence", async () => {

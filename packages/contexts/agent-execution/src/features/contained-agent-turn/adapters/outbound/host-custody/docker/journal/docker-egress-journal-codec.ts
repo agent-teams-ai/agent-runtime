@@ -310,6 +310,10 @@ export const createDockerEgressTombstone = (input: Omit<DockerEgressTombstone, "
   if (input.disposition !== "retired" && input.disposition !== "quarantined") { throw new TypeError("invalid tombstone disposition"); }
   const terminalRecord = input.terminalRecord === null ? null : recordFrom(input.terminalRecord);
   if (terminalRecord !== null && terminalRecord.subject.bindingSha256 !== bindingSha256) { throw new TypeError("tombstone binding mismatch"); }
+  if (input.disposition === "retired" && (terminalRecord === null || terminalRecord.event.kind !== "closed" ||
+      dockerEgressJournalLocator(terminalRecord.subject) !== locatorSha256)) {
+    throw new TypeError("retired tombstone must bind its exact closed terminal record");
+  }
   const body = Object.freeze({ version: DOCKER_EGRESS_JOURNAL_VERSION, locatorSha256, bindingSha256, disposition: input.disposition, terminalRecord });
   return Object.freeze({ ...body, checksumSha256: sha256(canonicalClosed(body)) });
 };

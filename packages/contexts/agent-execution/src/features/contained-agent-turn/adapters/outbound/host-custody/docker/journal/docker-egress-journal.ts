@@ -173,8 +173,9 @@ const trustedMatches = (subject: DockerEgressJournalSubject, trusted: DockerEgre
     identity.daemonGenerationId === trusted.daemonGenerationId && identity.slotGenerationId === trusted.slotGenerationId;
 };
 const uniquenessValues = (subject: DockerEgressJournalSubject): readonly string[] => Object.freeze([
-  subject.identity.operationId, subject.identity.effectId, subject.identity.attemptId, subject.identity.executionGenerationId,
-  subject.identity.daemonGenerationId, subject.identity.slotGenerationId, ...Object.values(subject.resources),
+  subject.identity.operationId, subject.identity.effectId, subject.identity.attemptId, subject.identity.custodyId,
+  subject.identity.workspaceId, subject.identity.executionGenerationId, subject.identity.daemonGenerationId,
+  subject.identity.slotGenerationId, ...Object.values(subject.resources),
 ]);
 const identitiesOverlap = (left: DockerEgressJournalSubject, right: DockerEgressJournalSubject): boolean => {
   const seen = new Set(uniquenessValues(left)); return uniquenessValues(right).some(value => seen.has(value));
@@ -318,7 +319,8 @@ export class DockerEgressJournal {
       if (file === undefined) { return; }
       const tombstone = decodeDockerEgressTombstone(await file.read(this.limits.maxRecordBytes), this.limits);
       const committed = tombstone.terminalRecord;
-      if (committed?.commandId !== commandId) { return; }
+      if (tombstone.disposition !== "retired" || tombstone.locatorSha256 !== dockerEgressJournalLocator(subject) ||
+          committed === null || committed.subject.bindingSha256 !== subject.bindingSha256 || committed.commandId !== commandId) { return; }
       const candidate = createDockerEgressRecord({ sequence: expectedSequence + 1, subject, commandId, event,
         previousChecksumSha256: committed.previousChecksumSha256 });
       if (candidate.commandDigestSha256 !== committed.commandDigestSha256) { throw new DockerEgressJournalConflictError("command digest conflict"); }
