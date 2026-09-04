@@ -103,8 +103,12 @@ class DeadlineByteReader {
     return value;
   }
 
-  public async requireEnd(): Promise<void> {
-    while (!this.ended) {await this.pull();}
+  public requireFramedEnd(): void {
+    if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
+    if (this.clock.now() >= this.limits.deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
+    // Framing ends the response, not the persistent transport. Reject surplus
+    // bytes already observed, but do not pull again or return the iterator:
+    // outer Host Custody owns transport closure and its settlement evidence.
     if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
   }
 
@@ -258,11 +262,11 @@ const forwardFramedBody = async (
 ): Promise<void> => {
   if (head.contentLength !== undefined) {
     await forwardSizedBody(reader, head.contentLength, limits.maxBufferedBytes, emit);
-    await reader.requireEnd();
+    reader.requireFramedEnd();
     return;
   }
   if (!head.chunked) {
-    await reader.requireEnd();
+    reader.requireFramedEnd();
     return;
   }
   let bodyBytes = 0;
@@ -286,7 +290,7 @@ const forwardFramedBody = async (
       } finally {
         zeroHttpBytes(trailers);
       }
-      await reader.requireEnd();
+      reader.requireFramedEnd();
       return;
     }
     await forwardSizedBody(reader, size, limits.maxBufferedBytes, emit);

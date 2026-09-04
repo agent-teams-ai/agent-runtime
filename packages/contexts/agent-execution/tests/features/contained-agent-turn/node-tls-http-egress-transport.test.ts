@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, X509Certificate } from "node:crypto";
+import { getEventListeners } from "node:events";
+import { Readable } from "node:stream";
 import { describe, test } from "node:test";
 
 import {
@@ -340,6 +342,58 @@ describe("NodeTlsHttpEgressTransport validation, closure and dispatch races", ()
 });
 
 describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", () => {
+  test("response abort listeners exist only during pending socket reads", async () => {
+    for (const finish of ["close", "abort-pending", "abort-suspended"] as const) {
+      const socket = new SyntheticOwnedTlsSocket();
+      const stream = new Readable({ read() {} });
+      socket.iterator = (options?: Readonly<{ destroyOnReturn?: boolean }>) => {
+        assert.deepEqual(options, { destroyOnReturn: false });
+        return stream.iterator(options);
+      };
+      const destroy = socket.destroy.bind(socket);
+      socket.destroy = error => {stream.destroy(error); return destroy(error);};
+      const attempt = injectedTransport(socket).beginOpen(target(443));
+      try {
+        const session = await attempt.ready();
+        const controller = new AbortController();
+        const listeners = () => getEventListeners(controller.signal, "abort").length;
+        const dispatch = await session.dispatch(() => utf8("request"), controller.signal);
+        assert.equal(dispatch.status, "response");
+        if (dispatch.status !== "response") {throw new Error("unreachable");}
+        const response = dispatch.response[Symbol.asyncIterator]();
+        assert.equal(listeners(), 0);
+        for (const part of ["HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n", "ok"]) {
+          const pending = response.next();
+          assert.equal(listeners(), 1);
+          stream.push(utf8(part));
+          assert.deepEqual(await pending, { done: false, value: Buffer.from(part) });
+          assert.equal(listeners(), 0, "cleanup must precede yield, without EOF or iterator return");
+          assert.equal(socket.destroyed, false);
+          assert.equal(stream.destroyed, false);
+        }
+        if (finish !== "close") {
+          if (finish === "abort-suspended") {
+            controller.abort();
+            assert.equal(socket.destroyed, false);
+          }
+          const pending = response.next();
+          if (finish === "abort-pending") {
+            assert.equal(listeners(), 1);
+            controller.abort();
+          }
+          await assert.rejects(pending, (error: unknown) =>
+            error instanceof NodeTlsHttpEgressError && error.code === "connect_failed");
+          assert.equal(listeners(), 0);
+          assert.equal(socket.destroyed, true);
+        }
+        await expectClosed(attempt);
+        assert.equal(socket.destroyed, true);
+        assert.equal(stream.destroyed, true);
+        assert.equal(listeners(), 0);
+      } finally {await attempt.close();}
+    }
+  });
+
   test("consume and socket.write occur in the same synchronous stack in that exact order", async () => {
     const socket = new SyntheticOwnedTlsSocket();
     const order: string[] = [];

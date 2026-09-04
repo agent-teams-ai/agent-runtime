@@ -65,17 +65,25 @@ const boundedResponse = (
 ): AsyncIterable<Uint8Array> => Object.freeze({
   async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
     const abort = (): void => {socket.destroy(canonicalConnectFailure());};
-    if (signal?.aborted) {abort();}
-    else {signal?.addEventListener("abort", abort, { once: true });}
     try {
-      for await (const value of socket.iterator({ destroyOnReturn: false })) {
+      const iterator = socket.iterator({ destroyOnReturn: false });
+      while (true) {
+        let next: IteratorResult<unknown>;
+        try {
+          if (signal?.aborted) {abort();}
+          else {signal?.addEventListener("abort", abort, { once: true });}
+          next = await iterator.next();
+        } finally {
+          // A framed response may leave this generator suspended at yield.
+          signal?.removeEventListener("abort", abort);
+        }
+        if (next.done) {return;}
+        const value = next.value;
         if (!(value instanceof Uint8Array)) {throw canonicalConnectFailure();}
         yield value;
       }
     } catch {
       throw canonicalConnectFailure();
-    } finally {
-      signal?.removeEventListener("abort", abort);
     }
   },
 });
