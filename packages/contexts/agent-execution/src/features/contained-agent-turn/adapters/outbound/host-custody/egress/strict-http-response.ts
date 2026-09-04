@@ -18,6 +18,7 @@ export class StrictHttpResponseError extends Error {
     public readonly kind: "cancelled" | "stalled" | "malformed" | "truncated" | "oversized" | "backpressure" | "redirect",
     public readonly upstreamBytes: number,
     public readonly outboundBytes: number,
+    public readonly outboundWriteUncertain = false,
   ) {
     super(kind);
     this.name = "StrictHttpResponseError";
@@ -69,6 +70,9 @@ class DeadlineByteReader {
     while (true) {
       const index = find(this.buffered, separator);
       if (index >= 0) {
+        if (index + separator.byteLength > maximum) {
+          throw new StrictHttpResponseError("oversized", this.bytesRead, 0);
+        }
         const value = this.buffered.slice(0, index);
         this.buffered = this.buffered.slice(index + separator.byteLength);
         return value;
@@ -185,6 +189,12 @@ const parseHead = (bytes: Uint8Array): ParsedHead => {
   const framing = parseResponseFraming(status, headers, bytes);
   const contentTypes = headers.get("content-type") ?? [];
   if (contentTypes.length > 1) {throw malformedHead(bytes);}
+  // This bounded adapter neither decompresses nor rewrites encoded payloads.
+  const contentEncodings = headers.get("content-encoding") ?? [];
+  if (contentEncodings.length > 1
+    || (contentEncodings.length === 1 && contentEncodings[0]?.toLowerCase() !== "identity")) {
+    throw malformedHead(bytes);
+  }
   return Object.freeze({ status, ...framing, contentType: contentTypes[0] });
 };
 
@@ -208,7 +218,58 @@ const write = async (
     await context.clock.within(context.limits.deadline, () => context.connection.write(bytes), context.signal);
     return outboundBytes + bytes.byteLength;
   } catch {
-    throw new StrictHttpResponseError(context.signal?.aborted ? "cancelled" : "backpressure", upstreamBytes, outboundBytes);
+    throw new StrictHttpResponseError(context.signal?.aborted ? "cancelled" : "backpressure", upstreamBytes, outboundBytes, true);
+  }
+};
+
+const forwardSizedBody = async (
+  reader: DeadlineByteReader,
+  size: number,
+  maximumChunk: number,
+  emit: (chunk: Uint8Array) => Promise<void>,
+): Promise<void> => {
+  let remaining = size;
+  while (remaining > 0) {
+    const chunk = await reader.take(Math.min(remaining, maximumChunk));
+    if (chunk === undefined) {throw new StrictHttpResponseError("truncated", reader.bytesRead, 0);}
+    remaining -= chunk.byteLength;
+    await emit(chunk);
+  }
+};
+
+const forwardFramedBody = async (
+  reader: DeadlineByteReader,
+  head: ParsedHead,
+  limits: HttpEgressLimits,
+  emit: (chunk: Uint8Array) => Promise<void>,
+): Promise<void> => {
+  if (head.contentLength !== undefined) {
+    await forwardSizedBody(reader, head.contentLength, limits.maxBufferedBytes, emit);
+    await reader.requireEnd();
+    return;
+  }
+  if (!head.chunked) {
+    await reader.requireEnd();
+    return;
+  }
+  let bodyBytes = 0;
+  while (true) {
+    const line = decoder.decode(await reader.through(CRLF, 34));
+    if (!/^[0-9A-Fa-f]+$/.test(line)) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
+    const size = Number.parseInt(line, 16);
+    if (!Number.isSafeInteger(size) || size > limits.maxOutputBytes - bodyBytes) {
+      throw new StrictHttpResponseError("oversized", reader.bytesRead, 0);
+    }
+    if (size === 0) {
+      const trailers = await reader.through(CRLF, limits.maxUpstreamHeaderBytes);
+      if (trailers.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
+      await reader.requireEnd();
+      return;
+    }
+    await forwardSizedBody(reader, size, limits.maxBufferedBytes, emit);
+    bodyBytes += size;
+    const ending = await reader.through(CRLF, 2);
+    if (ending.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
   }
 };
 
@@ -238,41 +299,14 @@ export const forwardStrictHttpResponse = async (
     if (bodyBytes > limits.maxOutputBytes) {throw new StrictHttpResponseError("oversized", reader.bytesRead, outboundBytes);}
     outboundBytes = await write(writeContext, chunk, reader.bytesRead, outboundBytes);
   };
-  if (head.contentLength !== undefined) {
-    let remaining = head.contentLength;
-    while (remaining > 0) {
-      const chunk = await reader.take(Math.min(remaining, limits.maxBufferedBytes));
-      if (chunk === undefined) {throw new StrictHttpResponseError("truncated", reader.bytesRead, outboundBytes);}
-      remaining -= chunk.byteLength;
-      await emit(chunk);
+  try {
+    await forwardFramedBody(reader, head, limits, emit);
+  } catch (error) {
+    if (!(error instanceof StrictHttpResponseError)) {
+      throw new StrictHttpResponseError("malformed", reader.bytesRead, outboundBytes);
     }
-    await reader.requireEnd();
-  } else if (head.chunked) {
-    while (true) {
-      const line = decoder.decode(await reader.through(CRLF, 32));
-      if (!/^[0-9A-Fa-f]+$/.test(line)) {throw new StrictHttpResponseError("malformed", reader.bytesRead, outboundBytes);}
-      const size = Number.parseInt(line, 16);
-      if (!Number.isSafeInteger(size) || size > limits.maxOutputBytes - bodyBytes) {
-        throw new StrictHttpResponseError("oversized", reader.bytesRead, outboundBytes);
-      }
-      if (size === 0) {
-        const trailers = await reader.through(CRLF, limits.maxUpstreamHeaderBytes);
-        if (trailers.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, outboundBytes);}
-        await reader.requireEnd();
-        break;
-      }
-      let remaining = size;
-      while (remaining > 0) {
-        const chunk = await reader.take(Math.min(remaining, limits.maxBufferedBytes));
-        if (chunk === undefined) {throw new StrictHttpResponseError("truncated", reader.bytesRead, outboundBytes);}
-        remaining -= chunk.byteLength;
-        await emit(chunk);
-      }
-      const ending = await reader.through(CRLF, 0);
-      if (ending.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, outboundBytes);}
-    }
-  } else {
-    await reader.requireEnd();
+    throw new StrictHttpResponseError(error.kind, reader.bytesRead, Math.max(outboundBytes, error.outboundBytes),
+      error.outboundWriteUncertain);
   }
   return Object.freeze({ status: head.status, upstreamBytes: reader.bytesRead, outboundBytes });
 };

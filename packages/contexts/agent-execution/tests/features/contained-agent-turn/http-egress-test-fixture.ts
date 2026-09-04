@@ -161,7 +161,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
             observations.dispatchedRequests.push(wireRequest.slice());
             options.abortOnDispatch?.abort();
             if (options.dispatch === "throw") {throw new Error("synthetic dispatch crash");}
-            return options.dispatch ?? defaultDispatch;
+            return options.dispatch ?? Object.freeze({ ...defaultDispatch, acceptedRequestBytes: wireRequest.byteLength });
           },
           close: async () => {
             observations.order.push("upstream-close");

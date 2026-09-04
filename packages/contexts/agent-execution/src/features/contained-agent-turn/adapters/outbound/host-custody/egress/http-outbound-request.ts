@@ -39,9 +39,10 @@ const concat = (parts: readonly Uint8Array[]): Uint8Array => {
   return result;
 };
 
-const assertRoute = (route: HttpEgressRoute): void => {
+export const assertHttpEgressRoute = (route: HttpEgressRoute): void => {
   if (!TOKEN.test(route.upstreamMethod) || route.upstreamMethod === "CONNECT") {throw new HttpOutboundRequestError();}
-  if (!route.upstreamPath.startsWith("/") || route.upstreamPath.startsWith("//") || route.upstreamPath.includes("?") || route.upstreamPath.includes("#")) {
+  if (!route.upstreamPath.startsWith("/") || route.upstreamPath.startsWith("//")
+    || /[^\x21-\x7e]|[?#]/.test(route.upstreamPath)) {
     throw new HttpOutboundRequestError();
   }
   if (!/^[A-Za-z0-9.-]+$/.test(route.originHost) || !/^[A-Za-z0-9.-]+$/.test(route.sni)) {throw new HttpOutboundRequestError();}
@@ -60,7 +61,7 @@ export const createOutboundHttpRequest = (
   route: HttpEgressRoute,
   authorization: Uint8Array,
 ): Uint8Array => {
-  assertRoute(route);
+  assertHttpEgressRoute(route);
   if (!authorizationIsSafe(authorization)) {throw new HttpOutboundRequestError();}
   const forwarded = request.headers
     .filter(header => !STRIPPED_HEADERS.has(header.name))

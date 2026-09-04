@@ -106,6 +106,8 @@ export type HttpEgressReceipt = Readonly<{
   upstreamRequestBytes: number;
   upstreamResponseBytes: number;
   outboundResponseBytes: number;
+  /** Confirmed byte count excludes any write whose completion was not observed. */
+  outboundResponseWriteUncertain: boolean;
   firstByteState: HttpEgressFirstByteState;
   inboundClosure: HttpEgressClosureState;
   upstreamClosure: HttpEgressClosureState;
