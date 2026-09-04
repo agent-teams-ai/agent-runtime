@@ -30,12 +30,28 @@ const exactArray = (value: unknown, maximumItems: number): readonly string[] | u
   return Object.freeze(output);
 };
 
-export const snapshotHostHttpRoute = (value: unknown): HttpEgressRoute | undefined => {
+const snapshotRouteDescriptors = (value: unknown): PropertyDescriptorMap | undefined => {
   if (typeof value !== "object" || value === null || utilTypes.isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) {return undefined;}
   const descriptors = Object.getOwnPropertyDescriptors(value); const keys = Reflect.ownKeys(descriptors);
   if (keys.length !== ROUTE_FIELDS.length || keys.some(key => typeof key !== "string" || !ROUTE_FIELDS.includes(key as never))
     || ROUTE_FIELDS.some(name => descriptors[name] === undefined || !("value" in descriptors[name]!))) {return undefined;}
+  return descriptors;
+};
+
+const validRoutePath = (value: unknown): value is string => bounded(value, 16_384)
+  && value.startsWith("/") && !value.startsWith("//") && !/[^\x21-\x7e]|[?#]/.test(value);
+
+const validRouteHeaderNames = (forwarded: readonly string[], credentials: readonly string[]): boolean =>
+  new Set(forwarded).size === forwarded.length
+  && !forwarded.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || !PRESENTATION.has(name))
+  && credentials.length !== 0 && new Set(credentials).size === credentials.length
+  && !credentials.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || PRESENTATION.has(name)
+    || name === "host" || name === "content-length" || name === "connection");
+
+export const snapshotHostHttpRoute = (value: unknown): HttpEgressRoute | undefined => {
+  const descriptors = snapshotRouteDescriptors(value);
+  if (descriptors === undefined) {return undefined;}
   const read = (name: typeof ROUTE_FIELDS[number]): unknown => descriptors[name]?.value;
   const forwarded = exactArray(read("forwardedRequestHeaderNames"), 32);
   const credentials = exactArray(read("credentialFieldNames"), 16);
@@ -44,12 +60,8 @@ export const snapshotHostHttpRoute = (value: unknown): HttpEgressRoute | undefin
   if (!bounded(receipt, 512) || !bounded(originHost, 512) || !/^[A-Za-z0-9.-]+$/.test(originHost)
     || !Number.isSafeInteger(originPort) || (originPort as number) < 1 || (originPort as number) > 65_535
     || !bounded(method, 128) || !TOKEN.test(method) || method === "CONNECT"
-    || !bounded(path, 16_384) || !path.startsWith("/") || path.startsWith("//") || /[^\x21-\x7e]|[?#]/.test(path)
-    || forwarded === undefined || credentials === undefined || new Set(forwarded).size !== forwarded.length
-    || forwarded.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || !PRESENTATION.has(name))
-    || credentials.length === 0 || new Set(credentials).size !== credentials.length
-    || credentials.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || PRESENTATION.has(name)
-      || name === "host" || name === "content-length" || name === "connection")) {return undefined;}
+    || !validRoutePath(path) || forwarded === undefined || credentials === undefined
+    || !validRouteHeaderNames(forwarded, credentials)) {return undefined;}
   return Object.freeze({routeReceiptDigest: receipt, originHost, originPort: originPort as number,
     upstreamMethod: method as HttpEgressRoute["upstreamMethod"], upstreamPath: path,
     forwardedRequestHeaderNames: forwarded as HttpEgressRoute["forwardedRequestHeaderNames"],
