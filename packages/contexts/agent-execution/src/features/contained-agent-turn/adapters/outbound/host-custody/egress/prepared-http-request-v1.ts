@@ -1,8 +1,7 @@
-import { snapshotHttpBytes, zeroHttpBytes } from "./http-byte-intrinsics.js";
+import { zeroHttpBytes } from "./http-byte-intrinsics.js";
 import {
   PREPARED_HTTP_REQUEST_V1_LIMITS,
   PreparedHttpRequestV1Error,
-  detachPreparedHttpByteSpanV1,
   type PreparedHttpRequestInputV1,
   type ValidatedPreparedHttpFieldV1,
   validatePreparedHttpRequestV1,
@@ -22,19 +21,22 @@ export type PreparedHttpCredentialValueSpanV1 = Readonly<{
  * Host-private physical serialization. Header-line spans include their final
  * CRLF; credential-value spans exclude the field name, `: `, and CRLF.
  *
- * Input byte arrays remain caller-owned. This product snapshots them and owns
- * only wireBytes and headerProjectionBytes. dispose() clears both idempotently.
- * Span metadata and arrays are frozen. No whole-buffer atomicity is claimed
- * against concurrent SharedArrayBuffer writers.
+ * Input byte arrays remain caller-owned. Serialized bytes stay private until
+ * consume() atomically transfers their custody exactly once. The recipient
+ * then owns zeroization and must call dispose() before releasing that custody.
  */
 export type PreparedHttpRequestV1 = Readonly<{
+  consume(): PreparedHttpRequestCustodyV1 | undefined;
+  dispose(): void;
+}>;
+
+export type PreparedHttpRequestCustodyV1 = Readonly<{
   wireBytes: Uint8Array;
   targetSpan: PreparedHttpByteSpanV1;
   headerLineSpans: readonly PreparedHttpByteSpanV1[];
   credentialValueSpans: readonly PreparedHttpCredentialValueSpanV1[];
   bodySpan: PreparedHttpByteSpanV1;
   headerProjectionBytes: Uint8Array;
-  snapshotSpan(span: PreparedHttpByteSpanV1): Uint8Array | undefined;
   dispose(): void;
 }>;
 
@@ -168,46 +170,40 @@ export const createPreparedHttpRequestV1 = (input: PreparedHttpRequestInputV1): 
     if (offset !== wireBytes.byteLength) {throw new PreparedHttpRequestV1Error();}
 
     headerProjectionBytes = createHeaderProjection(wireBytes, headerLineSpans);
-    const ownedWireBytes = wireBytes;
-    const ownedProjectionBytes = headerProjectionBytes;
-    const ownedWireLength = ownedWireBytes.byteLength;
+    let ownedWireBytes: Uint8Array | undefined = wireBytes;
+    let ownedProjectionBytes: Uint8Array | undefined = headerProjectionBytes;
     let disposed = false;
     return Object.freeze({
-      wireBytes: ownedWireBytes,
-      targetSpan,
-      headerLineSpans: Object.freeze(headerLineSpans),
-      credentialValueSpans: Object.freeze(credentialValueSpans),
-      bodySpan,
-      headerProjectionBytes: ownedProjectionBytes,
-      snapshotSpan: (span: PreparedHttpByteSpanV1): Uint8Array | undefined => {
-        if (disposed) {return undefined;}
-        const detachedSpan = detachPreparedHttpByteSpanV1(span, ownedWireLength);
-        if (detachedSpan === undefined) {return undefined;}
-        // The two intrinsic snapshots establish an exact live length without
-        // consulting an overridable property on the exposed result view.
-        const shorterWireSnapshot = snapshotHttpBytes(ownedWireBytes, ownedWireLength - 1);
-        if (shorterWireSnapshot !== undefined) {
-          zeroHttpBytes(shorterWireSnapshot);
-          return undefined;
-        }
-        const wireSnapshot = snapshotHttpBytes(ownedWireBytes, ownedWireLength);
-        if (wireSnapshot === undefined) {return undefined;}
-        try {
-          const {offset: spanOffset, length: spanLength} = detachedSpan;
-          const copy = new Uint8Array(spanLength);
-          for (let index = 0; index < spanLength; index += 1) {
-            copy[index] = wireSnapshot[spanOffset + index] as number;
-          }
-          return copy;
-        } finally {
-          zeroHttpBytes(wireSnapshot);
-        }
+      consume: (): PreparedHttpRequestCustodyV1 | undefined => {
+        if (disposed || ownedWireBytes === undefined || ownedProjectionBytes === undefined) {return undefined;}
+        disposed = true;
+        const transferredWireBytes = ownedWireBytes;
+        const transferredProjectionBytes = ownedProjectionBytes;
+        ownedWireBytes = undefined;
+        ownedProjectionBytes = undefined;
+        let custodyDisposed = false;
+        return Object.freeze({
+          wireBytes: transferredWireBytes,
+          targetSpan,
+          headerLineSpans: Object.freeze(headerLineSpans),
+          credentialValueSpans: Object.freeze(credentialValueSpans),
+          bodySpan,
+          headerProjectionBytes: transferredProjectionBytes,
+          dispose: (): void => {
+            if (custodyDisposed) {return;}
+            custodyDisposed = true;
+            zeroHttpBytes(transferredWireBytes);
+            zeroHttpBytes(transferredProjectionBytes);
+          },
+        });
       },
       dispose: (): void => {
         if (disposed) {return;}
         disposed = true;
         zeroHttpBytes(ownedWireBytes);
         zeroHttpBytes(ownedProjectionBytes);
+        ownedWireBytes = undefined;
+        ownedProjectionBytes = undefined;
       },
     });
   } catch (error) {
