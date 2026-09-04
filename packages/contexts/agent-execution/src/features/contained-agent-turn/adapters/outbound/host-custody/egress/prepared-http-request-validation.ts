@@ -197,9 +197,10 @@ const exactArrayValues = (value: unknown, maximum: number): readonly unknown[] =
   if (!Array.isArray(value) || utilTypes.isProxy(value) || value.length > maximum) {
     throw new PreparedHttpRequestV1Error();
   }
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
-  if (keys.length !== value.length + 1 || descriptors.length?.value !== value.length) {
+  if (keys.length !== value.length + 1 || lengthDescriptor?.value !== value.length) {
     throw new PreparedHttpRequestV1Error();
   }
   const result: unknown[] = [];
