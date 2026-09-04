@@ -15,8 +15,14 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import {
   assertExactCodexAppServerPlatformTuple,
+  CODEX_APP_SERVER_ADAPTER_REVISION,
+  CODEX_APP_SERVER_BINDINGS_SHA256,
   CODEX_APP_SERVER_DARWIN_ARM64_TUPLE,
   CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  CODEX_APP_SERVER_PACKAGE_REVISION,
+  CODEX_APP_SERVER_SCHEMA_SHA256,
+  CODEX_APP_SERVER_VERSION,
+  CODEX_CAPABILITY_MANIFEST_REVISION,
   selectCodexAppServerPlatformTuple,
   validateCodexAppServerUserAgent,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
@@ -24,17 +30,34 @@ import { codexReceipt } from "../../../dist/features/contained-agent-turn/adapte
 import { boundary } from "../../codex-app-server-contained-turn-provider-fixture.ts";
 
 const linuxUserAgent =
-  "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)";
+  "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)";
 const candidateAuthority = JSON.parse(readFileSync(new URL(
   "../../fixtures/protocol/codex-app-server-0.150.1/manifest.json", import.meta.url,
-), "utf8")) as {readonly candidateTargets: {readonly "darwin-arm64": {
+), "utf8")) as {
+  readonly dependencyAlias: string; readonly package: string; readonly resolvedPackageTarget: string;
+  readonly schemaVersion: number; readonly candidateTargets: {readonly "darwin-arm64": {
   readonly authority: string; readonly binaryPath: string; readonly binarySha256: string;
   readonly initialize: {readonly platformFamily: string; readonly platformOs: string; readonly userAgent: string};
-  readonly nativePackage: string; readonly nativeTarget: string; readonly qualification: string;
-  readonly wrapperPackage: string;
+  readonly nativeDependencyAliasRevision: string; readonly nativeTarget: string; readonly qualification: string;
+  readonly resolvedNativePackageRevision: string; readonly wrapperPackage: string;
 }}};
 const darwinCandidate = candidateAuthority.candidateTargets["darwin-arm64"];
 const darwinUserAgent = darwinCandidate.initialize.userAgent;
+
+test("pins the exact experimental Codex contract and immutable capability identity", () => {
+  assert.equal(CODEX_APP_SERVER_VERSION, "0.150.1");
+  assert.equal(CODEX_APP_SERVER_PACKAGE_REVISION, "@openai/codex@0.150.1");
+  assert.equal(CODEX_APP_SERVER_ADAPTER_REVISION,
+    "codex-app-server-contained-turn:0.150.1+native-permission-config-v2");
+  assert.equal(CODEX_APP_SERVER_SCHEMA_SHA256,
+    "9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56");
+  assert.equal(CODEX_APP_SERVER_BINDINGS_SHA256,
+    "3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc");
+  assert.equal(CODEX_CAPABILITY_MANIFEST_REVISION,
+    "contained-turn:v1:codex-app-server:0.150.1:schema-9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56:bindings-3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc:agent-runtime-contained-v1:native-permission-config-v2");
+  assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.protocolRevision, CODEX_CAPABILITY_MANIFEST_REVISION);
+  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.protocolRevision, CODEX_CAPABILITY_MANIFEST_REVISION);
+});
 
 test("selects the supported Codex Linux tuple and admitted static Darwin candidate", () => {
   assert.deepEqual(selectCodexAppServerPlatformTuple({ architecture: "x64", platform: "linux" }),
@@ -45,8 +68,21 @@ test("selects the supported Codex Linux tuple and admitted static Darwin candida
     "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386");
   assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.binarySha256,
     darwinCandidate.binarySha256);
-  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.nativePackageRevision,
-    darwinCandidate.nativePackage);
+  assert.equal(candidateAuthority.schemaVersion, 5);
+  assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.nativeDependencyAliasRevision,
+    candidateAuthority.package);
+  assert.equal(CODEX_APP_SERVER_LINUX_X64_TUPLE.resolvedNativePackageRevision,
+    candidateAuthority.resolvedPackageTarget);
+  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.nativeDependencyAliasRevision,
+    darwinCandidate.nativeDependencyAliasRevision);
+  assert.equal(darwinCandidate.nativeDependencyAliasRevision,
+    "@openai/codex-darwin-arm64@0.150.1");
+  assert.equal(CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.resolvedNativePackageRevision,
+    darwinCandidate.resolvedNativePackageRevision);
+  assert.equal(darwinCandidate.resolvedNativePackageRevision,
+    "@openai/codex@0.150.1-darwin-arm64");
+  assert.equal("nativePackageRevision" in CODEX_APP_SERVER_LINUX_X64_TUPLE, false);
+  assert.equal("nativePackageRevision" in CODEX_APP_SERVER_DARWIN_ARM64_TUPLE, false);
   assert.equal(darwinCandidate.wrapperPackage, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE.packageRevision);
   assert.equal(darwinCandidate.nativeTarget, "aarch64-apple-darwin");
   assert.equal(darwinCandidate.binaryPath, "vendor/aarch64-apple-darwin/codex/codex");
@@ -70,7 +106,7 @@ test("accepts the two real initialize observations without pinning patch or buil
   validateCodexAppServerUserAgent(linuxUserAgent, CODEX_APP_SERVER_LINUX_X64_TUPLE);
   validateCodexAppServerUserAgent(darwinUserAgent, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE);
   validateCodexAppServerUserAgent(
-    "agent-runtime/0.150.1 (Ubuntu 26.10; x86_64) release.7 (agent-runtime; codex-app-server-contained-turn:0.150.1)",
+    "agent-runtime/0.150.1 (Ubuntu 26.10; x86_64) release.7 (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
     CODEX_APP_SERVER_LINUX_X64_TUPLE,
   );
   validateCodexInitializeEvidence({
@@ -89,7 +125,7 @@ test("rejects hostile, malformed, crossed, prefixed, suffixed, and oversized ini
     linuxUserAgent.replace("Ubuntu", "Mac OS"),
     linuxUserAgent.replace("agent-runtime/", "other-client/"),
     linuxUserAgent.replace("(agent-runtime;", "(other-client;"),
-    linuxUserAgent.replace("codex-app-server-contained-turn:0.150.1", "codex-app-server-contained-turn:other"),
+    linuxUserAgent.replace("codex-app-server-contained-turn:0.150.1+native-permission-config-v2", "codex-app-server-contained-turn:other"),
     `prefix-${linuxUserAgent}`,
     `${linuxUserAgent}-suffix`,
     `${linuxUserAgent}\nprivate-path`,
@@ -138,7 +174,7 @@ test("derives Darwin launch identity and requests only the reviewed cooperative 
   try {
     const codexHome = join(privateRoot, "home"); const tmp = join(privateRoot, "tmp");
     mkdirSync(codexHome, { mode: 0o700 }); mkdirSync(tmp, { mode: 0o700 }); mkdirSync(workspace);
-    const exactBoundary = createCodexAppServerPermissionBoundary({ codexHome, workspaceRef: workspace });
+    const exactBoundary = createCodexAppServerPermissionBoundary({ codexHome, intentMode: "analysis", workspaceRef: workspace });
     const plan = createCodexAppServerLaunchPlan({
       boundary: exactBoundary,
       executablePath: "/synthetic/codex-darwin-arm64",

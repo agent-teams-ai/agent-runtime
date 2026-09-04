@@ -1,30 +1,100 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 4,
   "provenance": {
-    "capturedAtUtc": "2026-08-29",
+    "capturedAtUtc": "2026-09-03",
     "generationEnvironment": "brand-new disposable directory with empty mode-0700 HOME/CODEX_HOME/TMPDIR; no credentials, network, app-server turn, or user project",
-    "installedPackage": "@openai/codex-linux-x64@0.150.1",
+    "dependencyAlias": "@openai/codex-linux-x64",
+    "dependencyAliasRevision": "@openai/codex-linux-x64@0.150.1",
+    "installedPackage": "@openai/codex@0.150.1-linux-x64",
     "nativeTarget": "x86_64-unknown-linux-musl",
     "binarySha256": "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
-    "schemaCommand": "codex app-server generate-json-schema --out <disposable-root>/schema",
-    "typesCommand": "codex app-server generate-ts --out <disposable-root>/types",
-    "experimentalFlagUsed": false,
-    "schemaTreeManifestSha256": "8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3",
-    "typesTreeManifestSha256": "a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338",
-    "v2SchemaBundleSha256": "8cdccfc35582696d7141e7f916e0d5a664ab5b5e90b732f104284d2507f369f8",
-    "treeManifestAlgorithm": "sha256 of the byte stream emitted by sha256sum over all regular files sorted by relative path without a leading ./"
+    "schemaCommand": "codex app-server generate-json-schema --out <disposable-root>/schema-experimental --experimental",
+    "typesCommand": "codex app-server generate-ts --out <disposable-root>/generated-experimental --experimental",
+    "experimentalFlagUsed": true,
+    "schemaTreeFileCount": 411,
+    "schemaTreeManifestSha256": "9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56",
+    "typesTreeFileCount": 812,
+    "typesTreeManifestSha256": "3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc",
+    "treeManifestAlgorithm": "SHA-256 of the concatenated UTF-8 records `<lowercase file SHA-256>  <relative path>\\n` for every regular file; relative paths have no leading `./`, contain neither backslash nor LF, and are sorted lexicographically by unsigned UTF-8 bytes (the order returned by Buffer.compare(Buffer.from(path, \"utf8\")))"
   },
   "limitations": {
     "candidateStatus": "pinned candidate and admitted implementation tuple; not qualification-registry qualified",
     "codexItemPaths": "untrusted provider endpoint observations and progress only",
     "nodePathToctou": "lstat/realpath endpoint comparisons cannot prove continuous interval custody and cannot detect a transient substitution restored between observations",
-    "authoritativeContainment": "Host sandbox/mount/guardian custody plus workspace and artifact closure receipts; never Codex item pathnames"
+    "authoritativeContainment": "Host sandbox/mount/guardian custody plus workspace and artifact closure receipts; never Codex item pathnames",
+    "permissionProfileBody": "Codex 0.150.1 generates no PermissionProfile body type. The default_permissions and permissions bodies used by this adapter are admitted only through Config's open JSON intersection and are therefore runtime-validated adapter assumptions, not generated named body shapes."
+  },
+  "configLayerEvidence": {
+    "jsonSchema": {
+      "source": "v2/ConfigReadResponse.json",
+      "sourceSha256": "2de702bfaedcf8f4362b0122299ae412bdc0c244564a376a30fc9624c7df2514",
+      "required": [
+        "config",
+        "name",
+        "version"
+      ],
+      "disabledReason": {
+        "required": false,
+        "types": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "typeScript": {
+      "source": "v2/ConfigLayer.ts",
+      "sourceSha256": "24d1d2c7e0c774e0df55d767bb6d1874f92776daa96f2856f184a296de203161",
+      "fragment": "export type ConfigLayer = { name: ConfigLayerSource, version: string, config: JsonValue, disabledReason: string | null, };",
+      "disabledReasonRequired": true
+    },
+    "wireValidationBasis": "Runtime wire shape follows the generated JSON Schema, while the admissible active-evidence subset follows the observed Codex 0.150.1 wire: omitted or null disabledReason is accepted, any non-null string denotes a disabled layer and is rejected, and non-string values are malformed and rejected. The generated TypeScript rendering is retained as contradictory generator evidence and does not make the wire field required."
   },
   "generatedTypeFragments": [
     {
+      "source": "v2/ActivePermissionProfile.ts",
+      "sourceSha256": "9d137fa5e3cdbd3392e9a6d373b45e50f2f2643662a735ac90c6f1103e0f97a7",
+      "fragment": "id: string,\n/**\n * Parent profile identifier from the selected permissions profile's\n * `extends` setting, when present.\n */\nextends: string | null, };",
+      "fragmentPurpose": "The generated named active profile carries both the selected id and parent profile id used by the adapter."
+    },
+    {
+      "source": "v2/Config.ts",
+      "sourceSha256": "7130dcb6ffeff35935b9b65a3698c6fca97d814bdbc961e2bd367c62e0474c98",
+      "fragment": "} & ({ [key in string]?: number | string | boolean | Array<JsonValue> | { [key in string]?: JsonValue } | null });",
+      "fragmentPurpose": "The permission-profile body has no generated named type and enters Config only through this open JSON intersection."
+    },
+    {
+      "source": "v2/ConfigLayer.ts",
+      "sourceSha256": "24d1d2c7e0c774e0df55d767bb6d1874f92776daa96f2856f184a296de203161",
+      "fragment": "export type ConfigLayer = { name: ConfigLayerSource, version: string, config: JsonValue, disabledReason: string | null, };",
+      "fragmentPurpose": "The generated TypeScript renders disabledReason as required, unlike the generated JSON Schema and observed 0.150.1 wire."
+    },
+    {
+      "source": "v2/ConfigLayerMetadata.ts",
+      "sourceSha256": "bc6dac6f3c9ac7fa7d7a40c15abc4114cfe230f4777cabf8e0e130d70b78a515",
+      "fragment": "export type ConfigLayerMetadata = { name: ConfigLayerSource, version: string, };"
+    },
+    {
+      "source": "v2/ThreadStartResponse.ts",
+      "sourceSha256": "056e252e32c78761d250c7688cb102752ce8b6f445e509ae87766ba5588a8924",
+      "fragment": "activePermissionProfile: ActivePermissionProfile | null,",
+      "fragmentPurpose": "The generated response exposes named permission-profile provenance used by the adapter."
+    },
+    {
+      "source": "v2/ThreadStartParams.ts",
+      "sourceSha256": "7a3fddbb0cf0585c52edbf19e3a1f6e691681f18ab509f7abfa416da7f0ac824",
+      "fragment": "permissions?: string | null,",
+      "fragmentPurpose": "The generated request selects a named thread permission profile."
+    },
+    {
+      "source": "v2/TurnStartParams.ts",
+      "sourceSha256": "b876212f33e15754db8242ce9367318c6ee3a96686216663a37869c40a8b3d7f",
+      "fragment": "permissions?: string | null,",
+      "fragmentPurpose": "The generated request selects a named turn permission profile."
+    },
+    {
       "source": "InitializeResponse.ts",
       "sourceSha256": "4feabcb66d4bf01869d2780beaec1838d41b30213cdf57de175298aed01f5379",
-      "fragment": "export type InitializeResponse = { userAgent: string, codexHome: AbsolutePathBuf, platformFamily: string, platformOs: string, };"
+      "fragment": "export type InitializeResponse = { userAgent: string,"
     },
     {
       "source": "v2/ConfigReadResponse.ts",
@@ -34,12 +104,12 @@
     {
       "source": "v2/PermissionProfileListResponse.ts",
       "sourceSha256": "5ff6a99f0a0cc3956de6e980ad45d50c48e5319a9d421f11a85c7c96d3d92644",
-      "fragment": "export type PermissionProfileListResponse = { data: Array<PermissionProfileSummary>, nextCursor: string | null, };"
+      "fragment": "export type PermissionProfileListResponse = { data: Array<PermissionProfileSummary>,"
     },
     {
       "source": "v2/PermissionProfileSummary.ts",
       "sourceSha256": "1202513133554ed4a96b916b5117ff2a0e5bbded9d326f44d39d622a418944c7",
-      "fragment": "export type PermissionProfileSummary = { id: string, description: string | null, allowed: boolean, };"
+      "fragment": "allowed: boolean, };"
     },
     {
       "source": "v2/TurnInterruptResponse.ts",

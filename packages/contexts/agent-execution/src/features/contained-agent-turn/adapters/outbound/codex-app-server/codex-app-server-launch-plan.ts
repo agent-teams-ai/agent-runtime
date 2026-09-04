@@ -129,6 +129,9 @@ export const createCodexAppServerLaunchPlan = (
 ): CodexAppServerLaunchPlan => {
   const platformTuple = selectCodexAppServerPlatformTuple(options.platformTarget);
   const intentMode = acceptedIntentMode(options.intentMode);
+  if (options.boundary.intentMode !== intentMode) {
+    throw new TypeError("Codex launch intent mode does not match the permission boundary");
+  }
   validateCodexDirectoryIdentity("codexHome", options.boundary.codexHomeIdentity);
   validateCodexDirectoryIdentity("workspaceRef", options.boundary.workspaceIdentity, false);
   const tmpDirIdentity = privateTmpIdentity(options.tmpDir);

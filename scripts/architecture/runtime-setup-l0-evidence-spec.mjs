@@ -131,6 +131,94 @@ export const changes = Object.freeze([
     id: "contained-turn-domain-line-limit-follow-up",
     revision: "ff7496a89f75794a5bfbec5a425a70adb57d8868",
   }),
+  Object.freeze({
+    id: "contained-turn-output-validation-follow-up",
+    revision: "11bfa8ba29a5c828903ab1fba8caeb8d2c226af1",
+  }),
+  Object.freeze({
+    id: "codex-permission-wire-profile-validation",
+    revision: "937c5520b10fa6b5ca9e7ce7c4a7b1319c4cf914",
+  }),
+  Object.freeze({
+    id: "codex-empty-system-config-acceptance",
+    revision: "5886746fc54b06f5ed712273b3e2db63f47fd5b8",
+  }),
+  Object.freeze({
+    id: "codex-canary-credential-json-hardening",
+    revision: "9845418aaa9a2460100395e663f8b381fe34d3a8",
+  }),
+  Object.freeze({
+    id: "codex-native-permission-profile-selection",
+    revision: "5f01a0a7da79f82cdace15cbec4650d3b42b7a60",
+  }),
+  Object.freeze({
+    id: "codex-permission-fixture-intent-binding",
+    revision: "f0c3ed55f91257f1860561e2f6dbf5e2d1f4521b",
+  }),
+  Object.freeze({
+    id: "codex-launch-plan-fixture-intent-alignment",
+    revision: "497c84280169c06e3ad4df8d5864c365780e248c",
+  }),
+  Object.freeze({
+    id: "codex-native-permission-contract-versioning",
+    revision: "0e2ef08a5d31a01bb1ee81028bad2f72f8dd320d",
+  }),
+  Object.freeze({
+    id: "codex-pre-turn-buffer-bounds",
+    revision: "3d3d4e5b3155ac3e5e160675b691e93c0cbd5711",
+  }),
+  Object.freeze({
+    id: "codex-exact-config-evidence-validation",
+    revision: "6e929d2be072358de547b6cef2083c32052b813f",
+  }),
+  Object.freeze({
+    id: "codex-experimental-wire-evidence-binding",
+    revision: "f24c5c42cf8fd6ba3b97eb054c706cd2e8904239",
+  }),
+  Object.freeze({
+    id: "codex-config-evidence-srp-refactor",
+    revision: "e708cdafb2dcbab1f5e18c1a5663f6f50c4ca77c",
+  }),
+  Object.freeze({
+    id: "codex-empty-thread-identity-rejection",
+    revision: "c61af8515031793c64ccbb3616011cf62eaca7d0",
+  }),
+  Object.freeze({
+    id: "codex-deterministic-contract-evidence",
+    revision: "d7650584ffe76b07c5bc0355fe8fef0c4f1a88dc",
+  }),
+  Object.freeze({
+    id: "codex-contract-fixture-test-srp",
+    revision: "f5c62275018835f1a0990e2be75874b5e2b4cc1e",
+  }),
+  Object.freeze({
+    id: "codex-credential-canary-claim-boundary",
+    revision: "374404ee9a105844ef41a5272bd07d7239e54176",
+  }),
+  Object.freeze({
+    id: "codex-protocol-adversarial-test-srp",
+    revision: "f13d4173c6a92835a42d60e776073f23c66b1a76",
+  }),
+  Object.freeze({
+    id: "codex-regeneration-claim-binding",
+    revision: "159e2faf0871b353c45ed4d0365dffbf18af679c",
+  }),
+  Object.freeze({
+    id: "codex-aggregate-pre-turn-budget",
+    revision: "85bc7ba3226a3d5211aab9fe1c6c23ba70001a2d",
+  }),
+  Object.freeze({
+    id: "codex-regeneration-verifier-test-srp",
+    revision: "9df8b3b54a9b9e2fce39a933f41e3ca35203425b",
+  }),
+  Object.freeze({
+    id: "codex-regeneration-verifier-lint-hardening",
+    revision: "7135a4a054d48e40eb81ba77e4cad4cd158ad495",
+  }),
+  Object.freeze({
+    id: "codex-native-package-provenance",
+    revision: "739cc9bfdea7dc0527989b42cb8dd89a11387ea8",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -138,15 +226,15 @@ export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
     fileCount: 16,
-    sha256: "6c3dc86c204045403af01c2f5750df260bd7298cd011db91c164269ea7b4fe1b",
+    sha256: "694a67d5823c72e08ca3dfb9e96750d6fa5d5f2a298268f835a8452f2f12fb7a",
   }),
   sources: Object.freeze({
     fileCount: 298,
-    sha256: "e23f5fbc2affae9b62bf490c255592b2d443aea959a979c345ab3470299d8855",
+    sha256: "e9a6918a66517bf37b5843a6aca41afd635c0c022f0889ca857ed69970c7f68c",
   }),
   tests: Object.freeze({
-    fileCount: 129,
-    sha256: "2369ea76d0e8e67e43e3f889ed7d7d8194aa9dc2e2c9e1578ce4aa12a1370ab7",
+    fileCount: 135,
+    sha256: "9603cd4c0567c9ffd6cc7c71b882965ca192b832819cd35a948535e4213f51fa",
   }),
 });
 

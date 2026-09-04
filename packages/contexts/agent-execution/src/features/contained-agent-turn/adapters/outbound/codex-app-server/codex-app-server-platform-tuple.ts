@@ -2,12 +2,16 @@ import type { HostCustodyContainmentProfile } from "../host-custody/custodied-pr
 
 export const CODEX_APP_SERVER_VERSION = "0.150.1";
 export const CODEX_APP_SERVER_PACKAGE_REVISION = "@openai/codex@0.150.1";
-export const CODEX_APP_SERVER_SCHEMA_SHA256 = "8e39bf38e4b09d02ac867b1fb81447c544f8915361d60ce4da25415886ba88d3";
-export const CODEX_APP_SERVER_BINDINGS_SHA256 = "a690fb0c17d752f4a9e59be327dc661ab93e6aa0b59b79f93ed6edd70c258338";
-export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.150.1";
+export const CODEX_APP_SERVER_SCHEMA_SHA256 = "9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56";
+export const CODEX_APP_SERVER_BINDINGS_SHA256 = "3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc";
+// Native permission/configuration behavior is part of the adapter contract.
+// Keep the provider package, binary, and schema revisions stable while
+// changing the immutable adapter identity for this admitted candidate behavior;
+// retained evidence does not qualify behavior, route, or deployment.
+export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.150.1+native-permission-config-v2";
 export const CODEX_PERMISSION_PROFILE_ID = "agent-runtime-contained-v1";
 export const CODEX_CAPABILITY_MANIFEST_REVISION =
-  `contained-turn:v1:codex-app-server:0.150.1:schema-${CODEX_APP_SERVER_SCHEMA_SHA256}:bindings-${CODEX_APP_SERVER_BINDINGS_SHA256}:agent-runtime-contained-v1`;
+  `contained-turn:v1:codex-app-server:0.150.1:schema-${CODEX_APP_SERVER_SCHEMA_SHA256}:bindings-${CODEX_APP_SERVER_BINDINGS_SHA256}:agent-runtime-contained-v1:native-permission-config-v2`;
 
 export type CodexAppServerPlatform = "darwin" | "linux";
 export type CodexAppServerArchitecture = "arm64" | "x64";
@@ -25,12 +29,13 @@ export interface CodexAppServerPlatformTuple {
   readonly binarySha256: string;
   readonly clientName: "agent-runtime";
   readonly containmentProfile: HostCustodyContainmentProfile;
-  readonly nativePackageRevision: string;
+  readonly nativeDependencyAliasRevision: string;
   readonly packageRevision: typeof CODEX_APP_SERVER_PACKAGE_REVISION;
   readonly platform: CodexAppServerPlatform;
   readonly platformFamily: "unix";
   readonly platformOs: "linux" | "macos";
   readonly protocolRevision: typeof CODEX_CAPABILITY_MANIFEST_REVISION;
+  readonly resolvedNativePackageRevision: string;
   readonly userAgentArchitecture: "arm64" | "x86_64";
   readonly userAgentOsName: "Mac OS" | "Ubuntu";
   readonly version: typeof CODEX_APP_SERVER_VERSION;
@@ -45,12 +50,13 @@ export const CODEX_APP_SERVER_LINUX_X64_TUPLE = tuple({
   binarySha256: "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
   clientName: "agent-runtime",
   containmentProfile: "strict-linux-cgroup-v2",
-  nativePackageRevision: "@openai/codex-linux-x64@0.150.1",
+  nativeDependencyAliasRevision: "@openai/codex-linux-x64@0.150.1",
   packageRevision: CODEX_APP_SERVER_PACKAGE_REVISION,
   platform: "linux",
   platformFamily: "unix",
   platformOs: "linux",
   protocolRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
+  resolvedNativePackageRevision: "@openai/codex@0.150.1-linux-x64",
   userAgentArchitecture: "x86_64",
   userAgentOsName: "Ubuntu",
   version: CODEX_APP_SERVER_VERSION,
@@ -63,12 +69,13 @@ export const CODEX_APP_SERVER_DARWIN_ARM64_TUPLE = tuple({
   binarySha256: "a14f9a907c12c8812878b70e6b7d65f81c39ed795513e46a55817d7428c0ca6b",
   clientName: "agent-runtime",
   containmentProfile: "cooperative-darwin-posix-process-group",
-  nativePackageRevision: "@openai/codex-darwin-arm64@0.150.1",
+  nativeDependencyAliasRevision: "@openai/codex-darwin-arm64@0.150.1",
   packageRevision: CODEX_APP_SERVER_PACKAGE_REVISION,
   platform: "darwin",
   platformFamily: "unix",
   platformOs: "macos",
   protocolRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
+  resolvedNativePackageRevision: "@openai/codex@0.150.1-darwin-arm64",
   userAgentArchitecture: "arm64",
   userAgentOsName: "Mac OS",
   version: CODEX_APP_SERVER_VERSION,

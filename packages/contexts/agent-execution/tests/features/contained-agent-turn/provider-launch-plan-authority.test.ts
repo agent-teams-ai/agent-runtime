@@ -35,7 +35,7 @@ const fixture = () => {
   for (const path of [codexHome, codexTmp, claudeConfig, claudeHome, claudeTmp]) {
     mkdirSync(path, { mode: 0o700, recursive: true });
   }
-  const boundary = createCodexAppServerPermissionBoundary({ codexHome, workspaceRef });
+  const boundary = createCodexAppServerPermissionBoundary({ codexHome, intentMode: "analysis", workspaceRef });
   const privateProjection = createClaudeAgentSdkPrivateProjection({
     configRoot: claudeConfig,
     homeRoot: claudeHome,
@@ -43,7 +43,7 @@ const fixture = () => {
     tempRoot: claudeTmp,
     workspaceRef,
   });
-  return { boundary, codexTmp, privateProjection, privateRootPath, root, workspaceRef };
+  return { boundary, codexHome, codexTmp, privateProjection, privateRootPath, root, workspaceRef };
 };
 
 test("provider launch plans bind exact caller-owned root and requested mode without eager or widened authority", async t => {
@@ -51,8 +51,13 @@ test("provider launch plans bind exact caller-owned root and requested mode with
   t.after(() => {rmSync(value.root, { force: true, recursive: true });});
 
   for (const intentMode of ["analysis", "workspace-write"] as const) {
+    const boundary = createCodexAppServerPermissionBoundary({
+      codexHome: value.codexHome,
+      intentMode,
+      workspaceRef: value.workspaceRef,
+    });
     const codex = createCodexAppServerLaunchPlan({
-      boundary: value.boundary,
+      boundary,
       executablePath: "/synthetic/codex",
       intentMode,
       platformTarget: {architecture: "x64", platform: "linux"},

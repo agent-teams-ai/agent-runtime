@@ -15,6 +15,7 @@ import type { CodexEffectCustodyAuthority } from "../../../dist/features/contain
 import type { CustodiedProviderProcess } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { agentMessage, commandExecution, emitAgentCompleted, emitAgentStarted, fileChange,
   generatedTurn } from "../../codex-app-server-test-messages.mjs";
+import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./codex-permission-profile-fixture.ts";
 
 type Message = Record<string, unknown>;
 
@@ -50,7 +51,7 @@ mkdirSync(codexHome, { mode: 0o700 });
 mkdirSync(workspace);
 mkdirSync(privateTmp, { mode: 0o700 });
 after(() => rmSync(root, { force: true, recursive: true }));
-const boundary = createCodexAppServerPermissionBoundary({ codexHome, workspaceRef: workspace });
+const boundary = createCodexAppServerPermissionBoundary({ codexHome, intentMode: "analysis", workspaceRef: workspace });
 
 class ProtocolProcess implements CustodiedProviderProcess {
   public readonly custodyRef = "custody:protocol-adversarial";
@@ -104,7 +105,7 @@ class ProtocolProcess implements CustodiedProviderProcess {
   #handshake(message: Message): boolean {
     if (message.method === "initialize") {
       this.emit({ id: message.id, result: {
-        codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)",
+        codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
       } });
       return true;
     }
@@ -113,12 +114,12 @@ class ProtocolProcess implements CustodiedProviderProcess {
       this.emit({ id: message.id, result: {
         config: {
           default_permissions: boundary.permissionProfileId,
-          permissions: { [boundary.permissionProfileId]: boundary.permissionProfile },
+          permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(codexHome, this.#mode) },
         },
         layers: [
-          { config: {}, disabledReason: null, name: { file: "/opt/codex/defaults.toml", type: "packagedDefaults" }, version: "1" },
+          { config: {}, disabledReason: null, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
           {
-            config: { permissions: { [boundary.permissionProfileId]: boundary.permissionProfile } },
+            config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(codexHome, this.#mode) } },
             disabledReason: null,
             name: { file: `${codexHome}/config.toml`, profile: null, type: "user" },
             version: "2",
@@ -148,17 +149,8 @@ class ProtocolProcess implements CustodiedProviderProcess {
       const sandboxPolicy = this.#mode === "analysis"
         ? { networkAccess: false, type: "readOnly" }
         : { excludeSlashTmp: true, excludeTmpdirEnvVar: true, networkAccess: false,
-          type: "workspaceWrite", writableRoots: [workspace] };
-      this.emit({ method: "thread/settings/updated", params: {
-        threadId: "thread:test",
-        threadSettings: {
-          activePermissionProfile: { extends: ":workspace", id: boundary.permissionProfileId },
-          approvalPolicy: "never",
-          cwd: workspace,
-          sandboxPolicy,
-        },
-      } });
-      this.emit({ id: message.id, result: { thread: { id: "thread:test" } } });
+          type: "workspaceWrite", writableRoots: [] };
+      this.emit({ id: message.id, result: { thread: { id: "thread:test" }, activePermissionProfile: { extends: this.#mode === "analysis" ? ":read-only" : ":workspace", id: boundary.permissionProfileId }, approvalPolicy: "never", cwd: workspace, sandbox: sandboxPolicy } });
       return true;
     }
     return false;
@@ -174,11 +166,14 @@ const execute = async (
     readonly cancellation?: () => Promise<boolean>;
     readonly effectCustody?: CodexEffectCustodyAuthority;
     readonly interrupt?: (message: Message, target: ProtocolProcess) => void;
+    readonly maxLineBytes?: number;
   } = {},
 ) => {
   const process = new ProtocolProcess(active, mode, options.interrupt);
+  const executionBoundary = mode === "analysis" ? boundary
+    : createCodexAppServerPermissionBoundary({ codexHome, intentMode: mode, workspaceRef: workspace });
   const provider = new CodexAppServerContainedTurnProvider({
-    boundary,
+    boundary: executionBoundary,
     cancellationPollMs: 2,
     effectCustody: options.effectCustody,
     manifest: Object.freeze({
@@ -196,6 +191,7 @@ const execute = async (
     privateRootPath: privateRoot,
     processes: { get: custodyRef => custodyRef === process.custodyRef ? process : undefined },
     requestTimeoutMs,
+    ...(options.maxLineBytes === undefined ? {} : { maxLineBytes: options.maxLineBytes }),
     tmpDir: privateTmp,
     turnTimeoutMs,
   });

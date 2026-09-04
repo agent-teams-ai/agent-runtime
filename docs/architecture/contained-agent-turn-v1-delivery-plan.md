@@ -52,7 +52,12 @@ cancellation and cannot manufacture containment or terminal truth.
 
 Focused evidence is green: 58 Agent Execution tests, 63 Embedded Runtime
 tests, and five PostgreSQL restart/concurrency/corruption tests. The exact
-Codex `0.150.1` hosted Linux x64 canary is retained implementation evidence.
+Codex `0.150.1` hosted Linux x64 canary harness and static tuple are retained
+candidate implementation evidence; no content-addressed successful live-turn
+receipt bound to the current source SHA is committed.
+Its bounded credential inventory is only a pre-spawn observation: it does not
+prove the exact bytes later opened by Codex and does not close same-UID file
+mutation. That proof remains part of route and deployment qualification.
 Darwin arm64 has immutable package/binary/initialize candidate authority and
 synthetic cooperative composition evidence, but its exact-SHA local macOS
 canary and qualification-registry promotion remain open. The hosted Claude `0.3.251` path

@@ -89,18 +89,20 @@ const directoryIdentity = (value: unknown, name: string): CodexDirectoryIdentity
 const snapshotBoundary = (value: unknown): CodexAppServerPermissionBoundary => {
   const boundary = snapshotRecord(value, "Codex permission boundary", [
     "codexHome", "codexHomeIdentity", "effectivePolicyDigest", "permissionProfile",
-    "permissionProfileId", "workspaceRef", "workspaceIdentity",
+    "permissionProfileId", "intentMode", "workspaceRef", "workspaceIdentity",
   ]);
   const profile = snapshotRecord(boundary.permissionProfile, "Codex permission profile", ["extends", "file_system", "network"]);
   const fileSystem = snapshotRecord(profile.file_system, "Codex permission file-system profile", ["entries"]);
   const entries = snapshotArray(fileSystem.entries, "Codex permission file-system entries", 16);
   const detachedEntries = entries.map((entry, index) => {
     const record = snapshotRecord(entry, `Codex permission file-system entry ${index}`, ["access", "path"]);
-    if (record.access !== "deny") {throw new TypeError("Codex permission boundary contains a non-deny entry");}
-    return Object.freeze({ access: "deny" as const, path: boundedString(record.path, "Codex denied path") });
+    if (record.access !== "deny" && record.access !== "read") {throw new TypeError("Codex permission boundary contains an invalid filesystem access");}
+    return Object.freeze({ access: record.access as "deny" | "read", path: boundedString(record.path, "Codex permission path") });
   });
   const network = snapshotRecord(profile.network, "Codex permission network profile", ["enabled"]);
-  if (profile.extends !== ":workspace" || network.enabled !== false) {
+  const intentMode = boundary.intentMode;
+  if ((intentMode !== "analysis" && intentMode !== "workspace-write")
+    || profile.extends !== (intentMode === "analysis" ? ":read-only" : ":workspace") || network.enabled !== false) {
     throw new TypeError("Codex permission boundary has an invalid authority profile");
   }
   const permissionProfileId = boundedString(boundary.permissionProfileId, "Codex permission profile identity");
@@ -112,11 +114,14 @@ const snapshotBoundary = (value: unknown): CodexAppServerPermissionBoundary => {
   const codexHomeIdentity = directoryIdentity(boundary.codexHomeIdentity, "Codex home identity");
   const workspaceIdentity = directoryIdentity(boundary.workspaceIdentity, "Codex workspace identity");
   if (codexHomeIdentity.path !== codexHome || workspaceIdentity.path !== workspaceRef
-    || detachedEntries.length !== 1 || detachedEntries[0]?.path !== codexHome) {
+    || detachedEntries.length !== 3 || detachedEntries[0]?.path !== codexHome
+    || detachedEntries[0]?.access !== "deny"
+    || !detachedEntries.some(entry => entry.path === ":tmpdir" && entry.access === "read")
+    || !detachedEntries.some(entry => entry.path === ":slash_tmp" && entry.access === "read")) {
     throw new TypeError("Codex permission boundary identities do not match its exact roots");
   }
   const permissionProfile = Object.freeze({
-    extends: ":workspace" as const,
+    extends: (intentMode === "analysis" ? ":read-only" : ":workspace") as ":read-only" | ":workspace",
     file_system: Object.freeze({ entries: Object.freeze(detachedEntries) }),
     network: Object.freeze({ enabled: false as const }),
   });
@@ -124,6 +129,7 @@ const snapshotBoundary = (value: unknown): CodexAppServerPermissionBoundary => {
   const expectedPolicyDigest = `sha256:${createHash("sha256").update(canonicalCodexJson({
     permissionProfile,
     permissionProfileId,
+    intentMode,
     schema: "agent-runtime/codex-contained-permission-policy/v1",
     workspaceRef,
   })).digest("hex")}`;
@@ -134,6 +140,7 @@ const snapshotBoundary = (value: unknown): CodexAppServerPermissionBoundary => {
     codexHome,
     codexHomeIdentity,
     effectivePolicyDigest,
+    intentMode,
     permissionProfile,
     permissionProfileId,
     workspaceRef,

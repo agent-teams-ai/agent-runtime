@@ -5,6 +5,7 @@ import {
   CodexAppServerContainedTurnProvider,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
 import { agentMessage, commandExecution, emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../codex-app-server-test-messages.mjs";
+import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./codex-permission-profile-fixture.ts";
 import {
   FakeCodexProcess,
   boundary,
@@ -77,10 +78,10 @@ test("maps one exact Codex App Server turn to provider-neutral receipts", async 
       remote_plugin: false,
     },
   });
-  assert.equal((threadStart.params as Message).sandbox, "read-only");
+  assert.equal((threadStart.params as Message).permissions, boundary.permissionProfileId);
   const turnStart = process.requests.find(message => message.method === "turn/start");
   assert.ok(turnStart);
-  assert.deepEqual((turnStart.params as Message).sandboxPolicy, { networkAccess: false, type: "readOnly" });
+  assert.equal((turnStart.params as Message).permissions, boundary.permissionProfileId);
 });
 test("binds completed receipts to operation, effect, attempt, and the exact Codex implementation tuple", async () => {
   const identity = { attemptId: "attempt:receipt", effectId: "effect:receipt", operationId: "operation:receipt" };
@@ -309,7 +310,7 @@ test("fails before turn bytes when initialize reports the wrong private Codex ho
     if (message.method === "initialize") {
       target.emit({
         id: message.id,
-        result: { codexHome: "/synthetic/substituted-home", platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)" },
+        result: { codexHome: "/synthetic/substituted-home", platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)" },
       });
     }
   });
@@ -386,10 +387,10 @@ test("rejects project config substitution before creating a Codex thread or turn
         result: {
           config: {
             default_permissions: boundary.permissionProfileId,
-            permissions: { [boundary.permissionProfileId]: boundary.permissionProfile },
+            permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(boundary.codexHome) },
           },
           layers: [{
-            config: { permissions: { [boundary.permissionProfileId]: boundary.permissionProfile } },
+            config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(boundary.codexHome) } },
             disabledReason: null,
             name: { dotCodexFolder: `${boundary.workspaceRef}/.codex`, type: "project" },
             version: "hostile",
@@ -414,6 +415,29 @@ test("requires active profile provenance before sending turn bytes", async () =>
     standardHandshake(message, target);
   });
   assert.equal((await createProvider(process, { turnTimeoutMs: 20 }).execute(executeInput(process))).kind, "not_accepted");
+  assert.equal(process.requests.some(message => message.method === "turn/start"), false);
+});
+test("rejects an empty Codex thread identity before sending turn bytes", async () => {
+  const process = new FakeCodexProcess((message, target) => {
+    if (message.method === "thread/start") {
+      target.emit({
+        id: message.id,
+        result: {
+          activePermissionProfile: {
+            extends: boundary.permissionProfile.extends,
+            id: boundary.permissionProfileId,
+          },
+          approvalPolicy: "never",
+          cwd: boundary.workspaceRef,
+          sandbox: { networkAccess: false, type: "readOnly" },
+          thread: { id: "" },
+        },
+      });
+      return;
+    }
+    standardHandshake(message, target);
+  });
+  assert.equal((await createProvider(process).execute(executeInput(process))).kind, "not_accepted");
   assert.equal(process.requests.some(message => message.method === "turn/start"), false);
 });
 test("rejects wrong active profile provenance before sending turn bytes", async () => {
@@ -467,7 +491,7 @@ test("rejects semantic error, plan, and passive-item replays with substituted fi
       if (message.method === "turn/start") {target.emit({ id: message.id, result: { turn: generatedTurn("turn:replay", "inProgress") } }); emitTurnStarted(target, "turn:replay"); emitAdversary(target);}
     });
     assertContainmentRequired(await createProvider(process).execute(
-      executeInput(process, async () => false, "workspace-write"),
+      executeInput(process, async () => false, "analysis"),
     ));
   }
 });
@@ -615,7 +639,7 @@ test("returns typed uncertainty when pre-dispatch stdin closure is unproven", as
   const process = new FakeCodexProcess((message, target) => {
     if (message.method === "initialize") {
       target.emit({ id: message.id, result: {
-        codexHome: "/wrong-home", platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1)",
+        codexHome: "/wrong-home", platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
       } });
     }
   }, { hangClose: true });

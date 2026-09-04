@@ -1,3 +1,5 @@
+import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./features/contained-agent-turn/codex-permission-profile-fixture.ts";
+
 type Message = Record<string, any>;
 
 export interface CodexInitializeFixture {
@@ -158,19 +160,16 @@ class CodexProtocolProcess {
     const codexHome = this.#plan.codexHome as string;
     const permissionProfileId = this.#plan.permissionProfileId as string;
     const workspaceRef = this.#plan.workspaceRef as string;
-    const permissionProfile = {
-      extends: ":workspace",
-      file_system: {entries: [{access: "deny", path: codexHome}]},
-      network: {enabled: false},
-    };
+    const intentMode = this.#plan.intentMode as "analysis" | "workspace-write";
+    const permissionProfile = codexEffectivePermissionProfile(codexHome, intentMode);
     if (message.method === "initialize") {
       this.#emit({id: message.id, result: {codexHome, ...this.#initialization}});
     } else if (message.method === "config/read") {
       this.#emit({id: message.id, result: {
         config: {default_permissions: permissionProfileId, permissions: {[permissionProfileId]: permissionProfile}},
         layers: [
-          {config: {}, disabledReason: null, name: {file: "/opt/codex/defaults.toml", type: "packagedDefaults"}, version: "1"},
-          {config: {permissions: {[permissionProfileId]: permissionProfile}}, disabledReason: null,
+          {config: {}, disabledReason: null, name: {file: "/etc/codex/config.toml", type: "system"}, version: "1"},
+          {config: {permissions: {[permissionProfileId]: codexUserPermissionProfile(codexHome, intentMode)}}, disabledReason: null,
             name: {file: `${codexHome}/config.toml`, profile: null, type: "user"}, version: "2"},
           {config: {default_permissions: permissionProfileId}, disabledReason: null,
             name: {type: "sessionFlags"}, version: "3"},
@@ -183,11 +182,11 @@ class CodexProtocolProcess {
     } else if (message.method === "permissionProfile/list") {
       this.#emit({id: message.id, result: {data: [{allowed: true, description: null, id: permissionProfileId}], nextCursor: null}});
     } else if (message.method === "thread/start") {
-      this.#emit({method: "thread/settings/updated", params: {threadId: "thread:pg-success", threadSettings: {
-        activePermissionProfile: {extends: ":workspace", id: permissionProfileId}, approvalPolicy: "never", cwd: workspaceRef,
-        sandboxPolicy: {networkAccess: false, type: "readOnly"},
-      }}});
-      this.#emit({id: message.id, result: {thread: {id: "thread:pg-success"}}});
+      const sandbox = intentMode === "analysis" ? {networkAccess: false, type: "readOnly"}
+        : {excludeSlashTmp: true, excludeTmpdirEnvVar: true, networkAccess: false, type: "workspaceWrite", writableRoots: []};
+      this.#emit({id: message.id, result: {thread: {id: "thread:pg-success"},
+        activePermissionProfile: {extends: intentMode === "analysis" ? ":read-only" : ":workspace", id: permissionProfileId},
+        approvalPolicy: "never", cwd: workspaceRef, sandbox}});
     } else if (message.method === "turn/start") {
       const turn = generatedTurn("turn:pg-success", "inProgress");
       this.#emit({id: message.id, result: {turn}});
