@@ -24,6 +24,10 @@ import { snapshotHttpEgressLimits } from "./http-egress-limits.js";
 import { createHttpDispatchBoundary } from "./http-dispatch-boundary.js";
 import { observeHttpDispatch } from "./http-dispatch-observation.js";
 import { observeHttpResponse } from "./http-response-observation.js";
+import { httpAuthorizationMatches, httpFinalAuthorizationMatches,
+  snapshotHttpAuthorizationDecision, snapshotHttpClosureDecision,
+  snapshotHttpFinalAuthorizationDecision,
+} from "./http-receipt-validation.js";
 import { normalizeHttpEgressResolution } from "./public-address-policy.js";
 import type { NormalizedHttpEgressResolution } from "./public-address-policy.js";
 import {
@@ -104,28 +108,6 @@ const initialState = (
   upstreamClosureReceiptDigest: "",
   attemptCount: 0,
 });
-
-const authorizationMatches = (
-  decision: HttpEgressAuthorizationDecision,
-  route: HttpEgressRoute,
-  now: number,
-): boolean => decision.decision === "allow"
-  && Number.isFinite(now) && Number.isFinite(decision.validUntil)
-  && now < decision.validUntil
-  && decision.policyGeneration === route.policyGeneration
-  && decision.keyGeneration === route.keyGeneration
-  && decision.routeGeneration === route.routeGeneration
-  && decision.credentialGeneration === route.credentialGeneration
-  && decision.materializationReceiptDigest === route.materializationReceiptDigest;
-
-const finalAuthorizationMatches = (
-  decision: HttpEgressFinalAuthorizationDecision,
-  bindingDigest: string,
-  route: HttpEgressRoute,
-  now: number,
-): boolean => authorizationMatches(decision, route, now)
-  && decision.bindingDigest === bindingDigest;
-
 const bindingMatches = (
   route: HttpEgressRoute,
   selectedAddress: string,
@@ -205,20 +187,24 @@ const closeFlows = async (
 ): Promise<void> => {
   if (attempt !== undefined) {
     try {
-      const closure = await ports.clock.within(operation.limits.closureDeadline, () => attempt.close());
-      state.upstreamClosure = closure.state;
-      state.upstreamClosureReceiptDigest = closure.receiptDigest;
+      const closure = snapshotHttpClosureDecision(
+        await ports.clock.within(operation.limits.closureDeadline, () => attempt.close()),
+      );
+      state.upstreamClosure = closure?.state ?? "unknown";
+      state.upstreamClosureReceiptDigest = closure?.receiptDigest ?? "";
     } catch {
       state.upstreamClosure = "unknown";
     }
   }
   try {
-    const closure = await ports.clock.within(
-      operation.limits.closureDeadline,
-      () => operation.connection.close(state.outcome === "completed" ? "complete" : "abort"),
+    const closure = snapshotHttpClosureDecision(
+      await ports.clock.within(
+        operation.limits.closureDeadline,
+        () => operation.connection.close(state.outcome === "completed" ? "complete" : "abort"),
+      ),
     );
-    state.inboundClosure = closure.state;
-    state.inboundClosureReceiptDigest = closure.receiptDigest;
+    state.inboundClosure = closure?.state ?? "unknown";
+    state.inboundClosureReceiptDigest = closure?.receiptDigest ?? "";
   } catch {
     state.inboundClosure = "unknown";
   }
@@ -295,24 +281,27 @@ const authorizeResolution = async (
   ));
   applyRoute(state, route);
   const provisionalInput = provisionalAuthorizationInput(operation, state, route);
-  let provisional: HttpEgressAuthorizationDecision;
+  let provisional: HttpEgressAuthorizationDecision | undefined;
   try {
-    provisional = await ports.clock.within(
-      operation.limits.deadline,
-      () => ports.provisionalAuthorization.authorize(provisionalInput),
-      operation.signal,
+    provisional = snapshotHttpAuthorizationDecision(
+      await ports.clock.within(
+        operation.limits.deadline,
+        () => ports.provisionalAuthorization.authorize(provisionalInput),
+        operation.signal,
+      ),
     );
   } catch {
     state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "provisional_timeout";
     return await halt(ports, operation, state, resources);
   }
-  state.provisionalAuthorizationReceiptDigest = provisional.receiptDigest;
-  if (!authorizationMatches(provisional, route, ports.clock.now())) {
+  if (provisional === undefined || !httpAuthorizationMatches(provisional, route, ports.clock.now())) {
+    if (provisional !== undefined) {state.provisionalAuthorizationReceiptDigest = provisional.receiptDigest;}
     state.outcome = "denied";
     state.anomalyCode = "provisional_denied";
     return await halt(ports, operation, state, resources);
   }
+  state.provisionalAuthorizationReceiptDigest = provisional.receiptDigest;
   try {
     const resolution = await ports.clock.within(
       operation.limits.deadline,
@@ -405,12 +394,14 @@ const renderAuthorizedRequest = async (
     resolvedAddresses: resolution.addresses, selectedAddress: resolution.selectedAddress,
     binding: authorizedBinding, digest: parts => ports.evidence.digest(parts),
   });
-  let finalDecision: HttpEgressFinalAuthorizationDecision;
+  let finalDecision: HttpEgressFinalAuthorizationDecision | undefined;
   try {
-    finalDecision = await ports.clock.within(
-      operation.limits.deadline,
-      () => ports.finalAuthorization.authorize(finalInput),
-      operation.signal,
+    finalDecision = snapshotHttpFinalAuthorizationDecision(
+      await ports.clock.within(
+        operation.limits.deadline,
+        () => ports.finalAuthorization.authorize(finalInput),
+        operation.signal,
+      ),
     );
   } catch {
     outboundRequest.fill(0);
@@ -418,14 +409,16 @@ const renderAuthorizedRequest = async (
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "final_timeout";
     return await halt(ports, operation, state, resources);
   }
-  state.finalAuthorizationReceiptDigest = finalDecision.receiptDigest;
-  if (!finalAuthorizationMatches(finalDecision, finalInput.bindingDigest, route, ports.clock.now())) {
+  if (finalDecision === undefined
+    || !httpFinalAuthorizationMatches(finalDecision, finalInput.bindingDigest, route, ports.clock.now())) {
+    if (finalDecision !== undefined) {state.finalAuthorizationReceiptDigest = finalDecision.receiptDigest;}
     outboundRequest.fill(0);
     state.outcome = "denied";
     state.anomalyCode = "final_denied";
     return await halt(ports, operation, state, resources);
   }
-  const decision = Object.freeze({ ...finalDecision });
+  state.finalAuthorizationReceiptDigest = finalDecision.receiptDigest;
+  const decision = finalDecision;
   return Object.freeze({ halted: false, value: Object.freeze({
     bytes: outboundRequest,
     validateFirstByte: () => {
@@ -451,7 +444,7 @@ const renderAuthorizedRequest = async (
         binding: currentBinding, digest: parts => ports.evidence.digest(parts),
       });
       const allowed = now < operation.limits.deadline
-        && finalAuthorizationMatches(decision, currentInput.bindingDigest, route, now);
+        && httpFinalAuthorizationMatches(decision, currentInput.bindingDigest, route, now);
       if (!allowed) {state.anomalyCode = "final_denied";}
       return allowed;
     },
