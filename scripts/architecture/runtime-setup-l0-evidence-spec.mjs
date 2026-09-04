@@ -243,6 +243,14 @@ export const changes = Object.freeze([
     id: "host-egress-journal-security-integration",
     revision: "2d4e960b276559b39c4714fa0b7b59a44f164867",
   }),
+  Object.freeze({
+    id: "strict-http-egress-reviewed-byte-custody",
+    revision: "d7b99516a781cc1ce24d81922da5d1c674910ad2",
+  }),
+  Object.freeze({
+    id: "strict-http-egress-current-main-integration",
+    revision: "038080795baabe54bcc4ef89dbedf334becc2acf",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -253,12 +261,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "6708bfd7c55aa9747295893a924b44946c4edb2d528c57cff5dd4d0c3afa0bd0",
   }),
   sources: Object.freeze({
-    fileCount: 319,
-    sha256: "bd20d46031d31087cb1504d88baa977ff83366861eeb45aa1f2f1545d87585c1",
+    fileCount: 335,
+    sha256: "60230bd4b4ca3b68025d925ccd7147bc4399a7798cdf51f8180cf50e20637971",
   }),
   tests: Object.freeze({
-    fileCount: 148,
-    sha256: "51dbc10aa22d71ff5bd3cd039dd22a6b83d9fb70fb7be87f520dd16c7e065deb",
+    fileCount: 163,
+    sha256: "4c517f2fb3e5e0c3a82a68f9611c650b510f8791b7199343a0c2d17b110df52b",
   }),
 });
 
