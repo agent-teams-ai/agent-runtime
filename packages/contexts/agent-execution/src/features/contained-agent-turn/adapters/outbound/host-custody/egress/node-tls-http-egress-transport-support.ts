@@ -148,10 +148,13 @@ export const createBinding = (input: Readonly<{
     peerAddress: actual.address,
     peerPort: input.remotePort,
     tlsProtocol: input.protocol,
-    sni: input.expectedSni,
-    sniDigest: sha256(input.expectedSni),
-    certificateDigest: sha256(input.certificate.raw),
-    pinDigest: sha256(publicKey),
+    requestedSni: input.expectedSni,
+    observedSni: input.servername,
+    chainValidated: true,
+    dnsIdentity: input.expectedSni,
+    certificateDigest: `sha256:${sha256(input.certificate.raw)}` as const,
+    tlsPolicyDigest: "sha256:node-tls-http-egress-policy-v1",
+    spkiDigest: `sha256:${sha256(publicKey)}` as const,
     alpn: "http/1.1",
   });
 };
