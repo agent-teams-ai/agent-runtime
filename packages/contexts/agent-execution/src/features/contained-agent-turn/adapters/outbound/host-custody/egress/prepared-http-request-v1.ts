@@ -115,6 +115,14 @@ const asField = (field: ValidatedPreparedHttpFieldV1, credential: boolean): Emit
   credential,
 });
 
+const disposeOwnedBytes = (...values: readonly (Uint8Array | undefined)[]): void => {
+  let failed = false;
+  for (const value of values) {
+    try {zeroHttpBytes(value);} catch {failed = true;}
+  }
+  if (failed) {throw new PreparedHttpRequestV1Error();}
+};
+
 /** Serializes once; it does not decide route, account, refresh, or authorization policy. */
 export const createPreparedHttpRequestV1 = (input: PreparedHttpRequestInputV1): PreparedHttpRequestV1 => {
   const validated = validatePreparedHttpRequestV1(input);
@@ -192,18 +200,18 @@ export const createPreparedHttpRequestV1 = (input: PreparedHttpRequestInputV1): 
           dispose: (): void => {
             if (custodyDisposed) {return;}
             custodyDisposed = true;
-            zeroHttpBytes(transferredWireBytes);
-            zeroHttpBytes(transferredProjectionBytes);
+            disposeOwnedBytes(transferredWireBytes, transferredProjectionBytes);
           },
         });
       },
       dispose: (): void => {
         if (disposed) {return;}
         disposed = true;
-        zeroHttpBytes(ownedWireBytes);
-        zeroHttpBytes(ownedProjectionBytes);
+        const disposalWireBytes = ownedWireBytes;
+        const disposalProjectionBytes = ownedProjectionBytes;
         ownedWireBytes = undefined;
         ownedProjectionBytes = undefined;
+        disposeOwnedBytes(disposalWireBytes, disposalProjectionBytes);
       },
     });
   } catch (error) {

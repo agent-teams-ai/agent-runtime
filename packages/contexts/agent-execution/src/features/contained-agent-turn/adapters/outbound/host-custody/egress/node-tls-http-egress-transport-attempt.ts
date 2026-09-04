@@ -8,7 +8,7 @@ import type {
   HttpEgressTransportBinding,
   HttpEgressTransportSession,
 } from "./http-egress-ports.js";
-import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
+import { intrinsicUint8ArrayLength } from "./http-byte-intrinsics.js";
 import {
   closureReceiptDigest,
   createBinding,
@@ -117,17 +117,12 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
     return await new Promise<HttpEgressDispatch>(resolve => {
       let settled = false;
       let consumed = false;
-      let ownedBytes: Uint8Array | undefined;
       let acceptedLength = 0;
       let writeCompleted = false;
       let writeReturned = false;
       let writeCallbackSucceeded = false;
       let responseReadable = false;
       let failedDisposition = false;
-      const zeroOwnedBytes = (): void => {
-        zeroHttpBytes(ownedBytes);
-        ownedBytes = undefined;
-      };
 
       const cleanup = (): void => {
         this.#socket.off("readable", readable);
@@ -175,19 +170,15 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
         const bytes = consumeAuthorizedRequest();
         const byteLength = intrinsicUint8ArrayLength(bytes);
         if (byteLength === undefined || byteLength === 0) {
-          zeroHttpBytes(bytes);
           settle(failedBeforeConsumption());
           return;
         }
+        // Borrowed from the Host dispatch boundary; its prepared custody owns zeroization.
         const authorizedBytes = bytes as Uint8Array;
         consumed = true;
-        ownedBytes = authorizedBytes;
         acceptedLength = byteLength;
-        this.#socket.once("close", zeroOwnedBytes);
         // Deliberately no await or promise boundary between authority consumption and this write.
         this.#socket.write(authorizedBytes, error => {
-          this.#socket.off("close", zeroOwnedBytes);
-          zeroOwnedBytes();
           if (error !== undefined && error !== null) {failed();}
           else {
             writeCallbackSucceeded = true;

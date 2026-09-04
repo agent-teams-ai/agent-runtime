@@ -1,7 +1,7 @@
 import { types as utilTypes } from "node:util";
 import type { HostHttpMaterializationReceipt, HostHttpRequestProjection, HttpEgressBrokerPorts,
   HttpEgressRoute } from "./http-egress-ports.js";
-import type { PreparedHttpRequestV1 } from "./prepared-http-request-v1.js";
+import type { PreparedHttpRequestCustodyV1 } from "./prepared-http-request-v1.js";
 import type { StrictHttpRequest } from "./strict-http-request.js";
 import { zeroHttpBytes } from "./http-byte-intrinsics.js";
 
@@ -121,14 +121,13 @@ export const presentationFields = (request: StrictHttpRequest, route: HttpEgress
     name: field.name, valueBytes: encoder.encode(field.value)}));
 };
 
-export const projectPreparedRequest = (ports: HttpEgressBrokerPorts, prepared: PreparedHttpRequestV1,
+export const projectPreparedRequest = (ports: HttpEgressBrokerPorts, prepared: PreparedHttpRequestCustodyV1,
   receipt: HostHttpMaterializationReceipt): HostHttpRequestProjection => {
-  const target = prepared.snapshotSpan(prepared.targetSpan); const body = prepared.snapshotSpan(prepared.bodySpan);
-  if (target === undefined || body === undefined) {throw new TypeError("prepared request disposed");}
+  const target = prepared.wireBytes.slice(prepared.targetSpan.offset, prepared.targetSpan.offset + prepared.targetSpan.length);
+  const body = prepared.wireBytes.slice(prepared.bodySpan.offset, prepared.bodySpan.offset + prepared.bodySpan.length);
   const credentials: Array<Readonly<{name: string; credentialBindingDigest: string; valueDigest: string;
     byteLength: number}>> = [];
-  try {for (const span of prepared.credentialValueSpans) {const value = prepared.snapshotSpan(span);
-    if (value === undefined) {throw new TypeError("credential span invalid");}
+  try {for (const span of prepared.credentialValueSpans) {const value = prepared.wireBytes.slice(span.offset, span.offset + span.length);
     try {credentials.push(Object.freeze({name: span.name, credentialBindingDigest: receipt.credentialBindingDigest,
       valueDigest: ports.evidence.digest([value]), byteLength: span.length}));} finally {zeroHttpBytes(value);}}
     return Object.freeze({method: ports.route.upstreamMethod, scheme: "https",

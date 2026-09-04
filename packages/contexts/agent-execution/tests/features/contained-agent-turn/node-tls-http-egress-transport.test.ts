@@ -92,7 +92,9 @@ describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
       assert.equal(dispatch.acknowledgement, "acknowledged");
       if (dispatch.status !== "response") {throw new Error("unreachable");}
       assert.equal(new TextDecoder().decode(await collect(dispatch.response)), "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
-      assert.ok(request.every(byte => byte === 0), "transferred request storage is zeroized after safe socket use");
+      assert.equal(request.byteLength, requestLength);
+      assert.equal(new TextDecoder().decode(request), "GET /synthetic HTTP/1.1\r\nHost: provider.test\r\n\r\n");
+      request.fill(0); // The dispatch boundary owns cleanup, not the borrowing transport.
       assert.equal(new TextDecoder().decode(server.received()), "GET /synthetic HTTP/1.1\r\nHost: provider.test\r\n\r\n");
       await expectClosed(attempt);
       assert.equal(server.connections(), 1);
@@ -422,7 +424,8 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
       const bytes = utf8("owned bytes");
       assert.deepEqual(await session.dispatch(() => bytes),
         { status: "failed", acceptedRequestBytes: "unknown", acknowledgement: "lost" });
-      assert.ok(bytes.every(byte => byte === 0));
+      assert.equal(new TextDecoder().decode(bytes), "owned bytes");
+      bytes.fill(0);
       await expectClosed(attempt);
     });
   }
@@ -439,13 +442,14 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
       new Promise<"pending">(resolve => {setImmediate(() => {resolve("pending");});}),
     ]);
     assert.equal(state, "pending");
-    assert.equal(new TextDecoder().decode(bytes), "secret", "the socket still owns the request before its callback");
+    assert.equal(new TextDecoder().decode(bytes), "secret", "the socket still borrows the request before its callback");
 
     socket.completePendingWrite();
     const dispatch = await dispatchPromise;
     assert.equal(dispatch.status, "response");
     assert.equal(dispatch.acceptedRequestBytes, 6);
-    assert.ok(bytes.every(byte => byte === 0));
+    assert.equal(new TextDecoder().decode(bytes), "secret");
+    bytes.fill(0);
     await expectClosed(attempt);
   });
 
@@ -460,7 +464,8 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
 
     assert.deepEqual(await dispatchPromise,
       { status: "failed", acceptedRequestBytes: "unknown", acknowledgement: "lost" });
-    assert.ok(bytes.every(byte => byte === 0));
+    assert.equal(new TextDecoder().decode(bytes), "secret");
+    bytes.fill(0);
     await expectClosed(attempt);
   });
 
@@ -473,7 +478,8 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
 
     assert.deepEqual(await session.dispatch(() => bytes),
       { status: "failed", acceptedRequestBytes: "unknown", acknowledgement: "lost" });
-    assert.ok(bytes.every(byte => byte === 0));
+    assert.equal(new TextDecoder().decode(bytes), "secret");
+    bytes.fill(0);
     await expectClosed(attempt);
   });
 
@@ -496,12 +502,13 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
         { status: "failed", acceptedRequestBytes: "unknown", acknowledgement: "lost" });
       if (closePromise !== undefined) {assert.equal((await closePromise).state, "closed");}
       await new Promise<void>(resolve => {setImmediate(resolve);});
-      assert.ok(bytes.every(byte => byte === 0), "closure releases and zeroizes caller-owned storage");
+      assert.equal(new TextDecoder().decode(bytes), "secret", "the boundary retains zeroization ownership");
+      bytes.fill(0);
       await expectClosed(attempt);
     });
   }
 
-  test("intrinsic length and zeroization ignore own byteLength and fill properties", async () => {
+  test("intrinsic length ignores own byteLength and transport leaves cleanup to custody", async () => {
     const socket = new SyntheticOwnedTlsSocket();
     const attempt = injectedTransport(socket).beginOpen(target(443));
     const session = await attempt.ready();
@@ -515,7 +522,8 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
     assert.equal(dispatch.status, "response");
     assert.equal(dispatch.acceptedRequestBytes, 6);
     assert.deepEqual(socket.writes, [utf8("secret")]);
-    assert.deepEqual([...bytes], [0, 0, 0, 0, 0, 0]);
+    assert.deepEqual([...bytes], [...utf8("secret")]);
+    Uint8Array.prototype.fill.call(bytes, 0);
     await expectClosed(attempt);
   });
 

@@ -3,7 +3,7 @@ import type {HttpEgressAnomalyCode, HttpEgressClosureState, HttpEgressOperation,
 import type {HostHttpAdmissionLease} from "./host-http-admission-guard.js";
 import type {HostHttpGrant, HttpEgressBrokerPorts, HttpEgressTransportAttempt, HttpEgressTransportSession,
   HttpEgressTransportBinding} from "./http-egress-ports.js";
-import type {PreparedHttpRequestV1} from "./prepared-http-request-v1.js";
+import type {PreparedHttpRequestCustodyV1} from "./prepared-http-request-v1.js";
 import {createHttpDispatchBoundary} from "./http-dispatch-boundary.js";
 import {observeHttpDispatch} from "./http-dispatch-observation.js";
 import {observeHttpResponse} from "./http-response-observation.js";
@@ -84,11 +84,12 @@ const retryAnomaly = (status: number): HttpEgressAnomalyCode | undefined => stat
 export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgressBrokerPorts;
   operation: HttpEgressOperation; state: HttpEgressMutableState; attempt: HttpEgressTransportAttempt;
   session: HttpEgressTransportSession; tls: HttpEgressTransportBinding; grant: HostHttpGrant;
-  prepared: PreparedHttpRequestV1; lease: HostHttpAdmissionLease}>): Promise<Readonly<{
+  prepared: PreparedHttpRequestCustodyV1; lease: HostHttpAdmissionLease}>): Promise<Readonly<{
     receipt: HttpEgressReceipt; fullyAcknowledged: boolean}>> => {
   const {ports, operation, state, attempt, session, tls, grant, prepared, lease} = input;
   let boundaryAnomaly: HttpEgressAnomalyCode = "upstream_write_failed";
-  const boundary = createHttpDispatchBoundary(prepared.wireBytes, () => {
+  const requestByteLength = prepared.wireBytes.byteLength;
+  const boundary = createHttpDispatchBoundary(prepared, () => {
     if (ports.journal.consume(grant.payload.consumption.journalKey,
       grant.payload.consumption.requestFingerprint) !== "consumed") {boundaryAnomaly = "final_denied"; return false;}
     if (operation.signal?.aborted) {boundaryAnomaly = "inbound_cancelled"; return false;}
@@ -97,13 +98,15 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
     if (session.binding !== tls) {boundaryAnomaly = "transport_binding_drift"; return false;}
     state.firstByteState = "uncertain"; return true;
   });
-  const dispatched = await ports.clock.within(operation.limits.deadline,
-    () => session.dispatch(boundary.consume, operation.signal), operation.signal).finally(boundary.seal);
+  let dispatched: Awaited<ReturnType<HttpEgressTransportSession["dispatch"]>>;
+  try {dispatched = await ports.clock.within(operation.limits.deadline,
+    () => session.dispatch(boundary.consume, operation.signal), operation.signal);}
+  finally {boundary.seal();}
   state.firstByteState = boundary.wasConsumed() ? "uncertain" : "not_sent";
   if (!boundary.wasConsumed() && dispatched.status === "response") {state.firstByteState = "uncertain";
     state.outcome = "reconcile_required"; state.anomalyCode = "upstream_ack_lost";
     return closeAndRecordHttpEgress(ports, operation, state, attempt);}
-  const observed = observeHttpDispatch(dispatched, prepared.wireBytes.byteLength);
+  const observed = observeHttpDispatch(dispatched, requestByteLength);
   if (observed.kind === "failed") {Object.assign(state, observed.evidence);
     if (!boundary.wasConsumed()) {state.anomalyCode = boundaryAnomaly;}
     return closeAndRecordHttpEgress(ports, operation, state, attempt);}

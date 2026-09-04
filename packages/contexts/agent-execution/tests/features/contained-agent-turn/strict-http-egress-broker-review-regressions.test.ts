@@ -149,7 +149,7 @@ type MaterializedFields = Awaited<ReturnType<HttpEgressBrokerPorts["materializer
 
 // A separate process captures a faulting byte intrinsic before module initialization,
 // so the injected cleanup exception cannot contaminate other suites.
-for (const fault of ["body", "dispose"] as const) {
+for (const fault of ["body"] as const) {
 test(`${fault} cleanup exceptions cannot bypass finish or independent buffer clearing and evidence is honest`, () => {
   const broker = new URL("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js", import.meta.url).href;
   const fixtureUrl = new URL("./http-egress-test-fixture.ts", import.meta.url).href;
@@ -203,6 +203,35 @@ test(`${fault} cleanup exceptions cannot bypass finish or independent buffer cle
   `], {stdio: "pipe"});
 });
 }
+
+test("prepared custody still clears projection when wire cleanup fails", () => {
+  const preparedUrl = new URL(
+    "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.js",
+    import.meta.url,
+  ).href;
+  execFileSync(process.execPath, [...process.execArgv, "--input-type=module", "-e", `
+    import assert from 'node:assert/strict';
+    const original = Uint8Array.prototype.fill;
+    let target;
+    Uint8Array.prototype.fill = function(...args) {
+      if (this === target) {throw new Error('synthetic wire cleanup fault');}
+      return Reflect.apply(original, this, args);
+    };
+    const {createPreparedHttpRequestV1} = await import(${JSON.stringify(preparedUrl)});
+    const encoder = new TextEncoder();
+    const prepared = createPreparedHttpRequestV1({
+      methodBytes: encoder.encode('POST'), targetBytes: encoder.encode('/invoke'),
+      hostBytes: encoder.encode('broker.invalid'), credentialHeaderNameAllowlist: ['authorization'],
+      presentationFields: [], credentialFields: [{name: 'authorization', valueBytes: encoder.encode('Bearer synthetic')}],
+      bodyBytes: encoder.encode('{}'),
+    });
+    const custody = prepared.consume();
+    assert.ok(custody); target = custody.wireBytes;
+    assert.throws(() => custody.dispose());
+    assert.ok(custody.headerProjectionBytes.every(byte => byte === 0));
+    assert.doesNotThrow(() => custody.dispose());
+  `], {stdio: "pipe"});
+});
 
 test("a final grant arriving after timeout cannot resurrect a closed attempt", {timeout: 2_000}, async () => {
   const fixture = createEgressFixture(); let finalStarted = false; let finishes = 0;

@@ -2,7 +2,7 @@ import { types as utilTypes } from "node:util";
 import type { HttpEgressAnomalyCode, HttpEgressOperation, HttpEgressReceipt } from "./http-egress-contracts.js";
 import type { HostHttpGrant, HttpEgressBrokerPorts, HttpEgressTransportAttempt,
   HttpEgressTransportSession, HttpEgressTransportBinding } from "./http-egress-ports.js";
-import { createPreparedHttpRequestV1, type PreparedHttpRequestV1 } from "./prepared-http-request-v1.js";
+import { createPreparedHttpRequestV1, type PreparedHttpRequestV1, type PreparedHttpRequestCustodyV1 } from "./prepared-http-request-v1.js";
 import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 import { snapshotHttpEgressOperation } from "./http-ingress-validation.js";
 import { normalizeHttpEgressResolution } from "./public-address-policy.js";
@@ -48,6 +48,7 @@ const prepareMaterializedRequest = (ports: HttpEgressBrokerPorts, request: Stric
   const host = ports.route.originPort === 443 ? ports.route.originHost : `${ports.route.originHost}:${ports.route.originPort}`;
   return createPreparedHttpRequestV1({methodBytes: encoder.encode(ports.route.upstreamMethod),
     targetBytes: encoder.encode(ports.route.upstreamPath), hostBytes: encoder.encode(host),
+    credentialHeaderNameAllowlist: ports.route.credentialFieldNames,
     presentationFields: forwardedFields, credentialFields: fields, bodyBytes: request.body});
 };
 
@@ -152,13 +153,15 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
 }> => Object.freeze({execute: async (input): Promise<HttpEgressReceipt> => {
   const operation = snapshotHttpEgressOperation(input);
   const state = initialHttpEgressState(); let request: StrictHttpRequest | undefined; let attempt: HttpEgressTransportAttempt | undefined;
-  let prepared: PreparedHttpRequestV1 | undefined; const lease = dependencies.guard.acquire();
+  let prepared: PreparedHttpRequestV1 | undefined;
+  let custody: PreparedHttpRequestCustodyV1 | undefined;
+  const lease = dependencies.guard.acquire();
   let cleanupCertain = true; let cleaned = false;
   const cleanup = (): void => {
     if (cleaned) {return;} cleaned = true;
     // dispose can fail before clearing its second owned allocation. Clear each independently.
-    for (const action of [() => prepared?.dispose(), () => zeroHttpBytes(prepared?.wireBytes),
-      () => zeroHttpBytes(prepared?.headerProjectionBytes), () => zeroHttpBytes(request?.body)]) {
+    for (const action of [() => {if (custody === undefined) {prepared?.dispose();} else {custody.dispose();}},
+      () => zeroHttpBytes(request?.body)]) {
       try {action();} catch {cleanupCertain = false;}
     }
     if (!cleanupCertain) {state.outcome = "reconcile_required"; state.anomalyCode = "closure_unproved";}
@@ -203,7 +206,9 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
     if (!cleanupCertain) {throw new TypeError("credential cleanup unproved");}
     if (!await within(() => observeMaterializationReceipt(ports, paReceipt))) {state.outcome = "denied"; state.anomalyCode = "provider_generation_drift";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
-    const requestProjection = projectPreparedRequest(ports, prepared, paReceipt);
+    custody = prepared.consume();
+    if (custody === undefined) {throw new TypeError("prepared request already consumed");}
+    const requestProjection = projectPreparedRequest(ports, custody, paReceipt);
     let provisionalOutcome: Awaited<ReturnType<typeof ports.runtimeSecurity.requestProvisional>>;
     try {provisionalOutcome = await within(() => ports.runtimeSecurity.requestProvisional({contractVersion:
       "provider-process-egress-provisional/v2", authorizationRequestId: ids.runtimeAuthorizationId, request: requestProjection}));
@@ -256,7 +261,7 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;
     }
     const grant: HostHttpGrant = finalOutcome.grant; state.finalAuthorizationReceiptDigest = grant.finalAuthorizationDigest;
-    const settled = await settleHttpEgressDispatch({ports, operation, state, attempt, session, tls, grant, prepared, lease});
+    const settled = await settleHttpEgressDispatch({ports, operation, state, attempt, session, tls, grant, prepared: custody, lease});
     successful = settled.fullyAcknowledged;
     return settled.receipt;
   } catch (error) {
