@@ -14,6 +14,7 @@ import {
 import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { containedTurnOperationCutoffRevision } from "../../../dist/features/contained-agent-turn/domain/contained-turn-output-authority.js";
 import {
   delta,
   executablePath,
@@ -25,6 +26,7 @@ import {
   success,
   workspaceRef,
 } from "../../claude-agent-sdk-contained-turn-provider.support.ts";
+import { committedDispatchProofFixture } from "./support/committed-dispatch-proof-fixture.ts";
 
 const targetFor = (tuple: ClaudeAgentSdkPlatformTuple) => tuple.platform === "linux"
   ? Object.freeze({architecture: "x64" as const, platform: "linux" as const})
@@ -126,8 +128,12 @@ const idsFor = (suffix: string) => Object.freeze({
   attemptId: containedTurnIdentity("attempt", `attempt:claude-platform:${suffix}`),
   authorityVectorDigest: digestContainedTurnCanonicalValue({suffix}),
   custodyId: containedTurnIdentity("custody", `custody:claude-platform:${suffix}`),
+  commandId: containedTurnIdentity("command", `command:claude-platform:${suffix}`),
   effectId: containedTurnIdentity("effect", `effect:claude-platform:${suffix}`),
+  operationCutoffRevision: containedTurnOperationCutoffRevision(0),
   operationId: containedTurnIdentity("operation", `operation:claude-platform:${suffix}`),
+  operationRevision: 1,
+  preparationToken: containedTurnIdentity("preparation", `preparation:claude-platform:${suffix}`),
   workspaceId: containedTurnIdentity("workspace", `workspace:claude-platform:${suffix}`),
 });
 
@@ -168,7 +174,8 @@ const exerciseComposedOwner = async (tuple: ClaudeAgentSdkPlatformTuple, cancell
     }}),
   });
   const kernel = Object.freeze({...ids, adapterSnapshot: snapshot, providerAccessSnapshot: providerAccess});
-  await owner.custody.open({...kernel, intentMode: "analysis"});
+  const openInput = Object.freeze({...kernel, intentMode: "analysis" as const});
+  const opened = await owner.custody.open(openInput);
   const started = await owner.custody.start({
     attemptId: ids.attemptId, custodyId: ids.custodyId,
     execute: start => owner.provider.execute({...kernel,
@@ -176,8 +183,8 @@ const exerciseComposedOwner = async (tuple: ClaudeAgentSdkPlatformTuple, cancell
       intent: Object.freeze({mode: "analysis" as const, prompt: "synthetic composed owner"}),
       isCancellationRequested: async () => cancellation, start,
     }),
-    intent: Object.freeze({mode: "analysis" as const, prompt: "synthetic composed owner"}),
-    operationId: ids.operationId, startAuthority: `start-authority:${ids.authorityVectorDigest}`,
+    intentMode: "analysis",
+    committedDispatchProof: committedDispatchProofFixture(openInput, opened), operationId: ids.operationId,
     workspaceId: ids.workspaceId,
   });
   assert.equal(started.kind, "execution_started");

@@ -6,7 +6,7 @@ import type { ContainedTurnKernelOperation } from "../../../domain/contained-tur
 
 export interface ContainedTurnPostgresIdentitySource {
   nextId(kind: "attempt" | "cancellation_command" | "cleanup" | "custody" | "effect" |
-    "execution_generation" | "operation" | "operation_authority" | "proof" | "start_authority" |
+    "execution_generation" | "operation" | "operation_authority" | "proof" |
     "writer_fence", seed?: string): string;
 }
 

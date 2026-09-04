@@ -18,6 +18,7 @@ import type { ContainedTurnKernelOperation } from "../../../domain/contained-tur
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import { mutateContainedTurnOperation } from "../../../domain/contained-turn-transitions.js";
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
+import { committedDispatchProofV1 } from "../../../domain/committed-dispatch-proof-v1.js";
 import {
   assertContainedTurnPostgresAuthority as assertAuthority,
   type ContainedTurnPostgresIdentitySource,
@@ -123,7 +124,7 @@ export class ContainedTurnPostgresPreparationStore {
     });
   }
 
-  public claim(
+  public async claim(
     input: Parameters<ContainedTurnKernelOperationStore["claimPreparedDispatch"]>[0],
   ): ReturnType<ContainedTurnKernelOperationStore["claimPreparedDispatch"]> {
     const consumedReceipts = validateContainedTurnConsumedGrantReceipts(
@@ -134,8 +135,7 @@ export class ContainedTurnPostgresPreparationStore {
       operationId: input.subject.operationId,
       preparationToken: input.subject.preparationToken,
     });
-    const startAuthority = this.identities.nextId("start_authority", `claim:${claimSeed}`);
-    return this.transactions.write(async client => {
+    const outcome = await this.transactions.write(async client => {
       const current = await this.#load(client, input.authority.operationId, input.authority.scope);
       if (current === undefined) {return { kind: "not_found" as const };}
       assertAuthority(input.authority, current);
@@ -204,8 +204,60 @@ export class ContainedTurnPostgresPreparationStore {
         [current.operationId, input.subject.preparationToken, claimed.json,
           claimed.codecVersion, claimed.digest],
       );
-      return { kind: "claimed" as const, operation: next, startAuthority };
+      return {
+        claimProof,
+        kind: "fresh_claim" as const,
+        operation: next,
+        providerAccessProof,
+        providerAccessReceipt,
+        runtimeSecurityProof,
+        runtimeSecurityReceipt,
+      };
     });
+    if (outcome.kind !== "fresh_claim") {return outcome;}
+    const committed = outcome.operation;
+    if (committed.dispatch.kind !== "claimed" || committed.admissionFence.kind !== "fenced" ||
+        committed.custodyId === undefined || committed.hostBootId === undefined ||
+        committed.hostInstanceId === undefined || committed.workspaceId === undefined) {
+      throw new TypeError("acknowledged dispatch commit did not return a complete claimed operation");
+    }
+    const dispatch = committed.dispatch;
+    const hostCustodyProofs = committed.proofs.filter(proof =>
+      proof.kind === "host_custody" && proof.binding.attemptId === dispatch.attemptId &&
+      proof.binding.custodyId === committed.custodyId);
+    if (hostCustodyProofs.length !== 1) {
+      throw new TypeError("acknowledged dispatch commit did not retain one matching Host custody proof");
+    }
+    const [providerAccessGrantReceipt, runtimeSecurityGrantReceipt] = dispatch.grantReceipts;
+    const committedDispatchProof = committedDispatchProofV1({
+      acceptedAuthorityVectorDigest: committed.acceptedAuthorityVectorDigest,
+      admissionCutoffProofId: committed.admissionFence.proofId,
+      attemptId: dispatch.attemptId,
+      commandFingerprint: committed.commandFingerprint,
+      commandId: committed.commandId,
+      committedOperationRevision: committed.revision,
+      custodyId: committed.custodyId,
+      dispatchClaimProofId: dispatch.claimProofId,
+      effectId: committed.effectId,
+      executionGenerationId: dispatch.executionGenerationId,
+      hostBootId: committed.hostBootId,
+      hostCustodyProofId: hostCustodyProofs[0]!.proofId,
+      hostInstanceId: committed.hostInstanceId,
+      operationCutoffRevision: dispatch.operationCutoffRevision,
+      operationId: committed.operationId,
+      preparationToken: dispatch.preparationToken,
+      projectId: committed.scope.projectId,
+      provider: committed.adapterSnapshot.provider,
+      providerAccessDispatchProofId: dispatch.providerAccessDispatchProofId,
+      providerAccessGrantReceiptDigest: digestContainedTurnCanonicalValue(providerAccessGrantReceipt as never),
+      purpose: "contained_turn_committed_dispatch_v1",
+      runtimeSecurityDispatchProofId: dispatch.runtimeSecurityDispatchProofId,
+      runtimeSecurityGrantReceiptDigest: digestContainedTurnCanonicalValue(runtimeSecurityGrantReceipt as never),
+      tenantId: committed.scope.tenantId,
+      version: 1,
+      workspaceId: committed.workspaceId,
+    });
+    return { committedDispatchProof, kind: "claimed" as const, operation: outcome.operation };
   }
 
   public retire(

@@ -20,6 +20,7 @@ import { ClaudeAgentSdkCurrentKernelAdapter } from "../../../dist/features/conta
 import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { containedTurnOperationCutoffRevision } from "../../../dist/features/contained-agent-turn/domain/contained-turn-output-authority.js";
 import { createDependencies } from "../../features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 import { containedTurnFactoryPortKeys } from "./support/current-provider-owner-composition-ports.ts";
 import {
@@ -35,8 +36,12 @@ const ids = (provider: "claude" | "codex", suffix: string) => Object.freeze({
   attemptId: containedTurnIdentity("attempt", `attempt:${provider}:${suffix}`),
   authorityVectorDigest: digestContainedTurnCanonicalValue({ provider, suffix }),
   custodyId: containedTurnIdentity("custody", `custody:${provider}:${suffix}`),
+  commandId: containedTurnIdentity("command", `command:${provider}:${suffix}`),
   effectId: containedTurnIdentity("effect", `effect:${provider}:${suffix}`),
+  operationCutoffRevision: containedTurnOperationCutoffRevision(0),
   operationId: containedTurnIdentity("operation", `operation:${provider}:${suffix}`),
+  operationRevision: 1,
+  preparationToken: containedTurnIdentity("preparation", `preparation:${provider}:${suffix}`),
   workspaceId: containedTurnIdentity("workspace", `workspace:opaque:${provider}:${suffix}`),
 });
 

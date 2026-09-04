@@ -34,6 +34,7 @@ import type {
 import type { ContainedTurnOutputWriteAuthority } from "../../../domain/contained-turn-output-authority.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import type { ContainedTurnKernelMutation } from "../../../domain/contained-turn-transitions.js";
+import type { CommittedDispatchProofV1 } from "../../../domain/committed-dispatch-proof-v1.js";
 
 export type CommitContainedTurnKernelOperationOutcome =
   | { readonly kind: "applied"; readonly operation: ContainedTurnKernelOperation }
@@ -121,7 +122,7 @@ export interface ContainedTurnKernelOperationStore {
     hostCustodyProof: Extract<ContainedTurnProof, { readonly kind: "host_custody" }>;
     subject: ContainedTurnDispatchGrantSubject;
   }>): Promise<
-    | { readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation; readonly startAuthority: string }
+    | { readonly committedDispatchProof: CommittedDispatchProofV1; readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation }
     | { readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation }
     | { readonly current: ContainedTurnKernelOperation; readonly kind: "stale" }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }

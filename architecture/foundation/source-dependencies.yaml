@@ -25,6 +25,7 @@ boundaries:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts
