@@ -16,8 +16,38 @@ export type {
   DispatchAuthorityHead,
   DispatchAuthorityScope,
 } from "./features/contained-turn-dispatch-authority/domain/dispatch-authority-head.js";
-export { createContainedTurnEgressGateway } from
-  "./features/contained-turn-egress/gateway.js";
+import { createHash } from "node:crypto";
+import { types as nodeTypes } from "node:util";
+
+import { createContainedTurnEgressGatewayCore } from "./features/contained-turn-egress/gateway.js";
+import type { ContainedTurnEgressDependencies, TrustedEgressHostIdentityV1 } from
+  "./features/contained-turn-egress/composition.js";
+
+const exactObject = <Name extends string>(value: unknown, names: readonly Name[]) => {
+  if (typeof value !== "object" || value === null || nodeTypes.isProxy(value)) {return;}
+  try {const prototype = Object.getPrototypeOf(value); if (prototype !== Object.prototype && prototype !== null) {return;}
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    if (Reflect.ownKeys(descriptors).length !== names.length || Reflect.ownKeys(descriptors)
+      .some(key => typeof key !== "string" || !names.includes(key as Name))) {return;}
+    const result = Object.create(null) as Record<Name, unknown>;
+    for (const name of names) {const descriptor = descriptors[name]; if (descriptor === undefined || !("value" in descriptor)) {return;}
+      result[name] = descriptor.value;} return result as Readonly<Record<Name, unknown>>;} catch {return;}
+};
+const primitives = Object.freeze({
+  sha256: (bytes: Uint8Array) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+  exactObject,
+  callable: (value: unknown): value is (...args: never[]) => unknown => typeof value === "function" && !nodeTypes.isProxy(value),
+  byteArray: (value: unknown): value is Uint8Array => value instanceof Uint8Array && !nodeTypes.isProxy(value) &&
+    Object.getPrototypeOf(value) === Uint8Array.prototype && value.buffer instanceof ArrayBuffer,
+  array: (value: unknown): value is unknown[] => Array.isArray(value) && !nodeTypes.isProxy(value),
+  thenable: (value: unknown) => {if ((typeof value !== "object" || value === null) && typeof value !== "function") {return false;}
+    try {return typeof Reflect.get(value as object, "then") === "function";} catch {return true;}},
+  canonicalEd25519Signature: (value: unknown): value is string => {if (typeof value !== "string" ||
+      !/^[A-Za-z0-9+/]{86}==$/u.test(value)) {return false;} const decoded = Buffer.from(value, "base64");
+    return decoded.byteLength === 64 && decoded.toString("base64") === value;},
+});
+export const createContainedTurnEgressGateway = (identity: TrustedEgressHostIdentityV1,
+  dependencies: ContainedTurnEgressDependencies) => createContainedTurnEgressGatewayCore(identity, dependencies, primitives);
 export { createNodeEd25519EgressSigner } from
   "./features/contained-turn-egress/node-ed25519.js";
 export type {
@@ -28,7 +58,8 @@ export type {
   ContainedTurnEgressResult,
   EgressAuthorizationBodyV1,
   EgressAuthorizationEnvelopeV1,
-  EgressAuthorizationConsumptionV1,
+  ExactFirstWriteReceiptV1,
+  EgressTransportObservationV1,
   EgressAuthorizationSignerV1,
   EgressPolicyTimeAuthorityV1,
   EgressPolicyTimeSnapshotV1,

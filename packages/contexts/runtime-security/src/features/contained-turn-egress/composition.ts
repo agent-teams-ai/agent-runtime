@@ -15,12 +15,14 @@ export interface ContainedTurnEgressRequest {
   readonly credentialGeneration: string; readonly credentialRevision: string;
   readonly operationId: string; readonly dispatch: ObserveDispatchConsumptionInput;
   readonly requestId: string; readonly requestNonce: string; readonly method: "GET" | "POST";
+  /** Ephemeral transport target only. It is represented by pathDigest in authorization evidence. */
   readonly path: string; readonly headers: readonly Readonly<{name: string; value: string}>[];
   readonly body: Uint8Array;
   readonly budgets: Readonly<{requestBytes: number; responseBytes: number; deadlineMs: number}>;
 }
 export type ContainedTurnEgressResult =
-  | Readonly<{status: "completed"; responseDigest: string; responseBytes: number}>
+  | Readonly<{status: "completed"; responseDigest: string; responseBytes: number;
+      applicationBytesDigest: string; applicationBytesWritten: number}>
   | Readonly<{status: "denied"; reason: "invalid_request" | "route_unavailable" | "route_mismatch" |
       "dispatch_not_committed" | "authority_unavailable" | "authority_drift" | "address_denied" |
       "tls_peer_mismatch" | "expired" | "budget_exceeded" | "authorization_invalid" |
@@ -35,6 +37,8 @@ export interface ProviderRouteAuthoritySnapshotV1 {
   readonly credentialGeneration: string; readonly credentialRevision: string;
   readonly routeRevision: string; readonly authorityDigest: string; readonly scheme: "https";
   readonly host: string; readonly port: 443; readonly tlsServerName: string; readonly pathConstraint: string;
+  readonly allowedTlsSpkiDigests: readonly string[]; readonly tlsPinSetDigest: string;
+  readonly tlsPinSetGeneration: string; readonly tlsPinSetRevision: string;
 }
 export type ProviderRouteRevalidationV1 = Readonly<{status: "current"}> |
   Readonly<{status: "rejected"; reason: "changed" | "revoked" | "not_found"}> |
@@ -43,8 +47,8 @@ export interface ProviderRouteAuthorityV1 {
   resolveExact(input: Readonly<{tenantId: string; projectId: string; providerId: string;
     providerAccountRef: string; providerRouteRef: string; credentialBindingRef: string;
     credentialBindingDigest: string; credentialGeneration: string;
-    credentialRevision: string}>): Promise<ProviderRouteAuthoritySnapshotV1>;
-  revalidateExact(expected: ProviderRouteAuthoritySnapshotV1): Promise<ProviderRouteRevalidationV1>;
+    credentialRevision: string}>): PromiseLike<ProviderRouteAuthoritySnapshotV1>;
+  revalidateExact(expected: ProviderRouteAuthoritySnapshotV1): PromiseLike<ProviderRouteRevalidationV1>;
 }
 export interface EgressPolicyTimeSnapshotV1 {
   readonly contractVersion: "contained-turn-egress-policy/v1";
@@ -55,8 +59,8 @@ export interface EgressPolicyTimeSnapshotV1 {
   readonly maxDeadlineMs: number;
 }
 export interface EgressPolicyTimeAuthorityV1 {
-  resolve(): Promise<EgressPolicyTimeSnapshotV1>;
-  revalidateExact(expected: EgressPolicyTimeSnapshotV1): Promise<Readonly<{status: "current"; observedAt: number}> |
+  resolve(): PromiseLike<EgressPolicyTimeSnapshotV1>;
+  revalidateExact(expected: EgressPolicyTimeSnapshotV1): PromiseLike<Readonly<{status: "current"; observedAt: number}> |
     Readonly<{status: "rejected"}> | Readonly<{status: "indeterminate"}>>;
 }
 export interface EgressAuthorizationEnvelopeV1 {
@@ -82,11 +86,14 @@ export interface EgressAuthorizationBodyV1 {
   readonly policyGeneration: string; readonly keyId: string; readonly keyGeneration: string;
   readonly signerRevision: string; readonly timeAuthorityId: string; readonly timeGeneration: string;
   readonly issuedAt: number; readonly expiresAt: number; readonly target: Readonly<{scheme: "https";
-    host: string; port: 443; tlsServerName: string; path: string}>;
+    host: string; port: 443; tlsServerName: string; pathDigest: string}>;
+  readonly allowedTlsSpkiDigests: readonly string[]; readonly tlsPinSetDigest: string;
+  readonly tlsPinSetGeneration: string; readonly tlsPinSetRevision: string;
+  readonly resolutionAuthorityId: string; readonly resolutionGeneration: string; readonly answerSetDigest: string;
   readonly addresses: readonly NetworkAddressV1[]; readonly peerAddress: NetworkAddressV1;
   readonly peerPort: 443; readonly tlsSpkiDigest: string; readonly alpn: "http/1.1";
   readonly method: "GET" | "POST"; readonly headerDigest: string; readonly bodyDigest: string;
-  readonly requestDigest: string; readonly requestBytes: number;
+  readonly requestDigest: string; readonly applicationBytesDigest: string; readonly applicationBytes: number;
   readonly budgets: Readonly<{requestBytes: number; responseBytes: number; deadlineMs: number}>;
   readonly policyMaxima: Readonly<{requestBytes: number; responseBytes: number; deadlineMs: number}>;
 }
@@ -94,16 +101,25 @@ export interface BufferedEgressRequestV1 {
   readonly method: "GET" | "POST"; readonly headers: readonly Readonly<{name: string; value: string}>[];
   readonly body: Uint8Array;
 }
-export interface EgressAuthorizationConsumptionV1 { readonly authorizationDigest: string }
+export interface ExactFirstWriteReceiptV1 { readonly status: "written"; readonly authorizationDigest: string;
+  readonly applicationBytesDigest: string; readonly applicationBytesWritten: number }
+export interface EgressTransportObservationV1 {
+  readonly canonicalAddresses: readonly NetworkAddressV1[]; readonly peerAddress: NetworkAddressV1;
+  readonly peerPort: 443; readonly tlsServerName: string; readonly tlsSpkiDigest: string; readonly alpn: "http/1.1";
+  readonly phase: "immediately_before_first_application_byte"; readonly resolutionAuthorityId: string;
+  readonly resolutionGeneration: string; readonly answerSetDigest: string;
+  readonly applicationBytesDigest: string; readonly applicationBytes: number;
+}
 export interface EgressTransportV1 {
   execute(input: Readonly<{target: Readonly<{scheme: "https"; host: string; port: 443;
       tlsServerName: string; path: string}>; request: BufferedEgressRequestV1; responseByteLimit: number;
-    deadlineMs: number; beforeFirstByte(observation: unknown): Promise<Readonly<{status: "authorized";
-      body: EgressAuthorizationBodyV1; canonicalBody: Uint8Array; envelope: EgressAuthorizationEnvelopeV1;
-      consume(): unknown}> | Readonly<{status: "denied"}>>}>): Promise<unknown>;
-  close(): Promise<void>;
+    deadlineMs: number; beforeFirstWrite(observation: unknown,
+      write: (authorization: Readonly<{body: EgressAuthorizationBodyV1; canonicalBody: Uint8Array;
+        envelope: EgressAuthorizationEnvelopeV1}>) => unknown): Promise<Readonly<{status: "written"}> |
+          Readonly<{status: "denied"}>>}>): PromiseLike<unknown>;
+  close(): PromiseLike<void>;
 }
-export interface EgressTransportGatewayV1 { openOneShotHttps(): Promise<unknown> }
+export interface EgressTransportGatewayV1 { openOneShotHttps(): PromiseLike<unknown> }
 export interface ContainedTurnEgressDependencies {
   readonly routeAuthority: ProviderRouteAuthorityV1;
   readonly dispatchAuthority: Pick<ContainedTurnDispatchAuthorityV1, "observeDispatchConsumption">;
