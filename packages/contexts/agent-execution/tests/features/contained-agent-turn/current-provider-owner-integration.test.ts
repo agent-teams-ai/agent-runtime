@@ -410,7 +410,7 @@ test("Codex owner immutably snapshots a valid exact Array and rejects its arbitr
   const privateRootPath = codexFixturePrivateRoot;
   const codexHome = codexFixtureBoundary.codexHome;
   const tmpDir = codexFixtureTmp;
-  const oauthToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJwcm92aWRlciJ9.signature-private";
+  const oauthToken = "test-fixture-literal";
   const tokenDigest = createHash("sha256").update(oauthToken).digest("hex");
   const reviewToken = "ARBITRARY_REVIEW_TOKEN_93e77fe_exact_inventory";
   const process = new FakeCodexProcess((message, target) => {
@@ -767,4 +767,94 @@ test("public root remains path-free and outer composition retains the exact seve
   const supplied = containedTurnFactoryPortKeys(composition);
   assert.deepEqual(supplied, ["operationStore", "security", "providerAccess", "workspace", "artifacts", "custody", "provider"]);
   assert.doesNotMatch(composition, /production/u);
+});
+
+// Exercise the same submission seam retained by both live harnesses, using
+// current owners and synthetic transports. No provider executable is invoked.
+test("live canary submission uses current owner contracts and rejects substituted dispatch proofs", async t => {
+  const { submitContainedTurnLiveCanary } = await import("../../live/contained-turn-live-canary-lifecycle.mjs");
+  const { committedDispatchProofV1 } = await import("../../../dist/features/contained-agent-turn/domain/committed-dispatch-proof-v1.js");
+  for (const provider of ["codex", "claude"] as const) {
+    for (const mutation of ["none", "fabricated", "stale", "mismatched"] as const) {
+      await t.test(`${provider}: ${mutation}`, async () => {
+        const root = await realpath(await mkdtemp(join(tmpdir(), "live-canary-contract-")));
+        try {
+          const host = new FakeHost();
+          const owner = await createClaimPathOwner(provider, root, host);
+          const fixture = createDependencies();
+          const selected = dependenciesForProvider(fixture, provider);
+          let starts = 0;
+          let opens = 0;
+          const custody = Object.freeze({
+            attestContainment: owner.custody.attestContainment.bind(owner.custody),
+            attestExecutionClosure: owner.custody.attestExecutionClosure.bind(owner.custody),
+            completionBoundary: owner.custody.completionBoundary.bind(owner.custody),
+            ensurePhysicalContainment: owner.custody.ensurePhysicalContainment.bind(owner.custody),
+            queryContainmentAttestation: owner.custody.queryContainmentAttestation.bind(owner.custody),
+            queryPhysicalContainment: owner.custody.queryPhysicalContainment.bind(owner.custody),
+            releaseReservation: owner.custody.releaseReservation.bind(owner.custody),
+            releaseRetiredReservation: owner.custody.releaseRetiredReservation.bind(owner.custody),
+            requestContainment: owner.custody.requestContainment.bind(owner.custody),
+            requestPhysicalContainment: owner.custody.requestPhysicalContainment.bind(owner.custody),
+            open: async (input: Parameters<typeof owner.custody.open>[0]) => {
+              opens += 1;
+              assert.equal(typeof input.commandId, "string");
+              assert.equal(typeof input.operationRevision, "number");
+              assert.equal(typeof input.operationCutoffRevision, "number");
+              assert.equal(typeof input.preparationToken, "string");
+              return owner.custody.open(input);
+            },
+            start: async (input: Parameters<typeof owner.custody.start>[0]) => {
+              starts += 1;
+              assert.equal(host.starts, 0);
+              assert.equal(input.intentMode, "analysis");
+              assert.equal("intent" in input || "startAuthority" in input, false);
+              assert.equal(fixture.current()?.dispatch.kind, "claimed");
+              if (mutation === "none") {return owner.custody.start(input);}
+              const {proofDigest: _digest, ...seed} = input.committedDispatchProof;
+              const proof = mutation === "fabricated"
+                ? {...input.committedDispatchProof, proofDigest: `sha256:${"0".repeat(64)}`}
+                : committedDispatchProofV1({...seed, ...(mutation === "stale"
+                  ? {committedOperationRevision: seed.committedOperationRevision + 1}
+                  : {commandId: containedTurnIdentity("command", "command:foreign")})});
+              return owner.custody.start({...input, committedDispatchProof: proof as never});
+            },
+          });
+          const command = {
+            commandId: `command:canary:${provider}:${mutation}`, expectedProvider: provider,
+            intent: {mode: "analysis" as const, prompt: "synthetic current-owner contract"},
+            scope: {projectId: "project:one", tenantId: "tenant:one"},
+          };
+          let accepted = false;
+          const operationStore = Object.freeze({
+            ...selected.operationStore,
+            accept: async (...input: Parameters<typeof selected.operationStore.accept>) => {
+              if (!accepted) {
+                accepted = true;
+                return selected.operationStore.accept(...input);
+              }
+              const operation = fixture.current();
+              if (operation === undefined) {throw new Error("live canary replay lacks accepted operation");}
+              return {kind: "replayed" as const, operation};
+            },
+          });
+          const dependencies = {...selected, custody, operationStore, provider: owner.provider};
+          const result = await submitContainedTurnLiveCanary({
+            command, dependencies, owner,
+          });
+          assert.equal(opens, 1);
+          assert.equal(starts, 1);
+          assert.equal(host.starts, mutation === "none" ? 1 : 0);
+          assert.equal(result.turn.status, "reconcile_required");
+          assert.equal(result.turn.commandId, command.commandId);
+          assert.equal(result.turn.operationId, fixture.current()?.operationId);
+          assert.equal(result.turn.effectId, fixture.current()?.effectId);
+          const replay = await createContainedTurnFeature(dependencies).submit.execute(command);
+          assert.equal(replay.status, "observed");
+          assert.equal(opens, 1);
+          assert.equal(starts, 1);
+        } finally {await rm(root, {recursive: true, force: true});}
+      });
+    }
+  }
 });
