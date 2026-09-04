@@ -227,6 +227,14 @@ export const changes = Object.freeze([
     id: "filesystem-lineage-deterministic-qualification",
     revision: "5a712935c976ed7e2cdac2b98072c749913bb04b",
   }),
+  Object.freeze({
+    id: "provider-process-egress-authenticated-fields",
+    revision: "9f910fc7dcb28813bcbb21ddde4d4bbe252e09ce",
+  }),
+  Object.freeze({
+    id: "provider-process-egress-current-main-integration",
+    revision: "9dc4a4253f4bd1a35888052935c7d95c5face585",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -237,12 +245,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "694a67d5823c72e08ca3dfb9e96750d6fa5d5f2a298268f835a8452f2f12fb7a",
   }),
   sources: Object.freeze({
-    fileCount: 300,
-    sha256: "c1a0ca653b8af1e7846d7f8ba82d1ad4a1439b70edb205d34d5558bea8ac60f2",
+    fileCount: 313,
+    sha256: "46dd51b4f8f67aef453775690858fbd2dbad36cce3c8abe9bc584eab6b09caa6",
   }),
   tests: Object.freeze({
-    fileCount: 139,
-    sha256: "596c219026088fb15f1a236b9d3c1fc40669e05541c291cd8100be2643b483a2",
+    fileCount: 143,
+    sha256: "f1874e40d3c49ef35b986cebec666acca5596fa4eb6ea019e82c396b3e20d37e",
   }),
 });
 
