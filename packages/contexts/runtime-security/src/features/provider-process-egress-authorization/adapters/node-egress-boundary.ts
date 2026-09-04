@@ -73,6 +73,66 @@ const ownerOutcome = oneOf(
     reason: literal("policy_denied", "policy_not_found", "route_unavailable", "revoked") }),
   object({ status: literal("indeterminate"), reason: literal("owner_unavailable", "owner_malformed") }),
 );
+const signingKeyV2 = object({ algorithm: literal("ed25519"),
+  signatureEncoding: literal("hex-lower"), keyRef: text, publicKeyDigest: text,
+  keyGeneration: text, signerRevision: text, hostReservationId: text });
+const signatureV2 = object({ algorithm: literal("ed25519"),
+  signatureEncoding: literal("hex-lower"), keyRef: text, publicKeyDigest: text,
+  keyGeneration: text, signerRevision: text, hostReservationId: text, value: text });
+const policyV2 = object({ policyRef: text, policyRevision: text, policyGeneration: text,
+  authorizedRequestDigest: text, origin, dnsIdentity: text, tlsPolicyDigest: text, limits: budgets,
+  decisionTtlMilliseconds: number, revoked: boolean });
+const authorityV2 = object({ authorityRef: text, policy: policyV2, providerAccess });
+const provisionalDecisionV2 = object({
+  contractVersion: literal("provider-process-egress-provisional-decision/v2"),
+  authorizationRequestId: text, authorityRef: text, scope, policy: policyV2, providerAccess, request,
+  requestDigest: text, time, signingKey: signingKeyV2, decisionDigest: text, signature: signatureV2,
+});
+const provisionalSchemaV2 = object({
+  contractVersion: literal("provider-process-egress-provisional/v2"),
+  authorizationRequestId: text, request,
+});
+const finalSchemaV2 = object({
+  contractVersion: literal("provider-process-egress-final/v2"), provisional: provisionalDecisionV2,
+  boundaryUseId: text, connectionAttemptId: text, streamId: text,
+  transport: literal("tcp-tls", "udp-quic"),
+  resolver: object({ resolverIdentity: text, resolverEpoch: text, resolutionCount: number,
+    addresses: array(address, 32) }),
+  pinnedDestination: object({ address: text, port: number }),
+  observedPeer: object({ address: text, port: number }),
+  tls: object({ sniHostname: text, certificateValidated: boolean, dnsIdentity: text,
+    certificateDigest: text, tlsPolicyDigest: text, alpn: literal("http/1.1", "h2", "h3") }),
+  request, redirectHop: number,
+});
+const ownerOutcomeV2 = oneOf(
+  object({ status: literal("current"), authority: authorityV2 }),
+  object({ status: literal("denied"),
+    reason: literal("policy_denied", "policy_not_found", "route_unavailable", "revoked") }),
+  object({ status: literal("indeterminate"), reason: literal("owner_unavailable", "owner_malformed") }),
+);
+const grantPayloadV2 = object({
+  contractVersion: literal("provider-process-first-application-byte-grant/v2"),
+  authorizationRequestId: text, authorityRef: text, scope, policy: policyV2, providerAccess,
+  resolver: object({ resolverIdentity: text, resolverEpoch: text, resolutionCount: literal(1),
+    normalizedAddresses: array(address, 32), addressSetDigest: text }),
+  selectedPeer: object({ address: text, port: number }),
+  tls: object({ sniHostname: text, certificateValidated: boolean, dnsIdentity: text,
+    certificateDigest: text, tlsPolicyDigest: text, alpn: literal("http/1.1", "h2", "h3") }),
+  limits: budgets, request, requestDigest: text,
+  time: object({ authorityId: text, epoch: text, authorizedAtControlTime: number,
+    expiresAtControlTime: number }),
+  boundaryUseId: text, connectionAttemptId: text, streamId: text, redirectHop: literal(0),
+  provisionalDecisionDigest: text, automaticRetryAuthorized: literal(false),
+  poolingAuthorized: literal(false),
+  consumption: object({ owner: literal("host-custody"),
+    journalKey: object({ namespace: literal("provider-process-egress/v2"), tenantId: text,
+      projectId: text, operationId: text, boundaryUseId: text }), requestFingerprint: text }),
+});
+const signedGrantV2 = object({ payload: grantPayloadV2, finalAuthorizationDigest: text,
+  signature: signatureV2,
+  evidence: object({ contractVersion: literal("provider-process-egress-grant-evidence/v2"),
+    authorizationRef: text, boundaryUseRef: text, decisionDigest: text,
+    finalAuthorizationDigest: text, signingKey: signingKeyV2 }) });
 
 const ownStringKeysOnly = (descriptors: object): string[] => {
   const keys = Reflect.ownKeys(descriptors);
@@ -155,5 +215,17 @@ export const detachEgressDecisionSignature = (value: unknown): unknown =>
   detach(value, signature, new WeakSet());
 export const detachEgressScope = (value: unknown): unknown =>
   detach(value, scope, new WeakSet());
+export const detachProvisionalEgressInputV2 = (value: unknown): unknown =>
+  detach(value, provisionalSchemaV2, new WeakSet());
+export const detachFinalEgressInputV2 = (value: unknown): unknown =>
+  detach(value, finalSchemaV2, new WeakSet());
+export const detachEgressAuthorityOutcomeV2 = (value: unknown): unknown =>
+  detach(value, ownerOutcomeV2, new WeakSet());
+export const detachEgressDecisionSignatureV2 = (value: unknown): unknown =>
+  detach(value, signatureV2, new WeakSet());
+export const detachProvisionalEgressDecisionV2 = (value: unknown): unknown =>
+  detach(value, provisionalDecisionV2, new WeakSet());
+export const detachSignedEgressGrantV2 = (value: unknown): unknown =>
+  detach(value, signedGrantV2, new WeakSet());
 export const isNodeProxy = (value: unknown): boolean =>
   value !== null && typeof value === "object" && nodeUtilTypes.isProxy(value);

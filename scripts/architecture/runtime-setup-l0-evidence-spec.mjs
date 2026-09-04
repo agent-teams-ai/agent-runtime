@@ -251,6 +251,10 @@ export const changes = Object.freeze([
     id: "strict-http-egress-current-main-integration",
     revision: "038080795baabe54bcc4ef89dbedf334becc2acf",
   }),
+  Object.freeze({
+    id: "runtime-security-ed25519-v2-candidate",
+    revision: "d7c875a60ac8e59eb1d097bdb0f0926991a1ed99",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -261,12 +265,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "6708bfd7c55aa9747295893a924b44946c4edb2d528c57cff5dd4d0c3afa0bd0",
   }),
   sources: Object.freeze({
-    fileCount: 335,
-    sha256: "60230bd4b4ca3b68025d925ccd7147bc4399a7798cdf51f8180cf50e20637971",
+    fileCount: 337,
+    sha256: "98950b1e761789cde2329fd75605a74824e7cc30ad3472768400431934fdc7df",
   }),
   tests: Object.freeze({
-    fileCount: 163,
-    sha256: "4c517f2fb3e5e0c3a82a68f9611c650b510f8791b7199343a0c2d17b110df52b",
+    fileCount: 164,
+    sha256: "4590a859fd7605adce57e317bf100022b387f26ab6cd6e58944b86e3b85042c5",
   }),
 });
 
