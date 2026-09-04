@@ -20,7 +20,7 @@ import { createOutboundHttpRequest, selectForwardedRequestHeaders } from "./http
 import { boundedHttpOpaque, snapshotHttpEgressOperation, snapshotHttpGenerationObservation,
   snapshotHttpRouteObservation, snapshotHttpTransportBinding } from "./http-ingress-validation.js";
 import { createHttpDispatchBoundary } from "./http-dispatch-boundary.js";
-import { zeroHttpBytes } from "./http-byte-intrinsics.js";
+import { zeroHttpBytes, zeroLateHttpBytes } from "./http-byte-intrinsics.js";
 import { observeHttpDispatch } from "./http-dispatch-observation.js";
 import { observeHttpResponse } from "./http-response-observation.js";
 import { httpAuthorizationMatches, httpFinalAuthorizationMatches,
@@ -36,8 +36,6 @@ import {
 } from "./strict-http-request.js";
 import type { StrictHttpRequest } from "./strict-http-request.js";
 const encoder = new TextEncoder();
-const zeroLateBytes = (pending: Promise<Uint8Array> | undefined): void =>
-  void pending?.then(value => zeroHttpBytes(value), () => {});
 
 type ReceiptState = {
   outcome: HttpEgressOutcome;
@@ -372,7 +370,7 @@ const renderAuthorizedRequest = async (
       operation.signal,
     );
   } catch {
-    zeroLateBytes(pendingAuthorization);
+    zeroLateHttpBytes(pendingAuthorization);
     state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "credential_render_failed";
     return await halt(ports, operation, state, resources);
