@@ -148,5 +148,5 @@ export const authorizationRequestPayload = (command: Omit<AuthorizationCommand, 
 });
 
 export const sameAuthorizationOwner = (record: AuthorizationRecord, selector: AuthorizationOwnerSelector): boolean =>
-  record.tenantId === selector.tenantId && record.projectId === selector.projectId && record.provider === selector.provider &&
-  record.scopeDigest === selector.scopeDigest;
+  record.authorizationRequestId === selector.authorizationRequestId && record.tenantId === selector.tenantId &&
+  record.projectId === selector.projectId && record.provider === selector.provider && record.scopeDigest === selector.scopeDigest;

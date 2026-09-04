@@ -6,7 +6,7 @@ import type {
 } from "../application/ports/outbound/materialization-authorization-repository.js";
 import { createCredentialMaterializationAuthorizationAdapter } from "../adapters/inbound/materialization-authorization-mapper.js";
 import { detachedDispatchData } from "../adapters/dispatch-consumption-data.js";
-import { isNativePromise, isRuntimeProxy } from "../adapters/provider-access-data.js";
+import { exactProviderAccessDataRecord, isNativePromise, isRuntimeProxy } from "../adapters/provider-access-data.js";
 import { snapshotAuthorizationRecord, type AuthorizationRecord } from "../domain/materialization-authorization.js";
 
 export interface MaterializationAuthorizationV1Dependencies {
@@ -63,8 +63,16 @@ const nativeResult = async (name: string, value: unknown): Promise<unknown> => {
   return result;
 };
 
+const MATERIALIZATION_AUTHORIZATION_BINDING_KEYS = [
+  "accessRef", "availability", "bindingRevision", "credentialBindingDigest", "credentialBindingRef",
+  "credentialGeneration", "projectId", "provider", "providerAccountRef", "providerRouteRef", "revocation",
+  "scopeDigest", "tenantId",
+] as const;
+
 const bindingSnapshot = (value: unknown): MaterializationAuthorizationBinding => {
-  const data = detachedDispatchData("authorization binding", value) as MaterializationAuthorizationBinding;
+  const data = exactProviderAccessDataRecord(
+    "authorization binding", value, MATERIALIZATION_AUTHORIZATION_BINDING_KEYS,
+  ) as unknown as MaterializationAuthorizationBinding;
   const record = snapshotAuthorizationRecord({
     ...data, authorizationRequestId: "boundary:validation", decision: "authorized", purpose:
       "contained-turn.credential-materialization-authorization/v1", rejectionReason: null, requestDigest: "pending",

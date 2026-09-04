@@ -329,6 +329,68 @@ test("a substituted binding from another owner cannot authorize or write a recei
   }
 });
 
+test("a repository cannot substitute a same-scope record from another authorization request", async () => {
+  const source = repositoryFixture();
+  const sourceApi = createContainedTurnCredentialMaterializationAuthorizationV1({
+    digest: createSha256DispatchConsumptionDigest(), repository: source.repository,
+  });
+  const requestA = await requestFor();
+  assert.equal((await sourceApi.authorize(requestA)).kind, "authorized");
+  const recordA = source.saved();
+  assert.ok(recordA);
+  if (recordA === undefined) {return;}
+
+  let writes = 0;
+  const corruptRepository: MaterializationAuthorizationRepository = {
+    async observeAuthorizationRequest() {return recordA;},
+    async transact(_selector, work) {
+      return work(Object.freeze({
+        async findAuthorizationRequest() {return recordA;},
+        async findBinding() {return binding;},
+        async saveAuthorization() {writes += 1;},
+      }));
+    },
+  };
+  const baseDigest = createSha256DispatchConsumptionDigest();
+  let digestCalls = 0;
+  const api = createContainedTurnCredentialMaterializationAuthorizationV1({
+    digest: {async digest(payload) {digestCalls += 1; return baseDigest.digest(payload);}}, repository: corruptRepository,
+  });
+  const requestB = await requestFor({authorizationRequestId: "authorization-request:2"});
+  assert.deepEqual(await api.authorize(requestB), {kind: "indeterminate"});
+  assert.deepEqual(await api.observe({
+    ...observationFor(requestB), requestDigest: requestA.requestDigest,
+  }), {kind: "indeterminate"});
+  assert.equal(digestCalls, 0);
+  assert.equal(writes, 0);
+});
+
+test("binding decoding rejects every validation-field shadow without getters or authorization", async () => {
+  const shadowableKeys = [
+    "authorizationRequestId", "decision", "purpose", "rejectionReason", "requestDigest", "schemaVersion",
+  ] as const;
+  for (const key of shadowableKeys) {
+    for (const accessor of [false, true]) {
+      let getterCalls = 0;
+      const invalidBinding = {...binding} as Record<string, unknown>;
+      if (accessor) {
+        Object.defineProperty(invalidBinding, key, {
+          enumerable: true, get: () => {getterCalls += 1; return "shadow";},
+        });
+      } else {
+        invalidBinding[key] = "shadow";
+      }
+      const fixture = repositoryFixture(invalidBinding as unknown as MaterializationAuthorizationBinding);
+      const api = createContainedTurnCredentialMaterializationAuthorizationV1({
+        digest: createSha256DispatchConsumptionDigest(), repository: fixture.repository,
+      });
+      assert.deepEqual(await api.authorize(await requestFor()), {kind: "indeterminate"}, `${key}:${accessor}`);
+      assert.equal(getterCalls, 0, key);
+      assert.equal(fixture.saved(), undefined, key);
+    }
+  }
+});
+
 test("a retained transaction callback cannot run after the repository returns or rejects", async () => {
   for (const throws of [false, true]) {
     let replay: (() => Promise<unknown>) | undefined;
