@@ -1,6 +1,6 @@
 import { replayDockerCustodyBytes } from "./docker-custody-journal-codec.js";
 import { DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS } from "./docker-custody-journal-types.js";
-import { parseStrictJson } from "../engine/strict-json.js";
+import { parseStrictJson } from "../serialization/strict-json.js";
 import type { DockerEgressLegacyDiagnostic, DockerEgressLegacyV2Result } from "./docker-egress-journal-types.js";
 
 const result = (diagnostic: DockerEgressLegacyDiagnostic, quarantineRequired: boolean): DockerEgressLegacyV2Result =>

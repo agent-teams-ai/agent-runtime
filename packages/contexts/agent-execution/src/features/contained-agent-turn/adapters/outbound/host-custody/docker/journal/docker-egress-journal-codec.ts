@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 
-import { parseStrictJson } from "../engine/strict-json.js";
+import { parseStrictJson } from "../serialization/strict-json.js";
 import {
   DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS,
   DOCKER_EGRESS_JOURNAL_VERSION,
@@ -273,17 +273,20 @@ export const replayDockerEgressBytes = (bytes: Uint8Array,
   limits: DockerEgressJournalLimits = DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS): DockerEgressReplay => {
   if (bytes.byteLength > limits.maxJournalBytes) { throw new DockerEgressJournalCorruptionError("journal bound exceeded"); }
   const records: DockerEgressJournalRecord[] = []; let start = 0;
-  try {
-    for (let index = 0; index < bytes.byteLength; index += 1) {
-      if (bytes[index] !== 0x0a) { continue; }
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    if (bytes[index] !== 0x0a) { continue; }
+    try {
       const line = bytes.subarray(start, index);
       if (line.byteLength === 0 || line.byteLength + 1 > limits.maxRecordBytes || records.length >= limits.maxRecordsPerJournal) { throw new Error("journal record bound exceeded"); }
       const record = recordFrom(parsedPlain(parseStrictJson(line))); const previous = records.at(-1);
       if (record.sequence !== records.length || record.previousChecksumSha256 !== (previous?.checksumSha256 ?? null) ||
           (previous !== undefined && record.subject.bindingSha256 !== previous.subject.bindingSha256)) { throw new Error("journal chain mismatch"); }
       records.push(record); start = index + 1;
+    } catch {
+      if (records.length === 0) { throw new DockerEgressJournalCorruptionError(); }
+      return Object.freeze({ records: Object.freeze(records), tail: "partial" });
     }
-  } catch { throw new DockerEgressJournalCorruptionError(); }
+  }
   return Object.freeze({ records: Object.freeze(records), tail: start === bytes.byteLength ? "complete" : "partial" });
 };
 

@@ -9,6 +9,7 @@ import {
   encodeDockerEgressRecord,
   encodeDockerEgressTombstone,
   replayDockerEgressBytes,
+  type DockerEgressReplay,
   validateDockerEgressSubject,
   validateDockerEgressTrustedIdentity,
 } from "./docker-egress-journal-codec.js";
@@ -52,6 +53,9 @@ interface ReplayState {
 const invalid = (): never => { throw new DockerEgressJournalCorruptionError("invalid custody transition"); };
 const nextCleanup = (state: ReplayState): DockerEgressResourceKind | null =>
   DOCKER_EGRESS_CLEANUP_ORDER.find(resource => state.possible.has(resource) && !state.cleaned.has(resource)) ?? null;
+const isDebtFree = (state: ReplayState): boolean => nextCleanup(state) === null &&
+  state.materializePending === null && state.cleanupPending === null &&
+  !state.reconcileRequired && !state.quarantined;
 const initialState = (): ReplayState => ({
   possible: new Set(), cleaned: new Set(), materializePending: null, cleanupPending: null,
   materializeCursor: 0, cleanupStarted: false, reconcileRequired: false, unscopedReconciliation: false, terminal: false, quarantined: false,
@@ -170,8 +174,11 @@ export class DockerEgressJournal {
     limits?: Partial<DockerEgressJournalLimits>,
   ) { this.trusted = validateDockerEgressTrustedIdentity(trusted); this.limits = limitsFrom(limits); }
 
+  private async replay(file: DockerEgressJournalFile): Promise<DockerEgressReplay> {
+    return replayDockerEgressBytes(await file.read(this.limits.maxJournalBytes), this.limits);
+  }
   private async read(file: DockerEgressJournalFile): Promise<readonly DockerEgressJournalRecord[]> {
-    const replay = replayDockerEgressBytes(await file.read(this.limits.maxJournalBytes), this.limits);
+    const replay = await this.replay(file);
     if (replay.tail !== "complete") { throw new DockerEgressJournalCorruptionError("partial journal tail"); }
     replayState(replay.records); return replay.records;
   }
@@ -213,6 +220,24 @@ export class DockerEgressJournal {
     }
   }
 
+  private async quarantineCorruptEntry(entry: DockerEgressStorageEntry): Promise<never> {
+    let terminalRecord: DockerEgressJournalRecord | null = null;
+    try {
+      const prefix = await this.replay(entry.file);
+      if (prefix.records.length > 0) {
+        replayState(prefix.records);
+        if (dockerEgressJournalLocator(prefix.records[0]!.subject) === entry.locatorSha256) {
+          terminalRecord = prefix.records.at(-1)!;
+        }
+      }
+    } catch { /* Only a completely validated, locator-bound prefix is retained. */ }
+    const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256,
+      bindingSha256: terminalRecord?.subject.bindingSha256 ?? null,
+      disposition: "quarantined", terminalRecord });
+    await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
+    throw new DockerEgressJournalConflictError("corrupt V3 entry fences admission");
+  }
+
   public async open(subjectInput: DockerEgressJournalSubject, commandId: string): Promise<DockerEgressJournalRecord> {
     const subject = validateDockerEgressSubject(subjectInput);
     if (!trustedMatches(subject, this.trusted)) { throw new DockerEgressJournalConflictError("subject is not current trusted runtime identity"); }
@@ -238,12 +263,7 @@ export class DockerEgressJournal {
           }
           let records: readonly DockerEgressJournalRecord[];
           try { records = await this.read(entry.file); }
-          catch {
-            const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256, bindingSha256: null,
-              disposition: "quarantined", terminalRecord: null });
-            await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
-            throw new DockerEgressJournalConflictError("corrupt V3 entry fences admission");
-          }
+          catch { return await this.quarantineCorruptEntry(entry); }
           const first = records[0]!;
           if (dockerEgressJournalLocator(first.subject) !== entry.locatorSha256) {
             const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256,
@@ -283,6 +303,23 @@ export class DockerEgressJournal {
     } finally { await this.closeEntries(entries); }
   }
 
+  private async persistRetirement(locator: string, terminalRecord: DockerEgressJournalRecord): Promise<void> {
+    const tombstone = createDockerEgressTombstone({ locatorSha256: locator,
+      bindingSha256: terminalRecord.subject.bindingSha256, disposition: "retired", terminalRecord });
+    await this.storage.persistTombstone(locator, encodeDockerEgressTombstone(tombstone, this.limits), true);
+  }
+
+  private async committedCommandRetry(locator: string, subject: DockerEgressJournalSubject,
+    committed: DockerEgressJournalRecord, event: DockerEgressJournalEvent): Promise<DockerEgressJournalRecord> {
+    const candidate = createDockerEgressRecord({ sequence: committed.sequence, subject, commandId: committed.commandId, event,
+      previousChecksumSha256: committed.previousChecksumSha256 });
+    if (candidate.commandDigestSha256 !== committed.commandDigestSha256) {
+      throw new DockerEgressJournalConflictError("same command ID has a different canonical digest");
+    }
+    if (committed.event.kind === "closed") { await this.persistRetirement(locator, committed); }
+    return committed;
+  }
+
   private async append(subjectInput: DockerEgressJournalSubject, expectedSequence: number, commandId: string,
     event: DockerEgressJournalEvent): Promise<DockerEgressJournalRecord> {
     const subject = validateDockerEgressSubject(subjectInput);
@@ -296,12 +333,7 @@ export class DockerEgressJournal {
       }
       try {
         const records = await this.read(file); const committed = records.find(record => record.commandId === commandId);
-        if (committed !== undefined) {
-          const candidate = createDockerEgressRecord({ sequence: committed.sequence, subject, commandId, event,
-            previousChecksumSha256: committed.previousChecksumSha256 });
-          if (candidate.commandDigestSha256 === committed.commandDigestSha256) { return committed; }
-          throw new DockerEgressJournalConflictError("same command ID has a different canonical digest");
-        }
+        if (committed !== undefined) { return await this.committedCommandRetry(locator, subject, committed, event); }
         const previous = records.at(-1);
         if (previous === undefined || previous.sequence !== expectedSequence || previous.subject.bindingSha256 !== subject.bindingSha256) {
           throw new DockerEgressJournalConflictError();
@@ -373,15 +405,100 @@ export class DockerEgressJournal {
     await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
   }
 
+  private async retireDebtFree(entry: DockerEgressStorageEntry,
+    records: readonly DockerEgressJournalRecord[]): Promise<DockerEgressJournalRecord> {
+    const previous = records.at(-1)!;
+    if (previous.event.kind === "closed") {
+      await this.persistRetirement(entry.locatorSha256, previous);
+      return previous;
+    }
+    const terminal = createDockerEgressRecord({ sequence: previous.sequence + 1, subject: previous.subject,
+      commandId: internalCommand(entry.locatorSha256, "recovery-close"), event: { kind: "closed" },
+      previousChecksumSha256: previous.checksumSha256 });
+    if (records.length >= this.limits.maxRecordsPerJournal ||
+        entry.file.byteLength + this.limits.maxRecordBytes > this.limits.maxJournalBytes) {
+      throw new DockerEgressJournalCapacityError("debt-free recovery closure reservation unavailable");
+    }
+    await entry.file.append(entry.file.byteLength, encodeDockerEgressRecord(terminal, this.limits));
+    await this.persistRetirement(entry.locatorSha256, terminal);
+    return terminal;
+  }
+
+  private async retryExactRetirement(tombstoneEntry: DockerEgressStorageEntry,
+    liveEntry: DockerEgressStorageEntry): Promise<boolean> {
+    const tombstone = decodeDockerEgressTombstone(await tombstoneEntry.file.read(tombstoneEntry.byteLength), this.limits);
+    const expected = tombstone.terminalRecord;
+    if (tombstone.locatorSha256 !== tombstoneEntry.locatorSha256 || tombstone.disposition !== "retired" ||
+        expected === null || expected.event.kind !== "closed") { return false; }
+    let replay: DockerEgressReplay;
+    try { replay = await this.replay(liveEntry.file); } catch { return false; }
+    if (replay.tail !== "complete") { return false; }
+    const actual = replay.records.at(-1);
+    if (actual === undefined || actual.checksumSha256 !== expected.checksumSha256 ||
+        actual.subject.bindingSha256 !== tombstone.bindingSha256 ||
+        dockerEgressJournalLocator(actual.subject) !== liveEntry.locatorSha256 ||
+        liveEntry.locatorSha256 !== tombstoneEntry.locatorSha256) { return false; }
+    try { replayState(replay.records); } catch { return false; }
+    if (!replayState(replay.records).terminal) { return false; }
+    await this.storage.persistTombstone(tombstoneEntry.locatorSha256,
+      encodeDockerEgressTombstone(tombstone, this.limits), true);
+    return true;
+  }
+
+  private async recoverV3Entry(entry: DockerEgressStorageEntry, directives: DockerEgressCleanupDirective[],
+    evidence: DockerEgressRecoveryEvidence[]): Promise<void> {
+    try {
+      const replay = await this.replay(entry.file); const records = replay.records;
+      if (records.length === 0) { throw new DockerEgressJournalCorruptionError(); }
+      const subject = records[0]!.subject; const state = replayState(records);
+      if (dockerEgressJournalLocator(subject) !== entry.locatorSha256 || !trustedMatches(subject, this.trusted)) {
+        await this.quarantineStaleEntry(entry, records, state);
+        evidence.push(Object.freeze({ kind: "quarantine_evidence", locatorSha256: entry.locatorSha256,
+          bindingSha256: subject.bindingSha256, status: "quarantined" })); return;
+      }
+      if (replay.tail === "complete" && state.terminal) {
+        await this.persistRetirement(entry.locatorSha256, records.at(-1)!);
+        evidence.push(Object.freeze({ kind: "retirement_evidence", locatorSha256: entry.locatorSha256,
+          bindingSha256: subject.bindingSha256, status: "retired" })); return;
+      }
+      if (replay.tail === "complete" && isDebtFree(state)) {
+        await this.retireDebtFree(entry, records);
+        evidence.push(Object.freeze({ kind: "retirement_evidence", locatorSha256: entry.locatorSha256,
+          bindingSha256: subject.bindingSha256, status: "retired" })); return;
+      }
+      const resource = nextCleanup(state);
+      if (resource !== null) { directives.push(Object.freeze({ kind: "cleanup_only", subject, sequence: records.at(-1)!.sequence,
+        resource, cleanupHandle: dockerEgressCleanupHandle(subject, resource),
+        reconcileRequired: state.reconcileRequired || state.materializePending !== null || state.cleanupPending !== null })); }
+      if (replay.tail !== "complete") {
+        const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256,
+          bindingSha256: subject.bindingSha256, disposition: "quarantined", terminalRecord: records.at(-1)! });
+        await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
+      }
+      evidence.push(Object.freeze({ kind: state.quarantined || replay.tail !== "complete" ? "quarantine_evidence" : "cleanup_evidence",
+        locatorSha256: entry.locatorSha256, bindingSha256: subject.bindingSha256,
+        status: state.quarantined || replay.tail !== "complete" ? "quarantined" : "debt" }));
+    } catch {
+      const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256, bindingSha256: null,
+        disposition: "quarantined", terminalRecord: null });
+      await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
+      evidence.push(Object.freeze({ kind: "quarantine_evidence", locatorSha256: entry.locatorSha256,
+        bindingSha256: null, status: "quarantined" }));
+    }
+  }
+
   private async recovery(): Promise<Readonly<{ directives: readonly DockerEgressCleanupDirective[]; evidence: readonly DockerEgressRecoveryEvidence[] }>> {
     return this.storage.exclusive(this.trusted, async () => {
       const all = await this.scanAll(); const entries = [...all.tombstones, ...all.v3, ...all.legacy];
       const directives: DockerEgressCleanupDirective[] = []; const evidence: DockerEgressRecoveryEvidence[] = [];
+      const retiredLive = new Set<string>();
       try {
         for (const entry of all.tombstones) {
           try {
             const item = decodeDockerEgressTombstone(await entry.file.read(entry.byteLength), this.limits);
             if (item.locatorSha256 !== entry.locatorSha256) { throw new Error("tombstone locator mismatch"); }
+            const live = all.v3.find(candidate => candidate.locatorSha256 === entry.locatorSha256);
+            if (live !== undefined && await this.retryExactRetirement(entry, live)) { retiredLive.add(entry.locatorSha256); }
             evidence.push(Object.freeze({ kind: item.disposition === "retired" ? "retirement_evidence" : "quarantine_evidence",
               locatorSha256: entry.locatorSha256, bindingSha256: item.bindingSha256,
               status: item.disposition === "retired" ? "retired" : "quarantined" }));
@@ -401,29 +518,8 @@ export class DockerEgressJournal {
             status: legacy.quarantineRequired ? "quarantined" : "retired" }));
         }
         for (const entry of all.v3) {
-          try {
-            const records = await this.read(entry.file); const subject = records[0]!.subject; const state = replayState(records);
-            if (dockerEgressJournalLocator(subject) !== entry.locatorSha256 || !trustedMatches(subject, this.trusted)) {
-              await this.quarantineStaleEntry(entry, records, state);
-              evidence.push(Object.freeze({ kind: "quarantine_evidence", locatorSha256: entry.locatorSha256,
-                bindingSha256: subject.bindingSha256, status: "quarantined" })); continue;
-            }
-            if (state.terminal) { evidence.push(Object.freeze({ kind: "retirement_evidence", locatorSha256: entry.locatorSha256,
-              bindingSha256: subject.bindingSha256, status: "retired" })); continue; }
-            const resource = nextCleanup(state);
-            if (resource !== null) { directives.push(Object.freeze({ kind: "cleanup_only", subject, sequence: records.at(-1)!.sequence,
-              resource, cleanupHandle: dockerEgressCleanupHandle(subject, resource),
-              reconcileRequired: state.reconcileRequired || state.materializePending !== null || state.cleanupPending !== null })); }
-            evidence.push(Object.freeze({ kind: state.quarantined ? "quarantine_evidence" : "cleanup_evidence",
-              locatorSha256: entry.locatorSha256, bindingSha256: subject.bindingSha256,
-              status: state.quarantined ? "quarantined" : "debt" }));
-          } catch {
-            const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256, bindingSha256: null,
-              disposition: "quarantined", terminalRecord: null });
-            await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
-            evidence.push(Object.freeze({ kind: "quarantine_evidence", locatorSha256: entry.locatorSha256,
-              bindingSha256: null, status: "quarantined" }));
-          }
+          if (retiredLive.has(entry.locatorSha256)) { continue; }
+          await this.recoverV3Entry(entry, directives, evidence);
         }
         return Object.freeze({ directives: Object.freeze(directives), evidence: Object.freeze(evidence) });
       } finally { await this.closeEntries(entries); }

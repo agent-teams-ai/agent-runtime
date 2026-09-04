@@ -2,6 +2,8 @@ import { constants, type BigIntStats, type Dirent } from "node:fs";
 import { lstat, open, opendir, realpath, unlink, type FileHandle } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
+import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
+
 import {
   DockerEgressJournalBusyError,
   DockerEgressJournalCapacityError,
@@ -19,7 +21,11 @@ const LOCATOR = /^[a-f0-9]{64}$/u;
 const V3_PREFIX = "docker-egress-custody-v3-";
 const JOURNAL_SUFFIX = ".journal";
 const TOMBSTONE_SUFFIX = ".tombstone";
-const LOCK_NAME = ".docker-egress-custody-v3.lock";
+// This legacy named-lock residue is intentionally inert: it is ignored without
+// reading PID/mtime and is never reclaimed or deleted. The process-lock cutover
+// requires a fresh V3 root with no overlap with named-lock writers; this dormant
+// checkpoint does not authorize production activation.
+const LEGACY_LOCK_NAME = ".docker-egress-custody-v3.lock";
 const V2_PREFIX = "docker-custody-v1-";
 
 export interface DockerEgressLinuxFileSystemPort {
@@ -95,6 +101,7 @@ class NodeEgressFile implements DockerEgressJournalFile {
 interface PinnedRoot { readonly path: string; readonly handle: FileHandle; readonly stats: BigIntStats; }
 export class NodeDockerEgressJournalStorage implements DockerEgressJournalStorage {
   private activeFence: string | null = null;
+  private exclusivePending = false;
   private constructor(private readonly v3: PinnedRoot, private readonly v2: PinnedRoot,
     private readonly port: DockerEgressLinuxFileSystemPort) {}
 
@@ -135,26 +142,27 @@ export class NodeDockerEgressJournalStorage implements DockerEgressJournalStorag
     return Buffer.from(`${Object.values(fence).join("|")}\n`, "utf8");
   }
   public async exclusive<Result>(fence: DockerEgressTrustedRuntimeIdentity, operation: () => Promise<Result>): Promise<Result> {
-    await this.assertRoot(this.v3); const expected = this.fenceBytes(fence); let lock: FileHandle;
+    // flock is reentrant on this pinned descriptor, so same-instance exclusion
+    // must be claimed synchronously before the first await.
+    if (this.exclusivePending) { throw new DockerEgressJournalBusyError(); }
+    this.exclusivePending = true;
     try {
-      lock = await this.port.open(this.path(this.v3, LOCK_NAME),
-        constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | (constants.O_NOFOLLOW ?? 0), 0o600);
-    } catch (error) {
-      if (code(error) === "EEXIST") { throw new DockerEgressJournalBusyError(); }
-      return mapped(error);
-    }
-    try {
-      await lock.writeFile(expected); await lock.datasync(); await this.v3.handle.sync();
-      const [held, named] = await Promise.all([lock.stat({ bigint: true }), this.port.lstat(this.path(this.v3, LOCK_NAME))]);
-      privateFile(held, this.v3.stats.uid); privateFile(named, this.v3.stats.uid);
-      if (!same(held, named)) { throw new DockerEgressJournalCorruptionError("lock changed"); }
-      this.activeFence = expected.toString("hex"); const result = await operation(); await this.assertRoot(this.v3); return result;
-    } catch (error) { return mapped(error); }
-    finally {
-      this.activeFence = null;
-      try { await this.port.unlink(this.path(this.v3, LOCK_NAME)); await this.v3.handle.sync(); await lock.close(); }
-      catch { /* Failure leaves a stale lock and all future acquisition fails closed. */ }
-    }
+      const expected = this.fenceBytes(fence);
+      try {
+        await this.assertRoot(this.v3);
+        return await withStableDirectoryProcessLock(this.v3.handle, async () => {
+          await this.assertRoot(this.v3);
+          this.activeFence = expected.toString("hex");
+          try {
+            const result = await operation();
+            await this.assertRoot(this.v3);
+            return result;
+          } finally {
+            this.activeFence = null;
+          }
+        }, { onContention: () => { throw new DockerEgressJournalBusyError(); } });
+      } catch (error) { return mapped(error); }
+    } finally { this.exclusivePending = false; }
   }
   private name(locator: string, suffix: string): string {
     if (!LOCATOR.test(locator)) { throw new TypeError("invalid egress locator"); }
@@ -201,7 +209,7 @@ export class NodeDockerEgressJournalStorage implements DockerEgressJournalStorag
       directory = await this.port.opendir(this.path(root));
       for (;;) {
         const entry = await directory.read(); if (entry === null) { break; }
-        if (root === this.v3 && entry.name === LOCK_NAME) { continue; }
+        if (root === this.v3 && entry.name === LEGACY_LOCK_NAME) { continue; }
         const locator = classify(entry.name);
         if (locator === undefined) {
           if (root === this.v3 && (this.locator(entry.name, JOURNAL_SUFFIX) !== undefined ||
@@ -259,5 +267,8 @@ export class NodeDockerEgressJournalStorage implements DockerEgressJournalStorag
     } catch (error) { return mapped(error); }
     finally { await file?.close().catch(() => {}); }
   }
-  public async close(): Promise<void> { await Promise.all([this.v3.handle.close(), this.v2.handle.close()]); }
+  public async close(): Promise<void> {
+    if (this.exclusivePending) { throw new DockerEgressJournalBusyError(); }
+    await Promise.all([this.v3.handle.close(), this.v2.handle.close()]);
+  }
 }
