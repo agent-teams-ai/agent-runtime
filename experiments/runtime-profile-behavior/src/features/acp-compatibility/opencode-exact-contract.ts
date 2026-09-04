@@ -274,8 +274,8 @@ const parseSourcePointer = (value: unknown): SourcePointer => {
   return Object.freeze({ field: pointer.field, jsonPointer: pointer.jsonPointer, sourcePath: pointer.sourcePath });
 };
 
-const parseFixture = (value: unknown): OpenCodeExactContractFixture => {
-  const fixture = record(value, "fixture");
+const parseFixture = (input: unknown): OpenCodeExactContractFixture => {
+  const fixture = record(input, "fixture");
   exactKeys(fixture, [
     "authority", "boundedObservation", "capabilityDisposition", "claim", "deferredProductionWork",
     "derivedCapabilityProjection", "name", "neutralContract", "pin", "provenance", "schemaVersion", "scope",
