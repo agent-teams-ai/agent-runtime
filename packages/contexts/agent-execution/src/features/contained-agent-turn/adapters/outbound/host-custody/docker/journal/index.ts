@@ -22,6 +22,50 @@ export {
   NodeDockerCustodyJournalStorage,
   type DockerCustodyLinuxFileSystemPort,
 } from "./node-docker-custody-journal-storage.js";
+
+export {
+  canonicalDockerEgressJson,
+  createDockerEgressRecord,
+  createDockerEgressSubject,
+  dockerEgressBindingSha256,
+  dockerEgressJournalLocator,
+  encodeDockerEgressRecord,
+  replayDockerEgressBytes,
+  validateDockerEgressSubject,
+  type DockerEgressReplay,
+} from "./docker-egress-journal-codec.js";
+export {
+  classifyDockerEgressLegacyV2,
+  dockerJournalWireVersion,
+  type DockerEgressLegacyV2Result,
+} from "./docker-egress-v2-cleanup-reader.js";
+export {
+  DockerEgressJournal,
+  validateDockerEgressJournalTransitions,
+} from "./docker-egress-journal.js";
+export {
+  DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS,
+  DOCKER_EGRESS_CLEANUP_ORDER,
+  DOCKER_EGRESS_JOURNAL_VERSION,
+  DOCKER_EGRESS_RESOURCE_KINDS,
+  DockerEgressJournalCapacityError,
+  DockerEgressJournalConflictError,
+  DockerEgressJournalCorruptionError,
+  DockerEgressJournalError,
+  type DockerEgressAcknowledgement,
+  type DockerEgressAuthorityBinding,
+  type DockerEgressIdentity,
+  type DockerEgressJournalEvent,
+  type DockerEgressJournalLimits,
+  type DockerEgressJournalRecord,
+  type DockerEgressJournalSubject,
+  type DockerEgressLegacyDiagnostic,
+  type DockerEgressReconcileReason,
+  type DockerEgressQuarantineDiagnostic,
+  type DockerEgressRecoveryObservation,
+  type DockerEgressResourceIdentities,
+  type DockerEgressResourceKind,
+} from "./docker-egress-journal-types.js";
 export {
   DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS,
   DOCKER_CUSTODY_ACTION_STATES,
