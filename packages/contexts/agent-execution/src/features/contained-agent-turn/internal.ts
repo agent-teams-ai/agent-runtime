@@ -2,6 +2,8 @@ export {
   createNodeContainedTurnArtifacts,
   type NodeContainedTurnArtifactOptions,
 } from "./adapters/outbound/filesystem/node-contained-turn-artifacts.js";
+export { createHostHttpEgressSession } from "./adapters/outbound/host-custody/egress/host-http-egress-session.js";
+export type { HostHttpEgressSessionDependencies } from "./adapters/outbound/host-custody/egress/host-http-egress-session.js";
 export {
   createNodeContainedTurnWorkspace,
   type NodeContainedTurnWorkspaceOptions,

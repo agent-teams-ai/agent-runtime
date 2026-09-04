@@ -114,10 +114,12 @@ boundaries:
         - node:crypto
         - node:fs
         - node:fs/promises
+        - node:net
         - node:os
         - node:path
         - node:stream
         - node:timers/promises
+        - node:tls
         - node:util
       runtimeReferences: []
   - id: adapter.agent-execution.claude-agent-sdk

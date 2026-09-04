@@ -58,7 +58,7 @@ test("request parsing never mutates caller chunks and broker clears its adopted 
     ...fixture.ports.evidence,
     digest: (parts: readonly Uint8Array[]) => {
       calls += 1;
-      if (calls === 2) {adoptedBody = parts.at(-1);}
+      if (calls === 1) {adoptedBody = parts.at(-1);}
       return fixture.ports.evidence.digest(parts);
     },
   }) });
@@ -76,12 +76,12 @@ for (const failure of ["binding", "digest", "clock", "authorization"] as const) 
     const binding = fixture.ports.transport.beginOpen;
     const ports = {
       ...fixture.ports,
-      credentialCustody: Object.freeze({renderAuthorization: async () => {
+      materializer: Object.freeze({render: async () => {
         fixture.observations.renders += 1;
-        return authorization;
+        return [Object.freeze({name: "authorization", valueBytes: authorization})];
       }}),
-      ...(failure === "authorization" ? { finalAuthorization: Object.freeze({
-        authorize: async () => {throw new Error("synthetic authorization failure");},
+      ...(failure === "authorization" ? { runtimeSecurity: Object.freeze({...fixture.ports.runtimeSecurity,
+        authorizeFirstApplicationByte: async () => {throw new Error("synthetic authorization failure");},
       }) } : {}),
       ...(failure === "digest" ? { evidence: Object.freeze({
         ...fixture.ports.evidence,
@@ -107,7 +107,7 @@ for (const failure of ["binding", "digest", "clock", "authorization"] as const) 
           return Object.freeze({ ...attempt, ready: async () => {
             const session = await attempt.ready();
             const malformed = { ...session.binding };
-            Object.defineProperty(malformed, "sniDigest", {get: () => "must-not-run"});
+            Object.defineProperty(malformed, "observedSni", {get: () => "must-not-run"});
             let reads = 0;
             return Object.freeze({
               get binding(): HttpEgressTransportBinding {
@@ -141,19 +141,16 @@ test("a parser failure clears broker copies without mutating the supplied wire",
 test("one-shot dispatch sealing clears a transport-retained request reference", async () => {
   const fixture = createEgressFixture();
   let retained: Uint8Array | undefined;
-  const transport = Object.freeze({beginOpen: () => Object.freeze({
-    ready: async () => Object.freeze({
-      binding: Object.freeze({peerAddress: "93.184.216.34", peerPort: 443, tlsProtocol: "TLSv1.3" as const,
-        sni: "provider.example", sniDigest: "sni-digest", certificateDigest: "certificate-digest",
-        pinDigest: "pin-digest", alpn: "http/1.1" as const}),
+  const beginOpen = fixture.ports.transport.beginOpen;
+  const transport = Object.freeze({beginOpen: (input: Parameters<typeof beginOpen>[0]) => {
+    const attempt = beginOpen(input); return Object.freeze({...attempt,
+    ready: async () => {const session = await attempt.ready(); return Object.freeze({...session,
       dispatch: async (consume: () => Uint8Array | undefined) => {
         retained = consume();
         return Object.freeze({status: "failed" as const, acceptedRequestBytes: "unknown" as const,
           acknowledgement: "lost" as const});
       },
-    }),
-    close: async () => Object.freeze({state: "closed" as const, receiptDigest: "closed"}),
-  })});
+    });}});}});
   await createStrictHttpEgressBroker({...fixture.ports, transport}).execute(fixture.operation);
   assert.ok(retained !== undefined && allZero(retained));
 });
@@ -168,14 +165,15 @@ for (const scenario of [
     const overrides = overrideByteMethods(scenario.authorization, scenario.behavior);
     const receipt = await createStrictHttpEgressBroker({
       ...fixture.ports,
-      credentialCustody: Object.freeze({ renderAuthorization: async () => scenario.authorization }),
+      materializer: Object.freeze({ render: async () => [Object.freeze({name: "authorization",
+        valueBytes: scenario.authorization})] }),
     }).execute(fixture.operation);
     assert.notEqual(receipt.outcome, "completed");
     assert.equal(fixture.observations.order.includes("final"), false);
     assert.equal(fixture.observations.dispatches, 0);
     assert.equal(allZero(scenario.authorization), true);
     assert.equal(overrides.calls(), 0);
-    assert.equal(fixture.observations.closes, 1);
+    assert.equal(fixture.observations.closes, 0);
     assert.equal(fixture.observations.order.filter(value => value === "inbound-close").length, 1);
     assert.equal(fixture.observations.receipts.length, 1);
   });
@@ -187,7 +185,8 @@ test("valid Buffer authorization bypasses throwing own methods and its original 
   const overrides = overrideByteMethods(authorization, "throw");
   await createStrictHttpEgressBroker({
     ...fixture.ports,
-    credentialCustody: Object.freeze({ renderAuthorization: async () => authorization }),
+    materializer: Object.freeze({ render: async () => [Object.freeze({name: "authorization",
+      valueBytes: authorization})] }),
   }).execute(fixture.operation);
   assert.equal(fixture.observations.order.includes("final"), true);
   assert.equal(allZero(authorization), true);
@@ -202,12 +201,13 @@ test("a detached authorization view fails safely before final authorization", as
   structuredClone(authorization, { transfer: [authorization.buffer] });
   const receipt = await createStrictHttpEgressBroker({
     ...fixture.ports,
-    credentialCustody: Object.freeze({ renderAuthorization: async () => authorization }),
+    materializer: Object.freeze({ render: async () => [Object.freeze({name: "authorization",
+      valueBytes: authorization})] }),
   }).execute(fixture.operation);
   assert.notEqual(receipt.outcome, "completed");
   assert.equal(fixture.observations.order.includes("final"), false);
   assert.equal(fixture.observations.dispatches, 0);
-  assert.equal(fixture.observations.closes, 1);
+  assert.equal(fixture.observations.closes, 0);
   assert.equal(fixture.observations.receipts.length, 1);
 });
 

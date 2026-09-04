@@ -306,6 +306,7 @@ export const forwardStrictHttpResponse = async (
   limits: HttpEgressLimits,
   clock: HttpEgressClock,
   signal?: AbortSignal,
+  onHeadAccepted?: (status: number) => boolean,
 ): Promise<StrictHttpResponseResult> => {
   const writeContext = Object.freeze({ connection, clock, limits, signal });
   const reader = new DeadlineByteReader(source, clock, limits, signal);
@@ -324,6 +325,11 @@ export const forwardStrictHttpResponse = async (
       zeroHttpBytes(headBytes);
     }
     if (head.status >= 300 && head.status <= 399) {throw new StrictHttpResponseError("redirect", reader.bytesRead, 0);}
+    // This hook is deliberately synchronous. Retry-triggering status authority
+    // closes before any response byte can become observable by the provider.
+    if (onHeadAccepted !== undefined && !onHeadAccepted(head.status)) {
+      throw new StrictHttpResponseError("redirect", reader.bytesRead, 0);
+    }
     if ((head.contentLength ?? 0) > limits.maxOutputBytes) {
       throw new StrictHttpResponseError("oversized", reader.bytesRead, 0);
     }
