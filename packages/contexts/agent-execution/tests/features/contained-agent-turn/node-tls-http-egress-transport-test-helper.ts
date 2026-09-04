@@ -156,7 +156,8 @@ type FakeSocketOptions = Readonly<{
   remoteAddress?: string;
   remotePort?: number;
   closeOnDestroy?: boolean;
-  write?: "throw" | "callback-error" | "wait";
+  write?: "throw" | "callback-error" | "callback-then-throw" | "wait";
+  completeWriteOnDestroy?: boolean;
 }>;
 
 export class SyntheticOwnedTlsSocket extends EventEmitter implements OwnedNodeTlsSocket {
@@ -183,6 +184,9 @@ export class SyntheticOwnedTlsSocket extends EventEmitter implements OwnedNodeTl
   public setTimeout(_milliseconds: number): this {return this;}
   public destroy(_error?: Error): this {
     this.destroyed = true;
+    if (this.#options.completeWriteOnDestroy === true && this.#pendingWriteCallback !== undefined) {
+      this.completePendingWrite();
+    }
     if (this.#options.closeOnDestroy !== false && !this.closed) {
       queueMicrotask(() => {this.closed = true; this.emit("close");});
     }
@@ -191,6 +195,10 @@ export class SyntheticOwnedTlsSocket extends EventEmitter implements OwnedNodeTl
   public write(buffer: Uint8Array, callback: (error?: Error | null) => void): boolean {
     this.writes.push(Uint8Array.from(buffer));
     if (this.#options.write === "throw") {throw new Error("synthetic write throw");}
+    if (this.#options.write === "callback-then-throw") {
+      callback();
+      throw new Error("synthetic throw after successful callback");
+    }
     if (this.#options.write === "callback-error") {
       queueMicrotask(() => {callback(new Error("synthetic callback error")); this.emit("error", new Error("synthetic"));});
     } else if (this.#options.write !== "wait") {

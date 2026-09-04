@@ -346,26 +346,39 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
     await expectClosed(attempt);
   });
 
-  for (const disposition of ["close", "abort", "timeout"] as const) {
+  test("early readability and a successful callback cannot escape when write then throws", async () => {
+    const socket = new SyntheticOwnedTlsSocket({ write: "callback-then-throw" });
+    socket.readableLength = 1;
+    const attempt = injectedTransport(socket).beginOpen(target(443));
+    const session = await attempt.ready();
+    const bytes = utf8("secret");
+
+    assert.deepEqual(await session.dispatch(() => bytes),
+      { status: "failed", acceptedRequestBytes: "unknown", acknowledgement: "lost" });
+    assert.ok(bytes.every(byte => byte === 0));
+    await expectClosed(attempt);
+  });
+
+  for (const disposition of ["abort", "error", "timeout", "socket-close", "attempt-close"] as const) {
     test(`${disposition} while the write callback is pending cannot resurrect success`, async () => {
-      const socket = new SyntheticOwnedTlsSocket({ write: "wait" });
+      const socket = new SyntheticOwnedTlsSocket({ write: "wait", completeWriteOnDestroy: true });
       const attempt = injectedTransport(socket).beginOpen(target(443));
       const session = await attempt.ready();
       const bytes = utf8("secret");
       const controller = new AbortController();
       const dispatchPromise = session.dispatch(() => bytes, controller.signal);
       socket.exposeReadable();
-      const closePromise = disposition === "close" ? attempt.close() : undefined;
+      const closePromise = disposition === "attempt-close" ? attempt.close() : undefined;
       if (disposition === "abort") {controller.abort();}
+      if (disposition === "error") {socket.emit("error", new Error("synthetic failure"));}
       if (disposition === "timeout") {socket.emit("timeout");}
+      if (disposition === "socket-close") {socket.closed = true; socket.emit("close");}
 
       assert.deepEqual(await dispatchPromise,
         { status: "failed", acceptedRequestBytes: "unknown", acknowledgement: "lost" });
       if (closePromise !== undefined) {assert.equal((await closePromise).state, "closed");}
       await new Promise<void>(resolve => {setImmediate(resolve);});
       assert.ok(bytes.every(byte => byte === 0), "closure releases and zeroizes caller-owned storage");
-      socket.completePendingWrite();
-      assert.ok(bytes.every(byte => byte === 0));
       await expectClosed(attempt);
     });
   }

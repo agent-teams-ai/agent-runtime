@@ -112,7 +112,10 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
       let ownedBytes: Uint8Array | undefined;
       let acceptedLength = 0;
       let writeCompleted = false;
+      let writeReturned = false;
+      let writeCallbackSucceeded = false;
       let responseReadable = false;
+      let failedDisposition = false;
       const zeroOwnedBytes = (): void => {
         zeroHttpBytes(ownedBytes);
         ownedBytes = undefined;
@@ -133,6 +136,8 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
         resolve(result);
       };
       const failed = (): void => {
+        if (settled || failedDisposition) {return;}
+        failedDisposition = true;
         this.#socket.destroy();
         settle(consumed ? failedAfterConsumption() : failedBeforeConsumption());
       };
@@ -141,6 +146,7 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
         if (!consumed || acceptedLength === 0 || this.#socket.readableLength === 0) {return;}
         responseReadable = true;
         if (!writeCompleted || settled) {return;}
+        if (failedDisposition || signal?.aborted || !this.#isUsable()) {failed(); return;}
         settle(Object.freeze({
           status: "response",
           acceptedRequestBytes: acceptedLength,
@@ -176,15 +182,18 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
           zeroOwnedBytes();
           if (error !== undefined && error !== null) {failed();}
           else {
-            writeCompleted = true;
-            if (responseReadable || this.#socket.readableLength > 0) {readable();}
+            writeCallbackSucceeded = true;
+            if (writeReturned) {
+              writeCompleted = true;
+              if (responseReadable || this.#socket.readableLength > 0) {readable();}
+            }
           }
         });
+        writeReturned = true;
+        if (writeCallbackSucceeded) {writeCompleted = true;}
         if (this.#socket.readableLength > 0) {readable();}
       } catch {
-        this.#socket.off("close", zeroOwnedBytes);
-        zeroOwnedBytes();
-        settle(consumed ? failedAfterConsumption() : failedBeforeConsumption());
+        failed();
       }
     });
   }
@@ -267,6 +276,7 @@ export class NodeTlsHttpEgressAttempt implements HttpEgressTransportAttempt {
     };
     const onTimeout = (): void => {
       if (this.#session === undefined) {ready.reject(new NodeTlsHttpEgressError("connect_timeout"));}
+      this.#state = "failed";
       socket.destroy();
     };
     const onSecure = (): void => {
