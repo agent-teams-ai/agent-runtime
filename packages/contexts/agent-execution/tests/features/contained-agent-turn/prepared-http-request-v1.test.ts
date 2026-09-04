@@ -468,8 +468,17 @@ test("snapshotSpan rejects mutable, negative, fractional, and out-of-range metad
 test("snapshotSpan supports an exact frozen data span and detaches its values once", () => {
   const prepared = createPreparedHttpRequestV1(baseInput());
   const span = Object.freeze({offset: prepared.targetSpan.offset, length: prepared.targetSpan.length});
-  assert.equal(decoder.decode(prepared.snapshotSpan(span)), "/v1/messages");
-  prepared.dispose();
+  capturedClears = [];
+  try {
+    const snapshot = prepared.snapshotSpan(span);
+    assert.equal(decoder.decode(snapshot), "/v1/messages");
+    assert.equal(capturedClears.length, 1);
+    assert.equal(capturedClears.every(value => allZero(value)), true);
+    assert.equal(capturedClears.includes(snapshot as Uint8Array), false);
+  } finally {
+    capturedClears = undefined;
+    prepared.dispose();
+  }
 });
 
 test("snapshotSpan rejects changing and throwing accessors without invoking them", () => {
@@ -516,4 +525,11 @@ test("snapshotSpan returns no snapshot after disposal", () => {
   prepared.dispose();
   assert.equal(prepared.snapshotSpan(prepared.targetSpan), undefined);
   assert.equal(prepared.snapshotSpan(prepared.bodySpan), undefined);
+});
+
+test("snapshotSpan rejects detached result storage, including a zero-length span", () => {
+  const prepared = createPreparedHttpRequestV1(baseInput({targetBytes: bytes("/r2")}));
+  structuredClone(prepared.wireBytes.buffer, {transfer: [prepared.wireBytes.buffer]});
+  assert.equal(prepared.snapshotSpan(prepared.targetSpan), undefined);
+  assert.equal(prepared.snapshotSpan(Object.freeze({offset: 0, length: 0})), undefined);
 });

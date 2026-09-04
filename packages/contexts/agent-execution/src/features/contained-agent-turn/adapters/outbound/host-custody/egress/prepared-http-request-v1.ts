@@ -1,4 +1,4 @@
-import { zeroHttpBytes } from "./http-byte-intrinsics.js";
+import { snapshotHttpBytes, zeroHttpBytes } from "./http-byte-intrinsics.js";
 import {
   PREPARED_HTTP_REQUEST_V1_LIMITS,
   PreparedHttpRequestV1Error,
@@ -183,12 +183,25 @@ export const createPreparedHttpRequestV1 = (input: PreparedHttpRequestInputV1): 
         if (disposed) {return undefined;}
         const detachedSpan = detachPreparedHttpByteSpanV1(span, ownedWireLength);
         if (detachedSpan === undefined) {return undefined;}
-        const {offset: spanOffset, length: spanLength} = detachedSpan;
-        const copy = new Uint8Array(spanLength);
-        for (let index = 0; index < spanLength; index += 1) {
-          copy[index] = ownedWireBytes[spanOffset + index] as number;
+        // The two intrinsic snapshots establish an exact live length without
+        // consulting an overridable property on the exposed result view.
+        const shorterWireSnapshot = snapshotHttpBytes(ownedWireBytes, ownedWireLength - 1);
+        if (shorterWireSnapshot !== undefined) {
+          zeroHttpBytes(shorterWireSnapshot);
+          return undefined;
         }
-        return copy;
+        const wireSnapshot = snapshotHttpBytes(ownedWireBytes, ownedWireLength);
+        if (wireSnapshot === undefined) {return undefined;}
+        try {
+          const {offset: spanOffset, length: spanLength} = detachedSpan;
+          const copy = new Uint8Array(spanLength);
+          for (let index = 0; index < spanLength; index += 1) {
+            copy[index] = wireSnapshot[spanOffset + index] as number;
+          }
+          return copy;
+        } finally {
+          zeroHttpBytes(wireSnapshot);
+        }
       },
       dispose: (): void => {
         if (disposed) {return;}
