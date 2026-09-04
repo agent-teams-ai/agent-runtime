@@ -305,29 +305,32 @@ export const dockerEgressJournalLocator = (subjectInput: DockerEgressJournalSubj
     effectId: identity.effectId, hostSlotId: identity.hostSlotId, exactFingerprintSha256: identity.exactFingerprintSha256 }));
 };
 
-export const createDockerEgressTombstone = (input: Omit<DockerEgressTombstone, "checksumSha256" | "version">): DockerEgressTombstone => {
+export const createDockerEgressTombstone = (input: Omit<DockerEgressTombstone, "checksumSha256" | "version">,
+  limits: DockerEgressJournalLimits = DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS): DockerEgressTombstone => {
   const locatorSha256 = digest(input.locatorSha256, "locatorSha256"); const bindingSha256 = input.bindingSha256 === null ? null : digest(input.bindingSha256, "bindingSha256");
   if (input.disposition !== "retired" && input.disposition !== "quarantined") { throw new TypeError("invalid tombstone disposition"); }
   const terminalRecord = input.terminalRecord === null ? null : recordFrom(input.terminalRecord);
   if (terminalRecord !== null && terminalRecord.subject.bindingSha256 !== bindingSha256) { throw new TypeError("tombstone binding mismatch"); }
   if (input.disposition === "retired" && (terminalRecord === null || terminalRecord.event.kind !== "closed" ||
-      dockerEgressJournalLocator(terminalRecord.subject) !== locatorSha256)) {
+      terminalRecord.sequence < 1 || terminalRecord.sequence >= limits.maxRecordsPerJournal ||
+      terminalRecord.previousChecksumSha256 === null || dockerEgressJournalLocator(terminalRecord.subject) !== locatorSha256)) {
     throw new TypeError("retired tombstone must bind its exact closed terminal record");
   }
   const body = Object.freeze({ version: DOCKER_EGRESS_JOURNAL_VERSION, locatorSha256, bindingSha256, disposition: input.disposition, terminalRecord });
   return Object.freeze({ ...body, checksumSha256: sha256(canonicalClosed(body)) });
 };
-const tombstoneFrom = (value: unknown): DockerEgressTombstone => {
+const tombstoneFrom = (value: unknown,
+  limits: DockerEgressJournalLimits = DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS): DockerEgressTombstone => {
   assertExact(value, TOMBSTONE_KEYS, "egress tombstone");
   if (value.version !== DOCKER_EGRESS_JOURNAL_VERSION) { throw new TypeError("invalid tombstone version"); }
   const result = createDockerEgressTombstone({ locatorSha256: value.locatorSha256 as string, bindingSha256: value.bindingSha256 as string | null,
-    disposition: value.disposition as "retired" | "quarantined", terminalRecord: value.terminalRecord as DockerEgressJournalRecord | null });
+    disposition: value.disposition as "retired" | "quarantined", terminalRecord: value.terminalRecord as DockerEgressJournalRecord | null }, limits);
   if (digest(value.checksumSha256, "tombstone checksum") !== result.checksumSha256) { throw new TypeError("tombstone checksum mismatch"); }
   return result;
 };
 export const encodeDockerEgressTombstone = (value: DockerEgressTombstone,
   limits: DockerEgressJournalLimits = DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS): Uint8Array => {
-  const bytes = Buffer.from(`${canonicalClosed({ ...tombstoneFrom(value) })}\n`, "utf8");
+  const bytes = Buffer.from(`${canonicalClosed({ ...tombstoneFrom(value, limits) })}\n`, "utf8");
   if (bytes.byteLength > limits.maxRecordBytes) { throw new DockerEgressJournalCorruptionError("tombstone bound exceeded"); }
   return bytes;
 };
@@ -336,6 +339,6 @@ export const decodeDockerEgressTombstone = (bytes: Uint8Array,
   if (bytes.byteLength === 0 || bytes.byteLength > limits.maxRecordBytes || bytes.at(-1) !== 0x0a || bytes.subarray(0, -1).includes(0x0a)) {
     throw new DockerEgressJournalCorruptionError("invalid tombstone boundary");
   }
-  try { return tombstoneFrom(parsedPlain(parseStrictJson(bytes.subarray(0, -1)))); }
+  try { return tombstoneFrom(parsedPlain(parseStrictJson(bytes.subarray(0, -1))), limits); }
   catch { throw new DockerEgressJournalCorruptionError("corrupt tombstone"); }
 };

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { test } from "node:test";
 
 import {
+  DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS,
   DockerEgressJournal,
   createDockerEgressCleanupObservation,
   createDockerEgressRecord,
@@ -125,6 +126,47 @@ test("retired tombstones require an exact locator-bound closed terminal record",
       bindingSha256: null, status: "quarantined" }]);
     assert.equal(evidence.some(entry => entry.kind === "retirement_evidence"), false);
   }
+});
+
+test("retired tombstones require a bounded chained terminal while preserving retirement without historical reconstruction", () => {
+  const subject = makeSubject("retirement-chain-boundary"); const locator = dockerEgressJournalLocator(subject);
+  const lastSequence = DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordsPerJournal - 1;
+  const bounded = createDockerEgressRecord({ sequence: lastSequence, subject, commandId: command("bounded-close"),
+    event: { kind: "closed" }, previousChecksumSha256: hash("bounded-predecessor") });
+  const tombstone = createDockerEgressTombstone({ locatorSha256: locator, bindingSha256: subject.bindingSha256,
+    disposition: "retired", terminalRecord: bounded });
+  assert.equal(decodeDockerEgressTombstone(encodeDockerEgressTombstone(tombstone)).terminalRecord?.sequence, lastSequence);
+
+  for (const terminalRecord of [
+    createDockerEgressRecord({ sequence: 0, subject, commandId: command("zero-close"),
+      event: { kind: "closed" }, previousChecksumSha256: hash("zero-predecessor") }),
+    createDockerEgressRecord({ sequence: DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordsPerJournal, subject,
+      commandId: command("over-bound-close"), event: { kind: "closed" }, previousChecksumSha256: hash("over-bound-predecessor") }),
+  ]) {
+    assert.throws(() => createDockerEgressTombstone({ locatorSha256: locator, bindingSha256: subject.bindingSha256,
+      disposition: "retired", terminalRecord }), /exact closed terminal record/u);
+  }
+});
+
+test("checksum-valid retired tombstone with an unchained terminal fails retry and recovery closed", async () => {
+  const subject = makeSubject("unchained-retirement"); const locator = dockerEgressJournalLocator(subject);
+  const impossible = createDockerEgressRecord({ sequence: 1, subject, commandId: command("unchained-close"),
+    event: { kind: "closed" }, previousChecksumSha256: null });
+  const bytes = uncheckedTombstone({ locatorSha256: locator, bindingSha256: subject.bindingSha256,
+    disposition: "retired", terminalRecord: impossible });
+  assert.throws(() => decodeDockerEgressTombstone(bytes), { name: "DockerEgressJournalCorruptionError" });
+
+  const storage = new MemoryEgressStorage(); const file = new MemoryEgressFile(); file.bytes = Buffer.from(bytes);
+  storage.tombstones.set(locator, file);
+  const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority);
+  await assert.rejects(journal.close(subject, 0, impossible.commandId), { name: "DockerEgressJournalCorruptionError" });
+  assert.deepEqual(await journal.recoverCleanupDirectives(), []);
+  const evidence = await journal.recoveryEvidence();
+  assert.deepEqual(evidence, [{ kind: "quarantine_evidence", locatorSha256: locator,
+    bindingSha256: null, status: "quarantined" }]);
+  assert.equal(evidence.some(entry => entry.kind === "retirement_evidence" || entry.kind === "cleanup_evidence"), false);
+  assert.equal(storage.tombstones.has(locator), true);
+  assert.equal(storage.v3Files.has(locator), false);
 });
 
 test("quarantined prefix evidence remains decodable but cannot authorize tombstone retry", async () => {
