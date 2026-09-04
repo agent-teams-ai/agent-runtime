@@ -104,6 +104,49 @@ for (const shape of ["sparse", "null", "iterator", "accessor", "nested", "proxy"
   }
 }
 
+for (const shape of ["DataView", "Uint16Array", "accessor", "proxy", "detached"] as const) {
+  test(`malformed ${shape} credential cleanup uses intrinsic visible bytes and never succeeds`, async () => {
+    const fixture = createEgressFixture();
+    const backing = bytes(`xx${SECRET_MARKER}xx`);
+    const length = backing.byteLength - 4;
+    const view = shape === "Uint16Array" ? new Uint16Array(backing.buffer, 2, Math.floor(length / 2))
+      : new DataView(backing.buffer, 2, length);
+    const visibleLength = view.byteLength;
+    const before = backing.slice(); let reads = 0; let finishes = 0;
+    for (const key of shape === "accessor" ? ["buffer", "byteOffset", "byteLength"] : []) {
+      Object.defineProperty(view, key, {get: () => {reads += 1; throw new Error("unexpected getter");}});
+    }
+    const valueBytes = shape === "proxy" ? new Proxy(view, {
+      get: () => {reads += 1; throw new Error("unexpected get trap");},
+      ownKeys: () => {reads += 1; throw new Error("unexpected ownKeys trap");},
+    }) : view;
+    if (shape === "detached") {structuredClone(backing.buffer, {transfer: [backing.buffer]});}
+    const ports: HttpEgressBrokerPorts = {...fixture.ports,
+      materializer: {render: async () => [{name: "authorization", valueBytes}] as unknown as MaterializedFields},
+      guard: {...fixture.ports.guard, finish: (lease, disposition) => {
+        finishes += 1; assert.equal(disposition, undefined); return fixture.ports.guard.finish(lease, disposition);
+      }},
+    };
+    const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
+    assert.notEqual(receipt.outcome, "completed");
+    if (shape === "DataView" || shape === "Uint16Array") {assert.equal(receipt.outcome, "denied");}
+    else {
+      assert.equal(receipt.outcome, "reconcile_required");
+      assert.equal(receipt.anomalyCode, "closure_unproved");
+    }
+    assert.equal(receipt.firstByteState, "not_sent"); assert.equal(receipt.upstreamRequestBytes, 0);
+    assert.equal(fixture.observations.dispatches, 0); assert.equal(finishes, 1); assert.equal(reads, 0);
+    if (shape === "DataView" || shape === "Uint16Array" || shape === "accessor") {
+      assert.ok(zero(backing.subarray(2, 2 + visibleLength)));
+      assert.deepEqual(backing.subarray(0, 2), before.subarray(0, 2));
+      assert.deepEqual(backing.subarray(2 + visibleLength), before.subarray(2 + visibleLength));
+    }
+    if (shape === "proxy") {assert.deepEqual(backing, before);}
+  });
+}
+
+type MaterializedFields = Awaited<ReturnType<HttpEgressBrokerPorts["materializer"]["render"]>>;
+
 // A separate process captures a faulting byte intrinsic before module initialization,
 // so the injected cleanup exception cannot contaminate other suites.
 for (const fault of ["body", "dispose"] as const) {

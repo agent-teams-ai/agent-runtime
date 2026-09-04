@@ -51,6 +51,31 @@ const prepareMaterializedRequest = (ports: HttpEgressBrokerPorts, request: Stric
     presentationFields: forwardedFields, credentialFields: fields, bodyBytes: request.body});
 };
 
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const viewGetters = [DataView.prototype, typedArrayPrototype].map(prototype => ({
+  buffer: Object.getOwnPropertyDescriptor(prototype, "buffer")!.get!,
+  byteOffset: Object.getOwnPropertyDescriptor(prototype, "byteOffset")!.get!,
+  byteLength: Object.getOwnPropertyDescriptor(prototype, "byteLength")!.get!,
+}));
+const typedArrayValues = Uint8Array.prototype.values;
+
+// Read internal view slots, never instance properties; clear only the visible byte range.
+const zeroMaterializedView = (value: object): boolean => {
+  try {
+    if (intrinsicUint8ArrayLength(value) !== undefined) {zeroHttpBytes(value); return true;}
+    if (!ArrayBuffer.isView(value)) {return true;}
+    const dataView = utilTypes.isDataView(value);
+    // Typed-array getters alone report zero for detached or out-of-bounds views.
+    if (!dataView) {Reflect.apply(typedArrayValues, value, []);}
+    const getters = viewGetters[dataView ? 0 : 1]!;
+    const buffer = Reflect.apply(getters.buffer, value, []);
+    const offset = Reflect.apply(getters.byteOffset, value, []);
+    const length = Reflect.apply(getters.byteLength, value, []);
+    zeroHttpBytes(new Uint8Array(buffer, offset, length));
+    return true;
+  } catch {return false;}
+};
+
 // Walk own data properties, including malformed entries and non-index properties. Holes,
 // accessors and proxies must never interrupt cleanup of independently reachable buffers.
 const zeroMaterializedFields = (fields: unknown): boolean => {
@@ -60,9 +85,7 @@ const zeroMaterializedFields = (fields: unknown): boolean => {
     if ((typeof value !== "object" && typeof value !== "function") || value === null || seen.has(value)) {continue;}
     seen.add(value);
     if (utilTypes.isProxy(value)) {certain = false; continue;}
-    if (intrinsicUint8ArrayLength(value) !== undefined) {
-      try {zeroHttpBytes(value);} catch {certain = false;}
-    }
+    if (!zeroMaterializedView(value)) {certain = false;}
     try {
       for (const key of Reflect.ownKeys(value)) {
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
