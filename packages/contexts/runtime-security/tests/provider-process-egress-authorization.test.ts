@@ -95,15 +95,27 @@ test("composition binds immutable scope and owner resolves policy from Host requ
   assertDeepFrozen(decision);
 });
 
-test("final grant signs the complete payload and exposes only safe compact evidence", async () => {
+test("fixed V1 serializers bind consumption, grant, and derived compact evidence", async () => {
   const setup = harness();
   const provisional = await authorizeProvisional(setup.gateway);
   const result = await setup.gateway.authorizeFirstApplicationByte(finalInput(provisional));
   assert.equal(result.status, "authorized");
   if (result.status !== "authorized") {return;}
-  const recomputed = createNodeSha256EgressDigest().digest(canonical(result.grant.payload));
+  const digestPort = createNodeSha256EgressDigest();
+  const { requestFingerprint: _requestFingerprint, ...consumption } =
+    result.grant.payload.consumption;
+  const consumptionPreimage = { ...result.grant.payload, consumption };
+  assert.deepEqual(Object.keys(consumptionPreimage), Object.keys(result.grant.payload));
+  assert.deepEqual(Object.keys(consumption), ["owner", "journalKey"]);
+  assert.equal(result.grant.payload.consumption.requestFingerprint,
+    digestPort.digest(canonical(consumptionPreimage)));
+  const signingDocument = { payload: result.grant.payload,
+    evidence: { contractVersion: "provider-process-egress-grant-evidence/v1" } };
+  const recomputed = digestPort.digest(canonical(signingDocument));
   assert.equal(result.grant.finalAuthorizationDigest, recomputed);
   assert.equal(setup.seal.verify(recomputed, result.grant.signature), true);
+  assert.equal(result.grant.payload.redirectHop, 0);
+  assert.equal(result.grant.payload.provisionalDecisionDigest, provisional.decisionDigest);
   assert.deepEqual(result.grant.payload.resolver.normalizedAddresses, [
     { family: "ipv4", address: "93.184.216.34", classification: "public" },
   ]);
@@ -111,6 +123,17 @@ test("final grant signs the complete payload and exposes only safe compact evide
     namespace: "provider-process-egress/v1", tenantId: "tenant-1", projectId: "project-1",
     operationId: "operation-1", boundaryUseId: "boundary-use-1",
   });
+  assert.deepEqual(result.grant.evidence, {
+    contractVersion: "provider-process-egress-grant-evidence/v1",
+    authorizationRef: result.grant.payload.authorizationRequestId,
+    boundaryUseRef: result.grant.payload.boundaryUseId,
+    decisionDigest: result.grant.payload.provisionalDecisionDigest,
+    finalAuthorizationDigest: result.grant.finalAuthorizationDigest,
+  });
+  const hypotheticalV2Preimage = { ...consumptionPreimage,
+    contractVersion: "provider-process-first-application-byte-grant/v2" };
+  assert.notEqual(digestPort.digest(canonical(hypotheticalV2Preimage)),
+    result.grant.payload.consumption.requestFingerprint);
   assertDeepFrozen(result);
   const evidence = JSON.stringify(result.grant.evidence);
   assert.equal(evidence.includes("/v1/messages"), false);
@@ -350,8 +373,10 @@ test("address, peer, TLS, certificate, ALPN, and redirect observations fail clos
   }
   const redirected = harness();
   const provisional = await authorizeProvisional(redirected.gateway);
-  assert.equal((await redirected.gateway.authorizeFirstApplicationByte(
-    finalInput(provisional, { redirectHop: 1 }))).status, "denied");
+  const rejectedRedirect = await redirected.gateway.authorizeFirstApplicationByte(
+    finalInput(provisional, { redirectHop: 1 }));
+  assert.equal(rejectedRedirect.status, "denied");
+  assert.equal(redirected.state.currentCalls.length, 0);
 });
 
 test("mutating each critical final signed field invalidates the final signature", async () => {
@@ -362,6 +387,8 @@ test("mutating each critical final signed field invalidates the final signature"
   if (outcome.status !== "authorized") {return;}
   const payload = outcome.grant.payload;
   const mutations = [
+    { ...payload, contractVersion: "provider-process-first-application-byte-grant/v2" },
+    { ...payload, authorizationRequestId: "authorization-2" },
     { ...payload, authorityRef: "authority-2" },
     { ...payload, scope: { ...payload.scope, tenantId: "tenant-2" } },
     { ...payload, policy: { ...payload.policy, policyGeneration: "policy-generation-2" } },
@@ -372,6 +399,7 @@ test("mutating each critical final signed field invalidates the final signature"
     { ...payload, resolver: { ...payload.resolver, normalizedAddresses: [{
       family: "ipv4", address: "8.8.8.8", classification: "public",
     }] } },
+    { ...payload, resolver: { ...payload.resolver, resolverEpoch: "resolver-epoch-2" } },
     { ...payload, selectedPeer: { ...payload.selectedPeer, port: 8443 } },
     { ...payload, tls: { ...payload.tls, certificateDigest: digest("9") } },
     { ...payload, tls: { ...payload.tls, alpn: "h2" } },
@@ -382,20 +410,59 @@ test("mutating each critical final signed field invalidates the final signature"
       requestTarget: { ...payload.request.requestTarget, byteLength: 25 } } },
     { ...payload, request: { ...payload.request, body: { ...payload.request.body,
       byteLength: 127 } } },
+    { ...payload, requestDigest: digest("9") },
     { ...payload, time: { ...payload.time, expiresAtControlTime: 1_101 } },
     { ...payload, time: { ...payload.time, epoch: "process-epoch-2" } },
+    { ...payload, boundaryUseId: "boundary-use-2" },
+    { ...payload, connectionAttemptId: "connection-2" },
+    { ...payload, streamId: "stream-2" },
+    { ...payload, redirectHop: 1 },
+    { ...payload, provisionalDecisionDigest: digest("9") },
+    { ...payload, automaticRetryAuthorized: true },
+    { ...payload, poolingAuthorized: true },
     { ...payload, consumption: { ...payload.consumption, journalKey: {
       ...payload.consumption.journalKey, tenantId: "tenant-2" } } },
   ];
   const digestPort = createNodeSha256EgressDigest();
   for (const mutation of mutations) {
-    const changedDigest = digestPort.digest(canonical(mutation));
+    const changedDigest = digestPort.digest(canonical({ payload: mutation,
+      evidence: { contractVersion: "provider-process-egress-grant-evidence/v1" } }));
     assert.notEqual(changedDigest, outcome.grant.finalAuthorizationDigest);
     assert.equal(setup.seal.verify(changedDigest, outcome.grant.signature), false);
   }
   assert.equal(setup.seal.verify(outcome.grant.finalAuthorizationDigest, {
     ...outcome.grant.signature, keyGeneration: "key-generation-2",
   }), false);
+});
+
+test("every compact evidence substitution is detected from authenticated values", async () => {
+  const setup = harness();
+  const provisional = await authorizeProvisional(setup.gateway);
+  const outcome = await setup.gateway.authorizeFirstApplicationByte(finalInput(provisional));
+  assert.equal(outcome.status, "authorized");
+  if (outcome.status !== "authorized") {return;}
+  const { grant } = outcome;
+  const matches = (evidence: typeof grant.evidence): boolean => {
+    const documentDigest = createNodeSha256EgressDigest().digest(canonical({ payload: grant.payload,
+      evidence: { contractVersion: evidence.contractVersion } }));
+    return evidence.contractVersion === "provider-process-egress-grant-evidence/v1" &&
+      evidence.authorizationRef === grant.payload.authorizationRequestId &&
+      evidence.boundaryUseRef === grant.payload.boundaryUseId &&
+      evidence.decisionDigest === grant.payload.provisionalDecisionDigest &&
+      evidence.finalAuthorizationDigest === grant.finalAuthorizationDigest &&
+      documentDigest === grant.finalAuthorizationDigest &&
+      setup.seal.verify(documentDigest, grant.signature);
+  };
+  assert.equal(matches(grant.evidence), true);
+  for (const evidence of [
+    { ...grant.evidence, contractVersion: "provider-process-egress-grant-evidence/v2" },
+    { ...grant.evidence, authorizationRef: "authorization-2" },
+    { ...grant.evidence, boundaryUseRef: "boundary-use-2" },
+    { ...grant.evidence, decisionDigest: digest("9") },
+    { ...grant.evidence, finalAuthorizationDigest: digest("9") },
+  ]) {
+    assert.equal(matches(evidence as typeof grant.evidence), false);
+  }
 });
 
 test("tenant/project/operation journal namespace separates the same boundary use", async () => {

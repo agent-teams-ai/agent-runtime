@@ -10,6 +10,8 @@ import {
 import { deepFreezeEgress } from "../application/immutable.js";
 import { createProviderProcessEgressAuthorization } from
   "../application/provider-process-egress-authorization.js";
+import type { GrantPayloadBeforeFingerprint } from
+  "../application/provider-process-egress-authorization.js";
 import type { EgressAuthorityOwnerReadPort } from
   "../application/ports/outbound/egress-authority-owner.js";
 import type { EgressControlClock } from "../application/ports/outbound/egress-control-clock.js";
@@ -123,17 +125,34 @@ const provisionalSigningDocument = (decision: Omit<ProvisionalEgressAuthorizatio
   signingKey: decision.signingKey,
 });
 
-const grantPayloadToDto = (payload: FirstApplicationByteGrantPayload):
-  FirstApplicationByteGrantPayloadV1 => ({
-  contractVersion: "provider-process-first-application-byte-grant/v1",
+const GRANT_EVIDENCE_CONTRACT_VERSION = "provider-process-egress-grant-evidence/v1" as const;
+
+const grantPayloadFieldsToDto = (payload: GrantPayloadBeforeFingerprint) => ({
+  contractVersion: "provider-process-first-application-byte-grant/v1" as const,
   authorizationRequestId: payload.authorizationRequestId, authorityRef: payload.authorityRef,
   scope: payload.scope, policy: payload.policy, providerAccess: payload.providerAccess,
   resolver: payload.resolver, selectedPeer: payload.selectedPeer, tls: payload.tls,
   limits: payload.limits, request: payload.request, requestDigest: payload.requestDigest,
   time: payload.time, boundaryUseId: payload.boundaryUseId,
   connectionAttemptId: payload.connectionAttemptId, streamId: payload.streamId,
+  redirectHop: payload.redirectHop,
+  provisionalDecisionDigest: payload.provisionalDecisionDigest,
   automaticRetryAuthorized: payload.automaticRetryAuthorized,
-  poolingAuthorized: payload.poolingAuthorized, consumption: payload.consumption,
+  poolingAuthorized: payload.poolingAuthorized,
+});
+
+const grantConsumptionDocument = (payload: GrantPayloadBeforeFingerprint) => ({
+  ...grantPayloadFieldsToDto(payload), consumption: payload.consumption,
+});
+
+const grantPayloadToDto = (payload: FirstApplicationByteGrantPayload):
+  FirstApplicationByteGrantPayloadV1 => ({
+  ...grantPayloadFieldsToDto(payload), consumption: payload.consumption,
+});
+
+const grantSigningDocument = (payload: FirstApplicationByteGrantPayload) => ({
+  payload: grantPayloadToDto(payload),
+  evidence: { contractVersion: GRANT_EVIDENCE_CONTRACT_VERSION },
 });
 
 const provisionalOutcomeToDto = (outcome: RequestProvisionalEgressAuthorizationOutcome):
@@ -147,8 +166,11 @@ const finalOutcomeToDto = (outcome: RequestFinalEgressAuthorizationOutcome):
   ? { status: "authorized", grant: { payload: grantPayloadToDto(outcome.grant.payload),
     finalAuthorizationDigest: outcome.grant.finalAuthorizationDigest,
     signature: outcome.grant.signature,
-    evidence: { contractVersion: "provider-process-egress-grant-evidence/v1",
-      ...outcome.grant.evidence } } }
+    evidence: { contractVersion: GRANT_EVIDENCE_CONTRACT_VERSION,
+      authorizationRef: outcome.grant.payload.authorizationRequestId,
+      boundaryUseRef: outcome.grant.payload.boundaryUseId,
+      decisionDigest: outcome.grant.payload.provisionalDecisionDigest,
+      finalAuthorizationDigest: outcome.grant.finalAuthorizationDigest } } }
   : { status: "denied", evidence: { contractVersion: "provider-process-egress-denial-evidence/v1",
     ...outcome.evidence } };
 
@@ -210,7 +232,7 @@ const snapshotDependencies = (input: ProviderProcessEgressAuthorizationDependenc
     verifier: Object.freeze({ verify: (value: string, signature: EgressDecisionSignature) =>
       verify(value, signature) === true }),
     signedDocuments: Object.freeze({ provisional: provisionalSigningDocument,
-      grant: grantPayloadToDto }),
+      consumption: grantConsumptionDocument, grant: grantSigningDocument }),
   });
 };
 

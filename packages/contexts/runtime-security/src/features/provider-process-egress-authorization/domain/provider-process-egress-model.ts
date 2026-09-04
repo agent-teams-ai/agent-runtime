@@ -181,6 +181,8 @@ export interface FirstApplicationByteGrantPayload {
   readonly boundaryUseId: string;
   readonly connectionAttemptId: string;
   readonly streamId: string;
+  readonly redirectHop: 0;
+  readonly provisionalDecisionDigest: string;
   readonly automaticRetryAuthorized: false;
   readonly poolingAuthorized: false;
   readonly consumption: {
@@ -217,12 +219,6 @@ export type RequestFinalEgressAuthorizationOutcome =
       readonly payload: FirstApplicationByteGrantPayload;
       readonly finalAuthorizationDigest: string;
       readonly signature: EgressDecisionSignature;
-      readonly evidence: {
-        readonly authorizationRef: string;
-        readonly boundaryUseRef: string;
-        readonly decisionDigest: string;
-        readonly finalAuthorizationDigest: string;
-      };
     } }
   | { readonly status: "denied"; readonly evidence: EgressDenialEvidence };
 

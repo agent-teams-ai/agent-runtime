@@ -189,6 +189,8 @@ export interface FirstApplicationByteGrantPayloadV1 {
   readonly boundaryUseId: string;
   readonly connectionAttemptId: string;
   readonly streamId: string;
+  readonly redirectHop: 0;
+  readonly provisionalDecisionDigest: string;
   readonly automaticRetryAuthorized: false;
   readonly poolingAuthorized: false;
   readonly consumption: {

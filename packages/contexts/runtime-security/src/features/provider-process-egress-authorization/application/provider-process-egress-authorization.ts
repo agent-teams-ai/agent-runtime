@@ -37,6 +37,7 @@ export interface ProviderProcessEgressOperations {
   readonly signedDocuments: {
     readonly provisional: (decision: Omit<ProvisionalEgressAuthorization,
       "decisionDigest" | "signature">) => unknown;
+    readonly consumption: (payload: GrantPayloadBeforeFingerprint) => unknown;
     readonly grant: (payload: FirstApplicationByteGrantPayload) => unknown;
   };
 }
@@ -283,7 +284,7 @@ const validateNetworkFacts = (input: RequestFinalEgressAuthorization):
   return { facts: { addresses: normalized.addresses, peer } };
 };
 
-type GrantPayloadBeforeFingerprint = Omit<FirstApplicationByteGrantPayload, "consumption"> & {
+export type GrantPayloadBeforeFingerprint = Omit<FirstApplicationByteGrantPayload, "consumption"> & {
   readonly consumption: Omit<FirstApplicationByteGrantPayload["consumption"], "requestFingerprint">;
 };
 
@@ -307,7 +308,9 @@ const buildGrantPayloadBeforeFingerprint = (input: RequestFinalEgressAuthorizati
       authorizedAtControlTime: clock.controlTime,
       expiresAtControlTime: input.provisional.time.expiresAtControlTime },
     boundaryUseId: input.boundaryUseId, connectionAttemptId: input.connectionAttemptId,
-    streamId: input.streamId, automaticRetryAuthorized: false, poolingAuthorized: false,
+    streamId: input.streamId, redirectHop: 0,
+    provisionalDecisionDigest: input.provisional.decisionDigest,
+    automaticRetryAuthorized: false, poolingAuthorized: false,
     consumption: { owner: "host-custody", journalKey },
   };
 };
@@ -321,7 +324,8 @@ const signFinalGrant = (input: RequestFinalEgressAuthorization,
     const addressSetDigest = digestCanonical(operations.digest, facts.addresses);
     const beforeFingerprint = buildGrantPayloadBeforeFingerprint(input, operations, clock, facts,
       { addressSetDigest });
-    const requestFingerprint = digestCanonical(operations.digest, beforeFingerprint);
+    const requestFingerprint = digestCanonical(operations.digest,
+      operations.signedDocuments.consumption(beforeFingerprint));
     payload = { ...beforeFingerprint, consumption: {
       ...beforeFingerprint.consumption, requestFingerprint,
     } };
@@ -341,8 +345,6 @@ const signFinalGrant = (input: RequestFinalEgressAuthorization,
     }
     return deepFreezeEgress({ status: "authorized", grant: {
       payload, finalAuthorizationDigest, signature,
-      evidence: { authorizationRef: context.ref, boundaryUseRef: input.boundaryUseId,
-        decisionDigest: context.decisionDigest, finalAuthorizationDigest },
     }});
   } catch { return denial("final", "final_signature_invalid", context.ref, context.decisionDigest); }
 };
