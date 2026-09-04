@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "2d4e960b276559b39c4714fa0b7b59a44f164867",
+  "sourceRevision": "038080795baabe54bcc4ef89dbedf334becc2acf",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "e5ce68ab3fd2843b5d6ebaba6f0cbf295137ea784dc4f5116a88cb1bf6b0123e",
+    "outputSha256": "67ee677dcfbe17657759c5c6b81383298683fbfb2f58fa802c97054067834eac",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -58,12 +58,12 @@
       "sha256": "6708bfd7c55aa9747295893a924b44946c4edb2d528c57cff5dd4d0c3afa0bd0"
     },
     "sources": {
-      "fileCount": 319,
-      "sha256": "bd20d46031d31087cb1504d88baa977ff83366861eeb45aa1f2f1545d87585c1"
+      "fileCount": 335,
+      "sha256": "60230bd4b4ca3b68025d925ccd7147bc4399a7798cdf51f8180cf50e20637971"
     },
     "tests": {
-      "fileCount": 148,
-      "sha256": "51dbc10aa22d71ff5bd3cd039dd22a6b83d9fb70fb7be87f520dd16c7e065deb"
+      "fileCount": 163,
+      "sha256": "4c517f2fb3e5e0c3a82a68f9611c650b510f8791b7199343a0c2d17b110df52b"
     }
   },
   "historicalChanges": [
@@ -1810,6 +1810,64 @@
     {
       "id": "host-egress-journal-security-integration",
       "revision": "2d4e960b276559b39c4714fa0b7b59a44f164867",
+      "files": 0,
+      "additions": 0,
+      "deletions": 0,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "strict-http-egress-reviewed-byte-custody",
+      "revision": "d7b99516a781cc1ce24d81922da5d1c674910ad2",
+      "files": 2,
+      "additions": 5,
+      "deletions": 4,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 2,
+        "additions": 5,
+        "deletions": 4
+      },
+      "tests": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "strict-http-egress-current-main-integration",
+      "revision": "038080795baabe54bcc4ef89dbedf334becc2acf",
       "files": 0,
       "additions": 0,
       "deletions": 0,
