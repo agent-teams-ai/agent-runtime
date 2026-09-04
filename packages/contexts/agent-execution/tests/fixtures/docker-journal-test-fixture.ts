@@ -1,6 +1,9 @@
 import {
   DockerCustodyJournal,
   DockerCustodyJournalConflictError,
+  type DockerEgressJournalFile,
+  type DockerEgressJournalStorage,
+  type DockerEgressTrustedRuntimeIdentity,
   type DockerCustodyAttemptKey,
   type DockerCustodyJournalFile,
   type DockerCustodyJournalStorage,
@@ -76,6 +79,67 @@ export class MemoryStorage implements DockerCustodyJournalStorage {
   public async scan(maxFiles: number) {
     if (this.files.size > maxFiles) {throw new Error("bounded scan exceeded");}
     return [...this.files].map(([locatorSha256, file]) => ({ locatorSha256, file }));
+  }
+}
+
+export class MemoryEgressFile implements DockerEgressJournalFile {
+  public bytes = Buffer.alloc(0);
+  public appendCalls = 0;
+  public failBeforeAppend = false;
+  public failAfterAppend = false;
+  public get byteLength(): number { return this.bytes.byteLength; }
+  public async append(expectedByteLength: number, bytes: Uint8Array): Promise<void> {
+    this.appendCalls += 1;
+    if (this.failBeforeAppend) { this.failBeforeAppend = false; throw new Error("synthetic storage failure before append"); }
+    if (expectedByteLength !== this.bytes.byteLength) { throw new DockerCustodyJournalConflictError(); }
+    this.bytes = Buffer.concat([this.bytes, bytes]);
+    if (this.failAfterAppend) { this.failAfterAppend = false; throw new Error("synthetic lost storage acknowledgement"); }
+  }
+  public async read(maxBytes: number): Promise<Uint8Array> {
+    if (this.bytes.byteLength > maxBytes) { throw new Error("bounded read exceeded"); }
+    return this.bytes;
+  }
+  public async close(): Promise<void> {}
+}
+
+export class MemoryEgressStorage implements DockerEgressJournalStorage {
+  public readonly v3Files = new Map<string, MemoryEgressFile>();
+  public readonly legacyV2Files = new Map<string, MemoryEgressFile>();
+  public readonly tombstones = new Map<string, MemoryEgressFile>();
+  public createCalls = 0;
+  public failCreateAfterPublish = false;
+  public failTombstoneAfterPublish = false;
+  private serial = Promise.resolve();
+  public async exclusive<Result>(_fence: DockerEgressTrustedRuntimeIdentity, operation: () => Promise<Result>): Promise<Result> {
+    const previous = this.serial; let release!: () => void;
+    this.serial = new Promise<void>(resolve => { release = resolve; }); await previous;
+    try { return await operation(); } finally { release(); }
+  }
+  public async createWithFirstRecord(locator: string, firstRecord: Uint8Array): Promise<DockerEgressJournalFile> {
+    this.createCalls += 1;
+    const present = this.v3Files.get(locator);
+    if (present !== undefined) {
+      if (present.byteLength !== 0) { throw new DockerCustodyJournalConflictError(); }
+      await present.append(0, firstRecord); return present;
+    }
+    const file = new MemoryEgressFile(); file.bytes = Buffer.from(firstRecord); this.v3Files.set(locator, file);
+    if (this.failCreateAfterPublish) { this.failCreateAfterPublish = false; throw new Error("synthetic lost create acknowledgement"); }
+    return file;
+  }
+  public async openV3(locator: string): Promise<DockerEgressJournalFile | undefined> { return this.v3Files.get(locator); }
+  private entries(files: ReadonlyMap<string, MemoryEgressFile>, maxFiles: number) {
+    if (files.size > maxFiles) { throw new Error("bounded scan exceeded"); }
+    return [...files].map(([locatorSha256, file]) => ({ locatorSha256, byteLength: file.byteLength, file }));
+  }
+  public async scanV3(maxFiles: number) { return this.entries(this.v3Files, maxFiles); }
+  public async scanLegacyV2(maxFiles: number) { return this.entries(this.legacyV2Files, maxFiles); }
+  public async scanTombstones(maxFiles: number) { return this.entries(this.tombstones, maxFiles); }
+  public async persistTombstone(locator: string, bytes: Uint8Array, removeLive: boolean): Promise<void> {
+    const present = this.tombstones.get(locator);
+    if (present !== undefined && !present.bytes.equals(Buffer.from(bytes))) { throw new DockerCustodyJournalConflictError(); }
+    if (present === undefined) { const file = new MemoryEgressFile(); file.bytes = Buffer.from(bytes); this.tombstones.set(locator, file); }
+    if (this.failTombstoneAfterPublish) { this.failTombstoneAfterPublish = false; throw new Error("synthetic lost tombstone acknowledgement"); }
+    if (removeLive) { this.v3Files.delete(locator); }
   }
 }
 

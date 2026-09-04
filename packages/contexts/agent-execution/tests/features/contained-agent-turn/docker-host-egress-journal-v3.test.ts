@@ -1,282 +1,279 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 
 import {
+  DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS,
   DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS,
   DOCKER_EGRESS_CLEANUP_ORDER,
   DOCKER_EGRESS_RESOURCE_KINDS,
   DockerEgressJournal,
   classifyDockerEgressLegacyV2,
   createDockerCustodyRecord,
+  createDockerEgressCleanupObservation,
   createDockerEgressRecord,
   createDockerEgressSubject,
+  dockerEgressCleanupHandle,
   dockerEgressJournalLocator,
   encodeDockerCustodyRecord,
   encodeDockerEgressRecord,
   replayDockerEgressBytes,
   validateDockerEgressSubject,
   type DockerEgressJournalSubject,
+  type DockerEgressResourceKind,
+  type DockerEgressTrustedRuntimeIdentity,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/index.js";
-import { MemoryFile, MemoryStorage, key as v2Key } from "../../fixtures/docker-journal-test-fixture.ts";
+import { MemoryEgressFile, MemoryEgressStorage, key as v2Key } from "../../fixtures/docker-journal-test-fixture.ts";
 
-const digest = (character: string): string => character.repeat(64);
+const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
+const opaque = (prefix: string, value: string): string => `${prefix}${hash(value)}`;
+const command = (value: string): string => opaque("command:", value);
+
 const subject = createDockerEgressSubject({
   identity: {
-    operationId: "operation:egress-1", attemptId: "attempt:egress-1", effectId: "effect:egress-1",
-    custodyId: "custody:egress-1", workspaceId: "workspace:egress-1", hostInstanceId: "host:egress-1",
-    hostBootId: "boot:egress-1", resourceGenerationId: "resource-generation:egress-1",
+    operationId: opaque("operation:", "operation"), attemptId: opaque("attempt:", "attempt"),
+    effectId: opaque("effect:", "effect"), custodyId: opaque("custody:", "custody"),
+    workspaceId: opaque("workspace:", "workspace"), hostSlotId: opaque("host-slot:", "host-slot"),
+    hostInstanceId: opaque("host-instance:", "host-instance"), hostBootId: opaque("host-boot:", "host-boot"),
+    executionGenerationId: opaque("execution-generation:", "execution-generation"), daemonId: opaque("daemon:", "daemon"),
+    daemonGenerationId: opaque("daemon-generation:", "daemon-generation"),
+    slotGenerationId: opaque("slot-generation:", "slot-generation"), exactFingerprintSha256: hash("fingerprint"),
   },
   authority: {
-    scopeSha256: digest("1"), operationSha256: digest("2"), acceptedAuthoritySha256: digest("3"),
-    brokerPolicySha256: digest("4"), routeAuthorizationSha256: digest("5"),
-    materializationAuthorizationSha256: digest("6"),
+    scopeSha256: hash("scope"), operationSha256: hash("operation-binding"),
+    acceptedAuthoritySha256: hash("accepted-authority"), brokerPolicySha256: hash("broker-policy"),
+    routeAuthorizationSha256: hash("route-authorization"),
+    materializationAuthorizationSha256: hash("materialization-authorization"),
   },
   resources: {
-    privateNetworkId: "private-network:egress-1", brokerNamespaceId: "broker-netns:egress-1",
-    brokerCgroupId: "broker-cgroup:egress-1", brokerProcessId: "broker-process:egress-1",
-    brokerListenerId: "broker-listener:egress-1", brokerInboundSocketId: "broker-inbound-socket:egress-1",
-    brokerUpstreamSocketId: "broker-upstream-socket:egress-1", providerEndpointId: "provider-endpoint:egress-1",
-    networkEndpointId: "network-endpoint:egress-1", upstreamRuleGenerationId: "upstream-rule-generation:egress-1",
-    providerContainerId: "provider-container:egress-1",
+    privateNetworkHandle: opaque("private-network-handle:", "private-network"),
+    brokerNamespaceHandle: opaque("broker-netns-handle:", "broker-namespace"),
+    brokerCgroupHandle: opaque("broker-cgroup-handle:", "broker-cgroup"),
+    brokerProcessHandle: opaque("broker-process-handle:", "broker-process"),
+    brokerListenerHandle: opaque("broker-listener-handle:", "broker-listener"),
+    brokerInboundSocketHandle: opaque("broker-inbound-socket-handle:", "broker-inbound-socket"),
+    brokerUpstreamSocketHandle: opaque("broker-upstream-socket-handle:", "broker-upstream-socket"),
+    providerEndpointHandle: opaque("provider-endpoint-handle:", "provider-endpoint"),
+    networkEndpointHandle: opaque("network-endpoint-handle:", "network-endpoint"),
+    upstreamRuleHandle: opaque("upstream-rule-handle:", "upstream-rule"),
+    providerContainerHandle: opaque("provider-container-handle:", "provider-container"),
   },
 });
-
-const appendMaterialization = async (
-  journal: DockerEgressJournal,
-  value: DockerEgressJournalSubject = subject,
-): Promise<number> => {
-  let sequence = (await journal.open(value)).sequence;
+const trusted: DockerEgressTrustedRuntimeIdentity = Object.freeze({
+  scopeSha256: subject.authority.scopeSha256, hostSlotId: subject.identity.hostSlotId,
+  hostInstanceId: subject.identity.hostInstanceId, hostBootId: subject.identity.hostBootId,
+  executionGenerationId: subject.identity.executionGenerationId, daemonId: subject.identity.daemonId,
+  daemonGenerationId: subject.identity.daemonGenerationId, slotGenerationId: subject.identity.slotGenerationId,
+});
+const changedSubject = (identity: Partial<DockerEgressJournalSubject["identity"]> = {},
+  resources: Partial<DockerEgressJournalSubject["resources"]> = {}): DockerEgressJournalSubject => createDockerEgressSubject({
+  ...subject, identity: { ...subject.identity, ...identity }, resources: { ...subject.resources, ...resources },
+});
+const observation = (resource: DockerEgressResourceKind, value = subject) => createDockerEgressCleanupObservation({
+  resource, cleanupHandle: dockerEgressCleanupHandle(value, resource), scopeSha256: value.authority.scopeSha256,
+  hostInstanceId: value.identity.hostInstanceId, hostBootId: value.identity.hostBootId,
+  executionGenerationId: value.identity.executionGenerationId, daemonId: value.identity.daemonId,
+  daemonGenerationId: value.identity.daemonGenerationId, slotGenerationId: value.identity.slotGenerationId,
+  observerId: opaque("observer:", "docker-absence-observer"), capabilityRevisionSha256: hash("capability-revision"), result: "absent",
+});
+const materialize = async (journal: DockerEgressJournal, value = subject): Promise<number> => {
+  let sequence = (await journal.open(value, command("open"))).sequence;
   for (const resource of DOCKER_EGRESS_RESOURCE_KINDS) {
-    sequence = (await journal.materializeIntent(value, sequence, resource)).sequence;
-    sequence = (await journal.materializeReceipt(value, sequence, resource)).sequence;
+    sequence = (await journal.materializeIntent(value, sequence, command(`materialize-intent:${resource}`), resource)).sequence;
+    sequence = (await journal.materializeReceipt(value, sequence, command(`materialize-receipt:${resource}`), resource)).sequence;
+  }
+  return sequence;
+};
+const clean = async (journal: DockerEgressJournal, sequence: number, value = subject): Promise<number> => {
+  for (const resource of DOCKER_EGRESS_CLEANUP_ORDER) {
+    sequence = (await journal.cleanupIntent(value, sequence, command(`cleanup-intent:${resource}`), resource)).sequence;
+    sequence = (await journal.cleanupReceipt(value, sequence, command(`cleanup-receipt:${resource}`), resource,
+      observation(resource, value))).sequence;
   }
   return sequence;
 };
 
-test("V3 strict codec round-trips a deterministic digest-bound immutable record", () => {
-  const record = createDockerEgressRecord({
-    sequence: 0, subject, event: { kind: "open_intent" }, previousChecksumSha256: null,
-  });
-  const encoded = encodeDockerEgressRecord(record);
-  const replay = replayDockerEgressBytes(encoded);
+test("V3 records are strict, chained, command-digest bound, immutable, and locator bound", () => {
+  const record = createDockerEgressRecord({ sequence: 0, subject, commandId: command("codec-open"),
+    event: { kind: "open_intent" }, previousChecksumSha256: null });
+  const replay = replayDockerEgressBytes(encodeDockerEgressRecord(record));
   assert.deepEqual(replay.records, [record]);
-  assert.equal(Object.isFrozen(replay.records), true);
-  assert.equal(Object.isFrozen(replay.records[0]?.subject.resources), true);
-  assert.equal(Buffer.from(encoded).equals(Buffer.from(encodeDockerEgressRecord(record))), true);
-  assert.equal(JSON.stringify(record).includes("timestamp"), false);
-  assert.equal(JSON.stringify(record).includes("/"), false);
+  assert.equal(Object.isFrozen(record), true);
+  assert.notEqual(record.commandDigestSha256, record.checksumSha256);
+  assert.notEqual(dockerEgressJournalLocator(subject), subject.bindingSha256);
+  assert.throws(() => replayDockerEgressBytes(Buffer.from(
+    `${Buffer.from(encodeDockerEgressRecord(record)).toString().replace('"sequence":0', '"sequence":0,"sequence":0')}`,
+  )), { name: "DockerEgressJournalCorruptionError" });
+  assert.throws(() => replayDockerEgressBytes(Buffer.from([0xc3, 0x28, 0x0a])), { name: "DockerEgressJournalCorruptionError" });
 });
 
-test("same host-local identity with any changed accepted authority digest conflicts", async () => {
-  const journal = new DockerEgressJournal(new MemoryStorage());
-  await journal.open(subject);
-  const conflicting = createDockerEgressSubject({
-    ...subject,
-    authority: { ...subject.authority, brokerPolicySha256: digest("7") },
-  });
-  await assert.rejects(journal.open(conflicting), { name: "DockerEgressJournalConflictError" });
+test("lost append acknowledgements retry by exact command digest and conflicting reuse is rejected", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const opened = await journal.open(subject, command("open")); const file = storage.v3Files.get(dockerEgressJournalLocator(subject));
+  assert.ok(file); file.failAfterAppend = true;
+  await assert.rejects(journal.materializeIntent(subject, opened.sequence, command("lost-intent"), "private_network"));
+  const retried = await journal.materializeIntent(subject, opened.sequence, command("lost-intent"), "private_network");
+  assert.equal(retried.sequence, 1);
+  const exactAgain = await journal.materializeIntent(subject, opened.sequence, command("lost-intent"), "private_network");
+  assert.equal(exactAgain.checksumSha256, retried.checksumSha256);
+  await assert.rejects(journal.materializeReceipt(subject, opened.sequence, command("lost-intent"), "private_network"),
+    { name: "DockerEgressJournalConflictError" });
 });
 
-test("every materialization side effect has a durable intent and receipt and replay never recreates", async () => {
-  const storage = new MemoryStorage();
-  const journal = new DockerEgressJournal(storage);
-  let sequence = (await journal.open(subject)).sequence;
-  for (const resource of DOCKER_EGRESS_RESOURCE_KINDS) {
-    sequence = (await journal.materializeIntent(subject, sequence, resource)).sequence;
-    const afterIntent = (await journal.recover()).find(item => item.kind === "cleanup_only");
-    assert.equal(afterIntent?.kind, "cleanup_only");
-    assert.equal(afterIntent?.reconcileRequired, true);
-    assert.equal("materialize" in (afterIntent ?? {}), false);
-    sequence = (await journal.materializeReceipt(subject, sequence, resource)).sequence;
-    const afterReceipt = (await journal.recover()).find(item => item.kind === "cleanup_only");
-    assert.equal(afterReceipt?.kind, "cleanup_only");
-    assert.equal(JSON.stringify(afterReceipt).includes("retry"), false);
-  }
-  const file = storage.files.get(dockerEgressJournalLocator(subject));
-  assert.ok(file);
-  const events = replayDockerEgressBytes(file.bytes).records.map(record => record.event);
-  assert.equal(events.length, 1 + DOCKER_EGRESS_RESOURCE_KINDS.length * 2);
-  for (const [index, resource] of DOCKER_EGRESS_RESOURCE_KINDS.entries()) {
-    assert.deepEqual(events[index * 2 + 1], { kind: "materialize_intent", resource });
-    assert.deepEqual(events[index * 2 + 2], { acknowledgement: "acknowledged", kind: "materialize_receipt", resource });
-  }
+test("atomic open retries a lost create acknowledgement and recovers only an exact locator-bound zero-byte publication", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  storage.failCreateAfterPublish = true;
+  await assert.rejects(journal.open(subject, command("open")));
+  assert.equal((await journal.open(subject, command("open"))).sequence, 0);
+  const zeroStorage = new MemoryEgressStorage(); zeroStorage.v3Files.set(dockerEgressJournalLocator(subject), new MemoryEgressFile());
+  const zeroJournal = new DockerEgressJournal(zeroStorage, trusted);
+  assert.equal((await zeroJournal.open(subject, command("zero-open"))).sequence, 0);
+  assert.notEqual(zeroStorage.v3Files.get(dockerEgressJournalLocator(subject))?.byteLength, 0);
 });
 
-test("lost acknowledgement becomes reconcile_required then cleanup is reverse ordered and idempotent", async () => {
-  const storage = new MemoryStorage();
-  const journal = new DockerEgressJournal(storage);
-  let sequence = (await journal.open(subject)).sequence;
-  for (const resource of DOCKER_EGRESS_RESOURCE_KINDS.slice(0, 5)) {
-    sequence = (await journal.materializeIntent(subject, sequence, resource)).sequence;
-    if (resource === "broker_listener") { break; }
-    sequence = (await journal.materializeReceipt(subject, sequence, resource)).sequence;
-  }
-  sequence = (await journal.reconcileRequired(subject, sequence, "acknowledgement_unknown", "broker_listener")).sequence;
-  assert.deepEqual((await journal.recover())[0], {
-    kind: "cleanup_only", bindingSha256: subject.bindingSha256, nextCleanup: "broker_listener",
-    reconcileRequired: true, status: "cleaning",
-  });
-  for (const resource of DOCKER_EGRESS_CLEANUP_ORDER.filter(item => DOCKER_EGRESS_RESOURCE_KINDS.indexOf(item) <= 4)) {
-    sequence = (await journal.cleanupIntent(subject, sequence, resource)).sequence;
-    sequence = (await journal.cleanupReceipt(subject, sequence, resource, "already_absent")).sequence;
-  }
-  const closed = await journal.close(subject, sequence);
+test("live debt globally fences admission and effect, attempt, generation, and cleanup handles are unique", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  await journal.open(subject, command("open"));
+  const independent = changedSubject({ operationId: opaque("operation:", "other"), effectId: opaque("effect:", "other"),
+    attemptId: opaque("attempt:", "other"), exactFingerprintSha256: hash("other") });
+  await assert.rejects(journal.open(independent, command("other-open")), { name: "DockerEgressJournalConflictError" });
+  for (const collision of [
+    changedSubject({ operationId: opaque("operation:", "collision") }),
+    changedSubject({ effectId: opaque("effect:", "collision") }),
+    changedSubject({ attemptId: opaque("attempt:", "collision") }),
+    changedSubject({ executionGenerationId: opaque("execution-generation:", "collision") }),
+    changedSubject({}, { privateNetworkHandle: opaque("private-network-handle:", "collision") }),
+  ]) {await assert.rejects(journal.open(collision, command(`collision:${collision.bindingSha256}`)));}
+});
+
+test("retirement tombstone is durable, prevents resurrection, and serves a lost-close exact retry", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  const finalCleanup = await clean(journal, await materialize(journal));
+  storage.failTombstoneAfterPublish = true;
+  await assert.rejects(journal.close(subject, finalCleanup, command("close")));
+  const closed = await journal.close(subject, finalCleanup, command("close"));
   assert.equal(closed.event.kind, "closed");
-  assert.deepEqual((await journal.recover())[0], {
-    kind: "cleanup_only", bindingSha256: subject.bindingSha256, nextCleanup: null,
-    reconcileRequired: false, status: "closed",
-  });
-  await assert.rejects(journal.cleanupIntent(subject, closed.sequence, "private_network"), {
-    name: "DockerEgressJournalConflictError",
-  });
+  assert.equal(storage.tombstones.has(dockerEgressJournalLocator(subject)), true);
+  await assert.rejects(journal.open(subject, command("resurrect")), { name: "DockerEgressJournalConflictError" });
 });
 
-test("restart after every cleanup intent and receipt resumes only the exact reverse dependency", async () => {
-  const storage = new MemoryStorage();
-  const journal = new DockerEgressJournal(storage);
-  let sequence = await appendMaterialization(journal);
-  for (const [index, resource] of DOCKER_EGRESS_CLEANUP_ORDER.entries()) {
-    sequence = (await journal.cleanupIntent(subject, sequence, resource)).sequence;
-    assert.deepEqual((await new DockerEgressJournal(storage).recover())[0], {
-      kind: "cleanup_only", bindingSha256: subject.bindingSha256, nextCleanup: resource,
-      reconcileRequired: true, status: "cleaning",
-    });
-    sequence = (await journal.cleanupReceipt(subject, sequence, resource, "acknowledged")).sequence;
-    const expected = DOCKER_EGRESS_CLEANUP_ORDER[index + 1] ?? null;
-    assert.deepEqual((await new DockerEgressJournal(storage).recover())[0], {
-      kind: "cleanup_only", bindingSha256: subject.bindingSha256, nextCleanup: expected,
-      reconcileRequired: false, status: "cleaning",
-    });
+test("cleanup receipts require an immutable absence observation bound to the exact debt", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  let sequence = (await journal.open(subject, command("open"))).sequence;
+  sequence = (await journal.materializeIntent(subject, sequence, command("mi"), "private_network")).sequence;
+  sequence = (await journal.materializeReceipt(subject, sequence, command("mr"), "private_network")).sequence;
+  sequence = (await journal.cleanupIntent(subject, sequence, command("ci"), "private_network")).sequence;
+  const wrong = observation("private_network");
+  await assert.rejects(journal.cleanupReceipt(subject, sequence, command("bad-observation"), "private_network",
+    { ...wrong, scopeSha256: hash("wrong") }));
+  sequence = (await journal.cleanupReceipt(subject, sequence, command("cr"), "private_network", wrong)).sequence;
+  const closed = await journal.close(subject, sequence, command("close"));
+  assert.equal(closed.event.kind, "closed");
+  assert.equal(JSON.stringify(await journal.recoveryEvidence()).includes("private-network-handle"), false);
+});
+
+test("cleanup observation handles must use the resource-specific prefix", () => {
+  const correct = observation("private_network");
+  for (const cleanupHandle of [subject.resources.providerContainerHandle, opaque("arbitrary:", "network")]) {
+    assert.throws(() => createDockerEgressCleanupObservation({...correct, cleanupHandle}), /fixed-format opaque/u);
   }
-  await journal.close(subject, sequence);
 });
 
-test("cleanup failure fences closure and resource generation until exact absence is proved", async () => {
-  const journal = new DockerEgressJournal(new MemoryStorage());
-  let sequence = await appendMaterialization(journal);
-  sequence = (await journal.cleanupIntent(subject, sequence, "provider_container")).sequence;
-  sequence = (await journal.reconcileRequired(subject, sequence, "cleanup_failed", "provider_container")).sequence;
-  await assert.rejects(journal.close(subject, sequence), { name: "DockerEgressJournalConflictError" });
-  await assert.rejects(journal.materializeIntent(subject, sequence, "private_network"), { name: "DockerEgressJournalConflictError" });
-  sequence = (await journal.quarantine(subject, sequence, "cleanup_incomplete")).sequence;
-  sequence = (await journal.cleanupIntent(subject, sequence, "provider_container")).sequence;
-  sequence = (await journal.cleanupReceipt(subject, sequence, "provider_container", "acknowledged")).sequence;
-  const recovery = (await journal.recover()).find(item => item.kind === "cleanup_only");
-  assert.equal(recovery?.status, "quarantined");
-  await assert.rejects(journal.close(subject, sequence), { name: "DockerEgressJournalConflictError" });
+test("physical cleanup cannot clear unrelated unscoped reconciliation debt", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  let sequence = (await journal.open(subject, command("open"))).sequence;
+  sequence = (await journal.materializeIntent(subject, sequence, command("mi"), "private_network")).sequence;
+  sequence = (await journal.materializeReceipt(subject, sequence, command("mr"), "private_network")).sequence;
+  sequence = (await journal.reconcileRequired(subject, sequence, command("global-debt"), "journal_corrupt", null)).sequence;
+  sequence = (await journal.cleanupIntent(subject, sequence, command("ci"), "private_network")).sequence;
+  sequence = (await journal.cleanupReceipt(subject, sequence, command("cr"), "private_network", observation("private_network"))).sequence;
+  await assert.rejects(journal.close(subject, sequence, command("unsafe-close")), {name: "DockerEgressJournalConflictError"});
 });
 
-test("concurrent open is exact-idempotent while concurrent cleanup CAS has one winner", async () => {
-  const storage = new MemoryStorage();
-  const journal = new DockerEgressJournal(storage);
-  const opened = await Promise.all([journal.open(subject), journal.open(subject)]);
-  assert.equal(opened[0]?.checksumSha256, opened[1]?.checksumSha256);
-  let sequence = opened[0]?.sequence ?? -1;
-  sequence = (await journal.materializeIntent(subject, sequence, "private_network")).sequence;
-  sequence = (await journal.materializeReceipt(subject, sequence, "private_network")).sequence;
-  const settled = await Promise.allSettled([
-    journal.cleanupIntent(subject, sequence, "private_network"),
-    journal.cleanupIntent(subject, sequence, "private_network"),
-  ]);
-  assert.equal(settled.filter(item => item.status === "fulfilled").length, 1);
-  assert.equal(settled.filter(item => item.status === "rejected").length, 1);
+test("restart returns only a validated cleanup-only directive with private subject, sequence, and handle", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  let sequence = (await journal.open(subject, command("open"))).sequence;
+  sequence = (await journal.materializeIntent(subject, sequence, command("intent"), "private_network")).sequence;
+  const directives = await new DockerEgressJournal(storage, trusted).recoverCleanupDirectives();
+  assert.deepEqual(directives, [{ kind: "cleanup_only", subject, sequence, resource: "private_network",
+    cleanupHandle: subject.resources.privateNetworkHandle, reconcileRequired: true }]);
+  const stale = { ...trusted, hostBootId: opaque("host-boot:", "successor") };
+  assert.deepEqual(await new DockerEgressJournal(storage, stale).recoverCleanupDirectives(), []);
+  assert.equal(storage.tombstones.has(dockerEgressJournalLocator(subject)), true);
 });
 
-test("wrong host, boot, scope, and resource generation cannot open the same identity", async () => {
-  const journal = new DockerEgressJournal(new MemoryStorage());
-  await journal.open(subject);
-  for (const changed of [
-    { hostInstanceId: "host:wrong" }, { hostBootId: "boot:wrong" },
-    { resourceGenerationId: "resource-generation:wrong" },
-  ]) {
-    const candidate = createDockerEgressSubject({ ...subject, identity: { ...subject.identity, ...changed } });
-    await assert.rejects(journal.open(candidate), { name: "DockerEgressJournalConflictError" });
+test("V2 remains in a separate read-only namespace with original strict bounds and unsafe input fences admission", async () => {
+  const first = createDockerCustodyRecord({ attemptKey: v2Key, sequence: 0, state: "prepared",
+    evidence: { status: "proved" }, previousChecksumSha256: null });
+  const second = createDockerCustodyRecord({ attemptKey: v2Key, sequence: 1, state: "create_requested",
+    evidence: { status: "proved" }, previousChecksumSha256: first.checksumSha256 });
+  const safeBytes = encodeDockerCustodyRecord(first, DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS);
+  assert.equal(classifyDockerEgressLegacyV2(safeBytes).quarantineRequired, false);
+  const unsafeBytes = Buffer.concat([safeBytes, encodeDockerCustodyRecord(second, DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS)]);
+  assert.equal(classifyDockerEgressLegacyV2(unsafeBytes).quarantineRequired, true);
+  assert.equal(classifyDockerEgressLegacyV2(Buffer.alloc(DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS.maxJournalBytes + 1)).diagnostic,
+    "legacy_oversized");
+  assert.equal(classifyDockerEgressLegacyV2(Buffer.from('{"version":2,"version":2}\n')).diagnostic, "legacy_corrupt");
+  const storage = new MemoryEgressStorage(); const legacy = new MemoryEgressFile(); legacy.bytes = unsafeBytes;
+  storage.legacyV2Files.set(hash("legacy-locator"), legacy);
+  await assert.rejects(new DockerEgressJournal(storage, trusted).open(subject, command("open")),
+    { name: "DockerEgressJournalConflictError" });
+  assert.equal(storage.v3Files.size, 0);
+});
+
+test("corrupt and misplaced V3 journals persist locator-only quarantine evidence and fence admission", async () => {
+  for (const misplaced of [false, true]) {
+    const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+    await journal.open(subject, command("open")); const expected = dockerEgressJournalLocator(subject);
+    if (misplaced) { const file = storage.v3Files.get(expected)!; storage.v3Files.delete(expected); storage.v3Files.set(hash("moved"), file); }
+    else { storage.v3Files.get(expected)!.bytes[8] = 0xff; }
+    const evidence = await journal.recoveryEvidence();
+    assert.equal(evidence.some(item => item.kind === "quarantine_evidence" && item.locatorSha256 === (misplaced ? hash("moved") : expected)), true);
+    assert.equal(JSON.stringify(evidence).includes("cleanupHandle"), false);
+    await assert.rejects(journal.open(subject, command("another-open")));
   }
-  const changedScope = createDockerEgressSubject({
-    ...subject, authority: { ...subject.authority, scopeSha256: digest("8") },
-  });
-  await assert.rejects(journal.open(changedScope), { name: "DockerEgressJournalConflictError" });
 });
 
-test("strict shapes reject paths, secrets, accessors, symbols, proxies, and malformed digests", () => {
-  assert.throws(() => validateDockerEgressSubject({ ...subject, secret: "token" }), /exact data-only shape/u);
-  assert.throws(() => createDockerEgressSubject({
-    ...subject, resources: { ...subject.resources, privateNetworkId: "/var/run/netns/private" },
-  }), /bounded opaque/u);
-  assert.throws(() => createDockerEgressSubject({
-    ...subject, authority: { ...subject.authority, routeAuthorizationSha256: "latest" },
-  }), /SHA-256/u);
-  assert.throws(() => validateDockerEgressSubject({ ...subject, [Symbol("secret")]: "hidden" }), /exact data-only shape/u);
+test("scan bytes are globally pre-charged before any journal read", async () => {
+  const storage = new MemoryEgressStorage();
+  const first = new MemoryEgressFile(); first.bytes = Buffer.alloc(DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxJournalBytes);
+  const second = new MemoryEgressFile(); second.bytes = Buffer.alloc(DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxJournalBytes);
+  let reads = 0; first.read = async () => { reads += 1; return first.bytes; }; second.read = async () => { reads += 1; return second.bytes; };
+  storage.v3Files.set(hash("one"), first); storage.v3Files.set(hash("two"), second);
+  const bounded = new DockerEgressJournal(storage, trusted, {
+    maxRestartScanBytes: DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxJournalBytes,
+  });
+  await assert.rejects(bounded.recoveryEvidence(), { name: "DockerEgressJournalCapacityError" });
+  assert.equal(reads, 0);
+});
+
+test("canonical inputs reject network, path, secret, sparse/accessor, proxy, and non-fixed handles", () => {
+  for (const forbidden of ["/var/run/netns/x", "../x", "https://host/x", "127.0.0.1", "[::1]:443", "token=abc",
+    "account@example.com", "private-network-handle:not-a-digest"]) {
+    assert.throws(() => changedSubject({}, { privateNetworkHandle: forbidden }), /fixed-format opaque/u);
+  }
+  assert.throws(() => validateDockerEgressSubject({ ...subject, secret: "credential" }), /exact data-only shape/u);
   const accessor = { ...subject };
   Object.defineProperty(accessor, "bindingSha256", { enumerable: true, get: () => subject.bindingSha256 });
   assert.throws(() => validateDockerEgressSubject(accessor), /data-only/u);
   let traps = 0;
-  const proxy = new Proxy(subject, { getPrototypeOf: () => { traps += 1; return Object.prototype; } });
-  assert.throws(() => validateDockerEgressSubject(proxy), /non-proxy/u);
+  assert.throws(() => validateDockerEgressSubject(new Proxy(subject, { getPrototypeOf: () => { traps += 1; return Object.prototype; } })),
+    /non-proxy/u);
   assert.equal(traps, 0);
+  const sparse: unknown[] = []; sparse.length = 2;
+  assert.throws(() => validateDockerEgressSubject(sparse));
 });
 
-test("corrupt, truncated, and oversized V3 journals fail closed into bounded quarantine evidence", async () => {
-  for (const mutation of [
-    (bytes: Buffer) => Buffer.from(bytes.toString().replace(subject.bindingSha256, digest("f"))),
-    (bytes: Buffer) => bytes.subarray(0, bytes.byteLength - 1),
-    (bytes: Buffer) => Buffer.concat([bytes, Buffer.alloc(DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxJournalBytes)]),
-  ]) {
-    const storage = new MemoryStorage();
-    await new DockerEgressJournal(storage).open(subject);
-    const file = storage.files.get(dockerEgressJournalLocator(subject));
-    assert.ok(file);
-    file.bytes = mutation(file.bytes);
-    const recovered = await new DockerEgressJournal(storage).recover();
-    assert.deepEqual(recovered, [{
-      kind: "cleanup_only", bindingSha256: dockerEgressJournalLocator(subject), nextCleanup: null,
-      reconcileRequired: true, status: "quarantined",
-    }]);
+test("record and byte reservations cover receipt, unknown, quarantine, and every reverse cleanup", async () => {
+  const storage = new MemoryEgressStorage(); const journal = new DockerEgressJournal(storage, trusted);
+  let sequence = (await journal.open(subject, command("open"))).sequence;
+  for (const [index, resource] of DOCKER_EGRESS_RESOURCE_KINDS.entries()) {
+    const intent = await journal.materializeIntent(subject, sequence, command(`intent-${resource}`), resource); sequence = intent.sequence;
+    assert.equal(intent.event.kind, "materialize_intent");
+    if (intent.event.kind === "materialize_intent") {assert.equal(intent.event.reservation.recordCount, 4 + (index + 1) * 2);}
+    sequence = (await journal.materializeReceipt(subject, sequence, command(`receipt-${resource}`), resource)).sequence;
   }
-});
-
-test("V2 is cleanup-only; populated, partial, and malformed legacy state never upgrades authority", async () => {
-  const first = createDockerCustodyRecord({
-    attemptKey: v2Key, sequence: 0, state: "prepared", evidence: { status: "proved" }, previousChecksumSha256: null,
-  });
-  const second = createDockerCustodyRecord({
-    attemptKey: v2Key, sequence: 1, state: "create_requested", evidence: { status: "proved" },
-    previousChecksumSha256: first.checksumSha256,
-  });
-  const safe = classifyDockerEgressLegacyV2(encodeDockerCustodyRecord(first, DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS),
-    DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS);
-  assert.deepEqual(safe, { diagnostic: "legacy_empty", quarantineRequired: false, executionAuthority: null, cleanupIdentity: null });
-  const populatedBytes = Buffer.concat([
-    encodeDockerCustodyRecord(first, DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS),
-    encodeDockerCustodyRecord(second, DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS),
-  ]);
-  assert.deepEqual(classifyDockerEgressLegacyV2(populatedBytes, DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS), {
-    diagnostic: "legacy_populated_without_cleanup_identity", quarantineRequired: true,
-    executionAuthority: null, cleanupIdentity: null,
-  });
-  assert.equal(classifyDockerEgressLegacyV2(populatedBytes.subarray(0, populatedBytes.length - 3),
-    DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS).quarantineRequired, true);
-  assert.equal(classifyDockerEgressLegacyV2(Buffer.from("{}\n"), DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS).quarantineRequired, true);
-
-  const storage = new MemoryStorage();
-  const legacy = new MemoryFile(); legacy.bytes = populatedBytes; storage.files.set(digest("a"), legacy);
-  const recovery = await new DockerEgressJournal(storage).recover();
-  assert.equal(recovery[0]?.kind, "legacy_cleanup_only");
-  assert.equal(JSON.stringify(recovery).includes("acceptedAuthoritySha256"), false);
-  assert.equal(JSON.stringify(recovery).includes("routeAuthorizationSha256"), false);
-  assert.equal(JSON.stringify(recovery).includes("providerContainerId"), false);
-});
-
-test("terminal public evidence is digest-only and cannot reconstruct execution authority", async () => {
-  const journal = new DockerEgressJournal(new MemoryStorage());
-  const opened = await journal.open(subject);
-  await journal.close(subject, opened.sequence);
-  const evidence = (await journal.recover())[0];
-  assert.deepEqual(Object.keys(evidence ?? {}).toSorted(), [
-    "bindingSha256", "kind", "nextCleanup", "reconcileRequired", "status",
-  ]);
-  const serialized = JSON.stringify(evidence);
-  for (const forbidden of ["authority", "route", "policy", "materialization", "workspace:", "host:", "boot:", "/", "secret", "output"]) {
-    assert.equal(serialized.includes(forbidden), false);
-  }
+  const cleanup = await journal.cleanupIntent(subject, sequence, command("cleanup-intent"), "provider_container");
+  assert.deepEqual(cleanup.event.kind === "cleanup_intent" ? cleanup.event.reservation : null,
+    { recordCount: 3, byteCount: 3 * DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordBytes });
 });
