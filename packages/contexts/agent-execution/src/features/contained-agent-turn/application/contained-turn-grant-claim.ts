@@ -16,6 +16,10 @@ import { isContainedTurnPreparedClaimOperation } from "./contained-turn-preparat
 import { retireAndCleanupContainedTurnPreparation } from "./contained-turn-preparation-cleanup.js";
 import { recordContainedTurnRejectedDebt } from "./contained-turn-closure.js";
 import type { ContainedTurnKernelDependencies } from "./ports/outbound/contained-turn-ports.js";
+import {
+  validateCommittedDispatchClaimV1,
+  type CommittedDispatchProofV1,
+} from "../domain/committed-dispatch-proof-v1.js";
 
 type ConsumedGrantRequestIds = Readonly<{
   providerAccessConsumptionReceipt?: import("../domain/contained-turn-dispatch-authority.js").ContainedTurnConsumedGrantReceipt<"provider_access">;
@@ -51,7 +55,7 @@ const unavailableGrantConsumptionEvidenceId = (
 );
 
 export type ClaimContainedTurnWithConsumedGrantsOutcome =
-  | { readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation; readonly startAuthority: string }
+  | { readonly committedDispatchProof: CommittedDispatchProofV1; readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation }
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation })
   | (UnclaimedGrantOutcomeEvidence & { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" })
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId })
@@ -165,11 +169,14 @@ export const claimContainedTurnWithConsumedGrants = async (
         return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
       }
       if (outcome.kind === "claimed") {
+        const committedDispatchProof = validateCommittedDispatchClaimV1(
+          outcome.committedDispatchProof, outcome.operation, subject, hostCustodyProof,
+        );
         if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
         return Object.freeze({
           kind: "claimed",
           operation: outcome.operation,
-          startAuthority: outcome.startAuthority,
+          committedDispatchProof,
         });
       }
       if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
@@ -199,7 +206,7 @@ export const claimContainedTurnWithConsumedGrants = async (
 };
 
 export type ClaimPreparedContainedTurnOutcome =
-  | { readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation; readonly startAuthority: string }
+  | { readonly committedDispatchProof: CommittedDispatchProofV1; readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation }
   | { readonly kind: "observed"; readonly operation: ContainedTurnKernelOperation }
   | { readonly kind: "prevented"; readonly operation: ContainedTurnKernelOperation; readonly preventionProofId: ContainedTurnProofId }
   | { readonly kind: "stopped"; readonly operation: ContainedTurnKernelOperation };

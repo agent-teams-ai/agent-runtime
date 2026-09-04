@@ -30,7 +30,7 @@ export interface ReservationProofAuthority {
   readonly custodyId: KernelOpenInput["custodyId"];
   readonly effectId: KernelOpenInput["effectId"];
   readonly operationId: KernelOpenInput["operationId"];
-  readonly startIdentityDigest?: ContainedTurnCanonicalDigest;
+  readonly proofDigest?: ContainedTurnCanonicalDigest;
 }
 
 export interface HostProofIdentity {
@@ -121,10 +121,14 @@ export const openIdentity = (
   authorityVectorDigest: input.authorityVectorDigest,
   binaryRevision: input.adapterSnapshot.binaryRevision,
   capabilityManifestRevision: input.adapterSnapshot.capabilityManifestRevision,
+  commandId: input.commandId,
   custodyId: input.custodyId,
   effectId: input.effectId,
   intentMode: authority.intentMode,
   operationId: input.operationId,
+  operationCutoffRevision: input.operationCutoffRevision,
+  operationRevision: input.operationRevision,
+  preparationToken: input.preparationToken,
   provider: input.adapterSnapshot.provider,
   providerAccessSnapshotDigest: containedTurnProviderAccessSnapshotDigest(
     input.providerAccessSnapshot,
@@ -293,7 +297,7 @@ const processProjection = (
 ): ContainedTurnCanonicalValue => Object.freeze({
   evidence: hostEvidenceProjection(evidence),
   reservation: reservationIdentity(reservation),
-  startIdentityDigest: reservation.startIdentityDigest ?? null,
+  proofDigest: reservation.proofDigest ?? null,
 });
 
 export const createProcessStartProof = (
@@ -326,6 +330,7 @@ export const createPhysicalProof = (
   kind: "physical_containment",
   proofId: proofId("physical-containment", Object.freeze({
     evidence: hostEvidenceProjection(evidence),
+    proofDigest: reservation.proofDigest ?? null,
     receiptRef,
     reservation: reservationIdentity(reservation),
   })),

@@ -20,12 +20,19 @@ type ExecutionAttestation = Extract<
 export interface KernelReservation {
   readonly attemptId: KernelOpenInput["attemptId"];
   readonly authorityVectorDigest: KernelOpenInput["authorityVectorDigest"];
+  readonly commandId: KernelOpenInput["commandId"];
   readonly custodyId: KernelOpenInput["custodyId"];
   readonly effectId: KernelOpenInput["effectId"];
   readonly intentMode: ContainedTurnKernelCustodyLaunchAuthority["intentMode"];
   readonly kernelOpenIdentityDigest: ReturnType<typeof openIdentity>;
   readonly openIdentityDigest: ReturnType<typeof openIdentity>;
   readonly operationId: KernelOpenInput["operationId"];
+  readonly operationCutoffRevision: KernelOpenInput["operationCutoffRevision"];
+  readonly operationRevision: KernelOpenInput["operationRevision"];
+  readonly preparationToken: KernelOpenInput["preparationToken"];
+  readonly projectId: KernelOpenInput["providerAccessSnapshot"]["projectId"];
+  readonly provider: KernelOpenInput["adapterSnapshot"]["provider"];
+  readonly tenantId: KernelOpenInput["providerAccessSnapshot"]["tenantId"];
   readonly underlyingCustodyRef: string;
   readonly workspaceId: KernelOpenInput["workspaceId"];
   containmentReceiptRef?: string;
@@ -39,7 +46,7 @@ export interface KernelReservation {
   providerCompletion?: SealedProviderCompletion;
   providerCompletionState: "ambiguous" | "cutoff" | "pending" | "sealed";
   released: boolean;
-  startIdentityDigest?: ReturnType<typeof canonicalDigest>;
+  proofDigest?: ReturnType<typeof canonicalDigest>;
   startBoundaryCutoff: boolean;
   started: boolean;
 }

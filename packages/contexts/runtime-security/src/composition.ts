@@ -22,3 +22,40 @@ export {
   createSetupInspectionAuthorizationFeature,
   type SetupInspectionAuthorizationDependencies,
 } from "./features/setup-source-inspection-authorization/composition/feature-module-factory.js";
+export {
+  createProviderProcessEgressAuthorizationFeature,
+  type ProviderProcessEgressAuthorizationDependencies,
+} from "./features/provider-process-egress-authorization/composition/feature-module-factory.js";
+export {
+  createNodeHmacEgressDecisionSeal,
+  createNodeSha256EgressDigest,
+} from "./features/provider-process-egress-authorization/adapters/outbound/node-egress-cryptography.js";
+export type { EgressControlClock } from
+  "./features/provider-process-egress-authorization/application/ports/outbound/egress-control-clock.js";
+export type { EgressAuthorityOwnerReadPort } from
+  "./features/provider-process-egress-authorization/application/ports/outbound/egress-authority-owner.js";
+export type {
+  EgressCanonicalDigest,
+  EgressDecisionSigner,
+  EgressDecisionVerifier,
+} from "./features/provider-process-egress-authorization/application/ports/outbound/egress-cryptography.js";
+export type {
+  EgressAuthorityReadOutcome,
+  EgressControlTime,
+  EgressCurrentAuthority,
+  EgressDecisionSignature,
+  EgressSigningKeyMetadata,
+  TrustedEgressCompositionScope,
+  TrustedHostRequestProjection,
+} from "./features/provider-process-egress-authorization/domain/provider-process-egress-model.js";
+export type {
+  EgressAuthorityReadOutcomeV1,
+  EgressCurrentAuthorityV1,
+  EgressDecisionSignatureV1,
+  ProviderProcessEgressAuthorizationV1,
+  RequestFinalEgressAuthorizationV1,
+  RequestProvisionalEgressAuthorizationV1,
+  SignedFirstApplicationByteGrantV1,
+  TrustedEgressCompositionScopeV1,
+  TrustedHostRequestProjectionV1,
+} from "./features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v1.js";

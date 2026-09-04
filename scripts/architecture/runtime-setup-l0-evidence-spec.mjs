@@ -219,6 +219,22 @@ export const changes = Object.freeze([
     id: "codex-native-package-provenance",
     revision: "739cc9bfdea7dc0527989b42cb8dd89a11387ea8",
   }),
+  Object.freeze({
+    id: "contained-turn-committed-dispatch-handoff",
+    revision: "ef5d93d3ecb0ac070d19669516a28f02c0d82130",
+  }),
+  Object.freeze({
+    id: "filesystem-lineage-deterministic-qualification",
+    revision: "5a712935c976ed7e2cdac2b98072c749913bb04b",
+  }),
+  Object.freeze({
+    id: "provider-process-egress-authenticated-fields",
+    revision: "9f910fc7dcb28813bcbb21ddde4d4bbe252e09ce",
+  }),
+  Object.freeze({
+    id: "provider-process-egress-current-main-integration",
+    revision: "9dc4a4253f4bd1a35888052935c7d95c5face585",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -229,12 +245,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "694a67d5823c72e08ca3dfb9e96750d6fa5d5f2a298268f835a8452f2f12fb7a",
   }),
   sources: Object.freeze({
-    fileCount: 298,
-    sha256: "e9a6918a66517bf37b5843a6aca41afd635c0c022f0889ca857ed69970c7f68c",
+    fileCount: 313,
+    sha256: "46dd51b4f8f67aef453775690858fbd2dbad36cce3c8abe9bc584eab6b09caa6",
   }),
   tests: Object.freeze({
-    fileCount: 135,
-    sha256: "9603cd4c0567c9ffd6cc7c71b882965ca192b832819cd35a948535e4213f51fa",
+    fileCount: 143,
+    sha256: "f1874e40d3c49ef35b986cebec666acca5596fa4eb6ea019e82c396b3e20d37e",
   }),
 });
 
