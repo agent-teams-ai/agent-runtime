@@ -14,6 +14,18 @@ export type {
   ResolveContainedTurnProviderAccessOutcome,
 } from "./features/contained-turn-access/index.js";
 export {
+  CREDENTIAL_MATERIALIZATION_PURPOSE,
+  CREDENTIAL_MATERIALIZATION_SCHEMA_VERSION,
+  type AuthorizeCredentialMaterializationInput,
+  type AuthorizeCredentialMaterializationOutcome,
+  type CredentialMaterializationAuthorizationV1,
+  type CredentialMaterializationAuthorizationReceipt,
+  type CredentialMaterializationRejectionReason,
+  type CredentialMaterializationUnsupportedReason,
+  type ObserveCredentialMaterializationAuthorizationInput,
+  type ObserveCredentialMaterializationAuthorizationOutcome,
+} from "./features/contained-turn-access/index.js";
+export {
   CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE,
   type ContainedTurnDispatchConsumptionV1,
   type ConsumeForDispatchInput,

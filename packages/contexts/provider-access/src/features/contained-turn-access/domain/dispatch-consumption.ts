@@ -273,11 +273,25 @@ export const snapshotDispatchSettlementOutcome = (value: unknown): DispatchSettl
   throw new TypeError("settlement outcome kind is invalid");
 };
 export const canonicalJson = (value: unknown): string => {
-  if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") {return JSON.stringify(value);}
+  if (value === null) {return "null";}
+  if (typeof value === "boolean") {return value ? "true" : "false";}
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {throw new TypeError("canonical number is invalid");}
+    return String(value);
+  }
+  if (typeof value === "string") {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) {throw new TypeError("canonical string is invalid");}
+    return encoded;
+  }
   if (Array.isArray(value)) {return `[${value.map(canonicalJson).join(",")}]`;}
   if (typeof value !== "object") {throw new TypeError("canonical value is invalid");}
   const object = value as Readonly<Record<string, unknown>>;
-  return `{${Object.keys(object).toSorted().map(key => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
+  return `{${Object.keys(object).toSorted().map(key => {
+    const encodedKey = JSON.stringify(key);
+    if (encodedKey === undefined) {throw new TypeError("canonical key is invalid");}
+    return `${encodedKey}:${canonicalJson(object[key])}`;
+  }).join(",")}}`;
 };
 export const requestDigestPayload = (command: Omit<DispatchConsumeCommand, "requestDigest">): string => canonicalJson(command);
 export const journalDigestPayload = (entry: { readonly journalDigest?: string } & Readonly<Record<string, unknown>>): string => {
