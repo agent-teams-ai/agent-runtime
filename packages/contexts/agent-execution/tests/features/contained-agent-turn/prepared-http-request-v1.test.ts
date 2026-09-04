@@ -456,8 +456,64 @@ test("snapshotSpan rejects mutable, negative, fractional, and out-of-range metad
   const prepared = createPreparedHttpRequestV1(baseInput());
   assert.equal(prepared.snapshotSpan({offset: 0, length: 1}), undefined);
   for (const span of [Object.freeze({offset: -1, length: 1}), Object.freeze({offset: 0.5, length: 1}),
-    Object.freeze({offset: 0, length: -1}), Object.freeze({offset: prepared.wireBytes.byteLength, length: 1})]) {
+    Object.freeze({offset: 0, length: -1}), Object.freeze({offset: 0, length: 0.5}),
+    Object.freeze({offset: Number.MAX_SAFE_INTEGER, length: 1}),
+    Object.freeze({offset: 0, length: Number.MAX_SAFE_INTEGER}),
+    Object.freeze({offset: prepared.wireBytes.byteLength, length: 1})]) {
     assert.equal(prepared.snapshotSpan(span), undefined);
   }
   prepared.dispose();
+});
+
+test("snapshotSpan supports an exact frozen data span and detaches its values once", () => {
+  const prepared = createPreparedHttpRequestV1(baseInput());
+  const span = Object.freeze({offset: prepared.targetSpan.offset, length: prepared.targetSpan.length});
+  assert.equal(decoder.decode(prepared.snapshotSpan(span)), "/v1/messages");
+  prepared.dispose();
+});
+
+test("snapshotSpan rejects changing and throwing accessors without invoking them", () => {
+  const prepared = createPreparedHttpRequestV1(baseInput());
+  let changingCalls = 0;
+  const changing = Object.freeze({offset: 0, get length() {changingCalls += 1; return changingCalls <= 3 ? 1 : 128;}});
+  let throwingCalls = 0;
+  const throwing = Object.freeze({offset: 0, get length(): number {throwingCalls += 1; throw new Error("getter");}});
+  assert.equal(prepared.snapshotSpan(changing), undefined);
+  assert.equal(prepared.snapshotSpan(throwing), undefined);
+  assert.equal(changingCalls, 0);
+  assert.equal(throwingCalls, 0);
+  prepared.dispose();
+});
+
+test("snapshotSpan rejects proxies without consulting any proxy trap", () => {
+  const prepared = createPreparedHttpRequestV1(baseInput());
+  let calls = 0;
+  const target = Object.freeze({offset: 0, length: 1});
+  const span = new Proxy(target, {
+    get: () => {calls += 1; throw new Error("get");},
+    getOwnPropertyDescriptor: () => {calls += 1; throw new Error("descriptor");},
+    getPrototypeOf: () => {calls += 1; throw new Error("prototype");},
+    isExtensible: () => {calls += 1; throw new Error("extensible");},
+    ownKeys: () => {calls += 1; throw new Error("keys");},
+  });
+  assert.equal(prepared.snapshotSpan(span), undefined);
+  assert.equal(calls, 0);
+  prepared.dispose();
+});
+
+test("snapshotSpan rejects extra string and symbol fields", () => {
+  const prepared = createPreparedHttpRequestV1(baseInput());
+  assert.equal(prepared.snapshotSpan(Object.freeze({offset: 0, length: 1, extra: true})), undefined);
+  const symbolSpan = {offset: 0, length: 1} as {offset: number; length: number; [key: symbol]: boolean};
+  symbolSpan[Symbol("extra")] = true;
+  assert.equal(prepared.snapshotSpan(Object.freeze(symbolSpan)), undefined);
+  prepared.dispose();
+});
+
+test("snapshotSpan returns no snapshot after disposal", () => {
+  const prepared = createPreparedHttpRequestV1(baseInput({bodyBytes: new Uint8Array()}));
+  assert.deepEqual(prepared.snapshotSpan(prepared.bodySpan), new Uint8Array());
+  prepared.dispose();
+  assert.equal(prepared.snapshotSpan(prepared.targetSpan), undefined);
+  assert.equal(prepared.snapshotSpan(prepared.bodySpan), undefined);
 });

@@ -2,6 +2,7 @@ import { zeroHttpBytes } from "./http-byte-intrinsics.js";
 import {
   PREPARED_HTTP_REQUEST_V1_LIMITS,
   PreparedHttpRequestV1Error,
+  detachPreparedHttpByteSpanV1,
   type PreparedHttpRequestInputV1,
   type ValidatedPreparedHttpFieldV1,
   validatePreparedHttpRequestV1,
@@ -179,13 +180,13 @@ export const createPreparedHttpRequestV1 = (input: PreparedHttpRequestInputV1): 
       bodySpan,
       headerProjectionBytes: ownedProjectionBytes,
       snapshotSpan: (span: PreparedHttpByteSpanV1): Uint8Array | undefined => {
-        if (!Object.isFrozen(span) || !Number.isSafeInteger(span.offset) || !Number.isSafeInteger(span.length)
-          || span.offset < 0 || span.length < 0 || span.offset + span.length > ownedWireLength) {
-          return undefined;
-        }
-        const copy = new Uint8Array(span.length);
-        for (let index = 0; index < span.length; index += 1) {
-          copy[index] = ownedWireBytes[span.offset + index] as number;
+        if (disposed) {return undefined;}
+        const detachedSpan = detachPreparedHttpByteSpanV1(span, ownedWireLength);
+        if (detachedSpan === undefined) {return undefined;}
+        const {offset: spanOffset, length: spanLength} = detachedSpan;
+        const copy = new Uint8Array(spanLength);
+        for (let index = 0; index < spanLength; index += 1) {
+          copy[index] = ownedWireBytes[spanOffset + index] as number;
         }
         return copy;
       },

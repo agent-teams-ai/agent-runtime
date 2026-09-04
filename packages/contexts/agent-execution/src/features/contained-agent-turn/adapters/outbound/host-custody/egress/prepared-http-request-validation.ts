@@ -54,6 +54,8 @@ export type ValidatedPreparedHttpRequestV1 = Readonly<{
 const INPUT_FIELDS = ["methodBytes", "targetBytes", "hostBytes", "presentationFields",
   "credentialFields", "bodyBytes"] as const;
 const FIELD_INPUT_FIELDS = ["name", "valueBytes"] as const;
+const BYTE_SPAN_FIELDS = ["offset", "length"] as const;
+const CREDENTIAL_BYTE_SPAN_FIELDS = ["name", "offset", "length"] as const;
 const PRESENTATION_NAMES = new Set(["accept", "content-type"]);
 const CREDENTIAL_COLLISIONS = new Set([
   "accept", "connection", "content-length", "content-type", "expect", "host", "keep-alive",
@@ -72,6 +74,45 @@ const isPlainRecordWithDataFields = (value: unknown, fields: readonly string[]):
   return keys.length === fields.length
     && keys.every(key => typeof key === "string" && fields.includes(key))
     && fields.every(field => descriptors[field] !== undefined && "value" in (descriptors[field] as PropertyDescriptor));
+};
+
+export const detachPreparedHttpByteSpanV1 = (
+  value: unknown,
+  maximum: number,
+): Readonly<{offset: number; length: number}> | undefined => {
+  try {
+    if (typeof value !== "object" || value === null || utilTypes.isProxy(value)
+      || Object.getPrototypeOf(value) !== Object.prototype) {
+      return undefined;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const keys = Reflect.ownKeys(descriptors);
+    const spanFields: readonly string[] | undefined = keys.length === BYTE_SPAN_FIELDS.length
+      && keys.every(key => typeof key === "string" && BYTE_SPAN_FIELDS.some(field => field === key))
+      ? BYTE_SPAN_FIELDS
+      : keys.length === CREDENTIAL_BYTE_SPAN_FIELDS.length
+        && keys.every(key => typeof key === "string" && CREDENTIAL_BYTE_SPAN_FIELDS.some(field => field === key))
+        ? CREDENTIAL_BYTE_SPAN_FIELDS
+        : undefined;
+    if (spanFields === undefined
+      || !spanFields.every(field => descriptors[field] !== undefined
+        && "value" in (descriptors[field] as PropertyDescriptor))
+      || !Object.isFrozen(value)) {
+      return undefined;
+    }
+    const offset = descriptors.offset?.value as unknown;
+    const length = descriptors.length?.value as unknown;
+    if (typeof offset !== "number" || typeof length !== "number"
+      || !Number.isSafeInteger(offset) || !Number.isSafeInteger(length)
+      || offset < 0 || length < 0) {
+      return undefined;
+    }
+    const end = offset + length;
+    if (!Number.isSafeInteger(end) || end > maximum) {return undefined;}
+    return {offset, length};
+  } catch {
+    return undefined;
+  }
 };
 
 const snapshot = (value: unknown, maximum: number, acquired: Uint8Array[]): Uint8Array => {
