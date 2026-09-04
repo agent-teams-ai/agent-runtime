@@ -171,6 +171,84 @@ describe("Host-private monotonic HTTP admission", () => {
     assert.equal(guard.acquire(), undefined);
   });
 
+  test("close during completion reflection is terminal before any later broker action", () => {
+    const guard = createHostHttpAdmissionGuard(reservation());
+    const lease = acquired(guard);
+    const actions = {boundary: 0, pa: 0, rs: 0, sql: 0, socket: 0};
+    const disposition = new Proxy(completeSuccess(), {
+      getPrototypeOf: (target) => {
+        guard.close();
+        return Reflect.getPrototypeOf(target);
+      },
+    });
+
+    assert.equal(guard.finish(lease, disposition), "rejected");
+    assert.deepEqual(guard.snapshot(), {state: "closed", closePending: false});
+    const retry = guard.acquire();
+    if (retry !== undefined) {
+      actions.boundary += 1;
+      actions.pa += 1;
+      actions.rs += 1;
+      actions.sql += 1;
+      actions.socket += 1;
+    }
+    assert.equal(retry, undefined);
+    assert.deepEqual(actions, {boundary: 0, pa: 0, rs: 0, sql: 0, socket: 0});
+  });
+
+  test("invalidate during completion reflection cannot be overwritten by success", () => {
+    const guard = createHostHttpAdmissionGuard(reservation());
+    const lease = acquired(guard);
+    let invalidation: "closed" | "pending" | undefined;
+    const disposition = new Proxy(completeSuccess(), {
+      ownKeys: (target) => {
+        invalidation = guard.invalidate(lease);
+        return Reflect.ownKeys(target);
+      },
+    });
+
+    assert.equal(guard.finish(lease, disposition), "rejected");
+    assert.equal(invalidation, "closed");
+    assert.deepEqual(guard.snapshot(), {state: "closed", closePending: false});
+    assert.equal(guard.acquire(), undefined);
+  });
+
+  test("repeated recursive finishes cannot displace or reopen a newer exact lease", () => {
+    const guard = createHostHttpAdmissionGuard(reservation());
+    const outerLease = acquired(guard);
+    let innerLease: HostHttpAdmissionLease | undefined;
+    let trapCalls = 0;
+    const nestedResults: Array<"available" | "closed" | "rejected"> = [];
+    const reenter = (): void => {
+      trapCalls += 1;
+      if (innerLease === undefined) {
+        nestedResults.push(guard.finish(outerLease, completeSuccess()));
+        innerLease = acquired(guard);
+        return;
+      }
+      nestedResults.push(guard.finish(outerLease, completeSuccess()));
+    };
+    const disposition = new Proxy(completeSuccess(), {
+      getPrototypeOf: (target) => {
+        reenter();
+        return Reflect.getPrototypeOf(target);
+      },
+      getOwnPropertyDescriptor: (target, property) => {
+        reenter();
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      },
+    });
+
+    assert.equal(guard.finish(outerLease, disposition), "rejected");
+    assert.ok(trapCalls > 1);
+    assert.equal(nestedResults[0], "available");
+    assert.ok(nestedResults.slice(1).every((result) => result === "rejected"));
+    assert.deepEqual(guard.snapshot(), {state: "active", closePending: true});
+    assert.ok(innerLease);
+    assert.equal(guard.finish(innerLease, completeSuccess()), "closed");
+    assert.equal(guard.acquire(), undefined);
+  });
+
   test("extra or unknown completion facts cannot manufacture success", () => {
     for (const disposition of [
       {...completeSuccess(), receiptDigest: "claimed-proof"},

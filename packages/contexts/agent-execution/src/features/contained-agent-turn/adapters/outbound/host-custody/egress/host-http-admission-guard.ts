@@ -135,7 +135,15 @@ export const createHostHttpAdmissionGuard = (identity: unknown): HostHttpAdmissi
         sealWithoutDisplacingActive();
         return "rejected";
       }
-      if (!isCompleteSuccess(disposition) || closePending) {
+      const completeSuccess = isCompleteSuccess(disposition);
+      // Reflecting over a hostile disposition may synchronously reenter this guard.
+      // Treat that validation as an authority boundary and revalidate the exact lease
+      // before changing any state established by a nested call.
+      if (state !== "active" || lease !== activeLease) {
+        sealWithoutDisplacingActive();
+        return "rejected";
+      }
+      if (!completeSuccess || closePending) {
         activeLease = undefined;
         state = "closed";
         closePending = false;
