@@ -6,7 +6,8 @@ import {
   projectContainedTurnDisposalDiagnostics,
 } from "./agent-runtime-host-disposal-diagnostics.js";
 import type { ContainedTurnCompositionScope } from "./trusted-runtime-access-scope.js";
-import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
+import { unwrapContainedTurnAuthorityOutcome, type AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
+import { copyContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
 
 export type AgentRuntimeHostDisposalStatus =
   | "disposal_incomplete"
@@ -327,12 +328,12 @@ const snapshotCancellationProof = (
 class ContainedTurnOwnershipLedger {
   readonly #active = new Map<string, ActiveContainedTurn>();
   readonly #cancellations = new Map<string, Promise<unknown>>();
-  readonly #containedTurn: ContainedTurnCapabilityBundle | undefined;
+  readonly #containedTurn: AuthorityBoundContainedTurnCapability | undefined;
   readonly #executeCall: HostCallLedger["execute"];
   readonly #owners = new Map<string, object>();
 
   public constructor(
-    containedTurn: ContainedTurnCapabilityBundle | undefined,
+    containedTurn: AuthorityBoundContainedTurnCapability | undefined,
     executeCall: HostCallLedger["execute"],
   ) {
     this.#containedTurn = containedTurn;
@@ -431,7 +432,11 @@ class ContainedTurnOwnershipLedger {
     const execution = this.#executeCall(async () => {
       let outcome: unknown;
       try {
-        outcome = await this.#containedTurn!.cancel.execute(operation);
+        const authority = copyContainedTurnAccessAuthority(operation.scope);
+        if (authority === undefined) { throw containedTurnOwnerInvocationFailed; }
+        outcome = unwrapContainedTurnAuthorityOutcome(
+          await this.#containedTurn!.cancel.execute({ ...operation, authority }), authority,
+        );
       } catch {
         this.#recordCancellationFailure(operation.operationId, "cancellation_failed");
         throw containedTurnOwnerInvocationFailed;
@@ -536,7 +541,7 @@ class HostDisposalOrchestrator {
 }
 
 export const createAgentRuntimeHostDisposalLifecycle = (
-  containedTurn: ContainedTurnCapabilityBundle | undefined,
+  containedTurn: AuthorityBoundContainedTurnCapability | undefined,
 ): AgentRuntimeHostDisposalLifecycle => {
   const calls = new HostCallLedger();
   const containedTurns = new ContainedTurnOwnershipLedger(containedTurn, calls.execute);

@@ -1,3 +1,6 @@
+import { types } from "node:util";
+import { copyContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
+import type { AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
 import { randomBytes } from "node:crypto";
 
 import {
@@ -45,7 +48,6 @@ import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-insp
 import {
   createContainedTurnSubmissionCoordinator,
   createContainedTurnRuntimeAccess,
-  type ContainedTurnCapabilityBundle,
 } from "./contained-turn-runtime-access.js";
 import { createAgentRuntimeHostDisposalLifecycle } from "./agent-runtime-host-disposal.js";
 import { raceWithAbort } from "./runtime-access-lifecycle.js";
@@ -70,7 +72,7 @@ export type ClaudeCodeSetupCapabilityBundle = BuildClaudeCodeSetupViewDependenci
 export interface AgentRuntimeHostDependencies {
   readonly claudeCodeSetup: ClaudeCodeSetupCapabilityBundle;
   readonly codexSetup: CodexSetupCapabilityBundle;
-  readonly containedTurn?: ContainedTurnCapabilityBundle;
+  readonly containedTurn?: AuthorityBoundContainedTurnCapability;
 }
 
 export interface AgentRuntimeHost extends AsyncDisposable {
@@ -145,7 +147,7 @@ function assertClosedPlainBundle(
   bundleName: string,
   expectedBindings: readonly string[],
 ): asserts value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (typeof value !== "object" || value === null || types.isProxy(value) || Array.isArray(value)) {
     throw new TypeError(`${bundleName} must be a plain capability bundle`);
   }
   const prototype = Object.getPrototypeOf(value);
@@ -178,6 +180,14 @@ const snapshotCapabilityMethod = <Method>(
   return method.bind(binding) as Method;
 };
 
+const copyAuthorityRevision = (capability: Record<string, unknown>): string => {
+  const descriptor = Object.getOwnPropertyDescriptor(capability, "authorityRevision");
+  const authorityRevision = descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
+  const copied = copyContainedTurnAccessAuthority({ authorityRevision, projectId: "probe", tenantId: "probe" });
+  if (copied === undefined) { throw new TypeError("Contained-turn access authority is invalid"); }
+  return copied.authorityRevision;
+};
+
 const snapshotAgentRuntimeHostDependencies = (
   value: unknown,
 ): AgentRuntimeHostDependencies => {
@@ -207,7 +217,7 @@ const snapshotAgentRuntimeHostDependencies = (
     assertClosedPlainBundle(
       containedTurn,
       "Contained turn capability bundle",
-      ["cancel", "observe", "submit"],
+      ["authorityRevision", "cancel", "observe", "submit"],
     );
   }
   assertClosedPlainBundle(
@@ -252,14 +262,15 @@ const snapshotAgentRuntimeHostDependencies = (
     }),
     ...(containedTurn === undefined ? {} : {
       containedTurn: Object.freeze({
+        authorityRevision: copyAuthorityRevision(containedTurn),
         cancel: Object.freeze({
-          execute: snapshotCapabilityMethod<ContainedTurnCapabilityBundle["cancel"]["execute"]>(containedTurn, "Contained turn capability bundle", "cancel", "execute"),
+          execute: snapshotCapabilityMethod<AuthorityBoundContainedTurnCapability["cancel"]["execute"]>(containedTurn, "Contained turn capability bundle", "cancel", "execute"),
         }),
         observe: Object.freeze({
-          execute: snapshotCapabilityMethod<ContainedTurnCapabilityBundle["observe"]["execute"]>(containedTurn, "Contained turn capability bundle", "observe", "execute"),
+          execute: snapshotCapabilityMethod<AuthorityBoundContainedTurnCapability["observe"]["execute"]>(containedTurn, "Contained turn capability bundle", "observe", "execute"),
         }),
         submit: Object.freeze({
-          execute: snapshotCapabilityMethod<ContainedTurnCapabilityBundle["submit"]["execute"]>(containedTurn, "Contained turn capability bundle", "submit", "execute"),
+          execute: snapshotCapabilityMethod<AuthorityBoundContainedTurnCapability["submit"]["execute"]>(containedTurn, "Contained turn capability bundle", "submit", "execute"),
         }),
       }),
     }),
@@ -303,7 +314,13 @@ export const createAgentRuntimeHost = (
         copyTrustedCodexSetupScope,
       );
       const boundContainedTurnScope = snapshotProviderScope<ContainedTurnCompositionScope>(
-        () => scope.containedTurn,
+        () => {
+          if (types.isProxy(scope)) { throw new TypeError("Contained-turn access scope is invalid"); }
+          const descriptor = Object.getOwnPropertyDescriptor(scope, "containedTurn");
+          if (descriptor === undefined) { return undefined; }
+          if (!("value" in descriptor)) { throw new TypeError("Contained-turn access scope is invalid"); }
+          return descriptor.value as ContainedTurnCompositionScope | undefined;
+        },
         copyTrustedContainedTurnScope,
       );
       return Object.freeze({
@@ -351,7 +368,10 @@ export const createAgentRuntimeHost = (
           onObserved: lifecycle.recordContainedTurnStatus,
           requestCancellation: lifecycle.requestContainedTurnCancellation,
           scope: boundContainedTurnScope.status === "available"
-            ? boundContainedTurnScope.scope
+            ? copyContainedTurnAccessAuthority({
+                ...boundContainedTurnScope.scope,
+                authorityRevision: capabilityDependencies.containedTurn?.authorityRevision,
+              })
             : undefined,
           submissionCoordinator: containedTurnSubmissionCoordinator,
           executeCall: lifecycle.executeCall,

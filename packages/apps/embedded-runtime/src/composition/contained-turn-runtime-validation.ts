@@ -1,3 +1,4 @@
+import { isContainedTurnAccessAuthorityIdentity } from "./contained-turn-access-authority.js";
 import type {
   ObserveRuntimeContainedTurnOutcome,
   RuntimeContainedTurnView,
@@ -29,7 +30,7 @@ const MAX_OUTPUT_CHUNKS = 10_000;
 const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
 
 export const isBoundedIdentity = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
   // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
   value.isWellFormed() && !/\s/u.test(value) && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
 
@@ -42,14 +43,14 @@ export const contractViolation = (
 ): never => {throw new ContainedTurnOwnerContractError(code);};
 
 const copyProviderIdentity = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
     // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
     value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
     ? value
     : undefined;
 
 const copyCommandId = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_COMMAND_ID_LENGTH &&
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_COMMAND_ID_LENGTH &&
     /^[\x20-\x7E]+$/u.test(value) && value.isWellFormed() &&
     !value.includes("\u0000")
     ? value

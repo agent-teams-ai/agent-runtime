@@ -1,3 +1,5 @@
+import { types } from "node:util";
+import { isContainedTurnAccessAuthorityIdentity } from "./contained-turn-access-authority.js";
 import type { TrustedClaudeCodeSetupScope } from "../application/trusted-claude-code-setup-scope.js";
 import type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
 
@@ -55,7 +57,7 @@ const copyBoundedIdentifier = (value: string, limit: number): string | undefined
     : undefined;
 
 const copyContainedTurnReference = (value: string, limit: number): string | undefined =>
-  typeof value === "string" && value.length > 0 && value.length <= limit && !value.includes("\u0000")
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= limit && !value.includes("\u0000")
     ? value
     : undefined;
 
@@ -63,9 +65,13 @@ export const copyTrustedContainedTurnScope = (
   scope: ContainedTurnCompositionScope,
 ): ContainedTurnCompositionScope | undefined => {
   try {
+    if (scope === null || typeof scope !== "object" || types.isProxy(scope)) { return; }
+    const project = Object.getOwnPropertyDescriptor(scope, "projectId");
+    const tenant = Object.getOwnPropertyDescriptor(scope, "tenantId");
+    if (project === undefined || !("value" in project) || tenant === undefined || !("value" in tenant)) { return; }
     const limits = TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS.containedTurn.text;
-    const projectId = copyContainedTurnReference(scope.projectId, limits.projectId);
-    const tenantId = copyContainedTurnReference(scope.tenantId, limits.tenantId);
+    const projectId = copyContainedTurnReference(project.value, limits.projectId);
+    const tenantId = copyContainedTurnReference(tenant.value, limits.tenantId);
     return projectId === undefined || tenantId === undefined
       ? undefined
       : Object.freeze({ projectId, tenantId });

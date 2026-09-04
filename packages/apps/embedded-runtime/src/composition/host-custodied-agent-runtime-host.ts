@@ -1,3 +1,4 @@
+import { bindContainedTurnCapabilityAuthority } from "./contained-turn-authority-capability.js";
 import {
   createAgentRuntimeHost,
   type AgentRuntimeHost,
@@ -11,6 +12,7 @@ import {
 import { disposeAfterContainedTurnConstructionFailure } from "./contained-turn-construction-failure.js";
 
 export interface HostCustodiedAgentRuntimeHostDependencies {
+  readonly authorityRevision: string;
   readonly capabilities: Omit<AgentRuntimeHostDependencies, "containedTurn">;
   readonly containedTurn: HostCustodiedContainedTurnDependencies;
 }
@@ -32,7 +34,7 @@ export const composeHostCustodiedAgentRuntimeHost = (
     host = hostFactory(Object.freeze({
       claudeCodeSetup: dependencies.capabilities.claudeCodeSetup,
       codexSetup: dependencies.capabilities.codexSetup,
-      containedTurn: containedTurn.feature,
+      containedTurn: bindContainedTurnCapabilityAuthority(containedTurn.feature, dependencies.authorityRevision),
     }));
   } catch (error) {
     return disposeAfterContainedTurnConstructionFailure(error, containedTurn.dispose);

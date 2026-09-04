@@ -203,6 +203,7 @@ test("product Host composition rejects a candidate before Host Custody effects",
   try {
     const composed = await createCompositionInput(custody, root);
     assert.throws(() => createHostCustodiedAgentRuntimeHost({
+      authorityRevision: "runtime-access-authority:fixture",
       capabilities: setupCapabilities, containedTurn: composed.input,
     }), error => error instanceof ProviderRouteEnforcementUnsupportedError &&
       error.reason === "route-enforcement-unqualified");
