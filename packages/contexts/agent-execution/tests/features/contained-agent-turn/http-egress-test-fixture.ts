@@ -60,7 +60,7 @@ export type EgressFixture = Readonly<{ports: HttpEgressBrokerPorts; operation: H
   readonly order: string[]; readonly outboundWrites: Uint8Array[]; readonly dispatchedRequests: Uint8Array[];
   readonly receipts: HttpEgressReceipt[]; readonly materializationInputs: any[]; readonly provisionalInputs: any[];
   readonly finalAuthorizationInputs: any[]; dispatches: number;
-  opens: number; renders: number; closes: number}}>; 
+  opens: number; renders: number; closes: number}}>;
 
 const digest = (parts: readonly Uint8Array[]): string => {const hash = createHash("sha256");
   for (const part of parts) {hash.update(part);} return hash.digest("hex");};

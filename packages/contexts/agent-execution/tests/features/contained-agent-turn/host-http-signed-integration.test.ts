@@ -32,13 +32,14 @@ type Options = Readonly<{status?: number; paAuthorizeKind?: "authorized" | "obse
   truncated?: boolean; upstreamClosure?: "closed" | "unknown"; inboundClosure?: "closed" | "unknown";
   evidence?: "recorded" | "unknown"}>;
 
+const receiptFor = (input: Record<string, unknown>): HostHttpMaterializationReceipt => Object.freeze({
+  ...input, decision: "authorized", rejectionReason: null,
+}) as HostHttpMaterializationReceipt;
+
 const fixture = (options: Options = {}) => {
   const order: string[] = []; const writes: Uint8Array[] = []; const wires: Uint8Array[] = [];
   const paInputs: unknown[] = []; const provisionalInputs: unknown[] = []; const finalInputs: unknown[] = [];
   let ids = 0; let observes = 0; let opens = 0; let journalCalls = 0; let renders = 0; let cutReads = 0;
-  const receiptFor = (input: Record<string, unknown>): HostHttpMaterializationReceipt => Object.freeze({
-    ...input, decision: "authorized", rejectionReason: null,
-  }) as HostHttpMaterializationReceipt;
   const policy = (requestDigest: string) => Object.freeze({policyRef: "policy-1", policyRevision: "revision-3",
     policyGeneration: "policy-generation-9", authorizedRequestDigest: requestDigest,
     origin: Object.freeze({scheme: "https" as const, hostname: route.originHost, port: route.originPort}),
