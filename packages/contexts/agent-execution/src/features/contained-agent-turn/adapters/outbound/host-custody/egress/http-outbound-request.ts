@@ -1,7 +1,9 @@
 import type { HttpEgressRoute } from "./http-egress-ports.js";
 import type { StrictHttpRequest } from "./strict-http-request.js";
+import { snapshotHttpBytes, zeroHttpBytes } from "./http-byte-intrinsics.js";
 
 const encoder = new TextEncoder();
+const MAX_AUTHORIZATION_BYTES = 16_384;
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 // Provider-specific and unknown headers need an explicit typed mapping before
 // they may cross the Host credential-custody boundary.
@@ -54,10 +56,12 @@ export const selectForwardedRequestHeaders = (
 };
 
 const authorizationIsSafe = (authorization: Uint8Array): boolean => {
-  if (authorization.byteLength === 0 || authorization.byteLength > 16_384) {return false;}
-  return authorization.every(byte => byte === 9 || (byte >= 32 && byte <= 126))
-    && !authorization.includes(10)
-    && !authorization.includes(13);
+  if (authorization.byteLength === 0) {return false;}
+  for (let index = 0; index < authorization.byteLength; index += 1) {
+    const byte = authorization[index] as number;
+    if (byte !== 9 && (byte < 32 || byte > 126)) {return false;}
+  }
+  return true;
 };
 
 export const createOutboundHttpRequest = (
@@ -66,22 +70,30 @@ export const createOutboundHttpRequest = (
   authorization: Uint8Array,
 ): Uint8Array => {
   assertHttpEgressRoute(route);
-  if (!authorizationIsSafe(authorization)) {throw new HttpOutboundRequestError();}
-  const forwarded = selectForwardedRequestHeaders(request, route)
-    .map(header => `${header.name}: ${header.value}\r\n`)
-    .join("");
-  const defaultPort = route.originPort === 443;
-  const host = defaultPort ? route.originHost : `${route.originHost}:${route.originPort}`;
-  const prefix = encoder.encode(
-    `${route.upstreamMethod} ${route.upstreamPath} HTTP/1.1\r\n${forwarded}Host: ${host}\r\nAuthorization: `,
-  );
-  const suffix = encoder.encode(
-    `\r\nContent-Length: ${request.body.byteLength}\r\nConnection: close\r\n\r\n`,
-  );
+  const authorizationSnapshot = snapshotHttpBytes(authorization, MAX_AUTHORIZATION_BYTES);
+  if (authorizationSnapshot === undefined || !authorizationIsSafe(authorizationSnapshot)) {
+    zeroHttpBytes(authorizationSnapshot);
+    throw new HttpOutboundRequestError();
+  }
   try {
-    return concat([prefix, authorization, suffix, request.body]);
+    const forwarded = selectForwardedRequestHeaders(request, route)
+      .map(header => `${header.name}: ${header.value}\r\n`)
+      .join("");
+    const defaultPort = route.originPort === 443;
+    const host = defaultPort ? route.originHost : `${route.originHost}:${route.originPort}`;
+    const prefix = encoder.encode(
+      `${route.upstreamMethod} ${route.upstreamPath} HTTP/1.1\r\n${forwarded}Host: ${host}\r\nAuthorization: `,
+    );
+    const suffix = encoder.encode(
+      `\r\nContent-Length: ${request.body.byteLength}\r\nConnection: close\r\n\r\n`,
+    );
+    try {
+      return concat([prefix, authorizationSnapshot, suffix, request.body]);
+    } finally {
+      zeroHttpBytes(prefix);
+      zeroHttpBytes(suffix);
+    }
   } finally {
-    prefix.fill(0);
-    suffix.fill(0);
+    zeroHttpBytes(authorizationSnapshot);
   }
 };

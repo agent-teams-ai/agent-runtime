@@ -1,3 +1,5 @@
+import { zeroHttpBytes } from "./http-byte-intrinsics.js";
+
 /**
  * Ephemeral handoff, not the durable Host first-byte journal or an operation
  * retry guard. Host Custody still owns that separate durable consumption proof.
@@ -26,7 +28,7 @@ export const createHttpDispatchBoundary = (
       consumed = true;
       return bytes;
     },
-    seal: () => { open = false; bytes.fill(0); },
+    seal: () => { open = false; zeroHttpBytes(bytes); },
     wasConsumed: () => consumed,
     wasRequested: () => requested,
   });

@@ -3,6 +3,7 @@ import type {
   HttpEgressLimits,
 } from "./http-egress-contracts.js";
 import type { HttpEgressClock } from "./http-egress-ports.js";
+import { zeroHttpBytes } from "./http-byte-intrinsics.js";
 
 const decoder = new TextDecoder("ascii", { fatal: true });
 const encoder = new TextEncoder();
@@ -175,7 +176,7 @@ const parseBoundedRequestHead = (
   try {
     parsed = parseHeaders(head, expected);
   } finally {
-    head.fill(0);
+    zeroHttpBytes(head);
   }
   if (parsed.contentLength > limits.maxInboundBodyBytes) {throw new StrictHttpRequestError("body_oversized");}
   return parsed;
@@ -205,7 +206,7 @@ export const readStrictHttpRequest = async (
       }
       const previous = buffered;
       buffered = concat(previous, next.value);
-      previous.fill(0);
+      zeroHttpBytes(previous);
       if (headerEnd < 0) {
         headerEnd = indexOf(buffered, CRLFCRLF);
         if (headerEnd < 0 && buffered.byteLength > limits.maxInboundHeaderBytes) {
@@ -239,7 +240,7 @@ export const readStrictHttpRequest = async (
     }
     throw error;
   } finally {
-    buffered.fill(0);
+    zeroHttpBytes(buffered);
   }
 };
 

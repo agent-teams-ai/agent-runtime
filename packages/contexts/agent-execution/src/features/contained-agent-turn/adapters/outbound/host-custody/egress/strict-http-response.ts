@@ -1,5 +1,6 @@
 import type { HttpEgressConnection, HttpEgressLimits } from "./http-egress-contracts.js";
 import type { HttpEgressClock } from "./http-egress-ports.js";
+import { zeroHttpBytes } from "./http-byte-intrinsics.js";
 
 const decoder = new TextDecoder("ascii", { fatal: true });
 const encoder = new TextEncoder();
@@ -68,7 +69,7 @@ class DeadlineByteReader {
     const joined = new Uint8Array(this.buffered.byteLength + next.value.byteLength);
     joined.set(this.buffered);
     joined.set(next.value, this.buffered.byteLength);
-    this.buffered.fill(0);
+    zeroHttpBytes(this.buffered);
     this.buffered = joined;
   }
 
@@ -82,7 +83,7 @@ class DeadlineByteReader {
         const previous = this.buffered;
         const value = previous.slice(0, index);
         this.buffered = previous.slice(index + separator.byteLength);
-        previous.fill(0);
+        zeroHttpBytes(previous);
         return value;
       }
       if (this.buffered.byteLength > maximum) {throw new StrictHttpResponseError("oversized", this.bytesRead, 0);}
@@ -98,7 +99,7 @@ class DeadlineByteReader {
     const previous = this.buffered;
     const value = previous.slice(0, count);
     this.buffered = previous.slice(count);
-    previous.fill(0);
+    zeroHttpBytes(previous);
     return value;
   }
 
@@ -107,7 +108,7 @@ class DeadlineByteReader {
     if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
   }
 
-  public dispose(): void {this.buffered.fill(0); this.buffered = new Uint8Array();}
+  public dispose(): void {zeroHttpBytes(this.buffered); this.buffered = new Uint8Array();}
 }
 
 const find = (source: Uint8Array, needle: Uint8Array): number => {
@@ -271,7 +272,7 @@ const forwardFramedBody = async (
     try {
       line = decoder.decode(lineBytes);
     } finally {
-      lineBytes.fill(0);
+      zeroHttpBytes(lineBytes);
     }
     if (!/^[0-9A-Fa-f]+$/.test(line)) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
     const size = Number.parseInt(line, 16);
@@ -283,7 +284,7 @@ const forwardFramedBody = async (
       try {
         if (trailers.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
       } finally {
-        trailers.fill(0);
+        zeroHttpBytes(trailers);
       }
       await reader.requireEnd();
       return;
@@ -294,7 +295,7 @@ const forwardFramedBody = async (
     try {
       if (ending.byteLength !== 0) {throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);}
     } finally {
-      ending.fill(0);
+      zeroHttpBytes(ending);
     }
   }
 };
@@ -320,7 +321,7 @@ export const forwardStrictHttpResponse = async (
       }
       throw new StrictHttpResponseError("malformed", reader.bytesRead, 0);
     } finally {
-      headBytes.fill(0);
+      zeroHttpBytes(headBytes);
     }
     if (head.status >= 300 && head.status <= 399) {throw new StrictHttpResponseError("redirect", reader.bytesRead, 0);}
     if ((head.contentLength ?? 0) > limits.maxOutputBytes) {
@@ -334,7 +335,7 @@ export const forwardStrictHttpResponse = async (
     try {
       outboundBytes = await write(writeContext, downstreamHead, reader.bytesRead, 0);
     } finally {
-      downstreamHead.fill(0);
+      zeroHttpBytes(downstreamHead);
     }
     let bodyBytes = 0;
     const emit = async (chunk: Uint8Array): Promise<void> => {
@@ -345,7 +346,7 @@ export const forwardStrictHttpResponse = async (
         }
         outboundBytes = await write(writeContext, chunk, reader.bytesRead, outboundBytes);
       } finally {
-        chunk.fill(0);
+        zeroHttpBytes(chunk);
       }
     };
     try {

@@ -20,6 +20,7 @@ import { createOutboundHttpRequest, selectForwardedRequestHeaders } from "./http
 import { boundedHttpOpaque, snapshotHttpEgressOperation, snapshotHttpGenerationObservation,
   snapshotHttpRouteObservation, snapshotHttpTransportBinding } from "./http-ingress-validation.js";
 import { createHttpDispatchBoundary } from "./http-dispatch-boundary.js";
+import { zeroHttpBytes } from "./http-byte-intrinsics.js";
 import { observeHttpDispatch } from "./http-dispatch-observation.js";
 import { observeHttpResponse } from "./http-response-observation.js";
 import { httpAuthorizationMatches, httpFinalAuthorizationMatches,
@@ -36,7 +37,7 @@ import {
 import type { StrictHttpRequest } from "./strict-http-request.js";
 const encoder = new TextEncoder();
 const zeroLateBytes = (pending: Promise<Uint8Array> | undefined): void =>
-  void pending?.then(value => value.fill(0), () => {});
+  void pending?.then(value => zeroHttpBytes(value), () => {});
 
 type ReceiptState = {
   outcome: HttpEgressOutcome;
@@ -440,8 +441,8 @@ const renderAuthorizedRequest = async (
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "final_timeout";
     return halt(ports, operation, state, resources);
   } finally {
-    authorization?.fill(0);
-    outboundRequest?.fill(0);
+    zeroHttpBytes(authorization);
+    zeroHttpBytes(outboundRequest);
   }
 };
 
@@ -584,7 +585,7 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
       }
       return await settleAfterClose(ports, operation, state, resources.attempt);
     } finally {
-      request?.body.fill(0);
+      zeroHttpBytes(request?.body);
     }
   },
 });
