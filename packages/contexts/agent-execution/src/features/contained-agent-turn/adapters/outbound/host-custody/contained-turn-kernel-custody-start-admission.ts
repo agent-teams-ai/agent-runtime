@@ -27,7 +27,11 @@ const proofMatchesReservation = (
   proof.provider === reservation.provider && proof.tenantId === reservation.tenantId &&
   proof.workspaceId === reservation.workspaceId;
 
-/** Synchronously admits and consumes the exact committed authority for one reserved start. */
+/**
+ * Checks proof consistency and Host-owned reservation bindings, then consumes one start.
+ * COMMIT provenance is prevalidated by the trusted operation-owner composition;
+ * the proof digest alone does not authenticate a durable commit.
+ */
 export const admitCommittedDispatchStart = (
   input: StartInput,
   reservation: KernelReservation,
