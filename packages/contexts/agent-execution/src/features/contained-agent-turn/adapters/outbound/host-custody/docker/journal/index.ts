@@ -22,6 +22,66 @@ export {
   NodeDockerCustodyJournalStorage,
   type DockerCustodyLinuxFileSystemPort,
 } from "./node-docker-custody-journal-storage.js";
+
+export {
+  createDockerEgressCleanupObservation,
+  createDockerEgressRecord,
+  createDockerEgressSubject,
+  createDockerEgressTombstone,
+  decodeDockerEgressTombstone,
+  dockerEgressBindingSha256,
+  dockerEgressCleanupHandle,
+  dockerEgressJournalLocator,
+  encodeDockerEgressRecord,
+  encodeDockerEgressTombstone,
+  replayDockerEgressBytes,
+  validateDockerEgressCleanupObserverAuthority,
+  validateDockerEgressSubject,
+  validateDockerEgressTrustedIdentity,
+  type DockerEgressReplay,
+} from "./docker-egress-journal-codec.js";
+export {
+  classifyDockerEgressLegacyV2,
+} from "./docker-egress-v2-cleanup-reader.js";
+export {
+  DockerEgressJournal,
+  validateDockerEgressJournalTransitions,
+} from "./docker-egress-journal.js";
+export {
+  NodeDockerEgressJournalStorage,
+  type DockerEgressLinuxFileSystemPort,
+} from "./node-docker-egress-journal-storage.js";
+export {
+  DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS,
+  DOCKER_EGRESS_CLEANUP_ORDER,
+  DOCKER_EGRESS_JOURNAL_VERSION,
+  DOCKER_EGRESS_RESOURCE_KINDS,
+  DockerEgressJournalCapacityError,
+  DockerEgressJournalBusyError,
+  DockerEgressJournalConflictError,
+  DockerEgressJournalCorruptionError,
+  DockerEgressJournalError,
+  type DockerEgressAuthorityBinding,
+  type DockerEgressCleanupDirective,
+  type DockerEgressCleanupObservation,
+  type DockerEgressCleanupObserverAuthority,
+  type DockerEgressIdentity,
+  type DockerEgressJournalEvent,
+  type DockerEgressJournalLimits,
+  type DockerEgressJournalRecord,
+  type DockerEgressJournalSubject,
+  type DockerEgressLegacyDiagnostic,
+  type DockerEgressLegacyV2Result,
+  type DockerEgressReconcileReason,
+  type DockerEgressQuarantineDiagnostic,
+  type DockerEgressRecoveryEvidence,
+  type DockerEgressResourceIdentities,
+  type DockerEgressResourceKind,
+  type DockerEgressJournalStorage,
+  type DockerEgressStorageEntry,
+  type DockerEgressTombstone,
+  type DockerEgressTrustedRuntimeIdentity,
+} from "./docker-egress-journal-types.js";
 export {
   DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS,
   DOCKER_CUSTODY_ACTION_STATES,

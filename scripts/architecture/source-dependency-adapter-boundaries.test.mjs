@@ -23,6 +23,7 @@ const paths = {
   dockerFake: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/fake-docker-engine.ts",
   dockerNode: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/node-unix-socket-docker-engine.ts",
   dockerPort: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts",
+  dockerJson: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/serialization/strict-json.ts",
   host: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
   hostNode: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
   legacy: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts",
@@ -148,12 +149,19 @@ test("transitional boundaries and adapter permissions remain exact", () => {
 test("Docker custody has only the port-only engine entrypoint", () => {
   const engine = boundariesById.get("adapter.agent-execution.docker-engine");
   const custody = boundariesById.get("adapter.agent-execution.docker-custody");
+  const json = boundariesById.get("adapter.agent-execution.docker-json");
 
   assert.deepEqual(engine.entrypoints, [paths.dockerPort]);
-  assert.deepEqual(engine.allowedBoundaries, []);
+  assert.deepEqual(engine.allowedBoundaries, ["adapter.agent-execution.docker-json"]);
   assert.deepEqual(engine.allowedPackages, []);
   assert.deepEqual(engine.allowedRuntimeReferences, []);
-  assert.deepEqual(custody.allowedBoundaries, ["adapter.agent-execution.docker-engine"]);
+  assert.deepEqual(custody.allowedBoundaries, ["adapter.agent-execution.docker-engine", "adapter.agent-execution.docker-json"]);
+  assert.deepEqual(json.entrypoints, [paths.dockerJson]);
+  assert.deepEqual(json.allowedBoundaries, []);
+  assert.deepEqual(json.allowedPackages, []);
+  assert.deepEqual(json.allowedBuiltins, []);
+  assert.deepEqual(json.allowedRuntimeReferences, []);
+  assert.deepEqual(custody.allowedPackages, ["@agent-teams/filesystem-custody"]);
   assert.ok(!engine.entrypoints.includes(paths.dockerBarrel));
   assert.ok(!engine.entrypoints.includes(paths.dockerFake));
   assert.ok(!engine.entrypoints.includes(paths.dockerNode));
@@ -251,4 +259,12 @@ test("Docker custody may import the port but not concrete engines or the barrel"
       specifier,
     );
   }
+});
+
+test("Docker JSON remains neutral and cannot import its engine consumer", async () => {
+  const diagnostics = await analyzeFixture({
+    [paths.dockerJson]: "import type {} from '../engine/docker-engine-port.js';\n",
+    [paths.dockerPort]: "export {};\n",
+  });
+  assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
 });
