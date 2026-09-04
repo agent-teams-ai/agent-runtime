@@ -1,17 +1,17 @@
 import type {
-  EgressAuthorityReadOutcomeV1,
-  TrustedEgressCompositionScopeV1,
-  TrustedHostRequestProjectionV1,
-} from "../../../contracts/provider-process-egress-authorization-v1.js";
+  EgressAuthorityReadOutcome,
+  TrustedEgressCompositionScope,
+  TrustedHostRequestProjection,
+} from "../../../domain/provider-process-egress-model.js";
 
 export interface EgressAuthorityOwnerReadPort {
   resolvePolicy(input: Readonly<{
-    scope: TrustedEgressCompositionScopeV1;
+    scope: TrustedEgressCompositionScope;
     authorizationRequestId: string;
-    request: TrustedHostRequestProjectionV1;
-  }>): Promise<EgressAuthorityReadOutcomeV1>;
+    request: TrustedHostRequestProjection;
+  }>): Promise<EgressAuthorityReadOutcome>;
   readCurrent(input: Readonly<{
-    scope: TrustedEgressCompositionScopeV1;
+    scope: TrustedEgressCompositionScope;
     authorityRef: string;
-  }>): Promise<EgressAuthorityReadOutcomeV1>;
+  }>): Promise<EgressAuthorityReadOutcome>;
 }

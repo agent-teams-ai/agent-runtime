@@ -1,19 +1,19 @@
 import type {
   EgressAuthorizationIssueCode,
-  EgressAuthorityReadOutcomeV1,
-  EgressControlTimeV1,
-  EgressCurrentAuthorityV1,
-  EgressDenialEvidenceV1,
-  FirstApplicationByteGrantPayloadV1,
-  ProvisionalEgressAuthorizationV1,
-  ProviderProcessEgressAuthorizationV1,
-  RequestFinalEgressAuthorizationOutcomeV1,
-  RequestFinalEgressAuthorizationV1,
-  RequestProvisionalEgressAuthorizationOutcomeV1,
-  RequestProvisionalEgressAuthorizationV1,
-  TrustedEgressCompositionScopeV1,
-  TrustedHostRequestProjectionV1,
-} from "../contracts/provider-process-egress-authorization-v1.js";
+  EgressAuthorityReadOutcome,
+  EgressControlTime,
+  EgressCurrentAuthority,
+  EgressDenialEvidence,
+  FirstApplicationByteGrantPayload,
+  ProvisionalEgressAuthorization,
+  ProviderProcessEgressAuthorization,
+  RequestFinalEgressAuthorizationOutcome,
+  RequestFinalEgressAuthorization,
+  RequestProvisionalEgressAuthorizationOutcome,
+  RequestProvisionalEgressAuthorization,
+  TrustedEgressCompositionScope,
+  TrustedHostRequestProjection,
+} from "../domain/provider-process-egress-model.js";
 import { normalizeObservedAddress, normalizePublicAddressSet } from "../domain/public-address.js";
 import {
   normalizeHostname, validBudgets, validDigest, validOrigin, validRef, validRequestProjection,
@@ -28,15 +28,20 @@ import type { EgressCanonicalDigest, EgressDecisionSigner, EgressDecisionVerifie
   "./ports/outbound/egress-cryptography.js";
 
 export interface ProviderProcessEgressOperations {
-  readonly scope: TrustedEgressCompositionScopeV1;
+  readonly scope: TrustedEgressCompositionScope;
   readonly authorityOwner: EgressAuthorityOwnerReadPort;
   readonly clock: EgressControlClock;
   readonly digest: EgressCanonicalDigest;
   readonly signer: EgressDecisionSigner;
   readonly verifier: EgressDecisionVerifier;
+  readonly signedDocuments: {
+    readonly provisional: (decision: Omit<ProvisionalEgressAuthorization,
+      "decisionDigest" | "signature">) => unknown;
+    readonly grant: (payload: FirstApplicationByteGrantPayload) => unknown;
+  };
 }
 
-type ClockRead = { readonly view: EgressControlTimeV1; readonly issue?: never } |
+type ClockRead = { readonly view: EgressControlTime; readonly issue?: never } |
   { readonly view?: never; readonly issue: EgressAuthorizationIssueCode };
 type FinalContext = {
   readonly ref: string;
@@ -48,41 +53,39 @@ type NetworkFacts = {
 };
 type GrantDigests = {
   readonly addressSetDigest: string;
-  readonly requestFingerprint: string;
 };
 
 const same = (left: unknown, right: unknown): boolean =>
   canonicalEgressValue(left) === canonicalEgressValue(right);
 const denial = (phase: "provisional" | "final", issueCode: EgressAuthorizationIssueCode,
   authorizationRef: string, decisionDigest?: string) => deepFreezeEgress({ status: "denied" as const,
-  evidence: { contractVersion: "provider-process-egress-denial-evidence/v1" as const,
-    phase, issueCode, authorizationRef,
-    ...(decisionDigest === undefined ? {} : { decisionDigest }) } satisfies EgressDenialEvidenceV1 });
+  evidence: { phase, issueCode, authorizationRef,
+    ...(decisionDigest === undefined ? {} : { decisionDigest }) } satisfies EgressDenialEvidence });
 
-const validScope = (scope: TrustedEgressCompositionScopeV1): boolean =>
+const validScope = (scope: TrustedEgressCompositionScope): boolean =>
   validRef(scope.tenantId) && validRef(scope.projectId) && validRef(scope.operationId) &&
   validDigest(scope.scopeDigest);
-const validSigningKey = (key: EgressCurrentAuthorityV1["policy"]["signingKey"]): boolean =>
+const validSigningKey = (key: EgressCurrentAuthority["policy"]["signingKey"]): boolean =>
   key.algorithm === "hmac-sha256-synthetic" && validRef(key.keyRef) && validRef(key.keyGeneration);
-const validPolicy = (policy: EgressCurrentAuthorityV1["policy"]): boolean =>
+const validPolicy = (policy: EgressCurrentAuthority["policy"]): boolean =>
   validRef(policy.policyRef) && validRef(policy.policyRevision) && validRef(policy.policyGeneration) &&
   validDigest(policy.authorizedRequestDigest) && validOrigin(policy.origin) &&
   normalizeHostname(policy.dnsIdentity) === policy.dnsIdentity && validDigest(policy.tlsPolicyDigest) &&
   validBudgets(policy.limits) && Number.isSafeInteger(policy.decisionTtlMilliseconds) &&
   policy.decisionTtlMilliseconds >= 1 && policy.decisionTtlMilliseconds <= 300_000 &&
   validSigningKey(policy.signingKey) && typeof policy.revoked === "boolean";
-const validProviderAccess = (access: EgressCurrentAuthorityV1["providerAccess"]): boolean =>
+const validProviderAccess = (access: EgressCurrentAuthority["providerAccess"]): boolean =>
   validRef(access.accessRef) && validRef(access.providerRef) && validRef(access.accountRef) &&
   validRef(access.routeRef) && validDigest(access.routeAuthorityDigest) &&
   validDigest(access.credentialBindingDigest) && validRef(access.routeGeneration) &&
   validRef(access.credentialGeneration);
-const validAuthority = (authority: EgressCurrentAuthorityV1): boolean =>
+const validAuthority = (authority: EgressCurrentAuthority): boolean =>
   validRef(authority.authorityRef) && validPolicy(authority.policy) &&
   validProviderAccess(authority.providerAccess);
-const ownerIssue = (outcome: Exclude<EgressAuthorityReadOutcomeV1,
+const ownerIssue = (outcome: Exclude<EgressAuthorityReadOutcome,
   { readonly status: "current" }>): EgressAuthorizationIssueCode => outcome.reason;
 
-const requestProtocolIssue = (request: TrustedHostRequestProjectionV1):
+const requestProtocolIssue = (request: TrustedHostRequestProjection):
   EgressAuthorizationIssueCode | undefined => {
   if (request.framing.protocol !== "http/1.1") {return "unsupported_protocol";}
   if (request.framing.requestTarget !== "origin-form" || request.framing.authoritySource !== "host" ||
@@ -92,8 +95,8 @@ const requestProtocolIssue = (request: TrustedHostRequestProjectionV1):
   return undefined;
 };
 
-const requestAuthorityIssue = (request: TrustedHostRequestProjectionV1,
-  authority: EgressCurrentAuthorityV1, requestDigest: string): EgressAuthorizationIssueCode | undefined => {
+const requestAuthorityIssue = (request: TrustedHostRequestProjection,
+  authority: EgressCurrentAuthority, requestDigest: string): EgressAuthorizationIssueCode | undefined => {
   if (authority.policy.revoked) {return "revoked";}
   if (authority.policy.authorizedRequestDigest !== requestDigest) {return "policy_denied";}
   if (request.scheme !== authority.policy.origin.scheme ||
@@ -105,11 +108,12 @@ const requestAuthorityIssue = (request: TrustedHostRequestProjectionV1,
     ? "policy_denied" : undefined;
 };
 
-const verifyProvisional = (provisional: ProvisionalEgressAuthorizationV1,
+const verifyProvisional = (provisional: ProvisionalEgressAuthorization,
   operations: ProviderProcessEgressOperations): EgressAuthorizationIssueCode | undefined => {
   const { decisionDigest: _digest, signature: _signature, ...unsigned } = provisional;
   let calculated: string;
-  try { calculated = digestCanonical(operations.digest, provisionalPreimage(unsigned)); }
+  try { calculated = digestCanonical(operations.digest,
+    provisionalPreimage(operations.signedDocuments.provisional(unsigned))); }
   catch { return "provisional_digest_invalid"; }
   if (calculated !== provisional.decisionDigest) {return "provisional_digest_invalid";}
   const { value: _value, ...signatureKey } = provisional.signature;
@@ -122,9 +126,9 @@ const verifyProvisional = (provisional: ProvisionalEgressAuthorizationV1,
 };
 
 const createClockReader = (clock: EgressControlClock): (() => ClockRead) => {
-  let lastClock: EgressControlTimeV1 | undefined;
+  let lastClock: EgressControlTime | undefined;
   return () => {
-    let view: EgressControlTimeV1;
+    let view: EgressControlTime;
     try { view = clock.read(); } catch { return { issue: "control_time_invalid" }; }
     if (!validRef(view.authorityId) || !validRef(view.epoch) || !Number.isSafeInteger(view.controlTime) ||
       view.controlTime < 0) {return { issue: "control_time_invalid" };}
@@ -138,8 +142,8 @@ const createClockReader = (clock: EgressControlClock): (() => ClockRead) => {
   };
 };
 
-const resolveAuthority = async (input: RequestProvisionalEgressAuthorizationV1,
-  operations: ProviderProcessEgressOperations): Promise<EgressAuthorityReadOutcomeV1> => {
+const resolveAuthority = async (input: RequestProvisionalEgressAuthorization,
+  operations: ProviderProcessEgressOperations): Promise<EgressAuthorityReadOutcome> => {
   try {
     return await operations.authorityOwner.resolvePolicy(deepFreezeEgress({
       scope: operations.scope, authorizationRequestId: input.authorizationRequestId,
@@ -148,11 +152,12 @@ const resolveAuthority = async (input: RequestProvisionalEgressAuthorizationV1,
   } catch { return { status: "indeterminate", reason: "owner_unavailable" }; }
 };
 
-const signProvisional = (unsigned: Omit<ProvisionalEgressAuthorizationV1,
+const signProvisional = (unsigned: Omit<ProvisionalEgressAuthorization,
   "decisionDigest" | "signature">, operations: ProviderProcessEgressOperations,
-  ref: string): RequestProvisionalEgressAuthorizationOutcomeV1 => {
+  ref: string): RequestProvisionalEgressAuthorizationOutcome => {
   let decisionDigest: string;
-  try { decisionDigest = digestCanonical(operations.digest, provisionalPreimage(unsigned)); }
+  try { decisionDigest = digestCanonical(operations.digest,
+    provisionalPreimage(operations.signedDocuments.provisional(unsigned))); }
   catch { return denial("provisional", "provisional_digest_invalid", ref); }
   if (!validDigest(decisionDigest)) {
     return denial("provisional", "provisional_digest_invalid", ref);
@@ -168,12 +173,11 @@ const signProvisional = (unsigned: Omit<ProvisionalEgressAuthorizationV1,
   } catch { return denial("provisional", "provisional_signature_invalid", ref, decisionDigest); }
 };
 
-const requestProvisional = async (input: RequestProvisionalEgressAuthorizationV1,
+const requestProvisional = async (input: RequestProvisionalEgressAuthorization,
   operations: ProviderProcessEgressOperations, readClock: () => ClockRead):
-  Promise<RequestProvisionalEgressAuthorizationOutcomeV1> => {
+  Promise<RequestProvisionalEgressAuthorizationOutcome> => {
   const ref = validRef(input.authorizationRequestId) ? input.authorizationRequestId : "invalid";
-  if (input.contractVersion !== "provider-process-egress-provisional/v1" ||
-    !validRef(input.authorizationRequestId) || !validScope(operations.scope) ||
+  if (!validRef(input.authorizationRequestId) || !validScope(operations.scope) ||
     !validRequestProjection(input.request)) {return denial("provisional", "invalid_input", ref);}
   const protocolIssue = requestProtocolIssue(input.request);
   if (protocolIssue !== undefined) {return denial("provisional", protocolIssue, ref);}
@@ -192,7 +196,6 @@ const requestProvisional = async (input: RequestProvisionalEgressAuthorizationV1
     return denial("provisional", "control_time_invalid", ref);
   }
   return signProvisional({
-    contractVersion: "provider-process-egress-provisional-decision/v1",
     authorizationRequestId: input.authorizationRequestId, authorityRef: outcome.authority.authorityRef,
     scope: operations.scope, policy: outcome.authority.policy,
     providerAccess: outcome.authority.providerAccess, request: input.request, requestDigest,
@@ -200,10 +203,9 @@ const requestProvisional = async (input: RequestProvisionalEgressAuthorizationV1
   }, operations, ref);
 };
 
-const validateFinalInput = (input: RequestFinalEgressAuthorizationV1,
+const validateFinalInput = (input: RequestFinalEgressAuthorization,
   operations: ProviderProcessEgressOperations, context: FinalContext): EgressAuthorizationIssueCode | undefined => {
-  if (input.contractVersion !== "provider-process-egress-final/v1" ||
-    !validRef(input.boundaryUseId) || !validRef(input.connectionAttemptId) ||
+  if (!validRef(input.boundaryUseId) || !validRef(input.connectionAttemptId) ||
     !validRef(input.streamId) || !validRequestProjection(input.request)) {return "invalid_input";}
   const provisionalIssue = verifyProvisional(input.provisional, operations);
   if (provisionalIssue !== undefined) {return provisionalIssue;}
@@ -221,8 +223,8 @@ const validateFinalInput = (input: RequestFinalEgressAuthorizationV1,
   return context.ref === "invalid" || !validDigest(context.decisionDigest) ? "invalid_input" : undefined;
 };
 
-const readCurrentAuthority = async (input: RequestFinalEgressAuthorizationV1,
-  operations: ProviderProcessEgressOperations): Promise<EgressAuthorityReadOutcomeV1> => {
+const readCurrentAuthority = async (input: RequestFinalEgressAuthorization,
+  operations: ProviderProcessEgressOperations): Promise<EgressAuthorityReadOutcome> => {
   try {
     return await operations.authorityOwner.readCurrent(deepFreezeEgress({
       scope: operations.scope, authorityRef: input.provisional.authorityRef,
@@ -230,8 +232,8 @@ const readCurrentAuthority = async (input: RequestFinalEgressAuthorizationV1,
   } catch { return { status: "indeterminate", reason: "owner_unavailable" }; }
 };
 
-const currentAuthorityIssue = (outcome: EgressAuthorityReadOutcomeV1,
-  provisional: ProvisionalEgressAuthorizationV1): EgressAuthorizationIssueCode | undefined => {
+const currentAuthorityIssue = (outcome: EgressAuthorityReadOutcome,
+  provisional: ProvisionalEgressAuthorization): EgressAuthorizationIssueCode | undefined => {
   if (outcome.status !== "current") {return ownerIssue(outcome);}
   if (!validAuthority(outcome.authority)) {return "owner_malformed";}
   if (outcome.authority.policy.revoked) {return "revoked";}
@@ -240,7 +242,7 @@ const currentAuthorityIssue = (outcome: EgressAuthorityReadOutcomeV1,
     ? undefined : "authority_drift";
 };
 
-const currentClockIssue = (clock: ClockRead, provisional: ProvisionalEgressAuthorizationV1):
+const currentClockIssue = (clock: ClockRead, provisional: ProvisionalEgressAuthorization):
   EgressAuthorizationIssueCode | undefined => {
   if (clock.issue !== undefined) {return clock.issue;}
   if (clock.view.authorityId !== provisional.time.authorityId ||
@@ -248,7 +250,7 @@ const currentClockIssue = (clock: ClockRead, provisional: ProvisionalEgressAutho
   return clock.view.controlTime >= provisional.time.expiresAtControlTime ? "expired" : undefined;
 };
 
-const validateNetworkFacts = (input: RequestFinalEgressAuthorizationV1):
+const validateNetworkFacts = (input: RequestFinalEgressAuthorization):
   { readonly facts?: NetworkFacts; readonly issue?: EgressAuthorizationIssueCode } => {
   const normalized = normalizePublicAddressSet(input.resolver.addresses);
   if (input.resolver.resolutionCount !== 1 || !validRef(input.resolver.resolverIdentity) ||
@@ -281,14 +283,17 @@ const validateNetworkFacts = (input: RequestFinalEgressAuthorizationV1):
   return { facts: { addresses: normalized.addresses, peer } };
 };
 
-const buildGrantPayload = (input: RequestFinalEgressAuthorizationV1, operations:
-  ProviderProcessEgressOperations, clock: EgressControlTimeV1, facts: NetworkFacts,
-  digests: GrantDigests): FirstApplicationByteGrantPayloadV1 => {
+type GrantPayloadBeforeFingerprint = Omit<FirstApplicationByteGrantPayload, "consumption"> & {
+  readonly consumption: Omit<FirstApplicationByteGrantPayload["consumption"], "requestFingerprint">;
+};
+
+const buildGrantPayloadBeforeFingerprint = (input: RequestFinalEgressAuthorization, operations:
+  ProviderProcessEgressOperations, clock: EgressControlTime, facts: NetworkFacts,
+  digests: GrantDigests): GrantPayloadBeforeFingerprint => {
   const journalKey = { namespace: "provider-process-egress/v1" as const,
     tenantId: operations.scope.tenantId, projectId: operations.scope.projectId,
     operationId: operations.scope.operationId, boundaryUseId: input.boundaryUseId };
   return {
-    contractVersion: "provider-process-first-application-byte-grant/v1",
     authorizationRequestId: input.provisional.authorizationRequestId,
     authorityRef: input.provisional.authorityRef, scope: operations.scope,
     policy: input.provisional.policy, providerAccess: input.provisional.providerAccess,
@@ -303,27 +308,25 @@ const buildGrantPayload = (input: RequestFinalEgressAuthorizationV1, operations:
       expiresAtControlTime: input.provisional.time.expiresAtControlTime },
     boundaryUseId: input.boundaryUseId, connectionAttemptId: input.connectionAttemptId,
     streamId: input.streamId, automaticRetryAuthorized: false, poolingAuthorized: false,
-    consumption: { owner: "host-custody", journalKey,
-      requestFingerprint: digests.requestFingerprint },
+    consumption: { owner: "host-custody", journalKey },
   };
 };
 
-const signFinalGrant = (input: RequestFinalEgressAuthorizationV1,
-  operations: ProviderProcessEgressOperations, context: FinalContext, clock: EgressControlTimeV1,
-  facts: NetworkFacts): RequestFinalEgressAuthorizationOutcomeV1 => {
-  let payload: FirstApplicationByteGrantPayloadV1;
+const signFinalGrant = (input: RequestFinalEgressAuthorization,
+  operations: ProviderProcessEgressOperations, context: FinalContext, clock: EgressControlTime,
+  facts: NetworkFacts): RequestFinalEgressAuthorizationOutcome => {
+  let payload: FirstApplicationByteGrantPayload;
   let finalAuthorizationDigest: string;
   try {
     const addressSetDigest = digestCanonical(operations.digest, facts.addresses);
-    const journalKey = { namespace: "provider-process-egress/v1" as const,
-      tenantId: operations.scope.tenantId, projectId: operations.scope.projectId,
-      operationId: operations.scope.operationId, boundaryUseId: input.boundaryUseId };
-    const requestFingerprint = digestCanonical(operations.digest, { journalKey,
-      connectionAttemptId: input.connectionAttemptId, streamId: input.streamId,
-      requestDigest: input.provisional.requestDigest });
-    payload = buildGrantPayload(input, operations, clock, facts,
-      { addressSetDigest, requestFingerprint });
-    finalAuthorizationDigest = digestCanonical(operations.digest, finalAuthorizationPreimage(payload));
+    const beforeFingerprint = buildGrantPayloadBeforeFingerprint(input, operations, clock, facts,
+      { addressSetDigest });
+    const requestFingerprint = digestCanonical(operations.digest, beforeFingerprint);
+    payload = { ...beforeFingerprint, consumption: {
+      ...beforeFingerprint.consumption, requestFingerprint,
+    } };
+    finalAuthorizationDigest = digestCanonical(operations.digest,
+      finalAuthorizationPreimage(operations.signedDocuments.grant(payload)));
     if (![addressSetDigest, requestFingerprint, finalAuthorizationDigest].every(validDigest)) {
       return denial("final", "final_signature_invalid", context.ref, context.decisionDigest);
     }
@@ -338,16 +341,15 @@ const signFinalGrant = (input: RequestFinalEgressAuthorizationV1,
     }
     return deepFreezeEgress({ status: "authorized", grant: {
       payload, finalAuthorizationDigest, signature,
-      evidence: { contractVersion: "provider-process-egress-grant-evidence/v1",
-        authorizationRef: context.ref, boundaryUseRef: input.boundaryUseId,
+      evidence: { authorizationRef: context.ref, boundaryUseRef: input.boundaryUseId,
         decisionDigest: context.decisionDigest, finalAuthorizationDigest },
     }});
   } catch { return denial("final", "final_signature_invalid", context.ref, context.decisionDigest); }
 };
 
-const authorizeFirstApplicationByte = async (input: RequestFinalEgressAuthorizationV1,
+const authorizeFirstApplicationByte = async (input: RequestFinalEgressAuthorization,
   operations: ProviderProcessEgressOperations, readClock: () => ClockRead):
-  Promise<RequestFinalEgressAuthorizationOutcomeV1> => {
+  Promise<RequestFinalEgressAuthorizationOutcome> => {
   const context = { ref: validRef(input.provisional.authorizationRequestId)
     ? input.provisional.authorizationRequestId : "invalid",
   decisionDigest: input.provisional.decisionDigest };
@@ -372,12 +374,12 @@ const authorizeFirstApplicationByte = async (input: RequestFinalEgressAuthorizat
 
 export const createProviderProcessEgressAuthorization = (
   operations: ProviderProcessEgressOperations,
-): ProviderProcessEgressAuthorizationV1 => {
+): ProviderProcessEgressAuthorization => {
   const readClock = createClockReader(operations.clock);
   return Object.freeze({
-    requestProvisional: (input: RequestProvisionalEgressAuthorizationV1) =>
+    requestProvisional: (input: RequestProvisionalEgressAuthorization) =>
       requestProvisional(input, operations, readClock),
-    authorizeFirstApplicationByte: (input: RequestFinalEgressAuthorizationV1) =>
+    authorizeFirstApplicationByte: (input: RequestFinalEgressAuthorization) =>
       authorizeFirstApplicationByte(input, operations, readClock),
   });
 };

@@ -1,6 +1,5 @@
-import type { EgressControlTimeV1 } from
-  "../../../contracts/provider-process-egress-authorization-v1.js";
+import type { EgressControlTime } from "../../../domain/provider-process-egress-model.js";
 
 export interface EgressControlClock {
-  read(): EgressControlTimeV1;
+  read(): EgressControlTime;
 }

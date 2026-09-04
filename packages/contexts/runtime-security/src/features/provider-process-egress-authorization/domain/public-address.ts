@@ -1,5 +1,4 @@
-import type { EgressCandidateAddressV1 } from
-  "../contracts/provider-process-egress-authorization-v1.js";
+import type { EgressCandidateAddress } from "./provider-process-egress-model.js";
 
 const parseIpv4 = (value: string): readonly number[] | undefined => {
   const parts = value.split(".");
@@ -73,8 +72,8 @@ const publicIpv6 = (groups: readonly number[]): boolean => {
 };
 
 export const normalizePublicAddress = (
-  candidate: EgressCandidateAddressV1,
-): EgressCandidateAddressV1 | undefined => {
+  candidate: EgressCandidateAddress,
+): EgressCandidateAddress | undefined => {
   if (candidate.classification !== "public") {return undefined;}
   if (candidate.family === "ipv4") {
     const bytes = parseIpv4(candidate.address);
@@ -87,11 +86,11 @@ export const normalizePublicAddress = (
 };
 
 export const normalizePublicAddressSet = (
-  candidates: readonly EgressCandidateAddressV1[],
-): { readonly addresses: readonly EgressCandidateAddressV1[]; readonly problem?:
+  candidates: readonly EgressCandidateAddress[],
+): { readonly addresses: readonly EgressCandidateAddress[]; readonly problem?:
   "address_denied" | "address_duplicate" | "address_set_mixed" } => {
   if (candidates.length === 0 || candidates.length > 32) {return { addresses: [], problem: "address_denied" };}
-  const normalized: EgressCandidateAddressV1[] = [];
+  const normalized: EgressCandidateAddress[] = [];
   for (const candidate of candidates) {
     const address = normalizePublicAddress(candidate);
     if (address === undefined) {return { addresses: [], problem: "address_denied" };}

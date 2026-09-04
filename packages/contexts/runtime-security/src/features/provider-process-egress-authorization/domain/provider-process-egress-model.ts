@@ -1,23 +1,23 @@
-export interface TrustedEgressCompositionScopeV1 {
+export interface TrustedEgressCompositionScope {
   readonly tenantId: string;
   readonly projectId: string;
   readonly operationId: string;
   readonly scopeDigest: string;
 }
 
-export interface EgressTlsOriginV1 {
+export interface EgressTlsOrigin {
   readonly scheme: "https";
   readonly hostname: string;
   readonly port: number;
 }
 
-export interface EgressBudgetsV1 {
+export interface EgressBudgets {
   readonly requestBytes: number;
   readonly responseBytes: number;
   readonly totalMilliseconds: number;
 }
 
-export interface TrustedHostRequestProjectionV1 {
+export interface TrustedHostRequestProjection {
   readonly method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
   readonly scheme: "https";
   readonly authority: { readonly hostname: string; readonly port: number };
@@ -43,7 +43,7 @@ export interface TrustedHostRequestProjectionV1 {
   };
 }
 
-export interface EgressCandidateAddressV1 {
+export interface EgressCandidateAddress {
   readonly family: "ipv4" | "ipv6";
   readonly address: string;
   readonly classification:
@@ -51,34 +51,34 @@ export interface EgressCandidateAddressV1 {
     | "multicast" | "unspecified" | "ula" | "mapped" | "reserved";
 }
 
-export interface TrustedHostResolverObservationV1 {
+export interface TrustedHostResolverObservation {
   readonly resolverIdentity: string;
   readonly resolverEpoch: string;
   readonly resolutionCount: number;
-  readonly addresses: readonly EgressCandidateAddressV1[];
+  readonly addresses: readonly EgressCandidateAddress[];
 }
 
-export type EgressSignatureAlgorithmV1 = "hmac-sha256-synthetic";
-
-export interface EgressSigningKeyMetadataV1 {
-  readonly algorithm: EgressSignatureAlgorithmV1;
+export type EgressSignatureAlgorithm = "hmac-sha256-synthetic";
+export interface EgressSigningKeyMetadata {
+  readonly algorithm: EgressSignatureAlgorithm;
   readonly keyRef: string;
   readonly keyGeneration: string;
 }
+export interface EgressDecisionSignature extends EgressSigningKeyMetadata { readonly value: string; }
 
-export interface EgressCurrentAuthorityV1 {
+export interface EgressCurrentAuthority {
   readonly authorityRef: string;
   readonly policy: {
     readonly policyRef: string;
     readonly policyRevision: string;
     readonly policyGeneration: string;
     readonly authorizedRequestDigest: string;
-    readonly origin: EgressTlsOriginV1;
+    readonly origin: EgressTlsOrigin;
     readonly dnsIdentity: string;
     readonly tlsPolicyDigest: string;
-    readonly limits: EgressBudgetsV1;
+    readonly limits: EgressBudgets;
     readonly decisionTtlMilliseconds: number;
-    readonly signingKey: EgressSigningKeyMetadataV1;
+    readonly signingKey: EgressSigningKeyMetadata;
     readonly revoked: boolean;
   };
   readonly providerAccess: {
@@ -93,52 +93,45 @@ export interface EgressCurrentAuthorityV1 {
   };
 }
 
-export type EgressAuthorityReadOutcomeV1 =
-  | { readonly status: "current"; readonly authority: EgressCurrentAuthorityV1 }
+export type EgressAuthorityReadOutcome =
+  | { readonly status: "current"; readonly authority: EgressCurrentAuthority }
   | { readonly status: "denied"; readonly reason:
       "policy_denied" | "policy_not_found" | "route_unavailable" | "revoked" }
   | { readonly status: "indeterminate"; readonly reason:
       "owner_unavailable" | "owner_malformed" };
 
-export interface RequestProvisionalEgressAuthorizationV1 {
-  readonly contractVersion: "provider-process-egress-provisional/v1";
+export interface RequestProvisionalEgressAuthorization {
   readonly authorizationRequestId: string;
-  readonly request: TrustedHostRequestProjectionV1;
+  readonly request: TrustedHostRequestProjection;
 }
 
-export interface EgressDecisionSignatureV1 extends EgressSigningKeyMetadataV1 {
-  readonly value: string;
-}
-
-export interface EgressControlTimeV1 {
+export interface EgressControlTime {
   readonly authorityId: string;
   readonly epoch: string;
   readonly controlTime: number;
 }
 
-export interface ProvisionalEgressAuthorizationV1 {
-  readonly contractVersion: "provider-process-egress-provisional-decision/v1";
+export interface ProvisionalEgressAuthorization {
   readonly authorizationRequestId: string;
   readonly authorityRef: string;
-  readonly scope: TrustedEgressCompositionScopeV1;
-  readonly policy: EgressCurrentAuthorityV1["policy"];
-  readonly providerAccess: EgressCurrentAuthorityV1["providerAccess"];
-  readonly request: TrustedHostRequestProjectionV1;
+  readonly scope: TrustedEgressCompositionScope;
+  readonly policy: EgressCurrentAuthority["policy"];
+  readonly providerAccess: EgressCurrentAuthority["providerAccess"];
+  readonly request: TrustedHostRequestProjection;
   readonly requestDigest: string;
-  readonly time: EgressControlTimeV1 & { readonly expiresAtControlTime: number };
-  readonly signingKey: EgressSigningKeyMetadataV1;
+  readonly time: EgressControlTime & { readonly expiresAtControlTime: number };
+  readonly signingKey: EgressSigningKeyMetadata;
   readonly decisionDigest: string;
-  readonly signature: EgressDecisionSignatureV1;
+  readonly signature: EgressDecisionSignature;
 }
 
-export interface RequestFinalEgressAuthorizationV1 {
-  readonly contractVersion: "provider-process-egress-final/v1";
-  readonly provisional: ProvisionalEgressAuthorizationV1;
+export interface RequestFinalEgressAuthorization {
+  readonly provisional: ProvisionalEgressAuthorization;
   readonly boundaryUseId: string;
   readonly connectionAttemptId: string;
   readonly streamId: string;
   readonly transport: "tcp-tls" | "udp-quic";
-  readonly resolver: TrustedHostResolverObservationV1;
+  readonly resolver: TrustedHostResolverObservation;
   readonly pinnedDestination: { readonly address: string; readonly port: number };
   readonly observedPeer: { readonly address: string; readonly port: number };
   readonly tls: {
@@ -149,11 +142,11 @@ export interface RequestFinalEgressAuthorizationV1 {
     readonly tlsPolicyDigest: string;
     readonly alpn: "http/1.1" | "h2" | "h3";
   };
-  readonly request: TrustedHostRequestProjectionV1;
+  readonly request: TrustedHostRequestProjection;
   readonly redirectHop: number;
 }
 
-export interface EgressConsumptionJournalKeyV1 {
+export interface EgressConsumptionJournalKey {
   readonly namespace: "provider-process-egress/v1";
   readonly tenantId: string;
   readonly projectId: string;
@@ -161,24 +154,23 @@ export interface EgressConsumptionJournalKeyV1 {
   readonly boundaryUseId: string;
 }
 
-export interface FirstApplicationByteGrantPayloadV1 {
-  readonly contractVersion: "provider-process-first-application-byte-grant/v1";
+export interface FirstApplicationByteGrantPayload {
   readonly authorizationRequestId: string;
   readonly authorityRef: string;
-  readonly scope: TrustedEgressCompositionScopeV1;
-  readonly policy: EgressCurrentAuthorityV1["policy"];
-  readonly providerAccess: EgressCurrentAuthorityV1["providerAccess"];
+  readonly scope: TrustedEgressCompositionScope;
+  readonly policy: EgressCurrentAuthority["policy"];
+  readonly providerAccess: EgressCurrentAuthority["providerAccess"];
   readonly resolver: {
     readonly resolverIdentity: string;
     readonly resolverEpoch: string;
     readonly resolutionCount: 1;
-    readonly normalizedAddresses: readonly EgressCandidateAddressV1[];
+    readonly normalizedAddresses: readonly EgressCandidateAddress[];
     readonly addressSetDigest: string;
   };
   readonly selectedPeer: { readonly address: string; readonly port: number };
-  readonly tls: RequestFinalEgressAuthorizationV1["tls"];
-  readonly limits: EgressBudgetsV1;
-  readonly request: TrustedHostRequestProjectionV1;
+  readonly tls: RequestFinalEgressAuthorization["tls"];
+  readonly limits: EgressBudgets;
+  readonly request: TrustedHostRequestProjection;
   readonly requestDigest: string;
   readonly time: {
     readonly authorityId: string;
@@ -193,21 +185,8 @@ export interface FirstApplicationByteGrantPayloadV1 {
   readonly poolingAuthorized: false;
   readonly consumption: {
     readonly owner: "host-custody";
-    readonly journalKey: EgressConsumptionJournalKeyV1;
+    readonly journalKey: EgressConsumptionJournalKey;
     readonly requestFingerprint: string;
-  };
-}
-
-export interface SignedFirstApplicationByteGrantV1 {
-  readonly payload: FirstApplicationByteGrantPayloadV1;
-  readonly finalAuthorizationDigest: string;
-  readonly signature: EgressDecisionSignatureV1;
-  readonly evidence: {
-    readonly contractVersion: "provider-process-egress-grant-evidence/v1";
-    readonly authorizationRef: string;
-    readonly boundaryUseRef: string;
-    readonly decisionDigest: string;
-    readonly finalAuthorizationDigest: string;
   };
 }
 
@@ -223,25 +202,33 @@ export type EgressAuthorizationIssueCode =
   | "sni_mismatch" | "certificate_invalid" | "certificate_mismatch"
   | "alpn_mismatch" | "request_mismatch";
 
-export interface EgressDenialEvidenceV1 {
-  readonly contractVersion: "provider-process-egress-denial-evidence/v1";
+export interface EgressDenialEvidence {
   readonly phase: "provisional" | "final";
   readonly issueCode: EgressAuthorizationIssueCode;
   readonly authorizationRef: string;
   readonly decisionDigest?: string;
 }
 
-export type RequestProvisionalEgressAuthorizationOutcomeV1 =
-  | { readonly status: "authorized"; readonly decision: ProvisionalEgressAuthorizationV1 }
-  | { readonly status: "denied"; readonly evidence: EgressDenialEvidenceV1 };
+export type RequestProvisionalEgressAuthorizationOutcome =
+  | { readonly status: "authorized"; readonly decision: ProvisionalEgressAuthorization }
+  | { readonly status: "denied"; readonly evidence: EgressDenialEvidence };
+export type RequestFinalEgressAuthorizationOutcome =
+  | { readonly status: "authorized"; readonly grant: {
+      readonly payload: FirstApplicationByteGrantPayload;
+      readonly finalAuthorizationDigest: string;
+      readonly signature: EgressDecisionSignature;
+      readonly evidence: {
+        readonly authorizationRef: string;
+        readonly boundaryUseRef: string;
+        readonly decisionDigest: string;
+        readonly finalAuthorizationDigest: string;
+      };
+    } }
+  | { readonly status: "denied"; readonly evidence: EgressDenialEvidence };
 
-export type RequestFinalEgressAuthorizationOutcomeV1 =
-  | { readonly status: "authorized"; readonly grant: SignedFirstApplicationByteGrantV1 }
-  | { readonly status: "denied"; readonly evidence: EgressDenialEvidenceV1 };
-
-export interface ProviderProcessEgressAuthorizationV1 {
-  requestProvisional(input: RequestProvisionalEgressAuthorizationV1):
-    Promise<RequestProvisionalEgressAuthorizationOutcomeV1>;
-  authorizeFirstApplicationByte(input: RequestFinalEgressAuthorizationV1):
-    Promise<RequestFinalEgressAuthorizationOutcomeV1>;
+export interface ProviderProcessEgressAuthorization {
+  requestProvisional(input: RequestProvisionalEgressAuthorization):
+    Promise<RequestProvisionalEgressAuthorizationOutcome>;
+  authorizeFirstApplicationByte(input: RequestFinalEgressAuthorization):
+    Promise<RequestFinalEgressAuthorizationOutcome>;
 }

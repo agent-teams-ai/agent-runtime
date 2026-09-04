@@ -26,7 +26,7 @@ export const requestProjection = (
   change: Partial<TrustedHostRequestProjectionV1> = {},
 ): TrustedHostRequestProjectionV1 => ({
   method: "POST", scheme: "https", authority: { hostname: "api.example.com", port: 443 },
-  pathAndQuery: "/v1/messages?stream=true",
+  requestTarget: { digest: digest("a"), byteLength: 24 },
   headers: { canonicalDigest: digest("6"), fieldCount: 4, credentialFields: [{
     name: "authorization", credentialBindingDigest: digest("3"), valueDigest: digest("7"),
     byteLength: 32,

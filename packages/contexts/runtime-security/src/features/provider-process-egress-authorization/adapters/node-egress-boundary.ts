@@ -23,7 +23,8 @@ const credentialField = object({ name: text, credentialBindingDigest: text, valu
   byteLength: number });
 const request = object({
   method: literal("DELETE", "GET", "PATCH", "POST", "PUT"), scheme: literal("https"),
-  authority: object({ hostname: text, port: number }), pathAndQuery: text,
+  authority: object({ hostname: text, port: number }),
+  requestTarget: object({ digest: text, byteLength: number }),
   headers: object({ canonicalDigest: text, fieldCount: number,
     credentialFields: array(credentialField, 256) }),
   body: object({ digest: text, byteLength: number }),

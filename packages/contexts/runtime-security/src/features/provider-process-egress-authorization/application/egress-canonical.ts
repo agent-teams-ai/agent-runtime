@@ -1,7 +1,3 @@
-import type {
-  FirstApplicationByteGrantPayloadV1,
-  ProvisionalEgressAuthorizationV1,
-} from "../contracts/provider-process-egress-authorization-v1.js";
 import type { EgressCanonicalDigest } from "./ports/outbound/egress-cryptography.js";
 
 export const canonicalEgressValue = (value: unknown): string => {
@@ -22,8 +18,6 @@ export const canonicalEgressValue = (value: unknown): string => {
 export const digestCanonical = (digest: EgressCanonicalDigest, value: unknown): string =>
   digest.digest(canonicalEgressValue(value));
 
-export const provisionalPreimage = (
-  decision: Omit<ProvisionalEgressAuthorizationV1, "decisionDigest" | "signature">,
-) => decision;
+export const provisionalPreimage = (decision: unknown) => decision;
 
-export const finalAuthorizationPreimage = (payload: FirstApplicationByteGrantPayloadV1) => payload;
+export const finalAuthorizationPreimage = (payload: unknown) => payload;

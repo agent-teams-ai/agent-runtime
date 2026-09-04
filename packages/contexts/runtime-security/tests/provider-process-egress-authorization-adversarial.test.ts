@@ -13,6 +13,7 @@ import {
 } from "./provider-process-egress-authorization.fixtures.ts";
 
 test("caller inputs reject authority, scope, generation, expiry, route, budget, and unknown extras", async () => {
+  const querySecret = "synthetic-query-secret-must-not-cross-rs";
   const candidates = [
     { ...provisionalInput(), scope: scope() },
     { ...provisionalInput(), policy: authorityFor().policy },
@@ -21,12 +22,15 @@ test("caller inputs reject authority, scope, generation, expiry, route, budget, 
     { ...provisionalInput(), expiresAtControlTime: 1_100 },
     { ...provisionalInput(), routePermission: true },
     { ...provisionalInput(), budgets: authorityFor().policy.limits },
+    { ...provisionalInput(), request: { ...provisionalInput().request,
+      pathAndQuery: `/v1/messages?api_key=${querySecret}` } },
     { ...provisionalInput(), unexpected: true },
   ];
   for (const candidate of candidates) {
     const result = await harness().gateway.requestProvisional(candidate as never);
     assert.equal(result.status, "denied");
     if (result.status === "denied") {assert.equal(result.evidence.issueCode, "invalid_input");}
+    assert.equal(JSON.stringify(result).includes(querySecret), false);
   }
   const symbolInput = provisionalInput() as RequestProvisionalEgressAuthorizationV1 &
     { [key: symbol]: boolean };
@@ -47,6 +51,29 @@ test("caller inputs reject authority, scope, generation, expiry, route, budget, 
     { [key: symbol]: boolean };
   symbolFinal[Symbol("hidden-authority")] = true;
   assert.equal((await setup.gateway.authorizeFirstApplicationByte(symbolFinal)).status, "denied");
+});
+
+test("request-target bytes remain Host-only while their exact commitment crosses Runtime Security", async () => {
+  const querySecret = "synthetic-query-secret-must-not-cross-rs";
+  const rejected = harness();
+  const oldRawTarget = await rejected.gateway.requestProvisional({ ...provisionalInput(), request: {
+    ...provisionalInput().request, pathAndQuery: `/v1/messages?api_key=${querySecret}`,
+  } } as never);
+  assert.equal(oldRawTarget.status, "denied");
+  assert.equal(rejected.state.resolveCalls.length, 0);
+  assert.equal(JSON.stringify(oldRawTarget).includes(querySecret), false);
+  const setup = harness();
+  const input = provisionalInput({ request: { ...provisionalInput().request,
+    requestTarget: { digest: "sha256:" + "b".repeat(64), byteLength: 57 } } });
+  setup.state.authority = authorityFor(input.request);
+  const provisional = await authorizeProvisional(setup.gateway, input);
+  const final = await setup.gateway.authorizeFirstApplicationByte(finalInput(provisional));
+  assert.equal(final.status, "authorized");
+  for (const value of [setup.state.resolveCalls, provisional, final]) {
+    assert.equal(JSON.stringify(value).includes(querySecret), false);
+  }
+  assert.deepEqual(provisional.request.requestTarget, input.request.requestTarget);
+  assert.equal("pathAndQuery" in provisional.request, false);
 });
 
 test("input accessors, Proxies, cycles, sparse arrays, and prototypes fail without getter invocation", async () => {

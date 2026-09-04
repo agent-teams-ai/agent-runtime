@@ -1,5 +1,5 @@
-import type { EgressBudgetsV1, EgressTlsOriginV1, TrustedHostRequestProjectionV1 } from
-  "../contracts/provider-process-egress-authorization-v1.js";
+import type { EgressBudgets, EgressTlsOrigin, TrustedHostRequestProjection } from
+  "./provider-process-egress-model.js";
 
 export const validRef = (value: string): boolean =>
   value.length >= 1 && value.length <= 256 && /^[A-Za-z0-9][A-Za-z0-9._:@-]*$/.test(value) &&
@@ -20,11 +20,11 @@ export const normalizeHostname = (value: string): string | undefined => {
     !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)) ? undefined : hostname;
 };
 
-export const validOrigin = (origin: EgressTlsOriginV1): boolean =>
+export const validOrigin = (origin: EgressTlsOrigin): boolean =>
   origin.scheme === "https" && normalizeHostname(origin.hostname) === origin.hostname &&
   Number.isSafeInteger(origin.port) && origin.port >= 1 && origin.port <= 65_535;
 
-export const validBudgets = (budgets: EgressBudgetsV1): boolean =>
+export const validBudgets = (budgets: EgressBudgets): boolean =>
   Number.isSafeInteger(budgets.requestBytes) && budgets.requestBytes >= 0 &&
   budgets.requestBytes <= 64 * 1024 * 1024 &&
   Number.isSafeInteger(budgets.responseBytes) && budgets.responseBytes >= 0 &&
@@ -32,21 +32,18 @@ export const validBudgets = (budgets: EgressBudgetsV1): boolean =>
   Number.isSafeInteger(budgets.totalMilliseconds) && budgets.totalMilliseconds >= 1 &&
   budgets.totalMilliseconds <= 15 * 60 * 1000;
 
-const validPath = (value: string): boolean => value.length >= 1 && value.length <= 16_384 &&
-  value.startsWith("/") && !value.includes("#") && ![...value].some(character => {
-    const code = character.codePointAt(0) ?? 0;
-    return code <= 31 || code === 127;
-  });
 const validLength = (value: number, maximum: number): boolean =>
   Number.isSafeInteger(value) && value >= 0 && value <= maximum;
 const headerName = (value: string): boolean => value.length <= 128 &&
   /^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(value);
 
-export const validRequestProjection = (request: TrustedHostRequestProjectionV1): boolean => {
+export const validRequestProjection = (request: TrustedHostRequestProjection): boolean => {
   if (!["DELETE", "GET", "PATCH", "POST", "PUT"].includes(request.method) ||
     request.scheme !== "https" || normalizeHostname(request.authority.hostname) !==
       request.authority.hostname || !validOrigin({ scheme: "https", ...request.authority }) ||
-    !validPath(request.pathAndQuery) || !validDigest(request.headers.canonicalDigest) ||
+    !validDigest(request.requestTarget.digest) ||
+    !validLength(request.requestTarget.byteLength, 16_384) ||
+    !validDigest(request.headers.canonicalDigest) ||
     !validLength(request.headers.fieldCount, 256) || !validDigest(request.body.digest) ||
     !validLength(request.body.byteLength, 64 * 1024 * 1024)) {return false;}
   const credentialNames = request.headers.credentialFields.map(field => field.name);

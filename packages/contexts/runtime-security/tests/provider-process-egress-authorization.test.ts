@@ -4,8 +4,8 @@ import { test } from "node:test";
 
 import { createNodeSha256EgressDigest } from "../dist/composition.js";
 import {
-  assertDeepFrozen, authorizeProvisional, canonical, digest, finalInput, harness, provisionalInput,
-  requestProjection, scope,
+  assertDeepFrozen, authorityFor, authorizeProvisional, canonical, digest, finalInput, harness,
+  provisionalInput, requestProjection, scope,
 } from "./provider-process-egress-authorization.fixtures.ts";
 
 const grantForTenant = async (tenantId: string) => {
@@ -15,6 +15,63 @@ const grantForTenant = async (tenantId: string) => {
   assert.equal(outcome.status, "authorized");
   if (outcome.status !== "authorized") {throw new Error("expected grant");}
   return outcome.grant.payload.consumption;
+};
+
+type ChangedGrantFact = "none" | "policy" | "key" | "route" | "credential" |
+  "peer" | "tls" | "clock" | "expiry";
+const grantWithChangedFacts = async (change: ChangedGrantFact) => {
+  const request = change === "credential" ? requestProjection({ headers: {
+    ...requestProjection().headers, credentialFields: [{
+      ...requestProjection().headers.credentialFields[0]!,
+      credentialBindingDigest: digest("9"),
+    }],
+  } }) : requestProjection();
+  let authority = authorityFor(request);
+  if (change === "policy") {authority = { ...authority,
+    policy: { ...authority.policy, policyRevision: "policy-revision-2" } };}
+  if (change === "key") {authority = { ...authority, policy: { ...authority.policy,
+    signingKey: { ...authority.policy.signingKey, keyGeneration: "key-generation-2" } } };}
+  if (change === "route") {authority = { ...authority, providerAccess: {
+    ...authority.providerAccess, routeGeneration: "route-generation-2" } };}
+  if (change === "credential") {authority = { ...authority, providerAccess: {
+    ...authority.providerAccess, credentialBindingDigest: digest("9"),
+    credentialGeneration: "credential-generation-2" } };}
+  if (change === "expiry") {authority = { ...authority, policy: {
+    ...authority.policy, decisionTtlMilliseconds: 101 } };}
+  const setup = harness({ initialAuthority: authority });
+  const provisional = await authorizeProvisional(setup.gateway, provisionalInput({ request }));
+  if (change === "clock") {setup.clock.controlTime = 1_001;}
+  const network = change === "peer" ? {
+    resolver: { resolverIdentity: "resolver-1", resolverEpoch: "resolver-epoch-1",
+      resolutionCount: 1, addresses: [{ family: "ipv4" as const, address: "8.8.8.8",
+        classification: "public" as const }] },
+    pinnedDestination: { address: "8.8.8.8", port: 443 },
+    observedPeer: { address: "8.8.8.8", port: 443 },
+  } : {};
+  const base = finalInput(provisional, network);
+  const input = change === "tls" ? finalInput(provisional, {
+    tls: { ...base.tls, certificateDigest: digest("9") },
+  }) : base;
+  const result = await setup.gateway.authorizeFirstApplicationByte(input);
+  assert.equal(result.status, "authorized", change);
+  if (result.status !== "authorized") {throw new Error(`denied ${change}`);}
+  return result.grant.payload.consumption;
+};
+
+const authorizeTargetCommitment = async (requestTarget: {
+  readonly digest: string;
+  readonly byteLength: number;
+}) => {
+  const request = requestProjection({ requestTarget });
+  const setup = harness({ initialAuthority: authorityFor(request) });
+  const provisional = await authorizeProvisional(setup.gateway, provisionalInput({ request }));
+  assert.equal(provisional.policy.authorizedRequestDigest, provisional.requestDigest);
+  const final = await setup.gateway.authorizeFirstApplicationByte(finalInput(provisional));
+  assert.equal(final.status, "authorized");
+  if (final.status !== "authorized") {throw new Error("expected target-bound grant");}
+  return { requestDigest: provisional.requestDigest, decisionDigest: provisional.decisionDigest,
+    finalDigest: final.grant.finalAuthorizationDigest,
+    fingerprint: final.grant.payload.consumption.requestFingerprint };
 };
 
 test("composition binds immutable scope and owner resolves policy from Host request facts", async () => {
@@ -59,6 +116,18 @@ test("final grant signs the complete payload and exposes only safe compact evide
   assert.equal(evidence.includes("/v1/messages"), false);
   assert.equal(evidence.includes("authorization"), true);
   assert.equal(JSON.stringify(result.grant).includes("synthetic-only"), false);
+});
+
+test("request-target digest and length bind owner policy, provisional, final, and consumption identity", async () => {
+  const baseline = await authorizeTargetCommitment({ digest: digest("a"), byteLength: 24 });
+  const changedDigest = await authorizeTargetCommitment({ digest: digest("b"), byteLength: 24 });
+  const changedLength = await authorizeTargetCommitment({ digest: digest("a"), byteLength: 25 });
+  for (const changed of [changedDigest, changedLength]) {
+    assert.notEqual(changed.requestDigest, baseline.requestDigest);
+    assert.notEqual(changed.decisionDigest, baseline.decisionDigest);
+    assert.notEqual(changed.finalDigest, baseline.finalDigest);
+    assert.notEqual(changed.fingerprint, baseline.fingerprint);
+  }
 });
 
 test("every Runtime Security and Provider Access owner fact drift denies", async () => {
@@ -126,12 +195,20 @@ test("missing, denied, throwing, malformed, and revoked owner reads fail closed"
   }
   const throwing = harness();
   throwing.state.resolveThrows = true;
-  assert.equal((await throwing.gateway.requestProvisional(provisionalInput())).status, "denied");
+  const resolveThrown = await throwing.gateway.requestProvisional(provisionalInput());
+  assert.equal(resolveThrown.status, "denied");
+  if (resolveThrown.status === "denied") {
+    assert.equal(resolveThrown.evidence.issueCode, "owner_unavailable");
+  }
   const malformed = harness();
   malformed.state.resolveOutcome = { status: "current", authority: {
     ...malformed.state.authority, extra: true,
   } } as never;
-  assert.equal((await malformed.gateway.requestProvisional(provisionalInput())).status, "denied");
+  const resolveMalformed = await malformed.gateway.requestProvisional(provisionalInput());
+  assert.equal(resolveMalformed.status, "denied");
+  if (resolveMalformed.status === "denied") {
+    assert.equal(resolveMalformed.evidence.issueCode, "owner_malformed");
+  }
   const revoked = harness();
   revoked.state.authority = { ...revoked.state.authority,
     policy: { ...revoked.state.authority.policy, revoked: true } };
@@ -142,8 +219,35 @@ test("missing, denied, throwing, malformed, and revoked owner reads fail closed"
   const currentFailure = harness();
   const provisional = await authorizeProvisional(currentFailure.gateway);
   currentFailure.state.currentThrows = true;
-  assert.equal((await currentFailure.gateway.authorizeFirstApplicationByte(
-    finalInput(provisional))).status, "denied");
+  const currentThrown = await currentFailure.gateway.authorizeFirstApplicationByte(
+    finalInput(provisional));
+  assert.equal(currentThrown.status, "denied");
+  if (currentThrown.status === "denied") {
+    assert.equal(currentThrown.evidence.issueCode, "owner_unavailable");
+  }
+
+  const malformedCurrent = harness();
+  const malformedCurrentProvisional = await authorizeProvisional(malformedCurrent.gateway);
+  malformedCurrent.state.currentOutcome = { status: "current", authority: {
+    ...malformedCurrent.state.authority, extra: true,
+  } } as never;
+  const currentMalformed = await malformedCurrent.gateway.authorizeFirstApplicationByte(
+    finalInput(malformedCurrentProvisional));
+  assert.equal(currentMalformed.status, "denied");
+  if (currentMalformed.status === "denied") {
+    assert.equal(currentMalformed.evidence.issueCode, "owner_malformed");
+  }
+});
+
+test("consumption identity binds all final grant facts and is deterministic for identical facts", async () => {
+  const baseline = await grantWithChangedFacts("none");
+  assert.deepEqual(await grantWithChangedFacts("none"), baseline);
+  for (const change of ["policy", "key", "route", "credential", "peer", "tls", "clock",
+    "expiry"] as const) {
+    const changed = await grantWithChangedFacts(change);
+    assert.deepEqual(changed.journalKey, baseline.journalKey, change);
+    assert.notEqual(changed.requestFingerprint, baseline.requestFingerprint, change);
+  }
 });
 
 test("clock identity, process epoch, expiry, and monotonic regression are authoritative", async () => {
@@ -185,7 +289,8 @@ test("exact HTTP/1.1 request projection mutations deny and H2/H3 remain typed un
   const original = requestProjection();
   const mutations = [
     { method: "GET" }, { scheme: "https", authority: { hostname: "other.example.com", port: 443 } },
-    { authority: { hostname: "api.example.com", port: 8443 } }, { pathAndQuery: "/other" },
+    { authority: { hostname: "api.example.com", port: 8443 } },
+    { requestTarget: { digest: digest("9"), byteLength: 24 } },
     { headers: { ...original.headers, canonicalDigest: digest("9") } },
     { headers: { ...original.headers, fieldCount: 5 } },
     { headers: { ...original.headers, credentialFields: [{ ...original.headers.credentialFields[0]!,
@@ -273,6 +378,8 @@ test("mutating each critical final signed field invalidates the final signature"
     { ...payload, limits: { ...payload.limits, responseBytes: 9_999 } },
     { ...payload, request: { ...payload.request, headers: { ...payload.request.headers,
       canonicalDigest: digest("9") } } },
+    { ...payload, request: { ...payload.request,
+      requestTarget: { ...payload.request.requestTarget, byteLength: 25 } } },
     { ...payload, request: { ...payload.request, body: { ...payload.request.body,
       byteLength: 127 } } },
     { ...payload, time: { ...payload.time, expiresAtControlTime: 1_101 } },
