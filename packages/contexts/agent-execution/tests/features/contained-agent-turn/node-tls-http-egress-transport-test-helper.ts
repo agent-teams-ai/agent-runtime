@@ -171,6 +171,7 @@ export class SyntheticOwnedTlsSocket extends EventEmitter implements OwnedNodeTl
   public renegotiationDisabled = false;
   public readonly writes: Uint8Array[] = [];
   readonly #options: FakeSocketOptions;
+  #pendingWriteCallback: ((error?: Error | null) => void) | undefined;
 
   public constructor(options: FakeSocketOptions = {}) {
     super();
@@ -194,8 +195,20 @@ export class SyntheticOwnedTlsSocket extends EventEmitter implements OwnedNodeTl
       queueMicrotask(() => {callback(new Error("synthetic callback error")); this.emit("error", new Error("synthetic"));});
     } else if (this.#options.write !== "wait") {
       queueMicrotask(() => {callback(); this.readableLength = 1; this.emit("readable");});
+    } else {
+      this.#pendingWriteCallback = callback;
     }
     return false;
+  }
+  public exposeReadable(): void {
+    this.readableLength = 1;
+    this.emit("readable");
+  }
+  public completePendingWrite(error?: Error): void {
+    const callback = this.#pendingWriteCallback;
+    this.#pendingWriteCallback = undefined;
+    if (callback === undefined) {throw new Error("no pending synthetic write callback");}
+    callback(error);
   }
   public disableRenegotiation(): void {this.renegotiationDisabled = true;}
   public getProtocol(): string | null {return "TLSv1.3";}

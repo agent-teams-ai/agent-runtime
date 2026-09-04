@@ -8,6 +8,7 @@ import type {
   HttpEgressTransportBinding,
   HttpEgressTransportSession,
 } from "./http-egress-ports.js";
+import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 import {
   closureReceiptDigest,
   createBinding,
@@ -57,11 +58,6 @@ const failedAfterConsumption = (): HttpEgressDispatch => Object.freeze({
 });
 
 const canonicalConnectFailure = (): NodeTlsHttpEgressError => new NodeTlsHttpEgressError("connect_failed");
-
-const safeZero = (bytes: Uint8Array | undefined): void => {
-  if (bytes === undefined) {return;}
-  try {bytes.fill(0);} catch { /* A hostile detached view is already unusable. */ }
-};
 
 const boundedResponse = (
   socket: OwnedNodeTlsSocket,
@@ -115,8 +111,10 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
       let consumed = false;
       let ownedBytes: Uint8Array | undefined;
       let acceptedLength = 0;
+      let writeCompleted = false;
+      let responseReadable = false;
       const zeroOwnedBytes = (): void => {
-        safeZero(ownedBytes);
+        zeroHttpBytes(ownedBytes);
         ownedBytes = undefined;
       };
 
@@ -141,6 +139,8 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
       const aborted = (): void => {failed();};
       const readable = (): void => {
         if (!consumed || acceptedLength === 0 || this.#socket.readableLength === 0) {return;}
+        responseReadable = true;
+        if (!writeCompleted || settled) {return;}
         settle(Object.freeze({
           status: "response",
           acceptedRequestBytes: acceptedLength,
@@ -159,19 +159,26 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
       if (!this.#isUsable() || signal?.aborted) {failed(); return;}
       try {
         const bytes = consumeAuthorizedRequest();
-        if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+        const byteLength = intrinsicUint8ArrayLength(bytes);
+        if (byteLength === undefined || byteLength === 0) {
+          zeroHttpBytes(bytes);
           settle(failedBeforeConsumption());
           return;
         }
+        const authorizedBytes = bytes as Uint8Array;
         consumed = true;
-        ownedBytes = bytes;
-        acceptedLength = bytes.byteLength;
+        ownedBytes = authorizedBytes;
+        acceptedLength = byteLength;
         this.#socket.once("close", zeroOwnedBytes);
         // Deliberately no await or promise boundary between authority consumption and this write.
-        this.#socket.write(bytes, error => {
+        this.#socket.write(authorizedBytes, error => {
           this.#socket.off("close", zeroOwnedBytes);
           zeroOwnedBytes();
           if (error !== undefined && error !== null) {failed();}
+          else {
+            writeCompleted = true;
+            if (responseReadable || this.#socket.readableLength > 0) {readable();}
+          }
         });
         if (this.#socket.readableLength > 0) {readable();}
       } catch {

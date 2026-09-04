@@ -12,7 +12,7 @@ const uint8ArrayFill = Uint8Array.prototype.fill;
 const uint8ArraySet = Uint8Array.prototype.set;
 const emptyBytes = new Uint8Array();
 
-const intrinsicUint8ArrayLength = (value: unknown): number | undefined => {
+export const intrinsicUint8ArrayLength = (value: unknown): number | undefined => {
   try {
     if (Reflect.apply(typedArrayTag, value, []) !== "Uint8Array") {return undefined;}
     const byteLength = Reflect.apply(typedArrayByteLength, value, []);

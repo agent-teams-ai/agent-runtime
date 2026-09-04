@@ -309,6 +309,108 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
     });
   }
 
+  test("early readability waits for write completion before acknowledging the response", async () => {
+    const socket = new SyntheticOwnedTlsSocket({ write: "wait" });
+    const attempt = injectedTransport(socket).beginOpen(target(443));
+    const session = await attempt.ready();
+    const bytes = utf8("secret");
+    const dispatchPromise = session.dispatch(() => bytes);
+    socket.exposeReadable();
+    const state = await Promise.race([
+      dispatchPromise.then(() => "settled" as const),
+      new Promise<"pending">(resolve => {setImmediate(() => {resolve("pending");});}),
+    ]);
+    assert.equal(state, "pending");
+    assert.equal(new TextDecoder().decode(bytes), "secret", "the socket still owns the request before its callback");
+
+    socket.completePendingWrite();
+    const dispatch = await dispatchPromise;
+    assert.equal(dispatch.status, "response");
+    assert.equal(dispatch.acceptedRequestBytes, 6);
+    assert.ok(bytes.every(byte => byte === 0));
+    await expectClosed(attempt);
+  });
+
+  test("early readability followed by a write callback error is unknown and lost", async () => {
+    const socket = new SyntheticOwnedTlsSocket({ write: "wait" });
+    const attempt = injectedTransport(socket).beginOpen(target(443));
+    const session = await attempt.ready();
+    const bytes = utf8("secret");
+    const dispatchPromise = session.dispatch(() => bytes);
+    socket.exposeReadable();
+    socket.completePendingWrite(new Error("synthetic delayed failure"));
+
+    assert.deepEqual(await dispatchPromise,
+      { status: "failed", acceptedRequestBytes: "unknown", acknowledgement: "lost" });
+    assert.ok(bytes.every(byte => byte === 0));
+    await expectClosed(attempt);
+  });
+
+  for (const disposition of ["close", "abort", "timeout"] as const) {
+    test(`${disposition} while the write callback is pending cannot resurrect success`, async () => {
+      const socket = new SyntheticOwnedTlsSocket({ write: "wait" });
+      const attempt = injectedTransport(socket).beginOpen(target(443));
+      const session = await attempt.ready();
+      const bytes = utf8("secret");
+      const controller = new AbortController();
+      const dispatchPromise = session.dispatch(() => bytes, controller.signal);
+      socket.exposeReadable();
+      const closePromise = disposition === "close" ? attempt.close() : undefined;
+      if (disposition === "abort") {controller.abort();}
+      if (disposition === "timeout") {socket.emit("timeout");}
+
+      assert.deepEqual(await dispatchPromise,
+        { status: "failed", acceptedRequestBytes: "unknown", acknowledgement: "lost" });
+      if (closePromise !== undefined) {assert.equal((await closePromise).state, "closed");}
+      await new Promise<void>(resolve => {setImmediate(resolve);});
+      assert.ok(bytes.every(byte => byte === 0), "closure releases and zeroizes caller-owned storage");
+      socket.completePendingWrite();
+      assert.ok(bytes.every(byte => byte === 0));
+      await expectClosed(attempt);
+    });
+  }
+
+  test("intrinsic length and zeroization ignore own byteLength and fill properties", async () => {
+    const socket = new SyntheticOwnedTlsSocket();
+    const attempt = injectedTransport(socket).beginOpen(target(443));
+    const session = await attempt.ready();
+    const bytes = utf8("secret");
+    Object.defineProperties(bytes, {
+      byteLength: { value: 999 },
+      fill: { value: () => bytes },
+    });
+
+    const dispatch = await session.dispatch(() => bytes);
+    assert.equal(dispatch.status, "response");
+    assert.equal(dispatch.acceptedRequestBytes, 6);
+    assert.deepEqual(socket.writes, [utf8("secret")]);
+    assert.deepEqual([...bytes], [0, 0, 0, 0, 0, 0]);
+    await expectClosed(attempt);
+  });
+
+  test("invalid and detached authorized values never write or rely on instance cleanup hooks", async () => {
+    const invalidSocket = new SyntheticOwnedTlsSocket();
+    const invalidAttempt = injectedTransport(invalidSocket).beginOpen(target(443));
+    const invalidSession = await invalidAttempt.ready();
+    let hostileFillCalled = false;
+    const invalid = { byteLength: 12, fill: () => {hostileFillCalled = true;} };
+    assert.deepEqual(await invalidSession.dispatch(() => invalid as unknown as Uint8Array),
+      { status: "failed", acceptedRequestBytes: 0, acknowledgement: "acknowledged" });
+    assert.equal(hostileFillCalled, false);
+    assert.equal(invalidSocket.writes.length, 0);
+    await expectClosed(invalidAttempt);
+
+    const detachedSocket = new SyntheticOwnedTlsSocket();
+    const detachedAttempt = injectedTransport(detachedSocket).beginOpen(target(443));
+    const detachedSession = await detachedAttempt.ready();
+    const detached = new Uint8Array(6);
+    structuredClone(detached.buffer, { transfer: [detached.buffer] });
+    assert.deepEqual(await detachedSession.dispatch(() => detached),
+      { status: "failed", acceptedRequestBytes: 0, acknowledgement: "acknowledged" });
+    assert.equal(detachedSocket.writes.length, 0);
+    await expectClosed(detachedAttempt);
+  });
+
   test("rejects a supplied-peer versus actual-peer mismatch", async () => {
     const socket = new SyntheticOwnedTlsSocket({ remoteAddress: "127.0.0.2", remotePort: 443 });
     const attempt = injectedTransport(socket).beginOpen(target(443));
