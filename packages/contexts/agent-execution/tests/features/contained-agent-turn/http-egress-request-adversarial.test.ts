@@ -25,16 +25,18 @@ describe("strict Host HTTP/1.1 request boundary", () => {
     const outbound = new TextDecoder().decode(fixture.observations.dispatchedRequests[0]);
     assert.match(outbound, /^POST \/fixed-provider-route HTTP\/1\.1\r\n/);
     assert.match(outbound, /Host: provider\.example\r\n/);
-    assert.match(outbound, new RegExp(`Authorization: Bearer ${SECRET_MARKER}\\r\\n`));
-    assert.match(outbound, /Content-Length: 2\r\nConnection: close\r\n\r\n\{\}$/);
+    assert.match(outbound, new RegExp(`authorization: Bearer ${SECRET_MARKER}\\r\\n`));
+    assert.match(outbound, /Content-Length: 2\r\n\r\n\{\}$/);
+    assert.doesNotMatch(outbound, /Connection:/i);
     assert.doesNotMatch(outbound, /child-secret|proxy-secret|child-key|keep-alive/);
-    assert.deepEqual(fixture.observations.order.slice(0, 8), [
-      "observe-route",
+    assert.deepEqual(fixture.observations.order.slice(0, 9), [
+      "authorize-materialization",
+      "render-credential",
+      "observe-materialization",
       "provisional",
       "resolve",
       "open",
-      "revalidate-route",
-      "render-credential",
+      "observe-materialization",
       "final",
       "dispatch",
     ]);

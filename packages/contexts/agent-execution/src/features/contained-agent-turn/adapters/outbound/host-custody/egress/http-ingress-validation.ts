@@ -1,5 +1,6 @@
 import { types as utilTypes } from "node:util";
 import type { HttpEgressLimits, HttpEgressOperation } from "./http-egress-contracts.js";
+import { snapshotHttpEgressLimits } from "./http-egress-limits.js";
 
 export const boundedHttpOpaque = (value: unknown): value is string => typeof value === "string"
   && value.length > 0 && value.length <= 512 && !/\p{Cc}|\p{Cs}/u.test(value);
@@ -13,13 +14,6 @@ const exact = (value: unknown, names: readonly string[]): Record<string, unknown
     if (descriptor === undefined || !("value" in descriptor)) {return undefined;} result[name] = descriptor.value;}
   return result;
 };
-const limits = (value: unknown): HttpEgressLimits | undefined => {
-  const names = ["maxInboundHeaderBytes", "maxInboundBodyBytes", "maxUpstreamHeaderBytes", "maxOutputBytes",
-    "maxBufferedBytes", "maxUpstreamWireBytes", "deadline", "closureDeadline"];
-  const record = exact(value, names); if (record === undefined || names.some(name => !Number.isSafeInteger(record[name])
-    || (record[name] as number) <= 0)) {return undefined;}
-  return Object.freeze({...record}) as HttpEgressLimits;
-};
 export const snapshotHttpEgressOperation = (value: unknown): HttpEgressOperation => {
   const base = exact(value, ["operationId", "attemptId", "expectedRequest", "connection", "limits"])
     ?? exact(value, ["operationId", "attemptId", "expectedRequest", "connection", "limits", "signal"]);
@@ -27,15 +21,16 @@ export const snapshotHttpEgressOperation = (value: unknown): HttpEgressOperation
     throw new TypeError("invalid HTTP egress operation");
   }
   const expected = exact(base.expectedRequest, ["requestId", "method", "path", "host"]);
-  const connection = base.connection as Partial<HttpEgressOperation["connection"]> | undefined;
-  const fixedLimits = limits(base.limits);
+  const connectionRecord = exact(base.connection, ["request", "write", "close"]);
+  const connection = connectionRecord as Partial<HttpEgressOperation["connection"]> | undefined;
   if (expected === undefined || !boundedHttpOpaque(expected.requestId) || !boundedHttpOpaque(expected.method)
-    || !boundedHttpOpaque(expected.path) || !boundedHttpOpaque(expected.host) || fixedLimits === undefined
+    || !boundedHttpOpaque(expected.path) || !boundedHttpOpaque(expected.host)
     || connection === undefined || typeof connection.write !== "function" || typeof connection.close !== "function"
     || connection.request === undefined || typeof connection.request[Symbol.asyncIterator] !== "function"
     || (base.signal !== undefined && !(base.signal instanceof AbortSignal))) {
     throw new TypeError("invalid HTTP egress operation");
   }
+  const fixedLimits: HttpEgressLimits = snapshotHttpEgressLimits(base.limits);
   return Object.freeze({operationId: base.operationId, attemptId: base.attemptId,
     expectedRequest: Object.freeze(expected) as HttpEgressOperation["expectedRequest"],
     connection: Object.freeze({request: connection.request, write: connection.write.bind(connection),

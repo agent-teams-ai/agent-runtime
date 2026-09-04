@@ -35,7 +35,7 @@ type Options = Readonly<{status?: number; paAuthorizeKind?: "authorized" | "obse
 const fixture = (options: Options = {}) => {
   const order: string[] = []; const writes: Uint8Array[] = []; const wires: Uint8Array[] = [];
   const paInputs: unknown[] = []; const provisionalInputs: unknown[] = []; const finalInputs: unknown[] = [];
-  let ids = 0; let observes = 0; let opens = 0; let journalCalls = 0; let renders = 0;
+  let ids = 0; let observes = 0; let opens = 0; let journalCalls = 0; let renders = 0; let cutReads = 0;
   const receiptFor = (input: Record<string, unknown>): HostHttpMaterializationReceipt => Object.freeze({
     ...input, decision: "authorized", rejectionReason: null,
   }) as HostHttpMaterializationReceipt;
@@ -51,11 +51,12 @@ const fixture = (options: Options = {}) => {
   const runtimeSecurity: HttpEgressBrokerPorts["runtimeSecurity"] = Object.freeze({
     requestProvisional: async input => {
       order.push("rs-provisional"); provisionalInputs.push(input);
+      const signedRequestDigest = digest([bytes(JSON.stringify(input.request))]);
       let decision: HostHttpProvisionalDecision = Object.freeze({contractVersion: "provider-process-egress-provisional-decision/v2",
         authorizationRequestId: input.authorizationRequestId, authorityRef: "authority-1",
         scope: Object.freeze({tenantId: snapshot.tenantId, projectId: snapshot.projectId,
-          operationId: "operation-1", scopeDigest: snapshot.scopeDigest}), policy: policy(digest([bytes("request")])),
-        providerAccess, request: input.request, requestDigest: digest([bytes(JSON.stringify(input.request))]),
+          operationId: "operation-1", scopeDigest: snapshot.scopeDigest}), policy: policy(signedRequestDigest),
+        providerAccess, request: input.request, requestDigest: signedRequestDigest,
         time: Object.freeze({authorityId: "clock-authority", epoch: "epoch-1", controlTime: 10,
           expiresAtControlTime: 100}), signingKey: options.substituteKey ? Object.freeze({...key, keyRef: "other"}) : key,
         decisionDigest: "provisional-decision-digest", signature});
@@ -67,8 +68,10 @@ const fixture = (options: Options = {}) => {
       let grant: HostHttpGrant = Object.freeze({payload: Object.freeze({
         contractVersion: "provider-process-first-application-byte-grant/v2", authorizationRequestId: input.provisional.authorizationRequestId,
         authorityRef: input.provisional.authorityRef, scope: input.provisional.scope, policy: input.provisional.policy,
-        providerAccess, resolver: Object.freeze({...input.resolver, normalizedAddresses: input.resolver.addresses,
-          addressSetDigest: "address-set-digest"}), selectedPeer: input.observedPeer, tls: input.tls,
+        providerAccess, resolver: Object.freeze({resolverIdentity: input.resolver.resolverIdentity,
+          resolverEpoch: input.resolver.resolverEpoch, resolutionCount: input.resolver.resolutionCount,
+          normalizedAddresses: input.resolver.addresses, addressSetDigest: "address-set-digest"}),
+        selectedPeer: input.observedPeer, tls: input.tls,
         limits: input.provisional.policy.limits, request: input.request, requestDigest: input.provisional.requestDigest,
         time: Object.freeze({authorityId: "clock-authority", epoch: "epoch-1", authorizedAtControlTime: 10,
           expiresAtControlTime: 100}), boundaryUseId: input.boundaryUseId, connectionAttemptId: input.connectionAttemptId,
@@ -106,8 +109,9 @@ const fixture = (options: Options = {}) => {
     runtimeSecurity, verifier: Object.freeze({signingKey: key,
       verifyProvisionalDecision: () => options.verifierProvisional ?? true,
       verifyGrant: () => options.verifierGrant ?? true}),
-    localAuthorityCut: Object.freeze({read: () => Object.freeze({status: options.cut ?? "current",
-      authorityId: "clock-authority", epoch: options.cutEpoch ?? "epoch-1", controlTime: 10})}),
+    localAuthorityCut: Object.freeze({read: () => {cutReads += 1; return Object.freeze({
+      status: cutReads === 1 ? "current" as const : options.cut ?? "current",
+      authorityId: "clock-authority", epoch: cutReads === 1 ? "epoch-1" : options.cutEpoch ?? "epoch-1", controlTime: 10});}}),
     journal: Object.freeze({consume: () => {journalCalls += 1; order.push("journal"); return options.journal ?? "consumed";}}),
     resolver: Object.freeze({resolve: async () => {order.push("resolve"); return Object.freeze({resolverIdentity: "resolver-1",
       resolverEpoch: "resolver-epoch-1", resolutionCount: 1 as const,

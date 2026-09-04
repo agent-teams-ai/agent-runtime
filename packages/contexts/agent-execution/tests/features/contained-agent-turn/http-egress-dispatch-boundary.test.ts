@@ -68,7 +68,7 @@ test("expiry after the async preparation does not survive a queued dispatch", as
   } };
   const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
   assert.equal(receipt.outcome, "denied");
-  assert.equal(receipt.anomalyCode, "final_denied");
+  assert.equal(receipt.anomalyCode, "provider_generation_drift");
   assert.equal(fixture.observations.dispatches, 0);
 });
 

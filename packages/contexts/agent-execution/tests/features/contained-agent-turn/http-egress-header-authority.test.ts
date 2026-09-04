@@ -32,7 +32,8 @@ test("the actual forwarded header set is bound into the request digest", async (
   const plain = await executeHeaders("Content-Type: text/plain\r\n");
   assert.equal(json.receipt.outcome, "completed");
   assert.equal(plain.receipt.outcome, "completed");
-  assert.notEqual(json.receipt.requestDigest, plain.receipt.requestDigest);
+  assert.notEqual(json.fixture.observations.provisionalInputs[0].request.headers.canonicalDigest,
+    plain.fixture.observations.provisionalInputs[0].request.headers.canonicalDigest);
   assert.notEqual(json.request, plain.request);
 });
 
@@ -61,13 +62,12 @@ test("the closed presentation allowlist accepts its known non-auth headers", asy
   assert.match(result.request, /content-type: application\/json\r\n/);
 });
 
-test("a non-HTTP/1.1 route is rejected at runtime", async () => {
-  const result = await executeHeaders("Accept: application/json\r\n", {
-    ...defaultRoute, alpn: "h2",
-  } as unknown as HttpEgressRoute);
-  assert.equal(result.receipt.outcome, "denied");
-  assert.equal(result.fixture.observations.opens, 0);
-  assert.equal(result.fixture.observations.renders, 0);
+test("a non-HTTP/1.1 observed TLS protocol is rejected at runtime", async () => {
+  const fixture = createEgressFixture({binding: {alpn: "h2" as never}});
+  const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
+  assert.equal(receipt.outcome, "denied");
+  assert.equal(fixture.observations.opens, 1);
+  assert.equal(fixture.observations.renders, 1);
 });
 
 for (const names of [["authorization"], ["api-key"], ["cookie"], ["accept-encoding"],
@@ -94,18 +94,17 @@ test("duplicate forwarded presentation headers have no ambiguous interpretation"
 test("Host credential materialization is separate and bound to operation, attempt, and receipt", async () => {
   const fixture = createEgressFixture();
   let binding: unknown;
-  const ports = { ...fixture.ports, credentialCustody: { renderAuthorization: async (input: unknown) => {
+  const ports = { ...fixture.ports, materializer: { render: async (input: unknown) => {
     binding = input;
-    return bytes("Bearer synthetic-host-only");
+    return [Object.freeze({name: "authorization", valueBytes: bytes("Bearer synthetic-host-only")})];
   } } };
   const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
   assert.equal(receipt.outcome, "completed");
-  assert.equal("renderAuthorization" in ports.routeAuthority, false);
+  assert.equal("render" in ports.providerAccess, false);
   assert.equal("credential" in defaultRoute, false);
-  assert.deepEqual(binding, {
-    operationId: fixture.operation.operationId,
-    attemptId: fixture.operation.attemptId,
-    materializationReceiptDigest: defaultRoute.materializationReceiptDigest,
-  });
+  assert.equal((binding as {credentialBindingDigest: string}).credentialBindingDigest,
+    fixture.ports.providerAccessSnapshot.ownerAuthorityDigest);
+  assert.equal((binding as {authorizationRequestId: string}).authorizationRequestId,
+    fixture.observations.materializationInputs[0].authorizationRequestId);
   assert.doesNotMatch(JSON.stringify(receipt), /synthetic-host-only/);
 });

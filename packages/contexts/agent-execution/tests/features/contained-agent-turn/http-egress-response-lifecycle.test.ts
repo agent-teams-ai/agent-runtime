@@ -17,14 +17,14 @@ describe("strict upstream response and lifecycle", () => {
     [500, "upstream_server_error"],
     [503, "upstream_server_error"],
   ] as const) {
-    test(`observes HTTP ${status} without retry`, async () => {
+    test(`closes before exposing retry-triggering HTTP ${status}`, async () => {
       const fixture = createEgressFixture({ response: [`HTTP/1.1 ${status} Synthetic\r\nContent-Length: 0\r\n\r\n`] });
       const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
-      assert.equal(receipt.outcome, "completed");
+      assert.equal(receipt.outcome, "denied");
       assert.equal(receipt.anomalyCode, anomaly);
       assert.equal(receipt.attemptCount, 1);
       assert.equal(fixture.observations.dispatches, 1);
-      assert.match(outputText(fixture), new RegExp(`^HTTP/1.1 ${status} Upstream`));
+      assert.equal(outputText(fixture), "");
     });
   }
 
