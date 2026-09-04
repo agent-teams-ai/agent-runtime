@@ -5,7 +5,6 @@ import type {
   HttpEgressGenerationObservation,
   HttpEgressRoute,
   HttpEgressTransportBinding,
-  OpaqueCredentialCapability,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 import type {
   HttpEgressConnection,
@@ -28,7 +27,16 @@ export async function* chunks(values: readonly (string | Uint8Array)[]): AsyncIt
 const defaultRequest = "POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}";
 const defaultResponse = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n5\r\ndata:\r\n2\r\n\n\n\r\n0\r\n\r\n";
 
-const capability = Object.freeze({}) as OpaqueCredentialCapability;
+const defaultLimits: HttpEgressLimits = Object.freeze({
+  maxInboundHeaderBytes: 2_048,
+  maxInboundBodyBytes: 1_024,
+  maxUpstreamHeaderBytes: 2_048,
+  maxOutputBytes: 4_096,
+  maxBufferedBytes: 128,
+  maxUpstreamWireBytes: 8_192,
+  deadline: 1_000,
+  closureDeadline: 1_100,
+});
 
 export const defaultRoute: HttpEgressRoute = Object.freeze({
   routeReceiptDigest: "route-receipt-digest",
@@ -46,7 +54,7 @@ export const defaultRoute: HttpEgressRoute = Object.freeze({
   keyGeneration: "key-generation-3",
   routeGeneration: "route-generation-11",
   credentialGeneration: "credential-generation-5",
-  credential: capability,
+  forwardedRequestHeaderNames: Object.freeze(["accept", "content-type"]),
 });
 
 const defaultBinding: HttpEgressTransportBinding = Object.freeze({
@@ -185,7 +193,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
         return final;
       },
     }),
-    providerAccess: Object.freeze({
+    routeAuthority: Object.freeze({
       observe: async () => {
         observations.order.push("observe-route");
         return Object.freeze({ status: "available" as const, route });
@@ -201,6 +209,8 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
           materializationReceiptDigest: route.materializationReceiptDigest,
         });
       },
+    }),
+    credentialCustody: Object.freeze({
       renderAuthorization: async () => {
         observations.order.push("render-credential");
         observations.renders += 1;
@@ -226,16 +236,6 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
       },
     }),
   });
-  const limits: HttpEgressLimits = Object.freeze({
-    maxInboundHeaderBytes: 2_048,
-    maxInboundBodyBytes: 1_024,
-    maxUpstreamHeaderBytes: 2_048,
-    maxOutputBytes: 4_096,
-    maxBufferedBytes: 128,
-    maxUpstreamWireBytes: 8_192,
-    deadline: 1_000,
-    closureDeadline: 1_100,
-  });
   const connection: HttpEgressConnection = Object.freeze({
     request: chunks(options.request ?? [defaultRequest]),
     write: async (value: Uint8Array) => {
@@ -253,7 +253,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
     attemptId: "attempt-egress-1",
     expectedRequest: Object.freeze({ requestId: "request-egress-1", method: "POST", path: "/invoke", host: "broker.invalid" }),
     connection,
-    limits,
+    limits: defaultLimits,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   return Object.freeze({ ports, operation, observations });

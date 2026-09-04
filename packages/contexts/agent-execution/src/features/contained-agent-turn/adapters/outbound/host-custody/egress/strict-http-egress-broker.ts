@@ -12,7 +12,7 @@ import type {
   HttpEgressRoute,
   HttpEgressTransportSession,
 } from "./http-egress-ports.js";
-import { assertHttpEgressRoute, createOutboundHttpRequest } from "./http-outbound-request.js";
+import { assertHttpEgressRoute, createOutboundHttpRequest, selectForwardedRequestHeaders } from "./http-outbound-request.js";
 import { snapshotHttpEgressLimits } from "./http-egress-limits.js";
 import { resolutionIsSafe } from "./public-address-policy.js";
 import {
@@ -134,7 +134,7 @@ const bindingMatches = (
 
 const generationsMatch = (
   route: HttpEgressRoute,
-  observation: Awaited<ReturnType<HttpEgressBrokerPorts["providerAccess"]["revalidate"]>>,
+  observation: Awaited<ReturnType<HttpEgressBrokerPorts["routeAuthority"]["revalidate"]>>,
 ): boolean => observation.status === "current"
   && observation.policyGeneration === route.policyGeneration
   && observation.keyGeneration === route.keyGeneration
@@ -260,14 +260,13 @@ const halt = async (
 });
 
 const authorizeResolution = async (
-  ports: HttpEgressBrokerPorts,
-  operation: HttpEgressOperation,
-  state: ReceiptState,
-  resources: ExecutionResources,
+  context: ExecutionStageContext,
+  request: StrictHttpRequest,
 ): Promise<StageResult<Readonly<{ route: HttpEgressRoute; selectedAddress: string }>>> => {
+  const { ports, operation, state, resources } = context;
   const observation = await ports.clock.within(
     operation.limits.deadline,
-    () => ports.providerAccess.observe(operation.operationId, operation.attemptId),
+    () => ports.routeAuthority.observe(operation.operationId, operation.attemptId),
     operation.signal,
   );
   if (observation.status !== "available") {
@@ -275,8 +274,12 @@ const authorizeResolution = async (
     state.anomalyCode = "provider_access_denied";
     return await halt(ports, operation, state, resources);
   }
-  const route = observation.route;
-  assertHttpEgressRoute(route);
+  assertHttpEgressRoute(observation.route);
+  const route = Object.freeze({ ...observation.route,
+    forwardedRequestHeaderNames: Object.freeze([...observation.route.forwardedRequestHeaderNames]) });
+  state.requestDigest = ports.evidence.digest(canonicalRequestDigestParts(
+    operation.expectedRequest.requestId, request, selectForwardedRequestHeaders(request, route),
+  ));
   applyRoute(state, route);
   const provisionalInput = provisionalAuthorizationInput(operation, state, route);
   let provisional: HttpEgressAuthorizationDecision;
@@ -343,7 +346,7 @@ const renderAuthorizedRequest = async (
   const session = resources.session as HttpEgressTransportSession;
   const current = await ports.clock.within(
     operation.limits.deadline,
-    () => ports.providerAccess.revalidate(route.materializationReceiptDigest),
+    () => ports.routeAuthority.revalidate(route.materializationReceiptDigest),
     operation.signal,
   );
   if (!generationsMatch(route, current)) {
@@ -355,7 +358,10 @@ const renderAuthorizedRequest = async (
   try {
     authorization = await ports.clock.within(
       operation.limits.deadline,
-      () => ports.providerAccess.renderAuthorization(route.credential),
+      () => ports.credentialCustody.renderAuthorization({
+        operationId: operation.operationId, attemptId: operation.attemptId,
+        materializationReceiptDigest: route.materializationReceiptDigest,
+      }),
       operation.signal,
     );
   } catch {
@@ -525,10 +531,9 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
         operation.signal,
       );
       state.inboundRequestBytes = request.wireBytes;
-      state.requestDigest = ports.evidence.digest(canonicalRequestDigestParts(operation.expectedRequest.requestId, request));
-      const authority = await authorizeResolution(ports, operation, state, resources);
-      if (authority.halted) {return authority.receipt;}
       const context = Object.freeze({ ports, operation, state, resources });
+      const authority = await authorizeResolution(context, request);
+      if (authority.halted) {return authority.receipt;}
       const prepared = await openAuthorizedSession(context, request, authority.value);
       if (prepared.halted) {return prepared.receipt;}
       return await dispatchOnce(ports, operation, state, resources, prepared.value);

@@ -211,8 +211,10 @@ export const readStrictHttpRequest = async (
 export const canonicalRequestDigestParts = (
   requestId: string,
   request: StrictHttpRequest,
+  forwardedHeaders: StrictHttpRequest["headers"],
 ): readonly Uint8Array[] => Object.freeze([
-  encoder.encode("agent-runtime.host-http-request/v1\n"),
+  encoder.encode("agent-runtime.host-http-request/v2\n"),
+  encoder.encode(`${JSON.stringify(forwardedHeaders.map(header => [header.name, header.value]))}\n`),
   encoder.encode(`${requestId.length}:${requestId}\n${request.method.length}:${request.method}\n${request.path.length}:${request.path}\n${request.body.byteLength}:`),
   request.body,
 ]);

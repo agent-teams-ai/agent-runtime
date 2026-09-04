@@ -3,16 +3,20 @@ import type { StrictHttpRequest } from "./strict-http-request.js";
 
 const encoder = new TextEncoder();
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-const STRIPPED_HEADERS = new Set([
+const NON_FORWARDABLE_HEADERS = new Set([
+  "accept-encoding",
+  "api-key",
   "authorization",
   "connection",
   "content-length",
+  "cookie",
   "expect",
   "host",
   "keep-alive",
   "proxy-authenticate",
   "proxy-authorization",
   "proxy-connection",
+  "set-cookie",
   "te",
   "trailer",
   "transfer-encoding",
@@ -47,6 +51,23 @@ export const assertHttpEgressRoute = (route: HttpEgressRoute): void => {
   }
   if (!/^[A-Za-z0-9.-]+$/.test(route.originHost) || !/^[A-Za-z0-9.-]+$/.test(route.sni)) {throw new HttpOutboundRequestError();}
   if (!Number.isInteger(route.originPort) || route.originPort < 1 || route.originPort > 65_535) {throw new HttpOutboundRequestError();}
+  if (!Array.isArray(route.forwardedRequestHeaderNames) || route.forwardedRequestHeaderNames.length > 32
+    || new Set(route.forwardedRequestHeaderNames).size !== route.forwardedRequestHeaderNames.length
+    || route.forwardedRequestHeaderNames.some(name => typeof name !== "string"
+      || name.length > 128 || name !== name.toLowerCase() || !TOKEN.test(name) || NON_FORWARDABLE_HEADERS.has(name))) {
+    throw new HttpOutboundRequestError();
+  }
+};
+
+export const selectForwardedRequestHeaders = (
+  request: StrictHttpRequest,
+  route: HttpEgressRoute,
+): StrictHttpRequest["headers"] => {
+  const permitted = new Set(route.forwardedRequestHeaderNames);
+  const headers = request.headers.filter(header => permitted.has(header.name));
+  // Repeated presentation/control fields have no provider-neutral interpretation.
+  if (new Set(headers.map(header => header.name)).size !== headers.length) {throw new HttpOutboundRequestError();}
+  return Object.freeze(headers.toSorted((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 };
 
 const authorizationIsSafe = (authorization: Uint8Array): boolean => {
@@ -63,8 +84,7 @@ export const createOutboundHttpRequest = (
 ): Uint8Array => {
   assertHttpEgressRoute(route);
   if (!authorizationIsSafe(authorization)) {throw new HttpOutboundRequestError();}
-  const forwarded = request.headers
-    .filter(header => !STRIPPED_HEADERS.has(header.name))
+  const forwarded = selectForwardedRequestHeaders(request, route)
     .map(header => `${header.name}: ${header.value}\r\n`)
     .join("");
   const defaultPort = route.originPort === 443;

@@ -1,9 +1,5 @@
 import type { HttpEgressReceipt } from "./http-egress-contracts.js";
 
-export type OpaqueCredentialCapability = Readonly<{
-  readonly _hostPrivateCredentialCapability: unique symbol;
-}>;
-
 export type HttpEgressRoute = Readonly<{
   routeReceiptDigest: string;
   materializationReceiptDigest: string;
@@ -20,7 +16,7 @@ export type HttpEgressRoute = Readonly<{
   keyGeneration: string;
   routeGeneration: string;
   credentialGeneration: string;
-  credential: OpaqueCredentialCapability;
+  forwardedRequestHeaderNames: readonly string[];
 }>;
 
 export type HttpEgressRouteObservation =
@@ -36,10 +32,19 @@ export type HttpEgressGenerationObservation = Readonly<{
   materializationReceiptDigest: string;
 }>;
 
-export interface HttpEgressProviderAccess {
+/** ACL over Provider Access facts and the trusted Host route manifest, never secrets. */
+export interface HttpEgressRouteAuthority {
   observe(operationId: string, attemptId: string): Promise<HttpEgressRouteObservation>;
   revalidate(materializationReceiptDigest: string): Promise<HttpEgressGenerationObservation>;
-  renderAuthorization(capability: OpaqueCredentialCapability): Promise<Uint8Array>;
+}
+
+/** Host-owned private materialization only. This is not a Provider Access port. */
+export interface HttpEgressCredentialCustody {
+  renderAuthorization(input: Readonly<{
+    operationId: string;
+    attemptId: string;
+    materializationReceiptDigest: string;
+  }>): Promise<Uint8Array>;
 }
 
 export type HttpEgressAuthorizationDecision = Readonly<{
@@ -146,13 +151,14 @@ export interface HttpEgressEvidence {
   record(receipt: HttpEgressReceipt): Promise<"recorded" | "conflict" | "unknown">;
 }
 
-/** Exactly seven explicit Host-private ports; do not widen into a dependency bag. */
+/** Named Host-private dependencies; the seven Agent Execution use-case ports are unchanged. */
 export type HttpEgressBrokerPorts = Readonly<{
   resolver: HttpEgressTrustedResolver;
   transport: HttpEgressUpstreamTransport;
   provisionalAuthorization: HttpEgressProvisionalAuthorizer;
   finalAuthorization: HttpEgressFinalAuthorizer;
-  providerAccess: HttpEgressProviderAccess;
+  routeAuthority: HttpEgressRouteAuthority;
+  credentialCustody: HttpEgressCredentialCustody;
   clock: HttpEgressClock;
   evidence: HttpEgressEvidence;
 }>;

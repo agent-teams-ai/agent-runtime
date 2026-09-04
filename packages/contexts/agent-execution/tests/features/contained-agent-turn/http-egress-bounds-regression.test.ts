@@ -140,7 +140,7 @@ describe("HTTP egress bounded evidence regressions", () => {
   test("cancellation during route observation remains cancellation", async () => {
     const controller = new AbortController();
     const fixture = createEgressFixture({ signal: controller.signal });
-    const ports = { ...fixture.ports, providerAccess: { ...fixture.ports.providerAccess, observe: async () => {
+    const ports = { ...fixture.ports, routeAuthority: { ...fixture.ports.routeAuthority, observe: async () => {
       controller.abort();
       throw new Error("synthetic interrupted observation");
     } } };

@@ -11,11 +11,11 @@ export type {
   HttpEgressClock,
   HttpEgressEvidence,
   HttpEgressFinalAuthorizer,
-  HttpEgressProviderAccess,
+  HttpEgressRouteAuthority,
+  HttpEgressCredentialCustody,
   HttpEgressProvisionalAuthorizer,
   HttpEgressTrustedResolver,
   HttpEgressUpstreamTransport,
-  OpaqueCredentialCapability,
 } from "./http-egress-ports.js";
 export { isPublicEgressAddress, resolutionIsSafe } from "./public-address-policy.js";
 export { createStrictHttpEgressBroker } from "./strict-http-egress-broker.js";
