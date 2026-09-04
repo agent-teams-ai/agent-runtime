@@ -58,13 +58,20 @@ export interface TrustedHostResolverObservation {
   readonly addresses: readonly EgressCandidateAddress[];
 }
 
-export type EgressSignatureAlgorithm = "hmac-sha256-synthetic";
-export interface EgressSigningKeyMetadata {
-  readonly algorithm: EgressSignatureAlgorithm;
+export type EgressSigningKeyMetadata = {
+  readonly algorithm: "hmac-sha256-synthetic";
   readonly keyRef: string;
   readonly keyGeneration: string;
-}
-export interface EgressDecisionSignature extends EgressSigningKeyMetadata { readonly value: string; }
+} | {
+  readonly algorithm: "ed25519";
+  readonly signatureEncoding: "hex-lower";
+  readonly keyRef: string;
+  readonly publicKeyDigest: string;
+  readonly keyGeneration: string;
+  readonly signerRevision: string;
+  readonly hostReservationId: string;
+};
+export type EgressDecisionSignature = EgressSigningKeyMetadata & { readonly value: string };
 
 export interface EgressCurrentAuthority {
   readonly authorityRef: string;
@@ -147,7 +154,7 @@ export interface RequestFinalEgressAuthorization {
 }
 
 export interface EgressConsumptionJournalKey {
-  readonly namespace: "provider-process-egress/v1";
+  readonly namespace: "provider-process-egress/v1" | "provider-process-egress/v2";
   readonly tenantId: string;
   readonly projectId: string;
   readonly operationId: string;

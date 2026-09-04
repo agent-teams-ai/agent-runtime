@@ -27,6 +27,11 @@ export {
   type ProviderProcessEgressAuthorizationDependencies,
 } from "./features/provider-process-egress-authorization/composition/feature-module-factory.js";
 export {
+  createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
+  type ProviderProcessEgressAuthorizationV2AuthorityOwner,
+  type ProviderProcessEgressAuthorizationV2CandidateDependencies,
+} from "./features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.js";
+export {
   createNodeHmacEgressDecisionSeal,
   createNodeSha256EgressDigest,
 } from "./features/provider-process-egress-authorization/adapters/outbound/node-egress-cryptography.js";
@@ -59,3 +64,19 @@ export type {
   TrustedEgressCompositionScopeV1,
   TrustedHostRequestProjectionV1,
 } from "./features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v1.js";
+export type {
+  EgressAuthorityReadOutcomeV2,
+  EgressCurrentAuthorityV2,
+  EgressDecisionSignatureV2,
+  EgressSignatureAlgorithmV2,
+  EgressSignatureEncodingV2,
+  EgressSigningKeyMetadataV2,
+  HostEgressVerifierV2,
+  ProvisionalEgressAuthorizationV2,
+  ProviderProcessEgressAuthorizationV2,
+  RequestFinalEgressAuthorizationV2,
+  RequestProvisionalEgressAuthorizationV2,
+  SignedFirstApplicationByteGrantV2,
+  TrustedEgressCompositionScopeV2,
+  TrustedHostRequestProjectionV2,
+} from "./features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.js";

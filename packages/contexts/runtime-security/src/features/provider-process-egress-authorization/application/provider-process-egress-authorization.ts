@@ -4,6 +4,7 @@ import type {
   EgressControlTime,
   EgressCurrentAuthority,
   EgressDenialEvidence,
+  EgressConsumptionJournalKey,
   FirstApplicationByteGrantPayload,
   ProvisionalEgressAuthorization,
   ProviderProcessEgressAuthorization,
@@ -34,6 +35,8 @@ export interface ProviderProcessEgressOperations {
   readonly digest: EgressCanonicalDigest;
   readonly signer: EgressDecisionSigner;
   readonly verifier: EgressDecisionVerifier;
+  readonly validSigningKey: (key: EgressCurrentAuthority["policy"]["signingKey"]) => boolean;
+  readonly journalNamespace: EgressConsumptionJournalKey["namespace"];
   readonly signedDocuments: {
     readonly provisional: (decision: Omit<ProvisionalEgressAuthorization,
       "decisionDigest" | "signature">) => unknown;
@@ -66,22 +69,27 @@ const denial = (phase: "provisional" | "final", issueCode: EgressAuthorizationIs
 const validScope = (scope: TrustedEgressCompositionScope): boolean =>
   validRef(scope.tenantId) && validRef(scope.projectId) && validRef(scope.operationId) &&
   validDigest(scope.scopeDigest);
-const validSigningKey = (key: EgressCurrentAuthority["policy"]["signingKey"]): boolean =>
-  key.algorithm === "hmac-sha256-synthetic" && validRef(key.keyRef) && validRef(key.keyGeneration);
-const validPolicy = (policy: EgressCurrentAuthority["policy"]): boolean =>
+const validSigningKeyMetadata = (key: EgressCurrentAuthority["policy"]["signingKey"]): boolean =>
+  validRef(key.keyRef) && validRef(key.keyGeneration) && (key.algorithm === "hmac-sha256-synthetic" ||
+    (key.signatureEncoding === "hex-lower" && validDigest(key.publicKeyDigest) &&
+      validRef(key.signerRevision) && validRef(key.hostReservationId)));
+const validPolicy = (policy: EgressCurrentAuthority["policy"],
+  operations: ProviderProcessEgressOperations): boolean =>
   validRef(policy.policyRef) && validRef(policy.policyRevision) && validRef(policy.policyGeneration) &&
   validDigest(policy.authorizedRequestDigest) && validOrigin(policy.origin) &&
   normalizeHostname(policy.dnsIdentity) === policy.dnsIdentity && validDigest(policy.tlsPolicyDigest) &&
   validBudgets(policy.limits) && Number.isSafeInteger(policy.decisionTtlMilliseconds) &&
   policy.decisionTtlMilliseconds >= 1 && policy.decisionTtlMilliseconds <= 300_000 &&
-  validSigningKey(policy.signingKey) && typeof policy.revoked === "boolean";
+  validSigningKeyMetadata(policy.signingKey) &&
+  operations.validSigningKey(policy.signingKey) && typeof policy.revoked === "boolean";
 const validProviderAccess = (access: EgressCurrentAuthority["providerAccess"]): boolean =>
   validRef(access.accessRef) && validRef(access.providerRef) && validRef(access.accountRef) &&
   validRef(access.routeRef) && validDigest(access.routeAuthorityDigest) &&
   validDigest(access.credentialBindingDigest) && validRef(access.routeGeneration) &&
   validRef(access.credentialGeneration);
-const validAuthority = (authority: EgressCurrentAuthority): boolean =>
-  validRef(authority.authorityRef) && validPolicy(authority.policy) &&
+const validAuthority = (authority: EgressCurrentAuthority,
+  operations: ProviderProcessEgressOperations): boolean =>
+  validRef(authority.authorityRef) && validPolicy(authority.policy, operations) &&
   validProviderAccess(authority.providerAccess);
 const ownerIssue = (outcome: Exclude<EgressAuthorityReadOutcome,
   { readonly status: "current" }>): EgressAuthorizationIssueCode => outcome.reason;
@@ -187,7 +195,9 @@ const requestProvisional = async (input: RequestProvisionalEgressAuthorization,
   catch { return denial("provisional", "invalid_input", ref); }
   const outcome = await resolveAuthority(input, operations);
   if (outcome.status !== "current") {return denial("provisional", ownerIssue(outcome), ref);}
-  if (!validAuthority(outcome.authority)) {return denial("provisional", "owner_malformed", ref);}
+  if (!validAuthority(outcome.authority, operations)) {
+    return denial("provisional", "owner_malformed", ref);
+  }
   const authorityIssue = requestAuthorityIssue(input.request, outcome.authority, requestDigest);
   if (authorityIssue !== undefined) {return denial("provisional", authorityIssue, ref);}
   const clock = readClock();
@@ -234,9 +244,10 @@ const readCurrentAuthority = async (input: RequestFinalEgressAuthorization,
 };
 
 const currentAuthorityIssue = (outcome: EgressAuthorityReadOutcome,
-  provisional: ProvisionalEgressAuthorization): EgressAuthorizationIssueCode | undefined => {
+  provisional: ProvisionalEgressAuthorization, operations: ProviderProcessEgressOperations):
+  EgressAuthorizationIssueCode | undefined => {
   if (outcome.status !== "current") {return ownerIssue(outcome);}
-  if (!validAuthority(outcome.authority)) {return "owner_malformed";}
+  if (!validAuthority(outcome.authority, operations)) {return "owner_malformed";}
   if (outcome.authority.policy.revoked) {return "revoked";}
   return same(outcome.authority, { authorityRef: provisional.authorityRef,
     policy: provisional.policy, providerAccess: provisional.providerAccess })
@@ -291,7 +302,7 @@ export type GrantPayloadBeforeFingerprint = Omit<FirstApplicationByteGrantPayloa
 const buildGrantPayloadBeforeFingerprint = (input: RequestFinalEgressAuthorization, operations:
   ProviderProcessEgressOperations, clock: EgressControlTime, facts: NetworkFacts,
   digests: GrantDigests): GrantPayloadBeforeFingerprint => {
-  const journalKey = { namespace: "provider-process-egress/v1" as const,
+  const journalKey = { namespace: operations.journalNamespace,
     tenantId: operations.scope.tenantId, projectId: operations.scope.projectId,
     operationId: operations.scope.operationId, boundaryUseId: input.boundaryUseId };
   return {
@@ -358,7 +369,7 @@ const authorizeFirstApplicationByte = async (input: RequestFinalEgressAuthorizat
   const inputIssue = validateFinalInput(input, operations, context);
   if (inputIssue !== undefined) {return denial("final", inputIssue, context.ref, context.decisionDigest);}
   const authorityIssue = currentAuthorityIssue(await readCurrentAuthority(input, operations),
-    input.provisional);
+    input.provisional, operations);
   if (authorityIssue !== undefined) {
     return denial("final", authorityIssue, context.ref, context.decisionDigest);
   }
