@@ -50,7 +50,7 @@ const zeroLateMaterializedFields = (pendingFields: Promise<MaterializedFields> |
 
 const normalizeSingleResolution = (rawResolution: Awaited<ReturnType<HttpEgressBrokerPorts["resolver"]["resolve"]>>) => {
   const normalized = normalizeHttpEgressResolution(rawResolution.addresses.map(value => value.address), rawResolution.selectedAddress);
-  if (normalized === undefined || rawResolution.resolutionCount !== 1) {return undefined;}
+  if (normalized === undefined || rawResolution.resolutionCount !== 1) {return;}
   return normalized;
 };
 
