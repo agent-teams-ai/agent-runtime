@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 2,
+  "name": "opencode-1-18-5-contract-characterization",
+  "claim": "contract_only_no_production_adapter",
+  "pin": {
+    "package": "opencode-ai",
+    "packageVersion": "1.18.5",
+    "binaryVersion": "1.18.5",
+    "binarySha256": "78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
+    "providerRevision": "opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21"
+  },
+  "provenance": {
+    "kind": "derived_from_checked_in_immutable_redacted_evidence",
+    "rawAcpTranscriptRetained": false,
+    "sources": [
+      {
+        "path": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json",
+        "sha256": "6dbc6ca165ca9ff26ac7bb56ff049a7af05b81521d5b82414725a0af904a2d60",
+        "role": "exact_binary_acp_v1_prompt_terminal_observation"
+      },
+      {
+        "path": "experiments/runtime-profile-behavior/fixtures/opencode-hosting-e2e-summary.json",
+        "sha256": "efdb9caf86efae6dcb29529a84eb65a26b33ec42d837635afba71ac85579bf89",
+        "role": "exact_version_cancellation_timing_source"
+      },
+      {
+        "path": "experiments/runtime-profile-behavior/fixtures/provider-behavior-matrix.json",
+        "sha256": "5acc1c00ddca29c81e83ab646ad57827cd349faf9cb6a0abb3e1c4a75075dba3",
+        "role": "exact_version_acp_operation_characterization"
+      },
+      {
+        "path": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json",
+        "sha256": "2e8c659bb57b866c0afce532e4ab94c2bb07501e5c97b3933718e6148fa279eb",
+        "role": "provider_neutral_manifest_pin_and_unknown_capability_policy"
+      },
+      {
+        "path": "experiments/runtime-profile-behavior/fixtures/acp-compatibility/opencode-contained-turn-port-conformance.json",
+        "sha256": "076f8830c29f10ebf9d40e0fb344f9f1a44a6b7291f3f29066080785beccf9fb",
+        "role": "synthetic_provider_neutral_kernel_projection_with_declared_identity_gap"
+      }
+    ],
+    "fieldSources": [
+      { "field": "pin.packageVersion", "jsonPointer": "/runtimeClosure/openCode/version", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json" },
+      { "field": "pin.binaryVersion", "jsonPointer": "/runtimeClosure/openCode/version", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json" },
+      { "field": "pin.binarySha256", "jsonPointer": "/runtimeClosure/openCode/binarySha256", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json" },
+      { "field": "pin.providerRevision", "jsonPointer": "/providers/2/packageRevision", "sourcePath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json" },
+      { "field": "derivedCapabilityProjection.protocolVersion", "jsonPointer": "/accepted/directProxyOpenCodeE2E/acpProtocolVersion", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json" },
+      { "field": "derivedCapabilityProjection.providerName", "jsonPointer": "/accepted/directProxyOpenCodeE2E/agentName", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json" },
+      { "field": "derivedCapabilityProjection.providerVersion", "jsonPointer": "/accepted/directProxyOpenCodeE2E/agentVersion", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json" },
+      { "field": "derivedCapabilityProjection.session.prompt", "jsonPointer": "/accepted/directProxyOpenCodeE2E/stopReason", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json" },
+      { "field": "derivedCapabilityProjection.session.list", "jsonPointer": "/observations/14/observation", "sourcePath": "experiments/runtime-profile-behavior/fixtures/provider-behavior-matrix.json" },
+      { "field": "derivedCapabilityProjection.session.resume", "jsonPointer": "/observations/14/observation", "sourcePath": "experiments/runtime-profile-behavior/fixtures/provider-behavior-matrix.json" },
+      { "field": "derivedCapabilityProjection.session.close", "jsonPointer": "/observations/14/observation", "sourcePath": "experiments/runtime-profile-behavior/fixtures/provider-behavior-matrix.json" },
+      { "field": "derivedCapabilityProjection.session.cancel", "jsonPointer": "/confirmedFacts/5/fact", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-hosting-e2e-summary.json" },
+      { "field": "neutralContract.manifestRevision", "jsonPointer": "/adapterCapabilityManifests/2/manifestRevision", "sourcePath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json" },
+      { "field": "neutralContract.manifestProviderRevision", "jsonPointer": "/adapterCapabilityManifests/2/providerRevision", "sourcePath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json" },
+      { "field": "neutralContract.supportedModes", "jsonPointer": "/contractPin/supportedModes", "sourcePath": "experiments/runtime-profile-behavior/fixtures/acp-compatibility/opencode-contained-turn-port-conformance.json" },
+      { "field": "neutralContract.unknownCapabilityPolicy", "jsonPointer": "/adapterCapabilityManifests/2/unknownCapabilityPolicy", "sourcePath": "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json" },
+      { "field": "boundedObservation.stopReason", "jsonPointer": "/accepted/directProxyOpenCodeE2E/stopReason", "sourcePath": "experiments/runtime-profile-behavior/fixtures/opencode-container-tls-gateway-summary.json" }
+    ]
+  },
+  "authority": {
+    "acpFramingAndCorrelationOwner": "@agentclientprotocol/sdk@1.3.0",
+    "customJsonRpcIds": false,
+    "customNdjsonTransport": false,
+    "secondAcpWire": false
+  },
+  "scope": {
+    "liveProvider": false,
+    "network": false,
+    "credentials": false,
+    "productionAdapter": false
+  },
+  "derivedCapabilityProjection": {
+    "protocolVersion": 1,
+    "providerName": "OpenCode",
+    "providerVersion": "1.18.5",
+    "session": {
+      "prompt": "observed",
+      "list": "observed",
+      "resume": "observed",
+      "close": "observed",
+      "cancel": "deferred_timing_ambiguity"
+    }
+  },
+  "neutralContract": {
+    "source": "experiments/runtime-profile-behavior/fixtures/acp-compatibility/opencode-contained-turn-port-conformance.json",
+    "sourceSha256": "076f8830c29f10ebf9d40e0fb344f9f1a44a6b7291f3f29066080785beccf9fb",
+    "manifestRevision": "opencode-acp-contained-turn-v1@1",
+    "manifestProviderRevision": "opencode@1.18.5#sha256:78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
+    "supportedModes": ["analysis"],
+    "unknownCapabilityPolicy": "fail_closed"
+  },
+  "capabilityDisposition": [
+    { "capability": "contained_turn/analysis", "status": "supported", "evidence": "exact_prompt_end_turn" },
+    { "capability": "session/cancel", "status": "deferred", "evidence": "exact_version_timing_ambiguity" },
+    { "capability": "unobserved_acp_extensions", "status": "unknown", "evidence": "no_raw_transcript_retained" },
+    { "capability": "production_adapter", "status": "unsupported", "evidence": "contract_only_scope" }
+  ],
+  "boundedObservation": {
+    "terminal": "succeeded",
+    "stopReason": "end_turn",
+    "retainedRawData": false
+  },
+  "deferredProductionWork": [
+    "production_adapter",
+    "process_custody",
+    "credential_binding",
+    "provider_access_route",
+    "native_reconciliation"
+  ]
+}
