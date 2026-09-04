@@ -8,7 +8,7 @@ import {
   NodeTlsHttpEgressError,
   NodeTlsHttpEgressTransport,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-tls-http-egress-transport.js";
-import { canonicalLiteralAddress } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-tls-http-egress-transport-support.js";
+import { canonicalLiteralAddress, createBinding, fixTrust } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-tls-http-egress-transport-support.js";
 import {
   SYNTHETIC_LOOPBACK_CA,
   SYNTHETIC_LOOPBACK_SERVER_CERTIFICATE,
@@ -63,6 +63,72 @@ const expectClosed = async (attempt: ReturnType<NodeTlsHttpEgressTransport["begi
 };
 
 describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
+  test("binds a valid policy SHA-256 stable across equal bindings", () => {
+    const selectedAddress = canonicalLiteralAddress("127.0.0.1");
+    assert.ok(selectedAddress);
+    const input = {
+      trust: fixTrust([SYNTHETIC_LOOPBACK_CA]),
+      selectedAddress,
+      expectedPort: 443,
+      remoteAddress: "127.0.0.1",
+      remotePort: 443,
+      protocol: "TLSv1.3",
+      alpn: "http/1.1",
+      servername: "provider.test",
+      expectedSni: "provider.test",
+      certificate: new X509Certificate(SYNTHETIC_LOOPBACK_SERVER_CERTIFICATE),
+      authorized: true,
+      identityChecked: true,
+      sessionReused: false,
+    };
+    const binding = createBinding(input);
+    assert.match(binding.tlsPolicyDigest, /^sha256:[0-9a-f]{64}$/u);
+    assert.equal(createBinding({ ...input }).tlsPolicyDigest, binding.tlsPolicyDigest);
+    const policy = (authorities: (string | Uint8Array)[]) => createBinding({
+      ...input, trust: fixTrust(authorities),
+    }).tlsPolicyDigest;
+    const combined = policy([SYNTHETIC_LOOPBACK_CA, SYNTHETIC_OTHER_CA]);
+    assert.notEqual(combined, binding.tlsPolicyDigest);
+    assert.notEqual(policy([SYNTHETIC_OTHER_CA]), binding.tlsPolicyDigest);
+    assert.equal(policy([SYNTHETIC_OTHER_CA, SYNTHETIC_LOOPBACK_CA]), combined);
+    assert.equal(policy([SYNTHETIC_LOOPBACK_CA, SYNTHETIC_OTHER_CA, SYNTHETIC_LOOPBACK_CA]), combined);
+    assert.equal(policy([`${SYNTHETIC_OTHER_CA}\n${SYNTHETIC_LOOPBACK_CA}`]), combined);
+    assert.equal(policy([Buffer.from(SYNTHETIC_LOOPBACK_CA.replaceAll("\n", "\r\n"))]), binding.tlsPolicyDigest);
+    assert.match(combined, /^sha256:[0-9a-f]{64}$/u);
+    const encoded = JSON.stringify(binding);
+    assert.ok(!encoded.includes("CERTIFICATE"));
+    assert.ok(!encoded.includes(new X509Certificate(SYNTHETIC_LOOPBACK_CA).raw.toString("base64")));
+  });
+
+  test("fingerprints the immutable canonical set of effective trust anchors", () => {
+    const bytes = Buffer.from(SYNTHETIC_LOOPBACK_CA);
+    const fixed = fixTrust([bytes, SYNTHETIC_OTHER_CA]);
+    bytes.fill(0);
+    const fingerprints = [SYNTHETIC_LOOPBACK_CA, SYNTHETIC_OTHER_CA]
+      .map(pem => sha256(new X509Certificate(pem).raw)).sort();
+    assert.equal(fixed.trustAnchorDigest,
+      `sha256:${sha256(`agent-runtime.node-tls-trust-anchors/v1\n${fingerprints.join("\n")}\n`)}`);
+    assert.match(fixed.trustAnchorDigest, /^sha256:[0-9a-f]{64}$/u);
+    assert.ok(Object.isFrozen(fixed));
+  });
+
+  test("rejects malformed trust entries and bundles without exposing certificate bytes", () => {
+    const malformed = "-----BEGIN CERTIFICATE-----\nnot-a-certificate\n-----END CERTIFICATE-----";
+    for (const authorities of [[], [""], ["garbage"], [malformed],
+      [SYNTHETIC_LOOPBACK_CA, malformed], [`${SYNTHETIC_LOOPBACK_CA}\n${malformed}`],
+      [`${SYNTHETIC_LOOPBACK_CA}\ntrailing-garbage`],
+      [SYNTHETIC_LOOPBACK_CA.replace("-----END CERTIFICATE-----", "")],
+      [new X509Certificate(SYNTHETIC_LOOPBACK_CA).raw], [new Uint8Array([255])]]) {
+      assert.throws(() => fixTrust(authorities), (error: unknown) => {
+        assert.ok(error instanceof NodeTlsHttpEgressError);
+        assert.equal(error.code, "invalid_configuration");
+        assert.equal(error.message, "node TLS HTTP egress: invalid_configuration");
+        assert.equal(error.cause, undefined);
+        return true;
+      });
+    }
+  });
+
   test("dials the supplied literal without DNS and binds CA, SAN, SNI, ALPN, peer, TLS and digests", async () => {
     const server = await startLoopbackTlsServer({
       response: [utf8("HTTP/1.1 200 OK\r\n"), utf8("Content-Length: 2\r\n\r\n"), utf8("o"), utf8("k")],
@@ -75,13 +141,13 @@ describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
       assert.equal(session.binding.peerPort, server.port);
       assert.match(session.binding.tlsProtocol, /^TLSv1\.[23]$/u);
       assert.equal(session.binding.alpn, "http/1.1");
-      assert.equal(session.binding.sni, "provider.test");
+      assert.equal(session.binding.requestedSni, "provider.test");
+      assert.equal(session.binding.observedSni, "provider.test");
 
       const certificate = new X509Certificate(SYNTHETIC_LOOPBACK_SERVER_CERTIFICATE);
       const spki = certificate.publicKey.export({ type: "spki", format: "der" });
-      assert.equal(session.binding.sniDigest, sha256("provider.test"));
-      assert.equal(session.binding.certificateDigest, sha256(certificate.raw));
-      assert.equal(session.binding.pinDigest, sha256(spki));
+      assert.equal(session.binding.certificateDigest, `sha256:${sha256(certificate.raw)}`);
+      assert.equal(session.binding.spkiDigest, `sha256:${sha256(spki)}`);
       assert.equal(Object.isFrozen(session.binding), true);
 
       const request = utf8("GET /synthetic HTTP/1.1\r\nHost: provider.test\r\n\r\n");
@@ -101,6 +167,29 @@ describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
     } finally {
       await server.close();
     }
+  });
+
+  test("binds the configured CA set to real TLS sessions independently of the peer certificate", async () => {
+    const server = await startLoopbackTlsServer();
+    const bindings = [];
+    try {
+      for (const certificateAuthorities of [
+        [SYNTHETIC_LOOPBACK_CA],
+        [SYNTHETIC_LOOPBACK_CA, SYNTHETIC_OTHER_CA],
+        [SYNTHETIC_OTHER_CA, SYNTHETIC_LOOPBACK_CA, SYNTHETIC_OTHER_CA],
+      ]) {
+        const attempt = new NodeTlsHttpEgressTransport({ certificateAuthorities }).beginOpen(target(server.port));
+        try {bindings.push((await attempt.ready()).binding);}
+        finally {await expectClosed(attempt);}
+      }
+      assert.notEqual(bindings[0].tlsPolicyDigest, bindings[1].tlsPolicyDigest);
+      assert.equal(bindings[1].tlsPolicyDigest, bindings[2].tlsPolicyDigest);
+      for (const binding of bindings) {
+        assert.equal(binding.certificateDigest, bindings[0].certificateDigest);
+        assert.match(binding.tlsPolicyDigest, /^sha256:[0-9a-f]{64}$/u);
+        assert.ok(!JSON.stringify(binding).includes("CERTIFICATE"));
+      }
+    } finally {await server.close();}
   });
 
   test("snapshots constructor-owned trust bytes", async () => {

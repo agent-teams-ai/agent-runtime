@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { createHash, type X509Certificate } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import { isIP, SocketAddress } from "node:net";
 import { createSecureContext, type PeerCertificate, type SecureContext } from "node:tls";
 
@@ -33,6 +33,7 @@ export type NodeTlsTrustInput = string | Uint8Array;
 
 export type FixedNodeTlsTrust = Readonly<{
   secureContext: SecureContext;
+  trustAnchorDigest: `sha256:${string}`;
 }>;
 
 const MAXIMUM_TRUST_BYTES = 1_048_576;
@@ -76,9 +77,32 @@ export const fixTrust = (authorities: readonly NodeTlsTrustInput[]): FixedNodeTl
       aggregateByteLength += byteLength;
       copied[index] = snapshot;
     }
+
+    // Parse every PEM block before handing normalized anchors to OpenSSL, which
+    // otherwise silently ignores malformed CA entries. Fingerprint DER, not PEM
+    // formatting, and treat ordering and duplicate anchors as set semantics.
+    const anchors = new Map<string, string>();
+    for (const authority of copied) {
+      const pem = typeof authority === "string" ? authority : authority.toString("utf8");
+      const blocks = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/gu);
+      if (blocks === null || pem.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/gu, "").trim() !== "") {
+        throw new NodeTlsHttpEgressError("invalid_configuration");
+      }
+      for (const block of blocks) {
+        const certificate = new X509Certificate(block);
+        const encoded = block.replace("-----BEGIN CERTIFICATE-----", "")
+          .replace("-----END CERTIFICATE-----", "").replace(/\s/gu, "");
+        if (encoded !== certificate.raw.toString("base64")) {
+          throw new NodeTlsHttpEgressError("invalid_configuration");
+        }
+        anchors.set(sha256(certificate.raw), certificate.toString());
+      }
+    }
+    const fingerprints = [...anchors.keys()].sort();
     return Object.freeze({
+      trustAnchorDigest: `sha256:${sha256(`agent-runtime.node-tls-trust-anchors/v1\n${fingerprints.join("\n")}\n`)}` as const,
       secureContext: createSecureContext({
-        ca: copied,
+        ca: fingerprints.map(fingerprint => anchors.get(fingerprint)!),
         minVersion: "TLSv1.2",
         maxVersion: "TLSv1.3",
       }),
@@ -139,7 +163,19 @@ export const validatePort = (port: number): boolean => validBoundedInteger(port,
 
 const sha256 = (value: Uint8Array | string): string => createHash("sha256").update(value).digest("hex");
 
+const TLS_POLICY_MANIFEST = "agent-runtime.node-tls-http-egress-policy/v1\n"
+  + "tls=TLSv1.2,TLSv1.3\n"
+  + "alpn=http/1.1\n"
+  + "peer=exact-canonical-selected-address-family-and-port\n"
+  + "sni=exact-lower-case-expected-dns-name\n"
+  + "dns-identity=node-checkServerIdentity-for-expected-sni\n"
+  + "chain=authorized\n"
+  + "evidence=sha256-certificate-der,sha256-spki-der\n"
+  + "tls-session-reuse=rejected\n"
+  + "trust=constructor-owned-fixed-local-context\n";
+
 export const createBinding = (input: Readonly<{
+  trust: FixedNodeTlsTrust;
   selectedAddress: CanonicalLiteralAddress;
   expectedPort: number;
   remoteAddress: string | undefined;
@@ -176,7 +212,7 @@ export const createBinding = (input: Readonly<{
     chainValidated: true,
     dnsIdentity: input.expectedSni,
     certificateDigest: `sha256:${sha256(input.certificate.raw)}` as const,
-    tlsPolicyDigest: "sha256:node-tls-http-egress-policy-v1",
+    tlsPolicyDigest: `sha256:${sha256(`${TLS_POLICY_MANIFEST}trust-anchors=${input.trust.trustAnchorDigest}\n`)}` as const,
     spkiDigest: `sha256:${sha256(publicKey)}` as const,
     alpn: "http/1.1",
   });

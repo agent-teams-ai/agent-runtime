@@ -283,6 +283,7 @@ export class NodeTlsHttpEgressAttempt implements HttpEgressTransportAttempt {
       try {
         socket.disableRenegotiation();
         const binding = createBinding({
+          trust: input.trust,
           selectedAddress: input.selectedAddress,
           expectedPort: input.originPort,
           remoteAddress: socket.remoteAddress,
