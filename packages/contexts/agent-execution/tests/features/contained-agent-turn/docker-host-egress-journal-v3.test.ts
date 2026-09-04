@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import {
@@ -8,6 +11,7 @@ import {
   DOCKER_EGRESS_CLEANUP_ORDER,
   DOCKER_EGRESS_RESOURCE_KINDS,
   DockerEgressJournal,
+  NodeDockerEgressJournalStorage,
   classifyDockerEgressLegacyV2,
   createDockerCustodyRecord,
   createDockerEgressCleanupObservation,
@@ -238,13 +242,56 @@ test("scan bytes are globally pre-charged before any journal read", async () => 
   const storage = new MemoryEgressStorage();
   const first = new MemoryEgressFile(); first.bytes = Buffer.alloc(DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxJournalBytes);
   const second = new MemoryEgressFile(); second.bytes = Buffer.alloc(DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxJournalBytes);
-  let reads = 0; first.read = async () => { reads += 1; return first.bytes; }; second.read = async () => { reads += 1; return second.bytes; };
+  let reads = 0; let closes = 0;
+  first.read = async () => { reads += 1; return first.bytes; }; second.read = async () => { reads += 1; return second.bytes; };
+  first.close = async () => {closes += 1;}; second.close = async () => {closes += 1;};
   storage.v3Files.set(hash("one"), first); storage.v3Files.set(hash("two"), second);
   const bounded = new DockerEgressJournal(storage, trusted, {
     maxRestartScanBytes: DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxJournalBytes,
   });
   await assert.rejects(bounded.recoveryEvidence(), { name: "DockerEgressJournalCapacityError" });
   assert.equal(reads, 0);
+  assert.equal(closes, 2);
+});
+
+const openSandboxDescriptors = async (root: string): Promise<number> => {
+  const targets = await Promise.all((await readdir("/proc/self/fd")).map(name =>
+    readlink(join("/proc/self/fd", name)).catch(() => "")));
+  return targets.filter(target => target === root || target.startsWith(`${root}/`)).length;
+};
+
+test("Linux file storage persists retirement across reopen without changing legacy files or leaking handles", {
+  skip: process.platform !== "linux",
+}, async () => {
+  const root = await mkdtemp(join(tmpdir(), "ar-egress-storage-test-"));
+  const v3 = join(root, "v3"); const v2 = join(root, "v2");
+  let storage: NodeDockerEgressJournalStorage | undefined;
+  try {
+    await mkdir(v3, {mode: 0o700}); await mkdir(v2, {mode: 0o700});
+    const untouched = join(v2, "legacy-owner-note");
+    await writeFile(untouched, "not owned by V3\n", {mode: 0o600});
+    storage = await NodeDockerEgressJournalStorage.open(v3, v2);
+    const journal = new DockerEgressJournal(storage, trusted);
+    const sequence = await clean(journal, await materialize(journal));
+    const closed = await journal.close(subject, sequence, command("close"));
+    const tombstoneName = `docker-egress-custody-v3-${dockerEgressJournalLocator(subject)}.tombstone`;
+    assert.deepEqual(await readdir(v3), [tombstoneName]);
+    assert.equal((await stat(join(v3, tombstoneName))).mode & 0o777, 0o600);
+    await storage.close(); storage = undefined;
+    assert.equal(await openSandboxDescriptors(root), 0);
+    storage = await NodeDockerEgressJournalStorage.open(v3, v2);
+    const restarted = new DockerEgressJournal(storage, trusted);
+    for (let iteration = 0; iteration < 3; iteration += 1) {
+      assert.deepEqual(await restarted.close(subject, sequence, command("close")), closed);
+    }
+    assert.equal(await openSandboxDescriptors(root), 2);
+    await assert.rejects(restarted.open(subject, command("reopen")), {name: "DockerEgressJournalConflictError"});
+    assert.equal(await readFile(untouched, "utf8"), "not owned by V3\n");
+  } finally {
+    await storage?.close();
+    assert.equal(await openSandboxDescriptors(root), 0);
+    await rm(root, {recursive: true, force: true});
+  }
 });
 
 test("canonical inputs reject network, path, secret, sparse/accessor, proxy, and non-fixed handles", () => {

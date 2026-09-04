@@ -186,12 +186,18 @@ export class DockerEgressJournal {
   private async scanAll(): Promise<Readonly<{
     v3: readonly DockerEgressStorageEntry[]; legacy: readonly DockerEgressStorageEntry[]; tombstones: readonly DockerEgressStorageEntry[];
   }>> {
-    const tombstones = await this.storage.scanTombstones(this.limits.maxJournalFiles);
-    const v3 = await this.storage.scanV3(this.limits.maxJournalFiles);
-    const legacy = await this.storage.scanLegacyV2(this.limits.maxJournalFiles);
-    if (tombstones.length + v3.length + legacy.length >= this.limits.maxJournalFiles) { throw new DockerEgressJournalCapacityError(); }
-    let charged = this.precharge(tombstones, 0); charged = this.precharge(v3, charged); this.precharge(legacy, charged);
-    return { tombstones, v3, legacy };
+    const opened: DockerEgressStorageEntry[] = [];
+    try {
+      const tombstones = await this.storage.scanTombstones(this.limits.maxJournalFiles); opened.push(...tombstones);
+      const v3 = await this.storage.scanV3(this.limits.maxJournalFiles); opened.push(...v3);
+      const legacy = await this.storage.scanLegacyV2(this.limits.maxJournalFiles); opened.push(...legacy);
+      if (opened.length >= this.limits.maxJournalFiles) { throw new DockerEgressJournalCapacityError(); }
+      let charged = this.precharge(tombstones, 0); charged = this.precharge(v3, charged); this.precharge(legacy, charged);
+      return { tombstones, v3, legacy };
+    } catch (error) {
+      await this.closeEntries(opened);
+      throw error;
+    }
   }
   private async closeEntries(entries: readonly DockerEgressStorageEntry[]): Promise<void> {
     await Promise.all(entries.map(async entry => entry.file.close().catch(() => {})));
@@ -263,10 +269,10 @@ export class DockerEgressJournal {
 
   private async tombstoneRetry(subject: DockerEgressJournalSubject, expectedSequence: number, commandId: string,
     event: DockerEgressJournalEvent): Promise<DockerEgressJournalRecord | undefined> {
-    const file = (await this.storage.scanTombstones(this.limits.maxJournalFiles))
-      .find(entry => entry.locatorSha256 === dockerEgressJournalLocator(subject))?.file;
-    if (file === undefined) { return; }
+    const entries = await this.storage.scanTombstones(this.limits.maxJournalFiles);
     try {
+      const file = entries.find(entry => entry.locatorSha256 === dockerEgressJournalLocator(subject))?.file;
+      if (file === undefined) { return; }
       const tombstone = decodeDockerEgressTombstone(await file.read(this.limits.maxRecordBytes), this.limits);
       const committed = tombstone.terminalRecord;
       if (committed?.commandId !== commandId) { return; }
@@ -274,7 +280,7 @@ export class DockerEgressJournal {
         previousChecksumSha256: committed.previousChecksumSha256 });
       if (candidate.commandDigestSha256 !== committed.commandDigestSha256) { throw new DockerEgressJournalConflictError("command digest conflict"); }
       return committed;
-    } finally { await file.close(); }
+    } finally { await this.closeEntries(entries); }
   }
 
   private async append(subjectInput: DockerEgressJournalSubject, expectedSequence: number, commandId: string,
