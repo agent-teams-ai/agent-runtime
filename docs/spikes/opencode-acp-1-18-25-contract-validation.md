@@ -3,7 +3,7 @@ id: evidence.opencode-acp-1-18-25-contract-validation
 type: evidence
 status: evidence-reference
 owner: architecture/qualification
-summary: Records exact OpenCode 1.18.5 contract-only closure plus the separate normalized 1.18.25 observation.
+summary: Records bounded OpenCode 1.18.5 contract characterization plus the separate normalized 1.18.25 observation.
 related:
   - ADR-0001
   - ADR-0010
@@ -15,11 +15,12 @@ related:
 
 ## Scope and authority
 
-This experiment characterizes Agent Runtime-owned OpenCode ACP v1 policy and
-closes only the exact-version contract fixture for ADR-0010's accepted OpenCode
-`1.18.5` pin. The fixture claim is
-`contract_only_no_production_adapter`; it does not implement a production
-OpenCode adapter or establish product E2E or containment qualification.
+This experiment characterizes Agent Runtime-owned OpenCode ACP v1 policy for
+ADR-0010's accepted OpenCode `1.18.5` pin. It does not claim exact-version
+contract closure or replay through the Contained Agent Turn kernel. The
+fixture claim is `contract_only_no_production_adapter`; it does not implement
+a production OpenCode adapter or establish product E2E or containment
+qualification.
 
 The executable fixtures are synthetic/normalized inputs. The exact `1.18.5`
 fixture is a deterministic projection of already checked-in immutable,
@@ -129,38 +130,56 @@ The focused policy layer establishes only these rules:
   proof and no conflicting terminal evidence. Contradictory or incomplete
   evidence remains `ambiguous_requires_reconciliation`.
 
-## Exact 1.18.5 contract-only closure
+## Exact 1.18.5 contract-only characterization
 
-`opencode-1-18-5-contract.json` closes the original contract-characterization
-requirement for `opencode-ai@1.18.5` and binary closure
+`opencode-1-18-5-contract.json` strictly characterizes retained evidence for
+`opencode-ai@1.18.5` and binary revision
 `opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21`.
 Its SHA-256 is
-`9c8c6c9ef0ec05235033f36b5691a3deb76b5a8356a97f83b79cfe7f6459ce68`.
+`c540dc43d931ec8355e3f13ac4feebebb42498703e79c360b18191df0eb29a84`.
 
-The fixture records the path, SHA-256, and narrow role of four immutable
+The fixture records the path, SHA-256, and narrow role of five immutable
 inputs:
 
 - the exact-binary container/TLS summary for ACP v1, prompt, and `end_turn`;
+- the hosting result ledger for exact-version cancellation timing;
 - the provider behavior matrix for the exact-version session operation
   characterization;
-- the operation-oracle contract for the exact provider revision and
-  fail-closed unknown-capability policy;
-- the contained-turn port conformance fixture for the existing neutral
-  `analysis` projection.
+- the operation-oracle contract for the exact provider revision, capability
+  manifest revision, manifest provider revision, and fail-closed policy;
+- the synthetic contained-turn projection fixture for the neutral `analysis`
+  mode and its declared OpenCode identity gap.
 
-The replay retains only provider identity and revision, the `analysis` mode,
-fail-closed unknown-capability policy, the bounded successful terminal class,
-and the contract-only claim. It preserves separate `supported`, `deferred`,
-`unknown`, and `unsupported` dispositions. Strict validation rejects wrong
-versions or hashes, changed provenance, extra or malformed fields, unsupported
-capability promotion, raw-data fields, and neutral-contract drift. It does not
-retain workspace paths, session text, tool arguments, credentials, provider
-output, or network data.
+The fixture calls its capability object a `derivedCapabilityProjection`; it is
+not an observed initialize response. Field-level JSON pointers bind every
+projected field to retained source data. In particular, cancellation points to
+the hosting ledger's exact `1.18.5` timing result, and the neutral contract
+binds both `opencode-acp-contained-turn-v1@1` and the manifest's exact
+provider revision.
 
-This closes a deterministic contract fixture, not provider process execution.
+The exported loader accepts only bounded UTF-8 JSON bytes. It rejects malformed
+or duplicate-key JSON, excessive bytes, nesting, nodes, object properties,
+array entries, and strings before model validation. Every modeled object has
+an exact own-key set; raw ACP framing, `_meta`, raw fields, and capability
+promotion are rejected. The loader calculates and verifies every fixed-path
+source digest internally, constructs fresh values only from validated
+primitives, and returns deeply frozen data.
+
+The resulting characterization retains only provider identity and revision,
+the `analysis` mode, fail-closed unknown-capability policy, the bounded
+successful terminal observation, and the contract-only claim. It preserves
+separate `supported`, `deferred`, `unknown`, and `unsupported` dispositions.
+It does not retain workspace paths, session text, tool arguments, credentials,
+provider output, or network data.
+
+No OpenCode replay through the current neutral port/kernel is claimed. The
+separate synthetic kernel test exercises currently expressible projected
+outcomes using the current harness identity and continues to declare that an
+OpenCode identity is not expressible there without production-contract
+widening. The characterization therefore does not close that contract gap.
 The official ACP SDK remains the only framing and correlation owner; the exact
-fixture adds no request identifiers, NDJSON transport, parser, or second ACP
-wire.
+fixture adds no request identifiers, NDJSON transport, ACP parser, or second
+ACP wire.
 
 ## Separate retained 1.18.25 normalized observation
 
