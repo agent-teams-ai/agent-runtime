@@ -15,6 +15,7 @@ import {
   type ContainedTurnDispatchPreparation,
 } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { committedDispatchProofV1 } from "../../../dist/features/contained-agent-turn/domain/committed-dispatch-proof-v1.js";
 import type { ContainedTurnKernelOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-kernel-model.js";
 import { mutateContainedTurnOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-kernel.js";
 import {
@@ -31,9 +32,9 @@ import {
   scope,
   workspaceId,
 } from "../../contained-turn-kernel-fixtures.ts";
+import { committedDispatchProofForClaim } from "./support/committed-dispatch-proof-fixture.ts";
 
 const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
-const winner = createReservedOperation();
 const subject = completeContainedTurnDispatchGrantSubject(Object.freeze({
   attemptId,
   custodyId,
@@ -105,6 +106,27 @@ const consumedReceipt = (owner: "provider_access" | "runtime_security") => {
     validThroughOperationCutoffRevision: initial.operationCutoff.revision,
   });
 };
+const committedReceipts = Object.freeze([
+  consumedReceipt("provider_access"), consumedReceipt("runtime_security"),
+]) as never;
+const winnerSeed = createReservedOperation();
+if (winnerSeed.dispatch.kind !== "claimed") {throw new TypeError("winner fixture must be claimed");}
+const winner = Object.freeze({
+  ...winnerSeed,
+  dispatch: Object.freeze({ ...winnerSeed.dispatch, grantReceipts: committedReceipts }),
+  proofs: Object.freeze(winnerSeed.proofs.map(proof => proof.kind === "provider_access_dispatch"
+    ? Object.freeze({ ...proof, binding: Object.freeze({
+      ...proof.binding, resolutionDigest: digestContainedTurnCanonicalValue(committedReceipts[0] as never),
+    }) })
+    : proof.kind === "runtime_security_dispatch"
+      ? Object.freeze({ ...proof, binding: Object.freeze({
+        ...proof.binding, currentSecurityDecisionDigest: digestContainedTurnCanonicalValue(committedReceipts[1] as never),
+      }) })
+      : proof.kind === "host_custody" ? hostCustodyProof : proof)),
+});
+const committedDispatchProof = committedDispatchProofForClaim(
+  winner, subject, hostCustodyProof, committedReceipts,
+);
 
 const unavailableAfterConsumed = Object.freeze({
   consumedGrantReceipts: Object.freeze({
@@ -191,7 +213,7 @@ test("prepared claim claimed, observed, and stale outcomes collapse foreign owne
   for (const mutate of foreignOperationMutations) {
     const foreign = { ...mutate(winner), foreignAggregate: "must-not-leak" } as ContainedTurnKernelOperation;
     for (const outcome of [
-      { kind: "claimed" as const, operation: foreign, startAuthority: "foreign-start" },
+      { committedDispatchProof, kind: "claimed" as const, operation: foreign },
       { kind: "observed_claim" as const, operation: foreign },
       { current: foreign, kind: "stale" as const },
     ]) {
@@ -207,13 +229,13 @@ test("prepared claim claimed, observed, and stale outcomes collapse foreign owne
 test("prepared claim rejects same-owner extras and returns only a detached frozen Kernel projection", async () => {
   const withExtra = { ...winner, foreignAggregate: "must-not-leak" } as ContainedTurnKernelOperation;
   const rejected = await claimContainedTurnWithConsumedGrants(
-    claimDependencies({ kind: "claimed", operation: withExtra, startAuthority: "start:scope-sanitization" }),
+    claimDependencies({ committedDispatchProof, kind: "claimed", operation: withExtra }),
     initial, scope, subject, hostCustodyProof,
   );
   assert.deepEqual(rejected, unavailableAfterConsumed);
 
   const accepted = await claimContainedTurnWithConsumedGrants(
-    claimDependencies({ kind: "claimed", operation: winner, startAuthority: "start:scope-sanitization" }),
+    claimDependencies({ committedDispatchProof, kind: "claimed", operation: winner }),
     initial, scope, subject, hostCustodyProof,
   );
   assert.equal(accepted.kind, "claimed");
@@ -222,6 +244,44 @@ test("prepared claim rejects same-owner extras and returns only a detached froze
     assert.deepEqual(accepted.operation, winner);
     assert.equal(Object.isFrozen(accepted), true);
     assert.equal(Object.isFrozen(accepted.operation), true);
+  }
+});
+
+test("valid-looking committed proof substitutions cannot cross the detached operation owner", async () => {
+  const { proofDigest: _proofDigest, ...proofSeed } = committedDispatchProof;
+  const substitutions = Object.freeze({
+    acceptedAuthorityVectorDigest: digestContainedTurnCanonicalValue({ authority: "foreign" }),
+    admissionCutoffProofId: containedTurnIdentity("proof", "proof:foreign-cutoff"),
+    attemptId: containedTurnIdentity("attempt", "attempt:foreign"),
+    commandFingerprint: digestContainedTurnCanonicalValue({ command: "foreign" }) as never,
+    commandId: containedTurnIdentity("command", "command:foreign"),
+    committedOperationRevision: committedDispatchProof.committedOperationRevision + 1,
+    custodyId: containedTurnIdentity("custody", "custody:foreign"),
+    dispatchClaimProofId: containedTurnIdentity("proof", "proof:foreign-claim"),
+    effectId: containedTurnIdentity("effect", "effect:foreign"),
+    executionGenerationId: containedTurnIdentity("execution_generation", "execution-generation:foreign"),
+    hostBootId: containedTurnIdentity("host_boot", "host-boot:foreign-proof"),
+    hostCustodyProofId: containedTurnIdentity("proof", "proof:foreign-host-custody"),
+    hostInstanceId: containedTurnIdentity("host_instance", "host-instance:foreign-proof"),
+    operationCutoffRevision: (committedDispatchProof.operationCutoffRevision + 1) as never,
+    operationId: containedTurnIdentity("operation", "operation:foreign-proof"),
+    preparationToken: containedTurnIdentity("preparation", "preparation:foreign"),
+    projectId: "project:foreign-proof",
+    provider: "claude" as const,
+    providerAccessDispatchProofId: containedTurnIdentity("proof", "proof:foreign-provider-access"),
+    providerAccessGrantReceiptDigest: digestContainedTurnCanonicalValue({ receipt: "foreign-provider-access" }),
+    runtimeSecurityDispatchProofId: containedTurnIdentity("proof", "proof:foreign-runtime-security"),
+    runtimeSecurityGrantReceiptDigest: digestContainedTurnCanonicalValue({ receipt: "foreign-runtime-security" }),
+    tenantId: "tenant:foreign-proof",
+    workspaceId: containedTurnIdentity("workspace", "workspace:foreign-proof"),
+  });
+  for (const [field, value] of Object.entries(substitutions)) {
+    const substituted = committedDispatchProofV1({ ...proofSeed, [field]: value } as never);
+    const outcome = await claimContainedTurnWithConsumedGrants(
+      claimDependencies({ committedDispatchProof: substituted, kind: "claimed", operation: winner }),
+      initial, scope, subject, hostCustodyProof,
+    );
+    assert.deepEqual(outcome, unavailableAfterConsumed, field);
   }
 });
 

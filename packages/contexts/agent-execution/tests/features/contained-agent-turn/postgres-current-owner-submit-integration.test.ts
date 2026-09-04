@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 
 import {
   createContainedTurnFeature,
@@ -112,6 +112,47 @@ const createIdentities = (testRunId: string) => Object.freeze({
     return `${kind.replaceAll("_", "-")}:${digest}`;
   },
 });
+
+const poolWithLostClaimCommit = (pool: Pool) => {
+  let claimCommitArmed = false;
+  let lost = false;
+  const ambiguousPool = new Proxy(pool, {
+    get(target, property) {
+      if (property !== "connect") {
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return async () => {
+        const client = await target.connect();
+        return new Proxy(client, {
+          get(clientTarget, clientProperty) {
+            if (clientProperty !== "query") {
+              const value = Reflect.get(clientTarget, clientProperty, clientTarget);
+              return typeof value === "function" ? value.bind(clientTarget) : value;
+            }
+            return async (...arguments_: Parameters<PoolClient["query"]>) => {
+              const statement = arguments_[0];
+              if (typeof statement === "string" &&
+                  statement.startsWith("UPDATE agent_execution.contained_turn_dispatch_preparation_v1") &&
+                  arguments_.some(argument => Array.isArray(argument) &&
+                    argument.some(value => typeof value === "string" &&
+                      value.includes("\"kind\":\"claimed\"")))) {
+                claimCommitArmed = true;
+              }
+              if (!lost && claimCommitArmed && statement === "COMMIT") {
+                lost = true;
+                await (clientTarget.query as (...args: typeof arguments_) => Promise<unknown>)(...arguments_);
+                throw new Error("simulated lost claim COMMIT acknowledgement");
+              }
+              return (clientTarget.query as (...args: typeof arguments_) => Promise<unknown>)(...arguments_);
+            };
+          },
+        });
+      };
+    },
+  }) as unknown as Pool;
+  return Object.freeze({ pool: ambiguousPool, wasLost: () => lost });
+};
 
 const delegatingStore = (postgres: PostgresContainedTurnOperationStore, claimGate?: Readonly<{
   reached(): void;
@@ -492,6 +533,57 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
       });
     }
   } finally {
+    await pool.end();
+  }
+});
+
+test("lost PostgreSQL claim COMMIT acknowledgement reconciles without a provider attempt or retry", {
+  skip: databaseUrl === undefined
+    ? "coordinator rerun pending: POSTGRES_DURABILITY_URL is not available in this test-only worker"
+    : false,
+}, async () => {
+  assert.ok(databaseUrl);
+  const pool = new Pool({connectionString: databaseUrl, max: 12});
+  const testRunId = randomUUID();
+  const root = await mkdtemp(join(tmpdir(), "pg-current-owner-claim-commit-loss-"));
+  try {
+    await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
+    await applyContainedTurnPostgresSchema(pool);
+    const host = new FakeHost();
+    const owner = await createOwner("codex", root, host);
+    const fixture = createDependencies();
+    const selected = forProvider(fixture, "codex");
+    const identities = createIdentities(`${testRunId}:codex:claim-commit-loss`);
+    const ambiguous = poolWithLostClaimCommit(pool);
+    const durable = new PostgresContainedTurnOperationStore({identities, pool: ambiguous.pool});
+    const feature = createContainedTurnFeature({...selected,
+      custody: owner.custody, operationStore: delegatingStore(durable), provider: owner.provider});
+    const request = {
+      commandId: `command:pg-claim-commit-loss:${testRunId}`,
+      expectedProvider: "codex" as const,
+      intent: {mode: "analysis" as const, prompt: "Lose the claim commit acknowledgement."},
+      scope: {projectId: `project:pg:${testRunId}`, tenantId: `tenant:pg:${testRunId}`},
+    };
+
+    const result = await feature.submit.execute(request);
+    assert.equal(ambiguous.wasLost(), true);
+    assert.equal(result.status, "observed");
+    if (result.status === "observed") {assert.equal(result.turn.status, "reconcile_required");}
+    assert.equal(host.starts, 0, "an indeterminate claim acknowledgement cannot start the provider");
+    const operationId = result.status === "observed" ? result.turn.operationId : undefined;
+    assert.ok(operationId);
+    const persisted = await durable.read({operationId, scope: request.scope});
+    assert.equal(persisted?.dispatch.kind, "claimed");
+    assert.equal(persisted?.reconciliation.kind, "required");
+
+    const replay = await feature.submit.execute(request);
+    assert.equal(replay.status, "observed");
+    if (replay.status === "observed") {assert.equal(replay.turn.status, "reconcile_required");}
+    assert.equal(host.starts, 0, "reconciliation replay cannot make a second provider attempt");
+    owner.dispose();
+  } finally {
+    await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
+    await rm(root, {recursive: true, force: true});
     await pool.end();
   }
 });

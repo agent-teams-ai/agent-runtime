@@ -7,6 +7,7 @@ import type {
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import { containedTurnOutputWriteAuthority } from "../domain/contained-turn-output-authority.js";
 import type { ContainedTurnKernelMutation } from "../domain/contained-turn-transitions.js";
+import type { CommittedDispatchProofV1 } from "../domain/committed-dispatch-proof-v1.js";
 import {
   closeContainedTurnExecution,
   closeContainedTurnPhysicalContainment,
@@ -80,7 +81,7 @@ const claimContainedTurnConsumedGrantDispatch = async (input: Readonly<{
   prepared: Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["prepareDispatch"]>>;
   trustedScope: ContainedTurnScope;
 }>): Promise<Readonly<{
-  operation: ContainedTurnKernelOperation; startAuthority?: string; startPermitted: boolean;
+  committedDispatchProof?: CommittedDispatchProofV1; operation: ContainedTurnKernelOperation; startPermitted: boolean;
 }>> => {
   const { custody, dependencies, initial, preparationToken, prepared, trustedScope } = input;
   const claim = await claimPreparedContainedTurn({
@@ -88,7 +89,7 @@ const claimContainedTurnConsumedGrantDispatch = async (input: Readonly<{
     preparationToken, trustedScope,
   });
   if (claim.kind === "claimed") {
-    return Object.freeze({ operation: claim.operation, startAuthority: claim.startAuthority, startPermitted: true });
+    return Object.freeze({ committedDispatchProof: claim.committedDispatchProof, operation: claim.operation, startPermitted: true });
   }
   if (claim.kind === "observed") {
     return Object.freeze({
@@ -114,7 +115,7 @@ const claimContainedTurnDispatch = async (
   trustedScope: ContainedTurnScope,
 ): Promise<Readonly<{
   operation: ContainedTurnKernelOperation;
-  startAuthority?: string;
+  committedDispatchProof?: CommittedDispatchProofV1;
   startPermitted: boolean;
 }>> => {
   if (initial.workspaceId === undefined) {
@@ -153,10 +154,14 @@ const claimContainedTurnDispatch = async (
       adapterSnapshot: initial.adapterSnapshot,
       attemptId: prepared.attemptId,
       authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
+      commandId: initial.commandId,
       custodyId: prepared.custodyId,
       effectId: initial.effectId,
       intentMode: initial.intent.mode,
       operationId: initial.operationId,
+      operationCutoffRevision: initial.operationCutoff.revision,
+      operationRevision: initial.revision + 1,
+      preparationToken,
       providerAccessSnapshot: initial.providerAccessSnapshot,
       workspaceId,
     });
@@ -200,7 +205,7 @@ const startContainedTurnExecution = async (
   dependencies: ContainedTurnKernelDependencies,
   claimed: ContainedTurnKernelOperation,
   trustedScope: ContainedTurnScope,
-  startAuthority: string,
+  committedDispatchProof: CommittedDispatchProofV1,
 ): Promise<ContainedTurnKernelOperation> => {
   if (claimed.dispatch.kind !== "claimed" || claimed.custodyId === undefined ||
       claimed.workspaceId === undefined) {
@@ -251,7 +256,7 @@ const startContainedTurnExecution = async (
       }),
       intent: claimed.intent,
       operationId: claimed.operationId,
-      startAuthority,
+      committedDispatchProof,
       workspaceId,
     }), startBoundary);
     if (boundedStart.kind === "expired") {
@@ -332,10 +337,10 @@ export const dispatchContainedTurn = async (
   trustedScope: ContainedTurnScope,
 ): Promise<ContainedTurnKernelOperation> => {
   const claimed = await claimContainedTurnDispatch(dependencies, initial, trustedScope);
-  return claimed.startPermitted && claimed.startAuthority !== undefined &&
+  return claimed.startPermitted && claimed.committedDispatchProof !== undefined &&
       claimed.operation.dispatch.kind === "claimed"
     ? startContainedTurnExecution(
-      dependencies, claimed.operation, trustedScope, claimed.startAuthority,
+      dependencies, claimed.operation, trustedScope, claimed.committedDispatchProof,
     )
     : claimed.operation;
 };

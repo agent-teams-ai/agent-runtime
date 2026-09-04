@@ -18,6 +18,7 @@ import type {
 } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOutputChunk } from "../../../domain/contained-turn-kernel.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
+import type { CommittedDispatchProofV1 } from "../../../domain/committed-dispatch-proof-v1.js";
 import type {
   ContainedTurnClosureRequest,
   EnsureContainedTurnClosureOutcome,
@@ -92,9 +93,13 @@ export interface ContainedTurnKernelCustodyPort {
     adapterSnapshot: ContainedTurnProviderAdapterSnapshot;
     attemptId: ContainedTurnAttemptId;
     authorityVectorDigest: ContainedTurnCanonicalDigest;
+    commandId: import("../../../domain/contained-turn-identities.js").ContainedTurnCommandId;
     custodyId: ContainedTurnCustodyId;
     effectId: ContainedTurnEffectId; intentMode: "analysis" | "workspace-write";
     operationId: ContainedTurnOperationId;
+    operationCutoffRevision: import("../../../domain/contained-turn-output-authority.js").ContainedTurnOperationCutoffRevision;
+    operationRevision: number;
+    preparationToken: import("../../../domain/contained-turn-identities.js").ContainedTurnPreparationToken;
     providerAccessSnapshot: ContainedTurnProviderAccessSnapshot;
     workspaceId: ContainedTurnWorkspaceId;
   }>): Promise<Readonly<{
@@ -123,8 +128,8 @@ export interface ContainedTurnKernelCustodyPort {
     execute: (start: ContainedTurnKernelDelegatedStart) => Promise<ContainedTurnKernelProviderObservation>;
     intent: ContainedTurnIntent;
     operationId: ContainedTurnOperationId;
-    /** Exact one-use authority returned only by the final prepared-dispatch CAS. */
-    startAuthority: string;
+    /** Exact immutable authority returned only by the final persisted prepared-dispatch claim. */
+    committedDispatchProof: CommittedDispatchProofV1;
     workspaceId: ContainedTurnWorkspaceId;
   }>): Promise<
     | {

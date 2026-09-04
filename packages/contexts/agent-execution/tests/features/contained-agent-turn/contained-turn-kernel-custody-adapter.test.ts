@@ -31,6 +31,7 @@ import {
   attemptId,
   authorityDigest,
   createActiveOperation,
+  commandId,
   custodyId,
   effectId,
   hostBootId,
@@ -44,6 +45,7 @@ import {
 import {
   createDependencies,
 } from "../../features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { committedDispatchProofFixture } from "./support/committed-dispatch-proof-fixture.ts";
 
 const EMPTY_SHA256 = "0".repeat(64);
 const drain = Object.freeze({ bytes: 0, sha256: EMPTY_SHA256, status: "complete" as const });
@@ -275,10 +277,14 @@ const openInput: Parameters<ContainedTurnKernelCustodyPort["open"]>[0] = Object.
   adapterSnapshot,
   attemptId,
   authorityVectorDigest: authorityDigest,
+  commandId,
   custodyId,
   effectId,
   intentMode: "analysis",
   operationId,
+  operationCutoffRevision: containedTurnOperationCutoffRevision(0),
+  operationRevision: 1,
+  preparationToken,
   providerAccessSnapshot,
   workspaceId,
 });
@@ -302,15 +308,22 @@ const startInput = (
   },
   intent: Object.freeze({ mode: "analysis" as const, prompt: "synthetic" }),
   operationId,
-  startAuthority: "start-authority:synthetic",
+  committedDispatchProof: committedDispatchProofFixture(openInput, openedOutcomes.get(harness.custody)!),
   workspaceId,
 });
+
+const openedOutcomes = new WeakMap<ContainedTurnKernelCustodyAdapter, Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>>();
+const openHarness = async (harness: ReturnType<typeof createHarness>) => {
+  const outcome = await harness.custody.open(openInput);
+  openedOutcomes.set(harness.custody, outcome);
+  return outcome;
+};
 
 const openAndStart = async (
   harness: ReturnType<typeof createHarness>,
   outcome: "cancelled" | "failed" | "succeeded",
 ) => {
-  await harness.custody.open(openInput);
+  await openHarness(harness);
   const startBoundary = harness.custody.completionBoundary({
     attemptId, custodyId, operationId, phase: "start",
   });
@@ -531,7 +544,7 @@ test("missing raw provider exit or incomplete ingress remains ambiguous", async 
 
 test("cancellation before delegated spawn proves no start without another attempt", async () => {
   const harness = createHarness({ noStart: true });
-  await harness.custody.open(openInput);
+  await openHarness(harness);
   const result = await harness.custody.start(startInput(harness, "cancelled", false));
   assert.equal(result.kind, "proved_no_start");
   assert.deepEqual(harness.counts, {
@@ -545,7 +558,7 @@ test("cancellation before delegated spawn proves no start without another attemp
 
 test("kernel reservation defers process creation to its one-use start callback", async () => {
   const harness = createHarness();
-  await harness.custody.open(openInput);
+  await openHarness(harness);
   assert.deepEqual(harness.counts, {
     containments: 0, executions: 0, opens: 1, processes: 0, releases: 0,
   });
@@ -572,7 +585,7 @@ test("kernel reservation defers process creation to its one-use start callback",
 
 test("provider completion arriving after execution cutoff cannot be sealed", async () => {
   const harness = createHarness();
-  await harness.custody.open(openInput);
+  await openHarness(harness);
   let resolveCompletion!: (value: { readonly kind: "completed"; readonly outcome: "succeeded" }) => void;
   const providerCompletion = new Promise<{ readonly kind: "completed"; readonly outcome: "succeeded" }>(
     resolve => {resolveCompletion = resolve;},
@@ -602,7 +615,7 @@ test("provider completion arriving after execution cutoff cannot be sealed", asy
 
 test("invalid protocol completion cannot be converted into terminal truth", async () => {
   const harness = createHarness();
-  await harness.custody.open(openInput);
+  await openHarness(harness);
   const conflictingObservation = Object.freeze({
     kind: "completed" as const,
     outcome: "succeeded" as const,
@@ -647,7 +660,7 @@ test("cooperative closure proves execution and drain but cannot become physical 
 
 test("start identity conflict is rejected before the provider callback", async () => {
   const harness = createHarness();
-  await harness.custody.open(openInput);
+  await openHarness(harness);
   await assert.rejects(
     harness.custody.start(Object.freeze({
       ...startInput(harness, "succeeded"),

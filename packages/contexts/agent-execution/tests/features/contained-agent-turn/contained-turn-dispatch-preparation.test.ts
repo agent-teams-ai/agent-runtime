@@ -42,6 +42,7 @@ import {
   scope,
   workspaceId,
 } from "../../contained-turn-kernel-fixtures.ts";
+import { committedDispatchProofForClaim } from "./support/committed-dispatch-proof-fixture.ts";
 
 const unusedMandatoryDependency = async (): Promise<never> => {
   throw new Error("unused mandatory dependency");
@@ -634,7 +635,8 @@ test("normalized consumed receipts bind the exact final claim and reject replay 
   }
 });
 
-test("final claim follows both owner consumptions and only a fresh CAS exposes start authority", async () => {
+test("final claim follows both owner consumptions and only a fresh CAS exposes committed proof", async () => {
+  const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
   const subject = grantSubject();
   const normalizedReceipt = (owner: "provider_access" | "runtime_security") => consumedReceipt(owner, subject);
   const events: string[] = [];
@@ -649,14 +651,36 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
         normalizedReceipt("provider_access"), normalizedReceipt("runtime_security"),
       ]),
     }),
+    proofs: Object.freeze(winner.proofs.map(proof => proof.kind === "provider_access_dispatch"
+      ? Object.freeze({ ...proof, binding: Object.freeze({
+        ...proof.binding, resolutionDigest: digestContainedTurnCanonicalValue(normalizedReceipt("provider_access") as never),
+      }) })
+      : proof.kind === "runtime_security_dispatch"
+        ? Object.freeze({ ...proof, binding: Object.freeze({
+          ...proof.binding, currentSecurityDecisionDigest: digestContainedTurnCanonicalValue(normalizedReceipt("runtime_security") as never),
+        }) })
+        : proof.kind === "host_custody"
+          ? Object.freeze({
+            binding: Object.freeze({ attemptId, authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
+              custodyId, effectId, operationId }), kind: "host_custody" as const,
+            proofId: containedTurnIdentity("proof", "proof:dispatch-grant-host-custody"),
+          })
+          : proof)),
   });
+  const committedDispatchProof = committedDispatchProofForClaim(
+    durableWinner, subject, Object.freeze({
+      binding: Object.freeze({ attemptId, authorityVectorDigest: initial.acceptedAuthorityVectorDigest,
+        custodyId, effectId, operationId }), kind: "host_custody" as const,
+      proofId: containedTurnIdentity("proof", "proof:dispatch-grant-host-custody"),
+    }), durableWinner.dispatch.grantReceipts,
+  );
   const dependencies = createContainedTurnPreparationScopeDependencies({
     operationStore: {
       claimPreparedDispatch: async () => {
         events.push("agent-execution:final-claim");
         return observed
           ? { kind: "observed_claim" as const, operation: durableWinner }
-          : { kind: "claimed" as const, operation: durableWinner, startAuthority: "host-start-once:1" };
+          : { committedDispatchProof, kind: "claimed" as const, operation: durableWinner };
       },
       recordDispatchPreparationCleanup: unusedMandatoryDependency,
       retireDispatchPreparation: unusedMandatoryDependency,
@@ -686,7 +710,6 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
     },
     provider: {},
   } as unknown as ContainedTurnKernelDependencies);
-  const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
   const hostCustodyProof = Object.freeze({
     binding: Object.freeze({
       attemptId,
@@ -702,7 +725,7 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
     dependencies, initial, scope, subject, hostCustodyProof,
   );
   assert.equal(claimed.kind, "claimed");
-  if (claimed.kind === "claimed") {assert.equal(claimed.startAuthority, "host-start-once:1");}
+  if (claimed.kind === "claimed") {assert.deepEqual(claimed.committedDispatchProof, committedDispatchProof);}
   assert.deepEqual(events, [
     "provider-access:consumed",
     "runtime-security:consumed",
@@ -727,7 +750,7 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes s
     dependencies, initial, scope, subject, hostCustodyProof,
   );
   assert.equal(replay.kind, "observed_claim");
-  assert.equal("startAuthority" in replay, false, "a replay cannot manufacture one-use start authority");
+  assert.equal("committedDispatchProof" in replay, false, "a replay cannot manufacture committed dispatch proof");
 });
 
 test("dispatch grant ACL preserves explicit owner facts without accepting opaque proof digests", () => {

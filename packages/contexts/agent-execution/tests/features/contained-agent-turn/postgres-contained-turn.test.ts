@@ -25,19 +25,9 @@ import {
   encodeContainedTurnState,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
 import { PostgresContainedTurnOperationStore } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
-import { containedTurnPreparationToken } from "../../../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
-import { normalizeContainedTurnConsumedGrantReceipt } from "../../../dist/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.js";
-import {
-  containedTurnProviderAccessSnapshotDigest,
-} from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
-import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
-import { completeContainedTurnDispatchGrantSubject } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { mutateContainedTurnOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-kernel.js";
-import {
-  createOperation,
-  proofId,
-} from "../../contained-turn-kernel-fixtures.ts";
+import { createOperation } from "../../contained-turn-kernel-fixtures.ts";
 import {
   operationAuthority,
   operationForProject,
@@ -46,6 +36,7 @@ import {
   runtimeQuery,
   withPool,
 } from "./postgres-contained-turn-test-helpers.ts";
+import { postgresClaimInput } from "./support/postgres-committed-dispatch-fixture.ts";
 
 const assertStateBudgetRejected = (candidate: unknown): void => {
   assert.throws(
@@ -606,96 +597,24 @@ postgresTest("two claimers persist exact loser grants and restart-safe cleanup s
       store.prepareDispatch({ authority: operationAuthority(bound), operation: bound }),
       store.prepareDispatch({ authority: operationAuthority(bound), operation: bound }),
     ]);
-    const claims = prepared.map((reservation, index) => {
-      const preparationToken = containedTurnPreparationToken({
-        attemptId: reservation.attemptId,
-        custodyId: reservation.custodyId,
-        operationId: bound.operationId,
-      });
-      const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(bound.providerAccessSnapshot);
-      const subject = completeContainedTurnDispatchGrantSubject(Object.freeze({
-        attemptId: reservation.attemptId,
-        custodyId: reservation.custodyId,
-        effectId: bound.effectId,
-        executionGenerationId: reservation.executionGenerationId,
-        hostBootId: containedTurnIdentity("host_boot", `host-boot:race:${String(index)}`),
-        hostInstanceId: containedTurnIdentity("host_instance", `host-instance:race:${String(index)}`),
-        operationCutoffRevision: bound.operationCutoff.revision,
-        operationId: bound.operationId,
-        preparationToken,
-        purpose: "contained_turn_provider_start_v1" as const,
-        provider: bound.adapterSnapshot.provider,
-        providerAccessExpectation: Object.freeze({
-          acceptedAuthorityDigest: bound.acceptedAuthorityVectorDigest,
-          accessRef: bound.providerAccessSnapshot.accessRef,
-          authorityHeadDigest: bound.providerAccessSnapshot.ownerAuthorityDigest,
-          bindingDigest: providerBindingDigest,
-          bindingRevision: bound.providerAccessSnapshot.revision,
-          credentialBindingDigest: bound.providerAccessSnapshot.credentialBindingDigest,
-          credentialBindingRef: bound.providerAccessSnapshot.credentialBindingRef,
-          credentialGeneration: bound.providerAccessSnapshot.credentialGeneration,
-          providerAccountRef: bound.providerAccessSnapshot.providerAccountRef,
-          providerRouteRef: bound.providerAccessSnapshot.providerRouteRef,
-        }),
-        runtimeSecurityExpectation: Object.freeze({
-          acceptedAuthorityDigest: bound.acceptedAuthorityVector.securityDecisionDigest,
-          authorityGeneration: bound.acceptedAuthorityVector.operationAuthorityRevision,
-          authorityHeadDigest: bound.acceptedAuthorityVector.securityDecisionDigest,
-          authorityRevision: bound.acceptedAuthorityVector.securityAuthorityRevision,
-          constraintsDigest: digestContainedTurnCanonicalValue({
-            adapterSnapshot: bound.adapterSnapshot,
-            capabilityManifest: bound.capabilityManifest,
-            intentMode: bound.intent.mode,
-          } as never),
-          containmentPolicyDigest: bound.acceptedAuthorityVector.containmentPolicyDigest,
-          providerBindingDigest,
-          providerId: bound.adapterSnapshot.provider,
-        }),
-        scope: bound.scope,
-        scopeDigest: bound.acceptedAuthorityVector.scopeDigest,
-        workspaceId,
-      }));
-      const receipt = (owner: "provider_access" | "runtime_security") => {
-        const request = owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
-        return normalizeContainedTurnConsumedGrantReceipt(owner, subject, {
-          authorityFacts: owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation,
-          claimBeforeControlTime: 100,
-          claimBindingDigest: request.claimBindingDigest,
-          consumedAtControlTime: 50,
-          consumptionDigest: digestContainedTurnCanonicalValue({ index, owner, state: "consumed" }),
-          grantRequestId: request.grantRequestId,
-          operationId: subject.operationId,
-          ownerEvidenceRef: `${owner}:evidence:${String(index)}`,
-          provider: subject.provider,
-          purpose: "contained-turn.provider-dispatch/v1" as const,
-          requestDigest: request.requestDigest,
-          scope: Object.freeze({ ...subject.scope, scopeDigest: subject.scopeDigest }),
-        });
-      };
-      const receipts = Object.freeze([receipt("provider_access"), receipt("runtime_security")]) as const;
-      return { preparationToken, receipts, subject };
-    });
-    const outcomes = await Promise.all(claims.map(claim => store.claimPreparedDispatch({
-      authority: operationAuthority(bound),
-      consumedGrantReceipts: claim.receipts,
-      expectedOperationRevision: bound.revision,
-      hostCustodyProof: {
-        binding: {
-          attemptId: claim.subject.attemptId,
-          authorityVectorDigest: bound.acceptedAuthorityVectorDigest,
-          custodyId: claim.subject.custodyId,
-          effectId: bound.effectId,
-          operationId: bound.operationId,
-        },
-        kind: "host_custody",
-        proofId: proofId(`proof:host-custody:${claim.subject.attemptId}`),
-      },
-      subject: claim.subject,
-    })));
+    const claims = prepared.map((reservation, index) =>
+      postgresClaimInput(bound, workspaceId, reservation, `race:${String(index)}`));
+    const claimInputs = claims.map(claim => claim.claimInput);
+    const outcomes = await Promise.all(claimInputs.map(input => store.claimPreparedDispatch(input)));
     assert.deepEqual(outcomes.map(outcome => outcome.kind).toSorted(), ["claimed", "stale"]);
+    const winnerIndex = outcomes.findIndex(outcome => outcome.kind === "claimed");
+    const winner = outcomes[winnerIndex];
+    assert.ok(winner?.kind === "claimed");
+    assert.equal(winner.committedDispatchProof.operationId, bound.operationId);
+    assert.equal(winner.committedDispatchProof.committedOperationRevision, bound.revision + 1);
     const loserIndex = outcomes.findIndex(outcome => outcome.kind === "stale");
+    assert.equal("committedDispatchProof" in outcomes[loserIndex]!, false);
     const loser = claims[loserIndex];
     assert.ok(loser);
+
+    const replay = await store.claimPreparedDispatch(claimInputs[winnerIndex]!);
+    assert.equal(replay.kind, "observed_claim");
+    assert.equal("committedDispatchProof" in replay, false);
 
     const restarted = new PostgresContainedTurnOperationStore({ pool });
     const recoveries = await restarted.listDispatchPreparations({ scope: bound.scope });
