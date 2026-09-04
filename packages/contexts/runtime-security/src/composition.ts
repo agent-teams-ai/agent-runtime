@@ -22,24 +22,25 @@ export { createNodeEd25519EgressSigner } from
   "./features/contained-turn-egress/node-ed25519.js";
 export type {
   BufferedEgressRequestV1,
-  ConsumedDispatchAuthorityV1,
   ContainedTurnEgress,
   ContainedTurnEgressDependencies,
   ContainedTurnEgressRequest,
   ContainedTurnEgressResult,
   EgressAuthorizationBodyV1,
   EgressAuthorizationEnvelopeV1,
+  EgressAuthorizationConsumptionV1,
   EgressAuthorizationSignerV1,
   EgressPolicyTimeAuthorityV1,
   EgressPolicyTimeSnapshotV1,
   EgressTransportGatewayV1,
   EgressTransportV1,
-  NodeEd25519SignerIdentity,
+  NetworkAddressV1,
   ProviderRouteAuthorityV1,
   ProviderRouteAuthoritySnapshotV1,
   ProviderRouteRevalidationV1,
   TrustedEgressHostIdentityV1,
 } from "./features/contained-turn-egress/composition.js";
+export type { NodeEd25519SignerIdentity } from "./features/contained-turn-egress/node-ed25519.js";
 export { createAuthorizeClaudeCodeSetupInspection } from "./features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.js";
 export type { PathCanonicalizer } from "./features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.js";
 export {
