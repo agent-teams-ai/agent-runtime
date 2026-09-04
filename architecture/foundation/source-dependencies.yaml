@@ -102,6 +102,7 @@ boundaries:
         - node:path
         - node:stream
         - node:timers/promises
+        - node:util
       runtimeReferences: []
   - id: adapter.agent-execution.claude-agent-sdk
     dependencyMode: runtime

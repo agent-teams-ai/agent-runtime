@@ -98,10 +98,13 @@ export type FixtureOptions = Readonly<{
   selectedAddress?: string;
   dispatch?: HttpEgressDispatch | "throw";
   openThrows?: boolean;
+  openReady?: Promise<void>;
   renderThrows?: boolean;
   connectionWriteThrows?: boolean;
   inboundClosure?: "closed" | "unknown";
   upstreamClosure?: "closed" | "unknown";
+  upstreamCloseThrows?: boolean;
+  upstreamCloseNever?: boolean;
   evidence?: "recorded" | "conflict" | "unknown" | "throw";
   abortOnDispatch?: AbortController;
   signal?: AbortSignal;
@@ -124,6 +127,64 @@ export type EgressFixture = Readonly<{
   };
 }>;
 
+const fixtureTransport = (
+  options: FixtureOptions,
+  binding: HttpEgressTransportBinding,
+  observations: EgressFixture["observations"],
+  defaultDispatch: HttpEgressDispatch,
+): HttpEgressBrokerPorts["transport"] => Object.freeze({
+  beginOpen: () => {
+    observations.order.push("open");
+    observations.opens += 1;
+    let firstByte = false;
+    let closed = false;
+    let closeResult: Promise<Readonly<{ state: "closed" | "unknown"; receiptDigest: string }>> | undefined;
+    const session = Object.freeze({
+      get binding(): HttpEgressTransportBinding {
+        return firstByte ? Object.freeze({ ...binding, ...options.bindingAtFirstByte }) : binding;
+      },
+      dispatch: async (consume: () => Uint8Array | undefined) => {
+        observations.order.push("dispatch");
+        if (closed) {return Object.freeze({
+          status: "failed" as const, acceptedRequestBytes: 0, acknowledgement: "acknowledged" as const,
+        });}
+        firstByte = true;
+        const wireRequest = consume();
+        if (wireRequest === undefined) {return Object.freeze({
+          status: "failed" as const, acceptedRequestBytes: 0, acknowledgement: "acknowledged" as const,
+        });}
+        observations.dispatches += 1;
+        observations.dispatchedRequests.push(wireRequest.slice());
+        options.abortOnDispatch?.abort();
+        if (options.dispatch === "throw") {throw new Error("synthetic dispatch crash");}
+        return options.dispatch ?? Object.freeze({ ...defaultDispatch, acceptedRequestBytes: wireRequest.byteLength });
+      },
+    });
+    return Object.freeze({
+      ready: async () => {
+        await options.openReady;
+        if (options.openThrows) {throw new Error("synthetic open failure");}
+        if (closed) {throw new Error("synthetic attempt closed before ready");}
+        return session;
+      },
+      close: () => {
+        if (closeResult !== undefined) {return closeResult;}
+        closeResult = (async () => {
+          closed = true;
+          observations.order.push("upstream-close");
+          observations.closes += 1;
+          if (options.upstreamCloseThrows) {throw new Error("synthetic close failure");}
+          if (options.upstreamCloseNever) {return await new Promise<never>(() => {});}
+          return Object.freeze({
+            state: options.upstreamClosure ?? "closed", receiptDigest: "upstream-closure-digest",
+          });
+        })();
+        return closeResult;
+      },
+    });
+  },
+});
+
 export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture => {
   const route = options.route ?? defaultRoute;
   const binding = Object.freeze({ ...defaultBinding, ...options.binding });
@@ -143,7 +204,6 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
   const provisional = options.provisional ?? decision(route, "provisional-receipt-digest");
   const baseFinal = decision(route, "final-receipt-digest");
   const final = options.final;
-  let firstByte = false;
   const defaultDispatch: HttpEgressDispatch = Object.freeze({
     status: "response",
     acceptedRequestBytes: 1,
@@ -158,36 +218,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
         return Object.freeze({ addresses: Object.freeze([...(options.addresses ?? [selectedAddress])]), selectedAddress });
       },
     }),
-    transport: Object.freeze({
-      open: async () => {
-        observations.order.push("open");
-        observations.opens += 1;
-        if (options.openThrows) {throw new Error("synthetic open failure");}
-        return Object.freeze({
-          get binding(): HttpEgressTransportBinding {
-            return firstByte ? Object.freeze({ ...binding, ...options.bindingAtFirstByte }) : binding;
-          },
-          dispatch: async (consume: () => Uint8Array | undefined) => {
-            observations.order.push("dispatch");
-            firstByte = true;
-            const wireRequest = consume();
-            if (wireRequest === undefined) {return Object.freeze({
-              status: "failed" as const, acceptedRequestBytes: 0, acknowledgement: "acknowledged" as const,
-            });}
-            observations.dispatches += 1;
-            observations.dispatchedRequests.push(wireRequest.slice());
-            options.abortOnDispatch?.abort();
-            if (options.dispatch === "throw") {throw new Error("synthetic dispatch crash");}
-            return options.dispatch ?? Object.freeze({ ...defaultDispatch, acceptedRequestBytes: wireRequest.byteLength });
-          },
-          close: async () => {
-            observations.order.push("upstream-close");
-            observations.closes += 1;
-            return Object.freeze({ state: options.upstreamClosure ?? "closed", receiptDigest: "upstream-closure-digest" });
-          },
-        });
-      },
-    }),
+    transport: fixtureTransport(options, binding, observations, defaultDispatch),
     provisionalAuthorization: Object.freeze({
       authorize: async () => {
         observations.order.push("provisional");

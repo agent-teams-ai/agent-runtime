@@ -54,12 +54,15 @@ test("expiry after the async preparation does not survive a queued dispatch", as
   const fixture = createEgressFixture();
   let now = 0;
   const ports = { ...fixture.ports, clock: { ...fixture.ports.clock, now: () => now }, transport: {
-    open: async (input: Parameters<typeof fixture.ports.transport.open>[0]) => {
-      const session = await fixture.ports.transport.open(input);
-      return { ...session, dispatch: async (consume: () => Uint8Array | undefined) => {
-        await Promise.resolve();
-        now = 901;
-        return await session.dispatch(consume);
+    beginOpen: (input: Parameters<typeof fixture.ports.transport.beginOpen>[0]) => {
+      const attempt = fixture.ports.transport.beginOpen(input);
+      return { ...attempt, ready: async () => {
+        const session = await attempt.ready();
+        return { ...session, dispatch: async (consume: () => Uint8Array | undefined) => {
+          await Promise.resolve();
+          now = 901;
+          return await session.dispatch(consume);
+        } };
       } };
     },
   } };
@@ -73,17 +76,22 @@ test("dispatch cannot retain the callback after a failed attempt while closure i
   const fixture = createEgressFixture();
   let retained: (() => Uint8Array | undefined) | undefined;
   let lateValue: Uint8Array | undefined;
-  const ports = { ...fixture.ports, transport: { open: async (input: Parameters<typeof fixture.ports.transport.open>[0]) => {
-    const session = await fixture.ports.transport.open(input);
-    return { ...session,
-      dispatch: async (consume: () => Uint8Array | undefined): Promise<never> => {
-        retained = consume;
-        throw new Error("synthetic dispatch failure before consuming request");
+  const ports = { ...fixture.ports, transport: { beginOpen: (input: Parameters<typeof fixture.ports.transport.beginOpen>[0]) => {
+    const attempt = fixture.ports.transport.beginOpen(input);
+    return { ...attempt,
+      ready: async () => {
+        const session = await attempt.ready();
+        return { ...session,
+          dispatch: async (consume: () => Uint8Array | undefined): Promise<never> => {
+            retained = consume;
+            throw new Error("synthetic dispatch failure before consuming request");
+          },
+        };
       },
       close: async () => {
         await Promise.resolve();
         lateValue = retained?.();
-        return await session.close();
+        return await attempt.close();
       },
     };
   } } };
@@ -96,12 +104,15 @@ test("dispatch cannot retain the callback after a failed attempt while closure i
 
 test("a transport response without consuming authorization cannot claim success", async () => {
   const fixture = createEgressFixture();
-  const ports = { ...fixture.ports, transport: { open: async (input: Parameters<typeof fixture.ports.transport.open>[0]) => {
-    const session = await fixture.ports.transport.open(input);
-    return { ...session, dispatch: async () => ({
-      status: "response" as const, acceptedRequestBytes: 20, acknowledgement: "acknowledged" as const,
-      response: chunks(["HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"]),
-    }) };
+  const ports = { ...fixture.ports, transport: { beginOpen: (input: Parameters<typeof fixture.ports.transport.beginOpen>[0]) => {
+    const attempt = fixture.ports.transport.beginOpen(input);
+    return { ...attempt, ready: async () => {
+      const session = await attempt.ready();
+      return { ...session, dispatch: async () => ({
+        status: "response" as const, acceptedRequestBytes: 20, acknowledgement: "acknowledged" as const,
+        response: chunks(["HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"]),
+      }) };
+    } };
   } } };
   const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
   assert.equal(receipt.outcome, "reconcile_required");

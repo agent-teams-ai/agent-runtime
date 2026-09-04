@@ -162,17 +162,27 @@ export interface HttpEgressTransportSession {
    * Undefined denies the write. No request bytes are available before consume.
    */
   dispatch(consumeAuthorizedRequest: () => Uint8Array | undefined, signal?: AbortSignal): Promise<HttpEgressDispatch>;
+}
+
+/**
+ * Synchronously acquired Host custody for one transport open. The attempt owns
+ * connecting and late-created resources until close proves their disposition.
+ * close is idempotent and prevents a ready session from dispatching afterwards.
+ */
+export interface HttpEgressTransportAttempt {
+  ready(): Promise<HttpEgressTransportSession>;
   close(): Promise<Readonly<{ state: "closed" | "unknown"; receiptDigest: string }>>;
 }
 
 export interface HttpEgressUpstreamTransport {
-  open(input: Readonly<{
+  /** A thrown begin proves that no transport resource was started. */
+  beginOpen(input: Readonly<{
     originHost: string;
     originPort: number;
     selectedAddress: string;
     sni: string;
     alpn: "http/1.1";
-  }>): Promise<HttpEgressTransportSession>;
+  }>): HttpEgressTransportAttempt;
 }
 
 export interface HttpEgressClock {

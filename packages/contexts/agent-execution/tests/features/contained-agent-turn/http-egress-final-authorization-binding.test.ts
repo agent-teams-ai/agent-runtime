@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { describe, test } from "node:test";
 import type {
   HttpEgressFinalAuthorization,
-  HttpEgressFinalAuthorizationDecision,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 import {
   canonicalFinalAuthorizationBindingParts,
@@ -13,37 +11,12 @@ import type {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-final-authorization-binding.js";
 import { createStrictHttpEgressBroker } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
 import { createEgressFixture, defaultRoute, SECRET_MARKER } from "./http-egress-test-fixture.ts";
-
-const digest = (parts: readonly Uint8Array[]): string => {
-  const hash = createHash("sha256");
-  for (const part of parts) {hash.update(part);}
-  return hash.digest("hex");
-};
-
-const factsOf = (input: HttpEgressFinalAuthorization): HttpEgressFinalAuthorizationFacts => {
-  const { bindingDigest: _bindingDigest, ...facts } = input;
-  return facts;
-};
-
-const decisionFor = (
-  input: HttpEgressFinalAuthorization,
-  bindingDigest: string,
-): HttpEgressFinalAuthorizationDecision => Object.freeze({
-  decision: "allow",
-  receiptDigest: "final-receipt-digest",
-  validUntil: 900,
-  policyGeneration: input.policyGeneration,
-  keyGeneration: input.keyGeneration,
-  routeGeneration: input.routeGeneration,
-  credentialGeneration: input.credentialGeneration,
-  materializationReceiptDigest: input.materializationReceiptDigest,
-  bindingDigest,
-});
-
-const digestWith = (
-  input: HttpEgressFinalAuthorization,
-  changes: Partial<HttpEgressFinalAuthorizationFacts>,
-): string => digest(canonicalFinalAuthorizationBindingParts(Object.freeze({ ...factsOf(input), ...changes })));
+import {
+  allowForBinding,
+  authorizationFacts,
+  bindingDigestWith,
+  digestParts,
+} from "./http-egress-exact-validation-test-fixture.ts";
 
 describe("HTTP final authorization binding", () => {
   test("the successful synthetic request presents the complete normalized semantic authority input", async () => {
@@ -87,7 +60,7 @@ describe("HTTP final authorization binding", () => {
       limits: fixture.operation.limits,
       bindingDigest: input.bindingDigest,
     });
-    assert.equal(input.bindingDigest, digest(canonicalFinalAuthorizationBindingParts(factsOf(input))));
+    assert.equal(input.bindingDigest, digestParts(canonicalFinalAuthorizationBindingParts(authorizationFacts(input))));
   });
 
   test("every closed authorization fact changes the canonical correlation digest", async () => {
@@ -104,7 +77,6 @@ describe("HTTP final authorization binding", () => {
       ["request bytes", { requestDigest: "request-digest-stale" }],
       ["route receipt", { routeReceiptDigest: "route-stale" }],
       ["materialization", { materializationReceiptDigest: "materialization-stale" }],
-      ["redirect", { redirectHop: 1 as never }],
       ["origin host", { originHost: "other.example" }],
       ["origin port", { originPort: 8443 }],
       ["upstream method", { upstreamMethod: "PUT" }],
@@ -119,17 +91,40 @@ describe("HTTP final authorization binding", () => {
       ["SNI digest", { sniDigest: "sni-stale" }],
       ["certificate", { certificateDigest: "certificate-stale" }],
       ["pin", { pinDigest: "pin-stale" }],
-      ["ALPN", { alpn: "h2" as never }],
       ["policy generation", { policyGeneration: "policy-stale" }],
       ["key generation", { keyGeneration: "key-stale" }],
       ["route generation", { routeGeneration: "route-generation-stale" }],
       ["credential generation", { credentialGeneration: "credential-stale" }],
     ];
     for (const [name, changes] of cases) {
-      assert.notEqual(digestWith(input, changes), input.bindingDigest, name);
+      assert.notEqual(bindingDigestWith(input, changes), input.bindingDigest, name);
     }
     for (const name of Object.keys(input.limits) as (keyof typeof input.limits)[]) {
-      assert.notEqual(digestWith(input, { limits: { ...input.limits, [name]: input.limits[name] + 1 } }), input.bindingDigest, name);
+      assert.notEqual(bindingDigestWith(input, { limits: { ...input.limits, [name]: input.limits[name] + 1 } }), input.bindingDigest, name);
+    }
+  });
+
+  test("rejects surrogate aliases and oversized fields before canonical hashing", async () => {
+    const fixture = createEgressFixture();
+    await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
+    const input = fixture.observations.finalAuthorizationInputs[0];
+    const encodedHigh = new TextEncoder().encode("\ud800");
+    const encodedLow = new TextEncoder().encode("\udc00");
+    assert.deepEqual(encodedHigh, encodedLow, "the platform encoder demonstrates the replacement alias");
+    assert.throws(() => bindingDigestWith(input, { operationId: "operation-\ud800" }), /operationId/u);
+    assert.throws(() => bindingDigestWith(input, { operationId: "operation-\udc00" }), /operationId/u);
+    assert.throws(() => bindingDigestWith(input, { routeReceiptDigest: "r".repeat(513) }), /routeReceiptDigest/u);
+    assert.doesNotThrow(() => bindingDigestWith(input, { operationId: "operation-合法-🙂" }));
+  });
+
+  test("rejects values outside closed literal binding fields", async () => {
+    const fixture = createEgressFixture();
+    await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
+    const input = fixture.observations.finalAuthorizationInputs[0];
+    for (const [field, value] of [["redirectHop", 1], ["alpn", "h2"], ["tlsProtocol", "TLSv1.1"]] as const) {
+      const facts = { ...authorizationFacts(input) };
+      Reflect.set(facts, field, value);
+      assert.throws(() => canonicalFinalAuthorizationBindingParts(facts), new RegExp(field, "u"));
     }
   });
 
@@ -140,7 +135,7 @@ describe("HTTP final authorization binding", () => {
     { name: "a different byte limit", change: (input: HttpEgressFinalAuthorization) => ({ limits: { ...input.limits, maxOutputBytes: input.limits.maxOutputBytes + 1 } }) },
   ] as const) {
     test(`rejects an allow decision bound to ${scenario.name} without releasing credential bytes`, async () => {
-      const fixture = createEgressFixture({ final: input => decisionFor(input, digestWith(input, scenario.change(input))) });
+      const fixture = createEgressFixture({ final: input => allowForBinding(input, bindingDigestWith(input, scenario.change(input))) });
       const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
       assert.equal(receipt.anomalyCode, "final_denied");
       assert.equal(receipt.upstreamRequestBytes, 0);
@@ -195,7 +190,7 @@ describe("HTTP final authorization binding", () => {
     const fixture = createEgressFixture({ final: input => {
       sourceLimits.maxOutputBytes += 1;
       sourceRequest.requestId = "mutated-request";
-      return decisionFor(input, input.bindingDigest);
+      return allowForBinding(input, input.bindingDigest);
     } });
     const operation = { ...fixture.operation, limits: sourceLimits, expectedRequest: sourceRequest };
     const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(operation);

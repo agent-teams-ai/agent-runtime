@@ -11,6 +11,7 @@ import type {
   HttpEgressBrokerPorts,
   HttpEgressFinalAuthorizationDecision,
   HttpEgressRoute,
+  HttpEgressTransportAttempt,
   HttpEgressTransportBinding,
   HttpEgressTransportSession,
 } from "./http-egress-ports.js";
@@ -33,6 +34,8 @@ import {
 import type { StrictHttpRequest } from "./strict-http-request.js";
 
 const encoder = new TextEncoder();
+const zeroLateBytes = (pending: Promise<Uint8Array> | undefined): void =>
+  void pending?.then(value => value.fill(0), () => {});
 
 type ReceiptState = {
   outcome: HttpEgressOutcome;
@@ -198,11 +201,11 @@ const closeFlows = async (
   ports: HttpEgressBrokerPorts,
   operation: HttpEgressOperation,
   state: ReceiptState,
-  session: HttpEgressTransportSession | undefined,
+  attempt: HttpEgressTransportAttempt | undefined,
 ): Promise<void> => {
-  if (session !== undefined) {
+  if (attempt !== undefined) {
     try {
-      const closure = await ports.clock.within(operation.limits.closureDeadline, () => session.close());
+      const closure = await ports.clock.within(operation.limits.closureDeadline, () => attempt.close());
       state.upstreamClosure = closure.state;
       state.upstreamClosureReceiptDigest = closure.receiptDigest;
     } catch {
@@ -219,9 +222,10 @@ const closeFlows = async (
   } catch {
     state.inboundClosure = "unknown";
   }
-  if (state.inboundClosure !== "closed" || (session !== undefined && state.upstreamClosure !== "closed")) {
+  if (state.inboundClosure !== "closed" || (attempt !== undefined && state.upstreamClosure !== "closed")) {
     state.anomalyCode = "closure_unproved";
-    if (state.upstreamRequestBytes > 0 || state.firstByteState !== "not_sent") {state.outcome = "reconcile_required";}
+    if (attempt !== undefined && state.upstreamClosure !== "closed") {state.outcome = "reconcile_required";}
+    else if (state.upstreamRequestBytes > 0 || state.firstByteState !== "not_sent") {state.outcome = "reconcile_required";}
   }
 };
 
@@ -246,7 +250,7 @@ const settleEvidence = async (
   return receipt;
 };
 
-type ExecutionResources = { session?: HttpEgressTransportSession };
+type ExecutionResources = { attempt?: HttpEgressTransportAttempt; session?: HttpEgressTransportSession };
 type ExecutionStageContext = Readonly<{
   ports: HttpEgressBrokerPorts;
   operation: HttpEgressOperation;
@@ -265,7 +269,7 @@ const halt = async (
   resources: ExecutionResources,
 ): Promise<Halted> => Object.freeze({
   halted: true,
-  receipt: await settleAfterClose(ports, operation, state, resources.session),
+  receipt: await settleAfterClose(ports, operation, state, resources.attempt),
 });
 
 const authorizeResolution = async (
@@ -366,16 +370,21 @@ const renderAuthorizedRequest = async (
     return await halt(ports, operation, state, resources);
   }
   let authorization: Uint8Array;
+  let pendingAuthorization: Promise<Uint8Array> | undefined;
   try {
     authorization = await ports.clock.within(
       operation.limits.deadline,
-      () => ports.credentialCustody.renderAuthorization({
-        operationId: operation.operationId, attemptId: operation.attemptId,
-        materializationReceiptDigest: route.materializationReceiptDigest,
-      }),
+      () => {
+        pendingAuthorization = ports.credentialCustody.renderAuthorization({
+          operationId: operation.operationId, attemptId: operation.attemptId,
+          materializationReceiptDigest: route.materializationReceiptDigest,
+        });
+        return pendingAuthorization;
+      },
       operation.signal,
     );
   } catch {
+    zeroLateBytes(pendingAuthorization);
     state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "credential_render_failed";
     return await halt(ports, operation, state, resources);
@@ -455,18 +464,35 @@ const openAuthorizedSession = async (
   input: Readonly<{ route: HttpEgressRoute; resolution: NormalizedHttpEgressResolution }>,
 ): Promise<StageResult<AuthorizedHttpRequest>> => {
   const { ports, operation, state, resources } = context;
+  const beforeOpen = ports.clock.now();
+  if (operation.signal?.aborted || !Number.isFinite(beforeOpen) || beforeOpen >= operation.limits.deadline) {
+    state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
+    state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "transport_open_failed";
+    return await halt(ports, operation, state, resources);
+  }
   state.attemptCount = 1;
   try {
-    resources.session = await ports.clock.within(operation.limits.deadline, () => ports.transport.open({
+    resources.attempt = ports.transport.beginOpen({
       originHost: input.route.originHost,
       originPort: input.route.originPort,
       selectedAddress: input.resolution.selectedAddress,
       sni: input.route.sni,
       alpn: input.route.alpn,
-    }), operation.signal);
+    });
+    state.upstreamClosure = "unknown";
+    resources.session = await ports.clock.within(
+      operation.limits.deadline,
+      () => (resources.attempt as HttpEgressTransportAttempt).ready(),
+      operation.signal,
+    );
   } catch {
     state.outcome = operation.signal?.aborted ? "cancelled" : "denied";
     state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "transport_open_failed";
+    return await halt(ports, operation, state, resources);
+  }
+  if (operation.signal?.aborted) {
+    state.outcome = "cancelled";
+    state.anomalyCode = "inbound_cancelled";
     return await halt(ports, operation, state, resources);
   }
   const session = resources.session;
@@ -563,7 +589,7 @@ export const createStrictHttpEgressBroker = (ports: HttpEgressBrokerPorts): Read
           ? (operation.signal?.aborted ? "cancelled" : "denied") : "reconcile_required";
         state.anomalyCode = operation.signal?.aborted ? "inbound_cancelled" : "provider_access_denied";
       }
-      return await settleAfterClose(ports, operation, state, resources.session);
+      return await settleAfterClose(ports, operation, state, resources.attempt);
     }
   },
 });
@@ -572,8 +598,8 @@ const settleAfterClose = async (
   ports: HttpEgressBrokerPorts,
   operation: HttpEgressOperation,
   state: ReceiptState,
-  session: HttpEgressTransportSession | undefined,
+  attempt: HttpEgressTransportAttempt | undefined,
 ): Promise<HttpEgressReceipt> => {
-  await closeFlows(ports, operation, state, session);
+  await closeFlows(ports, operation, state, attempt);
   return await settleEvidence(ports, operation, state);
 };

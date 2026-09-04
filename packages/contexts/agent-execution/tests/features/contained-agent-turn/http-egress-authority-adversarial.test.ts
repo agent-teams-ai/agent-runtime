@@ -1,26 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { HttpEgressAuthorizationDecision } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
+import type { HttpEgressFinalAuthorization } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 import { createStrictHttpEgressBroker } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
 import { isPublicEgressAddress } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/public-address-policy.js";
 import { createEgressFixture, defaultRoute, denyDecision } from "./http-egress-test-fixture.ts";
-
-const allowFinal = (changes: Partial<HttpEgressAuthorizationDecision> = {}): HttpEgressAuthorizationDecision => Object.freeze({
-  decision: "allow",
-  receiptDigest: "final-receipt-digest",
-  validUntil: 900,
-  policyGeneration: defaultRoute.policyGeneration,
-  keyGeneration: defaultRoute.keyGeneration,
-  routeGeneration: defaultRoute.routeGeneration,
-  credentialGeneration: defaultRoute.credentialGeneration,
-  materializationReceiptDigest: defaultRoute.materializationReceiptDigest,
-  selectedPeer: "93.184.216.34",
-  sniDigest: defaultRoute.sniDigest,
-  certificateDigest: defaultRoute.certificateDigest,
-  pinDigest: defaultRoute.pinDigest,
-  alpn: defaultRoute.alpn,
-  ...changes,
-});
+import { allowForBinding, bindingDigestWith } from "./http-egress-exact-validation-test-fixture.ts";
 
 describe("strict egress authority ordering", () => {
   const unsafeAddresses = [
@@ -126,7 +110,9 @@ describe("strict egress authority ordering", () => {
     { name: "provisional expiry", options: { provisional: Object.freeze({ ...denyDecision(defaultRoute, "provisional-expired"), decision: "allow" as const, validUntil: 0 }) }, anomaly: "provisional_denied" },
     { name: "provisional timeout", options: { provisional: "timeout" as const }, anomaly: "provisional_timeout" },
     { name: "final deny", options: { final: denyDecision(defaultRoute, "final-deny") }, anomaly: "final_denied" },
-    { name: "final expiry", options: { final: allowFinal({ validUntil: 0 }) }, anomaly: "final_denied" },
+    { name: "final expiry", options: { final: (input: HttpEgressFinalAuthorization) => Object.freeze({
+      ...allowForBinding(input, input.bindingDigest), validUntil: 0,
+    }) }, anomaly: "final_denied" },
     { name: "final timeout", options: { final: "timeout" as const }, anomaly: "final_timeout" },
   ] as const) {
     test(`${scenario.name} proves zero upstream request bytes`, async () => {
@@ -155,18 +141,25 @@ describe("strict egress authority ordering", () => {
   });
 
   for (const [name, changes] of [
-    ["peer", { selectedPeer: "93.184.216.35" }],
-    ["SNI", { sniDigest: "drifted" }],
-    ["certificate", { certificateDigest: "drifted" }],
-    ["pin", { pinDigest: "drifted" }],
-    ["ALPN", { alpn: "h2" }],
-    ["policy generation", { policyGeneration: "drifted" }],
-    ["key generation", { keyGeneration: "drifted" }],
-    ["route generation", { routeGeneration: "drifted" }],
-    ["credential generation", { credentialGeneration: "drifted" }],
+    ["operation", (input: HttpEgressFinalAuthorization) => ({ operationId: `${input.operationId}-drifted` })],
+    ["request digest", (input: HttpEgressFinalAuthorization) => ({
+      requestDigest: `${input.requestDigest}-drifted`,
+    })],
+    ["route receipt", (input: HttpEgressFinalAuthorization) => ({
+      routeReceiptDigest: `${input.routeReceiptDigest}-drifted`,
+    })],
+    ["observed peer", (input: HttpEgressFinalAuthorization) => ({
+      observedPeerAddress: input.observedPeerAddress === "93.184.216.35"
+        ? "93.184.216.34" : "93.184.216.35",
+    })],
+    ["output limit", (input: HttpEgressFinalAuthorization) => ({ limits: {
+      ...input.limits, maxOutputBytes: input.limits.maxOutputBytes + 1,
+    } })],
   ] as const) {
     test(`final authorization rejects ${name} drift with zero bytes`, async () => {
-      const fixture = createEgressFixture({ final: allowFinal(changes) });
+      const fixture = createEgressFixture({
+        final: input => allowForBinding(input, bindingDigestWith(input, changes(input))),
+      });
       const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
       assert.equal(receipt.anomalyCode, "final_denied");
       assert.equal(receipt.upstreamRequestBytes, 0);

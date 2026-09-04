@@ -1,3 +1,29 @@
+import { types as utilTypes } from "node:util";
+
+const arrayValuesWithoutAccessors = (input: unknown): readonly string[] | undefined => {
+  if (!Array.isArray(input) || utilTypes.isProxy(input) || Object.getPrototypeOf(input) !== Array.prototype) {
+    return undefined;
+  }
+  const length = input.length;
+  if (!Number.isSafeInteger(length) || length < 1 || length > 32) {
+    return undefined;
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  if (Reflect.ownKeys(descriptors).length !== length + 1) {
+    return undefined;
+  }
+  const values: string[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = descriptors[String(index)];
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true
+      || typeof descriptor.value !== "string") {
+      return undefined;
+    }
+    values.push(descriptor.value);
+  }
+  return values;
+};
+
 const parseIpv4 = (address: string): readonly number[] | undefined => {
   const parts = address.split(".");
   if (parts.length !== 4) {return undefined;}
@@ -71,8 +97,10 @@ const canonicalIpv6 = (words: readonly number[]): string => {
   return `${formatted.slice(0, bestStart).join(":")}::${formatted.slice(bestStart + bestLength).join(":")}`;
 };
 
-const normalizePublicAddress = (address: string): string | undefined => {
-  if (address.length === 0 || address.length > 64) {return undefined;}
+const normalizePublicAddress = (address: unknown): string | undefined => {
+  if (typeof address !== "string" || address.length === 0 || address.length > 64 || !address.isWellFormed()) {
+    return undefined;
+  }
   const ipv4 = parseIpv4(address);
   if (ipv4 !== undefined) {return isPublicIpv4(ipv4) ? ipv4.join(".") : undefined;}
   const ipv6 = expandIpv6(address);
@@ -89,15 +117,16 @@ export type NormalizedHttpEgressResolution = Readonly<{
 }>;
 
 export const normalizeHttpEgressResolution = (
-  addresses: readonly string[],
-  selectedAddress: string,
+  addresses: unknown,
+  selectedAddress: unknown,
 ): NormalizedHttpEgressResolution | undefined => {
-  if (addresses.length === 0 || addresses.length > 32) {return undefined;}
+  const values = arrayValuesWithoutAccessors(addresses);
+  if (values === undefined) {return undefined;}
   const normalizedSelected = normalizePublicAddress(selectedAddress);
   if (normalizedSelected === undefined) {return undefined;}
-  const normalized = addresses.map(normalizePublicAddress);
+  const normalized = values.map(normalizePublicAddress);
   if (normalized.some(address => address === undefined)) {return undefined;}
-  const exact = normalized as string[];
+  const exact = normalized.filter((address): address is string => address !== undefined);
   if (new Set(exact).size !== exact.length || !exact.includes(normalizedSelected)) {return undefined;}
   return Object.freeze({
     addresses: Object.freeze(exact.toSorted()),
@@ -106,7 +135,6 @@ export const normalizeHttpEgressResolution = (
 };
 
 export const resolutionIsSafe = (
-  addresses: readonly string[],
-  selectedAddress: string,
-): boolean => addresses.length > 0
-  && normalizeHttpEgressResolution(addresses, selectedAddress) !== undefined;
+  addresses: unknown,
+  selectedAddress: unknown,
+): boolean => normalizeHttpEgressResolution(addresses, selectedAddress) !== undefined;
