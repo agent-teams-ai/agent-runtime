@@ -1,17 +1,13 @@
-export interface EgressCanonicalDigest {
-  digest(canonicalValue: string): string;
-}
+import type { EgressDecisionSignatureV1, EgressSigningKeyMetadataV1 } from
+  "../../../contracts/provider-process-egress-authorization-v1.js";
 
-export interface EgressDecisionSignature {
-  readonly keyRef: string;
-  readonly keyGeneration: string;
-  readonly value: string;
-}
+export interface EgressCanonicalDigest { digest(canonicalValue: string): string; }
 
 export interface EgressDecisionSigner {
-  sign(decisionDigest: string, keyGeneration: string): EgressDecisionSignature;
+  sign(decisionDigest: string, signingKey: EgressSigningKeyMetadataV1):
+    EgressDecisionSignatureV1;
 }
 
 export interface EgressDecisionVerifier {
-  verify(decisionDigest: string, signature: EgressDecisionSignature): boolean;
+  verify(decisionDigest: string, signature: EgressDecisionSignatureV1): boolean;
 }

@@ -1,4 +1,4 @@
-import type { EgressBudgetsV1, EgressRequestIntentV1, EgressTlsOriginV1 } from
+import type { EgressBudgetsV1, EgressTlsOriginV1, TrustedHostRequestProjectionV1 } from
   "../contracts/provider-process-egress-authorization-v1.js";
 
 export const validRef = (value: string): boolean =>
@@ -8,14 +8,16 @@ export const validRef = (value: string): boolean =>
 export const validDigest = (value: string): boolean => /^sha256:[0-9a-f]{64}$/.test(value);
 
 export const normalizeHostname = (value: string): string | undefined => {
-  if (value.length < 1 || value.length > 253 || value.endsWith(".") || value.includes(":")) {return undefined;}
+  if (value.length < 1 || value.length > 253 || value.endsWith(".") || value.includes(":")) {
+    return undefined;
+  }
   const hostname = value.toLowerCase();
-  if (hostname !== value || !hostname.includes(".")) {return undefined;}
-  if (/^[0-9]+(?:\.[0-9]+){3}$/.test(hostname)) {return undefined;}
+  if (hostname !== value || !hostname.includes(".") || /^[0-9]+(?:\.[0-9]+){3}$/.test(hostname)) {
+    return undefined;
+  }
   const labels = hostname.split(".");
-  if (labels.some(label => label.length < 1 || label.length > 63 ||
-    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))) {return undefined;}
-  return hostname;
+  return labels.some(label => label.length < 1 || label.length > 63 ||
+    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)) ? undefined : hostname;
 };
 
 export const validOrigin = (origin: EgressTlsOriginV1): boolean =>
@@ -30,16 +32,33 @@ export const validBudgets = (budgets: EgressBudgetsV1): boolean =>
   Number.isSafeInteger(budgets.totalMilliseconds) && budgets.totalMilliseconds >= 1 &&
   budgets.totalMilliseconds <= 15 * 60 * 1000;
 
-export const validIntent = (intent: EgressRequestIntentV1): boolean =>
-  ["DELETE", "GET", "PATCH", "POST", "PUT"].includes(intent.method) &&
-  intent.pathAndQuery.length >= 1 && intent.pathAndQuery.length <= 16_384 &&
-  intent.pathAndQuery.startsWith("/") && !intent.pathAndQuery.includes("#") &&
-  ![...intent.pathAndQuery].some(character => {
+const validPath = (value: string): boolean => value.length >= 1 && value.length <= 16_384 &&
+  value.startsWith("/") && !value.includes("#") && ![...value].some(character => {
     const code = character.codePointAt(0) ?? 0;
     return code <= 31 || code === 127;
-  }) &&
-  validDigest(intent.bodyDigest) &&
-  intent.mediaType.length >= 1 && intent.mediaType.length <= 128 &&
-  /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(intent.mediaType) &&
-  (intent.applicationProtocol === "http/1.1" || intent.applicationProtocol === "h2") &&
-  intent.transportMode === "direct-tls" && intent.upgradeMode === "none";
+  });
+const validLength = (value: number, maximum: number): boolean =>
+  Number.isSafeInteger(value) && value >= 0 && value <= maximum;
+const headerName = (value: string): boolean => value.length <= 128 &&
+  /^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(value);
+
+export const validRequestProjection = (request: TrustedHostRequestProjectionV1): boolean => {
+  if (!["DELETE", "GET", "PATCH", "POST", "PUT"].includes(request.method) ||
+    request.scheme !== "https" || normalizeHostname(request.authority.hostname) !==
+      request.authority.hostname || !validOrigin({ scheme: "https", ...request.authority }) ||
+    !validPath(request.pathAndQuery) || !validDigest(request.headers.canonicalDigest) ||
+    !validLength(request.headers.fieldCount, 256) || !validDigest(request.body.digest) ||
+    !validLength(request.body.byteLength, 64 * 1024 * 1024)) {return false;}
+  const credentialNames = request.headers.credentialFields.map(field => field.name);
+  if (request.headers.credentialFields.length > request.headers.fieldCount ||
+    new Set(credentialNames).size !== credentialNames.length ||
+    credentialNames.some((name, index) => index > 0 && credentialNames[index - 1]! >= name) ||
+    request.headers.credentialFields.some(field => !headerName(field.name) ||
+      !validDigest(field.credentialBindingDigest) || !validDigest(field.valueDigest) ||
+      !validLength(field.byteLength, 1024 * 1024))) {return false;}
+  const framing = request.framing;
+  if (framing.protocol !== "http/1.1") {return true;}
+  return framing.requestTarget === "origin-form" && framing.authoritySource === "host" &&
+    framing.transferEncoding === "absent" && framing.connectionSpecificHeaders === "absent" &&
+    framing.contentLength === request.body.byteLength;
+};

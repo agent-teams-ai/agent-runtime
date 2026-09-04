@@ -2,6 +2,8 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import type { EgressCanonicalDigest, EgressDecisionSigner, EgressDecisionVerifier } from
   "../../application/ports/outbound/egress-cryptography.js";
+import type { EgressDecisionSignatureV1, EgressSigningKeyMetadataV1 } from
+  "../../contracts/provider-process-egress-authorization-v1.js";
 
 export const createNodeSha256EgressDigest = (): EgressCanonicalDigest => Object.freeze({
   digest(canonicalValue: string): string {
@@ -18,12 +20,16 @@ export const createNodeHmacEgressDecisionSeal = (input: {
   const calculate = (digest: string, generation: string): string =>
     createHmac("sha256", secret).update(`${generation}\0${digest}`, "utf8").digest("hex");
   return Object.freeze({
-    sign(decisionDigest: string, keyGeneration: string) {
-      return Object.freeze({ keyRef, keyGeneration, value: calculate(decisionDigest, keyGeneration) });
+    sign(decisionDigest: string, signingKey: EgressSigningKeyMetadataV1) {
+      if (signingKey.algorithm !== "hmac-sha256-synthetic" || signingKey.keyRef !== keyRef) {
+        throw new TypeError("unsupported synthetic signing key");
+      }
+      return Object.freeze({ ...signingKey,
+        value: calculate(decisionDigest, signingKey.keyGeneration) });
     },
-    verify(decisionDigest: string, signature: { readonly keyRef: string;
-      readonly keyGeneration: string; readonly value: string }) {
-      if (signature.keyRef !== keyRef || !/^[0-9a-f]{64}$/.test(signature.value)) {return false;}
+    verify(decisionDigest: string, signature: EgressDecisionSignatureV1) {
+      if (signature.algorithm !== "hmac-sha256-synthetic" || signature.keyRef !== keyRef ||
+        !/^[0-9a-f]{64}$/.test(signature.value)) {return false;}
       const expected = Buffer.from(calculate(decisionDigest, signature.keyGeneration), "hex");
       const actual = Buffer.from(signature.value, "hex");
       return expected.length === actual.length && timingSafeEqual(expected, actual);

@@ -57,14 +57,18 @@ const specialIpv6 = (groups: readonly number[]): boolean => {
 };
 
 const publicIpv6 = (groups: readonly number[]): boolean => {
-  const [a = 0, b = 0] = groups;
+  const [a = 0, b = 0, c = 0] = groups;
   const globallyRoutable = (a & 0xe000) === 0x2000;
   return globallyRoutable && !(
     specialIpv6(groups) ||
     (a & 0xfe00) === 0xfc00 ||
     (a & 0xffc0) === 0xfe80 ||
     (a & 0xff00) === 0xff00 ||
-    (a === 0x2001 && b === 0x0db8)
+    (a === 0x2001 && b <= 0x01ff) ||
+    (a === 0x2001 && b === 0x0db8) ||
+    a === 0x2002 ||
+    (a === 0x2620 && b === 0x004f && c === 0x8000) ||
+    (a & 0xfff0) === 0x3ff0
   );
 };
 
