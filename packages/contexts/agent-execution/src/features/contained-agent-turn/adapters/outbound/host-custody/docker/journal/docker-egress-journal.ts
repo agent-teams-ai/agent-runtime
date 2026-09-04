@@ -257,7 +257,7 @@ export class DockerEgressJournal {
     } catch { /* Only a completely validated, locator-bound prefix is retained. */ }
     const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256,
       bindingSha256: terminalRecord?.subject.bindingSha256 ?? null,
-      disposition: "quarantined", terminalRecord });
+      disposition: "quarantined", terminalRecord }, this.limits);
     await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
     throw new DockerEgressJournalConflictError("corrupt V3 entry fences admission");
   }
@@ -291,7 +291,7 @@ export class DockerEgressJournal {
           const first = records[0]!;
           if (dockerEgressJournalLocator(first.subject) !== entry.locatorSha256) {
             const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256,
-              bindingSha256: first.subject.bindingSha256, disposition: "quarantined", terminalRecord: records.at(-1)! });
+              bindingSha256: first.subject.bindingSha256, disposition: "quarantined", terminalRecord: records.at(-1)! }, this.limits);
             await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
             throw new DockerEgressJournalConflictError("locator-record mismatch fences admission");
           }
@@ -330,7 +330,7 @@ export class DockerEgressJournal {
 
   private async persistRetirement(locator: string, terminalRecord: DockerEgressJournalRecord): Promise<void> {
     const tombstone = createDockerEgressTombstone({ locatorSha256: locator,
-      bindingSha256: terminalRecord.subject.bindingSha256, disposition: "retired", terminalRecord });
+      bindingSha256: terminalRecord.subject.bindingSha256, disposition: "retired", terminalRecord }, this.limits);
     await this.storage.persistTombstone(locator, encodeDockerEgressTombstone(tombstone, this.limits), true);
   }
 
@@ -375,7 +375,7 @@ export class DockerEgressJournal {
         await file.append(file.byteLength, bytes);
         if (event.kind === "closed" || event.kind === "quarantined") {
           const tombstone = createDockerEgressTombstone({ locatorSha256: locator, bindingSha256: subject.bindingSha256,
-            disposition: event.kind === "closed" ? "retired" : "quarantined", terminalRecord: next });
+            disposition: event.kind === "closed" ? "retired" : "quarantined", terminalRecord: next }, this.limits);
           await this.storage.persistTombstone(locator, encodeDockerEgressTombstone(tombstone, this.limits), event.kind === "closed");
         }
         return next;
@@ -426,7 +426,7 @@ export class DockerEgressJournal {
       await entry.file.append(entry.file.byteLength, encodeDockerEgressRecord(terminalRecord, this.limits));
     }
     const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256,
-      bindingSha256: subject.bindingSha256, disposition: "quarantined", terminalRecord });
+      bindingSha256: subject.bindingSha256, disposition: "quarantined", terminalRecord }, this.limits);
     await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
   }
 
@@ -498,7 +498,7 @@ export class DockerEgressJournal {
         reconcileRequired: state.reconcileRequired || state.materializePending !== null || state.cleanupPending !== null })); }
       if (!complete) {
         const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256,
-          bindingSha256: subject.bindingSha256, disposition: "quarantined", terminalRecord: records.at(-1)! });
+          bindingSha256: subject.bindingSha256, disposition: "quarantined", terminalRecord: records.at(-1)! }, this.limits);
         await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
       }
       evidence.push(Object.freeze({ kind: state.quarantined || !complete ? "quarantine_evidence" : "cleanup_evidence",
@@ -506,7 +506,7 @@ export class DockerEgressJournal {
         status: state.quarantined || !complete ? "quarantined" : "debt" }));
     } catch {
       const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256, bindingSha256: null,
-        disposition: "quarantined", terminalRecord: null });
+        disposition: "quarantined", terminalRecord: null }, this.limits);
       await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
       evidence.push(Object.freeze({ kind: "quarantine_evidence", locatorSha256: entry.locatorSha256,
         bindingSha256: null, status: "quarantined" }));
@@ -537,7 +537,7 @@ export class DockerEgressJournal {
             : classifyDockerEgressLegacyV2(await entry.file.read(entry.byteLength));
           if (legacy.quarantineRequired) {
             const tombstone = createDockerEgressTombstone({ locatorSha256: entry.locatorSha256, bindingSha256: null,
-              disposition: "quarantined", terminalRecord: null });
+              disposition: "quarantined", terminalRecord: null }, this.limits);
             await this.storage.persistTombstone(entry.locatorSha256, encodeDockerEgressTombstone(tombstone, this.limits), false);
           }
           evidence.push(Object.freeze({ kind: "legacy_evidence", locatorSha256: entry.locatorSha256, bindingSha256: null,

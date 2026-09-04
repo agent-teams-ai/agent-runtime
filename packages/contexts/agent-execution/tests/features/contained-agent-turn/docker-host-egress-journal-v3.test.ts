@@ -36,6 +36,11 @@ const observerAuthority = Object.freeze({
   observerId: opaque("observer:", "docker-absence-observer"),
   capabilityRevisionSha256: hash("capability-revision"),
 });
+const expandedLimits = Object.freeze({
+  ...DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS,
+  maxRecordsPerJournal: 128,
+  maxJournalBytes: 128 * DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordBytes,
+});
 
 const subject = createDockerEgressSubject({
   identity: {
@@ -163,6 +168,34 @@ test("retirement tombstone is durable, prevents resurrection, and serves a lost-
   assert.equal(closed.event.kind, "closed");
   assert.equal(storage.tombstones.has(dockerEgressJournalLocator(subject)), true);
   await assert.rejects(journal.open(subject, command("resurrect")), { name: "DockerEgressJournalConflictError" });
+});
+
+test("configured larger bounds retire a valid long failed-cleanup chain and preserve exact close retries", async () => {
+  const storage = new MemoryEgressStorage();
+  const journal = new DockerEgressJournal(storage, trusted, observerAuthority, expandedLimits);
+  let sequence = (await journal.open(subject, command("long-open"))).sequence;
+  sequence = (await journal.materializeIntent(subject, sequence, command("long-materialize-intent"), "private_network")).sequence;
+  sequence = (await journal.materializeReceipt(subject, sequence, command("long-materialize-receipt"), "private_network")).sequence;
+  for (let attempt = 0; attempt < 47; attempt += 1) {
+    sequence = (await journal.cleanupIntent(subject, sequence, command(`long-cleanup-intent-${attempt}`), "private_network")).sequence;
+    sequence = (await journal.reconcileRequired(subject, sequence, command(`long-cleanup-failed-${attempt}`),
+      "cleanup_failed", "private_network")).sequence;
+  }
+  sequence = (await journal.cleanupIntent(subject, sequence, command("long-final-cleanup-intent"), "private_network")).sequence;
+  sequence = (await journal.cleanupReceipt(subject, sequence, command("long-final-cleanup-receipt"), "private_network",
+    observation("private_network"))).sequence;
+  assert.ok(sequence >= DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordsPerJournal);
+
+  storage.failTombstoneAfterPublish = true;
+  await assert.rejects(journal.close(subject, sequence, command("long-close")));
+  const closed = await journal.close(subject, sequence, command("long-close"));
+  assert.equal(closed.sequence, sequence + 1);
+  assert.equal(storage.v3Files.has(dockerEgressJournalLocator(subject)), false);
+  assert.deepEqual(await journal.close(subject, sequence, command("long-close")), closed);
+  assert.deepEqual(await journal.recoveryEvidence(), [{
+    kind: "retirement_evidence", locatorSha256: dockerEgressJournalLocator(subject),
+    bindingSha256: subject.bindingSha256, status: "retired",
+  }]);
 });
 
 test("cleanup receipts require an immutable absence observation bound to the exact debt", async () => {

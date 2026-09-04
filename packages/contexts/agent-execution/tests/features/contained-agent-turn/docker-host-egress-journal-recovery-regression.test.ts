@@ -41,6 +41,11 @@ const observerAuthority = Object.freeze({
   observerId: opaque("observer:", "absence-observer"),
   capabilityRevisionSha256: hash("observer-capability"),
 });
+const expandedLimits = Object.freeze({
+  ...DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS,
+  maxRecordsPerJournal: 128,
+  maxJournalBytes: 128 * DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordBytes,
+});
 
 const makeSubject = (generation: string): DockerEgressJournalSubject => createDockerEgressSubject({
   identity: {
@@ -167,6 +172,38 @@ test("checksum-valid retired tombstone with an unchained terminal fails retry an
   assert.equal(evidence.some(entry => entry.kind === "retirement_evidence" || entry.kind === "cleanup_evidence"), false);
   assert.equal(storage.tombstones.has(locator), true);
   assert.equal(storage.v3Files.has(locator), false);
+});
+
+test("recovery closes and retires a reachable long failed-cleanup chain under configured bounds", async () => {
+  const subject = makeSubject("long-recovery-retirement"); const locator = dockerEgressJournalLocator(subject);
+  const storage = new MemoryEgressStorage();
+  const journal = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority, expandedLimits);
+  let sequence = (await journal.open(subject, command("long-recovery-open"))).sequence;
+  sequence = (await journal.materializeIntent(subject, sequence, command("long-recovery-materialize-intent"),
+    "private_network")).sequence;
+  sequence = (await journal.materializeReceipt(subject, sequence, command("long-recovery-materialize-receipt"),
+    "private_network")).sequence;
+  for (let attempt = 0; attempt < 47; attempt += 1) {
+    sequence = (await journal.cleanupIntent(subject, sequence, command(`long-recovery-cleanup-intent-${attempt}`),
+      "private_network")).sequence;
+    sequence = (await journal.reconcileRequired(subject, sequence, command(`long-recovery-cleanup-failed-${attempt}`),
+      "cleanup_failed", "private_network")).sequence;
+  }
+  sequence = (await journal.cleanupIntent(subject, sequence, command("long-recovery-final-cleanup-intent"),
+    "private_network")).sequence;
+  sequence = (await journal.cleanupReceipt(subject, sequence, command("long-recovery-final-cleanup-receipt"),
+    "private_network", observation(subject))).sequence;
+  assert.ok(sequence >= DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordsPerJournal);
+
+  const restarted = new DockerEgressJournal(storage, trustedFor(subject), observerAuthority, expandedLimits);
+  assert.deepEqual(await restarted.recoveryEvidence(), [{ kind: "retirement_evidence", locatorSha256: locator,
+    bindingSha256: subject.bindingSha256, status: "retired" }]);
+  assert.equal(storage.v3Files.has(locator), false);
+  const tombstoneFile = storage.tombstones.get(locator); assert.ok(tombstoneFile);
+  const tombstone = decodeDockerEgressTombstone(tombstoneFile.bytes, expandedLimits);
+  assert.equal(tombstone.terminalRecord?.sequence, sequence + 1);
+  assert.ok(tombstone.terminalRecord);
+  assert.deepEqual(await restarted.close(subject, sequence, tombstone.terminalRecord.commandId), tombstone.terminalRecord);
 });
 
 test("quarantined prefix evidence remains decodable but cannot authorize tombstone retry", async () => {
