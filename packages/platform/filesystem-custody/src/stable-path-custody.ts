@@ -110,6 +110,8 @@ const componentsEqual = (
   left.mtimeNs === right.mtimeNs &&
   left.ctimeNs === right.ctimeNs;
 
+// Contract: equality covers sampled lineage observations, not all pathname
+// event history between samples (including an otherwise invisible ABA).
 export const pathLineagesEqual = (
   left: PathLineage,
   right: PathLineage,
