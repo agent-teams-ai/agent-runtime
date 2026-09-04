@@ -28,8 +28,9 @@ export const operationForProject = (
   projectId: string,
   suffix: string,
   commandId = fixtureCommandId,
+  tenantId = "tenant:postgres-durability",
 ) => {
-  const selectedScope = Object.freeze({ projectId, tenantId: "tenant:postgres-durability" });
+  const selectedScope = Object.freeze({ projectId, tenantId });
   const selectedAccess = Object.freeze({
     ...providerAccessSnapshot,
     projectId,

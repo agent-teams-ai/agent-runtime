@@ -18,6 +18,7 @@ const containedTurnTestRoot = join(packageRoot, "tests/features/contained-agent-
 const qualificationDatabaseUrl =
   "postgresql://qualification-user:qualification-secret@db.internal:5432/qualification";
 const postgresTests = [
+  join(containedTurnTestRoot, "postgres-fresh-process-recovery.test.ts"),
   join(containedTurnTestRoot, "postgres-committed-dispatch.test.ts"),
   join(containedTurnTestRoot, "postgres-contained-turn-acceptance-commit.test.ts"),
   join(containedTurnTestRoot, "postgres-contained-turn.test.ts"),
