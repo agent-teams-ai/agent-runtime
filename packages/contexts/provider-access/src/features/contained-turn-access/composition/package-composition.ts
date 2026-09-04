@@ -15,7 +15,7 @@ import {
   claimBindingDigestPayload, requestDigestPayload, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumeCommand,
 } from "../domain/dispatch-consumption.js";
 import {
-  materializationRequestPayload, snapshotMaterializationCommand, type MaterializationCommand,
+  authorizationRequestPayload, snapshotAuthorizationCommand, type AuthorizationCommand,
 } from "../domain/materialization-authorization.js";
 import { exactDispatchDataRecord } from "../adapters/dispatch-consumption-data.js";
 import { unsignedConsumeCommandFromContract } from "../adapters/inbound/dispatch-consumption-mapper.js";
@@ -95,7 +95,10 @@ const seedToHead = (seed: InMemoryDispatchBindingSeed): DispatchBindingHead => {
   });
 };
 
-/** In-memory checkpoint harness: at-most-once state is process-local and does not survive restart. */
+/**
+ * Synthetic checkpoint harness. Its authorization ledger is process-local, does not survive restart,
+ * and is not a production persistence implementation.
+ */
 export const createInMemoryContainedTurnDispatchConsumptionV1 = (input: {
   readonly bindings: readonly InMemoryDispatchBindingSeed[];
   readonly initialControlTime: number;
@@ -139,7 +142,7 @@ export const createDispatchConsumptionRequestDigests = async (
 export const createCredentialMaterializationRequestDigest = async (
   input: Omit<AuthorizeCredentialMaterializationInput, "requestDigest">,
 ): Promise<string> => {
-  const command = snapshotMaterializationCommand({ ...input, requestDigest: "pending" });
-  const { requestDigest: _requestDigest, ...unsigned } = command as MaterializationCommand;
-  return createSha256DispatchConsumptionDigest().digest(materializationRequestPayload(unsigned));
+  const command = snapshotAuthorizationCommand({ ...input, requestDigest: "pending" });
+  const { requestDigest: _requestDigest, ...unsigned } = command as AuthorizationCommand;
+  return createSha256DispatchConsumptionDigest().digest(authorizationRequestPayload(unsigned));
 };

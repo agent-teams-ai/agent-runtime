@@ -16,19 +16,14 @@ export type {
 export {
   CREDENTIAL_MATERIALIZATION_PURPOSE,
   CREDENTIAL_MATERIALIZATION_SCHEMA_VERSION,
-  type AcknowledgeCredentialCleanupInput,
-  type AcknowledgeCredentialCleanupOutcome,
   type AuthorizeCredentialMaterializationInput,
   type AuthorizeCredentialMaterializationOutcome,
   type CredentialMaterializationAuthorizationV1,
-  type CredentialMaterializationReceipt,
+  type CredentialMaterializationAuthorizationReceipt,
   type CredentialMaterializationRejectionReason,
-  type CredentialMaterializationState,
-  type CredentialMaterializationTransition,
-  type ObserveCredentialMaterializationInput,
-  type ObserveCredentialMaterializationOutcome,
-  type TransitionCredentialMaterializationInput,
-  type TransitionCredentialMaterializationOutcome,
+  type CredentialMaterializationUnsupportedReason,
+  type ObserveCredentialMaterializationAuthorizationInput,
+  type ObserveCredentialMaterializationAuthorizationOutcome,
 } from "./features/contained-turn-access/index.js";
 export {
   CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE,
