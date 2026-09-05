@@ -1,4 +1,5 @@
 import type { HostHttpEgressSessionDependencies } from "@agent-teams/agent-execution/composition";
+import type { CredentialMaterializationAuthorizationReceipt } from "@agent-teams/provider-access";
 import { types } from "node:util";
 
 type HostAuthorization = HostHttpEgressSessionDependencies["providerAccess"];
@@ -104,7 +105,9 @@ const denialOutcome = (data: Record<string, unknown>, observation: boolean): Hos
   }
 };
 
-const outcome = (value: unknown, observation: boolean): HostOutcome => {
+type RetainFresh = (original: CredentialMaterializationAuthorizationReceipt, detached: HostReceipt) => void;
+
+const outcome = (value: unknown, observation: boolean, retainFresh?: RetainFresh): HostOutcome => {
   const data = dataRecord(value);
   switch (data.kind) {
     case "authorized":
@@ -117,7 +120,12 @@ const outcome = (value: unknown, observation: boolean): HostOutcome => {
       // PA can reject a formerly authorized receipt after revocation. Preserve
       // its historical decision; only the current outcome controls admission.
       if (data.kind === "rejected" && (typeof data.reason !== "string" || !reasons.includes(data.reason))) {return unavailable();}
-      return Object.freeze({kind: data.kind, receipt: detached});
+      const projected = Object.freeze({kind: data.kind, receipt: detached});
+      if (data.kind === "authorized") {
+        // Pair only after the complete projection validates, in this call's closure.
+        retainFresh?.(data.receipt as CredentialMaterializationAuthorizationReceipt, detached);
+      }
+      return projected;
     }
     default: return denialOutcome(data, observation);
   }
@@ -143,8 +151,9 @@ const invoke = <T>(capability: (...args: never[]) => unknown, input: object, pro
  * calling PA. No receipt replay is promoted to fresh authorization, no current
  * authority is cached, and no credentials, storage or Host lifecycle are owned here.
  */
-export const createContainedTurnHttpProviderAccessAuthorization = (
+const projectAuthorization = (
   owner: ContainedTurnHttpProviderAccessOwner,
+  retainFresh?: RetainFresh,
 ): HostAuthorization => {
   const outer = dataRecord(owner); exact(outer, ["authorization", "createRequestDigest"]);
   const authorization = dataRecord(outer.authorization); exact(authorization, ["authorize", "observe"]);
@@ -158,12 +167,122 @@ export const createContainedTurnHttpProviderAccessAuthorization = (
       } catch {throw new TypeError("HTTP Provider Access request digest unavailable");}
     },
     async authorize(input) {
-      try {return await invoke(authorize, inputSnapshot(input, commandKeys), value => outcome(value, false));}
+      try {return await invoke(authorize, inputSnapshot(input, commandKeys), value => outcome(value, false, retainFresh));}
       catch {return unavailable();}
     },
     async observe(input) {
       try {return await invoke(observe, inputSnapshot(input, selectorKeys), value => outcome(value, true));}
       catch {return unavailable();}
+    },
+  });
+};
+
+export const createContainedTurnHttpProviderAccessAuthorization = (
+  owner: ContainedTurnHttpProviderAccessOwner,
+): HostAuthorization => projectAuthorization(owner);
+
+/** Structural view of the PA-private factory product; never an acquisition port. */
+interface CredentialRenderingOwner {
+  readonly authorization: ContainedTurnHttpProviderAccessOwner["authorization"];
+  readonly rendering: Readonly<{
+    render(receipt: CredentialMaterializationAuthorizationReceipt): Promise<
+      | Readonly<{kind: "rendered"; credentials: Readonly<{
+          fields: readonly Readonly<{name: "Authorization" | "ChatGPT-Account-ID" | "x-api-key"; valueBytes: Uint8Array}>[];
+          release(): void;
+        }> }>
+      | Readonly<{kind: "denied" | "unsupported"}>>;
+  }>;
+  dispose(): void;
+}
+type CredentialPair = Pick<HostHttpEgressSessionDependencies, "providerAccess" | "materializer"> & Readonly<{dispose(): void}>;
+const renderUnavailable = (): TypeError => new TypeError("HTTP Provider Access credential rendering unavailable");
+const fill = Uint8Array.prototype.fill;
+const set = Uint8Array.prototype.set;
+
+/**
+ * Private, inert pairing for an exclusively owned, trusted PA rendering-factory
+ * product, as supplied by outer composition. This structural type does not prove
+ * provenance. PA validates and owns rendered fields until release; raw acquisition,
+ * recipes, current decisions and deadlines remain in PA. No PA internals are imported.
+ * Native async authorization/render/digest capabilities are still required.
+ * Disposal is one-way local admission closure, never durable cancellation truth.
+ */
+export const createContainedTurnHttpCredentialMaterialization = (
+  owner: CredentialRenderingOwner, createRequestDigest: ContainedTurnHttpProviderAccessOwner["createRequestDigest"],
+): CredentialPair => {
+  const outer = dataRecord(owner); exact(outer, ["authorization", "rendering", "dispose"]);
+  const rendering = dataRecord(outer.rendering); exact(rendering, ["render"]);
+  const render = method<CredentialRenderingOwner["rendering"]["render"]>(rendering.render);
+  const disposeOwner = outer.dispose;
+  if (typeof disposeOwner !== "function" || types.isProxy(disposeOwner)) {throw invalidOwner();}
+  let closed = false;
+  let fresh = new WeakMap<HostReceipt, CredentialMaterializationAuthorizationReceipt>();
+  const authorization = projectAuthorization({authorization: outer.authorization as CredentialRenderingOwner["authorization"],
+    createRequestDigest}, (original, detached) => {
+    if (closed) {throw renderUnavailable();}
+    fresh.set(detached, original);
+  });
+  return Object.freeze({
+    providerAccess: Object.freeze<HostAuthorization>({
+      async createRequestDigest(input) {
+        if (closed) {throw new TypeError("HTTP Provider Access request digest unavailable");}
+        const digest = await authorization.createRequestDigest(input);
+        if (closed) {throw new TypeError("HTTP Provider Access request digest unavailable");}
+        return digest;
+      },
+      async authorize(input) {
+        if (closed) {return unavailable();}
+        const result = await authorization.authorize(input);
+        return closed ? unavailable() : result;
+      },
+      async observe(input) {
+        if (closed) {return unavailable();}
+        const result = await authorization.observe(input);
+        return closed ? unavailable() : result;
+      },
+    }),
+    materializer: Object.freeze<CredentialPair["materializer"]>({
+      async render(detached) {
+        const original = fresh.get(detached);
+        if (closed || original === undefined) {throw renderUnavailable();}
+        fresh.delete(detached); // Consume identity before the first await, including failure.
+        const copies: Uint8Array[] = [];
+        try {
+          const result = await render(original);
+          if (result.kind !== "rendered") {throw renderUnavailable();}
+          let fields: Awaited<ReturnType<CredentialPair["materializer"]["render"]>>;
+          try {
+            if (closed || result.credentials.fields.length < 1 || result.credentials.fields.length > 2) {throw renderUnavailable();}
+            const names = new Set<string>();
+            fields = Object.freeze(result.credentials.fields.map(field => {
+              const name = field.name === "Authorization" ? "authorization" :
+                field.name === "ChatGPT-Account-ID" ? "chatgpt-account-id" : field.name === "x-api-key" ? "x-api-key" : undefined;
+              const maximum = name === "chatgpt-account-id" ? 256 : name === "authorization" ? 8199 : 8192;
+              if (name === undefined || names.has(name) || field.valueBytes.byteLength < 1 || field.valueBytes.byteLength > maximum) {
+                throw renderUnavailable();
+              }
+              names.add(name);
+              const bytes = new Uint8Array(field.valueBytes.byteLength);
+              copies.push(bytes); // Track before copying so partial failure is erasable.
+              Reflect.apply(set, bytes, [field.valueBytes]);
+              if (bytes.some(byte => byte < 0x20 || byte > 0x7e)) {throw renderUnavailable();}
+              return Object.freeze({name, valueBytes: bytes});
+            }));
+          } finally {result.credentials.release();}
+          if (closed) {throw renderUnavailable();}
+          // Host owns these dedicated copies, including a late completion after its cutoff.
+          return fields;
+        } catch {
+          for (const bytes of copies) {Reflect.apply(fill, bytes, [0]);}
+          throw renderUnavailable();
+        }
+      },
+    }),
+    dispose() {
+      if (closed) {return;}
+      closed = true;
+      fresh = new WeakMap();
+      Reflect.apply(disposeOwner, undefined, []);
     },
   });
 };

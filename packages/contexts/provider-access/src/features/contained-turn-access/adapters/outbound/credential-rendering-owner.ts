@@ -151,10 +151,10 @@ export const createCredentialRenderingAdapter = (selection: CredentialRenderingS
   const owner = new CredentialRenderingAdapter(selection, authorization, acquisition);
   return Object.freeze({
     authorization: Object.freeze({
-      authorize: (input: AuthorizeCredentialMaterializationInput) => owner.authorize(input),
-      observe: (input: ObserveCredentialMaterializationAuthorizationInput) => owner.observe(input),
+      authorize: async (input: AuthorizeCredentialMaterializationInput) => owner.authorize(input),
+      observe: async (input: ObserveCredentialMaterializationAuthorizationInput) => owner.observe(input),
     }),
-    rendering: Object.freeze({render: (receipt: CredentialMaterializationAuthorizationReceipt) => owner.render(receipt)}),
+    rendering: Object.freeze({render: async (receipt: CredentialMaterializationAuthorizationReceipt) => owner.render(receipt)}),
     dispose: () => {owner.dispose();},
   });
 };
