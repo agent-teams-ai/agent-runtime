@@ -14,7 +14,9 @@
     "role": "bounded-context",
     "ownerDocument": "ADR-0005"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -24,5 +26,9 @@
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
     }
+  },
+  "devDependencies": {
+    "@types/pg": "catalog:",
+    "pg": "catalog:"
   }
 }
