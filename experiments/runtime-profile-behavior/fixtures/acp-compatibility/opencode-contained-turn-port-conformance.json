@@ -20,7 +20,7 @@
       "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
       "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-kernel-model.ts"
     ],
-    "kernelHarnessProviderIdentity": "codex_contract_only_not_opencode_identity"
+    "kernelHarnessProviderIdentity": "opencode_bounded_string_synthetic_replay"
   },
   "contractPin": {
     "adapterIdentity": "synthetic-opencode-acp-v1-projection",
@@ -29,10 +29,10 @@
     "supportedModes": ["analysis"]
   },
   "neutralPortGap": {
-    "status": "not_expressible_without_production_contract_widening",
+    "status": "acceptance_detail_and_request_rejection_deferred",
     "providerIdentity": {
       "required": "opencode",
-      "currentClosedMembers": [],
+      "currentType": "bounded_string",
       "source": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts"
     },
     "forbiddenWorkarounds": [

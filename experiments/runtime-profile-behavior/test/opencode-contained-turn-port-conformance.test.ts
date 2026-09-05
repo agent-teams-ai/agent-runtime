@@ -54,7 +54,7 @@ interface ConformanceFixture {
     readonly acpTerminalAuthority: string;
     readonly fixtureRole: "acp_semantic_observations_only_no_expected_kernel_outcomes";
     readonly kernelExpectationAuthority: readonly string[];
-    readonly kernelHarnessProviderIdentity: "codex_contract_only_not_opencode_identity";
+    readonly kernelHarnessProviderIdentity: "opencode_bounded_string_synthetic_replay";
     readonly kernelImplementation: string;
   };
   readonly capabilityCases: readonly CapabilityCase[];
@@ -103,11 +103,11 @@ interface ConformanceFixture {
     };
     readonly forbiddenWorkarounds: readonly string[];
     readonly providerIdentity: {
-      readonly currentClosedMembers: readonly string[];
+      readonly currentType: "bounded_string";
       readonly required: "opencode";
       readonly source: string;
     };
-    readonly status: "not_expressible_without_production_contract_widening";
+    readonly status: "acceptance_detail_and_request_rejection_deferred";
   };
   readonly outcomeCases: readonly OutcomeCase[];
   readonly provenance: string;
@@ -150,7 +150,7 @@ const providerContractPath = join(
   repositoryRoot,
   "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
 );
-const fixtureDigest = "076f8830c29f10ebf9d40e0fb344f9f1a44a6b7291f3f29066080785beccf9fb";
+const fixtureDigest = "474ebd2e82d9dc5fbd258ccdcd9b8a865e8714fcab19fab0a3ff12a0b62d9b1f";
 
 const expectedCapabilityCases: readonly CapabilityCase[] = Object.freeze([
   { capability: "prompt", observedStatus: "baseline", characterizationDisposition: "supported" },
@@ -396,7 +396,7 @@ test("pins a fully synthetic, no-launch OpenCode semantic fixture", async () => 
       "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
       "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-kernel-model.ts",
     ],
-    kernelHarnessProviderIdentity: "codex_contract_only_not_opencode_identity",
+    kernelHarnessProviderIdentity: "opencode_bounded_string_synthetic_replay",
     kernelImplementation: "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts",
   });
   assert.ok(fixture.outcomeCases.every(value => !("expected" in value)));
@@ -675,7 +675,7 @@ test("records the provider-neutral identity and capability characterization boun
   assert.match(providerContract, /export type ContainedTurnProvider = string;/u);
   assert.doesNotMatch(providerContract, /ContainedTurnProvider[^;]*"opencode"/u);
   assert.deepEqual(fixture.neutralPortGap.providerIdentity, {
-    currentClosedMembers: [],
+    currentType: "bounded_string",
     required: "opencode",
     source: "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
   });
@@ -708,7 +708,7 @@ test("records the provider-neutral identity and capability characterization boun
     [...fixture.characterizationBoundary.capabilityDisposition.currentManifestMembers].toSorted(),
     manifestMembers,
   );
-  assert.equal(fixture.neutralPortGap.status, "not_expressible_without_production_contract_widening");
+  assert.equal(fixture.neutralPortGap.status, "acceptance_detail_and_request_rejection_deferred");
   assert.deepEqual(fixture.neutralPortGap.forbiddenWorkarounds, [
     "cast_opencode_to_existing_provider",
     "mislabel_opencode_as_claude_or_codex",

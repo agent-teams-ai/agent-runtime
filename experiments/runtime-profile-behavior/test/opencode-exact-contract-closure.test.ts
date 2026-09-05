@@ -15,7 +15,7 @@ const fixtureUrl = new URL(
   "../fixtures/acp-compatibility/opencode-1-18-5-contract.json",
   import.meta.url,
 );
-const expectedFixtureDigest = "c540dc43d931ec8355e3f13ac4feebebb42498703e79c360b18191df0eb29a84";
+const expectedFixtureDigest = "de7040233b6c117c3ba2ce0f1a663bebbdcdeee28083c1047e289e316378cfa4";
 const hostingPath = "experiments/runtime-profile-behavior/fixtures/opencode-hosting-e2e-summary.json";
 const hostingDigest = "efdb9caf86efae6dcb29529a84eb65a26b33ec42d837635afba71ac85579bf89";
 
@@ -66,7 +66,7 @@ test("authenticates fixed sources internally and binds field-level provenance", 
       "opencode@1.18.5#sha256:78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
     manifestRevision: "opencode-acp-contained-turn-v1@1",
     source: "experiments/runtime-profile-behavior/fixtures/acp-compatibility/opencode-contained-turn-port-conformance.json",
-    sourceSha256: "076f8830c29f10ebf9d40e0fb344f9f1a44a6b7291f3f29066080785beccf9fb",
+    sourceSha256: "474ebd2e82d9dc5fbd258ccdcd9b8a865e8714fcab19fab0a3ff12a0b62d9b1f",
     supportedModes: ["analysis"],
     unknownCapabilityPolicy: "fail_closed",
   });
@@ -104,13 +104,13 @@ test("labels the invented initialize shape as a derived capability projection", 
   assert.doesNotMatch(bytes, /normalizedInitializeResponse|initializeResponse/u);
 });
 
-test("withdraws kernel replay closure and returns only an immutable characterization", async () => {
+test("returns an immutable characterization for synthetic kernel replay", async () => {
   const characterization = characterizeOpenCodeExactContract(
     await parseOpenCodeExactContractFixture(await loadBytes()),
   );
   assert.deepEqual(characterization, {
     claim: "contract_only_no_production_adapter",
-    kernelReplayClaimed: false,
+    manifestRevision: "opencode-acp-contained-turn-v1@1",
     provider: "opencode",
     providerRevision:
       "opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
