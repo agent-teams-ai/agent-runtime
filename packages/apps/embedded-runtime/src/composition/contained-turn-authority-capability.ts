@@ -5,9 +5,8 @@ import {
   matchesContainedTurnAccessAuthority,
   type ContainedTurnAccessAuthority,
 } from "./contained-turn-access-authority.js";
+import { types } from "node:util";
 import { contractViolation } from "./contained-turn-runtime-validation.js";
-
-const { types } = process.getBuiltinModule("node:util");
 
 export interface AuthorityBoundOperationRef extends ContainedTurnCompositionOperationRef {
   readonly authority: ContainedTurnAccessAuthority;

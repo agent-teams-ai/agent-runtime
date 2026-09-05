@@ -1,8 +1,7 @@
+import { types } from "node:util";
 import { isContainedTurnAccessAuthorityIdentity } from "./contained-turn-access-authority.js";
 import type { TrustedClaudeCodeSetupScope } from "../application/trusted-claude-code-setup-scope.js";
 import type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
-
-const { types } = process.getBuiltinModule("node:util");
 
 export type { TrustedCodexSetupScope } from "../application/trusted-runtime-access-scope.js";
 

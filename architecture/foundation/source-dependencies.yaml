@@ -110,6 +110,7 @@ boundaries:
       packages:
         - "@agent-teams/filesystem-custody"
       builtins:
+        - node:buffer
         - node:child_process
         - node:crypto
         - node:fs
@@ -257,13 +258,38 @@ boundaries:
         - node:fs/promises
         - node:path
       runtimeReferences: []
+  - id: composition.embedded-runtime
+    dependencyMode: runtime
+    roots:
+      - packages/apps/embedded-runtime/src/composition
+      - packages/apps/embedded-runtime/src/composition.ts
+    entrypoints:
+      - packages/apps/embedded-runtime/src/composition.ts
+    allow:
+      boundaries:
+        - production.embedded-runtime
+      packages:
+        - "@agent-teams/agent-execution"
+        - "@agent-teams/runtime-configuration"
+        - "@agent-teams/runtime-security"
+      builtins:
+        - node:crypto
+        - node:timers/promises
+        - node:util
+      runtimeReferences: []
   - id: production.embedded-runtime
     dependencyMode: runtime
     roots:
       - packages/apps/embedded-runtime/src
     entrypoints:
+      - packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts
+      - packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts
+      - packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts
+      - packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts
+      - packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts
+      - packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts
+      - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
       - packages/apps/embedded-runtime/src/index.ts
-      - packages/apps/embedded-runtime/src/composition.ts
     allow:
       boundaries: []
       packages:

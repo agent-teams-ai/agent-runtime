@@ -1,11 +1,10 @@
+import { Buffer } from "node:buffer";
 import { createHash, X509Certificate } from "node:crypto";
 import { isIP, SocketAddress } from "node:net";
 import { createSecureContext, type PeerCertificate, type SecureContext } from "node:tls";
 
 import type { HttpEgressTransportBinding } from "./http-egress-ports.js";
 import { intrinsicUint8ArrayLength } from "./http-byte-intrinsics.js";
-
-const { Buffer } = process.getBuiltinModule("node:buffer");
 
 export type NodeTlsHttpEgressErrorCode =
   | "invalid_configuration"

@@ -1,4 +1,4 @@
-const { types } = process.getBuiltinModule("node:util");
+import { types } from "node:util";
 
 /** Composition-only authority; never an operation CAS or a caller DTO. */
 export interface ContainedTurnAccessAuthority {

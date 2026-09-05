@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { createSourceDependenciesCapability } from "../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/module.js";
 import { loadCapabilityConfig } from "../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/contract/config.js";
+import { OxcSourceDependencyParser } from "../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/outbound/oxc/oxc-source-dependency-parser.js";
 
 const repositoryRoot = new URL("../../", import.meta.url).pathname;
 const configPath = "architecture/foundation/source-dependencies.yaml";
@@ -106,6 +107,62 @@ test("contained-turn domain and application remain dependency-free core", async 
   })).includes("architecture.source-dependencies.forbidden-package-dependency"));
 });
 
+test("the real parser observes every retained Node import in composition and TLS support", async () => {
+  const composition = "packages/apps/embedded-runtime/src/composition";
+  const host = boundariesById.get("adapter.agent-execution.host-custody");
+  const parser = new OxcSourceDependencyParser();
+  for (const [path, builtins] of [
+    [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
+    [`${composition}/contained-turn-access-authority.ts`, ["node:util"]],
+    [`${composition}/contained-turn-authority-capability.ts`, ["node:util"]],
+    [`${composition}/trusted-runtime-access-scope.ts`, ["node:util"]],
+    [`${host.roots[0]}/egress/node-tls-http-egress-transport-support.ts`,
+      ["node:buffer", "node:crypto", "node:net", "node:tls"]],
+  ]) {
+    const source = await readFile(join(repositoryRoot, path), "utf8");
+    const parsed = parser.parse({ path, source });
+    assert.equal(parsed.parseErrorCount, 0, path);
+    assert.deepEqual(parsed.unresolved, [], path);
+    const observed = parsed.references.filter(reference => reference.specifier.startsWith("node:"));
+    assert.deepEqual(observed.map(reference => reference.specifier).toSorted(), builtins, path);
+    assert.ok(observed.every(reference => reference.kind === "static"), path);
+    assert.deepEqual(await analyzeFixture({
+      [path]: observed.map(reference => `import '${reference.specifier}';`).join("\n"),
+    }), [], path);
+  }
+});
+
+test("Node permissions do not follow imports moved into core or undeclared adapter locations", async () => {
+  for (const root of [
+    "packages/contexts/agent-execution/src/features/contained-agent-turn",
+    "packages/apps/embedded-runtime/src",
+  ]) {
+    for (const layer of ["domain", "application", "adapters/undeclared"]) {
+      const path = `${root}/${layer}/moved-node-dependency.ts`;
+      for (const builtin of ["node:buffer", "node:util"]) {
+        const diagnostics = await analyzeFixture({ [path]: `import '${builtin}';\n` });
+        assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
+        assert.equal(diagnostics[0].location.path, path);
+        assert.deepEqual(diagnostics[0].evidence, [{ kind: "specifier", value: builtin }]);
+      }
+    }
+  }
+});
+
+test("Embedded Runtime Node utility permission belongs only to composition", () => {
+  const composition = boundariesById.get("composition.embedded-runtime");
+  assert.deepEqual(composition.roots, [
+    "packages/apps/embedded-runtime/src/composition",
+    "packages/apps/embedded-runtime/src/composition.ts",
+  ]);
+  assert.deepEqual(composition.allowedBoundaries, ["production.embedded-runtime"]);
+  assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:timers/promises", "node:util"]);
+  assert.deepEqual(composition.allowedRuntimeReferences, []);
+  const production = boundariesById.get("production.embedded-runtime");
+  assert.deepEqual(production.allowedBoundaries, []);
+  assert.deepEqual(production.allowedBuiltins, ["node:crypto", "node:timers/promises"]);
+});
+
 test("transitional boundaries and adapter permissions remain exact", () => {
   const legacy = boundariesById.get("adapter.agent-execution.legacy-contained-turn-ports");
   const claude = boundariesById.get("adapter.agent-execution.claude-agent-sdk");
@@ -192,6 +249,7 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   ]);
 
   assert.deepEqual(host.allowedBuiltins, [
+    "node:buffer",
     "node:child_process",
     "node:crypto",
     "node:fs",
