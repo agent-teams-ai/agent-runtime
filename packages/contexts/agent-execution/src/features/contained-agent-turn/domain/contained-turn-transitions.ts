@@ -489,8 +489,8 @@ export const mutateContainedTurnOperation = (
   operation: ContainedTurnKernelOperation,
   mutation: ContainedTurnKernelMutation,
 ): ContainedTurnKernelOperation => {
-  validateContainedTurnKernelMutationShape(mutation);
-  const candidate = applyMutation(operation, mutation.kind, mutation);
+  const kind = validateContainedTurnKernelMutationShape(mutation);
+  const candidate = applyMutation(operation, kind, mutation);
   if (candidate === operation) {return operation;}
   validateContainedTurnOperation(candidate, { previous: operation });
   return detachAndFreezeContainedTurnValue(candidate);

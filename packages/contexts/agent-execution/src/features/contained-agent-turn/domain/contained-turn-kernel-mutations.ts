@@ -16,6 +16,7 @@ import type {
   ContainedTurnWriterFence,
 } from "./contained-turn-identities.js";
 import type { ContainedTurnProof } from "./contained-turn-proofs.js";
+import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
 
 type PendingClosure = Extract<ContainedTurnClosureRecovery, { readonly kind: "required" }>;
@@ -78,7 +79,9 @@ export type ContainedTurnKernelMutation =
   | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "record_process_start_unknown" }
   | { readonly command: ContainedTurnCancellationCommand; readonly cutoffProof: Extract<ContainedTurnProof, { readonly kind: "cutoff" }>; readonly kind: "request_cancellation"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "cancellation" }> };
 
-export const validateContainedTurnKernelMutationShape = (mutation: ContainedTurnKernelMutation): void => {
+export const validateContainedTurnKernelMutationShape = (
+  mutation: ContainedTurnKernelMutation,
+): ContainedTurnKernelMutation["kind"] => {
   const fieldsByKind: Readonly<Record<ContainedTurnKernelMutation["kind"], readonly string[]>> = {
     bind_workspace: ["kind", "workspaceId"],
     begin_closure_stage: ["kind", "stage"],
@@ -109,5 +112,15 @@ export const validateContainedTurnKernelMutationShape = (mutation: ContainedTurn
     resolve_effect: ["kind", "proof"],
     seal_artifact: ["artifactManifestRef", "kind", "proof"],
   };
-  assertContainedTurnExactRecord("contained-turn transition", mutation, fieldsByKind[mutation.kind]);
+  const kindDescriptor = Object.getOwnPropertyDescriptor(mutation, "kind");
+  const kind = kindDescriptor?.value;
+  invariant(
+    kindDescriptor?.enumerable === true &&
+      typeof kind === "string" &&
+      Object.hasOwn(fieldsByKind, kind),
+    "contained-turn transition kind must be a supported primitive string",
+  );
+  const validatedKind = kind as ContainedTurnKernelMutation["kind"];
+  assertContainedTurnExactRecord("contained-turn transition", mutation, fieldsByKind[validatedKind]);
+  return validatedKind;
 };
