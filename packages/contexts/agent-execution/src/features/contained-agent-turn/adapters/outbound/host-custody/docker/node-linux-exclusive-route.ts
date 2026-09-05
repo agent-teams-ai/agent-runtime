@@ -103,17 +103,19 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
     if (current.existence !== "present" || !current.state.running || current.state.hostPid !== pid ||
         current.state.startedAt !== observation.state.startedAt ||
         pathIdentity.dev !== identity.dev || pathIdentity.ino !== identity.ino) {throw rejected();}
-    const invoke = (args: readonly string[], transaction?: string): Uint8Array => {
+    const invoke = (args: readonly string[]): Uint8Array => {
       try {
         return execFileSync("/proc/self/fd/3", ["--net=/proc/self/fd/5", "--", "/proc/self/fd/4", ...args], {
           env: {PATH: "/usr/sbin:/usr/bin", LANG: "C", LC_ALL: "C"},
-          input: transaction, maxBuffer: 65_536, timeout: 1_000,
+          maxBuffer: 65_536, timeout: 1_000,
           stdio: ["pipe", "pipe", "pipe", nsenter, nft, namespace],
         });
       } catch {throw rejected();}
     };
     return installLinuxExclusiveRoute({...input, lifetimeMs, startedAtMs, monotonicNow: () => performance.now(), scheduleCutoff, kernel: {
-      transact: transaction => {invoke(["-j", "-f", "-"], transaction);},
+      // nft's file reader rejects Node's socket-backed stdin. Its command buffer
+      // accepts the same bounded JSON directly, without a shell or temporary file.
+      transact: transaction => {invoke(["-j", transaction]);},
       readRules: () => parseStrictJson(invoke(["-j", "list", "table", "inet", LINUX_EXCLUSIVE_ROUTE_TABLE])),
       containerRemoved: async () => (await engine.inspect(authority, call())).existence === "absent",
       releaseNamespace: release,
