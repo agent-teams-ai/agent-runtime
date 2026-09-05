@@ -34,7 +34,7 @@ describe("HTTP exact boundary validation", () => {
     ["empty route receipt", "routeReceiptDigest", ""],
     ["surrogate route receipt", "routeReceiptDigest", "receipt-\ud800"],
     ["oversized origin", "originHost", "h".repeat(513)],
-    ["unsafe upstream target", "upstreamPath", "/path?query=not-authority"],
+    ["unsafe upstream target", "upstreamPath", "/path?query=value#fragment"],
   ] as const) {
     test(`rejects ${name} with zero dispatch`, async () => {
       const fixture = createEgressFixture({route: routeWith(defaultRoute, field, value)});

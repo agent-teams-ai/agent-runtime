@@ -90,7 +90,7 @@ describe("strict Host HTTP/1.1 request boundary", () => {
     test("rejects an inbound route mismatch before Provider Access observation", async () => {
       const fixture = createEgressFixture({ request: [request] });
       const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
-      assert.equal(receipt.anomalyCode, request.includes("?") ? "inbound_smuggling" : "inbound_route_mismatch");
+      assert.equal(receipt.anomalyCode, "inbound_route_mismatch");
       assert.equal(fixture.observations.order[0], "inbound-close");
       assert.equal(fixture.observations.dispatches, 0);
     });

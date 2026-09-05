@@ -224,7 +224,6 @@ for (const [name, overrides] of [
   ["CONNECT", {methodBytes: bytes("CONNECT")}],
   ["absolute target", {targetBytes: bytes("https://provider.example/x")}],
   ["authority target", {targetBytes: bytes("//provider.example/x")}],
-  ["target query", {targetBytes: bytes("/x?admin=true")}],
   ["target fragment", {targetBytes: bytes("/x#fragment")}],
   ["target CRLF", {targetBytes: bytes("/x\r\nHost: evil")}],
   ["target backslash", {targetBytes: bytes("/x\\admin")}],
@@ -265,6 +264,21 @@ test("accepts RFC pchar and well-formed percent escapes in an absolute path", ()
     prepared.targetSpan.length)), target);
   prepared.dispose();
 });
+
+for (const target of ["/v1/messages?beta=true", "/v1/responses?tag=a&tag=b&next=%2F%3F&empty=", "/x?", "/x?q=/a?b"]) {
+  test(`preserves the exact origin-form target ${target} in wire custody`, () => {
+    const prepared = consumePreparedHttpRequestV1(baseInput({targetBytes: bytes(target)}));
+    assert.equal(decoder.decode(slice(prepared.wireBytes, prepared.targetSpan.offset,
+      prepared.targetSpan.length)), target);
+    prepared.dispose();
+  });
+}
+
+for (const target of ["/x?beta=true#fragment", "/x?beta=\r\nHost: evil", "/x?beta=%ZZ", "/x?beta=%2", "/x?beta=\\evil"]) {
+  test(`rejects malformed query bytes ${JSON.stringify(target)}`, () => {
+    assertRejected({targetBytes: bytes(target)});
+  });
+}
 
 for (const name of ["host", "HOST", "content-length", "Connection", "keep-alive", "proxy-authenticate",
   "proxy-authorization", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade",

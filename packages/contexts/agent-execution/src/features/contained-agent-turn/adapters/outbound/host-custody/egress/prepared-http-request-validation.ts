@@ -65,7 +65,9 @@ const CREDENTIAL_COLLISIONS = new Set([
 const encoder = new TextEncoder();
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const TOKEN_PUNCTUATION = new Set([33, 35, 36, 37, 38, 39, 42, 43, 45, 46, 94, 95, 96, 124, 126]);
-const TARGET_PUNCTUATION = new Set([33, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46, 58, 59, 61, 64, 95, 126]);
+// Origin-form includes the optional query. Preserve its bytes in the signed
+// target; do not decode, reorder, or normalize provider query parameters.
+const TARGET_PUNCTUATION = new Set([33, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46, 58, 59, 61, 63, 64, 95, 126]);
 
 const hasExactKeys = (keys: readonly PropertyKey[], fields: readonly string[]): boolean =>
   keys.length === fields.length

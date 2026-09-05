@@ -41,7 +41,7 @@ const snapshotRouteDescriptors = (value: unknown): PropertyDescriptorMap | undef
 };
 
 const validRoutePath = (value: unknown): value is string => bounded(value, 16_384)
-  && value.startsWith("/") && !value.startsWith("//") && !/[^\x21-\x7e]|[?#]/.test(value);
+  && value.startsWith("/") && !value.startsWith("//") && !/[^\x21-\x7e]|#/.test(value);
 
 const validRouteHeaderNames = (forwarded: readonly string[], credentials: readonly string[]): boolean =>
   new Set(forwarded).size === forwarded.length

@@ -80,8 +80,9 @@ const parseRequestLine = (
   const [method, path, version] = requestParts as [string, string, string];
   if (!TOKEN.test(method) || version !== "HTTP/1.1") {throw new StrictHttpRequestError("malformed");}
   const unsafeTarget = method === "CONNECT" || !path.startsWith("/") || path.startsWith("//")
-    || path.includes("?") || path.includes("#");
+    || path.includes("#");
   if (unsafeTarget) {throw new StrictHttpRequestError("smuggling");}
+  // The entire origin-form, including the query, is the route identity.
   if (method !== expected.method || path !== expected.path) {throw new StrictHttpRequestError("route_mismatch");}
   return Object.freeze({ method, path });
 };
