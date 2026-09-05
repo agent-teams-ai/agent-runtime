@@ -220,12 +220,12 @@ test("local capability is suppressed in every split of hostile synthetic output,
   assert.equal(outcome.kind, "not_accepted");
 });
 
-test("current Host environment admission and canary authority remain closed for the native recipe", async t => {
+test("Host rejects a malformed native capability and keeps canary route authority closed", async t => {
   const f = brokerFixture(t); const plan = await nativePlan(f);
-  // The current Host owns the allowlist/fingerprint integration. No bypass or
-  // secret classification is guessed here, and no process is started by this check.
+  // The native capability key is classified, but this redaction fixture is not
+  // a valid capability. Route qualification remains a separate closed gate.
   await assert.rejects(verifyPrivateLaunchPaths(plan, f.workspace, statSync(f.workspace, { bigint: true })),
-    /environment contains an unclassified key/u);
+    /local broker capability is malformed/u);
   assert.throws(() => requireContainedTurnLiveCanaryAuthorities(), { message: "route-enforcement-unqualified" });
   assert.equal(Object.hasOwn(f.recipe, "routeAuthority"), false);
   assert.equal(Object.hasOwn(f.recipe, "operationId"), false);
