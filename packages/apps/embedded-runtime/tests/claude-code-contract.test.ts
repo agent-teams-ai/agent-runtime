@@ -58,7 +58,10 @@ test("the real host composition owns the complete Claude dependency contract", a
     /interface AgentRuntimeHostDependencies[\s\S]*?\n\}/u,
   )?.[0] ?? "";
   assert.doesNotMatch(hostDependencies, /readonly (?:claudeCodeSetup|codexSetup)\?:/u);
-  assert.match(hostDependencies, /readonly containedTurn\?: ContainedTurnCapabilityBundle/u);
+  assert.match(
+    hostDependencies,
+    /readonly containedTurn\?: AuthorityBoundContainedTurnCapability/u,
+  );
   assert.match(source, /snapshotAgentRuntimeHostDependencies\(dependencies\)/u);
   assert.match(source, /createBuildClaudeCodeSetupView\([\s\S]*?capabilityDependencies\.claudeCodeSetup/u);
   const runtimeScope = scopeDeclaration.match(
