@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { createDependencies } from "./support/contained-agent-turn-fixture.ts";
 import { submitContainedTurnLiveCanary } from "./support/contained-turn-live-canary-submission.mjs";
@@ -89,6 +90,49 @@ for (const provider of ["codex", "claude"] as const) {
       } else {
         assert.equal(envelope.observations.terminalProofDigest, undefined);
         assert.equal(envelope.observations.containmentProofDigest, undefined);
+      }
+      // A later teardown failure retains persisted success without claiming
+      // the canary's expected output was verified. No live provider is run.
+      const failed = Object.freeze({...input, status: "failed", observations: Object.freeze({
+        ...Object.fromEntries(Object.entries(input.observations).filter(([key]) => key !== "outputDigest")),
+        failureKind: "canary-failed", ownerDisposal: "failed",
+      })});
+      const failedEnvelope = await publish(failed);
+      assert.equal(failedEnvelope.observations.terminalStatus, observation.terminalStatus);
+      assert.equal(failedEnvelope.observations.outputDigest, undefined);
+      assert.equal(failedEnvelope.status, "failed");
+      assert.equal(failedEnvelope.networkRouteEnforcement, "unqualified");
+      assert.equal(failedEnvelope.qualification, "implementation-evidence-only");
+      for (const [key, kind] of [["artifactManifestProofDigest", "artifact_manifest_seal"], ["resultPublicationProofDigest", "result_publication"]]) {
+        if (platform === "linux") {
+          const proof = result.kernel.proofs.find(proof => proof.kind === kind);
+          assert.equal(failedEnvelope.observations[key], `sha256:${createHash("sha256").update(proof.proofId).digest("hex")}`);
+        } else {assert.equal(failedEnvelope.observations[key], undefined);}
+      }
+      const required = ["operationIdentityDigest", "executionClosureProofDigest", "providerTerminalProofDigest",
+        "outputEvents",
+        ...(platform === "linux" ? ["outputDrainProofDigest", "artifactManifestProofDigest", "resultPublicationProofDigest",
+          "artifactManifestRefDigest", "resultRefDigest", "terminalProofDigest", "terminalKind", "terminalStatus",
+          "reconciliation", "closureRecovery", "containmentProofDigest", "closureStatus"] : [])];
+      for (const missing of required) {
+        // Omit the field entirely: an invalid undefined value would only test
+        // the leaf schema and could mask a missing completeness check.
+        await assert.rejects(publish(Object.freeze({...failed, observations: Object.freeze(
+          Object.fromEntries(Object.entries(failed.observations).filter(([key]) => key !== missing)),
+        )})), TypeError, missing);
+      }
+      if (platform === "darwin") {
+        const withoutDrain = Object.fromEntries(Object.entries(failed.observations).filter(([key]) => key !== "outputDrainProofDigest"));
+        const partial = await publish(Object.freeze({...failed, observations: Object.freeze(withoutDrain)}));
+        assert.equal(partial.observations.outputDigest, undefined);
+        assert.equal(partial.observations.terminalKind, "open");
+        await assert.rejects(publish(Object.freeze({...failed, observations: Object.freeze({
+          ...withoutDrain, outputDigest: input.observations.outputDigest,
+        })})), TypeError);
+      }
+      for (const patch of [{providerOutcome: "indeterminate"}, {closureRecovery: "proved_no_workspace"}]) {
+        await assert.rejects(publish(Object.freeze({...failed,
+          observations: Object.freeze({...failed.observations, ...patch})})), TypeError);
       }
       const invalid = [
         {closureStatus: platform === "linux" ? "unproven" : "closed"},

@@ -87,6 +87,7 @@ const OBSERVATIONS = Object.freeze({
   artifactManifestRef: value => text(value, /^urn:agent-runtime:artifact-manifest:[a-f0-9]{64}$/u),
   resultRef: value => text(value, /^urn:agent-runtime:contained-turn-result:[a-f0-9]{64}$/u),
   artifactManifestRefDigest: exactDigest, resultRefDigest: exactDigest,
+  artifactManifestProofDigest: exactDigest, resultPublicationProofDigest: exactDigest,
   closureStatus: value => choice(value, ["closed", "not-started", "unproven"]),
   containmentLimitations: limitations, containmentProfile: TUPLE_FIELDS.containmentProfile,
   containmentProofDigest: exactDigest, failureKind: value => choice(value, ["canary-failed"]), outputDigest: exactDigest,
@@ -122,29 +123,70 @@ const validateClosure = (input, observations, tuple) => {
       (darwin || input.physicalContainment !== "contained" || observations.containmentProofDigest === undefined)) {return reject();}
   if (observations.closureStatus === "unproven" &&
       (input.physicalContainment !== "indeterminate" || observations.terminalKind === "final" ||
-       observations.terminalStatus !== "reconcile_required" || observations.closureRecovery !== "required" ||
+       (observations.terminalStatus !== undefined && observations.terminalStatus !== "reconcile_required") ||
+       (observations.closureRecovery !== undefined && observations.closureRecovery !== "required") ||
        observations.containmentProofDigest !== undefined || observations.terminalProofDigest !== undefined)) {return reject();}
   if (observations.closureStatus === "not-started" &&
       (input.physicalContainment !== "indeterminate" || observations.terminalStatus === "succeeded" ||
        observations.containmentProofDigest !== undefined)) {return reject();}
 };
+const requireFacts = (observations, keys) => {
+  if (keys.some(key => observations[key] === undefined)) {return reject();}
+};
+const hasReference = (observations, key) => observations[key] !== undefined || observations[`${key}Digest`] !== undefined;
 const validateTerminal = (input, observations, tuple) => {
   const keys = ["terminalKind", "terminalStatus", "reconciliation", "closureRecovery"];
-  if (keys.every(key => observations[key] === undefined)) {return;}
-  if (keys.some(key => observations[key] === undefined)) {return reject();}
   const final = observations.terminalKind === "final";
-  if (final !== ["succeeded", "failed", "cancelled"].includes(observations.terminalStatus) ||
-      final !== (observations.terminalProofDigest !== undefined)) {return reject();}
+  const finalStatus = ["succeeded", "failed", "cancelled"].includes(observations.terminalStatus);
+  // Failure may retain only part of a kernel read. Missing facts do not imply
+  // clear recovery or terminal success; explicit finality still needs proof.
+  if (final || finalStatus || observations.terminalProofDigest !== undefined) {
+    requireFacts(observations, [...keys, "operationIdentityDigest", "terminalProofDigest", "closureStatus"]);
+    if (!final || !finalStatus || (observations.providerOutcome !== undefined &&
+        observations.providerOutcome !== observations.terminalStatus)) {return reject();}
+  } else if (input.status !== "failed") {requireFacts(observations, keys);}
   const debt = observations.reconciliation === "required" || observations.closureRecovery === "required";
-  if (debt !== (observations.terminalStatus === "reconcile_required")) {return reject();}
+  const recoveryKnown = observations.reconciliation !== undefined && observations.closureRecovery !== undefined;
+  if ((debt && observations.terminalStatus !== undefined && observations.terminalStatus !== "reconcile_required") ||
+      (recoveryKnown && !debt && observations.terminalStatus === "reconcile_required")) {return reject();}
   if (observations.terminalStatus === "succeeded" &&
       (tuple.platform !== "linux" || observations.providerOutcome !== "succeeded" ||
        observations.closureStatus !== "closed" || input.physicalContainment !== "contained")) {return reject();}
 };
+const validateArtifactEvidence = observations => {
+  for (const [reference, proof] of [["artifactManifestRef", "artifactManifestProofDigest"], ["resultRef", "resultPublicationProofDigest"]]) {
+    if (hasReference(observations, reference) || observations[proof] !== undefined) {
+      requireFacts(observations, ["operationIdentityDigest", proof, "outputDrainProofDigest", "outputEvents"]);
+      if (!hasReference(observations, reference) || observations.closureRecovery === "proved_no_workspace") {return reject();}
+    }
+  }
+  if (hasReference(observations, "resultRef") && !hasReference(observations, "artifactManifestRef")) {return reject();}
+  if (observations.terminalStatus === "succeeded") {
+    requireFacts(observations, ["outputDrainProofDigest", "outputEvents"]);
+    if (!["artifactManifestRef", "resultRef"].every(key => hasReference(observations, key))) {return reject();}
+  }
+};
+const validateClaimEvidence = (input, observations) => {
+  if ((input.physicalContainment === "contained") !== (observations.containmentProofDigest !== undefined)) {return reject();}
+  if (input.physicalContainment === "contained" && observations.closureStatus !== "closed") {return reject();}
+  if (Object.keys(observations).some(key => key.endsWith("ProofDigest")) || observations.outputEvents !== undefined) {
+    requireFacts(observations, ["operationIdentityDigest"]);
+  }
+  if (observations.providerOutcome === "succeeded" || observations.executionClosureProofDigest !== undefined ||
+      observations.providerTerminalProofDigest !== undefined) {
+    requireFacts(observations, ["operationIdentityDigest", "executionClosureProofDigest", "providerTerminalProofDigest"]);
+    choice(observations.providerOutcome, ["succeeded", "failed", "cancelled"]);
+  }
+  if (observations.outputDigest !== undefined || observations.outputDrainProofDigest !== undefined) {
+    requireFacts(observations, ["operationIdentityDigest", "outputDrainProofDigest", "outputEvents"]);
+  }
+  validateArtifactEvidence(observations);
+};
 export const validateCompletion = (input, observations, tuple) => {
   validateClosure(input, observations, tuple);
   validateTerminal(input, observations, tuple);
-  if ((input.physicalContainment === "contained") !== (observations.containmentProofDigest !== undefined)) {return reject();}
+  // Claims carry their own evidence requirements even if later teardown fails.
+  validateClaimEvidence(input, observations);
   if (input.status === "failed") {
     if (observations.failureKind !== "canary-failed") {return reject();}
     return;

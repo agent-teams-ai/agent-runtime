@@ -50,6 +50,8 @@ export const observeProviderCandidateResult = ({kernel, physicalContainment, tur
     ["execution_closure", "executionClosureProofDigest"],
     ["output_drain", "outputDrainProofDigest"],
     ["provider_terminal_observation", "providerTerminalProofDigest"],
+    ["artifact_manifest_seal", "artifactManifestProofDigest"],
+    ["result_publication", "resultPublicationProofDigest"],
   ]) {
     const proof = kernel.proofs.find(candidate => candidate.kind === kind);
     if (proof !== undefined) {facts[key] = digest(proof.proofId);}

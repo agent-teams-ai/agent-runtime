@@ -79,6 +79,8 @@ test("canonical envelope retains bounded failure facts, detaches data and reject
       failureKind: "canary-failed", ownerDisposal: "failed", runtimeDisposal: "completed",
       terminalKind: "open", terminalStatus: "reconcile_required", reconciliation: "clear", closureRecovery: "required",
       providerOutcome: "succeeded", outputEvents: 100_000,
+      operationIdentityDigest: digest, executionClosureProofDigest: digest, providerTerminalProofDigest: digest,
+      outputDrainProofDigest: digest, artifactManifestProofDigest: digest, resultPublicationProofDigest: digest,
       artifactManifestRef: `urn:agent-runtime:artifact-manifest:${digest}`,
       resultRef: `urn:agent-runtime:contained-turn-result:${digest}`,
       closureStatus: "unproven", containmentProfile: "cooperative-darwin-posix-process-group",
