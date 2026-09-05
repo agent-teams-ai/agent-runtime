@@ -62,6 +62,10 @@ export interface EgressPolicyTimeSnapshotV1 {
   readonly maxDeadlineMs: number;
 }
 export interface EgressPolicyTimeAuthorityV1 {
+  /** Synchronous joint owner check of exact route, policy/revocation and control time at emission.
+   * Must reject unless both snapshots still hold in the same authority transaction. */
+  consumeFirstWrite(expected: Readonly<{route: ProviderRouteAuthoritySnapshotV1;
+    policy: EgressPolicyTimeSnapshotV1; issuedAt: number}>): unknown;
   resolve(): PromiseLike<EgressPolicyTimeSnapshotV1>;
   revalidateExact(expected: EgressPolicyTimeSnapshotV1): PromiseLike<Readonly<{status: "current"; observedAt: number}> |
     Readonly<{status: "rejected"}> | Readonly<{status: "indeterminate"}>>;
@@ -113,7 +117,10 @@ export interface EgressTransportObservationV1 {
 }
 export interface TrustedEgressFirstWriteV1 {
   writeExact(input: Readonly<{authorization: Readonly<{body: EgressAuthorizationBodyV1; canonicalBody: Uint8Array;
-    envelope: EgressAuthorizationEnvelopeV1}>; applicationBytes: Uint8Array}>): void;
+    envelope: EgressAuthorizationEnvelopeV1}>; applicationBytes: Uint8Array;
+    /** Consume once immediately adjacent to emission, with no intervening await or owner callback.
+     * A false result forbids all application bytes. */
+    consumeAuthorization(): boolean}>): void;
 }
 export interface EgressTransportV1 {
   execute(input: Readonly<{target: Readonly<{scheme: "https"; host: string; port: 443;

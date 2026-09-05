@@ -82,11 +82,11 @@ const createValidationTools = (primitives: EgressSecurityPrimitives) => {
   const hash = (value: Uint8Array) => primitives.sha256(value); const exact = primitives.exactObject;
   const dense = (value: unknown, maximum: number): readonly unknown[] | undefined => {
     if (!primitives.array(value)) {return;}
-    const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<PropertyKey, PropertyDescriptor>;
-    const length = descriptors.length;
+    const length = Object.getOwnPropertyDescriptor(value, "length");
     if (length === undefined || !("value" in length) || !Number.isSafeInteger(length.value) ||
-        (length.value as number) < 0 || (length.value as number) > maximum ||
-        Reflect.ownKeys(descriptors).length !== (length.value as number) + 1) {return;}
+        (length.value as number) < 0 || (length.value as number) > maximum) {return;}
+    const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<PropertyKey, PropertyDescriptor>;
+    if (Reflect.ownKeys(descriptors).length !== (length.value as number) + 1) {return;}
     const output: unknown[] = [];
     for (let index = 0; index < (length.value as number); index += 1) {
       const descriptor = descriptors[String(index)]; if (descriptor === undefined || !("value" in descriptor)) {return;}
@@ -110,7 +110,7 @@ const captureComposition = (tools: ValidationTools, identity: unknown, dependenc
   const deps = exact(dependencies, ["routeAuthority", "dispatchAuthority", "policyAuthority", "signer", "transportGateway"]);
   const routeAuthority = methods(deps?.routeAuthority, ["resolveExact", "revalidateExact"]);
   const dispatchAuthority = methods(deps?.dispatchAuthority, ["observeDispatchConsumption"]);
-  const policyAuthority = methods(deps?.policyAuthority, ["resolve", "revalidateExact"]);
+  const policyAuthority = methods(deps?.policyAuthority, ["resolve", "revalidateExact", "consumeFirstWrite"]);
   const signer = methods(deps?.signer, ["sign", "verify"]);
   const transportGateway = methods(deps?.transportGateway, ["openOneShotHttps"]);
   if (host === undefined || ![host.attemptId, host.environmentId, host.gatewayId, host.hostInstanceId, host.hostBootId].every(identifier) ||
@@ -122,6 +122,15 @@ const captureComposition = (tools: ValidationTools, identity: unknown, dependenc
     dependencies: Object.freeze({routeAuthority, dispatchAuthority, policyAuthority, signer,
       transportGateway}) as unknown as ContainedTurnEgressDependencies});
 };
+
+const validRequestFields = (candidate: Readonly<Record<string, unknown>>, scope: Readonly<Record<string, unknown>>,
+  budgets: Readonly<Record<string, unknown>>) =>
+  [scope.tenantId, scope.projectId, candidate.providerId, candidate.providerAccountRef, candidate.providerRouteRef,
+    candidate.credentialBindingRef, candidate.credentialGeneration, candidate.credentialRevision,
+    candidate.resolutionAuthorityId, candidate.resolutionGeneration, candidate.operationId, candidate.requestId,
+    candidate.requestNonce].every(identifier) && isDigest(scope.scopeDigest) && isDigest(candidate.credentialBindingDigest) &&
+  (candidate.method === "GET" || candidate.method === "POST") && normalizedPath(candidate.path) &&
+  [budgets.requestBytes, budgets.responseBytes, budgets.deadlineMs].every(count) && budgets.responseBytes !== 0 && budgets.deadlineMs !== 0;
 
 const createRequestValidation = (tools: ValidationTools) => {
   const {exact, dense, primitives, hash} = tools;
@@ -159,7 +168,6 @@ const createRequestValidation = (tools: ValidationTools) => {
     headers: readonly Readonly<{name: string; value: string}>[], body: Uint8Array) => concat([
       utf8.encode(`${method} ${path} HTTP/1.1\r\nHost: ${host}\r\nContent-Length: ${body.byteLength}\r\n`),
       ...headers.map(header => utf8.encode(`${header.name}: ${header.value}\r\n`)), utf8.encode("\r\n"), body]);
-  // oxlint-disable-next-line complexity -- exact hostile graph checks remain an explicit closed conjunction.
   const snapshotRequest = (value: unknown, host?: string): BufferedRequest | undefined => {
     const candidate = exact(value, ["scope", "providerId", "providerAccountRef", "providerRouteRef", "credentialBindingRef",
       "credentialBindingDigest", "credentialGeneration", "credentialRevision", "resolutionAuthorityId", "resolutionGeneration",
@@ -167,18 +175,14 @@ const createRequestValidation = (tools: ValidationTools) => {
     const scope = exact(candidate?.scope, ["tenantId", "projectId", "scopeDigest"]);
     const budgets = exact(candidate?.budgets, ["requestBytes", "responseBytes", "deadlineMs"]);
     const dispatch = snapshotDispatch(candidate?.dispatch); const headers = snapshotHeaders(candidate?.headers);
+    if (headers === undefined) {return;}
     const body = primitives.copyBytes(candidate?.body, 1_048_576);
-    if (candidate === undefined || scope === undefined || budgets === undefined || dispatch === undefined || headers === undefined ||
-        body === undefined) {return;}
-    const valid = [[candidate.operationId, dispatch.operationId], [candidate.providerId, dispatch.providerId],
+    if (candidate === undefined || scope === undefined || budgets === undefined || dispatch === undefined || body === undefined) {return;}
+    const matches = [[candidate.operationId, dispatch.operationId], [candidate.providerId, dispatch.providerId],
       [scope.tenantId, dispatch.scope.tenantId], [scope.projectId, dispatch.scope.projectId],
-      [scope.scopeDigest, dispatch.scope.scopeDigest]].every(([left, right]) => left === right) &&
-      [scope.tenantId, scope.projectId, candidate.providerId, candidate.providerAccountRef, candidate.providerRouteRef,
-        candidate.credentialBindingRef, candidate.credentialGeneration, candidate.credentialRevision,
-        candidate.resolutionAuthorityId, candidate.resolutionGeneration, candidate.operationId, candidate.requestId,
-        candidate.requestNonce].every(identifier) && isDigest(scope.scopeDigest) && isDigest(candidate.credentialBindingDigest) &&
-      (candidate.method === "GET" || candidate.method === "POST") && normalizedPath(candidate.path) &&
-      [budgets.requestBytes, budgets.responseBytes, budgets.deadlineMs].every(count) && budgets.responseBytes !== 0 && budgets.deadlineMs !== 0;
+      [scope.scopeDigest, dispatch.scope.scopeDigest]].every(([left, right]) => left === right);
+    if (!matches) {return;}
+    const valid = validRequestFields(candidate, scope, budgets);
     if (!valid) {return;}
     const safe = Object.freeze({...candidate, scope: Object.freeze({...scope}), dispatch, headers, body,
       budgets: Object.freeze({...budgets})}) as unknown as ContainedTurnEgressRequest;
@@ -197,9 +201,14 @@ const createRequestValidation = (tools: ValidationTools) => {
   return {snapshotRequest};
 };
 
+const validHostname = (route: Readonly<Record<string, unknown>>) =>
+  route.scheme === "https" && route.port === 443 && typeof route.host === "string" && route.host.length <= 253 &&
+  route.host === route.tlsServerName && route.host === route.host.toLowerCase() && /^[a-z0-9.-]+$/u.test(route.host) &&
+  !route.host.endsWith(".") && !/^\d+(?:\.\d+){3}$/u.test(route.host) &&
+  route.host.split(".").every(label => label.length > 0 && label.length <= 63 && !label.startsWith("-") && !label.endsWith("-"));
+
 const createAuthorityValidation = (tools: ValidationTools) => {
   const {exact, dense, hash} = tools;
-  // oxlint-disable-next-line complexity -- exact route and pin-set authority checks remain fail-closed.
   const snapshotRoute = (value: unknown): RouteAuthority | undefined => {
     const route = exact(value, ["contractVersion", "tenantId", "projectId", "scopeDigest", "providerId", "providerAccountRef",
       "providerRouteRef", "credentialBindingRef", "credentialBindingDigest", "credentialGeneration", "credentialRevision",
@@ -207,19 +216,17 @@ const createAuthorityValidation = (tools: ValidationTools) => {
       "allowedTlsSpkiDigests", "tlsPinSetDigest", "tlsPinSetGeneration", "tlsPinSetRevision", "resolutionAuthorityId",
       "resolutionGeneration"]);
     const pins = dense(route?.allowedTlsSpkiDigests, 16);
-    if (route === undefined || !Object.isFrozen(value) || !Object.isFrozen(route.allowedTlsSpkiDigests) ||
+    if (route === undefined || pins === undefined) {return;}
+    if (!Object.isFrozen(value) || !Object.isFrozen(route.allowedTlsSpkiDigests) ||
         route.contractVersion !== "provider-route-authority/v1" ||
         ![route.tenantId, route.projectId, route.providerId, route.providerAccountRef, route.providerRouteRef,
           route.credentialBindingRef, route.credentialGeneration, route.credentialRevision, route.routeRevision,
           route.tlsPinSetGeneration, route.tlsPinSetRevision, route.resolutionAuthorityId, route.resolutionGeneration].every(identifier) ||
         ![route.scopeDigest, route.credentialBindingDigest, route.authorityDigest, route.tlsPinSetDigest].every(isDigest) ||
-        pins === undefined || pins.length === 0 || pins.some(digest => !isDigest(digest)) ||
+        pins.length === 0 || pins.some(digest => !isDigest(digest)) ||
         new Set(pins).size !== pins.length || pins.some((digest, index) => index > 0 && (digest as string) <= (pins[index - 1] as string)) ||
         route.tlsPinSetDigest !== hash(frame("contained-turn-egress-tls-pin-set/v1", pins as string[])) ||
-        route.scheme !== "https" || route.port !== 443 || typeof route.host !== "string" || route.host !== route.tlsServerName ||
-        route.host !== route.host.toLowerCase() || !/^[a-z0-9.-]+$/u.test(route.host) || route.host.endsWith(".") ||
-        /^\d+(?:\.\d+){3}$/u.test(route.host) || route.host.split(".").some(label => label.length === 0 || label.length > 63 ||
-          label.startsWith("-") || label.endsWith("-")) || !normalizedPath(route.pathConstraint)) {return;}
+        !validHostname(route) || !normalizedPath(route.pathConstraint)) {return;}
     return Object.freeze({...route, allowedTlsSpkiDigests: pins}) as RouteAuthority;
   };
   const snapshotPolicy = (value: unknown): PolicyAuthority | undefined => {
@@ -236,6 +243,12 @@ const createAuthorityValidation = (tools: ValidationTools) => {
   return {snapshotRoute, snapshotPolicy};
 };
 
+const validObservationFacts = (observation: Readonly<Record<string, unknown>>) =>
+  observation.peerPort === 443 && identifier(observation.tlsServerName) && isDigest(observation.tlsSpkiDigest) &&
+  identifier(observation.resolutionAuthorityId) && identifier(observation.resolutionGeneration) &&
+  isDigest(observation.answerSetDigest) && isDigest(observation.applicationBytesDigest) && count(observation.applicationBytes) &&
+  observation.alpn === "http/1.1" && observation.phase === "immediately_before_first_application_byte";
+
 const createTransportValidation = (tools: ValidationTools) => {
   const {exact, dense, hash, methods} = tools;
   const snapshotAddress = (value: unknown): NetworkAddressV1 | undefined => {
@@ -250,16 +263,11 @@ const createTransportValidation = (tools: ValidationTools) => {
   };
   const answerDigest = (addresses: readonly NetworkAddressV1[]) => hash(frame("contained-turn-egress-answer-set/v1",
     addresses.map(addressKey)));
-  // oxlint-disable-next-line complexity -- all address, DNS, TLS, and exact-wire facts are jointly required.
   const snapshotObservation = (value: unknown): TransportObservation | undefined => {
     const observation = exact(value, ["canonicalAddresses", "peerAddress", "peerPort", "tlsServerName", "tlsSpkiDigest", "alpn",
       "phase", "resolutionAuthorityId", "resolutionGeneration", "answerSetDigest", "applicationBytesDigest", "applicationBytes"]);
     const candidates = dense(observation?.canonicalAddresses, 16);
-    if (observation === undefined || candidates === undefined || candidates.length === 0 || observation.peerPort !== 443 ||
-        !identifier(observation.tlsServerName) || !isDigest(observation.tlsSpkiDigest) || !identifier(observation.resolutionAuthorityId) ||
-        !identifier(observation.resolutionGeneration) || !isDigest(observation.answerSetDigest) ||
-        !isDigest(observation.applicationBytesDigest) || !count(observation.applicationBytes) || observation.alpn !== "http/1.1" ||
-        observation.phase !== "immediately_before_first_application_byte") {return;}
+    if (observation === undefined || candidates === undefined || candidates.length === 0 || !validObservationFacts(observation)) {return;}
     const addresses: (NetworkAddressV1 | undefined)[] = [];
     for (let index = 0; index < candidates.length; index += 1) {addresses.push(snapshotAddress(candidates[index]));}
     const peer = snapshotAddress(observation.peerAddress);
@@ -292,7 +300,7 @@ const createTransportValidation = (tools: ValidationTools) => {
       receipt.claimBindingDigest, receipt.acceptedAuthorityDigest, receipt.authorityHeadDigestAtConsumption,
       receipt.constraintsDigest, receipt.containmentPolicyDigest, receipt.consumptionDigest].every(isDigest) ||
       !count(receipt.claimBeforeControlTime) || !count(receipt.consumedAtControlTime) ||
-      (receipt.claimBeforeControlTime as number) < (receipt.consumedAtControlTime as number) || !identifier(receipt.ownerEvidenceRef)) {return;}
+      (receipt.claimBeforeControlTime as number) <= (receipt.consumedAtControlTime as number) || !identifier(receipt.ownerEvidenceRef)) {return;}
     return Object.freeze({...receipt, scope: Object.freeze({...scope})}) as DispatchConsumptionReceipt;
   };
   const canonicalReceipt = (value: DispatchConsumptionReceipt) => frame("contained-turn-egress-dispatch-receipt/v1", [
