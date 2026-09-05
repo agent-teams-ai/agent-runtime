@@ -118,6 +118,10 @@ test("the real parser observes every retained Node import in composition and TLS
     [`${composition}/trusted-runtime-access-scope.ts`, ["node:util"]],
     [`${host.roots[0]}/egress/node-tls-http-egress-transport-support.ts`,
       ["node:buffer", "node:crypto", "node:net", "node:tls"]],
+    [`${host.roots[0]}/docker/node-linux-exclusive-route.ts`,
+      ["node:child_process", "node:crypto", "node:fs", "node:timers"]],
+    ["packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-wire.ts",
+      ["node:crypto", "node:util"]],
   ]) {
     const source = await readFile(join(repositoryRoot, path), "utf8");
     const parsed = parser.parse({ path, source });
@@ -139,7 +143,7 @@ test("Node permissions do not follow imports moved into core or undeclared adapt
   ]) {
     for (const layer of ["domain", "application", "adapters/undeclared"]) {
       const path = `${root}/${layer}/moved-node-dependency.ts`;
-      for (const builtin of ["node:buffer", "node:util"]) {
+      for (const builtin of ["node:buffer", "node:timers", "node:util"]) {
         const diagnostics = await analyzeFixture({ [path]: `import '${builtin}';\n` });
         assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
         assert.equal(diagnostics[0].location.path, path);
@@ -195,6 +199,7 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.ok(!claude.allowedBoundaries.includes("production.agent-execution"));
   assert.deepEqual(production.allowedBoundaries, [
     "adapter.agent-execution.claude-agent-sdk",
+    "adapter.agent-execution.codex-app-server",
     "adapter.agent-execution.host-custody",
     "adapter.agent-execution.legacy-contained-turn-ports",
     "adapter.agent-execution.provider-delegation-ports",
@@ -271,6 +276,20 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   assert.deepEqual(await analyzeFixture({
     [paths.claude]: "import 'node:perf_hooks';\nimport type {} from '@anthropic-ai/claude-agent-sdk';\n",
   }), []);
+});
+
+test("Codex evidence utilities do not grant spawn or network ownership", async () => {
+  const codex = boundariesById.get("adapter.agent-execution.codex-app-server");
+  const path = `${codex.roots[0]}/negative-fixture.ts`;
+  assert.deepEqual(await analyzeFixture({ [path]: "import 'node:util';\n" }), []);
+  for (const builtin of ["node:child_process", "node:http", "node:net", "node:tls", "node:timers"]) {
+    assert.deepEqual(rules(await analyzeFixture({ [path]: `import '${builtin}';\n` })),
+      ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+  }
+  assert.deepEqual(rules(await analyzeFixture({
+    [path]: "import '../host-custody/node-provider-process-custody-core.js';\n",
+    [`${boundariesById.get("adapter.agent-execution.host-custody").roots[0]}/node-provider-process-custody-core.ts`]: "export {};\n",
+  })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
 });
 
 test("Claude may import only narrow provider-delegation and private-directory ports", async () => {

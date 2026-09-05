@@ -96,6 +96,8 @@ boundaries:
         - node:fs/promises
         - node:path
         - node:stream
+        # Host-owned timer handles enforce the route cutoff and descriptor lifetime.
+        - node:timers
         - node:util
       runtimeReferences: []
   - id: adapter.agent-execution.host-custody
@@ -124,6 +126,31 @@ boundaries:
         - node:stream
         - node:timers/promises
         - node:tls
+        - node:util
+      runtimeReferences: []
+  - id: adapter.agent-execution.codex-app-server
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts
+    allow:
+      boundaries:
+        - adapter.agent-execution.host-custody
+        - adapter.agent-execution.legacy-contained-turn-ports
+        - core.agent-execution.contained-turn
+      packages:
+        - "@agent-teams/filesystem-custody"
+      builtins:
+        - node:crypto
+        - node:fs
+        - node:path
+        # Reject Proxy config evidence before invoking any traps.
         - node:util
       runtimeReferences: []
   - id: adapter.agent-execution.claude-agent-sdk
@@ -183,6 +210,7 @@ boundaries:
     allow:
       boundaries:
         - adapter.agent-execution.claude-agent-sdk
+        - adapter.agent-execution.codex-app-server
         - adapter.agent-execution.host-custody
         - adapter.agent-execution.legacy-contained-turn-ports
         - adapter.agent-execution.provider-delegation-ports
