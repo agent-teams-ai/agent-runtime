@@ -3,7 +3,8 @@ import type { createEgressValidation, PolicyAuthority } from "./validation.js";
 import { monotonicNow } from "./node-boundary.js";
 
 export const frozenExact = <Name extends string>(validation: ReturnType<typeof createEgressValidation>, value: unknown,
-  names: readonly Name[]) => {try {return Object.isFrozen(value) ? validation.exact(value, names) : undefined;} catch {return;}};
+  names: readonly Name[]) => {try {const captured = validation.exact(value, names);
+    return captured !== undefined && Object.isFrozen(value) ? captured : undefined;} catch {return;}};
 
 /** Ephemeral, one-use joint authority. The trusted writer consumes it at emission after signing/verification.
  * The monotonic lease starts before the asynchronous policy read, so owner latency cannot extend it. */

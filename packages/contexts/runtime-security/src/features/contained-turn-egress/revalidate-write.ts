@@ -27,6 +27,7 @@ export const revalidateWrite = async (rawObservation: unknown, input: FirstWrite
   } catch {return deny("authority_unavailable");}
   if (!input.active()) {return deny("authorization_invalid");}
   if (receipt === undefined) {return deny("dispatch_not_committed");}
+  if (receipt.providerBindingDigest !== validation.routeBindingDigest(route)) {return deny("route_mismatch");}
   if (!routeCurrent) {return deny("authority_drift");}
   const issuedAt = currentIssuedAt(timed, policy.observedAt);
   if (issuedAt === undefined) {return deny("authority_drift");}

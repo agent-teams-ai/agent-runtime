@@ -11,7 +11,6 @@ export interface EgressSecurityPrimitives {
   readonly callable: (value: unknown) => value is (...args: never[]) => unknown;
   readonly copyBytes: (value: unknown, maximumByteLength: number) => Uint8Array | undefined;
   readonly array: (value: unknown) => value is unknown[];
-  readonly thenable: (value: unknown) => boolean;
   readonly canonicalEd25519Signature: (value: unknown) => value is string;
 }
 export type RouteAuthority = Readonly<ProviderRouteAuthoritySnapshotV1>;
@@ -85,8 +84,8 @@ const createValidationTools = (primitives: EgressSecurityPrimitives) => {
     const length = Object.getOwnPropertyDescriptor(value, "length");
     if (length === undefined || !("value" in length) || !Number.isSafeInteger(length.value) ||
         (length.value as number) < 0 || (length.value as number) > maximum) {return;}
+    if (Reflect.ownKeys(value).length !== (length.value as number) + 1) {return;}
     const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<PropertyKey, PropertyDescriptor>;
-    if (Reflect.ownKeys(descriptors).length !== (length.value as number) + 1) {return;}
     const output: unknown[] = [];
     for (let index = 0; index < (length.value as number); index += 1) {
       const descriptor = descriptors[String(index)]; if (descriptor === undefined || !("value" in descriptor)) {return;}
@@ -212,7 +211,7 @@ const createAuthorityValidation = (tools: ValidationTools) => {
   const snapshotRoute = (value: unknown): RouteAuthority | undefined => {
     const route = exact(value, ["contractVersion", "tenantId", "projectId", "scopeDigest", "providerId", "providerAccountRef",
       "providerRouteRef", "credentialBindingRef", "credentialBindingDigest", "credentialGeneration", "credentialRevision",
-      "routeRevision", "authorityDigest", "scheme", "host", "port", "tlsServerName", "pathConstraint",
+      "accessRef", "accessRevision", "routeRevision", "authorityDigest", "scheme", "host", "port", "tlsServerName", "pathConstraint",
       "allowedTlsSpkiDigests", "tlsPinSetDigest", "tlsPinSetGeneration", "tlsPinSetRevision", "resolutionAuthorityId",
       "resolutionGeneration"]);
     const pins = dense(route?.allowedTlsSpkiDigests, 16);
@@ -220,7 +219,7 @@ const createAuthorityValidation = (tools: ValidationTools) => {
     if (!Object.isFrozen(value) || !Object.isFrozen(route.allowedTlsSpkiDigests) ||
         route.contractVersion !== "provider-route-authority/v1" ||
         ![route.tenantId, route.projectId, route.providerId, route.providerAccountRef, route.providerRouteRef,
-          route.credentialBindingRef, route.credentialGeneration, route.credentialRevision, route.routeRevision,
+          route.credentialBindingRef, route.credentialGeneration, route.credentialRevision, route.accessRef, route.accessRevision, route.routeRevision,
           route.tlsPinSetGeneration, route.tlsPinSetRevision, route.resolutionAuthorityId, route.resolutionGeneration].every(identifier) ||
         ![route.scopeDigest, route.credentialBindingDigest, route.authorityDigest, route.tlsPinSetDigest].every(isDigest) ||
         pins.length === 0 || pins.some(digest => !isDigest(digest)) ||
@@ -240,7 +239,17 @@ const createAuthorityValidation = (tools: ValidationTools) => {
       (policy.expiresAt as number) > (policy.observedAt as number) && (policy.maxRequestBytes as number) > 0 &&
       (policy.maxResponseBytes as number) > 0 && (policy.maxDeadlineMs as number) > 0 ? Object.freeze({...policy}) as PolicyAuthority : undefined;
   };
-  return {snapshotRoute, snapshotPolicy};
+  // Domain-separated preimage of the exact resolved Provider Access route, including owner revisions.
+  // Only the digest crosses into dispatch evidence; concrete path/credential material is never emitted.
+  const routeBindingDigest = (route: RouteAuthority) => hash(frame("contained-turn-egress-provider-binding/v1", [
+    route.contractVersion, route.tenantId, route.projectId, route.scopeDigest, route.providerId,
+    route.providerAccountRef, route.accessRef, route.accessRevision, route.providerRouteRef, route.routeRevision,
+    route.credentialBindingRef, route.credentialBindingDigest, route.credentialGeneration, route.credentialRevision,
+    route.authorityDigest, route.scheme, route.host, route.port, route.tlsServerName,
+    hash(frame("contained-turn-egress-path/v1", [route.pathConstraint])), route.tlsPinSetDigest,
+    route.tlsPinSetGeneration, route.tlsPinSetRevision, route.resolutionAuthorityId, route.resolutionGeneration,
+  ]));
+  return {snapshotRoute, snapshotPolicy, routeBindingDigest};
 };
 
 const validObservationFacts = (observation: Readonly<Record<string, unknown>>) =>
@@ -313,7 +322,7 @@ const createTransportValidation = (tools: ValidationTools) => {
   const canonicalAuthorization = (value: EgressAuthorizationBodyV1) => frame("contained-turn-egress-authorization/v1", [
     value.contractVersion, value.tenantId, value.projectId, value.scopeDigest, value.providerId, value.providerAccountRef,
     value.providerRouteRef, value.credentialBindingRef, value.credentialBindingDigest, value.credentialGeneration,
-    value.credentialRevision, value.routeRevision, value.routeAuthorityDigest, value.operationId, value.attemptId,
+    value.credentialRevision, value.accessRef, value.accessRevision, value.routeRevision, value.routeAuthorityDigest, value.operationId, value.attemptId,
     canonicalReceipt(value.dispatchReceipt), value.requestId, value.requestNonce, value.environmentId, value.gatewayId,
     value.hostInstanceId, value.hostBootId, value.transportMode, value.policyId, value.policyRevision, value.policyGeneration,
     value.keyId, value.keyGeneration, value.signerRevision, value.timeAuthorityId, value.timeGeneration, value.issuedAt,
@@ -331,12 +340,11 @@ const createTransportValidation = (tools: ValidationTools) => {
       writeExact: writer.writeExact as (input: unknown) => unknown});
   };
   const snapshotTransportResult = (value: unknown): TransportResult | undefined => {
-    if (!Object.isFrozen(value)) {return;}
     const completed = exact(value, ["status", "responseBytes", "responseDigest", "boundaryReceipt"]);
-    if (completed?.status === "completed" && count(completed.responseBytes) && isDigest(completed.responseDigest)) {
+    if (completed !== undefined && Object.isFrozen(value) && completed.status === "completed" && count(completed.responseBytes) && isDigest(completed.responseDigest)) {
       return Object.freeze({...completed}) as TransportResult;}
-    const notSent = exact(value, ["status"]); if (notSent?.status === "not_sent") {return Object.freeze({...notSent}) as TransportResult;}
-    const uncertain = exact(value, ["status"]); return uncertain?.status === "write_indeterminate" ?
+    const notSent = exact(value, ["status"]); if (notSent !== undefined && Object.isFrozen(value) && notSent.status === "not_sent") {return Object.freeze({...notSent}) as TransportResult;}
+    const uncertain = exact(value, ["status"]); return uncertain !== undefined && Object.isFrozen(value) && uncertain.status === "write_indeterminate" ?
       Object.freeze({...uncertain}) as TransportResult : undefined;
   };
   return {snapshotObservation, committedReceipt, canonicalAuthorization, captureTransport, snapshotTransportResult, answerDigest};
@@ -348,7 +356,7 @@ export const createEgressValidation = (primitives: EgressSecurityPrimitives) => 
   return {hash: tools.hash, exact: tools.exact,
     captureComposition: (identity: unknown, dependencies: unknown) => captureComposition(tools, identity, dependencies),
     snapshotRequest: guarded(request.snapshotRequest), snapshotRoute: guarded(authority.snapshotRoute),
-    snapshotPolicy: guarded(authority.snapshotPolicy), snapshotObservation: guarded(transport.snapshotObservation),
+    routeBindingDigest: authority.routeBindingDigest, snapshotPolicy: guarded(authority.snapshotPolicy), snapshotObservation: guarded(transport.snapshotObservation),
     committedReceipt: guarded(transport.committedReceipt), canonicalAuthorization: transport.canonicalAuthorization,
     captureTransport: guarded(transport.captureTransport), snapshotTransportResult: guarded(transport.snapshotTransportResult),
     answerDigest: transport.answerDigest};

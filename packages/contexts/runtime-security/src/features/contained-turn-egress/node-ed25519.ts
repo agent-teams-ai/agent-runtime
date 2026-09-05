@@ -5,8 +5,9 @@ import type { EgressAuthorizationEnvelopeV1, EgressAuthorizationSignerV1 } from 
 const hash = (body: Uint8Array) => `sha256:${createHash("sha256").update(body).digest("hex")}`;
 const exact = (value: unknown, names: readonly string[]) => {
   if (typeof value !== "object" || value === null || nodeTypes.isProxy(value)) {return;}
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== names.length || keys.some(key => typeof key !== "string" || !names.includes(key))) {return;}
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(descriptors).length !== names.length) {return;}
   const result: Record<string, unknown> = {};
   for (const name of names) {const descriptor = descriptors[name]; if (descriptor === undefined || !("value" in descriptor)) {return;}
     result[name] = descriptor.value;} return result;

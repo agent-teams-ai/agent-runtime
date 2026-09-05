@@ -13,6 +13,7 @@ export const authorizationBody = (input: Readonly<{route: ProviderRouteAuthority
     providerId: route.providerId, providerAccountRef: route.providerAccountRef, providerRouteRef: route.providerRouteRef,
     credentialBindingRef: route.credentialBindingRef, credentialBindingDigest: route.credentialBindingDigest,
     credentialGeneration: route.credentialGeneration, credentialRevision: route.credentialRevision,
+    accessRef: route.accessRef, accessRevision: route.accessRevision,
     routeRevision: route.routeRevision, routeAuthorityDigest: route.authorityDigest, operationId: receipt.operationId,
     attemptId: identity.attemptId, dispatchReceipt: receipt, requestId: request.requestId, requestNonce: request.requestNonce,
     environmentId: identity.environmentId, gatewayId: identity.gatewayId, hostInstanceId: identity.hostInstanceId,

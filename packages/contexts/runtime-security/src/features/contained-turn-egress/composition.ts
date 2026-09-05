@@ -36,6 +36,7 @@ export interface ProviderRouteAuthoritySnapshotV1 {
   readonly providerAccountRef: string; readonly providerRouteRef: string;
   readonly credentialBindingRef: string; readonly credentialBindingDigest: string;
   readonly credentialGeneration: string; readonly credentialRevision: string;
+  readonly accessRef: string; readonly accessRevision: string;
   readonly routeRevision: string; readonly authorityDigest: string; readonly scheme: "https";
   readonly host: string; readonly port: 443; readonly tlsServerName: string; readonly pathConstraint: string;
   readonly allowedTlsSpkiDigests: readonly string[]; readonly tlsPinSetDigest: string;
@@ -85,6 +86,7 @@ export interface EgressAuthorizationBodyV1 {
   readonly providerId: string; readonly providerAccountRef: string; readonly providerRouteRef: string;
   readonly credentialBindingRef: string; readonly credentialBindingDigest: string;
   readonly credentialGeneration: string; readonly credentialRevision: string;
+  readonly accessRef: string; readonly accessRevision: string;
   readonly routeRevision: string; readonly routeAuthorityDigest: string; readonly operationId: string;
   readonly attemptId: string; readonly dispatchReceipt: DispatchConsumptionReceipt;
   readonly requestId: string; readonly requestNonce: string; readonly environmentId: string;
