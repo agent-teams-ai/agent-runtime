@@ -43,7 +43,7 @@ export interface PostgresContainedTurnOperationStoreOptions {
   readonly identities?: ContainedTurnPostgresIdentitySource;
   readonly pool: Pool;
   /** Used only for deterministic mixed-version migration tests and staged drains. */
-  readonly runtimeSchemaVersion?: 1 | 2 | 3 | 4 | 5 | 6;
+  readonly runtimeSchemaVersion?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   readonly timeouts?: Partial<ContainedTurnPostgresTimeouts>;
 }
 

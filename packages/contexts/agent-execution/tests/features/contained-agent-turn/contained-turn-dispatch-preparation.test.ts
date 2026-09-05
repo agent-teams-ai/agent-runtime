@@ -134,6 +134,9 @@ test("dispatch preparation cleanup retains possible winners and releases only pr
 });
 
 test("retirement closes the cleanup TOCTOU and exact permit replay is monotone", () => {
+  const receipts = validateContainedTurnConsumedGrantReceipts(grantSubject(), [
+    consumedReceipt("provider_access", grantSubject()), consumedReceipt("runtime_security", grantSubject()),
+  ]);
   const active = Object.freeze({
     attemptId,
     custodyId,
@@ -142,12 +145,10 @@ test("retirement closes the cleanup TOCTOU and exact permit replay is monotone",
     operationId,
     preparationToken,
     preparedOperationRevision: 1,
-    providerAccessGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
-      owner: "provider_access", request: "retirement-one",
-    })}`,
-    runtimeSecurityGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({
-      owner: "runtime_security", request: "retirement-one",
-    })}`,
+    providerAccessConsumptionReceipt: receipts[0],
+    providerAccessGrantRequestId: receipts[0].grantRequestId,
+    runtimeSecurityConsumptionReceipt: receipts[1],
+    runtimeSecurityGrantRequestId: receipts[1].grantRequestId,
     workspaceId,
   });
   const retired = retireContainedTurnDispatchPreparation(active, "retirement:1");
@@ -238,23 +239,10 @@ test("retirement durably preserves and reconciles every indeterminate grant cons
   assert.equal(stillIndeterminate.kind, "cleanup_pending");
   if (stillIndeterminate.kind !== "cleanup_pending") {return;}
   assert.equal(stillIndeterminate.providerAccessSettled, false);
-  const providerReconciled = recordContainedTurnPreparationCleanup(stillIndeterminate, {
-    permit: retired.cleanupPermit,
-    target: "provider_access",
-  });
-  const closed = recordContainedTurnPreparationCleanup(providerReconciled, {
-    permit: retired.cleanupPermit,
-    target: "runtime_security",
-  });
-  assert.equal(closed.kind, "cleanup_closed");
-  if (closed.kind === "cleanup_closed") {
-    assert.deepEqual(closed.cleanupEvidenceIds, [
-      providerAccessEvidenceId,
-      runtimeSecurityEvidenceId,
-      settlementEvidenceId,
-    ]);
-    assert.equal(closed.providerAccessConsumptionEvidenceId, providerAccessEvidenceId);
-    assert.equal(closed.runtimeSecurityConsumptionEvidenceId, runtimeSecurityEvidenceId);
+  for (const target of ["provider_access", "runtime_security"] as const) {
+    assert.throws(() => recordContainedTurnPreparationCleanup(stillIndeterminate, {
+      permit: retired.cleanupPermit, target,
+    }), /exact consumed grant receipt/u);
   }
 });
 
@@ -402,8 +390,8 @@ test("persisted v2 cleanup debt upcasts for conservative recovery and oversized 
   if (v1Decoded.kind === "cleanup_pending") {
     assert.deepEqual(v1Decoded.cleanupEvidenceIds, [historicalEvidenceId]);
     assert.equal(v1Decoded.custodyReleased, false);
-    assert.equal(v1Decoded.providerAccessSettled, true);
-    assert.equal(v1Decoded.runtimeSecuritySettled, true);
+    assert.equal(v1Decoded.providerAccessSettled, false);
+    assert.equal(v1Decoded.runtimeSecuritySettled, false);
   }
 
   const oversizedRow = {
@@ -488,7 +476,10 @@ test("restart recovery retires against the preparation revision rather than the 
   });
   assert.equal(retirementInputs[0]?.expectedOperationRevision, active.preparedOperationRevision);
   assert.equal(custodyReleases, 1);
-  assert.equal(preparation.kind, "cleanup_closed", "a confirmed cleanup must actually persist through the owner method");
+  assert.equal(preparation.kind, "cleanup_pending", "custody release cannot close unproved owner obligations");
+  assert.equal(preparation.custodyReleased, true);
+  assert.equal(preparation.providerAccessSettled, false);
+  assert.equal(preparation.runtimeSecuritySettled, false);
 });
 
 test("parallel grant consumption returns every indeterminate owner evidence", async () => {

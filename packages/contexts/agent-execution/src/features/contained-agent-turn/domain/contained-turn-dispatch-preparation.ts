@@ -108,12 +108,30 @@ const validateGrantRequestId = (owner: string, value: string | null): void => {
   }
 };
 
-export const bindContainedTurnPreparationGrantRequests = (
+type BindablePreparation = Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" | "cleanup_pending" }>;
+
+export function bindContainedTurnPreparationGrantRequests(
+  preparation: Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" }>,
+  consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds,
+): Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" }>;
+export function bindContainedTurnPreparationGrantRequests(
   preparation: ContainedTurnDispatchPreparation,
   consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds,
-): Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" }> => {
-  if (preparation.kind !== "active") {
-    throw new TypeError("only an active dispatch preparation can bind consumed grants");
+): BindablePreparation;
+export function bindContainedTurnPreparationGrantRequests(
+  preparation: ContainedTurnDispatchPreparation,
+  consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds,
+): BindablePreparation {
+  if (preparation.kind !== "active" && preparation.kind !== "cleanup_pending") {
+    throw new TypeError("only an active or pending dispatch preparation can bind consumed grants");
+  }
+  for (const key of ["providerAccessConsumptionReceipt", "runtimeSecurityConsumptionReceipt"] as const) {
+    const previous = preparation[key];
+    const next = consumedGrantRequestIds[key];
+    if (previous !== undefined && next !== undefined &&
+        digestContainedTurnCanonicalValue(previous as never) !== digestContainedTurnCanonicalValue(next as never)) {
+      throw new TypeError("consumed grant receipt substitution rejected");
+    }
   }
   const providerAccessGrantRequestId =
     consumedGrantRequestIds.providerAccessConsumptionReceipt?.grantRequestId ?? consumedGrantRequestIds.providerAccessGrantRequestId ?? preparation.providerAccessGrantRequestId;
@@ -136,7 +154,7 @@ export const bindContainedTurnPreparationGrantRequests = (
     ...(consumedGrantRequestIds.runtimeSecurityConsumptionReceipt === undefined ? {} : { runtimeSecurityConsumptionReceipt: consumedGrantRequestIds.runtimeSecurityConsumptionReceipt }),
     runtimeSecurityGrantRequestId,
   });
-};
+}
 
 export const retireContainedTurnDispatchPreparation = (
   preparation: ContainedTurnDispatchPreparation,
@@ -157,6 +175,9 @@ export const retireContainedTurnDispatchPreparation = (
       preparation.runtimeSecurityGrantRequestId !== consumedGrantRequestIds.runtimeSecurityGrantRequestId) {
     throw new TypeError("Runtime Security retired grant identity substitution rejected");
   }
+  if (preparation.kind === "cleanup_pending") {
+    return bindContainedTurnPreparationGrantRequests(preparation, consumedGrantRequestIds);
+  }
   if (preparation.kind !== "active") {return preparation;}
   const bound = bindContainedTurnPreparationGrantRequests(preparation, consumedGrantRequestIds);
   const providerAccessConsumptionEvidenceId = consumptionEvidenceIds.providerAccessEvidenceId === undefined
@@ -165,9 +186,6 @@ export const retireContainedTurnDispatchPreparation = (
   const runtimeSecurityConsumptionEvidenceId = consumptionEvidenceIds.runtimeSecurityEvidenceId === undefined
     ? null
     : validateContainedTurnIdentity("evidence", consumptionEvidenceIds.runtimeSecurityEvidenceId);
-  if (bound.runtimeSecurityGrantRequestId !== null && runtimeSecurityConsumptionEvidenceId !== null) {
-    throw new TypeError("Runtime Security consumption cannot be both proved and indeterminate");
-  }
   const cleanupEvidenceIds = Object.freeze([
     ...new Set([
       providerAccessConsumptionEvidenceId,
@@ -181,11 +199,11 @@ export const retireContainedTurnDispatchPreparation = (
     custodyReleased: false,
     kind: "cleanup_pending",
     providerAccessConsumptionEvidenceId,
-    providerAccessSettled: bound.providerAccessGrantRequestId === null &&
-      providerAccessConsumptionEvidenceId === null,
+    // Missing consumption evidence is an unresolved owner obligation, never
+    // proof of non-consumption. Only an authoritative settlement closes it.
+    providerAccessSettled: false,
     runtimeSecurityConsumptionEvidenceId,
-    runtimeSecuritySettled: bound.runtimeSecurityGrantRequestId === null &&
-      runtimeSecurityConsumptionEvidenceId === null,
+    runtimeSecuritySettled: false,
   });
 };
 
@@ -239,6 +257,11 @@ export const recordContainedTurnPreparationCleanup = (
   const evidenceId = input.evidenceId === undefined
     ? undefined
     : validateContainedTurnIdentity("evidence", input.evidenceId);
+  if (evidenceId === undefined &&
+      ((input.target === "provider_access" && preparation.providerAccessConsumptionReceipt === undefined) ||
+       (input.target === "runtime_security" && preparation.runtimeSecurityConsumptionReceipt === undefined))) {
+    throw new TypeError("owner settlement requires the exact consumed grant receipt");
+  }
   if (evidenceId !== undefined) {
     if (preparation.cleanupEvidenceIds.includes(evidenceId) ||
         preparation.cleanupEvidenceIds.length === CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {

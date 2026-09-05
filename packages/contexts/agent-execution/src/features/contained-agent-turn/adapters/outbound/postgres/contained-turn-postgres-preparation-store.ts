@@ -50,6 +50,20 @@ const decodePreparationRow = (row: PreparationRow): ContainedTurnDispatchPrepara
   return decodeContainedTurnPreparation(row.state, row.state_digest, row.state_codec_version);
 };
 
+const assertRetirementReceiptAuthority = (
+  input: Parameters<ContainedTurnKernelOperationStore["retireDispatchPreparation"]>[0],
+  current: ContainedTurnKernelOperation,
+): void => {
+  for (const receipt of [input.consumedGrantRequestIds?.providerAccessConsumptionReceipt,
+    input.consumedGrantRequestIds?.runtimeSecurityConsumptionReceipt]) {
+    if (receipt !== undefined && (receipt.operationId !== current.operationId ||
+        receipt.scope.tenantId !== current.scope.tenantId || receipt.scope.projectId !== current.scope.projectId ||
+        receipt.scope.scopeDigest !== containedTurnScopeDigest(current.scope))) {
+      throw new TypeError("retired consumption receipt authority mismatch");
+    }
+  }
+};
+
 export class ContainedTurnPostgresPreparationStore {
   public constructor(
     private readonly identities: ContainedTurnPostgresIdentitySource,
@@ -148,7 +162,7 @@ export class ContainedTurnPostgresPreparationStore {
       );
       const persisted = row.rows[0];
       const preparation = persisted === undefined ? undefined : decodePreparationRow(persisted);
-      if (preparation === undefined || preparation.kind !== "active") {return { current, kind: "stale" as const };}
+      if (preparation === undefined || !["active", "cleanup_pending"].includes(preparation.kind)) {return { current, kind: "stale" as const };}
       if (preparation.operationId !== current.operationId ||
           preparation.operationId !== input.subject.operationId ||
           preparation.preparationToken !== input.subject.preparationToken ||
@@ -176,7 +190,9 @@ export class ContainedTurnPostgresPreparationStore {
         [current.operationId, input.subject.preparationToken, encodedBound.json,
           encodedBound.codecVersion, encodedBound.digest],
       );
-      if (current.revision !== input.expectedOperationRevision) {return { current, kind: "stale" as const };}
+      // Retirement fences dispatch, but delayed consumed receipts still belong
+      // to this preparation's durable settlement obligations and survive restart.
+      if (bound.kind !== "active" || current.revision !== input.expectedOperationRevision) {return { current, kind: "stale" as const };}
       const providerAccessProof: Extract<ContainedTurnProof, { kind: "provider_access_dispatch" }> = {
         binding: { ...operationBinding(current), acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(current.providerAccessSnapshot), resolutionDigest: digestContainedTurnCanonicalValue(providerAccessReceipt as never) },
         kind: "provider_access_dispatch", proofId: containedTurnIdentity("proof", `proof:provider-access-grant:${digestContainedTurnCanonicalValue(providerAccessReceipt as never)}`),
@@ -293,6 +309,7 @@ export class ContainedTurnPostgresPreparationStore {
           preparation.operationCutoffRevision !== input.expectedOperationCutoffRevision) {
         return { current, kind: "stale" as const };
       }
+      assertRetirementReceiptAuthority(input, current);
       const retired = retireContainedTurnDispatchPreparation(
         preparation,
         this.identities.nextId("cleanup", `retirement:${digestContainedTurnCanonicalValue({

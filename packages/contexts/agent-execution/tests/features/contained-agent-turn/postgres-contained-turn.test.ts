@@ -79,7 +79,7 @@ test("versioned state and preparation codecs upcast, round-trip, and quarantine 
     workspaceId: containedTurnIdentity("workspace", "workspace:codec"),
   });
   const encodedPreparation = encodeContainedTurnPreparation(preparation);
-  assert.equal(encodedPreparation.codecVersion, 4);
+  assert.equal(encodedPreparation.codecVersion, 5);
   assert.deepEqual(
     decodeContainedTurnPreparation(
       JSON.parse(encodedPreparation.json), encodedPreparation.digest, encodedPreparation.codecVersion,
@@ -289,7 +289,7 @@ postgresTest("migration chain is exact, serialized, drift-detecting, no-op safe,
       applyContainedTurnPostgresSchema(pool),
     ]);
     current = await pool.query("SELECT version, migration_digest FROM agent_execution.schema_migration");
-    assert.equal(current.rows[0]?.version, 6);
+    assert.equal(current.rows[0]?.version, 7);
 
     await pool.query("UPDATE agent_execution.schema_migration SET migration_digest = repeat('1', 64)");
     await assert.rejects(applyContainedTurnPostgresSchema(pool), /schema identity mismatch/u);
@@ -299,10 +299,10 @@ postgresTest("migration chain is exact, serialized, drift-detecting, no-op safe,
     await pool.query("DROP FUNCTION agent_execution.reject_schema_migration_history_mutation() CASCADE");
     await applyContainedTurnPostgresSchema(pool);
     current = await pool.query("SELECT version, migration_digest FROM agent_execution.schema_migration");
-    assert.equal(current.rows[0]?.version, 6);
+    assert.equal(current.rows[0]?.version, 7);
     assert.equal((await pool.query(
       "SELECT 1 FROM agent_execution.schema_migration_history ORDER BY version",
-    )).rowCount, 6);
+    )).rowCount, 7);
   });
 });
 
@@ -364,7 +364,7 @@ postgresTest("expand migration accepts legacy writes before the contract migrati
   });
 });
 
-postgresTest("real codec-1 preparation backfill crosses two page boundaries and reaches V6", async () => {
+postgresTest("real codec-1 preparation backfill crosses two page boundaries and reaches V7", async () => {
   await withPool(async pool => {
     await resetSchema(pool, 3);
     const operation = operationForProject("project:legacy-pages", "legacy-pages");
@@ -410,8 +410,8 @@ postgresTest("real codec-1 preparation backfill crosses two page boundaries and 
       "SELECT version,migration_digest FROM agent_execution.schema_migration WHERE component=$1",
       [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component],
     )).rows[0], {
-      migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[5]?.digest,
-      version: 6,
+      migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[6]?.digest,
+      version: 7,
     });
   });
 });

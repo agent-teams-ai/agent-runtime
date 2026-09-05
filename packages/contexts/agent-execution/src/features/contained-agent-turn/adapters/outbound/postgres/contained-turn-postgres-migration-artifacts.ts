@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 6;
+export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 7;
 
 const V1_SQL = `
 CREATE SCHEMA IF NOT EXISTS agent_execution;
@@ -309,6 +309,18 @@ ALTER TABLE agent_execution.contained_turn_dispatch_preparation_quarantine_v1
   CHECK (owner_debt_evidence_id ~ '^evidence:.+');
 `;
 
+// Advancing the schema identity fences binaries which infer non-consumption
+// from absent receipts. Existing unproved closure requires owner reconciliation.
+const V7_SQL = `
+ALTER TABLE agent_execution.contained_turn_dispatch_preparation_v1
+  ADD CONSTRAINT contained_turn_preparation_owner_closure
+  CHECK (
+    COALESCE(state #>> '{payload,kind}', state ->> 'kind') IS DISTINCT FROM 'cleanup_closed'
+    OR (jsonb_typeof(state #> '{payload,providerAccessConsumptionReceipt}') IS NOT DISTINCT FROM 'object'
+        AND jsonb_typeof(state #> '{payload,runtimeSecurityConsumptionReceipt}') IS NOT DISTINCT FROM 'object')
+  );
+`;
+
 export const V4_DOWN_SQL = `
 DO $$
 BEGIN
@@ -342,6 +354,7 @@ export const V3_DIGEST = digest(`${V3_OPERATION_DIGEST_VALIDATION_REVISION}\n${V
 export const V4_DIGEST = digest(`${V4_PREPARATION_DIGEST_BACKFILL_REVISION}\n${V4_SQL}`);
 const V5_DIGEST = digest(V5_SQL);
 const V6_DIGEST = digest(V6_SQL);
+const V7_DIGEST = digest(V7_SQL);
 
 export interface ContainedTurnPostgresMigrationIdentity {
   readonly digest: string;
@@ -357,15 +370,16 @@ export const CONTAINED_TURN_POSTGRES_MIGRATIONS: readonly ContainedTurnPostgresM
     Object.freeze({ digest: V4_DIGEST, predecessorDigest: V3_DIGEST, version: 4 }),
     Object.freeze({ digest: V5_DIGEST, predecessorDigest: V4_DIGEST, version: 5 }),
     Object.freeze({ digest: V6_DIGEST, predecessorDigest: V5_DIGEST, version: 6 }),
+    Object.freeze({ digest: V7_DIGEST, predecessorDigest: V6_DIGEST, version: 7 }),
   ]);
 
-export const CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST = V6_DIGEST;
+export const CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST = V7_DIGEST;
 
 export const migrationFor = (version: number): ContainedTurnPostgresMigrationIdentity & { readonly sql: string } => {
   const identity = CONTAINED_TURN_POSTGRES_MIGRATIONS[version - 1];
   const sql = version === 1 ? V1_SQL : version === 2 ? V2_SQL :
     version === 3 ? V3_SQL : version === 4 ? V4_SQL : version === 5 ? V5_SQL :
-      version === 6 ? V6_SQL : undefined;
+      version === 6 ? V6_SQL : version === 7 ? V7_SQL : undefined;
   if (identity === undefined || sql === undefined) {
     throw new RangeError(`unsupported contained turn PostgreSQL migration target ${String(version)}`);
   }

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { Pool } from "pg";
 
-import { applyContainedTurnPostgresSchema } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
+import { applyContainedTurnPostgresSchema, CONTAINED_TURN_POSTGRES_SCHEMA_VERSION } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 import { containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {
@@ -53,7 +53,7 @@ export const operationForProject = (
 
 export const resetSchema = async (
   pool: Pool,
-  targetVersion: 1 | 2 | 3 | 4 | 5 | 6 = 6,
+  targetVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 = CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
 ): Promise<void> => {
   await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
   await applyContainedTurnPostgresSchema(pool, {
@@ -77,7 +77,7 @@ export const runtimeQuery = async <Row extends import("pg").QueryResultRow = imp
   try {
     await client.query("BEGIN");
     await client.query(
-      "SELECT set_config('agent_execution.contained_turn_schema_version', '6', true)",
+      "SELECT set_config('agent_execution.contained_turn_schema_version', version::text, true) FROM agent_execution.schema_migration WHERE component='contained-agent-turn'",
     );
     const result = await client.query<Row>(text, [...values]);
     await client.query("COMMIT");
