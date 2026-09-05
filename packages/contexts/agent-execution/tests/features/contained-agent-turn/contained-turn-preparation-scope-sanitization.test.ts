@@ -152,6 +152,7 @@ const canonicalDependencies = (
 ): ContainedTurnKernelDependencies => {
   return createContainedTurnPreparationScopeDependencies(Object.freeze({
     operationStore: Object.freeze({
+      preventIntent: unavailablePreparationDependency,
       claimPreparedDispatch: unavailablePreparationDependency,
       recordDispatchPreparationCleanup: unavailablePreparationDependency,
       retireDispatchPreparation: unavailablePreparationDependency,
@@ -373,6 +374,7 @@ test("preparation dependencies are one-time snapshots in frozen plain facades", 
   let mutatedReads = 0;
   let callableGetterInvocations = 0;
   const operationStore = {
+    preventIntent: unavailablePreparationDependency,
     claimPreparedDispatch: unavailablePreparationDependency,
     read: async () => {originalReads += 1; return;},
     recordDispatchPreparationCleanup: unavailablePreparationDependency,

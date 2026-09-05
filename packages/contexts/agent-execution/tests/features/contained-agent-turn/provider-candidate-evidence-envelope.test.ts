@@ -118,6 +118,7 @@ test("canonical envelope retains bounded failure facts, detaches data and reject
 });
 
 test("safe tuple schema accepts the actual pinned provider tuples", async () => {
+  await import("./support/provider-candidate-source-loader.mjs");
   const codex = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts");
   const claude = await import("../../../src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.ts");
   for (const tuple of [codex.CODEX_APP_SERVER_LINUX_X64_TUPLE, codex.CODEX_APP_SERVER_DARWIN_ARM64_TUPLE,
