@@ -4,6 +4,7 @@ import type {
   HostHttpSigningKey, HostHttpTlsObservation, HostHttpVerifierV2, HttpEgressBrokerPorts,
 } from "./http-egress-ports.js";
 import {validHostHttpGrant, validHostHttpProvisionalDecision} from "./http-egress-signed-proof-validation.js";
+import {normalizePublicAddress} from "./public-address-policy.js";
 
 const readCut = (ports: HttpEgressBrokerPorts) => {
   const value = ports.localAuthorityCut.read();
@@ -108,7 +109,7 @@ export const verifiedGrant = (input: Readonly<{
     && payload.resolver.resolutionCount === input.resolver.resolutionCount
     && JSON.stringify(payload.resolver.normalizedAddresses) === JSON.stringify(input.resolver.addresses)
     && payload.selectedPeer.address === input.selectedAddress
-    && payload.selectedPeer.address === input.tls.peerAddress && payload.selectedPeer.port === input.tls.peerPort
+    && payload.selectedPeer.address === normalizePublicAddress(input.tls.peerAddress) && payload.selectedPeer.port === input.tls.peerPort
     && payload.tls.sniHostname === input.tls.requestedSni && payload.tls.certificateValidated === true
     && payload.tls.dnsIdentity === input.tls.dnsIdentity
     && payload.tls.certificateDigest === input.tls.certificateDigest

@@ -140,7 +140,7 @@ test("snapshots canonical immutable evidence before opening transport", async ()
   assert.equal(fixture.observations.dispatches, 1);
   const resolver = fixture.observations.finalAuthorizationInputs[0].resolver;
   assert.deepEqual(resolver, {resolverIdentity: "resolver-1", resolverEpoch: "resolver-epoch-1", resolutionCount: 1,
-    addresses: [{family: "ipv6", address: "2606:4700::abcd", classification: "public"}, entry()]});
+    addresses: [{family: "ipv6", address: "2606:4700:0000:0000:0000:0000:0000:abcd", classification: "public"}, entry()]});
   assert.ok(Object.isFrozen(resolver)); assert.ok(Object.isFrozen(resolver.addresses));
   assert.ok(resolver.addresses.every(Object.isFrozen));
   assert.notEqual(resolver.addresses, rawAddresses);
@@ -169,7 +169,7 @@ test("rejects outer proxies without inspection, including revoked proxies", () =
 });
 
 test("pins the canonical selected IPv6 address and binds it to final authority", async () => {
-  const canonical = "2606:4700::abcd";
+  const canonical = "2606:4700:0000:0000:0000:0000:0000:abcd";
   const fixture = createEgressFixture({selectedAddress: canonical, binding: {peerAddress: canonical}});
   const address = "2606:4700:0000:0000:0000:0000:0000:ABCD";
   const raw = {...observation([{family: "ipv6", address, classification: "public"}]), selectedAddress: address};

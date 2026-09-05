@@ -13,7 +13,7 @@ describe("HTTP signed final authorization binding", () => {
     assert.equal(input.contractVersion, "provider-process-egress-final/v2");
     assert.equal(input.provisional.contractVersion, "provider-process-egress-provisional-decision/v2");
     assert.deepEqual(input.resolver.addresses.map((value: {address: string}) => value.address),
-      ["2606:2800:220:1:248:1893:25c8:1946", "93.184.216.34"]);
+      ["2606:2800:0220:0001:0248:1893:25c8:1946", "93.184.216.34"]);
     assert.deepEqual(input.pinnedDestination, {address: "93.184.216.34", port: 443});
     assert.deepEqual(input.observedPeer, input.pinnedDestination);
     assert.equal(input.tls.certificateValidated, true);

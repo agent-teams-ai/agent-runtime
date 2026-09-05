@@ -6,6 +6,7 @@ import { createPreparedHttpRequestV1, type PreparedHttpRequestV1, type PreparedH
 import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 import { snapshotHttpEgressOperation } from "./http-ingress-validation.js";
 import { normalizeHttpResolverEvidence } from "./http-egress-resolver-evidence.js";
+import { normalizePublicAddress } from "./public-address-policy.js";
 import { readStrictHttpRequest, StrictHttpRequestError, type StrictHttpRequest } from "./strict-http-request.js";
 import { verifiedGrant, verifiedProvisional } from "./http-egress-runtime-security-v2.js";
 import { materializationAuthorizationRequest, observeMaterializationReceipt, presentationFields,
@@ -129,7 +130,7 @@ const observeTransportBinding = (ports: HttpEgressBrokerPorts, state: HttpEgress
   state.selectedPeer = tls.peerAddress; state.tlsProtocol = tls.tlsProtocol;
   state.certificateDigest = tls.certificateDigest; state.pinDigest = tls.spkiDigest ?? ""; state.alpn = tls.alpn;
   state.sniDigest = digest(ports, [encoder.encode(tls.observedSni)]);
-  if (tls.peerAddress !== selectedAddress || tls.peerPort !== ports.route.originPort
+  if (normalizePublicAddress(tls.peerAddress) !== selectedAddress || tls.peerPort !== ports.route.originPort
     || tls.requestedSni !== ports.route.originHost || tls.observedSni !== ports.route.originHost
     || tls.chainValidated !== true || tls.dnsIdentity !== ports.route.originHost || tls.alpn !== "http/1.1"
     || (tls.tlsProtocol !== "TLSv1.2" && tls.tlsProtocol !== "TLSv1.3")) {
