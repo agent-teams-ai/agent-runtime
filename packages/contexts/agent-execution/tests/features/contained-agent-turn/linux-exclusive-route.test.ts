@@ -547,9 +547,27 @@ test("Node route retains descriptors until removal and quarantines close failure
   assert.deepEqual(f.closed, []);
   f.remove(); assert.equal(await owner.releaseAfterContainerRemoval(), "quarantined");
   assert.deepEqual(f.closed, [42, 41, 40]); // one failure must not skip the other closes
-  assert.equal(await owner.releaseAfterContainerRemoval(), "quarantined");
+  const before = f.invocations.length;
   assert.equal(owner.revoke(), "quarantined");
+  assert.equal(f.invocations.length, before);
+  assert.equal(await owner.releaseAfterContainerRemoval(), "quarantined");
+  f.timer.fire();
+  assert.equal(f.invocations.length, before);
+  assert.deepEqual(f.closed, [42, 41, 40]);
   assert.throws(() => owner.reserveFirstWrite(binding, "request:closed"));
+});
+
+test("Node close failure fences descriptor reuse without earlier quarantine", nodeOnly, async t => {
+  const f = nodeFixture(t, {closeFailure: true}); const owner = await f.open();
+  f.remove(); assert.equal(await owner.releaseAfterContainerRemoval(), "quarantined");
+  assert.deepEqual(f.closed, [42, 41, 40]);
+  const before = f.invocations.length;
+  assert.equal(owner.revoke(), "quarantined");
+  assert.equal(f.invocations.length, before);
+  assert.equal(await owner.releaseAfterContainerRemoval(), "quarantined");
+  assert.equal(f.invocations.length, before);
+  assert.deepEqual(f.closed, [42, 41, 40]);
+  assert.equal(await owner.cutoff, "closed"); // earlier deny observation is immutable
 });
 
 test("Node owns an unreferenced timer and retains namespace custody through idle cutoff", nodeOnly, async t => {

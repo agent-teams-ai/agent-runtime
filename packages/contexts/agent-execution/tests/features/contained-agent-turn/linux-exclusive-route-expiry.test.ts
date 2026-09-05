@@ -26,7 +26,7 @@ const fixture = () => {
     removed: false, clockFailure: false, cancelFailure: false, readFailure: false, mismatch: false,
     transactionFailure: false, acknowledgementLoss: false, scheduleFailure: false, inline: false,
     removeFailure: false, releaseFailure: false, invalidCancellation: false,
-    onRead: () => {}, onSchedule: () => {},
+    onRead: () => {}, onSchedule: () => {}, onRelease: () => {},
     removal: undefined as Promise<boolean> | undefined,
   };
   const kernel = {
@@ -52,6 +52,7 @@ const fixture = () => {
     },
     releaseNamespace() {
       releases += 1;
+      controls.onRelease();
       if (controls.releaseFailure) {throw new Error("synthetic close failure");}
     },
   };
@@ -229,5 +230,24 @@ test("unknown removal and failed namespace close never erase cutoff quarantine",
     assert.equal(f.counts().releases, failure === "removeFailure" ? 0 : 1);
     f.controls[failure] = false;
     assert.equal(await owner.releaseAfterContainerRemoval(), "quarantined");
+  }
+});
+
+test("kernel I/O is fenced before descriptor release begins, including failed release", async () => {
+  for (const releaseFailure of [false, true]) {
+    const f = fixture(); const owner = f.open();
+    const pending = owner.reserveFirstWrite(binding, "request:pending-release");
+    f.controls.removed = true; f.controls.releaseFailure = releaseFailure;
+    let before: ReturnType<typeof f.counts> | undefined;
+    f.controls.onRelease = () => {before = f.counts(); owner.revoke(); f.fire();};
+    const result = releaseFailure ? "quarantined" : "closed";
+    assert.equal(await owner.releaseAfterContainerRemoval(), result);
+    assert.deepEqual(f.counts(), before);
+    assert.equal(pending.consume(), false);
+    assert.equal(owner.revoke(), result);
+    assert.equal(await owner.releaseAfterContainerRemoval(), result);
+    f.fire();
+    assert.deepEqual(f.counts(), before);
+    assert.throws(() => owner.reserveFirstWrite(binding, "request:after-release"));
   }
 });

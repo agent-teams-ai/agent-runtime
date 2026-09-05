@@ -213,7 +213,9 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
         revoke();
         try {
           if (!await kernel.containerRemoved()) {quarantined = true; return "quarantined";}
-          kernel.releaseNamespace(); released = true;
+          // Closing can partially succeed before throwing. Retire kernel I/O
+          // first so neither revocation nor cleanup can reuse descriptor numbers.
+          released = true; kernel.releaseNamespace();
         } catch {quarantined = true;}
         return quarantined ? "quarantined" : "closed";
       })();
