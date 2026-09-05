@@ -15,6 +15,7 @@ import {
 import { readCodexCanaryCredentialInventory } from "./codex-canary-credential-inventory.mjs";
 
 import { observeCustodyReservation, observeProviderCandidateCompletion } from "./provider-candidate-observation.mjs";
+import { createCandidateRunObservation } from "./provider-candidate-run-observation.mjs";
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const requiredEnvironment = name => {
@@ -91,23 +92,21 @@ const cgroupV2Factory = delegatedRoot => Object.freeze({
 
 const resolveCandidateExecution = () => {
   const canaryId = "codex-contained-turn-live-canary/v1";
-  return resolveCanaryExecutionProvenance({
-    buildRootUrl: new URL("../../dist/", import.meta.url),
+  return resolveCanaryExecutionProvenance(Object.freeze({
+    buildRootUrl: new URL("../../dist/", import.meta.url).href,
     canaryId,
     canarySourceUrl: import.meta.url,
     claimedSourceSha: requiredEnvironment("AR_SOURCE_SHA"),
     provider: "codex-app-server-current-kernel",
-  });
+  }));
 };
 
 const loadCandidateBuild = async () => {
-  const [composition, tuple, codecs, identities] = await Promise.all([
+  const [composition, tuple] = await Promise.all([
     import("../../dist/composition.js"),
     import("../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js"),
-    import("../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js"),
-    import("../../dist/features/contained-agent-turn/domain/contained-turn-identities.js"),
   ]);
-  return Object.freeze({ ...composition, ...tuple, ...codecs, ...identities });
+  return Object.freeze({ ...composition, ...tuple });
 };
 
 const prepareCandidateEvidence = (platformTuple, executionProvenance) => {
@@ -176,6 +175,7 @@ const run = async () => {
     authorities, canaryRoot, canonicalProjectRoot: workspaceRef,
     databaseUrl: requiredEnvironment("AR_CODEX_CANARY_POSTGRES_URL"),
   });
+  let observedCustody;
   try {
     const launchPlans = Object.freeze({
       resolve: async () => {throw new Error("ambient launch-plan resolution is forbidden");},
@@ -196,7 +196,7 @@ const run = async () => {
     } else {
       throw new Error("unsupported Codex canary Host Custody target");
     }
-    const observedCustody = observeCustodyReservation(custody);
+    observedCustody = observeCustodyReservation(custody);
     const owner = createCodexCurrentKernelOwner({
       effectCustody: Object.freeze({admit() {throw new Error("analysis canary forbids provider effects");}}),
       hostBootId: "host-boot:codex-live-canary", hostCustody: observedCustody.hostCustody,
@@ -224,7 +224,9 @@ const run = async () => {
       prompt: "Reply with exactly AR_CODEX_CANARY_OK. Do not invoke tools, spawn agents, or modify files.",
     });
     const result = await submitContainedTurnLiveCanary({
-      dependencies: runtime.dependencies(owner), owner,
+      dependencies: runtime.dependencies(owner),
+      owner: {dispose: () => runObservation.dispose("ownerDisposal", () => owner.dispose())},
+      onObserved: runObservation.result,
       command: {
         commandId: "command:codex-live-canary",
         expectedProvider: "codex", intent,
@@ -235,38 +237,35 @@ const run = async () => {
       platform: platformTarget.platform, result, closure: observedCustody.closure(),
       expectedOutput: "AR_CODEX_CANARY_OK",
     });
-    return Object.freeze({observations, physicalContainment: result.physicalContainment.kind});
-  } finally {await runtime.dispose();}
+    runObservation.completed(observations);
+  } finally {
+    try {runObservation.closure(observedCustody?.closure());}
+    finally {await runObservation.dispose("runtimeDisposal", () => runtime.dispose());}
+  }
 };
 
-const successfulEvidence = async () => {
-  const completed = await run();
+const completedEvidence = async () => {
+  await run();
   return createProviderCandidateEvidenceEnvelope(Object.freeze({
     ...candidateEvidence,
-    compositeContainment: "indeterminate",
-    observations: Object.freeze({...completed.observations, runtimeDisposal: "completed"}),
-    physicalContainment: completed.physicalContainment,
-    status: "provider-completed",
+    ...runObservation.evidence("provider-completed"),
   }));
 };
 
 let candidateEvidence;
+const runObservation = createCandidateRunObservation();
 try {
-  process.stdout.write(`${JSON.stringify(await successfulEvidence())}\n`);
+  process.stdout.write(`${JSON.stringify(await completedEvidence())}\n`);
 } catch (error) {
-  const failure = error instanceof Error ? `${error.name}:${error.message}` : String(error);
   if (candidateEvidence === undefined) {
-    process.stderr.write(`invalid Codex canary invocation (${error?.reason ?? sha256(failure)})\n`);
+    process.stderr.write(`invalid Codex canary invocation (${error?.reason === "route-enforcement-unqualified" ? "route-enforcement-unqualified" : "canary-invocation-rejected"})\n`);
   } else {
     try {
       process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope(Object.freeze({
-        ...candidateEvidence, compositeContainment: "indeterminate",
-        observations: Object.freeze({errorDigest: sha256(failure)}),
-        physicalContainment: "indeterminate", status: "failed",
+        ...candidateEvidence, ...runObservation.evidence("failed"),
       })))}\n`);
-    } catch (provenanceError) {
-      const detail = provenanceError instanceof Error ? provenanceError.name : "UnknownError";
-      process.stderr.write(`invalid Codex canary evidence (${sha256(detail)})\n`);
+    } catch {
+      process.stderr.write(`invalid Codex canary evidence (canary-evidence-rejected)\n`);
     }
   }
   process.exitCode = 1;

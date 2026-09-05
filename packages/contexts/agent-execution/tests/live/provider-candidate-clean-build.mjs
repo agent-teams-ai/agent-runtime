@@ -63,7 +63,8 @@ const copyBuildSources = async (snapshot, target) => {
 // and match BOTH executed workspace packages byte-for-byte. Installed dependency
 // bytes and links are checked before/after and on evidence publication.
 export const verifyCleanBuild = async snapshot => {
-  for (const required of ["pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json"]) {
+  const packageFiles = ["pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", ...PACKAGES.map(pkg => `${pkg}/package.json`)];
+  for (const required of packageFiles) {
     if (!snapshot.files.has(required)) {throw new Error("clean build requires package and dependency authority");}
   }
   const dependenciesDigest = await installedClosureDigest(snapshot.root);
@@ -94,7 +95,9 @@ export const verifyCleanBuild = async snapshot => {
     }
     return Object.freeze({
       ...executed, dependenciesDigest,
-      commandDigest: sha256(JSON.stringify(COMMANDS)),
+      sourceTreeDigest: snapshot.treeDigest,
+      packageClosureDigest: sha256(JSON.stringify(packageFiles.map(path => [path, sha256(snapshot.files.get(path).bytes)]))),
+      commandDigest: sha256(JSON.stringify({commands: COMMANDS, workingDirectories: [".", PACKAGES[0], "."], environment: buildEnvironment})),
       nodeDigest,
       profile: "local-offline-clean-build/v1",
     });

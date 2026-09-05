@@ -26,12 +26,38 @@ export const observeCustodyReservation = custody => {
       },
     }),
     closure() {
-      assert.ok(opened);
+      if (opened === undefined) {return undefined;}
       const evidence = custody.evidence(opened.custodyRef);
       assert.ok(evidence);
       return evidence.closure;
     },
   });
+};
+
+// Retain persisted facts even when completion assertions or teardown fail.
+// Opaque owner references are hashed; raw output is never retained here.
+export const observeProviderCandidateResult = ({kernel, physicalContainment, turn}) => {
+  const facts = {
+    operationIdentityDigest: digest(JSON.stringify([turn.operationId, turn.commandId, turn.effectId])),
+    outputEvents: turn.output.length, reconciliation: kernel.reconciliation,
+    closureRecovery: kernel.closureRecovery,
+    terminalKind: kernel.terminal.kind, terminalStatus: turn.status,
+  };
+  for (const key of ["artifactManifestRef", "resultRef"]) {
+    if (turn[key] !== undefined) {facts[`${key}Digest`] = digest(turn[key]);}
+  }
+  for (const [kind, key] of [
+    ["execution_closure", "executionClosureProofDigest"],
+    ["output_drain", "outputDrainProofDigest"],
+    ["provider_terminal_observation", "providerTerminalProofDigest"],
+  ]) {
+    const proof = kernel.proofs.find(candidate => candidate.kind === kind);
+    if (proof !== undefined) {facts[key] = digest(proof.proofId);}
+  }
+  if (kernel.providerExecution.kind === "closed") {facts.providerOutcome = kernel.providerExecution.outcome;}
+  if (physicalContainment.kind === "contained") {facts.containmentProofDigest = digest(physicalContainment.proofId);}
+  if (kernel.terminal.kind === "final") {facts.terminalProofDigest = digest(kernel.terminal.terminalProofId);}
+  return Object.freeze(facts);
 };
 
 // Called by both canaries only after the sole kernel submission and owner
@@ -46,6 +72,7 @@ export const observeProviderCandidateCompletion = ({ platform, result, closure, 
     return found;
   };
   assert.equal(proof("provider_terminal_observation").binding.outcome, "succeeded");
+  assert.equal(proof("execution_closure").binding.outcome, "succeeded");
   assert.equal(proof("output_drain").binding.finalCursor, turn.output.length);
   assert.equal(turn.output.map(chunk => chunk.text).join(""), expectedOutput);
   assert.equal(closure.status, "closed");
@@ -55,6 +82,7 @@ export const observeProviderCandidateCompletion = ({ platform, result, closure, 
     assert.equal(kernel.terminal.kind, "final");
     assert.equal(kernel.terminal.outcome, "succeeded");
     assert.equal(kernel.reconciliation, "clear");
+    assert.equal(kernel.closureRecovery, "clear");
     assert.equal(closure.profile, "strict-linux-cgroup-v2");
     assert.deepEqual(closure.limitations, []);
   } else {
@@ -62,28 +90,15 @@ export const observeProviderCandidateCompletion = ({ platform, result, closure, 
     assert.equal(physicalContainment.kind, "indeterminate");
     assert.equal(turn.status, "reconcile_required");
     assert.equal(kernel.terminal.kind, "open");
-    assert.equal(kernel.reconciliation, "required");
+    assert.ok(kernel.reconciliation === "required" || kernel.closureRecovery === "required");
     assert.equal(closure.profile, "cooperative-darwin-posix-process-group");
     assert.deepEqual(closure.limitations, DARWIN_LIMITATIONS);
   }
   return Object.freeze({
-    ...(turn.artifactManifestRef === undefined ? {} : {artifactManifestRef: turn.artifactManifestRef}),
-    ...(turn.resultRef === undefined ? {} : {resultRef: turn.resultRef}),
-    ...(physicalContainment.kind === "contained" ? {containmentProofDigest: digest(physicalContainment.proofId)} : {}),
-    ...(kernel.terminal.kind === "final" ? {terminalProofDigest: digest(kernel.terminal.terminalProofId)} : {}),
+    ...observeProviderCandidateResult(result),
     closureStatus: closure.status,
     containmentLimitations: Object.freeze([...closure.limitations]),
     containmentProfile: closure.profile,
-    executionClosureProofDigest: digest(proof("execution_closure").proofId),
-    operationIdentityDigest: digest(JSON.stringify([turn.operationId, turn.commandId, turn.effectId])),
     outputDigest: digest(expectedOutput),
-    outputDrainProofDigest: digest(proof("output_drain").proofId),
-    outputEvents: turn.output.length,
-    providerOutcome: "succeeded",
-    providerTerminalProofDigest: digest(proof("provider_terminal_observation").proofId),
-    reconciliation: kernel.reconciliation,
-    terminalKind: kernel.terminal.kind,
-    terminalStatus: turn.status,
-    ownerDisposal: "completed",
   });
 };

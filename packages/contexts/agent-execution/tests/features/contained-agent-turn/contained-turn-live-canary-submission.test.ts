@@ -56,3 +56,40 @@ test("canary submission surfaces disposal failure after successful verification"
   assert.equal(disposals, 1);
   assert.equal(current()?.terminal.kind, "final");
 });
+
+test("failure evidence retains persisted terminal and result facts when owner teardown rejects", async () => {
+  const { createCandidateRunObservation } = await import("../../live/provider-candidate-run-observation.mjs");
+  const { safeObservations } = await import("../../live/provider-candidate-evidence-schema.mjs");
+  const { current, dependencies } = createDependencies();
+  const observation = createCandidateRunObservation();
+  const failure = new Error("synthetic-secret-that-must-not-be-retained");
+  await assert.rejects(submitContainedTurnLiveCanary({
+    command, dependencies, onObserved: observation.result,
+    owner: {dispose: () => observation.dispose("ownerDisposal", async () => {throw failure;})},
+  }), error => error === failure);
+  await observation.dispose("runtimeDisposal", async () => {});
+  const facts = safeObservations(observation.evidence("failed").observations);
+  assert.equal(current()?.terminal.kind, "final");
+  assert.equal(facts.terminalStatus, "succeeded");
+  assert.equal(facts.ownerDisposal, "failed");
+  assert.equal(facts.runtimeDisposal, "completed");
+  assert.match(facts.resultRefDigest, /^sha256:[a-f0-9]{64}$/u);
+  assert.match(facts.artifactManifestRefDigest, /^sha256:[a-f0-9]{64}$/u);
+  assert.doesNotMatch(JSON.stringify(facts), /synthetic-secret|errorDigest|artifact:one|result:one/u);
+  assert.equal(facts.outputDigest, undefined, "unverified output is not hashed on failure");
+});
+
+test("runtime teardown failure cannot erase owner teardown or persisted kernel truth", async () => {
+  const { createCandidateRunObservation } = await import("../../live/provider-candidate-run-observation.mjs");
+  const { dependencies } = createDependencies();
+  const observation = createCandidateRunObservation();
+  await submitContainedTurnLiveCanary({
+    command, dependencies, onObserved: observation.result,
+    owner: {dispose: () => observation.dispose("ownerDisposal", async () => {})},
+  });
+  await assert.rejects(observation.dispose("runtimeDisposal", async () => {throw new Error("cleanup failed");}));
+  const facts = observation.evidence("failed").observations;
+  assert.equal(facts.terminalStatus, "succeeded");
+  assert.equal(facts.ownerDisposal, "completed");
+  assert.equal(facts.runtimeDisposal, "failed");
+});

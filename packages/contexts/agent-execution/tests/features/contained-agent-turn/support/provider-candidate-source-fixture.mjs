@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { cp, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const exec = promisify(execFile);
@@ -18,8 +18,9 @@ export const commit = async root => {
 const AE = "packages/contexts/agent-execution";
 const FS = "packages/platform/filesystem-custody";
 
-// Real offline TypeScript, real Git commits, fresh temporary packages. No
-// provider, SDK query, transport, credentials, or injected build callback.
+// Real Git commits and fresh temporary packages. A small installed compiler
+// stand-in makes the fixed build recipe executable without dependencies.
+// No provider, SDK query, transport, credentials, or injected build callback.
 export const sourceFixture = async (t, provider = "codex", withGit = true) => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "ar-canary-source-")));
   t.after(() => rm(root, {recursive: true, force: true}));
@@ -37,9 +38,9 @@ export const sourceFixture = async (t, provider = "codex", withGit = true) => {
   await writeFile(join(root, "package.json"), '{"type":"module"}\n');
   await writeFile(join(root, "pnpm-lock.yaml"), 'lockfileVersion: "9.0"\n');
   await writeFile(join(root, "pnpm-workspace.yaml"), 'packages: ["packages/*/*"]\n');
-  const compiler = dirname(fileURLToPath(import.meta.resolve("typescript/package.json")));
-  await mkdir(join(root, "node_modules"));
-  await cp(await realpath(compiler), join(root, "node_modules/typescript"), {recursive: true});
+  await mkdir(join(root, "node_modules/typescript/bin"), {recursive: true});
+  await writeFile(join(root, "node_modules/typescript/package.json"), '{"type":"module"}\n');
+  await cp(new URL("./provider-candidate-fixture-compiler.mjs", import.meta.url), join(root, "node_modules/typescript/bin/tsc"));
   for (const pkg of [FS, AE]) {
     await mkdir(join(root, pkg, "src"), {recursive: true});
     await writeFile(join(root, pkg, "package.json"), '{"type":"module"}\n');
@@ -62,22 +63,23 @@ export const sourceFixture = async (t, provider = "codex", withGit = true) => {
   const authority = await import(pathToFileURL(join(live, "provider-candidate-evidence-envelope.mjs")).href);
   const providerId = provider === "codex" ? "codex-app-server-current-kernel" : "claude-agent-sdk-current-kernel";
   const canaryId = `${provider}-contained-turn-live-canary/v1`;
-  const resolve = async (overrides = {}) => authority.resolveCanaryExecutionProvenance({
-    buildRootUrl: pathToFileURL(join(root, AE, "dist")), canaryId,
-    canarySourceUrl: pathToFileURL(canaryPath),
+  const resolve = async (overrides = {}) => authority.resolveCanaryExecutionProvenance(Object.freeze({
+    buildRootUrl: pathToFileURL(join(root, AE, "dist")).href, canaryId,
+    canarySourceUrl: pathToFileURL(canaryPath).href,
     claimedSourceSha: withGit ? await git(root, "rev-parse", "HEAD") : "0".repeat(40),
     provider: providerId, ...overrides,
-  });
+  }));
   return {root, authority, build, canaryPath, resolve, canaryId, providerId,
     buildPath: join(root, AE, "dist/runtime.js"), sourcePath: join(root, AE, "src/runtime.ts"),
   };
 };
 
 export const evidenceInput = (fixture, executionProvenance, overrides = {}) => Object.freeze({
-  binaryRevision: "@openai/codex:0.150.1+linux-x64", binarySha256: "a".repeat(64),
+  binaryRevision: fixture.providerId.startsWith("codex") ? "@openai/codex:0.150.1+linux-x64" : `sha256:${"a".repeat(64)}`,
+  binarySha256: "a".repeat(64),
   canaryId: fixture.canaryId, provider: fixture.providerId, executionProvenance,
   compositeContainment: "indeterminate", physicalContainment: "indeterminate",
-  observations: Object.freeze({errorDigest: "b".repeat(64), ownerDisposal: "not_observed", runtimeDisposal: "not_observed"}),
-  packageIdentity: Object.freeze({wrapperPackageRevision: "@openai/codex@0.150.1"}),
+  observations: Object.freeze({failureKind: "canary-failed", ownerDisposal: "not_observed", runtimeDisposal: "not_observed"}),
+  packageIdentity: Object.freeze(fixture.providerId.startsWith("codex") ? {wrapperPackageRevision: "@openai/codex@0.150.1"} : {sdkRevision: "@anthropic-ai/claude-agent-sdk@0.3.251"}),
   platformTuple: Object.freeze({architecture: "x64", platform: "linux"}), status: "failed", ...overrides,
 });

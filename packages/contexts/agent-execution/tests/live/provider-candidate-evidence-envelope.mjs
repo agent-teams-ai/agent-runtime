@@ -13,7 +13,13 @@ const executionAuthorities = new WeakMap();
 const PROVIDERS = ["codex-app-server-current-kernel", "claude-agent-sdk-current-kernel"];
 const CANARIES = ["codex-contained-turn-live-canary/v1", "claude-contained-turn-live-canary/v1"];
 
-export const resolveCanaryExecutionProvenance = async input => {
+export const resolveCanaryExecutionProvenance = async value => {
+  const input = record(value, ["provider", "canaryId", "claimedSourceSha", "canarySourceUrl", "buildRootUrl"]);
+  for (const key of ["canarySourceUrl", "buildRootUrl"]) {
+    if (typeof input[key] !== "string" || input[key].length > 4096) {throw new TypeError("canary source location must be bounded text");}
+    const url = new URL(input[key]);
+    if (url.protocol !== "file:" || url.host || url.search || url.hash) {throw new TypeError("canary source location must be a local file URL");}
+  }
   const provider = choice(input.provider, PROVIDERS);
   const canaryId = choice(input.canaryId, CANARIES);
   if (PROVIDERS.indexOf(provider) !== CANARIES.indexOf(canaryId)) {
@@ -23,6 +29,10 @@ export const resolveCanaryExecutionProvenance = async input => {
   const canarySourceUrl = new URL(input.canarySourceUrl).href;
   const buildRoot = fileURLToPath(input.buildRootUrl);
   const source = await sourceSnapshot(import.meta.url, sourceSha);
+  const expectedCanary = `${provider.startsWith("codex") ? "codex" : "claude"}-contained-turn-live-canary.mjs`;
+  if (canarySourceUrl !== new URL(expectedCanary, import.meta.url).href) {
+    throw new TypeError("canary source must be the exact provider entrypoint");
+  }
   if (buildRoot.replace(/\/$/u, "") !== join(source.root, "packages/contexts/agent-execution/dist")) {
     throw new Error("candidate must execute the exact workspace build");
   }
@@ -34,7 +44,7 @@ export const resolveCanaryExecutionProvenance = async input => {
   const execution = Object.freeze({
     build: Object.freeze({...build, receiptDigest}),
     canary: Object.freeze({id: canaryId, sourceDigest: canaryDigest}),
-    provider, sourceSha, tokenDigest: receiptDigest,
+    provider, sourceSha,
   });
   executionAuthorities.set(execution, Object.freeze({root: source.root, canarySourceUrl, authorityDigest}));
   return execution;
@@ -45,7 +55,8 @@ export const revalidateCanaryExecutionProvenance = async execution => {
   if (authority === undefined) {throw new TypeError("verified canary execution provenance is required");}
   try {
     const source = await sourceSnapshot(import.meta.url, execution.sourceSha);
-    if (sourceFileDigest(source, import.meta.url) !== authority.authorityDigest ||
+    if (source.treeDigest !== execution.build.sourceTreeDigest ||
+        sourceFileDigest(source, import.meta.url) !== authority.authorityDigest ||
         sourceFileDigest(source, authority.canarySourceUrl) !== execution.canary.sourceDigest ||
         (await executedBuildIdentity(authority.root)).treeDigest !== execution.build.treeDigest ||
         await installedClosureDigest(authority.root) !== execution.build.dependenciesDigest ||
@@ -73,8 +84,14 @@ export const createProviderCandidateEvidenceEnvelope = async value => {
   choice(input.compositeContainment, ["indeterminate"]);
   const binaryDigest = exactDigest(input.binarySha256);
   if (typeof input.binaryRevision !== "string" || input.binaryRevision.length > 192 ||
-      !/^(?:sha256:[a-f0-9]{64}|@(?:openai\/codex|anthropic-ai\/claude-agent-sdk)[:@][0-9]+\.[0-9]+\.[0-9]+(?:\+(?:linux-x64|darwin-arm64))?)$/u.test(input.binaryRevision)) {
+      !/^(?:sha256:[a-f0-9]{64}|@openai\/codex:0\.150\.1\+(?:linux-x64|darwin-arm64))$/u.test(input.binaryRevision)) {
     throw new TypeError("canary binary revision must be exact");
+  }
+  if ((input.provider.startsWith("claude") ? input.binaryRevision !== binaryDigest :
+      input.binaryRevision !== `@openai/codex:0.150.1+${tuple.platform}-${tuple.architecture}`) ||
+      (tuple.binaryRevision !== undefined && tuple.binaryRevision !== input.binaryRevision) ||
+      [tuple.binarySha256, tuple.executableSha256].some(value => value !== undefined && value !== binaryDigest)) {
+    throw new TypeError("canary binary identity is inconsistent");
   }
   if (tuple.platform === "darwin" && (input.physicalContainment !== "indeterminate" ||
       observations.terminalKind === "final" || observations.terminalStatus === "succeeded" ||
@@ -92,6 +109,8 @@ export const createProviderCandidateEvidenceEnvelope = async value => {
     buildIdentity: Object.freeze({
       bytes: execution.build.bytes, files: execution.build.files,
       treeDigest: exactDigest(execution.build.treeDigest),
+      sourceTreeDigest: exactDigest(execution.build.sourceTreeDigest),
+      packageClosureDigest: exactDigest(execution.build.packageClosureDigest),
       commandDigest: exactDigest(execution.build.commandDigest),
       dependenciesDigest: exactDigest(execution.build.dependenciesDigest),
       nodeDigest: exactDigest(execution.build.nodeDigest),
@@ -99,7 +118,6 @@ export const createProviderCandidateEvidenceEnvelope = async value => {
     }),
     canaryIdentity: Object.freeze({
       id: execution.canary.id, sourceDigest: exactDigest(execution.canary.sourceDigest),
-      tokenDigest: exactDigest(execution.tokenDigest),
     }),
     compositeContainment: "indeterminate", networkRouteEnforcement: "unqualified",
     observations, packageIdentity: packages, physicalContainment: input.physicalContainment,

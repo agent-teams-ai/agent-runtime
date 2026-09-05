@@ -4,15 +4,17 @@
  * fields or retries submission. Unknown/cancelled outcomes remain typed views.
  * @param {{dependencies: import('../../../../dist/features/contained-agent-turn/internal.js').ContainedTurnFeatureDependencies,
  * owner: Pick<import('../../../../dist/features/contained-agent-turn/internal.js').CodexCurrentKernelOwner, 'dispose'>,
- * command: import('../../../../dist/features/contained-agent-turn/contracts/contained-agent-turn.js').SubmitContainedTurnInput}} input
+ * command: import('../../../../dist/features/contained-agent-turn/contracts/contained-agent-turn.js').SubmitContainedTurnInput,
+ * onObserved?: (result: unknown) => void}} input
  */
 export const submitContainedTurnLiveCanary = async input => {
-  const { createContainedTurnFeature } = await import("../../../../dist/features/contained-agent-turn/internal.js");
+  const { createContainedTurnFeature } = await import("../../../../dist/features/contained-agent-turn/composition/feature-module-factory.js");
   let failed = false;
   let failure;
   let result;
   try {
     result = await submitAndVerifyCanary(input, createContainedTurnFeature);
+    input.onObserved?.(result);
   } catch (error) {
     failed = true;
     failure = error;
@@ -55,6 +57,7 @@ const submitAndVerifyCanary = async (input, createContainedTurnFeature) => {
   // of physical containment and never grants this harness terminal authority.
   return Object.freeze({
     kernel: Object.freeze({
+      closureRecovery: operation.closureRecovery.kind,
       providerExecution: operation.providerExecution,
       proofs: operation.proofs,
       reconciliation: operation.reconciliation.kind,
