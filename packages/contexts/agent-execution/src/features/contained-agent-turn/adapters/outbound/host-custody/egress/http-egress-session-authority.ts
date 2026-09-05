@@ -1,6 +1,7 @@
 import { types as utilTypes } from "node:util";
-import type { HostHttpMaterializationReceipt, HostHttpRequestProjection, HttpEgressBrokerPorts,
-  HttpEgressRoute } from "./http-egress-ports.js";
+import type { HostHttpMaterializationAuthorizationRequest, HostHttpMaterializationReceipt,
+  HostHttpRequestProjection, HttpEgressBrokerPorts, HttpEgressRoute,
+  HostHttpUnsignedMaterializationAuthorizationRequest } from "./http-egress-ports.js";
 import type { PreparedHttpRequestCustodyV1 } from "./prepared-http-request-v1.js";
 import type { StrictHttpRequest } from "./strict-http-request.js";
 import { zeroHttpBytes } from "./http-byte-intrinsics.js";
@@ -141,8 +142,9 @@ export const projectPreparedRequest = (ports: HttpEgressBrokerPorts, prepared: P
   } finally {zeroHttpBytes(target); zeroHttpBytes(body);}
 };
 
-export const materializationAuthorizationRequest = (ports: HttpEgressBrokerPorts, id: string,
-  requestDigest: string) => Object.freeze({accessRef: ports.providerAccessSnapshot.accessRef,
+export const materializationAuthorizationRequest = (ports: HttpEgressBrokerPorts,
+  id: string): HostHttpUnsignedMaterializationAuthorizationRequest => Object.freeze({
+    accessRef: ports.providerAccessSnapshot.accessRef,
     authorizationRequestId: id, availability: ports.providerAccessSnapshot.availability,
     bindingRevision: ports.providerAccessSnapshot.revision,
     credentialBindingDigest: ports.providerAccessSnapshot.ownerAuthorityDigest,
@@ -151,6 +153,13 @@ export const materializationAuthorizationRequest = (ports: HttpEgressBrokerPorts
     projectId: ports.providerAccessSnapshot.projectId, provider: ports.providerAccessSnapshot.provider,
     providerAccountRef: ports.providerAccessSnapshot.providerAccountRef,
     providerRouteRef: ports.providerAccessSnapshot.providerRouteRef,
-    purpose: "contained-turn.credential-materialization-authorization/v1" as const, requestDigest,
+    purpose: "contained-turn.credential-materialization-authorization/v1" as const,
     revocation: ports.providerAccessSnapshot.revocation, schemaVersion: 1 as const,
     scopeDigest: ports.providerAccessSnapshot.scopeDigest, tenantId: ports.providerAccessSnapshot.tenantId});
+
+export const bindMaterializationRequestDigest = (
+  request: HostHttpUnsignedMaterializationAuthorizationRequest,
+  requestDigest: unknown,
+): HostHttpMaterializationAuthorizationRequest | undefined => bounded(requestDigest, 512)
+  ? Object.freeze({...request, requestDigest})
+  : undefined;

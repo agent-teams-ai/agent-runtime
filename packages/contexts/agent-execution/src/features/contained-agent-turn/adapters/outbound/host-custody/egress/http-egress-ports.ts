@@ -36,8 +36,19 @@ export type HostHttpMaterializationOutcome =
   | Readonly<{kind: "authorized" | "observed" | "rejected"; receipt: HostHttpMaterializationReceipt}>
   | Readonly<{kind: "conflict" | "indeterminate" | "invalid" | "unsupported"}>;
 
+export type HostHttpMaterializationAuthorizationRequest = Omit<
+  HostHttpMaterializationReceipt,
+  "decision" | "rejectionReason"
+>;
+export type HostHttpUnsignedMaterializationAuthorizationRequest = Omit<
+  HostHttpMaterializationAuthorizationRequest,
+  "requestDigest"
+>;
+
 export interface HostHttpProviderAccessAuthorization {
-  authorize(input: Omit<HostHttpMaterializationReceipt, "decision" | "rejectionReason">): Promise<HostHttpMaterializationOutcome>;
+  /** Provider Access remains the sole owner of its canonical request digest. */
+  createRequestDigest(input: HostHttpUnsignedMaterializationAuthorizationRequest): Promise<string>;
+  authorize(input: HostHttpMaterializationAuthorizationRequest): Promise<HostHttpMaterializationOutcome>;
   observe(input: Readonly<{authorizationRequestId: string; projectId: string; provider: "claude" | "codex";
     requestDigest: string; scopeDigest: string; tenantId: string}>): Promise<HostHttpMaterializationOutcome>;
 }

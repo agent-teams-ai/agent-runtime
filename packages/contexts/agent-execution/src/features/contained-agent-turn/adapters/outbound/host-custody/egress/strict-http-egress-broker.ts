@@ -9,7 +9,7 @@ import { normalizeHttpResolverEvidence } from "./http-egress-resolver-evidence.j
 import { normalizePublicAddress } from "./public-address-policy.js";
 import { readStrictHttpRequest, StrictHttpRequestError, type StrictHttpRequest } from "./strict-http-request.js";
 import { verifiedGrant, verifiedProvisional } from "./http-egress-runtime-security-v2.js";
-import { materializationAuthorizationRequest, observeMaterializationReceipt, presentationFields,
+import { bindMaterializationRequestDigest, materializationAuthorizationRequest, observeMaterializationReceipt, presentationFields,
   projectPreparedRequest, receiptMatchesSnapshot, snapshotHostHttpRoute } from "./http-egress-session-authority.js";
 import {closeAndRecordHttpEgress, initialHttpEgressState, settleHttpEgressDispatch, type HttpEgressMutableState} from "./http-egress-settlement.js";
 
@@ -189,10 +189,24 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
     const ids = ports.ids.fresh();
     state.requestDigest = digest(ports, [encoder.encode("agent-runtime.host-http-materialization-request/v1\n"),
       encoder.encode(operation.expectedRequest.requestId), encoder.encode(ports.route.routeReceiptDigest), request.body]);
-    const pa = await within(() => ports.providerAccess.authorize(materializationAuthorizationRequest(ports, ids.materializationAuthorizationId,
-      state.requestDigest)));
+    const unsignedMaterializationRequest = materializationAuthorizationRequest(
+      ports, ids.materializationAuthorizationId,
+    );
+    let materializationRequest;
+    try {
+      materializationRequest = bindMaterializationRequestDigest(
+        unsignedMaterializationRequest,
+        await within(() => ports.providerAccess.createRequestDigest(unsignedMaterializationRequest)),
+      );
+    } catch {
+      materializationRequest = undefined;
+    }
+    if (materializationRequest === undefined) {recordAuthorityFailure(operation, state, "provider_access_denied");
+      return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
+    const pa = await within(() => ports.providerAccess.authorize(materializationRequest));
     if (pa.kind !== "authorized" || !receiptMatchesSnapshot(pa.receipt, ports,
-      ids.materializationAuthorizationId, state.requestDigest)) {state.outcome = "denied"; state.anomalyCode = "provider_access_denied";
+      ids.materializationAuthorizationId, materializationRequest.requestDigest)) {state.outcome = "denied";
+      state.anomalyCode = "provider_access_denied";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     const paReceipt = pa.receipt; state.materializationReceiptDigest = digest(ports, [encoder.encode(JSON.stringify(paReceipt))]);
     state.routeGeneration = String(paReceipt.bindingRevision); state.credentialGeneration = String(paReceipt.credentialGeneration);

@@ -24,6 +24,10 @@ import {authorityFor, digest} from "../../../contexts/runtime-security/tests/pro
 import {createStrictHttpEgressBroker} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
 import type {HostHttpGrant, HostHttpProvisionalDecision, HttpEgressBrokerPorts} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 import {createEgressFixture, SECRET_MARKER} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/http-egress-test-fixture.ts";
+import {
+  createCredentialMaterializationRequestDigest,
+  createInMemoryContainedTurnDispatchConsumptionV1,
+} from "@agent-teams/provider-access/composition";
 
 const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
 const codexInitialization = Object.freeze({
@@ -256,6 +260,17 @@ const executeSigned = async (options: Readonly<{
     ...(options.peerAtFirstByte === undefined ? {} : {bindingAtFirstByte: {peerAddress: options.peerAtFirstByte}})});
   const {ports: base} = fixture;
   const snapshot = {...base.providerAccessSnapshot, scopeDigest: digest("1"), ownerAuthorityDigest: digest("3")};
+  const providerAccessHarness = createInMemoryContainedTurnDispatchConsumptionV1({bindings: [Object.freeze({
+    acceptedAuthorityDigest: "accepted-authority:http-egress", accessRef: snapshot.accessRef,
+    authorityHeadDigest: "authority-head:http-egress", bindingDigest: "binding:http-egress",
+    bindingRevision: snapshot.revision, claimBeforeControlTime: 100,
+    credentialBindingDigest: snapshot.ownerAuthorityDigest, credentialBindingRef: snapshot.credentialBindingRef,
+    credentialGeneration: snapshot.credentialGeneration, expiresAtControlTime: 100,
+    opaqueOwnerEvidenceRef: "owner-evidence:http-egress", projectId: snapshot.projectId,
+    provider: snapshot.provider, providerAccountRef: snapshot.providerAccountRef,
+    providerRouteRef: snapshot.providerRouteRef, scopeDigest: snapshot.scopeDigest,
+    tenantId: snapshot.tenantId,
+  })], initialControlTime: 50});
   let authority: EgressCurrentAuthorityV2;
   const candidate = createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate({
     scope: {tenantId: snapshot.tenantId, projectId: snapshot.projectId,
@@ -278,6 +293,11 @@ const executeSigned = async (options: Readonly<{
   const signedGrants: SignedFirstApplicationByteGrantV2[] = [];
   const verified: boolean[] = [];
   const ports: HttpEgressBrokerPorts = {...base, providerAccessSnapshot: snapshot,
+    providerAccess: Object.freeze({
+      createRequestDigest: createCredentialMaterializationRequestDigest,
+      authorize: providerAccessHarness.materialization.authorize,
+      observe: providerAccessHarness.materialization.observe,
+    }),
     evidence: {...base.evidence, digest: parts => `sha256:${base.evidence.digest(parts)}`},
     runtimeSecurity: {
       requestProvisional: async input => {

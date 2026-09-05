@@ -106,5 +106,8 @@ test("Host credential materialization is separate and bound to operation, attemp
     fixture.ports.providerAccessSnapshot.ownerAuthorityDigest);
   assert.equal((binding as {authorizationRequestId: string}).authorizationRequestId,
     fixture.observations.materializationInputs[0].authorizationRequestId);
+  assert.equal((binding as {requestDigest: string}).requestDigest,
+    fixture.observations.materializationInputs[0].requestDigest);
+  assert.notEqual((binding as {requestDigest: string}).requestDigest, receipt.requestDigest);
   assert.doesNotMatch(JSON.stringify(receipt), /synthetic-host-only/);
 });

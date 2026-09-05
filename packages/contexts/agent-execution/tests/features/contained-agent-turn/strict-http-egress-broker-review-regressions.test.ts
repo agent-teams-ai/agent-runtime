@@ -8,7 +8,7 @@ import {bytes, createEgressFixture, SECRET_MARKER} from "./http-egress-test-fixt
 const zero = (value: Uint8Array): boolean => value.every(byte => byte === 0);
 const never = (): Promise<never> => new Promise(() => {});
 
-for (const stage of ["authorize", "render", "observe-before", "provisional", "resolve", "observe-ready", "final"] as const) {
+for (const stage of ["digest", "authorize", "render", "observe-before", "provisional", "resolve", "observe-ready", "final"] as const) {
   for (const stop of ["deadline", "cancel"] as const) {
     test(`${stage} is bounded by ${stop}, closes custody and never dispatches`, {timeout: 2_000}, async () => {
       const controller = new AbortController();
@@ -40,6 +40,7 @@ for (const stage of ["authorize", "render", "observe-before", "provisional", "re
         }},
         materializer: {render: stage === "render" ? stall : async () => [{name: "authorization", valueBytes: credential}]},
         providerAccess: {...fixture.ports.providerAccess,
+          createRequestDigest: stage === "digest" ? stall : fixture.ports.providerAccess.createRequestDigest,
           authorize: stage === "authorize" ? stall : fixture.ports.providerAccess.authorize,
           observe: input => {observations += 1;
             return (stage === "observe-before" && observations === 1 || stage === "observe-ready" && observations === 2)
@@ -63,7 +64,7 @@ for (const stage of ["authorize", "render", "observe-before", "provisional", "re
       assert.equal(fixture.observations.receipts.length, 1);
       assert.equal(JSON.stringify(receipt).includes(SECRET_MARKER), false);
       assert.ok(retained[3] !== undefined && zero(retained[3])); // adopted inbound body
-      if (stage !== "authorize" && stage !== "render") {assert.ok(zero(credential));}
+      if (stage !== "digest" && stage !== "authorize" && stage !== "render") {assert.ok(zero(credential));}
       if (projection !== undefined) {assert.ok(zero(projection));}
     });
   }

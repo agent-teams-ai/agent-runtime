@@ -111,14 +111,20 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
     dnsIdentity: route.originHost, tlsPolicyDigest: "tls-policy-digest", limits: Object.freeze({requestBytes: 1_000_000,
       responseBytes: 1_000_000, totalMilliseconds: 900}), decisionTtlMilliseconds: 100, revoked: false});
   let provisionalDecision: HostHttpProvisionalDecision | undefined;
+  const createMaterializationRequestDigest = async (input: object): Promise<string> => digest([bytes(JSON.stringify(input))]);
   const portsWithoutGuard: Omit<HttpEgressBrokerPorts, "guard"> = {
     identity: Object.freeze({operationId: "operation-egress-1", attemptId: "attempt-egress-1",
       custodyId: "custody-egress-1", hostBootId: "boot-1", liveProcessSessionIdentity: {}}),
     ids: Object.freeze({fresh: () => {ids += 1; return Object.freeze({materializationAuthorizationId: `pa-${ids}`,
       runtimeAuthorizationId: `rs-${ids}`, boundaryUseId: `boundary-${ids}`, connectionAttemptId: `connection-${ids}`,
       streamId: `stream-${ids}`});}}), providerAccessSnapshot: snapshot, route,
-    providerAccess: Object.freeze({authorize: async input => {observations.order.push("authorize-materialization");
+    providerAccess: Object.freeze({createRequestDigest: createMaterializationRequestDigest,
+      authorize: async input => {observations.order.push("authorize-materialization");
       observations.materializationInputs.push(input);
+      const {requestDigest, ...unsigned} = input;
+      if (requestDigest !== await createMaterializationRequestDigest(unsigned)) {
+        return Object.freeze({kind: "invalid" as const});
+      }
       materializationReceipt = Object.freeze({...input, decision: "authorized" as const, rejectionReason: null,
         ...options.paReceiptChange}) as HostHttpMaterializationReceipt;
       return Object.freeze({kind: "authorized" as const, receipt: materializationReceipt});}, observe: async input => {
