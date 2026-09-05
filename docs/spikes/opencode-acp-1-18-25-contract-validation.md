@@ -143,7 +143,7 @@ The focused policy layer establishes only these rules:
 `opencode-ai@1.18.5` and binary revision
 `opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21`.
 Its SHA-256 is
-`de7040233b6c117c3ba2ce0f1a663bebbdcdeee28083c1047e289e316378cfa4`.
+`7366d7e295e9ae5a2464f0056ed1fa2157b2b338f49acbdbfd6ea62f58d8baff`.
 
 The fixture records the path, SHA-256, and narrow role of five immutable
 inputs:
@@ -189,7 +189,9 @@ authority vector identities, exact binary and manifest revisions, successful
 terminal state, output fence, and all 12 required receipts. Custody and owner
 ports are in-memory test fixtures; no process, production OpenCode adapter, or
 production composition is involved. This establishes only synthetic replay of
-the retained successful observation. Acceptance-detail and proved-no-start
+the retained successful observation. Refusal, cancellation, and the three
+ambiguity cases are projection-only; they are not replayed through the kernel.
+Acceptance-detail and proved-no-start
 request-rejection mappings remain proposed gaps, and token-limit mappings
 remain deferred; supported/deferred/unknown/unsupported dispositions are
 unchanged.

@@ -162,7 +162,7 @@ const SOURCE = Object.freeze({
   }),
   projection: Object.freeze({
     path: "experiments/runtime-profile-behavior/fixtures/acp-compatibility/opencode-contained-turn-port-conformance.json",
-    sha256: "474ebd2e82d9dc5fbd258ccdcd9b8a865e8714fcab19fab0a3ff12a0b62d9b1f",
+    sha256: "a8973162fbdea09eef6abf18b13cab562d49a6628ea1021b0f69702f13e8b20f",
     role: "synthetic_provider_neutral_projection_with_opencode_identity",
   }),
 });

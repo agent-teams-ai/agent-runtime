@@ -15,7 +15,7 @@ const fixtureUrl = new URL(
   "../fixtures/acp-compatibility/opencode-1-18-5-contract.json",
   import.meta.url,
 );
-const expectedFixtureDigest = "de7040233b6c117c3ba2ce0f1a663bebbdcdeee28083c1047e289e316378cfa4";
+const expectedFixtureDigest = "7366d7e295e9ae5a2464f0056ed1fa2157b2b338f49acbdbfd6ea62f58d8baff";
 const hostingPath = "experiments/runtime-profile-behavior/fixtures/opencode-hosting-e2e-summary.json";
 const hostingDigest = "efdb9caf86efae6dcb29529a84eb65a26b33ec42d837635afba71ac85579bf89";
 
@@ -66,7 +66,7 @@ test("authenticates fixed sources internally and binds field-level provenance", 
       "opencode@1.18.5#sha256:78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21",
     manifestRevision: "opencode-acp-contained-turn-v1@1",
     source: "experiments/runtime-profile-behavior/fixtures/acp-compatibility/opencode-contained-turn-port-conformance.json",
-    sourceSha256: "474ebd2e82d9dc5fbd258ccdcd9b8a865e8714fcab19fab0a3ff12a0b62d9b1f",
+    sourceSha256: "a8973162fbdea09eef6abf18b13cab562d49a6628ea1021b0f69702f13e8b20f",
     supportedModes: ["analysis"],
     unknownCapabilityPolicy: "fail_closed",
   });

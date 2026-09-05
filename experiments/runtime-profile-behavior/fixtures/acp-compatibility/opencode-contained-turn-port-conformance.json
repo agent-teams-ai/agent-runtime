@@ -150,7 +150,7 @@
     },
     {
       "id": "completed-failed",
-      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "evidenceClassification": "current_neutral_projection_only",
       "sdkSemanticObservation": {
         "kind": "terminal",
         "providerAccepted": true,
@@ -159,7 +159,7 @@
     },
     {
       "id": "completed-cancelled",
-      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "evidenceClassification": "current_neutral_projection_only",
       "sdkSemanticObservation": {
         "kind": "terminal",
         "providerAccepted": true,
@@ -195,7 +195,7 @@
     },
     {
       "id": "request-timeout-after-dispatch",
-      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "evidenceClassification": "current_neutral_projection_only",
       "sdkSemanticObservation": {
         "kind": "request_timeout_ambiguity",
         "providerAccepted": "unknown"
@@ -203,7 +203,7 @@
     },
     {
       "id": "request-rejection-without-no-start-proof",
-      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "evidenceClassification": "current_neutral_projection_only",
       "sdkSemanticObservation": {
         "kind": "request_rejected",
         "providerAccepted": "unknown",
@@ -212,7 +212,7 @@
     },
     {
       "id": "late-rejection-after-timeout",
-      "evidenceClassification": "current_neutral_projection_kernel_exercised",
+      "evidenceClassification": "current_neutral_projection_only",
       "sdkSemanticObservation": {
         "kind": "late_request_rejected_after_timeout",
         "providerAccepted": "unknown"

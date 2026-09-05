@@ -42,6 +42,7 @@ interface CapabilityCase {
 interface OutcomeCase {
   readonly evidenceClassification:
     | "current_neutral_projection_kernel_exercised"
+    | "current_neutral_projection_only"
     | "proposed_acceptance_detail_contract_gap"
     | "proposed_deferred_distinct_terminal_reason"
     | "proposed_no_start_request_rejection_contract_gap";
@@ -150,7 +151,7 @@ const providerContractPath = join(
   repositoryRoot,
   "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
 );
-const fixtureDigest = "474ebd2e82d9dc5fbd258ccdcd9b8a865e8714fcab19fab0a3ff12a0b62d9b1f";
+const fixtureDigest = "a8973162fbdea09eef6abf18b13cab562d49a6628ea1021b0f69702f13e8b20f";
 
 const expectedCapabilityCases: readonly CapabilityCase[] = Object.freeze([
   { capability: "prompt", observedStatus: "baseline", characterizationDisposition: "supported" },
@@ -554,11 +555,11 @@ test("classifies every official ACP terminal reason without a refusal fallback",
       value.evidenceClassification,
     ])),
     {
-      cancelled: "current_neutral_projection_kernel_exercised",
+      cancelled: "current_neutral_projection_only",
       end_turn: "current_neutral_projection_kernel_exercised",
       max_tokens: "proposed_deferred_distinct_terminal_reason",
       max_turn_requests: "proposed_deferred_distinct_terminal_reason",
-      refusal: "current_neutral_projection_kernel_exercised",
+      refusal: "current_neutral_projection_only",
     },
   );
   for (const deferredReason of ["max_tokens", "max_turn_requests"] as const) {
@@ -582,11 +583,31 @@ test("classifies every official ACP terminal reason without a refusal fallback",
 
 test("projects every current neutral ACP case without an Agent Execution kernel harness", async () => {
   const fixture = await loadFixture();
-  const exercisedCases = fixture.outcomeCases.filter(
-    value => value.evidenceClassification === "current_neutral_projection_kernel_exercised",
+  // Only success is replayed in opencode-exact-kernel-replay.test.ts.
+  assert.deepEqual(
+    fixture.outcomeCases.filter(
+      value => value.evidenceClassification === "current_neutral_projection_kernel_exercised",
+    ).map(value => value.id),
+    ["completed-succeeded"],
   );
   assert.deepEqual(
-    exercisedCases.map(value => value.id).toSorted(),
+    fixture.outcomeCases.filter(
+      value => value.evidenceClassification === "current_neutral_projection_only",
+    ).map(value => value.id).toSorted(),
+    [
+      "completed-cancelled",
+      "completed-failed",
+      "late-rejection-after-timeout",
+      "request-rejection-without-no-start-proof",
+      "request-timeout-after-dispatch",
+    ],
+  );
+  const projectedCases = fixture.outcomeCases.filter(
+    value => value.evidenceClassification === "current_neutral_projection_kernel_exercised" ||
+      value.evidenceClassification === "current_neutral_projection_only",
+  );
+  assert.deepEqual(
+    projectedCases.map(value => value.id).toSorted(),
     Object.keys(independentProjectionExpectations).toSorted(),
   );
   assert.deepEqual(
@@ -597,7 +618,7 @@ test("projects every current neutral ACP case without an Agent Execution kernel 
   );
 
   let projectionCalls = 0;
-  for (const outcomeCase of exercisedCases) {
+  for (const outcomeCase of projectedCases) {
     const expectation = independentProjectionExpectations[outcomeCase.id];
     assert.ok(expectation, outcomeCase.id);
     const projectedOutput: Array<Readonly<{
@@ -655,7 +676,7 @@ test("projects every current neutral ACP case without an Agent Execution kernel 
       assert.ok(!retained.includes(canary), `${outcomeCase.id} retained ${canary}`);
     }
   }
-  assert.equal(projectionCalls, exercisedCases.length);
+  assert.equal(projectionCalls, projectedCases.length);
   assert.equal(projectionCalls, 6);
 });
 
