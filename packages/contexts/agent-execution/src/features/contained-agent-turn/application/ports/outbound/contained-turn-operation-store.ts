@@ -36,6 +36,7 @@ import type { ContainedTurnOutputWriteAuthority } from "../../../domain/containe
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import type { ContainedTurnKernelMutation } from "../../../domain/contained-turn-transitions.js";
 import type { CommittedDispatchProofV1 } from "../../../domain/committed-dispatch-proof-v1.js";
+import type { ContainedTurnPreventionCommand, ContainedTurnPreventionReceipt } from "../../../domain/contained-turn-intent-guard.js";
 
 export type CommitContainedTurnKernelOperationOutcome =
   | { readonly kind: "applied"; readonly operation: ContainedTurnKernelOperation }
@@ -90,6 +91,15 @@ export interface ContainedTurnKernelOperationStore {
     expectedOperationCutoffRevision: number;
     expectedOperationRevision: number;
   }>): Promise<ContainedTurnPreparationClosureProof | undefined>;
+  /** Same transactional authority as acceptance and claim. Exact replay recovers a lost receipt. */
+  preventIntent(input: Readonly<{
+    command: ContainedTurnPreventionCommand;
+    /** Independently authenticated scope, never copied from the command. */
+    scope: ContainedTurnScope;
+  }>): Promise<
+    | { readonly kind: "committed"; readonly receipt: ContainedTurnPreventionReceipt }
+    | { readonly kind: "conflict" | "denied" | "indeterminate" }
+  >;
   /** Restart-safe enumeration for owner reconciliation; production durable stores implement it. */
   listDispatchPreparations?(input: Readonly<{
     kinds?: readonly ("active" | "cleanup_pending")[];

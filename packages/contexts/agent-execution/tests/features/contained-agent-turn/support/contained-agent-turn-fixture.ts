@@ -179,6 +179,7 @@ const createDependencies = (options: Readonly<{
   let providerSettlementCount = 0;
   const workspaceQuarantines: Array<Parameters<ContainedTurnKernelDependencies["workspace"]["quarantine"]>[0]> = [];
   const operationStore: ContainedTurnKernelDependencies["operationStore"] = {
+    preventIntent: async () => ({ kind: "denied" }),
     accept: async (candidate, authority) => {
       assertOwnerAuthority(authority, candidate);
       if (options.potentialAcceptance === true) {

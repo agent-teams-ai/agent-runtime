@@ -28,6 +28,7 @@ import {
 } from "./contained-turn-postgres-operation-authority.js";
 import type { ContainedTurnPostgresOperationRepository } from "./contained-turn-postgres-operation-repository.js";
 import type { ContainedTurnPostgresTransactions } from "./contained-turn-postgres-transactions.js";
+import type { ContainedTurnPostgresIntentStore } from "./contained-turn-postgres-intent-store.js";
 import { decodeContainedTurnPreparation, encodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
 import {
   CONTAINED_TURN_POSTGRES_JSON_BUDGET,
@@ -77,6 +78,7 @@ export class ContainedTurnPostgresPreparationStore {
     private readonly identities: ContainedTurnPostgresIdentitySource,
     private readonly operations: ContainedTurnPostgresOperationRepository,
     private readonly transactions: ContainedTurnPostgresTransactions,
+    private readonly intents: ContainedTurnPostgresIntentStore,
   ) {}
 
   async #load(client: import("pg").PoolClient, operationId: string, scope: import("../../../domain/contained-turn-authority.js").ContainedTurnScope) {
@@ -99,14 +101,15 @@ export class ContainedTurnPostgresPreparationStore {
     const workspaceId = input.operation.workspaceId;
     if (workspaceId === undefined) {throw new TypeError("dispatch preparation requires workspace custody");}
     return this.transactions.write(async client => {
+      if (!await this.intents.lock(client, input.authority.scope)) {throw new TypeError("intent authority unavailable");}
       const current = await this.#load(client, input.authority.operationId, input.authority.scope);
       if (current === undefined || current.revision !== input.operation.revision) {
         throw new Error("dispatch preparation lost its operation revision fence");
       }
       assertAuthority(input.authority, current);
       if (current.operationCutoff.kind !== "open" || current.admissionFence.kind !== "open" ||
-          current.dispatch.kind !== "unclaimed") {
-        throw new Error("dispatch preparation rejected the closed operation fence");
+          current.dispatch.kind !== "unclaimed" || !await this.intents.claimAllowed(client, current)) {
+        throw new TypeError("dispatch preparation intent fenced");
       }
       const ordinalResult = await client.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1",
@@ -205,12 +208,14 @@ export class ContainedTurnPostgresPreparationStore {
       preparationToken: input.subject.preparationToken,
     });
     const outcome = await this.transactions.write(async client => {
+      if (!await this.intents.lock(client, input.authority.scope)) {return { kind: "not_found" as const };}
       const current = await this.#load(client, input.authority.operationId, input.authority.scope);
       if (current === undefined) {return { kind: "not_found" as const };}
       assertAuthority(input.authority, current);
       if (current.dispatch.kind === "claimed" && current.dispatch.preparationToken === input.subject.preparationToken) {
         return { kind: "observed_claim" as const, operation: current };
       }
+      if (!await this.intents.claimAllowed(client, current)) {return { current, kind: "stale" as const };}
       const row = await client.query<PreparationRow>(
         `SELECT ${PREPARATION_STATE_SELECTION} FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE`,
         [current.operationId, input.subject.preparationToken],
