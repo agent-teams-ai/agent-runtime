@@ -383,6 +383,7 @@ export class ContainedTurnPostgresPreparationStore {
         })}`),
         input.consumedGrantRequestIds,
         input.consumptionEvidenceIds,
+        input.reason,
       );
       assertRetirementReceiptAuthority(retired, current);
       const encoded = encodeContainedTurnPreparation(retired);

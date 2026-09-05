@@ -426,6 +426,7 @@ const createDependencies = (options: Readonly<{
       preparation = retireContainedTurnDispatchPreparation(
         preparation, "test-retirement", input.consumedGrantRequestIds,
         input.consumptionEvidenceIds,
+        input.reason,
       );
       preparations.set(preparation.preparationToken, preparation);
       return { kind: "retired", preparation: preparation as Extract<ContainedTurnDispatchPreparation, { kind: "cleanup_pending" }> };

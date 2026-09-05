@@ -165,11 +165,13 @@ const delegatingStore = (postgres: PostgresContainedTurnOperationStore, claimGat
   const commit = postgres.commit.bind(postgres);
   const identifyAcceptance = postgres.identifyAcceptance.bind(postgres);
   const listDispatchPreparations = postgres.listDispatchPreparations.bind(postgres);
+  const preventIntent = postgres.preventIntent.bind(postgres);
   const prepareCancellation = postgres.prepareCancellation.bind(postgres);
   const prepareDispatch = postgres.prepareDispatch.bind(postgres);
   const proofsForAcceptedEffect = postgres.proofsForAcceptedEffect.bind(postgres);
   const proofsForPrevention = postgres.proofsForPrevention.bind(postgres);
   const proofsForProcessNoStart = postgres.proofsForProcessNoStart.bind(postgres);
+  const proveDispatchPreparationClosure = postgres.proveDispatchPreparationClosure.bind(postgres);
   const read = postgres.read.bind(postgres);
   const recordDispatchPreparationCleanup = postgres.recordDispatchPreparationCleanup.bind(postgres);
   const requestCancellation = postgres.requestCancellation.bind(postgres);
@@ -188,11 +190,13 @@ const delegatingStore = (postgres: PostgresContainedTurnOperationStore, claimGat
     commit,
     identifyAcceptance,
     listDispatchPreparations,
+    preventIntent,
     prepareCancellation,
     prepareDispatch,
     proofsForAcceptedEffect,
     proofsForPrevention,
     proofsForProcessNoStart,
+    proveDispatchPreparationClosure,
     read,
     recordDispatchPreparationCleanup,
     requestCancellation,

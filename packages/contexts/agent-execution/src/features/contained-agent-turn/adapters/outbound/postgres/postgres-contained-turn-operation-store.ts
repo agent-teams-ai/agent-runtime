@@ -47,7 +47,7 @@ export interface PostgresContainedTurnOperationStoreOptions {
   readonly identities?: ContainedTurnPostgresIdentitySource;
   readonly pool: Pool;
   /** Used only for deterministic mixed-version migration tests and staged drains. */
-  readonly runtimeSchemaVersion?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  readonly runtimeSchemaVersion?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   readonly timeouts?: Partial<ContainedTurnPostgresTimeouts>;
 }
 
@@ -413,7 +413,9 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     return this.#evidence.proofsForProcessNoStart(input);
   }
 
-  public async proofsForPrevention(input: Parameters<ContainedTurnKernelOperationStore["proofsForPrevention"]>[0]) {
+  public async proofsForPrevention(
+    input: Parameters<ContainedTurnKernelOperationStore["proofsForPrevention"]>[0],
+  ): ReturnType<ContainedTurnKernelOperationStore["proofsForPrevention"]> {
     return this.#evidence.proofsForPrevention(input);
   }
 

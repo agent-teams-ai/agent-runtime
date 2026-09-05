@@ -13,9 +13,10 @@ export const seedLegacyIntentOperation = async (pool: Pool, operation: Contained
     const encoded = encodeContainedTurnState(operation);
     await client.query(`INSERT INTO agent_execution.contained_turn_operation_v1
       (operation_id,tenant_id,project_id,command_id,command_fingerprint,effect_id,revision,state,state_codec_version,state_digest,terminal)
-      VALUES ($1,$2,$3,$4,$5,$6,0,$7::jsonb,$8,$9,false)`,
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,false)`,
     [operation.operationId, operation.scope.tenantId, operation.scope.projectId, operation.commandId,
-      operation.commandFingerprint, operation.effectId, encoded.json, encoded.codecVersion, encoded.digest]);
+      operation.commandFingerprint, operation.effectId, operation.revision, encoded.json,
+      encoded.codecVersion, encoded.digest]);
     for (const proof of operation.proofs) {
       await client.query("INSERT INTO agent_execution.contained_turn_receipt_v1(operation_id,receipt_kind,receipt_ref) VALUES ($1,$2,$3)", [operation.operationId, proof.kind, proof.proofId]);
     }

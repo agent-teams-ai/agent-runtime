@@ -53,7 +53,7 @@ export const operationForProject = (
 
 export const resetSchema = async (
   pool: Pool,
-  targetVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 = CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
+  targetVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
 ): Promise<void> => {
   await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
   await applyContainedTurnPostgresSchema(pool, {

@@ -24,7 +24,7 @@ const active = Object.freeze({
   preparationToken: claim.preparationToken, preparedOperationRevision: operation.revision - 1,
   providerAccessGrantRequestId: null, runtimeSecurityGrantRequestId: null, workspaceId: operation.workspaceId!,
 });
-const decode = (payload: object, codecVersion = 5) => {
+const decode = (payload: object, codecVersion = 6) => {
   if (codecVersion === 1) {return decodeContainedTurnPreparation(payload, null, 1);}
   const envelope = { codecVersion, payload };
   return decodeContainedTurnPreparation(envelope, digestContainedTurnPostgresJson(envelope), codecVersion);
@@ -49,8 +49,8 @@ test("null identities remain owner debt across retirement, custody release and e
     assert.deepEqual(upcast.cleanupPermit, retired.cleanupPermit);
   }
   const encoded = encodeContainedTurnPreparation(pending);
-  assert.equal(encoded.codecVersion, 5);
-  assert.deepEqual(decodeContainedTurnPreparation(JSON.parse(encoded.json), encoded.digest, 5), pending);
+  assert.equal(encoded.codecVersion, 6);
+  assert.deepEqual(decodeContainedTurnPreparation(JSON.parse(encoded.json), encoded.digest, 6), pending);
 });
 
 test("every legacy codec quarantines malformed settlement and custody flags before normalization", () => {
@@ -167,8 +167,8 @@ test("strict bounded codec rejects unproved closure and malformed settlement rec
   ]) {assert.throws(() => decode(invalid));}
   const { cleanupPermit, custodyReleased: _custody, providerAccessSettled: _access, runtimeSecuritySettled: _security, ...rest } = retired;
   const unprovedClosed = { ...rest, cleanupPermitId: cleanupPermit.permitId, kind: "cleanup_closed" };
-  for (const codecVersion of [2, 3, 4, 5]) {assert.throws(() => decode(unprovedClosed, codecVersion));}
-  assert.throws(() => decode(bound, 6), /unsupported/u);
+  for (const codecVersion of [2, 3, 4, 5, 6]) {assert.throws(() => decode(unprovedClosed, codecVersion));}
+  assert.throws(() => decode(bound, 7), /unsupported/u);
   const encoded = encodeContainedTurnPreparation(bound);
-  assert.throws(() => decodeContainedTurnPreparation(JSON.parse(encoded.json), "0".repeat(64), 5), /digest/u);
+  assert.throws(() => decodeContainedTurnPreparation(JSON.parse(encoded.json), "0".repeat(64), 6), /digest/u);
 });

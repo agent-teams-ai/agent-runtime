@@ -10,7 +10,7 @@ import {
   ContainedTurnStateQuarantineError,
 } from "./contained-turn-state-codec.js";
 
-export const CONTAINED_TURN_PREPARATION_CODEC_VERSION = 5;
+export const CONTAINED_TURN_PREPARATION_CODEC_VERSION = 6;
 
 const record = (value: unknown): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -124,28 +124,32 @@ const upcastV1 = (state: unknown): ContainedTurnDispatchPreparation => {
     providerAccessGrantRequestId: null,
     runtimeSecurityGrantRequestId: null,
   }));
-  return validatePreparation({
-    ...legacy,
-  }, 1);
+  return validatePreparation(addNegativeConsumptionFields(legacy), 1);
 };
 
-const decodeEnvelope = (state: unknown, codecVersion: 2 | 3 | 4 | 5): ContainedTurnDispatchPreparation => {
+const addNegativeConsumptionFields = (payload: Record<string, unknown>): Record<string, unknown> =>
+  payload.kind === "cleanup_pending" || payload.kind === "cleanup_closed"
+    ? { ...payload, providerAccessNotConsumed: false, runtimeSecurityNotConsumed: false }
+    : payload;
+
+const decodeEnvelope = (state: unknown, codecVersion: 2 | 3 | 4 | 5 | 6): ContainedTurnDispatchPreparation => {
   const envelope = record(state);
   if (Object.keys(envelope).toSorted().join(",") !== "codecVersion,payload" ||
       envelope.codecVersion !== codecVersion) {
     throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
   }
   if (codecVersion < 5) {validateLegacyFields(record(envelope.payload), codecVersion);}
-  const payload = codecVersion < 5
+  const legacyPayload = codecVersion < 5
     ? recoverLegacyCleanupDebt(codecVersion === 2
       ? addConsumptionEvidenceFields(record(envelope.payload)) : record(envelope.payload))
     : envelope.payload;
+  const payload = codecVersion < 6 ? addNegativeConsumptionFields(record(legacyPayload)) : legacyPayload;
   return validatePreparation(payload, codecVersion);
 };
 
 export const encodeContainedTurnPreparation = (
   preparation: ContainedTurnDispatchPreparation,
-): Readonly<{ codecVersion: 5; digest: string; json: string }> => {
+): Readonly<{ codecVersion: 6; digest: string; json: string }> => {
   const validated = validatePreparation(preparation, CONTAINED_TURN_PREPARATION_CODEC_VERSION);
   const envelope = Object.freeze({
     codecVersion: CONTAINED_TURN_PREPARATION_CODEC_VERSION,
@@ -179,5 +183,5 @@ export const decodeContainedTurnPreparation = (
   if (expectedDigest === null) {
     throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
   }
-  return decodeEnvelope(state, codecVersion as 2 | 3 | 4 | 5);
+  return decodeEnvelope(state, codecVersion as 2 | 3 | 4 | 5 | 6);
 };

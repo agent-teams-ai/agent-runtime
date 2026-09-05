@@ -185,8 +185,8 @@ const snapshotCleanupPendingPreparation = (
 ): ContainedTurnDispatchPreparation => {
   requireOrdinaryRecord("dispatch preparation", preparation, [
     ...preparationIdentityKeys(preparation), "cleanupEvidenceIds", "cleanupPermit", "custodyReleased", "kind",
-    "providerAccessConsumptionEvidenceId", "providerAccessSettled",
-    "runtimeSecurityConsumptionEvidenceId", "runtimeSecuritySettled",
+    "providerAccessConsumptionEvidenceId", "providerAccessNotConsumed", "providerAccessSettled",
+    "runtimeSecurityConsumptionEvidenceId", "runtimeSecurityNotConsumed", "runtimeSecuritySettled",
   ]);
   const pending = preparation as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }>;
   if (pending.cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
@@ -201,13 +201,22 @@ const snapshotCleanupPendingPreparation = (
   const runtimeSecurityConsumptionEvidenceId = pending.runtimeSecurityConsumptionEvidenceId === null
     ? null
     : validateContainedTurnIdentity("evidence", pending.runtimeSecurityConsumptionEvidenceId);
-  if (typeof pending.custodyReleased !== "boolean" || typeof pending.providerAccessSettled !== "boolean" ||
+  if (typeof pending.custodyReleased !== "boolean" || typeof pending.providerAccessNotConsumed !== "boolean" ||
+      typeof pending.providerAccessSettled !== "boolean" || typeof pending.runtimeSecurityNotConsumed !== "boolean" ||
       typeof pending.runtimeSecuritySettled !== "boolean") {
     throw new TypeError("cleanup preparation flags must be primitive booleans");
   }
   if ((pending.providerAccessSettled && pending.providerAccessConsumptionReceipt === undefined) ||
       (pending.runtimeSecuritySettled && pending.runtimeSecurityConsumptionReceipt === undefined)) {
     throw new TypeError("cleanup preparation cannot settle an owner without a consumed receipt");
+  }
+  if ((pending.providerAccessNotConsumed && (pending.providerAccessGrantRequestId !== null ||
+      pending.providerAccessConsumptionReceipt !== undefined || providerAccessConsumptionEvidenceId !== null)) ||
+      (pending.runtimeSecurityNotConsumed && (pending.runtimeSecurityGrantRequestId !== null ||
+      pending.runtimeSecurityConsumptionReceipt !== undefined || runtimeSecurityConsumptionEvidenceId !== null)) ||
+      (pending.providerAccessNotConsumed && pending.providerAccessSettled) ||
+      (pending.runtimeSecurityNotConsumed && pending.runtimeSecuritySettled)) {
+    throw new TypeError("negative grant consumption proof contradicts owner consumption evidence");
   }
   if ((providerAccessConsumptionEvidenceId !== null &&
       !cleanupEvidenceIds.includes(providerAccessConsumptionEvidenceId)) ||
@@ -222,8 +231,10 @@ const snapshotCleanupPendingPreparation = (
     custodyReleased: pending.custodyReleased,
     kind: "cleanup_pending",
     providerAccessConsumptionEvidenceId,
+    providerAccessNotConsumed: pending.providerAccessNotConsumed,
     providerAccessSettled: pending.providerAccessSettled,
     runtimeSecurityConsumptionEvidenceId,
+    runtimeSecurityNotConsumed: pending.runtimeSecurityNotConsumed,
     runtimeSecuritySettled: pending.runtimeSecuritySettled,
   });
 };
@@ -233,11 +244,14 @@ const snapshotCleanupClosedPreparation = (
 ): ContainedTurnDispatchPreparation => {
   requireOrdinaryRecord("dispatch preparation", preparation, [
     ...preparationIdentityKeys(preparation), "cleanupEvidenceIds", "cleanupPermitId", "kind",
-    "providerAccessConsumptionEvidenceId", "runtimeSecurityConsumptionEvidenceId",
+    "providerAccessConsumptionEvidenceId", "providerAccessNotConsumed",
+    "runtimeSecurityConsumptionEvidenceId", "runtimeSecurityNotConsumed",
   ]);
   const closed = preparation as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_closed" }>;
-  if (closed.providerAccessConsumptionReceipt === undefined || closed.runtimeSecurityConsumptionReceipt === undefined) {
-    throw new TypeError("closed cleanup requires both consumed owner receipts");
+  if (typeof closed.providerAccessNotConsumed !== "boolean" || typeof closed.runtimeSecurityNotConsumed !== "boolean" ||
+      (closed.providerAccessConsumptionReceipt === undefined) === !closed.providerAccessNotConsumed ||
+      (closed.runtimeSecurityConsumptionReceipt === undefined) === !closed.runtimeSecurityNotConsumed) {
+    throw new TypeError("closed cleanup requires an exact settled-or-not-consumed fact per owner");
   }
   if (closed.cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
     throw new TypeError("cleanup evidence limit exceeded");
@@ -260,7 +274,8 @@ const snapshotCleanupClosedPreparation = (
   }
   return Object.freeze({
     ...preparationBase(preparation), cleanupEvidenceIds, cleanupPermitId, kind: "cleanup_closed",
-    providerAccessConsumptionEvidenceId, runtimeSecurityConsumptionEvidenceId,
+    providerAccessConsumptionEvidenceId, providerAccessNotConsumed: closed.providerAccessNotConsumed,
+    runtimeSecurityConsumptionEvidenceId, runtimeSecurityNotConsumed: closed.runtimeSecurityNotConsumed,
   });
 };
 
@@ -363,7 +378,9 @@ export const isContainedTurnPreparationCleanupContinuation = (
   actual.providerAccessGrantRequestId === expected.providerAccessGrantRequestId &&
   actual.runtimeSecurityGrantRequestId === expected.runtimeSecurityGrantRequestId &&
   actual.providerAccessConsumptionEvidenceId === expected.providerAccessConsumptionEvidenceId &&
+  actual.providerAccessNotConsumed === expected.providerAccessNotConsumed &&
   actual.runtimeSecurityConsumptionEvidenceId === expected.runtimeSecurityConsumptionEvidenceId &&
+  actual.runtimeSecurityNotConsumed === expected.runtimeSecurityNotConsumed &&
   expected.cleanupEvidenceIds.every(evidenceId => actual.cleanupEvidenceIds.includes(evidenceId)) &&
   (expected.kind === "cleanup_closed"
     ? actual.kind === "cleanup_closed" && actual.cleanupPermitId === expected.cleanupPermitId

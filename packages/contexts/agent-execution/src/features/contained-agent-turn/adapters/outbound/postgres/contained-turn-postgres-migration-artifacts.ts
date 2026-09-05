@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { CONTAINED_TURN_INTENT_GUARD_V8_SQL } from "./contained-turn-postgres-intent-migration.js";
 
-export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 8;
+export const CONTAINED_TURN_POSTGRES_SCHEMA_VERSION = 9;
 
 const V1_SQL = `
 CREATE SCHEMA IF NOT EXISTS agent_execution;
@@ -322,6 +322,40 @@ ALTER TABLE agent_execution.contained_turn_dispatch_preparation_v1
   );
 `;
 
+// V9 preserves the V7 no-inference rule while allowing an explicit durable
+// negative-consumption fact minted only by the trusted prevention path.
+const V9_SQL = `
+ALTER TABLE agent_execution.contained_turn_dispatch_preparation_v1
+  DROP CONSTRAINT contained_turn_preparation_owner_closure;
+ALTER TABLE agent_execution.contained_turn_dispatch_preparation_v1
+  ADD CONSTRAINT contained_turn_preparation_owner_closure
+  CHECK (
+    COALESCE(state #>> '{payload,kind}', state ->> 'kind') IS DISTINCT FROM 'cleanup_closed'
+    OR (
+      (
+        jsonb_typeof(state #> '{payload,providerAccessConsumptionReceipt}') IS NOT DISTINCT FROM 'object'
+        AND COALESCE(state #> '{payload,providerAccessNotConsumed}', 'false'::jsonb) = 'false'::jsonb
+      ) OR (
+        state #> '{payload,providerAccessConsumptionReceipt}' IS NULL
+        AND state #> '{payload,providerAccessNotConsumed}' = 'true'::jsonb
+        AND state #>> '{payload,providerAccessGrantRequestId}' IS NULL
+        AND state #>> '{payload,providerAccessConsumptionEvidenceId}' IS NULL
+      )
+    )
+    AND (
+      (
+        jsonb_typeof(state #> '{payload,runtimeSecurityConsumptionReceipt}') IS NOT DISTINCT FROM 'object'
+        AND COALESCE(state #> '{payload,runtimeSecurityNotConsumed}', 'false'::jsonb) = 'false'::jsonb
+      ) OR (
+        state #> '{payload,runtimeSecurityConsumptionReceipt}' IS NULL
+        AND state #> '{payload,runtimeSecurityNotConsumed}' = 'true'::jsonb
+        AND state #>> '{payload,runtimeSecurityGrantRequestId}' IS NULL
+        AND state #>> '{payload,runtimeSecurityConsumptionEvidenceId}' IS NULL
+      )
+    )
+  );
+`;
+
 export const V4_DOWN_SQL = `
 DO $$
 BEGIN
@@ -357,6 +391,7 @@ const V5_DIGEST = digest(V5_SQL);
 const V6_DIGEST = digest(V6_SQL);
 const V7_DIGEST = digest(V7_SQL);
 const V8_DIGEST = digest(CONTAINED_TURN_INTENT_GUARD_V8_SQL);
+const V9_DIGEST = digest(V9_SQL);
 
 export interface ContainedTurnPostgresMigrationIdentity {
   readonly digest: string;
@@ -374,16 +409,17 @@ export const CONTAINED_TURN_POSTGRES_MIGRATIONS: readonly ContainedTurnPostgresM
     Object.freeze({ digest: V6_DIGEST, predecessorDigest: V5_DIGEST, version: 6 }),
     Object.freeze({ digest: V7_DIGEST, predecessorDigest: V6_DIGEST, version: 7 }),
     Object.freeze({ digest: V8_DIGEST, predecessorDigest: V7_DIGEST, version: 8 }),
+    Object.freeze({ digest: V9_DIGEST, predecessorDigest: V8_DIGEST, version: 9 }),
   ]);
 
-export const CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST = V8_DIGEST;
+export const CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST = V9_DIGEST;
 
 export const migrationFor = (version: number): ContainedTurnPostgresMigrationIdentity & { readonly sql: string } => {
   const identity = CONTAINED_TURN_POSTGRES_MIGRATIONS[version - 1];
   const sql = version === 1 ? V1_SQL : version === 2 ? V2_SQL :
     version === 3 ? V3_SQL : version === 4 ? V4_SQL : version === 5 ? V5_SQL :
       version === 6 ? V6_SQL : version === 7 ? V7_SQL :
-        version === 8 ? CONTAINED_TURN_INTENT_GUARD_V8_SQL : undefined;
+        version === 8 ? CONTAINED_TURN_INTENT_GUARD_V8_SQL : version === 9 ? V9_SQL : undefined;
   if (identity === undefined || sql === undefined) {
     throw new RangeError(`unsupported contained turn PostgreSQL migration target ${String(version)}`);
   }

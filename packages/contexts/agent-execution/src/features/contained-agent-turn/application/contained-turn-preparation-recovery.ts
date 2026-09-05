@@ -81,10 +81,10 @@ export const recoverContainedTurnDispatchPreparations = async (
     if (!preparation.custodyReleased) {
       await completeTarget(dependencies, row.operation, preparation, "custody");
     }
-    if (!preparation.providerAccessSettled) {
+    if (!preparation.providerAccessSettled && !preparation.providerAccessNotConsumed) {
       await completeTarget(dependencies, row.operation, preparation, "provider_access");
     }
-    if (!preparation.runtimeSecuritySettled) {
+    if (!preparation.runtimeSecuritySettled && !preparation.runtimeSecurityNotConsumed) {
       await completeTarget(dependencies, row.operation, preparation, "runtime_security");
     }
   }

@@ -218,6 +218,42 @@ test("claim then cancellation protects the winner while exact loser cleanup is m
   assert.equal(cancelled.terminal.kind, "open");
 });
 
+test("trusted prevention settles only owners proved not consumed", () => {
+  const active = Object.freeze({
+    attemptId,
+    custodyId,
+    kind: "active" as const,
+    operationCutoffRevision: 0,
+    operationId,
+    preparationToken,
+    preparedOperationRevision: 1,
+    providerAccessGrantRequestId: null,
+    runtimeSecurityGrantRequestId: null,
+    workspaceId,
+  });
+  const prevented = retireContainedTurnDispatchPreparation(
+    active, "retirement:prevented", {}, {}, "prevention",
+  );
+  assert.equal(prevented.kind, "cleanup_pending");
+  if (prevented.kind !== "cleanup_pending") {return;}
+  assert.equal(prevented.providerAccessNotConsumed, true);
+  assert.equal(prevented.providerAccessSettled, false);
+  assert.equal(prevented.runtimeSecurityNotConsumed, true);
+  assert.equal(prevented.runtimeSecuritySettled, false);
+  assert.equal(recordContainedTurnPreparationCleanup(prevented, {
+    permit: prevented.cleanupPermit,
+    target: "custody",
+  }).kind, "cleanup_closed");
+
+  const unresolved = retireContainedTurnDispatchPreparation(active, "retirement:recovery");
+  assert.equal(unresolved.kind, "cleanup_pending");
+  if (unresolved.kind !== "cleanup_pending") {return;}
+  assert.equal(unresolved.providerAccessSettled, false);
+  assert.equal(unresolved.providerAccessNotConsumed, false);
+  assert.equal(unresolved.runtimeSecuritySettled, false);
+  assert.equal(unresolved.runtimeSecurityNotConsumed, false);
+});
+
 test("retirement durably preserves and reconciles every indeterminate grant consumption", () => {
   const providerAccessEvidenceId = containedTurnIdentity(
     "evidence", "evidence:provider-access-consumption-indeterminate",

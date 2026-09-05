@@ -155,7 +155,13 @@ for (const resume of ["intent cancellation", "ordinary cancellation", "submissio
       assert.equal(closed.dispatch.kind, "prevented");
       assert.equal(closed.providerExecution.kind, "closed");
       assert.equal(closed.providerAcceptance.kind, "not_accepted");
-      assert.equal(closed.terminal.kind, "final");
+      assert.equal(closed.terminal.kind, "final", JSON.stringify({
+        closureRecovery: closed.closureRecovery,
+        dispatch: closed.dispatch,
+        proofs: closed.proofs.map(proof => proof.kind),
+        providerExecution: closed.providerExecution,
+        reconciliation: closed.reconciliation,
+      }));
       assert.ok(closed.terminal.kind === "final" && closed.terminal.outcome === "cancelled");
       assert.equal(closed.reconciliation.kind, "clear");
       assert.equal(closed.closureRecovery.kind, "clear");

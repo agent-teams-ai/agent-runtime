@@ -16,6 +16,8 @@ import {
 import { postgresClaimInput, preparePostgresClaim } from "./support/postgres-committed-dispatch-fixture.ts";
 
 import { createPostgresReplayApplication } from "./support/postgres-replay-application.ts";
+import { intentAuthority } from "./support/intent-guard-fixture.ts";
+import { seedLegacyIntentOperation } from "./support/intent-guard-legacy-fixture.ts";
 
 type Fixture = Awaited<ReturnType<typeof preparePostgresClaim>>;
 
@@ -74,7 +76,7 @@ postgresTest("delayed claim after both consumptions cannot close cancelled prepa
       assert.equal(active.providerAccessGrantRequestId, null);
       assert.equal(active.runtimeSecurityGrantRequestId, null);
       const cancelled = await cancel(store, bound);
-      const restarted = new PostgresContainedTurnOperationStore({ pool });
+      const restarted = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
       const recovering = { ...dependencies, operationStore: restarted };
       await recoverContainedTurnDispatchPreparations(recovering, bound.scope);
       const durable = await runtimeQuery<{ state: { payload: { kind: string } } }>(pool,
@@ -106,7 +108,7 @@ postgresTest("delayed claim after both consumptions cannot close cancelled prepa
       assert.equal(partial.runtimeSecuritySettled, false);
       assert.deepEqual(partial.cleanupPermit, pending.cleanupPermit);
       allowedSettlements = 2;
-      await recoverContainedTurnDispatchPreparations({ ...recovering, operationStore: new PostgresContainedTurnOperationStore({ pool }) }, bound.scope);
+      await recoverContainedTurnDispatchPreparations({ ...recovering, operationStore: new PostgresContainedTurnOperationStore({ intentAuthority, pool }) }, bound.scope);
       const closed = await runtimeQuery<{ state: { payload: { kind: string } } }>(pool,
         "SELECT state FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1", [bound.operationId]);
       assert.equal(closed.rows[0]?.state.payload.kind, "cleanup_closed");
@@ -123,13 +125,32 @@ postgresTest("settlement migration rejects legacy unproved closure and fences th
     await resetSchema(pool, 6);
     const oldStore = new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 6 });
     const initial = operationForProject("project:settlement-migration", "settlement-migration");
-    await oldStore.accept(initial, operationAuthority(initial));
     const bound = mutateContainedTurnOperation(initial, {
       kind: "bind_workspace", workspaceId: containedTurnIdentity("workspace", "workspace:settlement-migration"),
     });
-    await oldStore.commit({ authority: operationAuthority(initial), candidate: bound, expectedRevision: initial.revision });
-    const reservation = await oldStore.prepareDispatch({ authority: operationAuthority(bound), operation: bound });
+    await seedLegacyIntentOperation(pool, bound, 6);
+    const reservation = {
+      attemptId: containedTurnIdentity("attempt", "attempt:settlement-migration"),
+      custodyId: containedTurnIdentity("custody", "custody:settlement-migration"),
+    };
     const preparationToken = containedTurnPreparationToken({ ...reservation, operationId: bound.operationId });
+    const active = {
+      ...reservation,
+      kind: "active" as const,
+      operationCutoffRevision: bound.operationCutoff.revision,
+      operationId: bound.operationId,
+      preparationToken,
+      preparedOperationRevision: bound.revision,
+      providerAccessGrantRequestId: null,
+      runtimeSecurityGrantRequestId: null,
+      workspaceId: bound.workspaceId!,
+    };
+    const encodedActive = encodeContainedTurnPreparation(active);
+    await runtimeQuery(pool,
+      `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+         (operation_id,preparation_token,state_codec_version,state,state_digest)
+       VALUES ($1,$2,$3,$4::jsonb,$5)`,
+      [bound.operationId, preparationToken, encodedActive.codecVersion, encodedActive.json, encodedActive.digest], 6);
     const retired = await oldStore.retireDispatchPreparation({
       authority: operationAuthority(bound), expectedOperationCutoffRevision: 0,
       expectedOperationRevision: bound.revision, preparationToken, reason: "reconciliation",
@@ -139,7 +160,7 @@ postgresTest("settlement migration rejects legacy unproved closure and fences th
       const envelope = { codecVersion: 4, payload };
       await runtimeQuery(pool,
         "UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$2::jsonb,state_codec_version=4,state_digest=$3 WHERE operation_id=$1",
-        [bound.operationId, JSON.stringify(envelope), digestContainedTurnPostgresJson(envelope)]);
+        [bound.operationId, JSON.stringify(envelope), digestContainedTurnPostgresJson(envelope)], 6);
     };
     const { cleanupPermit, custodyReleased: _custody, providerAccessSettled: _access, runtimeSecuritySettled: _security, ...rest } = retired.preparation;
     await writeLegacy({ ...rest, cleanupPermitId: cleanupPermit.permitId, kind: "cleanup_closed" });
@@ -153,7 +174,7 @@ postgresTest("settlement migration rejects legacy unproved closure and fences th
     const identity = (await pool.query("SELECT version,migration_digest FROM agent_execution.schema_migration")).rows[0];
     assert.deepEqual(identity, { version: 7, migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[6]!.digest });
     await assert.rejects(oldStore.read({ operationId: bound.operationId, scope: bound.scope }), /schema/u);
-    const restarted = new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 7 });
+    const restarted = new PostgresContainedTurnOperationStore({ intentAuthority, pool, runtimeSchemaVersion: 7 });
     const pending = (await restarted.listDispatchPreparations({ scope: bound.scope }))[0]?.preparation;
     assert.equal(pending?.kind, "cleanup_pending");
     if (pending?.kind !== "cleanup_pending") {throw new Error("legacy obligations disappeared");}
@@ -194,7 +215,7 @@ postgresTest("cancelled cutoff-zero preparation retires and recovers without a p
     assert.equal(cancelled.cancellation.kind, "requested");
     assert.equal(cancelled.dispatch.kind, "unclaimed");
 
-    const restarted = new PostgresContainedTurnOperationStore({ pool });
+    const restarted = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     // Even valid consumed receipts cannot authorize the original active preparation.
     assert.equal((await restarted.claimPreparedDispatch(claim.claimInput)).kind, "stale");
     const input = retirementInput(fixture);
@@ -402,7 +423,7 @@ postgresTest("claim plus cancellation retires only the losing preparation across
         if (index === 0) {throw new Error("disposable lost settlement acknowledgement");}
         return { kind: "settled" };
       } });
-      const restarted = new PostgresContainedTurnOperationStore({ pool });
+      const restarted = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
       const dependencies = {
         custody: { releaseRetiredReservation: async ({ cleanupPermit }) => {
           assert.equal(cleanupPermit.preparationToken, loser.preparationToken);
@@ -445,7 +466,7 @@ postgresTest("claim plus cancellation retires only the losing preparation across
       assert.equal(partial.runtimeSecuritySettled, false);
       assert.deepEqual(partial.cleanupPermit, pending.cleanupPermit);
       allowSecurity = true;
-      const recovered = new PostgresContainedTurnOperationStore({ pool });
+      const recovered = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
       assert.deepEqual(await recoverContainedTurnDispatchPreparations({ ...dependencies, operationStore: recovered }, bound.scope), { discovered: 1, retired: 0 });
       const closed = await recovered.recordDispatchPreparationCleanup({ authority: input.authority,
         permit: pending.cleanupPermit, target: "runtime_security" });

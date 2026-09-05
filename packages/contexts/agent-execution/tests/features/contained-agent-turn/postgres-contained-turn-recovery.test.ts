@@ -31,6 +31,7 @@ import {
   runtimeQuery,
   withPool,
 } from "./postgres-contained-turn-test-helpers.ts";
+import { postgresClaimInput } from "./support/postgres-committed-dispatch-fixture.ts";
 
 postgresTest("persisted v2 true flags preserve conservative cleanup debt without replaying consumption", async () => {
   await withPool(async pool => {
@@ -486,7 +487,7 @@ postgresTest("a later recovery batch violation takes precedence over an earlier 
 postgresTest("closure proof scans complete operation state, rejects stale scope and fences concurrent insertion", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     // Recovery pagination is deliberately substituted: the closure capability must never use it.
     store.listDispatchPreparations = async () => [];
     const initial = operationForProject("project:closure-proof", "closure-proof");
@@ -524,7 +525,7 @@ postgresTest("closure proof scans complete operation state, rejects stale scope 
 postgresTest("closure proof requires custody and both grants, validates every row, and bounds 1,000 preparations", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const initial = operationForProject("project:closure-completeness", "closure-completeness");
     await store.accept(initial, operationAuthority(initial));
     const bound = mutateContainedTurnOperation(initial, {
@@ -532,14 +533,17 @@ postgresTest("closure proof requires custody and both grants, validates every ro
     });
     const authority = operationAuthority(bound);
     await store.commit({ authority, candidate: bound, expectedRevision: initial.revision });
-    await store.prepareDispatch({ authority, operation: bound });
+    const reservation = await store.prepareDispatch({ authority, operation: bound });
+    const claim = postgresClaimInput(bound, bound.workspaceId!, reservation, "closure-completeness");
     const active = (await store.listDispatchPreparations({ scope: bound.scope }))[0]!.preparation;
     const retired = await store.retireDispatchPreparation({
       authority, expectedOperationCutoffRevision: bound.operationCutoff.revision,
       expectedOperationRevision: bound.revision, preparationToken: active.preparationToken, reason: "prevention",
       consumedGrantRequestIds: {
-        providerAccessGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({ owner: "provider_access" })}`,
-        runtimeSecurityGrantRequestId: `grant-request:${digestContainedTurnCanonicalValue({ owner: "runtime_security" })}`,
+        providerAccessConsumptionReceipt: claim.receipts[0],
+        providerAccessGrantRequestId: claim.receipts[0].grantRequestId,
+        runtimeSecurityConsumptionReceipt: claim.receipts[1],
+        runtimeSecurityGrantRequestId: claim.receipts[1].grantRequestId,
       },
     });
     if (retired.kind !== "retired") {assert.fail("expected retired preparation");}
@@ -565,13 +569,31 @@ postgresTest("closure proof requires custody and both grants, validates every ro
     const closed = ["custody", "provider_access", "runtime_security"].reduce((preparation, target) =>
       recordContainedTurnPreparationCleanup(preparation, { permit: retired.preparation.cleanupPermit,
         target: target as "custody" | "provider_access" | "runtime_security" }), retired.preparation as typeof active);
-    const foreign = { ...closed, operationId: containedTurnIdentity("operation", "operation:foreign") };
-    await writeState(active.preparationToken, encodeContainedTurnPreparation(foreign));
-    assert.equal(await store.proveDispatchPreparationClosure(input), undefined, "foreign row is not absence");
+    const foreignState = JSON.parse(encodeContainedTurnPreparation(closed).json) as {
+      codecVersion: 6;
+      payload: { operationId: string };
+    };
+    foreignState.payload.operationId = containedTurnIdentity("operation", "operation:foreign");
+    await writeState(active.preparationToken, {
+      codecVersion: foreignState.codecVersion,
+      digest: digestContainedTurnPostgresJson(foreignState),
+      json: JSON.stringify(foreignState),
+    });
+    await assert.rejects(
+      store.proveDispatchPreparationClosure(input),
+      /contained turn state quarantined: malformed codec 6/,
+      "a foreign operation inside the bound row is quarantined rather than treated as absence",
+    );
     await writeState(active.preparationToken, encodeContainedTurnPreparation(closed));
     const rows = Array.from({ length: 1_000 }, (_unused, index) => {
       const token = containedTurnIdentity("preparation", `preparation:closure-bound:${index}`);
-      const pending = retireContainedTurnDispatchPreparation({ ...active, preparationToken: token }, `bound:${index}`);
+      const pending = retireContainedTurnDispatchPreparation(
+        { ...active, preparationToken: token },
+        `bound:${index}`,
+        {},
+        {},
+        "prevention",
+      );
       if (pending.kind !== "cleanup_pending") {assert.fail("bound fixture must retire its exact preparation");}
       const encoded = encodeContainedTurnPreparation(recordContainedTurnPreparationCleanup(pending, {
         permit: pending.cleanupPermit, target: "custody",

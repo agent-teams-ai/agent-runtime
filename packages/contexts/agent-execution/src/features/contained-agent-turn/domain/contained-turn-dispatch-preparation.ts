@@ -41,8 +41,10 @@ export type ContainedTurnDispatchPreparation =
     readonly custodyReleased: boolean;
     readonly kind: "cleanup_pending";
     readonly providerAccessConsumptionEvidenceId: ContainedTurnEvidenceId | null;
+    readonly providerAccessNotConsumed: boolean;
     readonly providerAccessSettled: boolean;
     readonly runtimeSecurityConsumptionEvidenceId: ContainedTurnEvidenceId | null;
+    readonly runtimeSecurityNotConsumed: boolean;
     readonly runtimeSecuritySettled: boolean;
   })
   | (PreparationBase & {
@@ -50,7 +52,9 @@ export type ContainedTurnDispatchPreparation =
     readonly cleanupPermitId: ContainedTurnCleanupPermitId;
     readonly kind: "cleanup_closed";
     readonly providerAccessConsumptionEvidenceId: ContainedTurnEvidenceId | null;
+    readonly providerAccessNotConsumed: boolean;
     readonly runtimeSecurityConsumptionEvidenceId: ContainedTurnEvidenceId | null;
+    readonly runtimeSecurityNotConsumed: boolean;
   });
 
 export interface ContainedTurnGrantConsumptionEvidenceIds {
@@ -165,6 +169,7 @@ export const retireContainedTurnDispatchPreparation = (
   nonce: string,
   consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds = {},
   consumptionEvidenceIds: ContainedTurnGrantConsumptionEvidenceIds = {},
+  reason?: "claim_lost" | "open_failed" | "prevention" | "reconciliation",
 ): ContainedTurnDispatchPreparation => {
   if (preparation.kind === "claimed") {
     throw new TypeError("claimed dispatch preparation can never mint a cleanup permit");
@@ -196,6 +201,17 @@ export const retireContainedTurnDispatchPreparation = (
       runtimeSecurityConsumptionEvidenceId,
     ].filter((evidenceId): evidenceId is ContainedTurnEvidenceId => evidenceId !== null)),
   ]);
+  // A trusted prevention outcome is an authoritative negative consumption
+  // result for an owner that returned no request identity, receipt, or
+  // indeterminate evidence. Ordinary absence remains unresolved.
+  const providerAccessNotConsumed = reason === "prevention" &&
+    bound.providerAccessGrantRequestId === null &&
+    bound.providerAccessConsumptionReceipt === undefined &&
+    providerAccessConsumptionEvidenceId === null;
+  const runtimeSecurityNotConsumed = reason === "prevention" &&
+    bound.runtimeSecurityGrantRequestId === null &&
+    bound.runtimeSecurityConsumptionReceipt === undefined &&
+    runtimeSecurityConsumptionEvidenceId === null;
   return Object.freeze({
     ...bound,
     cleanupEvidenceIds,
@@ -205,8 +221,10 @@ export const retireContainedTurnDispatchPreparation = (
     providerAccessConsumptionEvidenceId,
     // Missing consumption evidence is an unresolved owner obligation, never
     // proof of non-consumption. Only an authoritative settlement closes it.
+    providerAccessNotConsumed,
     providerAccessSettled: false,
     runtimeSecurityConsumptionEvidenceId,
+    runtimeSecurityNotConsumed,
     runtimeSecuritySettled: false,
   });
 };
@@ -273,7 +291,9 @@ export const recordContainedTurnPreparationCleanup = (
     }
   }
   const candidate = advanceContainedTurnPreparationCleanup(preparation, evidenceId, input.target);
-  if (candidate.custodyReleased && candidate.providerAccessSettled && candidate.runtimeSecuritySettled) {
+  if (candidate.custodyReleased &&
+      (candidate.providerAccessSettled || candidate.providerAccessNotConsumed) &&
+      (candidate.runtimeSecuritySettled || candidate.runtimeSecurityNotConsumed)) {
     return Object.freeze({
       attemptId: preparation.attemptId,
       cleanupEvidenceIds: candidate.cleanupEvidenceIds,
@@ -286,9 +306,11 @@ export const recordContainedTurnPreparationCleanup = (
       preparedOperationRevision: preparation.preparedOperationRevision,
       ...(preparation.providerAccessConsumptionReceipt === undefined ? {} : { providerAccessConsumptionReceipt: preparation.providerAccessConsumptionReceipt }),
       providerAccessConsumptionEvidenceId: preparation.providerAccessConsumptionEvidenceId,
+      providerAccessNotConsumed: preparation.providerAccessNotConsumed,
       providerAccessGrantRequestId: preparation.providerAccessGrantRequestId,
       ...(preparation.runtimeSecurityConsumptionReceipt === undefined ? {} : { runtimeSecurityConsumptionReceipt: preparation.runtimeSecurityConsumptionReceipt }),
       runtimeSecurityConsumptionEvidenceId: preparation.runtimeSecurityConsumptionEvidenceId,
+      runtimeSecurityNotConsumed: preparation.runtimeSecurityNotConsumed,
       runtimeSecurityGrantRequestId: preparation.runtimeSecurityGrantRequestId,
       workspaceId: preparation.workspaceId,
     });

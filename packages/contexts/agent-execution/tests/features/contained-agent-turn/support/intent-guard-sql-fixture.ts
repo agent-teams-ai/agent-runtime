@@ -75,7 +75,13 @@ const intentQuery = (working: Tables, sql: string, values: any[], requireLock: (
 };
 
 const preparationQuery = (working: Tables, sql: string, values: any[]) => {
-  if (sql.startsWith("SELECT count(*)::text AS count")) {return result([{ count: String(working.preparations.filter(row => row.operation_id === values[0]).length) }]);}
+  if (sql.startsWith("SELECT count(*)::text AS count")) {
+    const rows = working.preparations.filter(row => row.operation_id === values[0]);
+    return result([{
+      bytes: String(rows.reduce((total, row) => total + Number(row.state_bytes), 0)),
+      count: String(rows.length),
+    }]);
+  }
   if (sql.startsWith("INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1")) {
     working.preparations.push({ operation_id: values[0], preparation_token: values[1], ...encoded(values[3], values[2], values[4]) }); return result([], 1);
   }
@@ -129,7 +135,7 @@ export class IntentGuardSqlFixture {
       if (sql === "ROLLBACK") {finish(); return result();}
       if (sql.startsWith("SELECT set_config") || sql.startsWith("SELECT pg_advisory_xact_lock_shared")) {return result();}
       if (sql.startsWith("SELECT version, migration_digest")) {
-        return result([{ version: 8, migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[7]!.digest }]);
+        return result([{ version: 9, migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[8]!.digest }]);
       }
       const requireLock = (scope: readonly unknown[]) => assert.deepEqual(lockedScope, scope.slice(0, 2), "intent writes must hold the scoped namespace lock");
       if (sql.startsWith("INSERT INTO agent_execution.contained_turn_intent_namespace_v1")) {
