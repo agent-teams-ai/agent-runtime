@@ -14,6 +14,7 @@ import type {
 import type {
   ContainedTurnCleanupPermit,
   ContainedTurnDispatchPreparation,
+  ContainedTurnPreparationClosureProof,
 } from "../../../domain/contained-turn-dispatch-preparation.js";
 import type {
   ContainedTurnAttemptId,
@@ -78,6 +79,17 @@ export interface ContainedTurnOwnerStoreAuthority {
 }
 
 export interface ContainedTurnKernelOperationStore {
+  /**
+   * Atomically proves every operation-scoped preparation is cleanup_closed at
+   * the exact revision and closed fence. No kind filter or pagination applies.
+   * The same fence must reject all subsequent preparation creation. Undefined
+   * (including stale, partial, over-budget, or unavailable state) is not proof.
+   */
+  proveDispatchPreparationClosure?(input: Readonly<{
+    authority: ContainedTurnOwnerStoreAuthority;
+    expectedOperationCutoffRevision: number;
+    expectedOperationRevision: number;
+  }>): Promise<ContainedTurnPreparationClosureProof | undefined>;
   /** Restart-safe enumeration for owner reconciliation; production durable stores implement it. */
   listDispatchPreparations?(input: Readonly<{
     kinds?: readonly ("active" | "cleanup_pending")[];

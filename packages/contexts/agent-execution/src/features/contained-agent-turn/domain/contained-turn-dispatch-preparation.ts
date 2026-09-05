@@ -1,3 +1,7 @@
+import type { ContainedTurnScope } from "./contained-turn-authority.js";
+import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
+import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
+
 import type { ContainedTurnConsumedGrantReceipt } from "./contained-turn-dispatch-authority.js";
 import { digestContainedTurnCanonicalValue, type ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import { containedTurnIdentity, type ContainedTurnAttemptId, type ContainedTurnCustodyId, type ContainedTurnEvidenceId, type ContainedTurnIdentity, type ContainedTurnOperationId, type ContainedTurnPreparationToken, type ContainedTurnWorkspaceId, validateContainedTurnIdentity } from "./contained-turn-identities.js";
@@ -290,4 +294,75 @@ export const recordContainedTurnPreparationCleanup = (
     });
   }
   return Object.freeze(candidate);
+};
+
+export const CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT = 1_000;
+
+/** An atomic owner-store assertion about every preparation, never a recovery page. */
+export interface ContainedTurnPreparationClosureProof {
+  readonly admissionFenceProofId: string;
+  readonly commandId: string;
+  readonly completeness: "all_operation_preparations";
+  readonly effectId: string;
+  readonly kind: "closed";
+  readonly operationCutoffRevision: number;
+  readonly operationId: string;
+  readonly operationRevision: number;
+  readonly preparationCount: number;
+  readonly projectId: string;
+  readonly purpose: "contained_turn_preparation_closure_v1";
+  readonly tenantId: string;
+  readonly version: 1;
+}
+
+/** The store checks this under the same operation lock used by preparation insertion. */
+export const containedTurnPreparationClosureBinding = (
+  operation: ContainedTurnKernelOperation,
+  scope: ContainedTurnScope,
+): Omit<ContainedTurnPreparationClosureProof, "preparationCount"> => {
+  if (operation.scope.tenantId !== scope.tenantId || operation.scope.projectId !== scope.projectId ||
+      operation.dispatch.kind !== "prevented" || operation.operationCutoff.kind !== "closed" ||
+      operation.admissionFence.kind !== "fenced") {
+    throw new TypeError("preparation closure requires the exact prevented operation fence");
+  }
+  return Object.freeze({
+    admissionFenceProofId: operation.admissionFence.proofId,
+    commandId: operation.commandId,
+    completeness: "all_operation_preparations",
+    effectId: operation.effectId,
+    kind: "closed",
+    operationCutoffRevision: operation.operationCutoff.revision,
+    operationId: operation.operationId,
+    operationRevision: operation.revision,
+    projectId: scope.projectId,
+    purpose: "contained_turn_preparation_closure_v1",
+    tenantId: scope.tenantId,
+    version: 1,
+  });
+};
+
+/** Receives only detached ordinary data from the composition boundary. */
+export const validateContainedTurnPreparationClosureProof = (
+  candidate: unknown,
+  operation: ContainedTurnKernelOperation,
+  scope: ContainedTurnScope,
+): ContainedTurnPreparationClosureProof => {
+  if (candidate === null || typeof candidate !== "object") {
+    throw new TypeError("preparation closure proof is unavailable");
+  }
+  const binding = containedTurnPreparationClosureBinding(operation, scope);
+  assertContainedTurnExactRecord("preparation closure proof", candidate, [
+    ...Object.keys(binding), "preparationCount",
+  ]);
+  const record = candidate as ContainedTurnPreparationClosureProof;
+  for (const key of Object.keys(binding) as (keyof typeof binding)[]) {
+    if (record[key] !== binding[key]) {
+      throw new TypeError("preparation closure proof is incomplete, foreign, or stale");
+    }
+  }
+  const count = record.preparationCount;
+  if (!Number.isSafeInteger(count) || count < 0 || count > CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT) {
+    throw new TypeError("preparation closure proof exceeds its complete scan bound");
+  }
+  return Object.freeze({ ...binding, preparationCount: count });
 };

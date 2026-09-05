@@ -371,6 +371,7 @@ export const createContainedTurnPreparationScopeDependencies = (
   });
   validateContainedTurnKernelDependencies(rawDependencies);
   const accept = rawOperationStore.accept;
+  const proveClosure = rawOperationStore.proveDispatchPreparationClosure;
   const claim = rawOperationStore.claimPreparedDispatch;
   const retire = rawOperationStore.retireDispatchPreparation;
   const record = rawOperationStore.recordDispatchPreparationCleanup;
@@ -383,6 +384,12 @@ export const createContainedTurnPreparationScopeDependencies = (
   const operationStore = overrideBoundaryPort(rawOperationStore, trustedFreeze({
     accept: async (...args: Parameters<typeof accept>) =>
       projectAcceptanceOwnerOutcome(await awaitContainedTurnOwnerPromise(accept(...args))),
+    proveDispatchPreparationClosure: async (input: Parameters<NonNullable<typeof proveClosure>>[0]) => {
+      if (proveClosure === undefined) {return;}
+      const outcome = await awaitContainedTurnOwnerPromise(proveClosure(input));
+      if (outcome === undefined) {return;}
+      return trustedFreeze(cloneContainedTurnPortValue(outcome));
+    },
     claimPreparedDispatch: async (input: Parameters<typeof claim>[0]) => {
       const outcome = projectClaimOwnerOutcome(await awaitContainedTurnOwnerPromise(claim(input)));
       if (outcome.kind !== "claimed") {return outcome;}

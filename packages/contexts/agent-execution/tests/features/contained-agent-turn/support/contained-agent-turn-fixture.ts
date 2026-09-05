@@ -10,7 +10,7 @@ import type { ContainedTurnProof } from "../../../../dist/features/contained-age
 import type { ContainedTurnKernelDependencies } from "../../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { containedTurnDispatchClaimBindingDigest, validateContainedTurnConsumedGrantReceipts } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
-import { bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation, recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
+import { containedTurnPreparationClosureBinding, CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT, bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation, recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
 import { containedTurnPreparationToken } from "../../../../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 import { committedDispatchProofV1 } from "../../../../dist/features/contained-agent-turn/domain/committed-dispatch-proof-v1.js";
 
@@ -348,6 +348,23 @@ const createDependencies = (options: Readonly<{
         proof: { binding: { ...operationBinding(operation), cancellationCommandId, cancellationFingerprint: command.fingerprint }, kind: "cancellation", proofId: proofId("cancellation") },
       };
     },
+    proveDispatchPreparationClosure: async input => {
+      if (current === undefined) {return;}
+      assertOwnerAuthority(input.authority, current);
+      if (current.revision !== input.expectedOperationRevision ||
+          current.operationCutoff.revision !== input.expectedOperationCutoffRevision ||
+          preparations.size > CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT) {return;}
+      const binding = containedTurnPreparationClosureBinding(current, input.authority.scope);
+      for (const [token, preparation] of preparations) {
+        if (token !== preparation.preparationToken || preparation.operationId !== current.operationId ||
+            preparation.workspaceId !== current.workspaceId ||
+            preparation.preparedOperationRevision >= current.revision ||
+            preparation.operationCutoffRevision >= current.operationCutoff.revision || preparation.kind !== "cleanup_closed") {
+          return;
+        }
+      }
+      return Object.freeze({ ...binding, preparationCount: preparations.size });
+    },
     listDispatchPreparations: async input => {
       if (current === undefined || input.scope.tenantId !== current.scope.tenantId ||
           input.scope.projectId !== current.scope.projectId) {return [];}
@@ -382,6 +399,10 @@ const createDependencies = (options: Readonly<{
         throw new Error("fixture preparation lost its operation revision fence");
       }
       assertOwnerAuthority(authority, current);
+      if (current.operationCutoff.kind !== "open" || current.admissionFence.kind !== "open" ||
+          current.dispatch.kind !== "unclaimed") {
+        throw new Error("fixture preparation rejected the closed operation fence");
+      }
       const ordinal = preparationCount;
       preparationCount += 1;
       const preparedAttemptId = ordinal === 0 ? attemptId : identity("attempt", `one-${String(ordinal)}`);

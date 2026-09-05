@@ -6,6 +6,8 @@ import {
 } from "../../../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
 import {
+  containedTurnPreparationClosureBinding,
+  CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT,
   bindContainedTurnPreparationGrantRequests,
   claimContainedTurnDispatchPreparation,
   recordContainedTurnPreparationCleanup,
@@ -29,6 +31,7 @@ import type { ContainedTurnPostgresTransactions } from "./contained-turn-postgre
 import { decodeContainedTurnPreparation, encodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
 import {
   CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET,
   ContainedTurnStateBudgetError,
 } from "./contained-turn-state-codec.js";
 
@@ -101,6 +104,10 @@ export class ContainedTurnPostgresPreparationStore {
         throw new Error("dispatch preparation lost its operation revision fence");
       }
       assertAuthority(input.authority, current);
+      if (current.operationCutoff.kind !== "open" || current.admissionFence.kind !== "open" ||
+          current.dispatch.kind !== "unclaimed") {
+        throw new Error("dispatch preparation rejected the closed operation fence");
+      }
       const ordinalResult = await client.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1",
         [input.operation.operationId],
@@ -140,6 +147,49 @@ export class ContainedTurnPostgresPreparationStore {
         executionGenerationId: containedTurnIdentity("execution_generation", this.identities.nextId("execution_generation", `preparation:${seed}:generation`)),
         writerFence: containedTurnIdentity("writer_fence", this.identities.nextId("writer_fence", `preparation:${seed}:writer`)),
       });
+    });
+  }
+
+  public proveClosure(
+    input: Parameters<NonNullable<ContainedTurnKernelOperationStore["proveDispatchPreparationClosure"]>>[0],
+  ): ReturnType<NonNullable<ContainedTurnKernelOperationStore["proveDispatchPreparationClosure"]>> {
+    return this.transactions.write(async client => {
+      // All preparation writers take this lock. A closed cutoff rejects future
+      // insertions even if the caller supplies the latest operation revision.
+      const current = await this.#load(client, input.authority.operationId, input.authority.scope);
+      if (current === undefined) {return;}
+      assertAuthority(input.authority, current);
+      if (current.revision !== input.expectedOperationRevision ||
+          current.operationCutoff.revision !== input.expectedOperationCutoffRevision) {return;}
+      const binding = containedTurnPreparationClosureBinding(current, input.authority.scope);
+      const metadata = await client.query<{ count: string; bytes: string }>(
+        `SELECT count(*)::text AS count,COALESCE(sum(octet_length(state::text)),0)::text AS bytes
+           FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1`,
+        [current.operationId],
+      );
+      const count = Number(metadata.rows[0]?.count);
+      const bytes = Number(metadata.rows[0]?.bytes);
+      if (!Number.isSafeInteger(count) || count < 0 || count > CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT ||
+          !Number.isSafeInteger(bytes) || bytes < 0 ||
+          bytes > CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumBatchBytes) {return;}
+      const rows = await client.query<PreparationRow & { preparation_token: string }>(
+        `SELECT preparation_token,${PREPARATION_STATE_SELECTION}
+           FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1`,
+        [current.operationId],
+      );
+      if (rows.rows.length !== count) {return;}
+      for (const row of rows.rows) {
+        // Unsupported, corrupt, or quarantined data cannot become an absence proof.
+        const preparation = decodePreparationRow(row);
+        if (preparation.operationId !== current.operationId ||
+            preparation.preparationToken !== row.preparation_token ||
+            preparation.workspaceId !== current.workspaceId ||
+            preparation.preparedOperationRevision >= current.revision ||
+            preparation.operationCutoffRevision >= current.operationCutoff.revision || preparation.kind !== "cleanup_closed") {
+          return;
+        }
+      }
+      return Object.freeze({ ...binding, preparationCount: count });
     });
   }
 

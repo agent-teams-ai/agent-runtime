@@ -342,6 +342,12 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     return this.#preparationRecovery.list(input);
   }
 
+  public proveDispatchPreparationClosure(
+    input: Parameters<NonNullable<ContainedTurnKernelOperationStore["proveDispatchPreparationClosure"]>>[0],
+  ) {
+    return this.#preparations.proveClosure(input);
+  }
+
   public async prepareDispatch(input: Parameters<ContainedTurnKernelOperationStore["prepareDispatch"]>[0]) {
     return this.#preparations.prepare(input);
   }
