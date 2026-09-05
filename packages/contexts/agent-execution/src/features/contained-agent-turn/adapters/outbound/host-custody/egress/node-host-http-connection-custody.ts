@@ -53,6 +53,7 @@ export class NodeHostHttpConnectionCustody {
   #tainted = false;
   #endCalled = false;
   #headerDeadline = 0;
+  #closeDeadline = 0;
 
   public constructor(config: FixedNodeHostHttpConnectionConfig, clock: HttpEgressClock, cutoff: AbortController) {
     this.#config = config;
@@ -238,6 +239,15 @@ export class NodeHostHttpConnectionCustody {
   readonly #onClose = (...args: readonly unknown[]): void => {
     if (this.#actuallyClosed) {return;}
     this.#actuallyClosed = true;
+    // Actual event delivery must still be inside the retained close interval.
+    // The retained clock rejects regression; neither timer order nor a later
+    // physical close can restore lost deadline/clock authority.
+    try {
+      const now = this.#clock.now();
+      if (!Number.isSafeInteger(now) || now >= this.#closeDeadline) {
+        throw new NodeHostHttpConnectionError("deadline");
+      }
+    } catch {this.#fail(new NodeHostHttpConnectionError("deadline"));}
     if (args[0] === true || this.#socket!.readableLength !== 0) {
       this.#fail(new NodeHostHttpConnectionError("closed"));
     }
@@ -248,7 +258,8 @@ export class NodeHostHttpConnectionCustody {
     this.#frame!.release();
     this.#headerWatch?.abort();
     this.#operationWatch?.abort();
-    this.#closeWatch?.abort();
+    // Resolve the close watch normally; aborting it here would hide an already
+    // rejected watchdog behind an indistinguishable retirement rejection.
     this.#cutoff.signal.removeEventListener("abort", this.#aborted);
     this.#socket!.off("readable", this.#readable).off("end", this.#onEnd).off("finish", this.#onFinish)
       .off("drain", this.#onDrain).off("timeout", this.#timeout).off("close", this.#onClose)
@@ -288,10 +299,10 @@ export class NodeHostHttpConnectionCustody {
 
   async #closeOwned(): Promise<CloseReceipt> {
     this.#closeWatch = new AbortController();
-    let deadline = 0;
     try {
       const now = this.#clock.now();
-      deadline = Math.min(this.#config.limits.closureDeadline, now + this.#config.closeTimeoutMs);
+      const deadline = Math.min(this.#config.limits.closureDeadline, now + this.#config.closeTimeoutMs);
+      this.#closeDeadline = deadline;
       if (!Number.isSafeInteger(now) || now >= deadline) {throw new NodeHostHttpConnectionError("deadline");}
       // Start the close watchdog BEFORE waiting for a write callback or FIN.
       const observing = this.#clock.within(deadline, () => this.#closed.promise, this.#closeWatch.signal);
@@ -299,7 +310,7 @@ export class NodeHostHttpConnectionCustody {
       void this.#finishWrites().catch(() => this.#fail(new NodeHostHttpConnectionError("write_failed")));
       await observing;
     } catch {
-      if (!this.#actuallyClosed) {this.#tainted = true; this.#fail(new NodeHostHttpConnectionError("deadline"));}
+      this.#fail(new NodeHostHttpConnectionError("deadline"));
     }
     this.#headerWatch?.abort();
     this.#operationWatch?.abort();

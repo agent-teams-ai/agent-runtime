@@ -7,6 +7,40 @@ import { defaults, encode, fixture, SyntheticSocket } from "./node-host-http-con
 
 const raw = encode("POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}");
 
+for (const bound of ["timeout", "closure cap"] as const) {
+  for (const timer of ["queued", "rejected"] as const) {
+    for (const time of [99, 100, 101]) {
+      test(`broker close ${bound} at ${time}, timer ${timer}: honest disposition and one dispatch`, async () => {
+        const socket = new SyntheticSocket();
+        socket.autoClose = false;
+        const egress = createEgressFixture();
+        const ingress = fixture({ ...defaults, expectedRequest: egress.operation.expectedRequest,
+          limits: { ...egress.operation.limits, closureDeadline: bound === "closure cap" ? 100 : 1_100 },
+          closeTimeoutMs: bound === "timeout" ? 100 : 2_000 }, socket);
+        socket.on("finish", () => {
+          socket.peerEnd();
+          if (timer === "rejected") {void ingress.clock.advance(time);}
+          else {ingress.clock.time = time;} // Physical close while the timer callback is still queued.
+          socket.actualClose();
+        });
+        socket.feed(raw);
+        const broker = createStrictHttpEgressBroker({ ...egress.ports, clock: ingress.clock });
+        const operation = { ...egress.operation, connection: ingress.connection, signal: ingress.signal };
+        const receipt = await broker.execute(operation);
+        assert.equal(receipt.inboundClosure, time < 100 ? "closed" : "unknown");
+        assert.equal(receipt.outcome, time < 100 ? "completed" : "reconcile_required");
+        assert.equal(receipt.firstByteState, "sent");
+        assert.ok(receipt.upstreamRequestBytes > 0);
+        assert.equal(egress.observations.dispatches, 1);
+        await broker.execute(operation);
+        assert.equal(egress.observations.dispatches, 1);
+        assert.equal(ingress.clock.pending, 0);
+        assert.ok(socket.writes.every(write => write.bytes.every(byte => byte === 0)));
+      });
+    }
+  }
+}
+
 for (const phase of ["same chunk", "pending", "final grant", "after upstream effect", "complete"] as const) {
   test(`existing broker owns disposition with TCP custody: ${phase}`, async () => {
     const socket = new SyntheticSocket();

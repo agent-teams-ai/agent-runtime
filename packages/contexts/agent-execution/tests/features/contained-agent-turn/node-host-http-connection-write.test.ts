@@ -262,6 +262,104 @@ test("reentrant abort during close preserves the single close promise", async ()
   assert.equal(f.clock.pending, 0);
 });
 
+test("close deadline rejection cannot be erased by actual close before its continuation", async () => {
+  const socket = new SyntheticSocket();
+  socket.autoClose = false;
+  const f = await ready(socket);
+  const closing = f.connection.close("complete");
+  await flush();
+  socket.peerEnd();
+  const expired = f.clock.advance(2_000);
+  socket.actualClose();
+  await expired;
+  assert.equal((await closing).state, "unknown");
+  assert.equal(f.signal.aborted, true);
+  assert.equal(f.connection.close("abort"), closing);
+  assert.equal(f.clock.pending, 0);
+});
+
+for (const time of [49, Number.NaN, Number.POSITIVE_INFINITY, "throw"] as const) {
+  test(`actual close cannot backdate or lose monotonic clock authority: ${time}`, async () => {
+    const socket = new SyntheticSocket();
+    socket.autoClose = false;
+    const f = await ready(socket);
+    f.clock.time = 50;
+    const closing = f.connection.close("complete");
+    await flush();
+    socket.peerEnd();
+    if (time === "throw") {f.clock.now = () => {throw new Error("synthetic clock failure");};}
+    else {f.clock.time = time;}
+    socket.actualClose();
+    assert.equal((await closing).state, "unknown");
+    assert.equal(f.signal.aborted, true);
+    assert.equal(f.clock.pending, 0);
+    assert.deepEqual(socket.eventNames(), ["error"]);
+  });
+}
+
+for (const fault of ["throw", "rejection"] as const) {
+  test(`close watchdog ${fault} remains unknown even with physical closure`, async () => {
+    const socket = new SyntheticSocket();
+    socket.autoClose = false;
+    const f = await ready(socket);
+    const failed = Promise.withResolvers<never>();
+    f.clock.within = () => {
+      if (fault === "throw") {throw new Error("synthetic watchdog failure");}
+      return failed.promise;
+    };
+    const closing = f.connection.close("complete");
+    await flush();
+    socket.peerEnd();
+    if (fault === "rejection") {failed.reject(new Error("synthetic watchdog failure"));}
+    socket.actualClose();
+    assert.equal((await closing).state, "unknown");
+    assert.equal(f.connection.close("complete"), closing);
+    assert.equal(f.signal.aborted, true);
+    assert.equal(f.clock.pending, 0);
+  });
+}
+
+test("timely actual close remains closed when watchdog continuation runs after the deadline", async () => {
+  const socket = new SyntheticSocket();
+  socket.autoClose = false;
+  const f = await ready(socket);
+  const closing = f.connection.close("complete");
+  await flush();
+  socket.peerEnd();
+  f.clock.time = 1_999;
+  socket.actualClose();
+  f.clock.time = 2_001;
+  assert.equal((await closing).state, "closed");
+  assert.equal(f.signal.aborted, false);
+  assert.equal(f.clock.pending, 0);
+});
+
+test("expired close keeps its receipt and borrowed write bytes until late physical cleanup", async () => {
+  const socket = new SyntheticSocket();
+  socket.autoAck = false;
+  socket.autoClose = false;
+  const f = await ready(socket);
+  const writing = assert.rejects(f.connection.write(encode("retained until close")), /write_failed/);
+  const closing = f.connection.close("complete");
+  await f.clock.advance(2_000);
+  const receipt = await closing;
+  await writing;
+  assert.equal(receipt.state, "unknown");
+  assert.equal(f.connection.close("abort"), closing);
+  socket.ack();
+  socket.emit("drain");
+  assert.deepEqual(socket.writes[0]!.bytes, encode("retained until close"));
+  f.clock.time = 1_999; // Backdating cannot repair an already failed deadline.
+  socket.actualClose();
+  socket.emit("close");
+  socket.emit("error", new Error("late synthetic error"));
+  assert.ok(socket.writes[0]!.bytes.every(byte => byte === 0));
+  assert.equal(await f.connection.close("complete"), receipt);
+  assert.equal(socket.destroyCalls, 1);
+  assert.equal(f.clock.pending, 0);
+  assert.deepEqual(socket.eventNames(), ["error"]);
+});
+
 test("closure grace after FIN is independent of the operation deadline and cannot permit more writes", async () => {
   const f = await ready();
   f.clock.time = 19_999;
