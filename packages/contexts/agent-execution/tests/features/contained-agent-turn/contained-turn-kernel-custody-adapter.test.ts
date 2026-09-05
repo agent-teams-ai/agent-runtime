@@ -245,7 +245,7 @@ const createHarness = (options: HarnessOptions = {}) => {
     },
   });
   const custody = new ContainedTurnKernelCustodyAdapter(hostCustody, {
-    attemptOwner: syntheticAttemptOwner,
+    postClaimPreparation: "current-owner", attemptOwner: syntheticAttemptOwner,
     completionAfterMs: 15,
     hostBootId,
     hostInstanceId,
@@ -402,7 +402,7 @@ for (const cooperative of [false, true]) {
     let closeCalls = 0;
     const { custody: _fixtureCustody, ...otherOwners } = fixture.dependencies;
     const mappedCustody = new ContainedTurnKernelCustodyAdapter(hostCustody, {
-      attemptOwner: syntheticAttemptOwner,
+      postClaimPreparation: "current-owner", attemptOwner: syntheticAttemptOwner,
       completionAfterMs: 100,
       hostBootId: "host-boot:one",
       hostInstanceId: "host-instance:one",
@@ -502,7 +502,7 @@ test("current seven-port composition closes true failed and cancelled observatio
       const feature = createContainedTurnFeature(Object.freeze({
         ...otherOwners,
         custody: new ContainedTurnKernelCustodyAdapter(hostCustody, {
-          attemptOwner: syntheticAttemptOwner,
+          postClaimPreparation: "current-owner", attemptOwner: syntheticAttemptOwner,
           completionAfterMs: 100,
           hostBootId: "host-boot:matrix",
           hostInstanceId: "host-instance:matrix",

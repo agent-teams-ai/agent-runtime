@@ -32,11 +32,13 @@ class FakeChannel implements DockerCustodyDuplexChannel {
   readonly #values: Uint8Array[] = [];
   #ended = false;
   #readCalls = 0;
+  public iteratorCalls = 0;
+  public get readCalls(): number {return this.#readCalls;}
   public closeCalls = 0;
   public closeInputCalls = 0;
   public writeGate: Promise<void> | undefined;
   public readonly writes: DockerCustodyProtocolMessage[] = [];
-  public readonly output: AsyncIterable<Uint8Array> = {[Symbol.asyncIterator]: () => ({
+  public readonly output: AsyncIterable<Uint8Array> = {[Symbol.asyncIterator]: () => {this.iteratorCalls += 1; return {
     next: () => {
       this.#readCalls += 1;
       for (const waiter of this.#readWaiters.splice(0)) {
@@ -48,7 +50,7 @@ class FakeChannel implements DockerCustodyDuplexChannel {
       return new Promise(resolve => {this.#pending.push(resolve);});
     },
     return: async () => ({done: true, value: undefined}),
-  })};
+  };}};
 
   public async close(): Promise<void> {
     this.closeCalls += 1; this.#ended = true;
@@ -77,13 +79,17 @@ class FakeChannel implements DockerCustodyDuplexChannel {
   }
 }
 
-const create = (channel = new FakeChannel(), overrides: Partial<DockerCustodyInitHostOptions> = {}) => {
+const exec = Object.freeze({argv: ["provider-entrypoint"], environment: [], executableSha256: digest("d"), gid: 1000,
+  requestId: "request:g1", uid: 1000, wallDeadlineUnixMs: 9_999_999_999_999});
+const create = (channel = new FakeChannel(), overrides: Partial<DockerCustodyInitHostOptions> = {}, automatic = true) => {
   const options: DockerCustodyInitHostOptions = {acknowledgementTimeoutMs: 50,
     authority: {expectedIdentity: identity, generation: "generation:g1", launchFingerprintSha256: digest("c"), operationNonce: "nonce:g1"},
-    channel, exec: {argv: ["provider-entrypoint"], environment: [], executableSha256: digest("d"), gid: 1000,
-      requestId: "request:g1", uid: 1000, wallDeadlineUnixMs: 9_999_999_999_999}, isCurrentGeneration: value => value === "generation:g1",
+    channel, isCurrentGeneration: value => value === "generation:g1",
     maximumStderrBytes: 100, maximumStdoutBytes: 100, readyTimeoutMs: 50, ...overrides};
-  return {channel, session: new DockerCustodyInitHostSession(options)};
+  const session = new DockerCustodyInitHostSession(options);
+  // Legacy protocol cases explicitly advance both phases; phase-boundary cases opt out.
+  if (automatic) {void session.ready().then(result => {if (result.kind === "ready") {void session.execute(exec);} return null;});}
+  return {channel, session};
 };
 const tick = (): Promise<void> => new Promise(resolve => {setImmediate(resolve);});
 
@@ -92,7 +98,7 @@ test("fragmented ready and coalesced acknowledgement/output/exit/drain produce e
     {onDrainComplete: value => {observations.push(value);}, onOutput: chunk => {
     chunks.push(`${chunk.stream}:${Buffer.from(chunk.bytes).toString()}`);
   }, onRootExit: value => {observations.push(value);}});
-  const frame = encodeDockerCustodyFrame(ready); channel.pushBytes(frame.subarray(0, 3)); channel.pushBytes(frame.subarray(3));
+  const frame = encodeDockerCustodyFrame(ready); channel.pushBytes(frame.subarray(0, 3)); channel.pushBytes(frame.subarray(3)); await tick();
   channel.push(ack, {bytesBase64: Buffer.from("out").toString("base64"), kind: "provider-output", requestId: "request:g1", stream: "stdout"}, root, drain);
   channel.end();
   assert.deepEqual(await session.completion, {acknowledgement: "started", drain: {outerContainmentClaim: "unproven", rootExit: "observed", stderr: "eof", stdout: "eof"},
@@ -341,4 +347,123 @@ test("AbortSignal settles post-start cancellation while preserving backpressured
   assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "cancelled"});
   assert.equal(channel.closeCalls, 1); assert.equal(cleaned, false);
   release(); await blocked; assert.equal(cleaned, true);
+});
+
+test("construction is inert, readiness is explicit, and start acknowledgement is separate from drain", async () => {
+  const {channel, session} = create(new FakeChannel(), {}, false);
+  await tick();
+  assert.equal(channel.iteratorCalls, 0); assert.equal(channel.readCalls, 0);
+  assert.deepEqual(channel.writes.slice(), []); assert.equal(channel.closeCalls, 0);
+  let completed = false; void session.completion.then(() => {completed = true; return null;});
+  const readiness = session.ready(); assert.strictEqual(session.ready(), readiness);
+  channel.push(ready); assert.deepEqual(await readiness, {generation: "generation:g1", kind: "ready"});
+  await tick(); assert.deepEqual(channel.writes.map(value => value.kind), ["host-handshake"]);
+  assert.equal(completed, false);
+  const started = session.execute(exec); await tick();
+  assert.deepEqual(channel.writes.map(value => value.kind), ["host-handshake", "provider-exec"]);
+  channel.push(ack); assert.deepEqual(await started, {generation: "generation:g1", kind: "started"});
+  assert.equal(completed, false);
+  await assert.rejects(session.execute(exec), /one-use/u);
+  channel.push(root, drain); channel.end(); assert.equal((await session.completion).kind, "closed");
+  assert.equal(channel.iteratorCalls, 1);
+});
+
+test("execute before ready consumes the attempt and emits no handshake or provider exec", async () => {
+  const {channel, session} = create(new FakeChannel(), {}, false);
+  assert.equal((await session.execute(exec)).kind, "failed");
+  assert.equal((await session.ready()).kind, "failed");
+  await assert.rejects(session.execute(exec), /one-use/u);
+  assert.deepEqual(channel.writes.slice(), []); assert.equal(channel.iteratorCalls, 0);
+});
+
+test("pre-exec surplus poisons the retained channel while the owner is preparing", async t => {
+  for (const variant of ["coalesced", "partial", "separate", "delayed", "eof"] as const) {
+    await t.test(variant, async () => {
+      const {channel, session} = create(new FakeChannel(), {}, false);
+      const readiness = session.ready();
+      if (variant === "coalesced") {channel.push(ready, ack);}
+      else if (variant === "partial") {
+        channel.pushBytes(Buffer.concat([encodeDockerCustodyFrame(ready), encodeDockerCustodyFrame(ack).subarray(0, 2)]));
+      } else {
+        channel.push(ready);
+        if (variant === "separate") {channel.push(ack);}
+        else {
+          assert.equal((await readiness).kind, "ready"); await tick();
+          if (variant === "eof") {channel.end();} else {channel.push(ack);}
+        }
+      }
+      assert.deepEqual(await session.completion, {generation: "generation:g1", kind: "failed", reason: "protocol-violation"});
+      assert.equal((await session.execute(exec)).kind, "failed");
+      assert.equal(channel.writes.filter(value => value.kind === "provider-exec").length, 0);
+      assert.equal(channel.closeCalls, 1);
+    });
+  }
+});
+
+test("cancellation, generation change and wall deadline at the prepared boundary emit zero exec frames", async t => {
+  for (const variant of ["cancel", "generation", "deadline", "same-turn-cancel"] as const) {
+    await t.test(variant, async () => {
+      let current = true; const abort = new AbortController();
+      const {channel, session} = create(new FakeChannel(), {signal: abort.signal, isCurrentGeneration: () => current}, false);
+      const readiness = session.ready(); channel.push(ready); await readiness;
+      if (variant === "cancel") {abort.abort();}
+      if (variant === "generation") {current = false;}
+      const start = session.execute(variant === "deadline" ? {...exec, wallDeadlineUnixMs: 1} : exec);
+      if (variant === "same-turn-cancel") {abort.abort();}
+      assert.equal((await start).kind, "failed");
+      assert.equal(channel.writes.filter(value => value.kind === "provider-exec").length, 0);
+      assert.equal((await session.completion).kind, "failed");
+    });
+  }
+});
+
+test("late handshake write and late readiness cannot revive a cancelled or expired session", async t => {
+  for (const variant of ["blocked-write", "timeout", "cancel", "clock-jump"] as const) {
+    await t.test(variant, async () => {
+      let monotonic = 0; let unblock!: () => void;
+      const channel = new FakeChannel();
+      if (variant === "blocked-write") {channel.writeGate = new Promise(resolve => {unblock = resolve;});}
+      const {session} = create(channel, {readyTimeoutMs: 5, monotonicNow: () => monotonic}, false);
+      const readiness = session.ready();
+      if (variant === "cancel") {await session.cancel();}
+      if (variant === "clock-jump") {await tick(); monotonic = 20; channel.push(ready);}
+      assert.equal((await readiness).kind, "failed");
+      if (variant === "blocked-write") {unblock();}
+      channel.push(ready); await tick();
+      assert.equal((await session.execute(exec)).kind, "failed");
+      assert.equal(channel.writes.filter(value => value.kind === "provider-exec").length, 0);
+    });
+  }
+});
+
+test("lost start acknowledgement and lost exec write remain unknown, never restarted", async t => {
+  for (const variant of ["timeout", "write", "observation", "stale-after-write"] as const) {
+    await t.test(variant, async () => {
+      let current = true; const channel = new FakeChannel();
+      const {session} = create(channel, {acknowledgementTimeoutMs: 5, isCurrentGeneration: () => current}, false);
+      const readiness = session.ready(); channel.push(ready); await readiness;
+      if (variant === "write") {channel.writeGate = Promise.reject(new Error("synthetic lost write acknowledgement")); void channel.writeGate.catch(() => null);}
+      const start = session.execute(exec); await tick();
+      if (variant === "observation") {channel.push({kind: "provider-observation", requestId: exec.requestId, observation: "exec-acknowledgement-lost", exitCode: null, signal: null, treeEmptyClaim: "not-claimed"});}
+      if (variant === "stale-after-write") {current = false; channel.push(ack);}
+      const result = await start; assert.equal(result.kind, "unknown");
+      assert.strictEqual(await session.completion, result);
+      await assert.rejects(session.execute(exec), /one-use/u);
+      channel.push(ack, root, drain); channel.end(); await tick();
+      assert.strictEqual(await session.completion, result);
+      assert.equal(channel.writes.filter(value => value.kind === "provider-exec").length, variant === "write" ? 0 : 1);
+    });
+  }
+});
+
+test("concurrent execute calls consume only one send even while its write acknowledgement is blocked", async () => {
+  const {channel, session} = create(new FakeChannel(), {}, false);
+  const readiness = session.ready(); channel.push(ready); await readiness;
+  let unblock!: () => void; channel.writeGate = new Promise(resolve => {unblock = resolve;});
+  const first = session.execute(exec);
+  await assert.rejects(session.execute({...exec, requestId: "request:duplicate"}), /one-use/u);
+  await tick(); unblock(); channel.writeGate = undefined; await tick(); channel.push(ack);
+  assert.equal((await first).kind, "started");
+  assert.equal(channel.writes.filter(value => value.kind === "provider-exec").length, 1);
+  await session.cancel();
 });

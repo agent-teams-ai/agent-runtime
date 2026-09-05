@@ -1,3 +1,5 @@
+import {DockerContainedTurnHostCustody, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
+import type {DockerCustodyInitHostExec} from "./init/docker-custody-init-host-session.js";
 import type {
   DockerContainerAuthority,
   DockerContainerObservation,
@@ -102,6 +104,13 @@ const journalUnavailable = (error: unknown): boolean =>
 export class DockerHostCustodyLifecycle {
   /** Volatile exact binding permits safe cleanup after same-instance journal loss, but is not restart authority. */
   private readonly liveAuthorityBindings = new Map<string, string>();
+  private readonly liveLaunches = new Map<string, DockerContainedTurnHostCustody>();
+
+  private assertLaunchOpen(key: DockerCustodyAttemptKey, call: DockerEngineCall): void {
+    const launch = this.liveLaunches.get(dockerCustodyAttemptLocator(key));
+    if (launch === undefined) {throw new TypeError("Docker Host Custody live launch is unavailable");}
+    launch.assertOpen(call);
+  }
 
   public constructor(
     private readonly engine: DockerEnginePort,
@@ -130,49 +139,82 @@ export class DockerHostCustodyLifecycle {
     journal: DockerCustodyJournalRecord;
     key: DockerCustodyAttemptKey;
     kind: "launched";
+    openInitSession(options: DockerContainedTurnInitOptions): DockerContainedTurnInitSession;
   }>> {
+    if (input.call.signal.aborted || Date.now() >= input.call.deadlineEpochMs) {
+      throw new TypeError("Docker Host Custody launch call is closed");
+    }
     const engineIdentity = await this.engine.identity(input.call);
     const key = dockerHostCustodyAttemptKey(input.owner, input.create, engineIdentity);
-    const create = bindDockerHostCustodyCreate(key, input.create);
-    const prepared = await this.journal.prepare(key);
-    if (prepared.state !== "prepared" || prepared.sequence !== 0) {
-      throw new TypeError("Docker Host Custody launch requires fresh prepared authority");
+    const locator = dockerCustodyAttemptLocator(key);
+    if (this.liveLaunches.has(locator) || this.liveLaunches.size >= this.maxLiveAuthorityBindings) {
+      throw new TypeError("Docker Host Custody requires unused launch capacity");
     }
-    const confirmedEngineIdentity = await this.engine.identity(input.call);
-    assertDockerEngineBinding(key, confirmedEngineIdentity);
-    await this.journal.beforeAction({ key, expectedSequence: prepared.sequence, state: "create_requested" });
-    const authority = await this.engine.create(create, input.call, confirmedEngineIdentity);
-    assertDockerAuthorityBinding(key, authority);
-    const authoritySha256 = this.holdAuthority(key, authority);
-    const created = await this.journal.observe({
-      authoritySha256, key, expectedSequence: 1, state: "created", evidence: proved,
-    });
-    await this.journal.beforeAction({ key, expectedSequence: created.sequence, state: "init_start_requested" });
-    await this.engine.attachCustody(authority, input.call);
-    await this.engine.start(authority, input.call);
-    const observation = await this.engine.inspect(authority, input.call);
-    const journal = await this.journal.observe({
-      key,
-      expectedSequence: 3,
-      state: "init_ready",
-      evidence: isRunningDockerObservation(observation)
-        ? proved
-        : { status: "unproven", reason: "docker_observation_unavailable" },
-    });
-    if (!isRunningDockerObservation(observation)) {
-      throw new TypeError("Docker Host Custody init readiness is unproven");
+    const live = new DockerContainedTurnHostCustody();
+    this.liveLaunches.set(locator, live);
+    try {
+      this.assertLaunchOpen(key, input.call);
+      const create = bindDockerHostCustodyCreate(key, input.create);
+      const prepared = await this.journal.prepare(key);
+      this.assertLaunchOpen(key, input.call);
+      if (prepared.state !== "prepared" || prepared.sequence !== 0) {
+        throw new TypeError("Docker Host Custody launch requires fresh prepared authority");
+      }
+      const confirmedEngineIdentity = await this.engine.identity(input.call);
+      this.assertLaunchOpen(key, input.call);
+      assertDockerEngineBinding(key, confirmedEngineIdentity);
+      await this.journal.beforeAction({ key, expectedSequence: prepared.sequence, state: "create_requested" });
+      this.assertLaunchOpen(key, input.call);
+      const authority = await this.engine.create(create, input.call, confirmedEngineIdentity);
+      assertDockerAuthorityBinding(key, authority);
+      const authoritySha256 = this.holdAuthority(key, authority);
+      this.assertLaunchOpen(key, input.call);
+      const created = await this.journal.observe({
+        authoritySha256, key, expectedSequence: 1, state: "created", evidence: proved,
+      });
+      this.assertLaunchOpen(key, input.call);
+      await this.journal.beforeAction({ key, expectedSequence: created.sequence, state: "init_start_requested" });
+      this.assertLaunchOpen(key, input.call);
+      live.retain(authority, await this.engine.attachCustody(authority, input.call));
+      this.assertLaunchOpen(key, input.call);
+      await this.engine.start(authority, input.call);
+      this.assertLaunchOpen(key, input.call);
+      const observation = await this.engine.inspect(authority, input.call);
+      this.assertLaunchOpen(key, input.call);
+      const journal = await this.journal.observe({
+        key,
+        expectedSequence: 3,
+        state: "init_ready",
+        evidence: isRunningDockerObservation(observation)
+          ? proved
+          : { status: "unproven", reason: "docker_observation_unavailable" },
+      });
+      this.assertLaunchOpen(key, input.call);
+      if (!isRunningDockerObservation(observation)) {
+        throw new TypeError("Docker Host Custody init readiness is unproven");
+      }
+      // V2 init_ready is a running-container observation, not authenticated protocol readiness.
+      return Object.freeze({ authority, journal, key, kind: "launched" as const,
+        openInitSession: (options: DockerContainedTurnInitOptions) => live.openInitSession(options, input.call),
+      });
+    } catch (error) {
+      try {await live.close();} catch {}
+      throw error;
     }
-    return Object.freeze({ authority, journal, key, kind: "launched" as const });
   }
 
   public async executeProvider(input: Readonly<{
     authority: DockerContainerAuthority;
     call: DockerEngineCall;
-    execute(): Promise<"proved" | "unproven">;
+    exec: DockerCustodyInitHostExec;
     key: DockerCustodyAttemptKey;
   }>): Promise<DockerCustodyJournalRecord> {
     assertDockerAuthorityBinding(input.key, input.authority);
+    this.assertLaunchOpen(input.key, input.call);
+    const live = this.liveLaunches.get(dockerCustodyAttemptLocator(input.key))!;
+    live.beginExecute(input.call);
     const current = await this.journal.lookup(input.key);
+    this.assertLaunchOpen(input.key, input.call);
     if (this.authorityMatch(input.key, input.authority, current) !== "match") {
       throw new TypeError("Docker Host Custody provider execution requires exact created authority");
     }
@@ -180,6 +222,7 @@ export class DockerHostCustodyLifecycle {
         !isRunningDockerObservation(await this.engine.inspect(input.authority, input.call))) {
       throw new TypeError("Docker Host Custody provider execution requires exact live init authority");
     }
+    this.assertLaunchOpen(input.key, input.call);
     const requested = await this.journal.beforeAction({
       key: input.key,
       expectedSequence: current.sequence,
@@ -187,7 +230,13 @@ export class DockerHostCustodyLifecycle {
     });
     let evidence: DockerCustodyJournalEvidence;
     try {
-      evidence = await input.execute() === "proved"
+      this.assertLaunchOpen(input.key, input.call);
+      const observation = await this.engine.inspect(input.authority, input.call);
+      this.assertLaunchOpen(input.key, input.call);
+      if (!isRunningDockerObservation(observation)) {throw new TypeError("Docker init identity is no longer live");}
+      const start = await live.execute(input.exec);
+      this.assertLaunchOpen(input.key, input.call);
+      evidence = start.kind === "started"
         ? proved
         : { status: "unproven", reason: "provider_execution_unproven" };
     } catch {
@@ -203,6 +252,11 @@ export class DockerHostCustodyLifecycle {
 
   public async contain(input: DockerHostCustodyContainmentInput): Promise<DockerHostCustodyContainment> {
     assertDockerAuthorityBinding(input.key, input.authority);
+    // Seal before the first await; a delayed exec-intent acknowledgement cannot reopen it.
+    const live = this.liveLaunches.get(dockerCustodyAttemptLocator(input.key));
+    if (live !== undefined && (live.owns(input.authority) || this.authorityMatch(input.key, input.authority) === "match")) {
+      try {await live.close();} catch {}
+    }
     for (let transition = 0; transition < 16; transition += 1) {
       let current: DockerCustodyJournalRecord;
       try {current = await this.journal.lookup(input.key);} catch (error) {
@@ -485,6 +539,7 @@ export class DockerHostCustodyLifecycle {
   }>): Promise<void> {
     await this.journal.retire(input);
     this.liveAuthorityBindings.delete(dockerCustodyAttemptLocator(input.key));
+    this.liveLaunches.delete(dockerCustodyAttemptLocator(input.key));
   }
 }
 

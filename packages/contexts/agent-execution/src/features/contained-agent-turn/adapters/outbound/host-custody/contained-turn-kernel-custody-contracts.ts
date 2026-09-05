@@ -1,3 +1,4 @@
+import type { CommittedDispatchProofV1 } from "../../../domain/committed-dispatch-proof-v1.js";
 import type {
   ContainedTurnKernelCustodyPort,
 } from "../../../application/ports/outbound/contained-turn-ports.js";
@@ -41,7 +42,25 @@ export interface ContainedTurnKernelCustodyAttemptOwner {
   retire(input: Readonly<{ attemptId: string; custodyId: string; operationId: string }>): void;
 }
 
+/** Host-private capability: register pending cleanup before effects and honor irreversible signal cutoff.
+ * Only the fresh owner-acknowledged proof reaches this method; replay cannot reconstruct it.
+ * Missing network, broker, durable journal or authority owners must return unsupported before allocation.
+ */
+export interface ContainedTurnHostPostClaimPreparation {
+  prepareClaimed(input: Readonly<{
+    committedDispatchProof: CommittedDispatchProofV1;
+    signal: AbortSignal;
+    underlyingCustodyRef: string;
+  }>): Promise<
+    | Readonly<{kind: "prepared"}>
+    | Readonly<{kind: "unsupported"; reason: "network" | "broker" | "journal" | "owner"}>
+    | Readonly<{kind: "quarantined"}>
+  >;
+}
+
 export interface ContainedTurnKernelCustodyAdapterOptions {
+  /** Explicit legacy current-owner semantics carry no Docker readiness claim. */
+  readonly postClaimPreparation: "current-owner" | ContainedTurnHostPostClaimPreparation;
   readonly completionAfterMs?: number;
   readonly hostBootId: string;
   readonly hostInstanceId: string;

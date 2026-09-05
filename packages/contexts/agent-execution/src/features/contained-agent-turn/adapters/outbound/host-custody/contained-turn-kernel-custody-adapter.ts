@@ -68,6 +68,8 @@ type ContainmentInput = Parameters<ContainedTurnKernelCustodyPort["attestContain
  * operating-system exit status is never interpreted as a logical outcome.
  */
 export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCustodyPort {
+  readonly #preparation: ContainedTurnKernelCustodyAdapterOptions["postClaimPreparation"];
+  readonly #preparing = new Map<string, AbortController>();
   readonly #completionAfterMs: number;
   readonly #hostBootId: Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>["hostBootId"];
   readonly #hostCustody: ContainedTurnHostCustodyPort;
@@ -81,6 +83,12 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     hostCustody: ContainedTurnHostCustodyPort,
     options: ContainedTurnKernelCustodyAdapterOptions,
   ) {
+    const preparation = options.postClaimPreparation;
+    if (preparation !== "current-owner" && typeof preparation?.prepareClaimed !== "function") {
+      throw new TypeError("Host post-claim preparation owner is unavailable");
+    }
+    this.#preparation = preparation === "current-owner" ? preparation
+      : Object.freeze({prepareClaimed: preparation.prepareClaimed.bind(preparation)});
     this.#hostCustody = hostCustody;
     this.#completionAfterMs = positiveInteger("completionAfterMs", options.completionAfterMs, 30_000);
     this.#startObservationAfterMs = positiveInteger(
@@ -231,7 +239,9 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public completionBoundary(
     input: Parameters<ContainedTurnKernelCustodyPort["completionBoundary"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["completionBoundary"]> {
-    return openKernelCompletionBoundary(input, this.#reservation(input), this.#completionAfterMs);
+    const boundary = openKernelCompletionBoundary(input, this.#reservation(input), this.#completionAfterMs);
+    if (input.phase === "start") {void boundary.expiration.then(() => {this.#preparing.get(input.custodyId)?.abort(); return null;});}
+    return boundary;
   }
   public async start(input: StartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
     const reservation = this.#reservation(input);
@@ -241,11 +251,27 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       hostCustodyProofId: hostCustodyProof.proofId,
       hostInstanceId: this.#hostInstanceId,
     });
+    const preparation = new AbortController();
+    this.#preparing.set(reservation.custodyId, preparation);
+    try {
+      if (reservation.startBoundaryCutoff) {throw new TypeError("Host start was cut off");}
+      if (this.#preparation !== "current-owner") {
+        const result = await this.#preparation.prepareClaimed({committedDispatchProof: input.committedDispatchProof,
+          signal: preparation.signal, underlyingCustodyRef: reservation.underlyingCustodyRef});
+        if (result.kind !== "prepared") {throw new TypeError("Host post-claim preparation is unavailable");}
+      }
+      if (preparation.signal.aborted || reservation.startBoundaryCutoff) {throw new TypeError("Host preparation was cut off");}
+    } catch {
+      await this.#contain(reservation, true);
+      return this.#indeterminate("post-claim-preparation", reservation);
+    }
     let creatorCalled = false;
     let executionSettled = false;
     let observation!: Promise<StartObservation>;
     const execution: Promise<ContainedTurnKernelProviderObservation> = Promise.resolve().then(
-      () => input.execute(Object.freeze({
+      () => {
+        if (reservation.startBoundaryCutoff) {throw new TypeError("Host execute arrived after cutoff");}
+        return input.execute(Object.freeze({
         createProcess: <Process>(createProcess: () => Process): Process => {
           if (creatorCalled) {throw new TypeError("Host Custody delegated process creator is one-use");}
           if (reservation.startBoundaryCutoff) {
@@ -255,7 +281,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
           return createProcess();
         },
         observation,
-      })),
+      }));},
     );
     void execution.then(
       value => {
@@ -435,6 +461,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     });
   }
   async #contain(reservation: KernelReservation, initiate: boolean): Promise<string | undefined> {
+    if (initiate) {reservation.startBoundaryCutoff = true; this.#preparing.get(reservation.custodyId)?.abort();}
     if (reservation.containmentReceiptRef !== undefined) {return reservation.containmentReceiptRef;}
     if (!initiate) {return undefined;}
     let outcome: Awaited<ReturnType<ProviderProcessCustodyPort["requestContainment"]>>;
@@ -473,6 +500,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       throw new TypeError("Host Custody reservation release is unproven");
     }
     reservation.released = true;
+    this.#preparing.delete(reservation.custodyId);
     this.#attemptOwner.retire(reservation);
   }
   public async releaseRetiredReservation(

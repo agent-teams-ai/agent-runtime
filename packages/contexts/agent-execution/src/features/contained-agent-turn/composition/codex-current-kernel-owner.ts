@@ -206,6 +206,7 @@ export const createCodexCurrentKernelOwner = (
     retire(input: OwnerRetireInput) {records.delete(input.custodyId);},
   });
   const custody = new ContainedTurnKernelCustodyAdapter(options.hostCustody, {
+    postClaimPreparation: "current-owner",
     attemptOwner, hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId,
     workspaceOwner: options.workspaceOwner,
   });
