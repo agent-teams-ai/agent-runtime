@@ -4,7 +4,7 @@ import { closeSync, constants, fstatSync, openSync, readFileSync, realpathSync, 
 import { clearTimeout, setTimeout } from "node:timers";
 import type { DockerContainerAuthority, DockerEnginePort } from "./engine/docker-engine-port.js";
 import { parseStrictJson } from "./serialization/strict-json.js";
-import { linuxExclusiveRouteSeccomp, type LinuxExclusiveRouteEndpoint } from "./linux-exclusive-route-policy.js";
+import { LINUX_EXCLUSIVE_ROUTE_TABLE, linuxExclusiveRouteSeccomp, type LinuxExclusiveRouteEndpoint } from "./linux-exclusive-route-policy.js";
 import { installLinuxExclusiveRoute, type LinuxExclusiveRouteBinding,
   type LinuxExclusiveRouteOwner } from "./linux-exclusive-route-owner.js";
 
@@ -24,7 +24,9 @@ export class LinuxExclusiveRouteOpeningError extends Error {
 }
 
 // Private production scheduling is mandatory. unref permits Host exit; neither
-// this timer nor performance.now proves cutoff during Host death or suspension.
+// this timer nor performance.now proves Host-loss containment. The kernel set
+// independently expires while the Host is stopped; endpoint quarantine and
+// whole-machine suspend behavior remain separate, unqualified requirements.
 // The owner retains namespace custody independently until exact removal.
 const scheduleCutoff = (delayMs: number, callback: () => void): (() => void) => {
   const timer = setTimeout(callback, Math.ceil(delayMs));
@@ -66,10 +68,14 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
   binding: LinuxExclusiveRouteBinding;
   endpoint: LinuxExclusiveRouteEndpoint;
   engine: Pick<DockerEnginePort, "inspect">;
+  /** Remaining authoritative operation lease at entry, including preparation.
+   * At least 4000 ms must remain after namespace/tool preparation. */
   lifetimeMs: number;
   nsenter: LinuxRouteToolPin;
   nft: LinuxRouteToolPin;
 }>): Promise<LinuxExclusiveRouteOwner> => {
+  const startedAtMs = performance.now();
+  const lifetimeMs = input.lifetimeMs;
   assertPlatform();
   const seccomp = linuxExclusiveRouteSeccomp();
   const engine = input.engine;
@@ -106,9 +112,9 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
         });
       } catch {throw rejected();}
     };
-    return installLinuxExclusiveRoute({...input, monotonicNow: () => performance.now(), scheduleCutoff, kernel: {
+    return installLinuxExclusiveRoute({...input, lifetimeMs, startedAtMs, monotonicNow: () => performance.now(), scheduleCutoff, kernel: {
       transact: transaction => {invoke(["-j", "-f", "-"], transaction);},
-      readRules: () => parseStrictJson(invoke(["-j", "list", "table", "inet", "ar_provider_route_v1"])),
+      readRules: () => parseStrictJson(invoke(["-j", "list", "table", "inet", LINUX_EXCLUSIVE_ROUTE_TABLE])),
       containerRemoved: async () => (await engine.inspect(authority, call())).existence === "absent",
       releaseNamespace: release,
     }});

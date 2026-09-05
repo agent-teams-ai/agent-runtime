@@ -1,5 +1,6 @@
 import { types } from "node:util";
-import { linuxExclusiveRouteRulesMatch, linuxExclusiveRouteTransaction,
+import { linuxExclusiveRouteReadback, linuxExclusiveRouteTransaction,
+  LINUX_ROUTE_ACK_MS, LINUX_ROUTE_ROUNDING_MS, LINUX_ROUTE_MIN_LIFETIME_MS, LINUX_ROUTE_MAX_LIFETIME_MS,
   validateLinuxExclusiveRouteEndpoint, type LinuxExclusiveRouteEndpoint } from "./linux-exclusive-route-policy.js";
 
 export interface LinuxExclusiveRouteBinding {
@@ -88,7 +89,11 @@ export interface LinuxExclusiveRouteOwner {
 export const installLinuxExclusiveRoute = (input: Readonly<{
   binding: LinuxExclusiveRouteBinding;
   endpoint: LinuxExclusiveRouteEndpoint;
+  /** Original remaining operation lease at startedAtMs; never a fresh renewal.
+   * At least 4000 ms must still remain when kernel installation begins. */
   lifetimeMs: number;
+  /** Captured before Node namespace/tool preparation, in monotonicNow's domain. */
+  startedAtMs: number;
   kernel: LinuxExclusiveRouteKernel;
   monotonicNow(): number;
   /** Adapter-private, one-shot scheduler; returns cancellation. Must not call inline. */
@@ -98,22 +103,24 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
   const endpoint = Object.freeze({address: input.endpoint.address, port: input.endpoint.port});
   validateLinuxExclusiveRouteEndpoint(endpoint);
   const lifetimeMs = input.lifetimeMs;
-  if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 1 || lifetimeMs > 120_000) {
-    throw new TypeError("route lease must be bounded to at most two minutes");
+  if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < LINUX_ROUTE_MIN_LIFETIME_MS || lifetimeMs > LINUX_ROUTE_MAX_LIFETIME_MS) {
+    throw new TypeError("route lease requires 4000..120000 integer milliseconds");
   }
   const kernel = input.kernel; const now = input.monotonicNow; const schedule = input.scheduleCutoff;
   if (typeof schedule !== "function") {throw new TypeError("autonomous route cutoff scheduler required");}
-  const startedAt = now(); let highWater = startedAt;
-  if (!Number.isFinite(startedAt) || startedAt < 0) {throw new TypeError("invalid route control time");}
+  const startedAt = input.startedAtMs; let highWater = startedAt;
+  const deadline = startedAt + lifetimeMs;
+  if (!Number.isFinite(startedAt) || startedAt < 0 || deadline > Number.MAX_SAFE_INTEGER || deadline <= startedAt) {throw new TypeError("invalid route control time");}
   let revoked = false; let released = false; let quarantined = false; let installed = false;
   const cutoff = Promise.withResolvers<"closed" | "quarantined">();
   let timerGeneration = 0; let cancelTimer: (() => void) | undefined;
   let releaseFlight: Promise<"closed" | "quarantined"> | undefined;
   const requests = new Set<string>();
+  let timeoutSeconds = 0; let kernelCutoffMs = 0; let liveUntilMs = 0;
   const readTime = (): number => {
     let observed: number;
     try {observed = now();} catch (error) {quarantined = true; throw error;}
-    if (!Number.isFinite(observed) || observed < highWater) {
+    if (!Number.isFinite(observed) || observed > Number.MAX_SAFE_INTEGER || observed < highWater) {
       quarantined = true;
       throw new TypeError("route control time changed");
     }
@@ -127,9 +134,14 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
   };
   const verify = (permit: boolean): void => {
     try {
-      if (!linuxExclusiveRouteRulesMatch(kernel.readRules(), endpoint, permit)) {
-        throw new TypeError("kernel exclusive route differs from the installed policy");
-      }
+      const beforeMs = permit ? readTime() : 0;
+      const observed = kernel.readRules();
+      const afterMs = permit ? readTime() : 0;
+      const liveUntil = linuxExclusiveRouteReadback(observed, endpoint, permit ? {
+        timeoutSeconds, beforeMs, afterMs, cutoffMs: kernelCutoffMs,
+      } : false);
+      if (liveUntil === undefined) {throw new TypeError("kernel exclusive route differs from the installed policy or expired");}
+      if (permit) {liveUntilMs = liveUntil;}
     } catch (error) {
       // An unobserved or changed cut leaves uncertainty about earlier traffic.
       // Record it before any deny transaction; later cleanup cannot erase it.
@@ -176,11 +188,23 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
     } catch (error) {quarantined = true; throw error;}
   };
   try {
+    const beforeInstall = readTime();
+    // Whole seconds rounded DOWN, with explicit acknowledgement and rounding
+    // reserves. Preparation time spends the original lease; it never restarts it.
+    if (deadline - beforeInstall < LINUX_ROUTE_MIN_LIFETIME_MS) {throw new TypeError("unsupported remaining route lifetime");}
+    timeoutSeconds = Math.floor((deadline - beforeInstall - LINUX_ROUTE_ACK_MS - LINUX_ROUTE_ROUNDING_MS) / 1_000);
     // Fresh namespace admission fails if a previous campaign's table already exists.
-    kernel.transact(linuxExclusiveRouteTransaction(endpoint, false, true));
-    installed = true; verify(true);
+    kernel.transact(linuxExclusiveRouteTransaction(endpoint, false, timeoutSeconds));
+    installed = true;
+    const acknowledgedAt = readTime();
+    kernelCutoffMs = acknowledgedAt + timeoutSeconds * 1_000 + LINUX_ROUTE_ROUNDING_MS;
+    if (acknowledgedAt - beforeInstall > LINUX_ROUTE_ACK_MS || kernelCutoffMs > deadline) {
+      throw new TypeError("kernel route installation exceeded acknowledgement margin");
+    }
+    verify(true);
     arm(lifetimeMs - (readTime() - startedAt));
-    readTime(); // Scheduling is also inside the bounded installation window.
+    // A blocked scheduler must not publish a stale readback as live authority.
+    if (readTime() >= liveUntilMs) {throw new TypeError("kernel route readback expired during scheduling");}
   } catch (error) {
     // An acknowledgement loss may have installed the table. Replacement only
     // reduces authority; preserve the original failure and always attempt it.
@@ -203,7 +227,9 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
           if (revoked || released || readTime() - issuedAt >= 1_000) {return false;}
           verify(true);
           // Kernel inspection may take time; expiry must be checked after it.
-          return !revoked && !released && readTime() - issuedAt < 1_000;
+          const finishedAt = readTime();
+          if (finishedAt >= liveUntilMs) {throw new TypeError("kernel route readback expired");}
+          return !revoked && !released && finishedAt - issuedAt < 1_000;
         } catch {revoke(); return false;}
       }});
     },

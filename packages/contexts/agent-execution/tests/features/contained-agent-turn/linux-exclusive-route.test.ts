@@ -5,7 +5,7 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import test, { type TestContext } from "node:test";
 import timers from "node:timers";
-import { linuxExclusiveRouteRules, linuxExclusiveRouteRulesMatch, linuxExclusiveRouteSeccomp } from
+import { linuxExclusiveRouteRules, linuxExclusiveRouteReadback, linuxExclusiveRouteSeccomp } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
 import { installLinuxExclusiveRoute, type LinuxExclusiveRouteBinding } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js";
@@ -61,16 +61,17 @@ test("synthetic syscall matrix excludes namespace, alternate socket, and io_urin
 
 type Packet = {family: string; protocol: string; source: string; destination: string; sourcePort: number;
   destinationPort: number; state: string};
-const packetAllowed = (hook: string, packet: Packet): boolean => {
-  const entries = linuxExclusiveRouteRules(endpoint, true) as {rule?: {chain: string; expr: any[]}}[];
+const packetAllowed = (hook: string, packet: Packet, member = true): boolean => {
+  const entries = linuxExclusiveRouteRules(endpoint, 8) as {rule?: {chain: string; expr: any[]}}[];
   const field = (left: any): unknown => {
     if (left.meta) {return left.meta.key === "nfproto" ? packet.family : packet.protocol;}
     if (left.ct) {return packet.state;}
+    if (packet.family !== "ipv4" || packet.protocol !== "tcp") {return undefined;}
     return ({saddr: packet.source, daddr: packet.destination, sport: packet.sourcePort,
       dport: packet.destinationPort} as Record<string, unknown>)[left.payload.field];
   };
   return entries.some(entry => entry.rule?.chain === hook && entry.rule.expr.every(expr =>
-    expr.accept === null || (expr.match?.op === "==" && field(expr.match.left) === expr.match.right)));
+    expr.accept === null || (expr.match?.op === "==" && (expr.match.right === "@broker" ? member && field(expr.match.left) === endpoint.address : field(expr.match.left) === expr.match.right))));
 };
 
 test("synthetic packet matrix admits only the exact broker TCP endpoint and established replies", () => {
@@ -87,6 +88,10 @@ test("synthetic packet matrix admits only the exact broker TCP endpoint and esta
   const reply = {...outbound, source: endpoint.address, sourcePort: endpoint.port, destination: "172.30.0.2",
     destinationPort: 32000, state: "established"};
   assert.equal(packetAllowed("input", reply), true);
+  for (const state of ["new", "established"]) {
+    assert.equal(packetAllowed("output", {...outbound, state}, false), false);
+    assert.equal(packetAllowed("input", {...reply, state}, false), false);
+  }
   assert.equal(packetAllowed("input", {...reply, state: "new"}), false);
   assert.equal(packetAllowed("input", {...reply, source: "172.30.0.3"}), false);
 });
@@ -102,20 +107,18 @@ const NFT_1_0_9_PERMIT = `{"nftables":[
   {"chain":{"family":"inet","table":"ar_provider_route_v1","name":"input","handle":1,
     "type":"filter","hook":"input","prio":300,"policy":"drop"}},
   {"rule":{"family":"inet","table":"ar_provider_route_v1","chain":"input","handle":5,"expr":[
-    {"match":{"op":"==","left":{"meta":{"key":"nfproto"}},"right":"ipv4"}},
-    {"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"172.30.0.1"}},
+    {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"@broker"}},
     {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"sport"}},"right":18443}},
     {"match":{"op":"==","left":{"ct":{"key":"state"}},"right":"established"}}, {"accept":null}]}},
   {"chain":{"family":"inet","table":"ar_provider_route_v1","name":"output","handle":2,
     "type":"filter","hook":"output","prio":300,"policy":"drop"}},
   {"rule":{"family":"inet","table":"ar_provider_route_v1","chain":"output","handle":4,"expr":[
-    {"match":{"op":"==","left":{"meta":{"key":"nfproto"}},"right":"ipv4"}},
-    {"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"daddr"}},"right":"172.30.0.1"}},
+    {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"daddr"}},"right":"@broker"}},
     {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":18443}}, {"accept":null}]}},
   {"chain":{"family":"inet","table":"ar_provider_route_v1","name":"forward","handle":3,
-    "type":"filter","hook":"forward","prio":300,"policy":"drop"}}
+    "type":"filter","hook":"forward","prio":300,"policy":"drop"}},
+  {"set":{"family":"inet","table":"ar_provider_route_v1","name":"broker","type":"ipv4_addr","handle":6,
+    "flags":["timeout"],"elem":[{"elem":{"val":"172.30.0.1","timeout":8,"expires":7}}]}}
 ]}`;
 const NFT_1_0_9_DENY = `{"nftables":[
   {"metainfo":{"version":"1.0.9","release_name":"Old Doc Yak","json_schema_version":1}},
@@ -127,6 +130,7 @@ const NFT_1_0_9_DENY = `{"nftables":[
   {"chain":{"family":"inet","table":"ar_provider_route_v1","name":"forward","handle":3,
     "type":"filter","hook":"forward","prio":300,"policy":"drop"}}
 ]}`;
+const readWindow = {timeoutSeconds: 8, beforeMs: 10, afterMs: 10, cutoffMs: 9010};
 const listing = (permit = true): any => JSON.parse(permit ? NFT_1_0_9_PERMIT : NFT_1_0_9_DENY);
 const withoutHandle = ({handle: _handle, ...body}: any): any => body;
 
@@ -135,12 +139,13 @@ const withoutHandle = ({handle: _handle, ...body}: any): any => body;
 // Readback always uses the independent listing fixtures, never command entries.
 const persistentKernel = (options: {readFailure?: number; transactionFailure?: number; removed?: boolean;
   removeFailure?: boolean; releaseFailure?: boolean; mutateRead?: (value: any) => void;
-  preexisting?: "deny" | "permit"} = {}) => {
+  preexisting?: "deny" | "permit"; now?: () => number} = {}) => {
   let transactions = 0; let reads = 0; let releases = 0; let removals = 0;
   let present = options.preexisting !== undefined;
   let ruleCounts: Record<string, number> = {input: options.preexisting === "permit" ? 1 : 0,
     output: options.preexisting === "permit" ? 1 : 0};
   const batches: any[] = [];
+  let timeoutSeconds = 8; let insertedAt = 10;
   const rules = (): any[] => ruleCounts.input === 0 && ruleCounts.output === 0 ? listing(false).nftables :
     listing().nftables.flatMap((entry: any) => entry.rule
       ? Array.from({length: ruleCounts[entry.rule.chain]}, () => structuredClone(entry)) : [entry]);
@@ -163,10 +168,17 @@ const persistentKernel = (options: {readFailure?: number; transactionFailure?: n
             }
           } else {
             assert.equal(verb, "add"); assert.equal(nextPresent, true);
-            const kind = object.chain ? "chain" : "rule";
+            const kind = object.chain ? "chain" : object.set ? "set" : "rule";
             const expected = listing().nftables.find((entry: any) => entry[kind] &&
-              (kind === "chain" ? entry.chain.name === object.chain.name : entry.rule.chain === object.rule.chain));
-            assert.deepEqual(object[kind], withoutHandle(expected[kind]));
+              (kind === "chain" ? entry.chain.name === object.chain.name : kind === "set" || entry.rule.chain === object.rule.chain));
+            const expectedBody = withoutHandle(expected[kind]);
+            if (kind === "set") {
+              timeoutSeconds = object.set.elem[0].elem.timeout;
+              insertedAt = options.now?.() ?? 10;
+              expectedBody.elem[0].elem.timeout = timeoutSeconds;
+              delete expectedBody.elem[0].elem.expires;
+            }
+            assert.deepEqual(object[kind], expectedBody);
             if (object.rule) {nextCounts[object.rule.chain] += 1;}
           }
         }
@@ -178,6 +190,14 @@ const persistentKernel = (options: {readFailure?: number; transactionFailure?: n
         if (options.readFailure === reads) {throw new Error("synthetic observation loss");}
         assert.equal(present, true);
         const value = {nftables: rules()};
+        const set = value.nftables.find((entry: any) => entry.set)?.set;
+        if (set) {
+          const remaining = timeoutSeconds * 1000 - ((options.now?.() ?? 11) - insertedAt);
+          if (remaining <= 0) {delete set.elem;} else {
+            set.elem[0].elem.timeout = timeoutSeconds;
+            set.elem[0].elem.expires = Math.floor(remaining / 1000);
+          }
+        }
         options.mutateRead?.(value); return value;
       },
       async containerRemoved() {removals += 1; if (options.removeFailure) {throw new Error("synthetic engine failure");}
@@ -187,9 +207,9 @@ const persistentKernel = (options: {readFailure?: number; transactionFailure?: n
   return {kernel, batches, counts: () => ({transactions, reads, releases, removals}), rules};
 };
 const fixture = (options: Parameters<typeof persistentKernel>[0] = {}) => {
-  let time = 10; const state = persistentKernel(options);
+  let time = 10; const state = persistentKernel(Object.assign(options, {now: () => time}));
   const owner = installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 10_000,
-    monotonicNow: () => time, kernel: state.kernel, scheduleCutoff: fakeTimer().scheduleCutoff});
+    startedAtMs: 10, monotonicNow: () => time, kernel: state.kernel, scheduleCutoff: fakeTimer().scheduleCutoff});
   return {...state, owner, advance: (value: number) => {time = value;}};
 };
 
@@ -207,10 +227,10 @@ const fakeTimer = () => {
 
 test("idle lease expiry autonomously removes installed permission without owner calls", () => {
   const timer = fakeTimer(); const state = persistentKernel();
-  installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000, kernel: state.kernel,
-    monotonicNow: timer.now, scheduleCutoff: timer.scheduleCutoff});
+  installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 10_000, kernel: state.kernel,
+    startedAtMs: 10, monotonicNow: timer.now, scheduleCutoff: timer.scheduleCutoff});
   assert.equal(state.rules().some(entry => entry.rule), true);
-  timer.advance(1010); timer.fire();
+  timer.advance(10_010); timer.fire();
   assert.equal(state.rules().some(entry => entry.rule), false);
   assert.equal(state.counts().releases, 0);
 });
@@ -218,13 +238,13 @@ test("idle lease expiry autonomously removes installed permission without owner 
 test("nft 1.0.9 listings compare chain identities independently of transaction order", () => {
   for (const permit of [false, true]) {
     const value = listing(permit);
-    assert.equal(linuxExclusiveRouteRulesMatch(value, endpoint, permit), true);
+    assert.equal(linuxExclusiveRouteReadback(value, endpoint, permit ? readWindow : false), permit ? 7010 : 0);
     // Whole chain groups can be enumerated differently without changing policy.
     if (permit) {value.nftables = [value.nftables[0], value.nftables[1], value.nftables[6],
-      value.nftables[4], value.nftables[5], value.nftables[2], value.nftables[3]];}
+      value.nftables[4], value.nftables[5], value.nftables[2], value.nftables[3], value.nftables[7]];}
     else {value.nftables = [value.nftables[0], value.nftables[1], ...value.nftables.slice(2).toReversed()];}
-    assert.equal(linuxExclusiveRouteRulesMatch(value, endpoint, permit), true);
-    assert.equal(linuxExclusiveRouteRulesMatch(value, endpoint, !permit), false);
+    assert.equal(linuxExclusiveRouteReadback(value, endpoint, permit ? readWindow : false), permit ? 7010 : 0);
+    assert.equal(linuxExclusiveRouteReadback(value, endpoint, permit ? false : readWindow), undefined);
   }
 });
 
@@ -238,10 +258,10 @@ test("listing validation rejects extra, missing, misidentified, reordered and we
     value => {value.nftables[2].chain.family = "ip";}, value => {value.nftables[2].chain.prio = 0;},
     value => {value.nftables[3].rule.chain = "output";}, value => {value.nftables[3].rule.table = "other";},
     value => {value.nftables[3].rule.family = "ip";}, value => {value.nftables[3].rule.expr.reverse();},
-    value => {value.nftables[3].rule.expr.splice(2, 1);}, value => {value.nftables[3].rule.expr[4].match.right = "new";},
-    value => {value.nftables[5].rule.expr[2].match.right = "172.30.0.3";},
-    value => {value.nftables[5].rule.expr[3].match.right = 443;},
-    value => {value.nftables[5].rule.expr[3].match.op = "!=";},
+    value => {value.nftables[3].rule.expr.splice(2, 1);}, value => {value.nftables[3].rule.expr[2].match.right = "new";},
+    value => {value.nftables[5].rule.expr[0].match.right = "172.30.0.3";},
+    value => {value.nftables[5].rule.expr[1].match.right = 443;},
+    value => {value.nftables[5].rule.expr[1].match.op = "!=";},
     value => {value.nftables.push({set: {family: "inet", table: "ar_provider_route_v1", name: "extra"}});},
     value => {value.nftables[1].table.handle = -1;}, value => {value.nftables.push(...Array.from({length: 17}, () => ({})));},
   ];
@@ -251,14 +271,14 @@ test("listing validation rejects extra, missing, misidentified, reordered and we
   }
   for (const mutate of mutations) {
     const changed = listing(); mutate(changed);
-    assert.equal(linuxExclusiveRouteRulesMatch(changed, endpoint, true), false, String(mutate));
+    assert.equal(linuxExclusiveRouteReadback(changed, endpoint, readWindow), undefined, String(mutate));
   }
   // There is one permit rule per chain. Extra accept rules fail in either order;
   // moving the final verdict before its predicates also fails above.
   for (const index of [3, 4]) {
     const changed = listing(); const extra = structuredClone(changed.nftables[3]);
     extra.rule.expr = [{accept: null}]; changed.nftables.splice(index, 0, extra);
-    assert.equal(linuxExclusiveRouteRulesMatch(changed, endpoint, true), false);
+    assert.equal(linuxExclusiveRouteReadback(changed, endpoint, readWindow), undefined);
   }
   assert.throws(() => fixture({mutateRead: value => {value.nftables[2].chain.policy = "accept";}}), /kernel exclusive/u);
 });
@@ -324,7 +344,7 @@ test("observation loss and policy mismatch stay quarantined after successful den
 test("exclusive table creation rejects all existing tables and cannot revive a revoked attempt", () => {
   const state = persistentKernel();
   const install = (attemptId: string) => installLinuxExclusiveRoute({binding: {...binding, attemptId},
-    endpoint, lifetimeMs: 1000, kernel: state.kernel, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff});
+    endpoint, lifetimeMs: 10_000, kernel: state.kernel, startedAtMs: 10, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff});
   const first = install("attempt:first");
   const pending = first.reserveFirstWrite({...binding, attemptId: "attempt:first"}, "request:old");
   assert.equal(first.revoke(), "closed");
@@ -335,8 +355,8 @@ test("exclusive table creation rejects all existing tables and cannot revive a r
   assert.equal(state.rules().some(entry => entry.rule), false);
   for (const preexisting of ["deny", "permit"] as const) {
     const existing = persistentKernel({preexisting});
-    assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000,
-      kernel: existing.kernel, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff}), /EEXIST/u);
+    assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 10_000,
+      kernel: existing.kernel, startedAtMs: 10, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff}), /EEXIST/u);
     assert.equal(existing.rules().some(entry => entry.rule), false);
     assert.equal(existing.batches.length, 2); // failed admission followed by deny-only replacement
     assert.deepEqual(existing.batches[0][0], {create: {table: {family: "inet", name: "ar_provider_route_v1"}}});
@@ -361,14 +381,14 @@ test("binding shape, lease bounds and request inventory remain fail closed", () 
   for (const lifetimeMs of [0, 120_001, 1.5, Number.NaN]) {
     const state = persistentKernel();
     assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs,
-      kernel: state.kernel, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff}));
+      kernel: state.kernel, startedAtMs: 10, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff}));
     assert.equal(state.counts().transactions, 0);
   }
 });
 
 test("lost installation acknowledgement attempts a deny cut while preserving the primary failure", () => {
   const transactions: any[] = []; const primary = new Error("synthetic primary failure");
-  assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff,
+  assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 10_000, startedAtMs: 10, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff,
     kernel: {
       transact(value) {transactions.push(JSON.parse(value)); throw transactions.length === 1 ? primary : new Error("synthetic cleanup failure");},
       readRules() {throw new Error("must not issue a lease after unknown installation");},
@@ -380,10 +400,10 @@ test("lost installation acknowledgement attempts a deny cut while preserving the
   assert.equal(transactions[1].nftables.filter((command: any) => command.add?.chain?.policy === "drop").length, 3);
   for (const failure of [{transactionFailure: 1}, {readFailure: 1}]) {
     const state = persistentKernel(failure);
-    assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000,
-      monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff, kernel: state.kernel}), /synthetic.*loss/u);
+    assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 10_000,
+      startedAtMs: 10, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff, kernel: state.kernel}), /synthetic.*loss/u);
     assert.equal(state.counts().transactions, 2);
-    assert.equal(linuxExclusiveRouteRulesMatch(state.kernel.readRules(), endpoint, false), true);
+    assert.equal(linuxExclusiveRouteReadback(state.kernel.readRules(), endpoint, false), 0);
   }
 });
 
@@ -410,9 +430,9 @@ test("independent teardown revokes first, verifies removal, and quarantines all 
 // Intercept Node builtins only inside the test process. No root access, tool,
 // namespace, Docker transport, or injectable production command runner is used.
 const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "inode" | "device" | "pid" | "start";
-  closeFailure?: boolean; hashDrift?: boolean; scheduleFailure?: boolean; unrefFailure?: boolean} = {}) => {
-  const state = persistentKernel(); const closed: number[] = []; const invocations: any[] = [];
+  closeFailure?: boolean; hashDrift?: boolean; scheduleFailure?: boolean; unrefFailure?: boolean; prepareDelayMs?: number} = {}) => {
   const timer = fakeTimer(); let unrefs = 0;
+  const state = persistentKernel({now: timer.now}); const closed: number[] = []; const invocations: any[] = [];
   const files = new Map([["/synthetic/nsenter", Buffer.from("pinned-nsenter")], ["/synthetic/nft", Buffer.from("pinned-nft")]]);
   const descriptors = new Map<number, {path: string; bytes: Buffer}>();
   let nextFd = 40; let inspections = 0; let removed = false; let toolFailure: string | undefined;
@@ -483,6 +503,7 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
   const engine: Input["engine"] = {async inspect(actual, call) {
     assert.deepEqual(actual, authority); assert.ok(call.signal instanceof AbortSignal);
     assert.ok(call.deadlineEpochMs <= Date.now() + 5000); inspections += 1;
+    if (inspections === 2 && options.prepareDelayMs) {timer.advance(10 + options.prepareDelayMs);}
     if (inspections === 2 && options.replaceTools) {
       files.set(nsenter.path, Buffer.from("replacement-nsenter")); files.set(nft.path, Buffer.from("replacement-nft"));
     }
@@ -609,3 +630,26 @@ for (const options of [{scheduleFailure: true}, {unrefFailure: true}]) {
     assert.equal(f.invocations.length, calls);
   });
 }
+
+
+test("Node preparation spends the entry lease before choosing its one-shot kernel timeout", nodeOnly, async t => {
+  const f = nodeFixture(t, {prepareDelayMs: 1500}); const owner = await f.open();
+  const commands = f.batches[0];
+  assert.equal(commands.find((entry: any) => entry.add?.set).add.set.elem[0].elem.timeout, 6);
+  assert.equal(f.timer.tasks[0]!.delay, 8500);
+  assert.equal(owner.reserveFirstWrite(binding, "request:after-preparation").consume(), true);
+  assert.equal(f.batches.length, 1);
+  f.remove(); assert.equal(await owner.releaseAfterContainerRemoval(), "closed");
+});
+
+test("Node preparation crossing the lease publishes cleanup only and never creates membership", nodeOnly, async t => {
+  const f = nodeFixture(t, {prepareDelayMs: 10_001});
+  const error = await f.open().catch(failure => failure);
+  assert.ok(error instanceof LinuxExclusiveRouteOpeningError);
+  assert.equal(f.batches.some(batch => batch.some((entry: any) => entry.add?.set)), false);
+  assert.equal(f.descriptors.size, 3); assert.deepEqual(f.closed, []);
+  assert.equal(await error.releaseAfterContainerRemoval(), "quarantined");
+  assert.deepEqual(f.closed, []);
+  f.remove(); assert.equal(await error.releaseAfterContainerRemoval(), "quarantined");
+  assert.deepEqual(f.closed, [42, 41, 40]);
+});
