@@ -1,5 +1,6 @@
 import {DockerContainedTurnHostCustody, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
 import type {DockerCustodyInitHostExec} from "./init/docker-custody-init-host-session.js";
+import { createDockerRemovalObservationOwner, type DockerHostCustodyContainmentInput } from "./docker-removal-observation-owner.js";
 import type {
   DockerContainerAuthority,
   DockerContainerObservation,
@@ -89,12 +90,6 @@ export type DockerHostCustodyContainment =
       reason: "authority_mismatch" | "authority_unavailable";
     }>;
 
-type DockerHostCustodyContainmentInput = Readonly<{
-  authority: DockerContainerAuthority;
-  call: DockerEngineCall;
-  key: DockerCustodyAttemptKey;
-}>;
-
 const proved = Object.freeze({ status: "proved" as const });
 
 const journalUnavailable = (error: unknown): boolean =>
@@ -102,6 +97,7 @@ const journalUnavailable = (error: unknown): boolean =>
 
 /** Coordinates Docker effects only after their exact journal authority is durable. */
 export class DockerHostCustodyLifecycle {
+  public readonly removalObservation: ReturnType<typeof createDockerRemovalObservationOwner>;
   /** Volatile exact binding permits safe cleanup after same-instance journal loss, but is not restart authority. */
   private readonly liveAuthorityBindings = new Map<string, string>();
   private readonly liveLaunches = new Map<string, DockerContainedTurnHostCustody>();
@@ -119,7 +115,9 @@ export class DockerHostCustodyLifecycle {
     private readonly journal: DockerHostCustodyJournalPort,
     private readonly residue: DockerHostCustodyResiduePort,
     private readonly maxLiveAuthorityBindings = DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS.maxJournalFiles,
-  ) {}
+  ) {
+    this.removalObservation = createDockerRemovalObservationOwner(engine, this.contain.bind(this));
+  }
 
   private holdAuthority(key: DockerCustodyAttemptKey, authority: DockerContainerAuthority): string {
     const locator = dockerCustodyAttemptLocator(key);
