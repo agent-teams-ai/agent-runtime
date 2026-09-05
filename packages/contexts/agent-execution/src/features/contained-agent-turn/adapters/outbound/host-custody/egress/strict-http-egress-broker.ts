@@ -8,7 +8,7 @@ import { snapshotHttpEgressOperation } from "./http-ingress-validation.js";
 import { normalizeHttpResolverEvidence } from "./http-egress-resolver-evidence.js";
 import { normalizePublicAddress } from "./public-address-policy.js";
 import { readStrictHttpRequest, StrictHttpRequestError, type StrictHttpRequest } from "./strict-http-request.js";
-import { verifiedGrant, verifiedProvisional } from "./http-egress-runtime-security-v2.js";
+import { retainHttpEgressClock, verifiedGrant, verifiedProvisional } from "./http-egress-runtime-security-v2.js";
 import { bindMaterializationRequestDigest, materializationAuthorizationRequest, observeMaterializationReceipt, presentationFields,
   projectPreparedRequest, receiptMatchesSnapshot, snapshotHostHttpRoute } from "./http-egress-session-authority.js";
 import {closeAndRecordHttpEgress, initialHttpEgressState, settleHttpEgressDispatch, type HttpEgressMutableState} from "./http-egress-settlement.js";
@@ -192,7 +192,8 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
     }
     if (!cleanupCertain) {state.outcome = "reconcile_required"; state.anomalyCode = "closure_unproved";}
   };
-  const ports: HttpEgressBrokerPorts = {...dependencies, evidence: {digest: parts => dependencies.evidence.digest(parts), record: receipt => {
+  const ports: HttpEgressBrokerPorts = {...dependencies, clock: retainHttpEgressClock(dependencies.clock),
+    evidence: {digest: parts => dependencies.evidence.digest(parts), record: receipt => {
     cleanup();
     return dependencies.evidence.record(Object.freeze({...receipt, outcome: state.outcome, anomalyCode: state.anomalyCode}));
   }}};

@@ -48,7 +48,8 @@ class DeadlineByteReader {
 
   private async pull(deadline = this.limits.deadline): Promise<void> {
     if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
-    if (this.clock.now() >= deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
+    const now = this.clock.now();
+    if (!Number.isSafeInteger(now) || now >= deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
     let next: IteratorResult<Uint8Array>;
     try {
       next = await this.clock.within(deadline, () => this.iterator.next(), this.signal);
@@ -62,7 +63,9 @@ class DeadlineByteReader {
     if (!(next.value instanceof Uint8Array)) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
     if (next.value.byteLength === 0) {return;}
     this.bytesRead = addObservedBytes(this.bytesRead, next.value.byteLength);
-    if (next.value.byteLength > this.limits.maxBufferedBytes
+    // Check the combined retained size before allocating, including the final
+    // delimiter chunk. Each fragment fitting independently is insufficient.
+    if (next.value.byteLength > this.limits.maxBufferedBytes - this.buffered.byteLength
       || this.bytesRead > this.limits.maxUpstreamWireBytes) {
       throw new StrictHttpResponseError("oversized", this.bytesRead, 0);
     }
@@ -105,7 +108,8 @@ class DeadlineByteReader {
 
   public requireFramedEnd(): void {
     if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
-    if (this.clock.now() >= this.limits.deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
+    const now = this.clock.now();
+    if (!Number.isSafeInteger(now) || now >= this.limits.deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
     // Framing permits Host Custody to close the persistent transport. Surplus
     // in later source chunks must still be checked after that closure barrier.
     if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}

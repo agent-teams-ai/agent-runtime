@@ -1,10 +1,44 @@
 import {types as utilTypes} from "node:util";
 import type {
   HostHttpGrant, HostHttpMaterializationReceipt, HostHttpProvisionalDecision, HostHttpRequestProjection,
-  HostHttpSigningKey, HostHttpTlsObservation, HostHttpVerifierV2, HttpEgressBrokerPorts,
+  HostHttpSigningKey, HostHttpTlsObservation, HostHttpVerifierV2, HttpEgressBrokerPorts, HttpEgressClock,
 } from "./http-egress-ports.js";
 import {validHostHttpGrant, validHostHttpProvisionalDecision} from "./http-egress-signed-proof-validation.js";
 import {normalizePublicAddress} from "./public-address-policy.js";
+
+// One execution owns this high-water mark, including final verification and both
+// sides of synchronous journal consumption. No caller wrapper identity or global
+// registry carries clock authority. Uncertainty is sticky until execution closes.
+export const retainHttpEgressClock = (clock: HttpEgressClock): HttpEgressClock => {
+  let latest = -1;
+  let uncertain = false;
+  return Object.freeze({
+    now: () => {
+      const now = clock.now();
+      uncertain ||= !Number.isSafeInteger(now) || now < 0 || now < latest;
+      if (uncertain) {return Number.NaN;}
+      latest = now;
+      return now;
+    },
+    // Closure acknowledgements retain their separate deadline even if authority
+    // time becomes uncertain; a failed authority check must still initiate cleanup.
+    within: <T>(deadline: number, action: () => Promise<T>, signal?: AbortSignal) =>
+      clock.within(deadline, action, signal),
+  });
+};
+
+export const signedHttpDispatchDeadline = (grant: HostHttpGrant, operationDeadline: number): number | undefined => {
+  const {authorizedAtControlTime} = grant.payload.time;
+  const {requestBytes, responseBytes, totalMilliseconds} = grant.payload.limits;
+  if (![authorizedAtControlTime, operationDeadline, requestBytes, responseBytes, totalMilliseconds]
+    .every(Number.isSafeInteger) || authorizedAtControlTime < 0 || operationDeadline < 0
+    || requestBytes < 0 || responseBytes < 0 || totalMilliseconds < 1
+    || totalMilliseconds > Number.MAX_SAFE_INTEGER - authorizedAtControlTime) {return;}
+  // V2 signs the stream-specific authorizedAtControlTime in the final grant.
+  // expiresAtControlTime is inherited provisional decision freshness, checked at
+  // emission separately. Neither receipt time nor consumption restarts duration.
+  return Math.min(operationDeadline, authorizedAtControlTime + totalMilliseconds);
+};
 
 const readCut = (ports: HttpEgressBrokerPorts) => {
   const value = ports.localAuthorityCut.read();
@@ -124,10 +158,12 @@ export const verifiedGrant = (input: Readonly<{
     && sameProjection(payload.request, input.request) && providerAccessMatches(payload.providerAccess, input.receipt);
 };
 
-export const dispatchGrantIsCurrent = (ports: HttpEgressBrokerPorts, grant: HostHttpGrant): boolean => {
+export const dispatchGrantIsCurrent = (ports: HttpEgressBrokerPorts, grant: HostHttpGrant,
+  deadline = grant.payload.time.expiresAtControlTime): boolean => {
   const cut = readCut(ports);
   const now = ports.clock.now();
   return cut !== null && cut.status === "current" && cut.authorityId === grant.payload.time.authorityId
     && cut.epoch === grant.payload.time.epoch && cut.controlTime === now
-    && Number.isSafeInteger(now) && now < grant.payload.time.expiresAtControlTime;
+    && Number.isSafeInteger(now) && now >= grant.payload.time.authorizedAtControlTime
+    && now < grant.payload.time.expiresAtControlTime && now < deadline;
 };

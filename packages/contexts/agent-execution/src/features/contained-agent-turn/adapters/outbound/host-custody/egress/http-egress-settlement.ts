@@ -8,7 +8,7 @@ import {createHttpDispatchBoundary} from "./http-dispatch-boundary.js";
 import {observeHttpDispatch} from "./http-dispatch-observation.js";
 import {observeHttpResponse} from "./http-response-observation.js";
 import {snapshotHttpClosureDecision} from "./http-receipt-validation.js";
-import {dispatchGrantIsCurrent} from "./http-egress-runtime-security-v2.js";
+import {dispatchGrantIsCurrent, signedHttpDispatchDeadline} from "./http-egress-runtime-security-v2.js";
 
 export type HttpEgressMutableState = {
   outcome: HttpEgressOutcome; anomalyCode: HttpEgressAnomalyCode; requestDigest: string;
@@ -102,17 +102,34 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
   const {ports, operation, state, attempt, session, tls, grant, prepared, lease} = input;
   let boundaryAnomaly: HttpEgressAnomalyCode = "upstream_write_failed";
   const requestByteLength = prepared.wireBytes.byteLength;
-  const boundary = createHttpDispatchBoundary(prepared, () => {
-    if (ports.journal.consume(grant.payload.consumption.journalKey,
-      grant.payload.consumption.requestFingerprint) !== "consumed") {boundaryAnomaly = "final_denied"; return false;}
+  const deadline = signedHttpDispatchDeadline(grant, operation.limits.deadline);
+  // The projection's body length excludes credential/header/framing overhead.
+  // Only the complete, already-owned serialization can satisfy the wire budget.
+  if (deadline === undefined || requestByteLength > grant.payload.limits.requestBytes) {
+    state.outcome = "denied"; state.anomalyCode = "final_denied";
+    return closeAndRecordHttpEgress(ports, operation, state, attempt);
+  }
+  const current = (): boolean => {
     if (operation.signal?.aborted) {boundaryAnomaly = "inbound_cancelled"; return false;}
-    if (ports.guard.snapshot().state !== "active" || !dispatchGrantIsCurrent(ports, grant)) {
-      boundaryAnomaly = "provider_generation_drift"; return false;}
     if (session.binding !== tls) {boundaryAnomaly = "transport_binding_drift"; return false;}
+    if (ports.guard.snapshot().state !== "active" || !dispatchGrantIsCurrent(ports, grant, deadline)) {
+      boundaryAnomaly = "provider_generation_drift"; return false;}
+    return true;
+  };
+  if (!current()) {state.outcome = "denied"; state.anomalyCode = boundaryAnomaly;
+    return closeAndRecordHttpEgress(ports, operation, state, attempt);}
+  const boundary = createHttpDispatchBoundary(prepared, () => {
+    // Journal I/O may block synchronously. Observe current authority/time before
+    // consuming, then again after it returns, with no await before emission.
+    if (!current()) {return false;}
+    boundaryAnomaly = "final_denied";
+    if (ports.journal.consume(grant.payload.consumption.journalKey,
+      grant.payload.consumption.requestFingerprint) !== "consumed" || !current()) {return false;}
     state.firstByteState = "uncertain"; return true;
   });
   let dispatched: Awaited<ReturnType<HttpEgressTransportSession["dispatch"]>>;
-  try {dispatched = await ports.clock.within(operation.limits.deadline,
+  state.anomalyCode = "upstream_write_failed";
+  try {dispatched = await ports.clock.within(deadline,
     () => session.dispatch(boundary.consume, operation.signal), operation.signal);}
   finally {boundary.seal();}
   state.firstByteState = boundary.wasConsumed() ? "uncertain" : "not_sent";
@@ -127,7 +144,7 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
   let rejectedStatus: HttpEgressAnomalyCode | undefined;
   let closure: ReturnType<typeof beginHttpClosure> | undefined;
   Object.assign(state, await observeHttpResponse(observed.response, {...operation, limits: {...operation.limits,
-    maxOutputBytes: Math.min(operation.limits.maxOutputBytes, grant.payload.limits.responseBytes)}}, ports.clock, status => {
+    deadline, maxOutputBytes: Math.min(operation.limits.maxOutputBytes, grant.payload.limits.responseBytes)}}, ports.clock, status => {
     rejectedStatus = retryAnomaly(status); if (rejectedStatus !== undefined) {ports.guard.invalidate(lease); return false;}
     return true;}, async () => {
     closure = beginHttpClosure(ports, operation, state, attempt);
