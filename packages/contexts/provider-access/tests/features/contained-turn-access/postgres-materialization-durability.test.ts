@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPostgresMaterializationAuthorization } from "../../../dist/features/contained-turn-access/composition/postgres-materialization-authorization.js";
 import { createPostgresMaterializationRepository } from "../../../dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js";
+import { createPostgresCredentialRenderingOwner } from "../../../dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js";
 import { renderingFixture, selectorFor } from "./credential-rendering-test-fixture.ts";
 
 // Opt-in only: a newly created, caller-owned test database. No ambient application URL.
@@ -110,5 +111,38 @@ test("PA-M1 PostgreSQL durability and concurrent current-owner contract", {skip:
       throw new Error("rollback fixture");
     }), /rollback fixture/u);
     assert.deepEqual(await one.authorization.observe(selectorFor(input)), {kind: "indeterminate"});
+  });
+
+  await t.test("actual durable PA renderer keeps freshness private and rereads revocation before acquisition", async () => {
+    const renderFixture = renderingFixture();
+    const attached = createPostgresCredentialRenderingOwner(a, renderFixture.selection, renderFixture.acquisition);
+    const owner = attached.owner; t.after(owner.dispose);
+    const input = await renderFixture.request({authorizationRequestId: "request:render-durable"});
+    const fresh = await owner.authorization.authorize(input);
+    assert.equal(fresh.kind, "authorized");
+    if (fresh.kind !== "authorized") {throw new Error("Expected fresh persistent PA authorization");}
+    assert.deepEqual(await owner.rendering.render({...fresh.receipt}), {kind: "denied"});
+    const credentials = await owner.rendering.render(fresh.receipt);
+    assert.equal(credentials.kind, "rendered");
+    if (credentials.kind !== "rendered") {throw new Error("Expected fixture credential rendering");}
+    try {
+      assert.equal(renderFixture.requests[0]?.authorization, fresh.receipt);
+      assert.equal(new TextDecoder().decode(credentials.credentials.fields[0]?.valueBytes), "Bearer fixture-pa");
+      for (const raw of renderFixture.raw) {
+        assert.equal(raw.kind, "acquired");
+        if (raw.kind === "acquired") {for (const field of raw.fields) {assert.ok(field.valueBytes.every(value => value === 0));}}
+      }
+    } finally {credentials.credentials.release();}
+    assert.ok(credentials.credentials.fields.every(field => field.valueBytes.every(value => value === 0)));
+    assert.deepEqual(await owner.rendering.render(fresh.receipt), {kind: "denied"});
+    assert.equal((await two.authorization.authorize(input)).kind, "observed");
+    const pending = await owner.authorization.authorize(await renderFixture.request({authorizationRequestId: "request:render-revoked"}));
+    assert.equal(pending.kind, "authorized");
+    if (pending.kind !== "authorized") {throw new Error("Expected fresh pre-revocation receipt");}
+    assert.equal(await two.control.replaceBinding({...binding, revocation: "revoked"}, 6), 7);
+    assert.deepEqual(await owner.rendering.render(pending.receipt), {kind: "denied"});
+    assert.equal(renderFixture.requests.length, 1, "Revocation must deny before another acquisition");
+    owner.dispose();
+    await assert.rejects(attached.control.replaceBinding(binding, 7), /closed/u);
   });
 });
