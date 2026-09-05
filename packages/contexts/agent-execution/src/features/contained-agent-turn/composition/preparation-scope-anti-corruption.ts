@@ -146,6 +146,30 @@ const awaitContainedTurnOwnerPromise = async <Value>(promise: Promise<Value>): P
   return promise;
 };
 
+type AcceptanceOwnerOutcome = Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["accept"]>>;
+
+const projectAcceptanceOwnerOutcome = (outcome: AcceptanceOwnerOutcome): AcceptanceOwnerOutcome => {
+  // Capture hostile owner data once, before scope checks or caller projections.
+  const safeOutcome = cloneContainedTurnPortValue(outcome);
+  if (safeOutcome.kind === "accepted" || safeOutcome.kind === "replayed") {
+    assertContainedTurnExactRecord("confirmed acceptance outcome", safeOutcome, ["kind", "operation"]);
+    return trustedFreeze({ kind: safeOutcome.kind, operation: snapshotContainedTurnOwnedOperation(safeOutcome.operation) });
+  }
+  if (safeOutcome.kind === "potential_acceptance") {
+    assertContainedTurnExactRecord("potential acceptance outcome", safeOutcome, ["candidateOperation", "evidenceId", "kind"]);
+    return trustedFreeze({
+      candidateOperation: snapshotContainedTurnOwnedOperation(safeOutcome.candidateOperation),
+      evidenceId: validateContainedTurnIdentity("evidence", safeOutcome.evidenceId),
+      kind: "potential_acceptance",
+    });
+  }
+  if (safeOutcome.kind === "not_found" || safeOutcome.kind === "fingerprint_conflict") {
+    assertContainedTurnExactRecord("absent acceptance outcome", safeOutcome, ["kind"]);
+    return trustedFreeze({ kind: safeOutcome.kind });
+  }
+  throw new TypeError("unknown acceptance owner outcome");
+};
+
 type GrantOwnerOutcome = Awaited<ReturnType<NonNullable<
   ContainedTurnKernelDependencies["providerAccess"]["consumeForDispatch"]
 >>> | Awaited<ReturnType<NonNullable<
@@ -346,6 +370,7 @@ export const createContainedTurnPreparationScopeDependencies = (
     provider: snapshotBoundaryPort("provider", raw("provider")) as ContainedTurnKernelDependencies["provider"],
   });
   validateContainedTurnKernelDependencies(rawDependencies);
+  const accept = rawOperationStore.accept;
   const claim = rawOperationStore.claimPreparedDispatch;
   const retire = rawOperationStore.retireDispatchPreparation;
   const record = rawOperationStore.recordDispatchPreparationCleanup;
@@ -356,6 +381,8 @@ export const createContainedTurnPreparationScopeDependencies = (
   const custodyRelease = rawCustody.releaseRetiredReservation;
 
   const operationStore = overrideBoundaryPort(rawOperationStore, trustedFreeze({
+    accept: async (...args: Parameters<typeof accept>) =>
+      projectAcceptanceOwnerOutcome(await awaitContainedTurnOwnerPromise(accept(...args))),
     claimPreparedDispatch: async (input: Parameters<typeof claim>[0]) => {
       const outcome = projectClaimOwnerOutcome(await awaitContainedTurnOwnerPromise(claim(input)));
       if (outcome.kind !== "claimed") {return outcome;}
