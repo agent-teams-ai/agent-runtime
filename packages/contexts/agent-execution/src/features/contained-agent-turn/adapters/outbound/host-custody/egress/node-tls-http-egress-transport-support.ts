@@ -44,61 +44,66 @@ const invalidConfiguration = (): NodeTlsHttpEgressError => new NodeTlsHttpEgress
 const validBoundedInteger = (value: number, minimum: number, maximum: number): boolean =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
+const copyTrustInputs = (authorities: readonly NodeTlsTrustInput[]): Array<string | Buffer> => {
+  if (!Array.isArray(authorities)) {throw invalidConfiguration();}
+  const count: unknown = Object.getOwnPropertyDescriptor(authorities, "length")?.value;
+  if (!Number.isSafeInteger(count) || (count as number) < 1 || (count as number) > 32) {
+    throw invalidConfiguration();
+  }
+  const copied: Array<string | Buffer> = [];
+  let aggregateByteLength = 0;
+  for (let index = 0; index < (count as number); index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(authorities, String(index));
+    if (descriptor === undefined || !("value" in descriptor)) {throw invalidConfiguration();}
+    const authority: unknown = descriptor.value;
+    if (typeof authority === "string") {
+      const remainingByteLength = MAXIMUM_TRUST_BYTES - aggregateByteLength;
+      if (authority.length === 0 || authority.length > remainingByteLength) {throw invalidConfiguration();}
+      const byteLength = Buffer.byteLength(authority, "utf8");
+      if (byteLength > remainingByteLength) {throw invalidConfiguration();}
+      aggregateByteLength += byteLength;
+      copied[index] = authority;
+      continue;
+    }
+    const byteLength = intrinsicUint8ArrayLength(authority);
+    if (byteLength === undefined || byteLength === 0 || byteLength > MAXIMUM_TRUST_BYTES - aggregateByteLength) {
+      throw invalidConfiguration();
+    }
+    const snapshot = Buffer.allocUnsafe(byteLength);
+    Reflect.apply(uint8ArraySet, snapshot, [authority]);
+    aggregateByteLength += byteLength;
+    copied[index] = snapshot;
+  }
+  return copied;
+};
+
+const canonicalTrustAnchors = (authorities: readonly (string | Buffer)[]): Readonly<{
+  anchors: ReadonlyMap<string, string>;
+  fingerprints: readonly string[];
+}> => {
+  // OpenSSL silently ignores some malformed CA entries, so parse each PEM
+  // block here and fingerprint canonical DER with set semantics.
+  const anchors = new Map<string, string>();
+  for (const authority of authorities) {
+    const pem = typeof authority === "string" ? authority : authority.toString("utf8");
+    const blocks = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/gu);
+    if (blocks === null || pem.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/gu, "").trim() !== "") {
+      throw invalidConfiguration();
+    }
+    for (const block of blocks) {
+      const certificate = new X509Certificate(block);
+      const encoded = block.replace("-----BEGIN CERTIFICATE-----", "")
+        .replace("-----END CERTIFICATE-----", "").replace(/\s/gu, "");
+      if (encoded !== certificate.raw.toString("base64")) {throw invalidConfiguration();}
+      anchors.set(sha256(certificate.raw), certificate.toString());
+    }
+  }
+  return Object.freeze({ anchors, fingerprints: [...anchors.keys()].toSorted() });
+};
+
 export const fixTrust = (authorities: readonly NodeTlsTrustInput[]): FixedNodeTlsTrust => {
   try {
-    if (!Array.isArray(authorities)) {throw invalidConfiguration();}
-    const lengthDescriptor = Object.getOwnPropertyDescriptor(authorities, "length");
-    const count = lengthDescriptor?.value;
-    if (!Number.isSafeInteger(count) || count < 1 || count > 32) {throw invalidConfiguration();}
-
-    const copied: Array<string | Buffer> = [];
-    let aggregateByteLength = 0;
-    for (let index = 0; index < count; index += 1) {
-      const authorityDescriptor = Object.getOwnPropertyDescriptor(authorities, String(index));
-      if (authorityDescriptor === undefined || !("value" in authorityDescriptor)) {throw invalidConfiguration();}
-      const authority: unknown = authorityDescriptor.value;
-      if (typeof authority === "string") {
-        const remainingByteLength = MAXIMUM_TRUST_BYTES - aggregateByteLength;
-        if (authority.length === 0 || authority.length > remainingByteLength) {throw invalidConfiguration();}
-        const byteLength = Buffer.byteLength(authority, "utf8");
-        if (byteLength > remainingByteLength) {
-          throw invalidConfiguration();
-        }
-        aggregateByteLength += byteLength;
-        copied[index] = authority;
-        continue;
-      }
-      const byteLength = intrinsicUint8ArrayLength(authority);
-      if (byteLength === undefined || byteLength === 0 || byteLength > MAXIMUM_TRUST_BYTES - aggregateByteLength) {
-        throw invalidConfiguration();
-      }
-      const snapshot = Buffer.allocUnsafe(byteLength);
-      Reflect.apply(uint8ArraySet, snapshot, [authority]);
-      aggregateByteLength += byteLength;
-      copied[index] = snapshot;
-    }
-
-    // Parse every PEM block before handing normalized anchors to OpenSSL, which
-    // otherwise silently ignores malformed CA entries. Fingerprint DER, not PEM
-    // formatting, and treat ordering and duplicate anchors as set semantics.
-    const anchors = new Map<string, string>();
-    for (const authority of copied) {
-      const pem = typeof authority === "string" ? authority : authority.toString("utf8");
-      const blocks = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/gu);
-      if (blocks === null || pem.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/gu, "").trim() !== "") {
-        throw new NodeTlsHttpEgressError("invalid_configuration");
-      }
-      for (const block of blocks) {
-        const certificate = new X509Certificate(block);
-        const encoded = block.replace("-----BEGIN CERTIFICATE-----", "")
-          .replace("-----END CERTIFICATE-----", "").replace(/\s/gu, "");
-        if (encoded !== certificate.raw.toString("base64")) {
-          throw new NodeTlsHttpEgressError("invalid_configuration");
-        }
-        anchors.set(sha256(certificate.raw), certificate.toString());
-      }
-    }
-    const fingerprints = [...anchors.keys()].sort();
+    const { anchors, fingerprints } = canonicalTrustAnchors(copyTrustInputs(authorities));
     return Object.freeze({
       trustAnchorDigest: `sha256:${sha256(`agent-runtime.node-tls-trust-anchors/v1\n${fingerprints.join("\n")}\n`)}` as const,
       secureContext: createSecureContext({

@@ -62,7 +62,7 @@ const expectClosed = async (attempt: ReturnType<NodeTlsHttpEgressTransport["begi
   assert.match(receipt.receiptDigest, /^[a-f0-9]{64}$/u);
 };
 
-describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
+describe("NodeTlsHttpEgressTransport trust policy", () => {
   test("binds a valid policy SHA-256 stable across equal bindings", () => {
     const selectedAddress = canonicalLiteralAddress("127.0.0.1");
     assert.ok(selectedAddress);
@@ -105,7 +105,7 @@ describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
     const fixed = fixTrust([bytes, SYNTHETIC_OTHER_CA]);
     bytes.fill(0);
     const fingerprints = [SYNTHETIC_LOOPBACK_CA, SYNTHETIC_OTHER_CA]
-      .map(pem => sha256(new X509Certificate(pem).raw)).sort();
+      .map(pem => sha256(new X509Certificate(pem).raw)).toSorted();
     assert.equal(fixed.trustAnchorDigest,
       `sha256:${sha256(`agent-runtime.node-tls-trust-anchors/v1\n${fingerprints.join("\n")}\n`)}`);
     assert.match(fixed.trustAnchorDigest, /^sha256:[0-9a-f]{64}$/u);
@@ -128,6 +128,10 @@ describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
       });
     }
   });
+
+});
+
+describe("NodeTlsHttpEgressTransport real synthetic loopback TLS", () => {
 
   test("dials the supplied literal without DNS and binds CA, SAN, SNI, ALPN, peer, TLS and digests", async () => {
     const server = await startLoopbackTlsServer({
