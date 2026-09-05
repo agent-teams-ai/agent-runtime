@@ -46,12 +46,12 @@ class DeadlineByteReader {
     this.iterator = source[Symbol.asyncIterator]();
   }
 
-  private async pull(): Promise<void> {
+  private async pull(deadline = this.limits.deadline): Promise<void> {
     if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
-    if (this.clock.now() >= this.limits.deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
+    if (this.clock.now() >= deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
     let next: IteratorResult<Uint8Array>;
     try {
-      next = await this.clock.within(this.limits.deadline, () => this.iterator.next(), this.signal);
+      next = await this.clock.within(deadline, () => this.iterator.next(), this.signal);
     } catch {
       throw new StrictHttpResponseError(this.signal?.aborted ? "cancelled" : "stalled", this.bytesRead, 0);
     }
@@ -106,10 +106,16 @@ class DeadlineByteReader {
   public requireFramedEnd(): void {
     if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
     if (this.clock.now() >= this.limits.deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
-    // Framing ends the response, not the persistent transport. Reject surplus
-    // bytes already observed, but do not pull again or return the iterator:
-    // outer Host Custody owns transport closure and its settlement evidence.
+    // Framing permits Host Custody to close the persistent transport. Surplus
+    // in later source chunks must still be checked after that closure barrier.
     if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
+  }
+
+  public async requireSourceEnd(deadline: number): Promise<void> {
+    while (!this.ended) {
+      await this.pull(deadline);
+      if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
+    }
   }
 
   public dispose(): void {zeroHttpBytes(this.buffered); this.buffered = new Uint8Array();}
@@ -309,7 +315,8 @@ export const forwardStrictHttpResponse = async (
   connection: HttpEgressConnection,
   limits: HttpEgressLimits,
   clock: HttpEgressClock,
-  ...[signal, onHeadAccepted]: [signal?: AbortSignal, onHeadAccepted?: (status: number) => boolean]
+  ...[signal, onHeadAccepted, onFramedEnd]: [signal?: AbortSignal,
+    onHeadAccepted?: (status: number) => boolean, onFramedEnd?: () => Promise<boolean>]
 ): Promise<StrictHttpResponseResult> => {
   const writeContext = Object.freeze({ connection, clock, limits, signal });
   const reader = new DeadlineByteReader(source, clock, limits, signal);
@@ -360,6 +367,11 @@ export const forwardStrictHttpResponse = async (
     };
     try {
       await forwardFramedBody(reader, head, limits, emit);
+      // The Host owns closure; the parser owns the final bounded source check.
+      // Unknown closure is reconciled by the Host without waiting for peer EOF.
+      if (onFramedEnd === undefined || await onFramedEnd()) {
+        await reader.requireSourceEnd(onFramedEnd === undefined ? limits.deadline : limits.closureDeadline);
+      }
     } catch (error) {
       if (!(error instanceof StrictHttpResponseError)) {
         throw new StrictHttpResponseError("malformed", reader.bytesRead, outboundBytes);

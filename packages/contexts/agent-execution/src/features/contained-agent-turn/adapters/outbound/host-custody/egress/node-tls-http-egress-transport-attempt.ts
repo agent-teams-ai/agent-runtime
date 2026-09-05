@@ -43,6 +43,7 @@ export interface OwnedNodeTlsSocket {
   getPeerX509Certificate(): X509Certificate | undefined;
   isSessionReused(): boolean;
   iterator(options?: Readonly<{ destroyOnReturn?: boolean }>): AsyncIterableIterator<unknown>;
+  read?(): unknown;
 }
 
 export type NodeTlsHttpEgressConnector = (options: ConnectionOptions) => OwnedNodeTlsSocket;
@@ -59,9 +60,21 @@ const failedAfterConsumption = (): HttpEgressDispatch => Object.freeze({
 
 const canonicalConnectFailure = (): NodeTlsHttpEgressError => new NodeTlsHttpEgressError("connect_failed");
 
+const nextResponseChunk = (socket: OwnedNodeTlsSocket, iterator: AsyncIterator<unknown>, closedByHost: boolean)
+  : Promise<IteratorResult<unknown>> => {
+  if (closedByHost && socket.closed) {
+    if (socket.readableLength === 0) {return Promise.resolve({done: true, value: undefined});}
+    // Node's async iterator throws premature-close even with queued data after
+    // destroy(). Read that retained queue so surplus remains byte evidence.
+    if (socket.read !== undefined) {return Promise.resolve({done: false, value: socket.read()});}
+  }
+  return iterator.next();
+};
+
 const boundedResponse = (
   socket: OwnedNodeTlsSocket,
   signal: AbortSignal | undefined,
+  closedByHost: () => boolean,
 ): AsyncIterable<Uint8Array> => Object.freeze({
   async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
     const abort = (): void => {socket.destroy(canonicalConnectFailure());};
@@ -72,7 +85,7 @@ const boundedResponse = (
         try {
           if (signal?.aborted) {abort();}
           else {signal?.addEventListener("abort", abort, { once: true });}
-          next = await iterator.next();
+          next = await nextResponseChunk(socket, iterator, closedByHost());
         } finally {
           // A framed response may leave this generator suspended at yield.
           signal?.removeEventListener("abort", abort);
@@ -92,16 +105,19 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
   readonly #socket: OwnedNodeTlsSocket;
   readonly #binding: HttpEgressTransportBinding;
   readonly #isUsable: () => boolean;
+  readonly #closedByHost: () => boolean;
   #dispatched = false;
 
   public constructor(
     socket: OwnedNodeTlsSocket,
     binding: HttpEgressTransportBinding,
     isUsable: () => boolean,
+    closedByHost: () => boolean,
   ) {
     this.#socket = socket;
     this.#binding = binding;
     this.#isUsable = isUsable;
+    this.#closedByHost = closedByHost;
     Object.freeze(this);
   }
 
@@ -154,7 +170,7 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
           status: "response",
           acceptedRequestBytes: acceptedLength,
           acknowledgement: "acknowledged",
-          response: boundedResponse(this.#socket, signal),
+          response: boundedResponse(this.#socket, signal, this.#closedByHost),
         }));
       };
 
@@ -303,6 +319,7 @@ export class NodeTlsHttpEgressAttempt implements HttpEgressTransportAttempt {
           socket,
           binding,
           () => this.#state === "ready" && !socket.destroyed && !socket.closed,
+          () => this.#closePromise !== undefined,
         );
         ready.resolve(this.#session);
       } catch (error) {

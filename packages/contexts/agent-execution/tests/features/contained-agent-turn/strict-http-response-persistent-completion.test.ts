@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Readable } from "node:stream";
 import type { HttpEgressClock } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 import { createStrictHttpEgressBroker } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
+import { forwardStrictHttpResponse, StrictHttpResponseError } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-response.js";
+import { NodeTlsHttpEgressTransport } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-tls-http-egress-transport.js";
+import { SYNTHETIC_LOOPBACK_CA } from "../../fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 import { bytes, createEgressFixture, outputText } from "./http-egress-test-fixture.ts";
+import { SyntheticOwnedTlsSocket, syntheticConnector } from "./node-tls-http-egress-transport-test-helper.ts";
 
 const fixedHead = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n";
 const chunkHead = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n";
@@ -13,6 +18,7 @@ const persistentSource = (parts: readonly string[]) => {
   let pulls = 0;
   let returns = 0;
   let closed = false;
+  let pullsAtClose = 0;
   const pending = Promise.withResolvers<IteratorResult<Uint8Array>>();
   const source: AsyncIterable<Uint8Array> = {
     [Symbol.asyncIterator]: () => ({
@@ -24,7 +30,9 @@ const persistentSource = (parts: readonly string[]) => {
     }),
   };
   return { source, get pulls() { return pulls; }, get returns() { return returns; },
+    get pullsAtClose() { return pullsAtClose; },
     get closed() { return closed; }, close: () => {
+      pullsAtClose = pulls;
       closed = true;
       pending.resolve({ done: true, value: undefined });
     } };
@@ -72,7 +80,8 @@ for (const [name, parts, body] of [
     const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
     assert.equal(receipt.outcome, "completed");
     assert.equal(receipt.anomalyCode, "none");
-    assert.equal(peer.pulls, parts.length);
+    assert.equal(peer.pullsAtClose, parts.length, "framing must trigger closure without waiting for peer EOF");
+    assert.equal(peer.pulls, parts.length + 1, "check the closed source once for surplus bytes");
     assert.equal(peer.returns, 0, "parser must not acquire transport cleanup ownership");
     assert.equal(peer.closed, true);
     assert.equal(fixture.observations.closes, 1);
@@ -155,7 +164,8 @@ for (const disposition of ["drain", "fail", "cancel"] as const) {
     assert.equal(receipt.outboundResponseWriteUncertain, disposition === "fail");
     assert.equal(receipt.outboundResponseBytes, bytes(downstreamHead).byteLength + (disposition === "fail" ? 0 : 2));
     assert.equal(peer.closed, true);
-    assert.equal(peer.pulls, 1);
+    assert.equal(peer.pullsAtClose, 1);
+    assert.equal(peer.pulls, disposition === "drain" ? 2 : 1);
   });
 }
 
@@ -181,6 +191,7 @@ test("Host Custody waits for transport closure before inbound completion and evi
   await closing.promise;
   assert.equal(outputText(fixture), downstreamHead + "ok");
   assert.equal(peer.closed, false);
+  assert.equal(peer.pulls, 1, "do not read beyond framing while transport closure is pending");
   assert.equal(settled, false);
   assert.equal(fixture.observations.order.includes("inbound-close"), false);
   assert.equal(fixture.observations.receipts.length, 0);
@@ -188,8 +199,107 @@ test("Host Custody waits for transport closure before inbound completion and evi
   closed.resolve();
   assert.equal((await result).outcome, "completed");
   assert.equal(peer.closed, true);
+  assert.equal(peer.pullsAtClose, 1);
+  assert.equal(peer.pulls, 2);
   assert.deepEqual(fixture.observations.order.slice(-3), ["upstream-close", "inbound-close", "record-evidence"]);
 });
+
+for (const failure of ["unknown", "throw"] as const) {
+  test(`unproved ${failure} closure aborts inbound only after the closure observation`, async () => {
+    const {fixture, ports, peer} = persistentFixture([fixedHead + "ok"]);
+    const closing = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const dispositions: string[] = [];
+    const gatedPorts = {...ports, transport: {beginOpen: (input: Parameters<typeof ports.transport.beginOpen>[0]) => {
+      const attempt = ports.transport.beginOpen(input);
+      return {ready: attempt.ready, close: async () => {
+        closing.resolve();
+        await release.promise;
+        await attempt.close();
+        if (failure === "throw") {throw new Error("synthetic lost closure acknowledgement");}
+        return {state: "unknown" as const, receiptDigest: "unknown-closure"};
+      }};
+    }}};
+    const result = createStrictHttpEgressBroker(gatedPorts).execute({...fixture.operation, connection: {
+      ...fixture.operation.connection, close: async disposition => {
+        dispositions.push(disposition);
+        return await fixture.operation.connection.close(disposition);
+      },
+    }});
+    await closing.promise;
+    try {
+      assert.deepEqual(dispositions, []);
+      assert.equal(fixture.observations.receipts.length, 0);
+      assert.equal(ports.guard.snapshot().state, "active");
+    } finally {release.resolve();}
+    const receipt = await result;
+    assert.equal(receipt.outcome, "reconcile_required");
+    assert.equal(receipt.anomalyCode, "closure_unproved");
+    assert.equal(receipt.upstreamClosure, "unknown");
+    assert.equal(receipt.inboundClosure, "closed");
+    assert.deepEqual(dispositions, ["abort"]);
+    assert.equal(peer.pulls, 1);
+    assert.equal(fixture.observations.dispatches, 1);
+    assert.equal(fixture.observations.closes, 1);
+    assert.deepEqual(fixture.observations.receipts, [receipt]);
+    assert.equal(ports.guard.snapshot().state, "closed");
+  });
+}
+
+for (const surplus of [false, true]) {
+  test(`Node TLS owner closure retains queued surplus: ${surplus}`, async () => {
+    class ResponseSocket extends SyntheticOwnedTlsSocket {
+      readonly #source = new Readable({read() {}});
+      public read(): unknown {
+        const value = this.#source.read();
+        this.readableLength = this.#source.readableLength;
+        return value;
+      }
+      public override destroy(error?: Error): this {
+        this.#source.destroy(error);
+        return super.destroy(error);
+      }
+      public override async *iterator(): AsyncIterableIterator<unknown> {
+        this.#source.push(bytes(fixedHead + "ok"));
+        const iterator = this.#source.iterator({destroyOnReturn: false});
+        const first = await iterator.next();
+        if (surplus) {this.#source.push(bytes("x"));}
+        this.readableLength = this.#source.readableLength;
+        yield first.value;
+        yield* iterator;
+      }
+    }
+    const socket = new ResponseSocket();
+    const transport = new NodeTlsHttpEgressTransport({certificateAuthorities: [SYNTHETIC_LOOPBACK_CA],
+      connectTimeoutMs: 100, responseIdleTimeoutMs: 100, closeTimeoutMs: 100}, syntheticConnector(socket));
+    const attempt = transport.beginOpen({originHost: "provider.test", originPort: 443,
+      selectedAddress: "127.0.0.1", sni: "provider.test", alpn: "http/1.1"});
+    const fixture = createEgressFixture();
+    try {
+      const session = await attempt.ready();
+      const dispatch = await session.dispatch(() => bytes("GET / HTTP/1.1\r\nHost: provider.test\r\n\r\n"));
+      assert.equal(dispatch.status, "response");
+      if (dispatch.status !== "response") {assert.fail("missing synthetic response");}
+      const result = forwardStrictHttpResponse(dispatch.response, fixture.operation.connection, fixture.operation.limits,
+        boundedClock, undefined, undefined, async () => (await attempt.close()).state === "closed");
+      if (surplus) {
+        await assert.rejects(result, error => {
+          assert.ok(error instanceof StrictHttpResponseError);
+          assert.equal(error.kind, "malformed");
+          assert.equal(error.upstreamBytes, bytes(fixedHead + "okx").byteLength);
+          assert.equal(error.outboundBytes, bytes(downstreamHead + "ok").byteLength);
+          assert.equal(error.outboundWriteUncertain, false);
+          return true;
+        });
+      } else {
+        assert.equal((await result).outboundBytes, bytes(downstreamHead + "ok").byteLength);
+      }
+      assert.equal(outputText(fixture), downstreamHead + "ok");
+      assert.equal(socket.closed, true);
+      assert.equal(socket.writes.length, 1);
+    } finally {await attempt.close();}
+  });
+}
 
 for (const [name, head, body] of [
   ["fixed", fixedHead, "ok"],

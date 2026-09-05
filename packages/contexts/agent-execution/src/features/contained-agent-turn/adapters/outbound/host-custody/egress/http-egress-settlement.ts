@@ -49,19 +49,32 @@ const initiateHttpClosure = (close: () => Promise<unknown>) => {
   catch {return Promise.resolve();}
 };
 
-export const closeAndRecordHttpEgress = async (ports: HttpEgressBrokerPorts, operation: HttpEgressOperation,
-  state: HttpEgressMutableState, attempt?: HttpEgressTransportAttempt): Promise<Readonly<{
-    receipt: HttpEgressReceipt; fullyAcknowledged: boolean}>> => {
+const beginHttpClosure = (ports: HttpEgressBrokerPorts, operation: HttpEgressOperation,
+  state: HttpEgressMutableState, attempt?: HttpEgressTransportAttempt) => {
+  const responseObserved = Promise.withResolvers<void>();
   const upstream = attempt === undefined ? undefined : initiateHttpClosure(() => attempt.close());
-  const inbound = initiateHttpClosure(() => operation.connection.close(state.outcome === "completed" ? "complete" : "abort"));
   const acknowledge = async (pending: ReturnType<typeof initiateHttpClosure>) => {
     try {return snapshotHttpClosureDecision(await ports.clock.within(operation.limits.closureDeadline, () => pending));}
     catch {return;}
   };
-  const [upstreamValue, inboundValue] = await Promise.all([
-    upstream === undefined ? undefined : acknowledge(upstream), acknowledge(inbound),
-  ]);
-  if (upstream !== undefined) {state.upstreamClosure = upstreamValue?.state ?? "unknown";
+  const upstreamAcknowledged = Promise.resolve(upstream === undefined ? undefined : acknowledge(upstream));
+  const inbound = upstreamAcknowledged.then(async value => {
+    await responseObserved.promise;
+    const complete = state.outcome === "completed" && (attempt === undefined || value?.state === "closed");
+    return initiateHttpClosure(() => operation.connection.close(complete ? "complete" : "abort"));
+  });
+  // Arm both acknowledgement budgets now, but defer inbound completion until
+  // upstream closure and the parser's final byte evidence have been observed.
+  return {upstream: upstreamAcknowledged, inbound: acknowledge(inbound), releaseInbound: () => responseObserved.resolve()};
+};
+
+export const closeAndRecordHttpEgress = async (ports: HttpEgressBrokerPorts, operation: HttpEgressOperation,
+  state: HttpEgressMutableState, attempt?: HttpEgressTransportAttempt,
+  closure = beginHttpClosure(ports, operation, state, attempt)): Promise<Readonly<{
+    receipt: HttpEgressReceipt; fullyAcknowledged: boolean}>> => {
+  closure.releaseInbound();
+  const [upstreamValue, inboundValue] = await Promise.all([closure.upstream, closure.inbound]);
+  if (attempt !== undefined) {state.upstreamClosure = upstreamValue?.state ?? "unknown";
     state.upstreamClosureReceiptDigest = upstreamValue?.receiptDigest ?? "";}
   state.inboundClosure = inboundValue?.state ?? "unknown";
   state.inboundClosureReceiptDigest = inboundValue?.receiptDigest ?? "";
@@ -112,10 +125,14 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
     return closeAndRecordHttpEgress(ports, operation, state, attempt);}
   state.firstByteState = "sent"; state.upstreamRequestBytes = observed.upstreamRequestBytes;
   let rejectedStatus: HttpEgressAnomalyCode | undefined;
+  let closure: ReturnType<typeof beginHttpClosure> | undefined;
   Object.assign(state, await observeHttpResponse(observed.response, {...operation, limits: {...operation.limits,
     maxOutputBytes: Math.min(operation.limits.maxOutputBytes, grant.payload.limits.responseBytes)}}, ports.clock, status => {
     rejectedStatus = retryAnomaly(status); if (rejectedStatus !== undefined) {ports.guard.invalidate(lease); return false;}
-    return true;}));
+    return true;}, async () => {
+    closure = beginHttpClosure(ports, operation, state, attempt);
+    return (await closure.upstream)?.state === "closed";
+  }));
   if (rejectedStatus !== undefined) {state.anomalyCode = rejectedStatus; state.outcome = "denied";}
-  return closeAndRecordHttpEgress(ports, operation, state, attempt);
+  return closeAndRecordHttpEgress(ports, operation, state, attempt, closure);
 };
