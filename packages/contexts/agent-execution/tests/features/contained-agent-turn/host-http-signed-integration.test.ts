@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {describe, test} from "node:test";
+import {createCredentialMaterializationRequestDigest} from "../../../../provider-access/dist/composition.js";
 import {createHostHttpEgressSession} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
 import type {HttpEgressOperation} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js";
 import type {HostHttpGrant, HostHttpMaterializationReceipt, HostHttpProvisionalDecision,
@@ -94,7 +95,10 @@ const fixture = (options: Options = {}) => {
       materializationAuthorizationId: `pa-${ids}`, runtimeAuthorizationId: `rs-${ids}`,
       boundaryUseId: `boundary-${ids}`, connectionAttemptId: `connection-${ids}`, streamId: `stream-${ids}`});}}),
     providerAccessSnapshot: snapshot, route, providerAccess: Object.freeze({
+      createRequestDigest: createCredentialMaterializationRequestDigest,
       authorize: async input => {order.push("pa-authorize"); paInputs.push(input);
+        const {requestDigest, ...unsigned} = input;
+        assert.equal(requestDigest, await createCredentialMaterializationRequestDigest(unsigned));
         const receipt = receiptFor(input as unknown as Record<string, unknown>);
         return Object.freeze({kind: options.paAuthorizeKind ?? "authorized", receipt}) as never;},
       observe: async input => {observes += 1; order.push(`pa-observe-${observes}`);
@@ -155,6 +159,8 @@ describe("Host HTTP PA and signed RS integration", () => {
     const f = fixture(); const first = await f.session.execute(f.operation()); const second = await f.session.execute(f.operation());
     assert.equal(first.outcome, "completed"); assert.equal(second.outcome, "completed");
     assert.deepEqual(f.counts(), {ids: 2, observes: 4, opens: 2, journalCalls: 2, renders: 2});
+    assert.deepEqual(f.order.filter(step => ["pa-authorize", "render", "resolve", "open"].includes(step)),
+      ["pa-authorize", "render", "resolve", "open", "pa-authorize", "render", "resolve", "open"]);
     assert.equal((f.provisionalInputs[0] as any).request.headers.credentialFields[0].credentialBindingDigest,
       snapshot.ownerAuthorityDigest); assert.doesNotMatch(JSON.stringify(f.finalInputs), new RegExp(SECRET));
     assert.match(new TextDecoder().decode(f.wires[0]), new RegExp(SECRET));
@@ -164,6 +170,9 @@ describe("Host HTTP PA and signed RS integration", () => {
     for (const options of [{paAuthorizeKind: "observed" as const}, {firstObserveDenied: true}, {secondObserveDenied: true}]) {
       const f = fixture(options); const receipt = await f.session.execute(f.operation());
       assert.equal(receipt.outcome, "denied"); assert.equal(f.counts().journalCalls, 0);
+      assert.equal(receipt.anomalyCode, options.paAuthorizeKind === "observed" ? "provider_access_denied" : "provider_generation_drift");
+      assert.equal(f.order.includes("pa-authorize"), true);
+      assert.equal(f.counts().observes, options.paAuthorizeKind === "observed" ? 0 : options.firstObserveDenied ? 1 : 2);
       if (options.paAuthorizeKind === "observed") {assert.equal(f.counts().renders, 0);}
       if (options.firstObserveDenied) {assert.equal(f.counts().opens, 0);}
       if (options.secondObserveDenied) {assert.equal(f.counts().opens, 1);}
@@ -179,6 +188,9 @@ describe("Host HTTP PA and signed RS integration", () => {
       {mutateGrant: value => Object.freeze({...value, payload: Object.freeze({...value.payload,
         tls: Object.freeze({...value.payload.tls, certificateDigest: "sha256:other"})})})}];
     for (const item of cases) {const f = fixture(item); const result = await f.session.execute(f.operation());
+      const final = item.verifierGrant === false || item.mutateGrant !== undefined;
+      assert.equal(result.anomalyCode, final ? "final_denied" : "provisional_denied");
+      assert.equal(f.provisionalInputs.length, 1); assert.equal(f.finalInputs.length, final ? 1 : 0);
       assert.equal(result.firstByteState, "not_sent"); assert.equal(f.counts().journalCalls, 0);}
   });
 
@@ -186,12 +198,18 @@ describe("Host HTTP PA and signed RS integration", () => {
     for (const item of [{journal: "duplicate" as const}, {cut: "revoked" as const}, {cut: "unknown" as const},
       {cutEpoch: "epoch-other"}]) {const f = fixture(item); const result = await f.session.execute(f.operation());
       assert.equal(result.firstByteState, "not_sent"); assert.equal(f.counts().journalCalls, 1);
-      assert.equal(f.order.indexOf("journal") < f.order.indexOf("dispatch") || f.order.includes("dispatch"), true);}
+      assert.equal(result.anomalyCode, item.journal === "duplicate" ? "final_denied" : "provider_generation_drift");
+      assert.deepEqual(f.order.filter(step => step === "dispatch" || step === "journal"), ["dispatch", "journal"]);
+      assert.equal(f.wires.length, 0);}
   });
 
   test("closes before exposing retry status and blocks all later authority", async () => {
     for (const status of [301, 401, 403, 429, 500]) {const f = fixture({status});
       const first = await f.session.execute(f.operation()); const counts = f.counts();
+      assert.equal(first.firstByteState, "sent"); assert.equal(f.wires.length, 1);
+      assert.equal(first.anomalyCode, status === 301 ? "redirect_rejected" : status === 429 ? "upstream_rate_limited"
+        : status === 500 ? "upstream_server_error" : "upstream_auth_rejected");
+      assert.equal(first.upstreamClosure, "closed"); assert.equal(first.inboundClosure, "closed");
       assert.equal(first.outboundResponseBytes, 0); assert.equal(f.writes.length, 0);
       await f.session.execute(f.operation()); assert.deepEqual(f.counts(), counts);}
   });
@@ -200,6 +218,12 @@ describe("Host HTTP PA and signed RS integration", () => {
     for (const item of [{dispatch: "lost" as const}, {dispatch: "throw" as const}, {truncated: true},
       {upstreamClosure: "unknown" as const}, {inboundClosure: "unknown" as const}, {evidence: "unknown" as const}]) {
       const f = fixture(item); const first = await f.session.execute(f.operation()); const counts = f.counts();
+      assert.equal(f.wires.length, 1);
+      assert.deepEqual(counts, {ids: 1, observes: 2, opens: 1, journalCalls: 1, renders: 1});
+      if (item.dispatch !== undefined) {assert.equal(first.firstByteState, "uncertain");}
+      if (item.truncated) {assert.equal(first.anomalyCode, "upstream_truncated");}
+      if (item.upstreamClosure || item.inboundClosure) {assert.equal(first.anomalyCode, "closure_unproved");}
+      if (item.evidence) {assert.equal(first.anomalyCode, "evidence_ack_lost");}
       assert.notEqual(first.outcome, "completed"); await f.session.execute(f.operation()); assert.deepEqual(f.counts(), counts);
     }
   });
