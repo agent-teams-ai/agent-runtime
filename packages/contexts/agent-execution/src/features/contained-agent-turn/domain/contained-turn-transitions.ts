@@ -398,6 +398,17 @@ const requestCancellation: MutationHandler<"request_cancellation"> = (operation,
       mutation.command.fingerprint === containedTurnCancellationFingerprint(mutation.command),
     "cancellation command subject or canonical fingerprint mismatch",
   );
+  const preservePrevention = operation.dispatch.kind === "prevented" &&
+    operation.operationCutoff.kind === "closed" && operation.operationCutoff.reason === "prevention";
+  if (preservePrevention) {
+    // The prepared cutoff is validated as command evidence, but the earlier
+    // prevention remains the sole durable cutoff authority.
+    validateContainedTurnProofBinding({
+      ...operation, cancellation: { command: mutation.command, kind: "requested", proofId: mutation.proof.proofId },
+    }, mutation.cutoffProof);
+    invariant(mutation.cutoffProof.binding.cancellationCommandId === mutation.command.cancellationCommandId,
+      "cancellation cutoff evidence must bind the exact cancellation command");
+  }
   if (operation.cancellation.kind === "requested") {
     validateContainedTurnProofBinding(operation, mutation.proof);
     validateContainedTurnProofBinding(operation, mutation.cutoffProof);
@@ -405,8 +416,8 @@ const requestCancellation: MutationHandler<"request_cancellation"> = (operation,
         operation.cancellation.command.cancellationCommandId === mutation.command.cancellationCommandId &&
         operation.cancellation.command.fingerprint === mutation.command.fingerprint &&
         operation.cancellation.proofId === mutation.proof.proofId && operation.operationCutoff.kind === "closed" &&
-        operation.operationCutoff.reason === "cancellation" &&
-        operation.operationCutoff.proofId === mutation.cutoffProof.proofId,
+        (preservePrevention || (operation.operationCutoff.reason === "cancellation" &&
+        operation.operationCutoff.proofId === mutation.cutoffProof.proofId)),
       "cancellation replay requires exact command and proof identity",
     );
     return operation;
@@ -422,7 +433,7 @@ const requestCancellation: MutationHandler<"request_cancellation"> = (operation,
       ? operation.admissionFence
       : { kind: "fenced", proofId: mutation.cutoffProof.proofId },
     cancellation: { command: mutation.command, kind: "requested", proofId: mutation.proof.proofId },
-    operationCutoff: {
+    operationCutoff: preservePrevention ? operation.operationCutoff : {
       kind: "closed",
       proofId: mutation.cutoffProof.proofId,
       reason: "cancellation",
@@ -431,7 +442,7 @@ const requestCancellation: MutationHandler<"request_cancellation"> = (operation,
     output: operation.output.fence.kind === "open"
       ? { chunks: operation.output.chunks, fence: { finalCursor: operation.output.chunks.length, kind: "fenced" } }
       : operation.output,
-    proofs: [...operation.proofs, mutation.proof, mutation.cutoffProof],
+    proofs: [...operation.proofs, mutation.proof, ...(preservePrevention ? [] : [mutation.cutoffProof])],
     revision: operation.revision + 1,
   };
 };

@@ -118,6 +118,18 @@ const validateGrantRequestId = (owner: string, value: string | null): void => {
 
 type BindablePreparation = Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" | "cleanup_pending" }>;
 
+const assertConsumptionCanBind = (
+  preparation: BindablePreparation,
+  providerAccessGrantRequestId: string | null,
+  runtimeSecurityGrantRequestId: string | null,
+): void => {
+  if (preparation.kind === "cleanup_pending" &&
+      ((preparation.providerAccessNotConsumed && providerAccessGrantRequestId !== null) ||
+       (preparation.runtimeSecurityNotConsumed && runtimeSecurityGrantRequestId !== null))) {
+    throw new TypeError("consumed grant contradicts authoritative not-consumed outcome");
+  }
+};
+
 export function bindContainedTurnPreparationGrantRequests(
   preparation: Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" }>,
   consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds,
@@ -155,6 +167,7 @@ export function bindContainedTurnPreparationGrantRequests(
       runtimeSecurityGrantRequestId !== preparation.runtimeSecurityGrantRequestId) {
     throw new TypeError("Runtime Security consumed grant identity substitution rejected");
   }
+  assertConsumptionCanBind(preparation, providerAccessGrantRequestId, runtimeSecurityGrantRequestId);
   return Object.freeze({
     ...preparation,
     ...(consumedGrantRequestIds.providerAccessConsumptionReceipt === undefined ? {} : { providerAccessConsumptionReceipt: consumedGrantRequestIds.providerAccessConsumptionReceipt }),
@@ -163,6 +176,20 @@ export function bindContainedTurnPreparationGrantRequests(
     runtimeSecurityGrantRequestId,
   });
 }
+
+const mergeConsumptionEvidence = (
+  previous: ContainedTurnEvidenceId | null,
+  next: ContainedTurnEvidenceId | undefined,
+  notConsumed: boolean,
+): ContainedTurnEvidenceId | null => {
+  if (next === undefined) {return previous;}
+  validateContainedTurnIdentity("evidence", next);
+  if (notConsumed) {throw new TypeError("consumption evidence contradicts authoritative not-consumed outcome");}
+  if (previous !== null && previous !== next) {
+    throw new TypeError("consumption evidence substitution rejected");
+  }
+  return next;
+};
 
 export const retireContainedTurnDispatchPreparation = (
   preparation: ContainedTurnDispatchPreparation,
@@ -184,48 +211,69 @@ export const retireContainedTurnDispatchPreparation = (
       preparation.runtimeSecurityGrantRequestId !== consumedGrantRequestIds.runtimeSecurityGrantRequestId) {
     throw new TypeError("Runtime Security retired grant identity substitution rejected");
   }
-  if (preparation.kind === "cleanup_pending") {
-    return bindContainedTurnPreparationGrantRequests(preparation, consumedGrantRequestIds);
-  }
-  if (preparation.kind !== "active") {return preparation;}
+  if (preparation.kind === "cleanup_closed") {return preparation;}
   const bound = bindContainedTurnPreparationGrantRequests(preparation, consumedGrantRequestIds);
-  const providerAccessConsumptionEvidenceId = consumptionEvidenceIds.providerAccessEvidenceId === undefined
-    ? null
-    : validateContainedTurnIdentity("evidence", consumptionEvidenceIds.providerAccessEvidenceId);
-  const runtimeSecurityConsumptionEvidenceId = consumptionEvidenceIds.runtimeSecurityEvidenceId === undefined
-    ? null
-    : validateContainedTurnIdentity("evidence", consumptionEvidenceIds.runtimeSecurityEvidenceId);
+  const pending: CleanupPendingPreparation = bound.kind === "cleanup_pending" ? bound : {
+    ...bound,
+    cleanupEvidenceIds: [],
+    cleanupPermit: containedTurnCleanupPermit(bound, nonce),
+    custodyReleased: false,
+    kind: "cleanup_pending",
+    providerAccessConsumptionEvidenceId: null,
+    providerAccessNotConsumed: false,
+    providerAccessSettled: false,
+    runtimeSecurityConsumptionEvidenceId: null,
+    runtimeSecurityNotConsumed: false,
+    runtimeSecuritySettled: false,
+  };
+  return mergePendingConsumption(pending, consumptionEvidenceIds, reason === "prevention");
+};
+
+const mergePendingConsumption = (
+  preparation: CleanupPendingPreparation,
+  consumptionEvidenceIds: ContainedTurnGrantConsumptionEvidenceIds,
+  prevention: boolean,
+): CleanupPendingPreparation => {
+  const providerAccessConsumptionEvidenceId = mergeConsumptionEvidence(
+    preparation.providerAccessConsumptionEvidenceId,
+    consumptionEvidenceIds.providerAccessEvidenceId,
+    preparation.providerAccessNotConsumed,
+  );
+  const runtimeSecurityConsumptionEvidenceId = mergeConsumptionEvidence(
+    preparation.runtimeSecurityConsumptionEvidenceId,
+    consumptionEvidenceIds.runtimeSecurityEvidenceId,
+    preparation.runtimeSecurityNotConsumed,
+  );
   const cleanupEvidenceIds = Object.freeze([
     ...new Set([
+      ...preparation.cleanupEvidenceIds,
       providerAccessConsumptionEvidenceId,
       runtimeSecurityConsumptionEvidenceId,
     ].filter((evidenceId): evidenceId is ContainedTurnEvidenceId => evidenceId !== null)),
   ]);
+  if (cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
+    throw new TypeError("cleanup evidence limit exceeded");
+  }
   // A trusted prevention outcome is an authoritative negative consumption
   // result for an owner that returned no request identity, receipt, or
   // indeterminate evidence. Ordinary absence remains unresolved.
-  const providerAccessNotConsumed = reason === "prevention" &&
-    bound.providerAccessGrantRequestId === null &&
-    bound.providerAccessConsumptionReceipt === undefined &&
+  const providerAccessNotConsumed = preparation.providerAccessNotConsumed || prevention &&
+    preparation.providerAccessGrantRequestId === null &&
+    preparation.providerAccessConsumptionReceipt === undefined &&
     providerAccessConsumptionEvidenceId === null;
-  const runtimeSecurityNotConsumed = reason === "prevention" &&
-    bound.runtimeSecurityGrantRequestId === null &&
-    bound.runtimeSecurityConsumptionReceipt === undefined &&
+  const runtimeSecurityNotConsumed = preparation.runtimeSecurityNotConsumed || prevention &&
+    preparation.runtimeSecurityGrantRequestId === null &&
+    preparation.runtimeSecurityConsumptionReceipt === undefined &&
     runtimeSecurityConsumptionEvidenceId === null;
   return Object.freeze({
-    ...bound,
+    ...preparation,
     cleanupEvidenceIds,
-    cleanupPermit: containedTurnCleanupPermit(bound, nonce),
-    custodyReleased: false,
-    kind: "cleanup_pending",
     providerAccessConsumptionEvidenceId,
     // Missing consumption evidence is an unresolved owner obligation, never
     // proof of non-consumption. Only an authoritative settlement closes it.
     providerAccessNotConsumed,
-    providerAccessSettled: false,
     runtimeSecurityConsumptionEvidenceId,
     runtimeSecurityNotConsumed,
-    runtimeSecuritySettled: false,
   });
 };
 
