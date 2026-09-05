@@ -110,6 +110,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createContainedTurnFeature",
       "createContainedTurnProviderAccessPort",
       "createContainedTurnRuntimeSecurityPort",
+      "createHostHttpEgressSession",
       "createNodeContainedTurnArtifacts",
       "createNodeContainedTurnWorkspace",
       "createNodeExecutableFileObserver",
