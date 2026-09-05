@@ -14,13 +14,20 @@ const exact = (value: unknown, names: readonly string[]): Record<string, unknown
     if (descriptor === undefined || !("value" in descriptor)) {return undefined;} result[name] = descriptor.value;}
   return result;
 };
+const validateBodyPolicy = (expected: Record<string, unknown>, limits: HttpEgressLimits): void => {
+  if (Object.hasOwn(expected, "bodyMode") && (expected.bodyMode !== "forbidden"
+    || (expected.method !== "GET" && expected.method !== "HEAD") || limits.maxInboundBodyBytes !== 0)) {
+    throw new TypeError("invalid HTTP egress body policy");
+  }
+};
 export const snapshotHttpEgressOperation = (value: unknown): HttpEgressOperation => {
   const base = exact(value, ["operationId", "attemptId", "expectedRequest", "connection", "limits"])
     ?? exact(value, ["operationId", "attemptId", "expectedRequest", "connection", "limits", "signal"]);
   if (base === undefined || !boundedHttpOpaque(base.operationId) || !boundedHttpOpaque(base.attemptId)) {
     throw new TypeError("invalid HTTP egress operation");
   }
-  const expected = exact(base.expectedRequest, ["requestId", "method", "path", "host"]);
+  const expected = exact(base.expectedRequest, ["requestId", "method", "path", "host"])
+    ?? exact(base.expectedRequest, ["requestId", "method", "path", "host", "bodyMode"]);
   const connectionRecord = exact(base.connection, ["request", "write", "close"]);
   const connection = connectionRecord as Partial<HttpEgressOperation["connection"]> | undefined;
   if (expected === undefined || !boundedHttpOpaque(expected.requestId) || !boundedHttpOpaque(expected.method)
@@ -31,6 +38,7 @@ export const snapshotHttpEgressOperation = (value: unknown): HttpEgressOperation
     throw new TypeError("invalid HTTP egress operation");
   }
   const fixedLimits: HttpEgressLimits = snapshotHttpEgressLimits(base.limits);
+  validateBodyPolicy(expected, fixedLimits);
   return Object.freeze({operationId: base.operationId, attemptId: base.attemptId,
     expectedRequest: Object.freeze(expected) as HttpEgressOperation["expectedRequest"],
     connection: Object.freeze({request: connection.request, write: connection.write.bind(connection),

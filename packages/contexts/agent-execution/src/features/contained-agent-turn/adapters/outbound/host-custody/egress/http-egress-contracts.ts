@@ -60,6 +60,8 @@ export type HttpEgressExpectedRequest = Readonly<{
   method: string;
   path: string;
   host: string;
+  /** Trusted request-profile framing only; no PA/RS or route authority. */
+  bodyMode?: "forbidden";
 }>;
 
 export type HttpEgressConnection = Readonly<{

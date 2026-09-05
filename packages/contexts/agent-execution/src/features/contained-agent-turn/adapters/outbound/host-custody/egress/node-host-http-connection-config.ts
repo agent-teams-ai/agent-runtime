@@ -31,6 +31,12 @@ export class NodeHostHttpConnectionError extends Error {
 const bounded = (value: number, minimum: number, maximum: number): boolean =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
+const supportedBodyPolicy = (expected: HttpEgressExpectedRequest, limits: HttpEgressLimits): boolean => {
+  if (expected.bodyMode === undefined) {return expected.method === "POST";}
+  return expected.bodyMode === "forbidden" && (expected.method === "GET" || expected.method === "HEAD")
+    && limits.maxInboundBodyBytes === 0;
+};
+
 export const fixNodeHostHttpConnectionConfig = (input: NodeHostHttpConnectionConfig): FixedNodeHostHttpConnectionConfig => {
   const config = Object.freeze({
     expectedRequest: Object.freeze({ ...input.expectedRequest }),
@@ -41,7 +47,7 @@ export const fixNodeHostHttpConnectionConfig = (input: NodeHostHttpConnectionCon
     headerTimeoutMs: input.headerTimeoutMs ?? 5_000,
     closeTimeoutMs: input.closeTimeoutMs ?? 2_000,
   });
-  if (config.expectedRequest.method !== "POST"
+  if (!supportedBodyPolicy(config.expectedRequest, config.limits)
     || !bounded(config.limits.maxInboundHeaderBytes, 1, 16_384)
     || !bounded(config.limits.maxInboundBodyBytes, 0, 1_048_576)
     || !bounded(config.maxHeaderFields, 1, 64)
