@@ -43,6 +43,7 @@ const decision = (route: typeof defaultRoute, receiptDigest: string): LegacyDeci
   materializationReceiptDigest: route.materializationReceiptDigest});
 
 export type FixtureOptions = Readonly<{request?: readonly (string | Uint8Array)[]; response?: readonly (string | Uint8Array)[];
+  provider?: "codex" | "claude";
   responseSource?: AsyncIterable<Uint8Array>; route?: typeof defaultRoute | HttpEgressRoute; binding?: LegacyBinding;
   bindingAtFirstByte?: LegacyBinding; provisional?: LegacyDecision | "timeout"; final?: LegacyDecision | "timeout" | ((input: any) => any);
   paReceiptChange?: Readonly<Record<string, unknown>>;
@@ -68,12 +69,13 @@ const key = Object.freeze({algorithm: "ed25519" as const, signatureEncoding: "he
   keyRef: "key-1", publicKeyDigest: "public-key-digest", keyGeneration: defaultRoute.keyGeneration,
   signerRevision: "signer-revision-1", hostReservationId: "custody-egress-1"});
 const signature = Object.freeze({...key, value: "a".repeat(128)});
-const snapshot = Object.freeze({tenantId: "tenant-1", projectId: "project-1", scopeDigest: "scope-digest",
+const defaultSnapshot = Object.freeze({tenantId: "tenant-1", projectId: "project-1", scopeDigest: "scope-digest",
   accessRef: "access-1", provider: "codex" as const, providerAccountRef: "account-1", providerRouteRef: "route-1",
   credentialBindingRef: "binding-1", ownerAuthorityDigest: "pa-owner-binding-digest", revision: 11,
   credentialGeneration: 5, availability: "available" as const, revocation: "active" as const});
 
 const narrowRoute = (value: typeof defaultRoute | HttpEgressRoute): HttpEgressRoute => Object.freeze({
+  ...("requestProfile" in value ? {requestProfile: value.requestProfile} : {}),
   routeReceiptDigest: value.routeReceiptDigest, originHost: value.originHost, originPort: value.originPort,
   upstreamMethod: value.upstreamMethod, upstreamPath: value.upstreamPath,
   forwardedRequestHeaderNames: value.forwardedRequestHeaderNames,
@@ -99,6 +101,7 @@ const createInboundConnection = (
     options.inboundClosure ?? "closed", receiptDigest: "inbound-closure-digest"});}});
 
 export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture => {
+  const snapshot = Object.freeze({...defaultSnapshot, provider: options.provider ?? defaultSnapshot.provider});
   const legacyRoute = options.route ?? defaultRoute; const route = narrowRoute(legacyRoute);
   const observations: EgressFixture["observations"] = {order: [], outboundWrites: [], dispatchedRequests: [], receipts: [],
     materializationInputs: [], provisionalInputs: [], finalAuthorizationInputs: [], dispatches: 0, opens: 0,

@@ -1,5 +1,8 @@
 import { types as utilTypes } from "node:util";
 import { snapshotHttpBytes, zeroHttpBytes } from "./http-byte-intrinsics.js";
+import { isHttpCredentialCollision, nativeHeaderValueAllowed, nativeHttpRequestProfile,
+  NATIVE_HTTP_HEADER_LIMITS, type NativeHttpRequestProfile } from "./native-http-request-profile.js";
+import type { NativeHttpPresentationFields } from "./native-http-request-headers.js";
 
 export const PREPARED_HTTP_REQUEST_V1_LIMITS = Object.freeze({
   maximumMethodBytes: 32,
@@ -30,7 +33,7 @@ export type PreparedHttpRequestInputV1 = Readonly<{
   methodBytes: Uint8Array;
   targetBytes: Uint8Array;
   hostBytes: Uint8Array;
-  presentationFields: readonly PreparedHttpFieldInputV1[];
+  presentationFields: readonly PreparedHttpFieldInputV1[] | NativeHttpPresentationFields;
   /** Exact normalized names authorized by the trusted materializer. */
   credentialHeaderNameAllowlist: readonly string[];
   credentialFields: readonly PreparedHttpFieldInputV1[];
@@ -57,11 +60,6 @@ const INPUT_FIELDS = ["methodBytes", "targetBytes", "hostBytes", "presentationFi
   "credentialHeaderNameAllowlist", "credentialFields", "bodyBytes"] as const;
 const FIELD_INPUT_FIELDS = ["name", "valueBytes"] as const;
 const PRESENTATION_NAMES = new Set(["accept", "content-type"]);
-const CREDENTIAL_COLLISIONS = new Set([
-  "accept", "connection", "content-length", "content-type", "expect", "host", "keep-alive",
-  "proxy-authenticate", "proxy-authorization", "proxy-connection", "te", "trailer",
-  "transfer-encoding", "upgrade",
-]);
 const encoder = new TextEncoder();
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const TOKEN_PUNCTUATION = new Set([33, 35, 36, 37, 38, 39, 42, 43, 45, 46, 94, 95, 96, 124, 126]);
@@ -201,7 +199,7 @@ const validateCredentialHeaderNameAllowlist = (value: unknown): ReadonlySet<stri
     if (typeof candidate !== "string" || candidate.length === 0
       || candidate.length > PREPARED_HTTP_REQUEST_V1_LIMITS.maximumFieldNameBytes
       || !TOKEN.test(candidate) || candidate !== candidate.toLowerCase()
-      || CREDENTIAL_COLLISIONS.has(candidate) || names.has(candidate)) {
+      || isHttpCredentialCollision(candidate) || names.has(candidate)) {
       throw new PreparedHttpRequestV1Error();
     }
     names.add(candidate);
@@ -214,8 +212,9 @@ const validateFields = (
   maximum: number,
   kind: "presentation" | "credential",
   acquired: Uint8Array[],
-  credentialHeaderNameAllowlist: ReadonlySet<string>,
+  authority: Readonly<{credentialHeaderNameAllowlist: ReadonlySet<string>; profile: NativeHttpRequestProfile | undefined}>,
 ): readonly ValidatedPreparedHttpFieldV1[] => {
+  const {credentialHeaderNameAllowlist, profile} = authority;
   const fields: ValidatedPreparedHttpFieldV1[] = [];
   const names = new Set<string>();
   for (const candidate of exactArrayValues(value, maximum)) {
@@ -227,18 +226,47 @@ const validateFields = (
     }
     const normalizedName = name.toLowerCase();
     if (names.has(normalizedName)
-      || (kind === "presentation" ? !PRESENTATION_NAMES.has(normalizedName) || name !== normalizedName
+      || profile !== undefined && name !== normalizedName
+      || (kind === "presentation" ? !(profile === undefined ? PRESENTATION_NAMES.has(normalizedName)
+        : (profile.forwardedRequestHeaderNames as readonly string[]).includes(normalizedName)) || name !== normalizedName
         : !credentialHeaderNameAllowlist.has(normalizedName))) {
       throw new PreparedHttpRequestV1Error();
     }
     names.add(normalizedName);
     const valueBytes = snapshot(candidate.valueBytes, PREPARED_HTTP_REQUEST_V1_LIMITS.maximumFieldValueBytes, acquired);
     validateValue(valueBytes);
+    if (profile !== undefined && kind === "presentation"
+      && !nativeHeaderValueAllowed(profile, name, new TextDecoder().decode(valueBytes))) {throw new PreparedHttpRequestV1Error();}
     const nameBytes = encoder.encode(normalizedName);
     acquired.push(nameBytes);
     insertSorted(fields, Object.freeze({normalizedName, nameBytes, valueBytes}));
   }
   return Object.freeze(fields);
+};
+
+const presentationInput = (value: unknown): Readonly<{fields: unknown; profile?: NativeHttpRequestProfile}> => {
+  if (Array.isArray(value) && !utilTypes.isProxy(value)) {return {fields: value};}
+  if (!isPlainRecordWithDataFields(value, ["requestProfile", "fields"])) {throw new PreparedHttpRequestV1Error();}
+  const profile = nativeHttpRequestProfile(value.requestProfile);
+  if (profile === undefined) {throw new PreparedHttpRequestV1Error();}
+  return {fields: value.fields, profile};
+};
+
+const validateNativeBinding = (profile: NativeHttpRequestProfile | undefined, method: Uint8Array,
+  target: Uint8Array, host: Uint8Array, names: ReadonlySet<string>): void => {
+  if (profile !== undefined && (!bytesMatchAscii(method, profile.upstreamMethod)
+    || !bytesMatchAscii(target, profile.upstreamPath) || !bytesMatchAscii(host, profile.originHost)
+    || names.size !== profile.credentialFieldNames.length
+    || profile.credentialFieldNames.some(name => !names.has(name)))) {throw new PreparedHttpRequestV1Error();}
+};
+
+const validateNativeFields = (profile: NativeHttpRequestProfile | undefined,
+  presentation: readonly ValidatedPreparedHttpFieldV1[], credentials: readonly ValidatedPreparedHttpFieldV1[]): void => {
+  if (profile === undefined) {return;}
+  if (profile.requiredHeaderNames.some(name => !presentation.some(field => field.normalizedName === name))
+    || credentials.length !== profile.credentialFieldNames.length
+    || presentation.reduce((total, field) => total + field.valueBytes.byteLength, 0)
+      > NATIVE_HTTP_HEADER_LIMITS.maximumTotalValueBytes) {throw new PreparedHttpRequestV1Error();}
 };
 
 export const validatePreparedHttpRequestV1 = (input: unknown): ValidatedPreparedHttpRequestV1 => {
@@ -253,12 +281,16 @@ export const validatePreparedHttpRequestV1 = (input: unknown): ValidatedPrepared
     validateTarget(targetBytes);
     validateHost(hostBytes);
     const credentialHeaderNameAllowlist = validateCredentialHeaderNameAllowlist(input.credentialHeaderNameAllowlist);
-    const presentationFields = validateFields(input.presentationFields,
-      PREPARED_HTTP_REQUEST_V1_LIMITS.maximumPresentationFields, "presentation", acquired,
-      credentialHeaderNameAllowlist);
+    const presentation = presentationInput(input.presentationFields);
+    const authority = {credentialHeaderNameAllowlist, profile: presentation.profile};
+    validateNativeBinding(presentation.profile, methodBytes, targetBytes, hostBytes, credentialHeaderNameAllowlist);
+    const presentationFields = validateFields(presentation.fields,
+      presentation.profile?.forwardedRequestHeaderNames.length ?? PREPARED_HTTP_REQUEST_V1_LIMITS.maximumPresentationFields,
+      "presentation", acquired, authority);
     const credentialFields = validateFields(input.credentialFields,
       PREPARED_HTTP_REQUEST_V1_LIMITS.maximumCredentialFields, "credential", acquired,
-      credentialHeaderNameAllowlist);
+      authority);
+    validateNativeFields(presentation.profile, presentationFields, credentialFields);
     return Object.freeze({methodBytes, targetBytes, hostBytes, presentationFields,
       credentialFields, bodyBytes, temporaryCopies: Object.freeze(acquired)});
   } catch (error) {

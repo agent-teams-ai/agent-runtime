@@ -1,13 +1,16 @@
 import type { HttpEgressReceipt } from "./http-egress-contracts.js";
 import type { HostHttpAdmissionGuard } from "./host-http-admission-guard.js";
+import type { HttpPresentationHeaderName, NativeHttpRequestProfileId } from "./native-http-request-profile.js";
 
 export type HttpEgressRoute = Readonly<{
+  /** Absent retains the established two-header contract. Native factories remain internal. */
+  requestProfile?: NativeHttpRequestProfileId;
   routeReceiptDigest: string;
   originHost: string;
   originPort: number;
   upstreamMethod: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
   upstreamPath: string;
-  forwardedRequestHeaderNames: readonly ("accept" | "content-type")[];
+  forwardedRequestHeaderNames: readonly HttpPresentationHeaderName[];
   credentialFieldNames: readonly string[];
 }>;
 

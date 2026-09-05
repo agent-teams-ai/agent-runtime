@@ -5,6 +5,8 @@ import type { HostHttpMaterializationAuthorizationRequest, HostHttpMaterializati
 import type { PreparedHttpRequestCustodyV1 } from "./prepared-http-request-v1.js";
 import type { StrictHttpRequest } from "./strict-http-request.js";
 import { zeroHttpBytes } from "./http-byte-intrinsics.js";
+import { isHttpCredentialCollision, nativeHttpRequestProfile, type NativeHttpRequestProfile } from "./native-http-request-profile.js";
+import { selectHttpPresentationFields } from "./native-http-request-headers.js";
 
 const encoder = new TextEncoder();
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
@@ -16,7 +18,7 @@ const bounded = (value: unknown, maximum: number): value is string => typeof val
   && value.length <= maximum && value.isWellFormed() && encoder.encode(value).byteLength <= maximum
   && !/\p{Cc}|\p{Cs}/u.test(value);
 const exactArray = (value: unknown, maximumItems: number): readonly string[] | undefined => {
-  if (!Array.isArray(value) || utilTypes.isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+  if (utilTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
     return undefined;
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
@@ -35,7 +37,9 @@ const snapshotRouteDescriptors = (value: unknown): PropertyDescriptorMap | undef
   if (typeof value !== "object" || value === null || utilTypes.isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) {return undefined;}
   const descriptors = Object.getOwnPropertyDescriptors(value); const keys = Reflect.ownKeys(descriptors);
-  if (keys.length !== ROUTE_FIELDS.length || keys.some(key => typeof key !== "string" || !ROUTE_FIELDS.includes(key as never))
+  const fields: readonly string[] = Object.hasOwn(descriptors, "requestProfile") ? [...ROUTE_FIELDS, "requestProfile"] : ROUTE_FIELDS;
+  if (keys.length !== fields.length || keys.some(key => typeof key !== "string" || !fields.includes(key))
+    || fields.some(name => descriptors[name] === undefined || !("value" in descriptors[name]!))
     || ROUTE_FIELDS.some(name => descriptors[name] === undefined || !("value" in descriptors[name]!))) {return undefined;}
   return descriptors;
 };
@@ -43,12 +47,28 @@ const snapshotRouteDescriptors = (value: unknown): PropertyDescriptorMap | undef
 const validRoutePath = (value: unknown): value is string => bounded(value, 16_384)
   && value.startsWith("/") && !value.startsWith("//") && !/[^\x21-\x7e]|#/.test(value);
 
-const validRouteHeaderNames = (forwarded: readonly string[], credentials: readonly string[]): boolean =>
+const validRouteOriginHost = (value: unknown): value is string => bounded(value, 512) && /^[A-Za-z0-9.-]+$/.test(value);
+
+const validRouteHeaderNames = (forwarded: readonly string[], credentials: readonly string[],
+  allowed: readonly string[]): boolean =>
   new Set(forwarded).size === forwarded.length
-  && !forwarded.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || !PRESENTATION.has(name))
+  && !forwarded.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || !allowed.includes(name))
   && credentials.length !== 0 && new Set(credentials).size === credentials.length
-  && !credentials.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || PRESENTATION.has(name)
-    || name === "host" || name === "content-length" || name === "connection");
+  && !credentials.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || isHttpCredentialCollision(name));
+
+const sameNames = (actual: readonly string[], expected: readonly string[]): boolean =>
+  actual.length === expected.length && actual.every((name, index) => name === expected[index]);
+
+const validProfileInput = (value: unknown, descriptors: PropertyDescriptorMap,
+  profile: NativeHttpRequestProfile | undefined): boolean => !Object.hasOwn(descriptors, "requestProfile")
+  || profile !== undefined && Object.isFrozen(value) && Object.isFrozen(descriptors.forwardedRequestHeaderNames?.value)
+    && Object.isFrozen(descriptors.credentialFieldNames?.value);
+
+const profileMatchesRoute = (profile: NativeHttpRequestProfile | undefined, route: HttpEgressRoute): boolean =>
+  profile === undefined || route.originHost === profile.originHost && route.originPort === profile.originPort
+    && route.upstreamMethod === profile.upstreamMethod && route.upstreamPath === profile.upstreamPath
+    && sameNames(route.forwardedRequestHeaderNames, profile.forwardedRequestHeaderNames)
+    && sameNames(route.credentialFieldNames, profile.credentialFieldNames);
 
 export const snapshotHostHttpRoute = (value: unknown): HttpEgressRoute | undefined => {
   const descriptors = snapshotRouteDescriptors(value);
@@ -56,17 +76,23 @@ export const snapshotHostHttpRoute = (value: unknown): HttpEgressRoute | undefin
   const read = (name: typeof ROUTE_FIELDS[number]): unknown => descriptors[name]?.value;
   const forwarded = exactArray(read("forwardedRequestHeaderNames"), 32);
   const credentials = exactArray(read("credentialFieldNames"), 16);
+  // Rejected arrays must never reach reflection such as Object.isFrozen: it can execute proxy traps.
+  if (forwarded === undefined || credentials === undefined) {return undefined;}
   const originHost = read("originHost"); const originPort = read("originPort"); const method = read("upstreamMethod");
   const path = read("upstreamPath"); const receipt = read("routeReceiptDigest");
-  if (!bounded(receipt, 512) || !bounded(originHost, 512) || !/^[A-Za-z0-9.-]+$/.test(originHost)
+  const profile = nativeHttpRequestProfile(descriptors.requestProfile?.value);
+  if (!validProfileInput(value, descriptors, profile)) {return undefined;}
+  if (!bounded(receipt, 512) || !validRouteOriginHost(originHost)
     || !Number.isSafeInteger(originPort) || (originPort as number) < 1 || (originPort as number) > 65_535
     || !bounded(method, 128) || !TOKEN.test(method) || method === "CONNECT"
-    || !validRoutePath(path) || forwarded === undefined || credentials === undefined
-    || !validRouteHeaderNames(forwarded, credentials)) {return undefined;}
-  return Object.freeze({routeReceiptDigest: receipt, originHost, originPort: originPort as number,
+    || !validRoutePath(path)
+    || !validRouteHeaderNames(forwarded, credentials, profile?.forwardedRequestHeaderNames ?? [...PRESENTATION])) {return undefined;}
+  const route = Object.freeze({routeReceiptDigest: receipt, originHost, originPort: originPort as number,
+    ...(profile === undefined ? {} : {requestProfile: profile.id}),
     upstreamMethod: method as HttpEgressRoute["upstreamMethod"], upstreamPath: path,
     forwardedRequestHeaderNames: forwarded as HttpEgressRoute["forwardedRequestHeaderNames"],
     credentialFieldNames: credentials});
+  return profileMatchesRoute(profile, route) ? route : undefined;
 };
 
 const receiptFields: readonly (keyof HostHttpMaterializationReceipt)[] = ["schemaVersion", "purpose", "accessRef",
@@ -90,12 +116,15 @@ const validReceipt = (value: unknown): value is HostHttpMaterializationReceipt =
 const sameReceipt = (left: HostHttpMaterializationReceipt, right: HostHttpMaterializationReceipt): boolean =>
   validReceipt(left) && validReceipt(right) && receiptFields.every(name => left[name] === right[name]);
 
+const receiptProviderMatchesSnapshot = (receipt: HostHttpMaterializationReceipt, ports: HttpEgressBrokerPorts): boolean =>
+  routeMatchesProvider(ports) && receipt.provider === ports.providerAccessSnapshot.provider;
+
 export const receiptMatchesSnapshot = (receipt: HostHttpMaterializationReceipt, ports: HttpEgressBrokerPorts,
   authorizationRequestId: string, requestDigest: string): boolean => validReceipt(receipt) && receipt.schemaVersion === 1
+  && receiptProviderMatchesSnapshot(receipt, ports)
   && receipt.purpose === "contained-turn.credential-materialization-authorization/v1" && receipt.decision === "authorized"
   && receipt.rejectionReason === null && receipt.authorizationRequestId === authorizationRequestId
   && receipt.requestDigest === requestDigest && receipt.accessRef === ports.providerAccessSnapshot.accessRef
-  && receipt.provider === ports.providerAccessSnapshot.provider
   && receipt.providerAccountRef === ports.providerAccessSnapshot.providerAccountRef
   && receipt.providerRouteRef === ports.providerAccessSnapshot.providerRouteRef
   && receipt.credentialBindingRef === ports.providerAccessSnapshot.credentialBindingRef
@@ -115,11 +144,10 @@ export const observeMaterializationReceipt = async (ports: HttpEgressBrokerPorts
 };
 
 export const presentationFields = (request: StrictHttpRequest, route: HttpEgressRoute) => {
-  const allowed = new Set(route.forwardedRequestHeaderNames);
-  const fields = request.headers.filter(field => allowed.has(field.name as "accept" | "content-type"));
-  if (new Set(fields.map(field => field.name)).size !== fields.length) {throw new TypeError("duplicate presentation field");}
-  return fields.toSorted((a, b) => a.name.localeCompare(b.name)).map(field => Object.freeze({
-    name: field.name, valueBytes: encoder.encode(field.value)}));
+  const snapshot = snapshotHostHttpRoute(route);
+  if (snapshot === undefined) {throw new TypeError("invalid HTTP route");}
+  return selectHttpPresentationFields(request, snapshot.forwardedRequestHeaderNames,
+    nativeHttpRequestProfile(snapshot.requestProfile));
 };
 
 export const projectPreparedRequest = (ports: HttpEgressBrokerPorts, prepared: PreparedHttpRequestCustodyV1,
@@ -142,8 +170,16 @@ export const projectPreparedRequest = (ports: HttpEgressBrokerPorts, prepared: P
   } finally {zeroHttpBytes(target); zeroHttpBytes(body);}
 };
 
+const routeMatchesProvider = (ports: HttpEgressBrokerPorts): boolean => {
+  const route = snapshotHostHttpRoute(ports.route);
+  return route !== undefined && (route.requestProfile === undefined
+    || nativeHttpRequestProfile(route.requestProfile)?.provider === ports.providerAccessSnapshot.provider);
+};
+
 export const materializationAuthorizationRequest = (ports: HttpEgressBrokerPorts,
-  id: string): HostHttpUnsignedMaterializationAuthorizationRequest => Object.freeze({
+  id: string): HostHttpUnsignedMaterializationAuthorizationRequest => {
+  if (!routeMatchesProvider(ports)) {throw new TypeError("HTTP route provider mismatch");}
+  return Object.freeze({
     accessRef: ports.providerAccessSnapshot.accessRef,
     authorizationRequestId: id, availability: ports.providerAccessSnapshot.availability,
     bindingRevision: ports.providerAccessSnapshot.revision,
@@ -156,6 +192,7 @@ export const materializationAuthorizationRequest = (ports: HttpEgressBrokerPorts
     purpose: "contained-turn.credential-materialization-authorization/v1" as const,
     revocation: ports.providerAccessSnapshot.revocation, schemaVersion: 1 as const,
     scopeDigest: ports.providerAccessSnapshot.scopeDigest, tenantId: ports.providerAccessSnapshot.tenantId});
+};
 
 export const bindMaterializationRequestDigest = (
   request: HostHttpUnsignedMaterializationAuthorizationRequest,
