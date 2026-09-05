@@ -52,6 +52,12 @@ const prepareMaterializedRequest = (ports: HttpEgressBrokerPorts, request: Stric
     presentationFields: forwardedFields, credentialFields: fields, bodyBytes: request.body});
 };
 
+const consumePreparedRequest = (prepared: PreparedHttpRequestV1): PreparedHttpRequestCustodyV1 => {
+  const custody = prepared.consume();
+  if (custody === undefined) {throw new TypeError("prepared request already consumed");}
+  return custody;
+};
+
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
 const viewGetters = [DataView.prototype, typedArrayPrototype].map(prototype => ({
   buffer: Object.getOwnPropertyDescriptor(prototype, "buffer")!.get!,
@@ -206,8 +212,7 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
     if (!cleanupCertain) {throw new TypeError("credential cleanup unproved");}
     if (!await within(() => observeMaterializationReceipt(ports, paReceipt))) {state.outcome = "denied"; state.anomalyCode = "provider_generation_drift";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
-    custody = prepared.consume();
-    if (custody === undefined) {throw new TypeError("prepared request already consumed");}
+    custody = consumePreparedRequest(prepared);
     const requestProjection = projectPreparedRequest(ports, custody, paReceipt);
     let provisionalOutcome: Awaited<ReturnType<typeof ports.runtimeSecurity.requestProvisional>>;
     try {provisionalOutcome = await within(() => ports.runtimeSecurity.requestProvisional({contractVersion:
