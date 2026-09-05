@@ -18,9 +18,9 @@ import {
   type KernelOpenInput,
 } from "./contained-turn-kernel-custody-contracts.js";
 import { openKernelCompletionBoundary } from "./contained-turn-kernel-custody-deadline.js";
+import { createExecutionAttestation } from "./contained-turn-kernel-custody-execution-attestation.js";
 import {
   canonicalDigest,
-  completionProjection,
   createPhysicalProof,
   createProcessNoStartProof,
   createProcessStartProof,
@@ -62,10 +62,6 @@ type StartObservation =
   };
 type PhysicalInput = Parameters<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]>[0];
 type ContainmentInput = Parameters<ContainedTurnKernelCustodyPort["attestContainment"]>[0];
-type ExecutionAttestation = Extract<
-  Awaited<ReturnType<ContainedTurnKernelCustodyPort["attestExecutionClosure"]>>,
-  { readonly kind: "proved" }
->;
 /**
  * Outer anti-corruption adapter from raw Host facts to the kernel proof port.
  * Provider protocol completion is sealed from the exact one-use execute promise;
@@ -354,40 +350,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
         !executionEvidenceIsClosed(observed)) {
       return this.#indeterminate("execution-closure", reservation, observed);
     }
-    const binding = Object.freeze({
-      attemptId: reservation.attemptId,
-      authorityVectorDigest: reservation.authorityVectorDigest,
-      effectId: reservation.effectId,
-      operationId: reservation.operationId,
-    });
-    const closureProjection = Object.freeze({
-      completion: completionProjection(completion),
-      evidence: hostEvidenceProjection(observed),
-      proofDigest: reservation.proofDigest ?? null,
-      receiptRef: contained,
-      reservation: reservationIdentity(reservation),
-    });
-    const result: ExecutionAttestation = Object.freeze({
-      executionClosureProof: Object.freeze({
-        binding: Object.freeze({ ...binding, outcome: completion.outcome }),
-        kind: "execution_closure",
-        proofId: proofId("execution-closure", closureProjection),
-      }),
-      kind: "proved",
-      outputDrainProof: Object.freeze({
-        binding: Object.freeze({ ...binding, finalCursor: input.finalCursor }),
-        kind: "output_drain",
-        proofId: proofId("output-drain", Object.freeze({
-          closure: closureProjection,
-          finalCursor: input.finalCursor,
-        })),
-      }),
-      terminalObservationProof: Object.freeze({
-        binding: Object.freeze({ ...binding, outcome: completion.outcome }),
-        kind: "provider_terminal_observation",
-        proofId: proofId("terminal-observation", closureProjection),
-      }),
-    });
+    const result = createExecutionAttestation(reservation, observed, completion, contained, input.finalCursor);
     reservation.executionAttestation = Object.freeze({ finalCursor: input.finalCursor, result });
     return result;
   }

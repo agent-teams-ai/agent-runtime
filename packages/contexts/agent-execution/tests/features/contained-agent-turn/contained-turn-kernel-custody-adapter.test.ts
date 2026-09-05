@@ -680,7 +680,33 @@ test("attestation is stable and containment cleanup remains retryable", async ()
   const first = await attest(harness.custody, 0);
   const repeated = await attest(harness.custody, 0);
   assert.equal(first.kind, "proved");
-  assert.deepEqual(repeated, first);
+  assert.equal(repeated, first);
+  // Pin deterministic redacted proof bytes for the synthetic Host observation.
+  const binding = { attemptId, authorityVectorDigest: authorityDigest, effectId, operationId };
+  assert.deepEqual(first, {
+    executionClosureProof: {
+      binding: { ...binding, outcome: "cancelled" },
+      kind: "execution_closure",
+      proofId: "proof:host-custody-adapter:execution-closure:sha256:873cd5d90b069fa922f31d75c839bd3b5ec49d7f8b2eed272d9f2a80a5b2fdf6",
+    },
+    kind: "proved",
+    outputDrainProof: {
+      binding: { ...binding, finalCursor: 0 },
+      kind: "output_drain",
+      proofId: "proof:host-custody-adapter:output-drain:sha256:e35ea1572468d983ed7379ccff6d48de087ef1ada7f485136e4c46960d29f337",
+    },
+    terminalObservationProof: {
+      binding: { ...binding, outcome: "cancelled" },
+      kind: "provider_terminal_observation",
+      proofId: "proof:host-custody-adapter:terminal-observation:sha256:873cd5d90b069fa922f31d75c839bd3b5ec49d7f8b2eed272d9f2a80a5b2fdf6",
+    },
+  });
+  assert.ok(Object.isFrozen(first));
+  if (first.kind !== "proved") {return;}
+  for (const proof of [first.executionClosureProof, first.outputDrainProof, first.terminalObservationProof]) {
+    assert.ok(Object.isFrozen(proof));
+    assert.ok(Object.isFrozen(proof.binding));
+  }
   assert.equal((await attest(harness.custody, 1)).kind, "indeterminate");
 
   const cleanupPermit = containedTurnCleanupPermit({
