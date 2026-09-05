@@ -29,6 +29,7 @@ const route = Object.freeze({routeReceiptDigest: "route-receipt", originHost: "p
   upstreamMethod: "POST" as const, upstreamPath: "/fixed", forwardedRequestHeaderNames: Object.freeze(["content-type"] as const),
   credentialFieldNames: Object.freeze(["authorization"])});
 const response = (status = 200) => `HTTP/1.1 ${status} Status\r\nContent-Length: 2\r\n\r\nok`;
+const flipSignature = (value: string) => `${value[0] === "0" ? "1" : "0"}${value.slice(1)}`;
 const scope = Object.freeze({tenantId: snapshot.tenantId, projectId: snapshot.projectId,
   operationId: "operation-1", scopeDigest: snapshot.scopeDigest});
 const tlsPolicyDigest = digest([bytes("tls-policy")]);
@@ -100,7 +101,7 @@ const fixture = (options: Options = {}, security?: ReturnType<typeof bindContain
   const pa = createInMemoryContainedTurnDispatchConsumptionV1({bindings: [paSeed], initialControlTime: 10});
   const paOutcomes: Awaited<ReturnType<typeof pa.materialization.authorize>>[] = [];
   const runtimeSecurity: HttpEgressBrokerPorts["runtimeSecurity"] = Object.freeze({
-    requestProvisional: async input => {
+    requestProvisional: async (input: Parameters<HttpEgressBrokerPorts["runtimeSecurity"]["requestProvisional"]>[0]) => {
       order.push("rs-provisional"); provisionalInputs.push(input);
       if (security !== undefined) {
         const outcome = await security.runtimeSecurity.requestProvisional(input);
@@ -121,7 +122,7 @@ const fixture = (options: Options = {}, security?: ReturnType<typeof bindContain
       decision = options.mutateProvisional?.(decision) ?? decision;
       return Object.freeze({status: "authorized" as const, decision});
     },
-    authorizeFirstApplicationByte: async input => {
+    authorizeFirstApplicationByte: async (input: Parameters<HttpEgressBrokerPorts["runtimeSecurity"]["authorizeFirstApplicationByte"]>[0]) => {
       order.push("rs-final"); finalInputs.push(input);
       if (security !== undefined) {
         const outcome = await security.runtimeSecurity.authorizeFirstApplicationByte(input);
@@ -177,7 +178,7 @@ const fixture = (options: Options = {}, security?: ReturnType<typeof bindContain
           const outcome = await pa.materialization.observe(input); paOutcomes.push(outcome); return outcome;
         },
       },
-    }), materializer: Object.freeze({render: async receipt => {order.push("render"); renders += 1;
+    }), materializer: Object.freeze({render: async (receipt: Parameters<HttpEgressBrokerPorts["materializer"]["render"]>[0]) => {order.push("render"); renders += 1;
       assert.equal(receipt.credentialBindingDigest, snapshot.ownerAuthorityDigest);
       const valueBytes = bytes(`Bearer ${SECRET}`); materializedBuffers.push(valueBytes);
       return Object.freeze([Object.freeze({name: "authorization", valueBytes})]);}}),
@@ -187,10 +188,10 @@ const fixture = (options: Options = {}, security?: ReturnType<typeof bindContain
     localAuthorityCut: Object.freeze({read: () => {return Object.freeze({
       status: journalCalls === 0 ? "current" as const : options.cut ?? "current",
       authorityId: "clock-authority", epoch: journalCalls === 0 ? "epoch-1" : options.cutEpoch ?? "epoch-1", controlTime: 10});}}),
-    journal: Object.freeze({consume: (key, requestFingerprint) => {
-      journalCalls += 1; order.push("journal"); journalInputs.push({key, requestFingerprint});
+    journal: Object.freeze({consume: (journalKey: Parameters<HttpEgressBrokerPorts["journal"]["consume"]>[0], requestFingerprint: string) => {
+      journalCalls += 1; order.push("journal"); journalInputs.push({key: journalKey, requestFingerprint});
       if (options.journal !== undefined) {return options.journal;}
-      const id = JSON.stringify(key); const previous = consumed.get(id);
+      const id = JSON.stringify(journalKey); const previous = consumed.get(id);
       if (previous !== undefined) {return previous === requestFingerprint ? "duplicate" : "mismatch";}
       consumed.set(id, requestFingerprint); return "consumed";
     }}),
@@ -203,7 +204,7 @@ const fixture = (options: Options = {}, security?: ReturnType<typeof bindContain
         requestedSni: route.originHost, observedSni: route.originHost, chainValidated: true as const,
         dnsIdentity: route.originHost, certificateDigest: digest([bytes("certificate")]),
         tlsPolicyDigest, spkiDigest: digest([bytes("spki")]), alpn: "http/1.1" as const});
-      return Object.freeze({ready: async () => Object.freeze({binding, dispatch: async consume => {
+      return Object.freeze({ready: async () => Object.freeze({binding, dispatch: async (consume: () => Uint8Array | undefined) => {
         order.push("dispatch"); const wire = consume(); if (wire === undefined || closed) {return Object.freeze({status: "failed" as const,
           acceptedRequestBytes: 0, acknowledgement: "acknowledged" as const});}
         wireBuffers.push(wire); wires.push(wire.slice()); if (options.dispatch === "throw") {throw new Error("write failed");}
@@ -215,14 +216,14 @@ const fixture = (options: Options = {}, security?: ReturnType<typeof bindContain
         order.push("upstream-close"); return Object.freeze({state: options.upstreamClosure ?? "closed",
           receiptDigest: "upstream-close-receipt"});}});}}),
     clock: Object.freeze({now: () => 10, within: async <T>(_deadline: number, operation: () => Promise<T>) => await operation()}),
-    evidence: Object.freeze({digest, record: async receipt => {order.push("evidence");
+    evidence: Object.freeze({digest, record: async (receipt: HttpEgressReceipt) => {order.push("evidence");
       assert.doesNotMatch(JSON.stringify(receipt), new RegExp(SECRET)); return options.evidence ?? "recorded";}}),
   });
   const session = createHostHttpEgressSession(deps);
   const operation = (): HttpEgressOperation => Object.freeze({operationId: "operation-1", attemptId: "attempt-1",
     expectedRequest: Object.freeze({requestId: `request-${ids + 1}`, method: "POST", path: "/invoke", host: "broker.invalid"}),
     connection: Object.freeze({request: chunks("POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"),
-      write: async value => {order.push("write-response"); writes.push(value.slice());}, close: async () => {order.push("inbound-close");
+      write: async (value: Uint8Array) => {order.push("write-response"); writes.push(value.slice());}, close: async () => {order.push("inbound-close");
         return Object.freeze({state: options.inboundClosure ?? "closed", receiptDigest: "inbound-close-receipt"});}}),
     limits: Object.freeze({maxInboundHeaderBytes: 2048, maxInboundBodyBytes: 1024, maxUpstreamHeaderBytes: 2048,
       maxOutputBytes: 4096, maxBufferedBytes: 256, maxUpstreamWireBytes: 8192, deadline: 1000, closureDeadline: 1100})});
@@ -423,7 +424,6 @@ describe("Host HTTP with real Ed25519 RS binding and PA application", () => {
     });
   }
 
-  const flipSignature = (value: string) => `${value[0] === "0" ? "1" : "0"}${value.slice(1)}`;
   const tampering: readonly {name: string; options: Options}[] = [
     {name: "provisional signature", options: {mutateProvisional: value => Object.freeze({...value,
       signature: Object.freeze({...value.signature, value: flipSignature(value.signature.value)})})}},
