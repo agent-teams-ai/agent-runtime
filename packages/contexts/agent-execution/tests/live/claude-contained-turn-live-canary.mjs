@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
-import { constants } from "node:fs";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, open, readFile, realpath, rmdir, stat, statfs, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rmdir, stat, statfs, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
-
-import { query as claudeQuery } from "@anthropic-ai/claude-agent-sdk";
 
 import {
   createProviderCandidateEvidenceEnvelope,
   resolveCanaryExecutionProvenance,
 } from "./provider-candidate-evidence-envelope.mjs";
-import { runContainedTurnLiveCanaryLifecycle } from "./contained-turn-live-canary-lifecycle.mjs";
+import {
+  requireContainedTurnLiveCanaryAuthorities,
+  createDisposableContainedTurnCanaryRuntime,
+  submitContainedTurnLiveCanary,
+} from "./contained-turn-live-canary-lifecycle.mjs";
+
+import { observeCustodyReservation, observeProviderCandidateCompletion } from "./provider-candidate-observation.mjs";
+import { createCandidateRunObservation } from "./provider-candidate-run-observation.mjs";
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const requiredEnvironment = name => {
@@ -34,12 +38,6 @@ const assertPrivateDirectory = async path => {
   assert.equal(directory.uid, process.getuid());
   assert.equal(directory.mode & 0o077, 0);
 };
-const mountId = async descriptor => {
-  const fdinfo = await readFile(`/proc/self/fdinfo/${descriptor}`, "utf8");
-  const matches = [...fdinfo.matchAll(/^mnt_id:\s*(\d+)$/gmu)];
-  assert.equal(matches.length, 1);
-  return matches[0][1];
-};
 const exactPlatformTarget = () => {
   const platformRevision = `${process.platform}-${process.arch}`;
   if (platformRevision === "linux-x64") {
@@ -50,35 +48,6 @@ const exactPlatformTarget = () => {
   }
   throw new Error(`unsupported Claude canary target: ${platformRevision}`);
 };
-const workspaceOwner = (workspaceRef, platformTarget) => Object.freeze({
-  async withLaunchAuthority(_input, consume) {
-    if (platformTarget.platform === "darwin" && platformTarget.architecture === "arm64") {
-      const identity = await stat(workspaceRef, {bigint: true});
-      assert.equal(identity.isDirectory(), true);
-      return consume(Object.freeze({
-        canonicalPath: workspaceRef,
-        descriptorPath: workspaceRef,
-        identity: Object.freeze({
-          dev: identity.dev, ino: identity.ino, mountId: "darwin-statfs:unqualified-candidate",
-        }),
-      }));
-    }
-    if (platformTarget.platform !== "linux" || platformTarget.architecture !== "x64") {
-      throw new Error("unsupported Claude canary workspace authority target");
-    }
-    const descriptor = await open(workspaceRef, constants.O_RDONLY | constants.O_DIRECTORY);
-    try {
-      const identity = await descriptor.stat({bigint: true});
-      assert.equal(identity.isDirectory(), true);
-      return await consume(Object.freeze({
-        canonicalPath: workspaceRef,
-        descriptorPath: `/proc/self/fd/${descriptor.fd}`,
-        identity: Object.freeze({dev: identity.dev, ino: identity.ino, mountId: await mountId(descriptor.fd)}),
-      }));
-    } finally {await descriptor.close();}
-  },
-});
-
 const cgroupV2Factory = delegatedRoot => Object.freeze({
   async create(custodyRef) {
     const operationRoot = join(delegatedRoot, `operation-${sha256(custodyRef).slice(0, 32)}`);
@@ -122,24 +91,22 @@ const cgroupV2Factory = delegatedRoot => Object.freeze({
 
 const resolveCandidateExecution = () => {
   const canaryId = "claude-contained-turn-live-canary/v1";
-  return resolveCanaryExecutionProvenance({
-    buildRootUrl: new URL("../../dist/", import.meta.url),
+  return resolveCanaryExecutionProvenance(Object.freeze({
+    buildRootUrl: new URL("../../dist/", import.meta.url).href,
     canaryId,
     canarySourceUrl: import.meta.url,
     claimedSourceSha: requiredEnvironment("AR_SOURCE_SHA"),
     provider: "claude-agent-sdk-current-kernel",
-  });
+  }));
 };
 
 const loadCandidateBuild = async () => {
-  const [composition, launchPlan, authority, codecs, identities] = await Promise.all([
+  const [composition, launchPlan, authority] = await Promise.all([
     import("../../dist/composition.js"),
     import("../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js"),
     import("../../dist/features/contained-agent-turn/domain/contained-turn-authority.js"),
-    import("../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js"),
-    import("../../dist/features/contained-agent-turn/domain/contained-turn-identities.js"),
   ]);
-  return Object.freeze({ ...composition, ...launchPlan, ...authority, ...codecs, ...identities });
+  return Object.freeze({ ...composition, ...launchPlan, ...authority });
 };
 
 const prepareCandidateEvidence = (tuple, executionProvenance) => {
@@ -176,22 +143,17 @@ const createPlatformCustody = async (platformTarget, launchPlans, candidateBuild
   throw new Error("unsupported Claude canary Host Custody target");
 };
 
-const createSuccessfulEvidence = (evidence, physicalContainment, output, outputEvents) =>
-  createProviderCandidateEvidenceEnvelope({
-    ...evidence,
-    compositeContainment: "indeterminate",
-    observations: Object.freeze({ outputDigest: sha256(output), outputEvents }),
-    physicalContainment,
-    status: "succeeded",
-  });
-
 const run = async () => {
+  // This current checkout has no qualified enforced route. Resolve authority
+  // before inspecting credential paths, allocating custody, or connecting to PG.
+  const authorities = requireContainedTurnLiveCanaryAuthorities();
   const platformTarget = exactPlatformTarget();
   const executionProvenance = await resolveCandidateExecution();
   const candidateBuild = await loadCandidateBuild();
+  const { query: claudeQuery } = await import("@anthropic-ai/claude-agent-sdk");
   const {
-    CONTAINED_TURN_REQUIRED_PROOF_KINDS, containedTurnIdentity, createClaudeAgentSdkPrivateProjection,
-    createClaudeCurrentKernelOwner, digestContainedTurnCanonicalValue, selectClaudeAgentSdkPlatformTuple,
+    CONTAINED_TURN_REQUIRED_PROOF_KINDS, createClaudeAgentSdkPrivateProjection,
+    createClaudeCurrentKernelOwner, selectClaudeAgentSdkPlatformTuple,
   } = candidateBuild;
   const tuple = selectClaudeAgentSdkPlatformTuple(platformTarget.platform, platformTarget.architecture);
   candidateEvidence = prepareCandidateEvidence(tuple, executionProvenance);
@@ -231,126 +193,97 @@ const run = async () => {
     supportedModes: Object.freeze(["analysis", "workspace-write"]),
     unknownCapabilityPolicy: "fail_closed",
   });
-  const credentialBindingDigest = `sha256:${sha256(await readFile(credentialPath))}`;
-  const providerAccessSnapshot = Object.freeze({
-    accessRef: "access:claude-live-canary", credentialBindingDigest,
-    credentialBindingRef: "credential-binding:claude-live-canary", credentialGeneration: 1,
-    ownerAuthorityDigest: digestContainedTurnCanonicalValue({owner: "claude-live-canary"}),
-    projectId: "project:disposable-live-canary", provider: "claude",
-    providerAccountRef: "account:claude-live-canary",
-    providerRouteRef: "route:claude-live-canary:subscription", revision: 1,
-    tenantId: "tenant:disposable-live-canary",
+  const runtime = await createDisposableContainedTurnCanaryRuntime({
+    authorities, canaryRoot, canonicalProjectRoot: workspaceRef,
+    databaseUrl: requiredEnvironment("AR_CLAUDE_CANARY_POSTGRES_URL"),
   });
-  const authorityVectorDigest = digestContainedTurnCanonicalValue({provider: "claude", workspace: "disposable"});
-  const ids = Object.freeze({
-    attemptId: containedTurnIdentity("attempt", "attempt:claude-live-canary"),
-    custodyId: containedTurnIdentity("custody", "custody:claude-live-canary"),
-    effectId: containedTurnIdentity("effect", "effect:claude-live-canary"),
-    operationId: containedTurnIdentity("operation", "operation:claude-live-canary"),
-    workspaceId: containedTurnIdentity("workspace", "workspace:claude-live-canary"),
-  });
-  const launchPlans = Object.freeze({
-    resolve: async () => {throw new Error("ambient launch-plan resolution is forbidden");},
-  });
-  const hostCustody = await createPlatformCustody(platformTarget, launchPlans, candidateBuild);
-  const privateDirectoryCustody = Object.freeze({assertPrivateDirectory});
-  const privateProjection = createClaudeAgentSdkPrivateProjection({
-    configRoot, homeRoot, projectionRef: "projection:claude-live-canary", tempRoot, workspaceRef,
-  });
-  const owner = createClaudeCurrentKernelOwner({
-    adapterSnapshot: snapshot, executablePath,
-    executableSha256: tuple.executableSha256,
-    hostBootId: "host-boot:claude-live-canary", hostCustody,
-    hostInstanceId: "host-instance:claude-live-canary",
-    launchRecords: Object.freeze({resolve: async input => {
-      assert.equal(input.intentMode, "analysis");
-      assert.equal(input.workspaceAuthority.canonicalPath, workspaceRef);
-      if (platformTarget.platform === "linux") {
-        assert.match(input.workspaceAuthority.descriptorPath, /^\/proc\/self\/fd\/\d+$/u);
-      } else {
-        assert.equal(input.workspaceAuthority.descriptorPath, workspaceRef);
-        assert.equal(input.workspaceAuthority.identity.mountId, "darwin-statfs:unqualified-candidate");
-      }
-      return Object.freeze({privateProjection, privateRootPath});
-    }}),
-    manifest, privateDirectoryCustody,
-    queryFactory(input) {
-      assert.equal(typeof input.options.spawnClaudeCodeProcess, "function");
-      const query = claudeQuery(input);
-      return Object.freeze({
-        close: () => query.close(),
-        interrupt: () => query.interrupt(),
-        async *[Symbol.asyncIterator]() {yield* query;},
-      });
-    },
-    platformTarget,
-    workspaceOwner: workspaceOwner(workspaceRef, platformTarget),
-  });
-  const intent = Object.freeze({
-    mode: "analysis",
-    prompt: "Reply with exactly AR_CLAUDE_CANARY_OK. Do not invoke tools, spawn agents, or modify files.",
-  });
-  const kernelIdentity = Object.freeze({...ids, adapterSnapshot: snapshot, authorityVectorDigest, providerAccessSnapshot});
-  const output = [];
-  let finalCursor = 0;
-  const {physicalContainment} = await runContainedTurnLiveCanaryLifecycle({
-    dispose: () => owner.dispose(),
-    open: () => owner.custody.open({...kernelIdentity, intentMode: intent.mode}),
-    execute: async opened => {
-      assert.equal(opened.custodyId, ids.custodyId);
-      const started = await owner.custody.start({
-        attemptId: ids.attemptId, custodyId: ids.custodyId,
-        execute: start => owner.provider.execute({
-          ...kernelIdentity,
-          emit: async chunk => {
-            assert.equal(chunk.cursor, finalCursor);
-            finalCursor += 1;
-            output.push(chunk.text);
-          },
-          intent, isCancellationRequested: async () => false, start,
-        }),
-        intent, operationId: ids.operationId,
-        startAuthority: `start-authority:${authorityVectorDigest}`, workspaceId: ids.workspaceId,
-      });
-      assert.equal(started.kind, "execution_started");
-      const outcome = await started.execution;
-      assert.deepEqual(outcome, {kind: "completed", outcome: "succeeded"});
-      assert.equal(output.join(""), "AR_CLAUDE_CANARY_OK");
-      const closure = await owner.custody.attestExecutionClosure({
-        attemptId: ids.attemptId, custodyId: ids.custodyId, finalCursor, operationId: ids.operationId,
-      });
-      assert.equal(closure.kind, "proved");
-      assert.equal(closure.outputDrainProof.kind, "output_drain");
-    },
-    requestPhysicalContainment: () => owner.custody.requestPhysicalContainment({
-      attemptId: ids.attemptId, custodyId: ids.custodyId, operationId: ids.operationId,
-    }),
-  });
-  if (platformTarget.platform === "linux") {
-    assert.equal(physicalContainment.kind, "contained");
-  } else {
-    assert.equal(physicalContainment.kind, "indeterminate");
+  let observedCustody;
+  try {
+    const launchPlans = Object.freeze({
+      resolve: async () => {throw new Error("ambient launch-plan resolution is forbidden");},
+    });
+    const hostCustody = await createPlatformCustody(platformTarget, launchPlans, candidateBuild);
+    observedCustody = observeCustodyReservation(hostCustody);
+    const privateDirectoryCustody = Object.freeze({assertPrivateDirectory});
+    const owner = createClaudeCurrentKernelOwner({
+      adapterSnapshot: snapshot, executablePath,
+      executableSha256: tuple.executableSha256,
+      hostBootId: "host-boot:claude-live-canary", hostCustody: observedCustody.hostCustody,
+      hostInstanceId: "host-instance:claude-live-canary",
+      launchRecords: Object.freeze({resolve: async input => {
+        assert.equal(input.intentMode, "analysis");
+        const launchWorkspace = input.workspaceAuthority.canonicalPath;
+        if (platformTarget.platform === "linux") {
+          assert.match(input.workspaceAuthority.descriptorPath, /^\/proc\/self\/fd\/\d+$/u);
+        } else {
+          assert.equal(input.workspaceAuthority.descriptorPath, launchWorkspace);
+        }
+        const privateProjection = createClaudeAgentSdkPrivateProjection({
+          configRoot, homeRoot, projectionRef: "projection:claude-live-canary", tempRoot,
+          workspaceRef: launchWorkspace,
+        });
+        return Object.freeze({privateProjection, privateRootPath});
+      }}),
+      manifest, privateDirectoryCustody,
+      queryFactory(input) {
+        assert.equal(typeof input.options.spawnClaudeCodeProcess, "function");
+        const query = claudeQuery(input);
+        return Object.freeze({
+          close: () => query.close(),
+          interrupt: () => query.interrupt(),
+          async *[Symbol.asyncIterator]() {yield* query;},
+        });
+      },
+      platformTarget,
+      workspaceOwner: runtime.workspaceOwner,
+    });
+    const intent = Object.freeze({
+      mode: "analysis",
+      prompt: "Reply with exactly AR_CLAUDE_CANARY_OK. Do not invoke tools, spawn agents, or modify files.",
+    });
+    const result = await submitContainedTurnLiveCanary({
+      dependencies: runtime.dependencies(owner),
+      owner: {dispose: () => runObservation.dispose("ownerDisposal", () => owner.dispose())},
+      onObserved: runObservation.result,
+      command: {
+        commandId: "command:claude-live-canary",
+        expectedProvider: "claude", intent,
+        scope: {projectId: "project:disposable-live-canary", tenantId: "tenant:disposable-live-canary"},
+      },
+    });
+    const observations = observeProviderCandidateCompletion({
+      platform: platformTarget.platform, result, closure: observedCustody.closure(),
+      expectedOutput: "AR_CLAUDE_CANARY_OK",
+    });
+    runObservation.completed(observations);
+  } finally {
+    try {runObservation.closure(observedCustody?.closure());}
+    finally {await runObservation.dispose("runtimeDisposal", () => runtime.dispose());}
   }
-  return createSuccessfulEvidence(candidateEvidence, physicalContainment.kind, output.join(""), finalCursor);
+};
+
+const completedEvidence = async () => {
+  await run();
+  return createProviderCandidateEvidenceEnvelope(Object.freeze({
+    ...candidateEvidence,
+    ...runObservation.evidence("provider-completed"),
+  }));
 };
 
 let candidateEvidence;
+const runObservation = createCandidateRunObservation();
 try {
-  process.stdout.write(`${JSON.stringify(await run())}\n`);
+  process.stdout.write(`${JSON.stringify(await completedEvidence())}\n`);
 } catch (error) {
-  const failure = error instanceof Error ? `${error.name}:${error.message}` : String(error);
   if (candidateEvidence === undefined) {
-    process.stderr.write(`invalid Claude canary invocation (${sha256(failure)})\n`);
+    process.stderr.write(`invalid Claude canary invocation (${error?.reason === "route-enforcement-unqualified" ? "route-enforcement-unqualified" : "canary-invocation-rejected"})\n`);
   } else {
     try {
-      process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope({
-        ...candidateEvidence, compositeContainment: "indeterminate",
-        observations: Object.freeze({errorDigest: sha256(failure)}),
-        physicalContainment: "indeterminate", status: "failed",
-      }))}\n`);
-    } catch (provenanceError) {
-      const detail = provenanceError instanceof Error ? provenanceError.name : "UnknownError";
-      process.stderr.write(`invalid Claude canary evidence (${sha256(detail)})\n`);
+      process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope(Object.freeze({
+        ...candidateEvidence, ...runObservation.evidence("failed"),
+      })))}\n`);
+    } catch {
+      process.stderr.write(`invalid Claude canary evidence (canary-evidence-rejected)\n`);
     }
   }
   process.exitCode = 1;

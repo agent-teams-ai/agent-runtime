@@ -97,7 +97,7 @@ export const validateContainedTurnKernelDependencies = (
   const requiredMethods = Object.freeze({
     artifacts: ["ensureSealed", "querySeal"],
     custody: ["attestContainment", "ensurePhysicalContainment", "queryContainmentAttestation", "queryPhysicalContainment", "releaseRetiredReservation"],
-    operationStore: ["claimPreparedDispatch", "recordDispatchPreparationCleanup", "retireDispatchPreparation"],
+    operationStore: ["preventIntent", "claimPreparedDispatch", "recordDispatchPreparationCleanup", "retireDispatchPreparation"],
     providerAccess: ["consumeForDispatch", "settleConsumedGrant"],
     security: ["consumeForDispatch", "settleConsumedGrant"],
     workspace: ["ensureClosed", "queryClosure"],

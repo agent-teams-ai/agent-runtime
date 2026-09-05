@@ -23,6 +23,9 @@ export {
 } from "./adapters/outbound/host-custody/darwin-cooperative-process-custody.js";
 export {
   applyContainedTurnPostgresSchema,
+  CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST,
+  CONTAINED_TURN_POSTGRES_MIGRATIONS,
+  type ContainedTurnPostgresMigrationIdentity,
   CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
   CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS,
   CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
@@ -68,6 +71,19 @@ export {
   type ClaudeCurrentKernelPlatformTarget,
   type CreateClaudeCurrentKernelOwnerOptions,
 } from "./composition/claude-current-kernel-owner.js";
-export type {
-  ContainedTurnKernelWorkspaceOwner,
+export {
+  createHostHttpEgressSession,
+  type HostHttpEgressSessionDependencies,
+  type ContainedTurnKernelWorkspaceOwner,
 } from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+export type {
+  ContainedTurnIntentAuthority,
+  ContainedTurnPreventionCommand,
+  ContainedTurnPreventionReceipt,
+} from "./domain/contained-turn-intent-guard.js";
+export { containedTurnPreventionDigest } from "./domain/contained-turn-intent-guard.js";
+export type {
+  ContainedTurnPrivateFeatureApi,
+  ContainedTurnIntentCancellationInput,
+  ContainedTurnIntentCancellationOutcome,
+} from "./composition/contained-turn-intent-cancellation.js";

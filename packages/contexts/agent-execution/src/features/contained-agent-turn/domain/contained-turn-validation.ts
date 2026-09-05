@@ -338,7 +338,9 @@ const validateCancellation = (candidate: ContainedTurnKernelOperation): void => 
   requireContainedTurnProof(candidate, cancellation.proofId, "cancellation");
   invariant(candidate.admissionFence.kind === "fenced", "durable cancellation requires a persisted admission fence");
   invariant(
-    candidate.operationCutoff.kind === "closed" && candidate.operationCutoff.reason === "cancellation",
+    candidate.operationCutoff.kind === "closed" &&
+      (candidate.operationCutoff.reason === "cancellation" ||
+       (candidate.operationCutoff.reason === "prevention" && candidate.dispatch.kind === "prevented")),
     "durable cancellation requires the current monotonic operation cutoff",
   );
   if (candidate.operationCutoff.kind === "closed" && candidate.operationCutoff.reason === "cancellation") {

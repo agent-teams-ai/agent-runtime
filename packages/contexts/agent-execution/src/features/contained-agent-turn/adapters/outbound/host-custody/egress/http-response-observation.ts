@@ -22,9 +22,13 @@ export const observeHttpResponse = async (
   source: AsyncIterable<Uint8Array>,
   operation: HttpEgressOperation,
   clock: HttpEgressClock,
+  onHeadAccepted?: (status: number) => boolean,
+  onFramedEnd?: () => Promise<boolean>,
 ): Promise<ResponseEvidence> => {
   try {
-    const response = await forwardStrictHttpResponse(source, operation.connection, operation.limits, clock, operation.signal);
+    const response = await forwardStrictHttpResponse(
+      source, operation.connection, operation.limits, clock, operation.signal, onHeadAccepted, onFramedEnd,
+    );
     return Object.freeze({
       upstreamResponseBytes: response.upstreamBytes, outboundResponseBytes: response.outboundBytes,
       outboundResponseWriteUncertain: false, outcome: "completed", anomalyCode: responseAnomaly(response.status),

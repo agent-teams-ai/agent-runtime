@@ -130,31 +130,45 @@ test("accepts every bounded path, profile, epoch, and scope string at its limit"
   assert.ok(contained !== undefined && isDeeplyFrozen(contained));
 });
 
-test("copies contained-turn scope once and preserves valid opaque references", () => {
-  let projectReads = 0;
-  let tenantReads = 0;
-  const scope = Object.defineProperties({}, {
-    projectId: {
+test("rejects contained-turn accessor properties without executing getters", () => {
+  for (const field of ["projectId", "tenantId"] as const) {
+    let getterReads = 0;
+    const scope = {
+      projectId: "project:opaque/reference",
+      tenantId: "tenant:opaque/reference",
+    };
+    const reference = scope[field];
+    Object.defineProperty(scope, field, {
       enumerable: true,
       get() {
-        projectReads += 1;
-        return projectReads === 1 ? "project:opaque/reference" : "changed";
+        getterReads += 1;
+        return reference;
       },
-    },
-    tenantId: {
-      enumerable: true,
-      get() {
-        tenantReads += 1;
-        return tenantReads === 1 ? "tenant:opaque/reference" : "changed";
-      },
-    },
-  });
-  assert.deepEqual(copyTrustedContainedTurnScope(scope as never), {
+    });
+    assert.equal(copyTrustedContainedTurnScope(scope), undefined, field);
+    assert.equal(getterReads, 0, field);
+  }
+});
+
+test("copies and freezes contained-turn plain data scope preserving opaque references", () => {
+  const scope = {
+    projectId: "project:opaque/reference",
+    tenantId: "tenant:opaque/reference",
+  };
+  const copied = copyTrustedContainedTurnScope(scope);
+  assert.deepEqual(copied, scope);
+  assert.notEqual(copied, scope);
+  assert.ok(copied !== undefined && Object.isFrozen(copied));
+
+  scope.projectId = "changed-project";
+  scope.tenantId = "changed-tenant";
+  assert.deepEqual(copied, {
     projectId: "project:opaque/reference",
     tenantId: "tenant:opaque/reference",
   });
-  assert.equal(projectReads, 1);
-  assert.equal(tenantReads, 1);
+});
+
+test("rejects invalid contained-turn references", () => {
   for (const invalid of [
     { projectId: "", tenantId: "tenant" },
     { projectId: "project", tenantId: "" },

@@ -453,6 +453,22 @@ test("strict codecs reject collision-shaped values and accepted inputs are deepl
   expectInvariant(() => createContainedTurnOperation(symbolInput), /symbol keys/u);
 });
 
+test("kernel mutations reject coerced, unknown, and prototype-backed discriminants", () => {
+  const operation = createOperation();
+  for (const kind of [
+    ["bind_workspace"],
+    new String("bind_workspace"),
+    "unknown_transition",
+    "toString",
+    "__proto__",
+  ]) {
+    expectInvariant(
+      () => mutateContainedTurnOperation(operation, { kind, workspaceId } as never),
+      /supported primitive string/u,
+    );
+  }
+});
+
 test("JSON restart round-trip preserves and re-freezes the accepted RequiredReceiptSet", () => {
   const accepted = createOperation();
   const restarted = JSON.parse(JSON.stringify(accepted)) as ContainedTurnKernelOperation;

@@ -1,3 +1,4 @@
+import { intentAuthority } from "./support/intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -14,9 +15,11 @@ import { recoverContainedTurnDispatchPreparations } from "../../../dist/features
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
+  containedTurnPreparationClosureBinding,
   claimContainedTurnDispatchPreparation,
   CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT,
   retireContainedTurnDispatchPreparation,
+  recordContainedTurnPreparationCleanup,
 } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { mutateContainedTurnOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-kernel.js";
@@ -28,11 +31,12 @@ import {
   runtimeQuery,
   withPool,
 } from "./postgres-contained-turn-test-helpers.ts";
+import { postgresClaimInput } from "./support/postgres-committed-dispatch-fixture.ts";
 
 postgresTest("persisted v2 true flags preserve conservative cleanup debt without replaying consumption", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const initial = operationForProject("project:v2-cleanup-recovery", "v2-cleanup-recovery");
     assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
     const workspaceId = containedTurnIdentity("workspace", "workspace:v2-cleanup-recovery");
@@ -80,7 +84,7 @@ postgresTest("persisted v2 true flags preserve conservative cleanup debt without
         digestContainedTurnPostgresJson(v2State)],
     );
 
-    const restarted = new PostgresContainedTurnOperationStore({ pool });
+    const restarted = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const decoded = (await restarted.listDispatchPreparations({ scope: bound.scope }))[0]?.preparation;
     assert.equal(decoded?.kind, "cleanup_pending");
     if (decoded?.kind !== "cleanup_pending") {throw new Error("v2 recovery preparation was not decoded");}
@@ -94,12 +98,12 @@ postgresTest("persisted v2 true flags preserve conservative cleanup debt without
         calls.push("custody"); return { kind: "released" as const };
       } },
       operationStore: restarted,
-      providerAccess: { settleConsumedGrant: async input => {
-        calls.push(`provider_access:${input.grantRequestId ?? "missing"}`);
+      providerAccess: { settleConsumedGrant: async () => {
+        calls.push("provider_access");
         return { kind: "settled" as const };
       } },
-      security: { settleConsumedGrant: async input => {
-        calls.push(`runtime_security:${input.grantRequestId ?? "missing"}`);
+      security: { settleConsumedGrant: async () => {
+        calls.push("runtime_security");
         return { kind: "settled" as const };
       } },
     } as unknown as ContainedTurnKernelDependencies;
@@ -122,7 +126,7 @@ postgresTest("persisted v2 true flags preserve conservative cleanup debt without
 postgresTest("unsupported preparation codecs quarantine independently and recovery keeps progressing", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const initial = operationForProject("project:poison-preparation", "poison-preparation");
     assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
     const workspaceId = containedTurnIdentity("workspace", "workspace:poison-preparation");
@@ -205,7 +209,7 @@ postgresTest("unsupported preparation codecs quarantine independently and recove
 postgresTest("legacy quarantine is linked atomically to scoped owner debt and replay is idempotent", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const owned = operationForProject("project:quarantine-owner", "quarantine-owner");
     const other = operationForProject("project:quarantine-other", "quarantine-other");
     assert.equal((await store.accept(owned, operationAuthority(owned))).kind, "accepted");
@@ -270,7 +274,7 @@ postgresTest("legacy quarantine is linked atomically to scoped owner debt and re
 postgresTest("recovery pages retained history and validates debt and later supported corruption", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const operation = operationForProject("project:paged-history", "paged-history");
     assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
     const base = {
@@ -356,7 +360,7 @@ postgresTest("recovery pages retained history and validates debt and later suppo
 postgresTest("retirement rejects a payload token that disagrees with its row key", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const initial = operationForProject("project:retirement-token", "retirement-token");
     assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
     const workspaceId = containedTurnIdentity("workspace", "workspace:retirement-token");
@@ -453,7 +457,7 @@ test("recovery verifies phase-one identity and size metadata before decoding mat
 postgresTest("a later recovery batch violation takes precedence over an earlier digest mismatch", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const operation = operationForProject("project:oversized-recovery", "oversized-recovery");
     assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
     for (const suffix of ["a", "b"]) {
@@ -477,5 +481,134 @@ postgresTest("a later recovery batch violation takes precedence over an earlier 
       pool,
       "SELECT count(*)::text AS count FROM agent_execution.contained_turn_dispatch_preparation_quarantine_v1",
     )).rows[0]?.count, "0");
+  });
+});
+
+postgresTest("closure proof scans complete operation state, rejects stale scope and fences concurrent insertion", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
+    // Recovery pagination is deliberately substituted: the closure capability must never use it.
+    store.listDispatchPreparations = async () => [];
+    const initial = operationForProject("project:closure-proof", "closure-proof");
+    await store.accept(initial, operationAuthority(initial));
+    const bound = mutateContainedTurnOperation(initial, {
+      kind: "bind_workspace", workspaceId: containedTurnIdentity("workspace", "workspace:closure-proof"),
+    });
+    await store.commit({ authority: operationAuthority(bound), candidate: bound, expectedRevision: initial.revision });
+    const authority = operationAuthority(bound);
+    const prevention = await store.proofsForPrevention({
+      authority, operation: bound, preventionProofId: containedTurnIdentity("proof", "proof:closure-prevention"),
+    });
+    const prevented = mutateContainedTurnOperation(bound, { kind: "prevent_dispatch", ...prevention });
+    const [insertion, fencing] = await Promise.allSettled([
+      store.prepareDispatch({ authority, operation: bound }),
+      store.commit({ authority, candidate: prevented, expectedRevision: bound.revision }),
+    ]);
+    assert.equal(fencing.status, "fulfilled");
+    if (fencing.status !== "fulfilled") {assert.fail("prevention did not commit");}
+    assert.equal(fencing.value.kind, "applied");
+    const input = { authority, expectedOperationRevision: prevented.revision,
+      expectedOperationCutoffRevision: prevented.operationCutoff.revision };
+    const proof = await store.proveDispatchPreparationClosure(input);
+    if (insertion.status === "fulfilled") {assert.equal(proof, undefined);}
+    else {assert.deepEqual(proof, { ...containedTurnPreparationClosureBinding(prevented, prevented.scope), preparationCount: 0 });}
+    await assert.rejects(store.prepareDispatch({ authority, operation: prevented }), /fence/);
+    assert.equal(await store.proveDispatchPreparationClosure({ ...input, expectedOperationRevision: bound.revision }), undefined);
+    assert.equal(await store.proveDispatchPreparationClosure({ ...input, expectedOperationCutoffRevision: 0 }), undefined);
+    for (const scope of [{ ...bound.scope, tenantId: "tenant:foreign" }, { ...bound.scope, projectId: "project:foreign" }]) {
+      assert.equal(await store.proveDispatchPreparationClosure({ ...input, authority: { ...authority, scope } }), undefined);
+    }
+  });
+});
+
+postgresTest("closure proof requires custody and both grants, validates every row, and bounds 1,000 preparations", async () => {
+  await withPool(async pool => {
+    await resetSchema(pool);
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
+    const initial = operationForProject("project:closure-completeness", "closure-completeness");
+    await store.accept(initial, operationAuthority(initial));
+    const bound = mutateContainedTurnOperation(initial, {
+      kind: "bind_workspace", workspaceId: containedTurnIdentity("workspace", "workspace:closure-completeness"),
+    });
+    const authority = operationAuthority(bound);
+    await store.commit({ authority, candidate: bound, expectedRevision: initial.revision });
+    const reservation = await store.prepareDispatch({ authority, operation: bound });
+    const claim = postgresClaimInput(bound, bound.workspaceId!, reservation, "closure-completeness");
+    const active = (await store.listDispatchPreparations({ scope: bound.scope }))[0]!.preparation;
+    const retired = await store.retireDispatchPreparation({
+      authority, expectedOperationCutoffRevision: bound.operationCutoff.revision,
+      expectedOperationRevision: bound.revision, preparationToken: active.preparationToken, reason: "prevention",
+      consumedGrantRequestIds: {
+        providerAccessConsumptionReceipt: claim.receipts[0],
+        providerAccessGrantRequestId: claim.receipts[0].grantRequestId,
+        runtimeSecurityConsumptionReceipt: claim.receipts[1],
+        runtimeSecurityGrantRequestId: claim.receipts[1].grantRequestId,
+      },
+    });
+    if (retired.kind !== "retired") {assert.fail("expected retired preparation");}
+    const prevention = await store.proofsForPrevention({
+      authority, operation: bound, preventionProofId: containedTurnIdentity("proof", "proof:complete-prevention"),
+    });
+    const prevented = mutateContainedTurnOperation(bound, { kind: "prevent_dispatch", ...prevention });
+    await store.commit({ authority, candidate: prevented, expectedRevision: bound.revision });
+    const input = { authority, expectedOperationRevision: prevented.revision,
+      expectedOperationCutoffRevision: prevented.operationCutoff.revision };
+    for (const target of ["custody", "provider_access", "runtime_security"] as const) {
+      assert.equal(await store.proveDispatchPreparationClosure(input), undefined);
+      await store.recordDispatchPreparationCleanup({ authority, permit: retired.preparation.cleanupPermit, target });
+    }
+    const expected = containedTurnPreparationClosureBinding(prevented, prevented.scope);
+    assert.deepEqual(await store.proveDispatchPreparationClosure(input), { ...expected, preparationCount: 1 });
+    const writeState = async (token: string, state: ReturnType<typeof encodeContainedTurnPreparation>) => runtimeQuery(pool,
+      `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+         (operation_id,preparation_token,state_codec_version,state,state_digest)
+       VALUES ($1,$2,$3,$4::jsonb,$5) ON CONFLICT (operation_id,preparation_token)
+       DO UPDATE SET state_codec_version=EXCLUDED.state_codec_version,state=EXCLUDED.state,state_digest=EXCLUDED.state_digest`,
+      [bound.operationId, token, state.codecVersion, state.json, state.digest]);
+    const closed = ["custody", "provider_access", "runtime_security"].reduce((preparation, target) =>
+      recordContainedTurnPreparationCleanup(preparation, { permit: retired.preparation.cleanupPermit,
+        target: target as "custody" | "provider_access" | "runtime_security" }), retired.preparation as typeof active);
+    const foreignState = JSON.parse(encodeContainedTurnPreparation(closed).json) as {
+      codecVersion: 6;
+      payload: { operationId: string };
+    };
+    foreignState.payload.operationId = containedTurnIdentity("operation", "operation:foreign");
+    await writeState(active.preparationToken, {
+      codecVersion: foreignState.codecVersion,
+      digest: digestContainedTurnPostgresJson(foreignState),
+      json: JSON.stringify(foreignState),
+    });
+    await assert.rejects(
+      store.proveDispatchPreparationClosure(input),
+      /contained turn state quarantined: malformed codec 6/,
+      "a foreign operation inside the bound row is quarantined rather than treated as absence",
+    );
+    await writeState(active.preparationToken, encodeContainedTurnPreparation(closed));
+    const rows = Array.from({ length: 1_000 }, (_unused, index) => {
+      const token = containedTurnIdentity("preparation", `preparation:closure-bound:${index}`);
+      const pending = retireContainedTurnDispatchPreparation(
+        { ...active, preparationToken: token },
+        `bound:${index}`,
+        {},
+        {},
+        "prevention",
+      );
+      if (pending.kind !== "cleanup_pending") {assert.fail("bound fixture must retire its exact preparation");}
+      const encoded = encodeContainedTurnPreparation(recordContainedTurnPreparationCleanup(pending, {
+        permit: pending.cleanupPermit, target: "custody",
+      }));
+      return { token, state: JSON.parse(encoded.json), digest: encoded.digest, version: encoded.codecVersion };
+    });
+    await runtimeQuery(pool,
+      `INSERT INTO agent_execution.contained_turn_dispatch_preparation_v1
+         (operation_id,preparation_token,state_codec_version,state,state_digest)
+       SELECT $1,r.token,r.version,r.state,r.digest FROM jsonb_to_recordset($2::jsonb)
+         AS r(token text,version integer,state jsonb,digest text)`,
+      [bound.operationId, JSON.stringify(rows.slice(0, 999))]);
+    assert.deepEqual(await store.proveDispatchPreparationClosure(input), { ...expected, preparationCount: 1_000 });
+    const extra = rows[999]!;
+    await writeState(extra.token, { codecVersion: extra.version, digest: extra.digest, json: JSON.stringify(extra.state) });
+    assert.equal(await store.proveDispatchPreparationClosure(input), undefined, "all rows are closed but the proof is over budget");
   });
 });

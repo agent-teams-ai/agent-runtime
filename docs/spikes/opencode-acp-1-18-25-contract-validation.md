@@ -16,8 +16,9 @@ related:
 ## Scope and authority
 
 This experiment characterizes Agent Runtime-owned OpenCode ACP v1 policy for
-ADR-0010's accepted OpenCode `1.18.5` pin. It does not claim exact-version
-contract closure or replay through the Contained Agent Turn kernel. The
+ADR-0010's accepted OpenCode `1.18.5` pin. It includes offline replay of the
+exact fixture characterization through the provider-neutral Contained Agent
+Turn kernel with OpenCode identity. The
 fixture claim is `contract_only_no_production_adapter`; it does not implement
 a production OpenCode adapter or establish product E2E or containment
 qualification.
@@ -88,14 +89,20 @@ Ordinary `Error` values are reduced to a digest over a bounded canonical error
 name and small message (or an oversized-message size marker); message, stack,
 cause, and attached fields are never retained.
 
-Ordinary SDK rejection and initialization/version failure fail the probe.
+Final probe success fails closed on every retained anomaly, rejected or
+truncated evidence, SDK diagnostic output, closure failure, and abnormal child
+exit (including confirmed signal termination). Ordinary SDK rejection and
+initialization/version failure also fail the probe. Prompt success requires
+the fixed marker for the newly created session and exactly `end_turn`;
+wrong-session markers, refusal, cancellation, and token-limit reasons cannot
+establish completion.
 Request timeout is a bounded ambiguity failure, not a successful observation.
 The deadline observer assigns no request identifiers and inspects no SDK
 diagnostics; a later settlement of the returned SDK promise is reduced to a
 typed safe anomaly so a late rejection is not silently discarded.
-Connection closure is also bounded; a closure timeout remains a typed retained
-anomaly before finite SIGTERM/SIGKILL process cleanup proceeds. If exit remains
-unconfirmed after SIGKILL, the probe retains that uncertainty, destroys its
+Connection closure is also bounded; a thrown close, rejected closure, or
+closure timeout remains a typed retained anomaly before finite SIGTERM/SIGKILL
+process cleanup proceeds. If exit remains unconfirmed after SIGKILL, the probe retains that uncertainty, destroys its
 remaining child stdio handles, and unreferences the child so evidence emission
 and probe termination do not depend on a later close event. This is only
 bounded experimental cleanup, not proof that the provider process or all of
@@ -136,7 +143,7 @@ The focused policy layer establishes only these rules:
 `opencode-ai@1.18.5` and binary revision
 `opencode@1.18.5#78f75775f26bf92237b27748d3b07bbd84b861536cb4ebe437fab6cf36bcac21`.
 Its SHA-256 is
-`c540dc43d931ec8355e3f13ac4feebebb42498703e79c360b18191df0eb29a84`.
+`7366d7e295e9ae5a2464f0056ed1fa2157b2b338f49acbdbfd6ea62f58d8baff`.
 
 The fixture records the path, SHA-256, and narrow role of five immutable
 inputs:
@@ -148,7 +155,7 @@ inputs:
 - the operation-oracle contract for the exact provider revision, capability
   manifest revision, manifest provider revision, and fail-closed policy;
 - the synthetic contained-turn projection fixture for the neutral `analysis`
-  mode and its declared OpenCode identity gap.
+  mode and bounded OpenCode provider identity.
 
 The fixture calls its capability object a `derivedCapabilityProjection`; it is
 not an observed initialize response. Field-level JSON pointers bind every
@@ -166,17 +173,28 @@ source digest internally, constructs fresh values only from validated
 primitives, and returns deeply frozen data.
 
 The resulting characterization retains only provider identity and revision,
-the `analysis` mode, fail-closed unknown-capability policy, the bounded
-successful terminal observation, and the contract-only claim. It preserves
+capability manifest revision, the `analysis` mode, fail-closed
+unknown-capability policy, the bounded successful terminal observation, and the contract-only claim. It preserves
 separate `supported`, `deferred`, `unknown`, and `unsupported` dispositions.
 It does not retain workspace paths, session text, tool arguments, credentials,
 provider output, or network data.
 
-No OpenCode replay through the current neutral port/kernel is claimed. The
-separate synthetic kernel test exercises currently expressible projected
-outcomes using the current harness identity and continues to declare that an
-OpenCode identity is not expressible there without production-contract
-widening. The characterization therefore does not close that contract gap.
+Production provider identity is already a bounded string (128 UTF-8 bytes),
+not a closed provider enumeration; OpenCode requires no identity widening.
+`opencode-exact-kernel-replay.test.ts` loads the exact fixture with authenticated
+source digests, consumes its immutable characterization in a synthetic provider
+port, and submits it to the actual neutral kernel using `opencode`. The replay
+checks the accepted adapter, capability manifest, provider-access snapshot and
+authority vector identities, exact binary and manifest revisions, successful
+terminal state, output fence, and all 12 required receipts. Custody and owner
+ports are in-memory test fixtures; no process, production OpenCode adapter, or
+production composition is involved. This establishes only synthetic replay of
+the retained successful observation. Refusal, cancellation, and the three
+ambiguity cases are projection-only; they are not replayed through the kernel.
+Acceptance-detail and proved-no-start
+request-rejection mappings remain proposed gaps, and token-limit mappings
+remain deferred; supported/deferred/unknown/unsupported dispositions are
+unchanged.
 The official ACP SDK remains the only framing and correlation owner; the exact
 fixture adds no request identifiers, NDJSON transport, ACP parser, or second
 ACP wire.

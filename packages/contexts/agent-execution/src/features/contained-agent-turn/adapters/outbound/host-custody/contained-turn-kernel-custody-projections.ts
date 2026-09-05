@@ -269,7 +269,10 @@ export const physicalEvidenceIsClosed = (evidence: HostCustodyEvidence): boolean
   (evidence.closure.status === "closed" || evidence.closure.status === "not-started");
 
 export const executionEvidenceIsClosed = (evidence: HostCustodyEvidence): boolean =>
-  evidence.closure.status === "closed" &&
+  // Darwin can seal exact execution observations while descendant containment remains unproven.
+  (evidence.closure.status === "closed" ||
+    (evidence.closure.profile === "cooperative-darwin-posix-process-group" &&
+      evidence.closure.status === "unproven")) &&
   evidence.guardianExit.status === "observed" &&
   evidence.identity.status === "proved" &&
   evidence.providerExit.status === "observed" &&

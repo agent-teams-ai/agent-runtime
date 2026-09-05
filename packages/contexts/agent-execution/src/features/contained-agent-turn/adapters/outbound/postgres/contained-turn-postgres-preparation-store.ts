@@ -6,6 +6,8 @@ import {
 } from "../../../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
 import {
+  containedTurnPreparationClosureBinding,
+  CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT,
   bindContainedTurnPreparationGrantRequests,
   claimContainedTurnDispatchPreparation,
   recordContainedTurnPreparationCleanup,
@@ -26,9 +28,11 @@ import {
 } from "./contained-turn-postgres-operation-authority.js";
 import type { ContainedTurnPostgresOperationRepository } from "./contained-turn-postgres-operation-repository.js";
 import type { ContainedTurnPostgresTransactions } from "./contained-turn-postgres-transactions.js";
+import type { ContainedTurnPostgresIntentStore } from "./contained-turn-postgres-intent-store.js";
 import { decodeContainedTurnPreparation, encodeContainedTurnPreparation } from "./contained-turn-preparation-codec.js";
 import {
   CONTAINED_TURN_POSTGRES_JSON_BUDGET,
+  CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET,
   ContainedTurnStateBudgetError,
 } from "./contained-turn-state-codec.js";
 
@@ -50,11 +54,48 @@ const decodePreparationRow = (row: PreparationRow): ContainedTurnDispatchPrepara
   return decodeContainedTurnPreparation(row.state, row.state_digest, row.state_codec_version);
 };
 
+const assertRetirementReceiptAuthority = (
+  preparation: ContainedTurnDispatchPreparation,
+  current: ContainedTurnKernelOperation,
+): void => {
+  for (const receipt of [preparation.providerAccessConsumptionReceipt,
+    preparation.runtimeSecurityConsumptionReceipt]) {
+    if (receipt === undefined) {continue;}
+    if (receipt.operationId !== current.operationId ||
+        receipt.scope.tenantId !== current.scope.tenantId || receipt.scope.projectId !== current.scope.projectId ||
+        receipt.scope.scopeDigest !== containedTurnScopeDigest(current.scope)) {
+      throw new TypeError("retired consumption receipt authority mismatch");
+    }
+    if (current.dispatch.kind === "claimed" && current.dispatch.grantReceipts.some(claimed =>
+      claimed.owner === receipt.owner && claimed.grantRequestId === receipt.grantRequestId)) {
+      throw new TypeError("claimed grant cannot belong to a losing preparation cleanup");
+    }
+  }
+};
+
+const matchesPreparationClaim = (
+  preparation: ContainedTurnDispatchPreparation,
+  current: ContainedTurnKernelOperation,
+  input: Parameters<ContainedTurnKernelOperationStore["claimPreparedDispatch"]>[0],
+): boolean =>
+  preparation.operationId === current.operationId &&
+  preparation.operationId === input.subject.operationId &&
+  preparation.preparationToken === input.subject.preparationToken &&
+  preparation.attemptId === input.subject.attemptId &&
+  preparation.custodyId === input.subject.custodyId &&
+  preparation.workspaceId === current.workspaceId &&
+  preparation.workspaceId === input.subject.workspaceId &&
+  preparation.operationCutoffRevision === input.subject.operationCutoffRevision &&
+  preparation.preparedOperationRevision === input.expectedOperationRevision &&
+  current.effectId === input.subject.effectId &&
+  containedTurnScopeDigest(current.scope) === input.subject.scopeDigest;
+
 export class ContainedTurnPostgresPreparationStore {
   public constructor(
     private readonly identities: ContainedTurnPostgresIdentitySource,
     private readonly operations: ContainedTurnPostgresOperationRepository,
     private readonly transactions: ContainedTurnPostgresTransactions,
+    private readonly intents: ContainedTurnPostgresIntentStore,
   ) {}
 
   async #load(client: import("pg").PoolClient, operationId: string, scope: import("../../../domain/contained-turn-authority.js").ContainedTurnScope) {
@@ -77,11 +118,16 @@ export class ContainedTurnPostgresPreparationStore {
     const workspaceId = input.operation.workspaceId;
     if (workspaceId === undefined) {throw new TypeError("dispatch preparation requires workspace custody");}
     return this.transactions.write(async client => {
+      if (!await this.intents.lock(client, input.authority.scope)) {throw new TypeError("intent authority unavailable");}
       const current = await this.#load(client, input.authority.operationId, input.authority.scope);
       if (current === undefined || current.revision !== input.operation.revision) {
         throw new Error("dispatch preparation lost its operation revision fence");
       }
       assertAuthority(input.authority, current);
+      if (current.operationCutoff.kind !== "open" || current.admissionFence.kind !== "open" ||
+          current.dispatch.kind !== "unclaimed" || !await this.intents.claimAllowed(client, current)) {
+        throw new TypeError("dispatch preparation intent fenced");
+      }
       const ordinalResult = await client.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1",
         [input.operation.operationId],
@@ -124,6 +170,49 @@ export class ContainedTurnPostgresPreparationStore {
     });
   }
 
+  public proveClosure(
+    input: Parameters<NonNullable<ContainedTurnKernelOperationStore["proveDispatchPreparationClosure"]>>[0],
+  ): ReturnType<NonNullable<ContainedTurnKernelOperationStore["proveDispatchPreparationClosure"]>> {
+    return this.transactions.write(async client => {
+      // All preparation writers take this lock. A closed cutoff rejects future
+      // insertions even if the caller supplies the latest operation revision.
+      const current = await this.#load(client, input.authority.operationId, input.authority.scope);
+      if (current === undefined) {return;}
+      assertAuthority(input.authority, current);
+      if (current.revision !== input.expectedOperationRevision ||
+          current.operationCutoff.revision !== input.expectedOperationCutoffRevision) {return;}
+      const binding = containedTurnPreparationClosureBinding(current, input.authority.scope);
+      const metadata = await client.query<{ count: string; bytes: string }>(
+        `SELECT count(*)::text AS count,COALESCE(sum(octet_length(state::text)),0)::text AS bytes
+           FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1`,
+        [current.operationId],
+      );
+      const count = Number(metadata.rows[0]?.count);
+      const bytes = Number(metadata.rows[0]?.bytes);
+      if (!Number.isSafeInteger(count) || count < 0 || count > CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT ||
+          !Number.isSafeInteger(bytes) || bytes < 0 ||
+          bytes > CONTAINED_TURN_POSTGRES_MATERIALIZATION_BUDGET.maximumBatchBytes) {return;}
+      const rows = await client.query<PreparationRow & { preparation_token: string }>(
+        `SELECT preparation_token,${PREPARATION_STATE_SELECTION}
+           FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1`,
+        [current.operationId],
+      );
+      if (rows.rows.length !== count) {return;}
+      for (const row of rows.rows) {
+        // Unsupported, corrupt, or quarantined data cannot become an absence proof.
+        const preparation = decodePreparationRow(row);
+        if (preparation.operationId !== current.operationId ||
+            preparation.preparationToken !== row.preparation_token ||
+            preparation.workspaceId !== current.workspaceId ||
+            preparation.preparedOperationRevision >= current.revision ||
+            preparation.operationCutoffRevision >= current.operationCutoff.revision || preparation.kind !== "cleanup_closed") {
+          return;
+        }
+      }
+      return Object.freeze({ ...binding, preparationCount: count });
+    });
+  }
+
   public async claim(
     input: Parameters<ContainedTurnKernelOperationStore["claimPreparedDispatch"]>[0],
   ): ReturnType<ContainedTurnKernelOperationStore["claimPreparedDispatch"]> {
@@ -136,32 +225,22 @@ export class ContainedTurnPostgresPreparationStore {
       preparationToken: input.subject.preparationToken,
     });
     const outcome = await this.transactions.write(async client => {
+      if (!await this.intents.lock(client, input.authority.scope)) {return { kind: "not_found" as const };}
       const current = await this.#load(client, input.authority.operationId, input.authority.scope);
       if (current === undefined) {return { kind: "not_found" as const };}
       assertAuthority(input.authority, current);
       if (current.dispatch.kind === "claimed" && current.dispatch.preparationToken === input.subject.preparationToken) {
         return { kind: "observed_claim" as const, operation: current };
       }
+      if (!await this.intents.claimAllowed(client, current)) {return { current, kind: "stale" as const };}
       const row = await client.query<PreparationRow>(
         `SELECT ${PREPARATION_STATE_SELECTION} FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2 FOR UPDATE`,
         [current.operationId, input.subject.preparationToken],
       );
       const persisted = row.rows[0];
       const preparation = persisted === undefined ? undefined : decodePreparationRow(persisted);
-      if (preparation === undefined || preparation.kind !== "active") {return { current, kind: "stale" as const };}
-      if (preparation.operationId !== current.operationId ||
-          preparation.operationId !== input.subject.operationId ||
-          preparation.preparationToken !== input.subject.preparationToken ||
-          preparation.attemptId !== input.subject.attemptId ||
-          preparation.custodyId !== input.subject.custodyId ||
-          preparation.workspaceId !== current.workspaceId ||
-          preparation.workspaceId !== input.subject.workspaceId ||
-          preparation.operationCutoffRevision !== input.subject.operationCutoffRevision ||
-          preparation.preparedOperationRevision !== input.expectedOperationRevision ||
-          current.effectId !== input.subject.effectId ||
-          containedTurnScopeDigest(current.scope) !== input.subject.scopeDigest) {
-        return { current, kind: "stale" as const };
-      }
+      if (preparation === undefined || !["active", "cleanup_pending"].includes(preparation.kind)) {return { current, kind: "stale" as const };}
+      if (!matchesPreparationClaim(preparation, current, input)) {return { current, kind: "stale" as const };}
       const providerAccessReceipt = consumedReceipts[0];
       const runtimeSecurityReceipt = consumedReceipts[1];
       const bound = bindContainedTurnPreparationGrantRequests(preparation, {
@@ -176,7 +255,9 @@ export class ContainedTurnPostgresPreparationStore {
         [current.operationId, input.subject.preparationToken, encodedBound.json,
           encodedBound.codecVersion, encodedBound.digest],
       );
-      if (current.revision !== input.expectedOperationRevision) {return { current, kind: "stale" as const };}
+      // Retirement fences dispatch, but delayed consumed receipts still belong
+      // to this preparation's durable settlement obligations and survive restart.
+      if (bound.kind !== "active" || current.revision !== input.expectedOperationRevision) {return { current, kind: "stale" as const };}
       const providerAccessProof: Extract<ContainedTurnProof, { kind: "provider_access_dispatch" }> = {
         binding: { ...operationBinding(current), acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(current.providerAccessSnapshot), resolutionDigest: digestContainedTurnCanonicalValue(providerAccessReceipt as never) },
         kind: "provider_access_dispatch", proofId: containedTurnIdentity("proof", `proof:provider-access-grant:${digestContainedTurnCanonicalValue(providerAccessReceipt as never)}`),
@@ -276,10 +357,19 @@ export class ContainedTurnPostgresPreparationStore {
       const preparation = persisted === undefined ? undefined : decodePreparationRow(persisted);
       if (preparation === undefined) {return { current, kind: "stale" as const };}
       if (preparation.kind === "claimed") {return { current, kind: "stale" as const };}
+      // The exact claimed preparation is protected above. Cancellation also
+      // fences a different, losing preparation when the operation has a winner.
+      // Its original cutoff still binds only its own retirement and cleanup.
+      const cancelledPreparation = current.cancellation.kind === "requested" &&
+        current.operationCutoff.kind === "closed" &&
+        current.operationCutoff.reason === "cancellation" &&
+        current.operationCutoff.revision > preparation.operationCutoffRevision &&
+        current.revision > preparation.preparedOperationRevision;
       if (preparation.operationId !== current.operationId ||
           preparation.preparationToken !== input.preparationToken ||
           preparation.workspaceId !== current.workspaceId ||
-          preparation.operationCutoffRevision !== current.operationCutoff.revision ||
+          (preparation.operationCutoffRevision !== current.operationCutoff.revision &&
+            !cancelledPreparation) ||
           preparation.preparedOperationRevision !== input.expectedOperationRevision ||
           preparation.operationCutoffRevision !== input.expectedOperationCutoffRevision) {
         return { current, kind: "stale" as const };
@@ -293,7 +383,9 @@ export class ContainedTurnPostgresPreparationStore {
         })}`),
         input.consumedGrantRequestIds,
         input.consumptionEvidenceIds,
+        input.reason,
       );
+      assertRetirementReceiptAuthority(retired, current);
       const encoded = encodeContainedTurnPreparation(retired);
       await client.query(
         "UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb,state_codec_version=$4,state_digest=$5 WHERE operation_id=$1 AND preparation_token=$2",

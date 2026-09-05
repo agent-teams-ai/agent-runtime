@@ -46,3 +46,5 @@ export type {
   ClaudeCodeSetupInspectionPlan,
   ClaudeCodeSetupInspectionPlanner,
 } from "./application/ports/outbound/claude-code-setup-inspection-planner.js";
+
+export { bindContainedTurnCapabilityAuthority, type AuthorityBoundContainedTurnCapability } from "./composition/contained-turn-authority-capability.js";

@@ -1,9 +1,13 @@
+import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
+import { recoverContainedTurnDispatchPreparations } from "../../../contexts/agent-execution/dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
+import { containedTurnIdentity } from "../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { createDependencies, proofId } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 import {
   AgentRuntimeHostDisposalIncompleteError,
-  createAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
 } from "../dist/composition.js";
@@ -30,6 +34,92 @@ const setupDependencies = Object.freeze({
 });
 
 const trustedScope = Object.freeze({ projectId: "project:embedded", tenantId: "tenant:embedded" });
+
+for (const target of ["custody", "provider_access", "runtime_security"] as const) {
+  test(`prevented dispatch retains Host tracking while ${target} cleanup is indeterminate`, async () => {
+    const cleanupScope = Object.freeze({ projectId: "project:one", tenantId: "tenant:one" });
+    const fixture = createDependencies({ dispatchPrevented: target !== "provider_access" });
+    const { dependencies, current, providerCalls, custodyStartInputs } = fixture;
+    const evidenceId = containedTurnIdentity("evidence", `evidence:cleanup-indeterminate:${target}`);
+    let cleanupProved = false;
+    let cleanupCalls = 0;
+    const indeterminate = async () => {
+      cleanupCalls += 1;
+      return { evidenceId, kind: "indeterminate" as const };
+    };
+    const configured = {
+      ...dependencies,
+      custody: {
+        ...dependencies.custody,
+        releaseRetiredReservation: input => target === "custody" && !cleanupProved
+          ? indeterminate() : dependencies.custody.releaseRetiredReservation(input),
+      },
+      providerAccess: {
+        ...dependencies.providerAccess,
+        settleConsumedGrant: input => target === "provider_access" && !cleanupProved
+          ? indeterminate() : dependencies.providerAccess.settleConsumedGrant(input),
+      },
+      security: {
+        ...dependencies.security,
+        consumeForDispatch: input => target === "provider_access"
+          ? Promise.resolve({ kind: "prevented" as const, preventionProofId: proofId("security-prevention") })
+          : dependencies.security.consumeForDispatch(input),
+        settleConsumedGrant: input => target === "runtime_security" && !cleanupProved
+          ? indeterminate() : dependencies.security.settleConsumedGrant(input),
+      },
+    } satisfies typeof dependencies;
+    const feature = createContainedTurnFeature(configured);
+    let complete!: () => void;
+    const completed = new Promise<void>(resolve => {complete = resolve;});
+    const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: {
+      ...feature,
+      submit: { async execute(input, options) {
+        try {return await feature.submit.execute(input, options);} finally {complete();}
+      } },
+    } });
+    const access = host.bindAccess({ containedTurn: cleanupScope });
+    const submission = {
+      commandId: "command:one", expectedProvider: "codex" as const,
+      intent: { mode: "analysis" as const, prompt: "synthetic prevented cleanup" },
+    };
+    const accepted = await access.containedTurn.submit(submission);
+    assert.equal(accepted.status, "accepted");
+    if (accepted.status !== "accepted") {assert.fail("missing accepted handle");}
+    await completed;
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    const observed = await access.containedTurn.observe(accepted.operationId);
+    assert.equal(observed.status, "observed");
+    if (observed.status !== "observed") {assert.fail("missing operation");}
+    assert.equal(observed.turn.status, "reconcile_required");
+    assert.equal(current()?.terminal.kind, "open");
+    assert.equal(current()?.reconciliation.kind, "required");
+    assert.equal(current()?.operationCutoff.kind, "closed");
+    const pending = await dependencies.operationStore.listDispatchPreparations?.({ scope: cleanupScope });
+    assert.equal(pending?.length, 1);
+    const preparation = pending?.[0]?.preparation;
+    if (preparation?.kind !== "cleanup_pending") {assert.fail("cleanup must remain recoverable");}
+    assert.equal(preparation.custodyReleased, target !== "custody");
+    assert.equal(preparation.providerAccessNotConsumed, target !== "provider_access");
+    assert.equal(preparation.providerAccessSettled, false);
+    assert.equal(preparation.runtimeSecurityNotConsumed, target === "provider_access");
+    assert.equal(preparation.runtimeSecuritySettled, target === "custody");
+    assert.ok(preparation.cleanupEvidenceIds.includes(evidenceId));
+    assert.equal(cleanupCalls, 1, "cleanup must not be blindly retried");
+    await assert.rejects(host.dispose(), error => {
+      assert.ok(error instanceof AgentRuntimeHostDisposalIncompleteError);
+      assert.deepEqual(error.containedTurns, [{ operationId: accepted.operationId, status: "reconcile_required" }]);
+      return true;
+    });
+    assert.equal(current()?.terminal.kind, "open", "Host cancellation cannot erase cleanup debt");
+    assert.equal((await dependencies.operationStore.listDispatchPreparations?.({ scope: cleanupScope }))?.length, 1);
+    cleanupProved = true;
+    assert.deepEqual(await recoverContainedTurnDispatchPreparations(configured, cleanupScope), { discovered: 1, retired: 0 });
+    assert.equal((await dependencies.operationStore.listDispatchPreparations?.({ scope: cleanupScope }))?.length, 0);
+    assert.equal(current()?.terminal.kind, "open", "preparation recovery alone is not terminal authority");
+    assert.equal(custodyStartInputs.length, 0);
+    assert.equal(providerCalls.value, 0);
+  });
+}
 
 const turnView = (status: ContainedTurnStatus) => Object.freeze({
   ...(status === "cancelled" || status === "failed" || status === "succeeded"

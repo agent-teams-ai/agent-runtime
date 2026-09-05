@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -18,161 +17,13 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import { ClaudeAgentSdkCurrentKernelAdapter } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-current-kernel-adapter.js";
 import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
-import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { containedTurnOperationCutoffRevision } from "../../../dist/features/contained-agent-turn/domain/contained-turn-output-authority.js";
 import { createDependencies } from "../../features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 import { containedTurnFactoryPortKeys } from "./support/current-provider-owner-composition-ports.ts";
 import {
-  boundary as codexFixtureBoundary,
-  FakeCodexProcess,
-  standardHandshake,
-  syntheticPrivateRoot as codexFixturePrivateRoot,
-  syntheticTmp as codexFixtureTmp,
-} from "../../codex-app-server-contained-turn-provider-fixture.ts";
-import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../codex-app-server-test-messages.mjs";
-
-const ids = (provider: "claude" | "codex", suffix: string) => Object.freeze({
-  attemptId: containedTurnIdentity("attempt", `attempt:${provider}:${suffix}`),
-  authorityVectorDigest: digestContainedTurnCanonicalValue({ provider, suffix }),
-  custodyId: containedTurnIdentity("custody", `custody:${provider}:${suffix}`),
-  commandId: containedTurnIdentity("command", `command:${provider}:${suffix}`),
-  effectId: containedTurnIdentity("effect", `effect:${provider}:${suffix}`),
-  operationCutoffRevision: containedTurnOperationCutoffRevision(0),
-  operationId: containedTurnIdentity("operation", `operation:${provider}:${suffix}`),
-  operationRevision: 1,
-  preparationToken: containedTurnIdentity("preparation", `preparation:${provider}:${suffix}`),
-  workspaceId: containedTurnIdentity("workspace", `workspace:opaque:${provider}:${suffix}`),
-});
-
-const access = (provider: "claude" | "codex") => Object.freeze({
-  accessRef: `access:${provider}`, credentialBindingDigest: digestContainedTurnCanonicalValue({ provider }),
-  credentialBindingRef: `credential-binding:${provider}`, credentialGeneration: 1,
-  ownerAuthorityDigest: `owner:${provider}`, projectId: "project:test", provider,
-  providerAccountRef: `account:${provider}`, providerRouteRef: `route:${provider}`,
-  revision: 1, tenantId: "tenant:test",
-});
-const codexCredentialOutputInventory = (
-  authority: Pick<ReturnType<typeof access>, "credentialBindingDigest" | "credentialGeneration">,
-  sensitiveOutputTokens: readonly string[] = [],
-) => Object.freeze({
-  credentialBindingDigest: authority.credentialBindingDigest,
-  credentialGeneration: authority.credentialGeneration,
-  sensitiveOutputTokens: Object.freeze([...sensitiveOutputTokens]),
-});
-
-class FakeHost {
-  readonly plans: unknown[] = [];
-  readonly refs = new Map<string, string>();
-  readonly startInputs: unknown[] = [];
-  reserves = 0;
-  releases = 0;
-  starts = 0;
-  contained = false;
-  containments = 0;
-  async reserve(input: any) {
-    this.reserves += 1;
-    const custodyRef = `urn:agent-runtime:host-custody:random-${this.reserves}`;
-    this.refs.set(input.attemptId, custodyRef);
-    this.plans.push(input.launchPlan);
-    return Object.freeze({ custodyRef });
-  }
-  async open() {throw new Error("owner integration must use reserve");}
-  start(custodyRef: string, input: unknown) {
-    assert.ok([...this.refs.values()].includes(custodyRef));
-    this.startInputs.push(input);
-    this.starts += 1;
-    return Object.freeze({
-      exitCode: null, killed: false, stdin: {}, stdout: {}, kill: () => true,
-      off: () => {}, on: () => {}, once: () => {},
-    });
-  }
-  get(custodyRef: string) {
-    if (![...this.refs.values()].includes(custodyRef)) {return null;}
-    return Object.freeze({
-      closeInput: async () => {}, custodyRef, stderr: emptyBytes(), stdout: emptyBytes(),
-      waitForExit: async () => ({ code: 0, signal: null }),
-      workspaceAuthorityPath: "/proc/self/fd/4" as const, write: async () => {},
-    });
-  }
-  evidence(custodyRef: string) {
-    if (![...this.refs.values()].includes(custodyRef)) {return null;}
-    const started = this.starts > 0;
-    const provedNoStart = !started && this.contained;
-    return Object.freeze({
-      closure: Object.freeze({
-        limitations: Object.freeze([]), profile: "strict-linux-cgroup-v2",
-        status: started ? "closed" : provedNoStart ? "not-started" : "unproven",
-      }),
-      fingerprint: Object.freeze({
-        argumentsSha256: "1".repeat(64), binaryRevision: "binary:test", containmentProfile: "strict-linux-cgroup-v2",
-        environmentKeys: Object.freeze([]), executablePathSha256: "2".repeat(64), executableSha256: "3".repeat(64),
-        fingerprintSha256: "4".repeat(64), intentMode: "analysis", planSha256: "5".repeat(64),
-        privatePathEnvironmentKeys: Object.freeze([]), privateRootPathSha256: "6".repeat(64),
-        providerBindingSha256: "7".repeat(64), spawnMode: "sdk-delegated", workspaceSha256: "8".repeat(64),
-      }),
-      guardianExit: started ? Object.freeze({code: 0, signal: null, status: "observed"}) : Object.freeze({status: "unobserved"}),
-      identity: started ? Object.freeze({
-        binarySha256: "3".repeat(64), childProcessInstanceSha256: "9".repeat(64),
-        hostLifecycleGenerationSha256: "a".repeat(64), pgid: 101, pid: 102,
-        planSha256: "5".repeat(64), proofRef: "process-proof:test", status: "proved",
-      }) : Object.freeze({
-        binarySha256: "0".repeat(64), childProcessInstanceSha256: "0".repeat(64),
-        hostLifecycleGenerationSha256: "a".repeat(64), planSha256: "0".repeat(64), status: "not-started",
-      }),
-      privateRoot: Object.freeze({identitySha256: "b".repeat(64), status: started ? "deleted" : "active"}),
-      providerExit: started ? Object.freeze({code: 0, signal: null, status: "observed"}) : Object.freeze({status: "not-started"}),
-      sealed: started || provedNoStart, spawn: started ? "acknowledged" : "never-started",
-      stderr: Object.freeze({bytes: 0, sha256: "0".repeat(64), status: started ? "complete" : provedNoStart ? "not-started" : "incomplete"}),
-      stdout: Object.freeze({bytes: 0, sha256: "0".repeat(64), status: started ? "complete" : provedNoStart ? "not-started" : "incomplete"}),
-    });
-  }
-  async requestContainment() {
-    this.contained = true;
-    this.containments += 1;
-    return Object.freeze({ kind: "contained" as const, receiptRef: "receipt:test" });
-  }
-  async release() {this.releases += 1; return Object.freeze({ kind: "released" as const });}
-}
-async function* emptyBytes(): AsyncIterable<Uint8Array> {}
-
-const privateDirectoryCustody = Object.freeze({
-  async assertPrivateDirectory(path: string): Promise<void> {
-    assert.equal((await stat(path)).isDirectory(), true);
-  },
-});
-
-const workspaceOwner = (expected: ReturnType<typeof ids>, workspaceRef: string) => Object.freeze({
-  async withLaunchAuthority<Result>(input: any, consume: (authority: any) => Promise<Result>): Promise<Result> {
-    assert.deepEqual(input, {
-      attemptId: expected.attemptId, operationId: expected.operationId, workspaceId: expected.workspaceId,
-    });
-    return consume(Object.freeze({
-      canonicalPath: workspaceRef, descriptorPath: "/proc/self/fd/99",
-      identity: Object.freeze({ dev: 1n, ino: 2n, mountId: "mount:test" }),
-    }));
-  },
-});
-
-const syntheticCodexEffectCustody = () => ({
-  admit(): undefined {return undefined;},
-});
-
-const openInput = (identity: ReturnType<typeof ids>, provider: "claude" | "codex", snapshot: any) => ({
-  adapterSnapshot: snapshot, ...identity, intentMode: "analysis" as const, providerAccessSnapshot: access(provider),
-});
-const executeInput = (identity: ReturnType<typeof ids>, provider: "claude" | "codex", snapshot: any) => ({
-  adapterSnapshot: snapshot, ...identity, emit: async () => {},
-  intent: Object.freeze({ mode: "analysis" as const, prompt: "Inspect this disposable workspace." }),
-  isCancellationRequested: async () => false, providerAccessSnapshot: access(provider),
-  start: Object.freeze({
-    createProcess<Process>(create: () => Process): Process {return create();},
-    observation: Promise.resolve(Object.freeze({
-      evidenceId: containedTurnIdentity("evidence", `evidence:${provider}:synthetic-start`),
-      kind: "indeterminate" as const,
-    })),
-  }),
-});
+  codexCredentialOutputInventory, executeInput, FakeHost, ids, openInput,
+  privateDirectoryCustody, syntheticCodexEffectCustody, workspaceOwner,
+} from "./support/current-provider-owner-fixture.ts";
 
 const claudeSnapshot = Object.freeze({
   adapterRevision: CLAUDE_AGENT_SDK_PRODUCTION_TUPLE.adapterRevision,
@@ -405,150 +256,6 @@ test("Codex Darwin owner delegates the canonical workspace to cooperative Host C
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
-test("Codex owner immutably snapshots a valid exact Array and rejects its arbitrary review token", async () => {
-  const workspaceRef = codexFixtureBoundary.workspaceRef;
-  const privateRootPath = codexFixturePrivateRoot;
-  const codexHome = codexFixtureBoundary.codexHome;
-  const tmpDir = codexFixtureTmp;
-  const oauthToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJwcm92aWRlciJ9.signature-private";
-  const tokenDigest = createHash("sha256").update(oauthToken).digest("hex");
-  const reviewToken = "ARBITRARY_REVIEW_TOKEN_93e77fe_exact_inventory";
-  const process = new FakeCodexProcess((message, target) => {
-    if (standardHandshake(message, target)) {return;}
-    if (message.method === "turn/start") {
-      target.emit({id: message.id, result: {turn: generatedTurn("turn:sensitive", "inProgress")}});
-      emitTurnStarted(target, "turn:sensitive");
-      emitAgentStarted(target, "turn:sensitive", "item:sensitive");
-      target.emit({method: "item/agentMessage/delta", params: {
-        delta: `unlabeled ${oauthToken} ${tokenDigest} ${reviewToken}`, itemId: "item:sensitive",
-        threadId: "thread:test", turnId: "turn:sensitive",
-      }});
-      emitAgentCompleted(target, "turn:sensitive", "item:sensitive", `unlabeled ${oauthToken} ${tokenDigest} ${reviewToken}`);
-      target.emit({method: "turn/completed", params: {
-        threadId: "thread:test", turn: generatedTurn("turn:sensitive", "completed"),
-      }});
-    }
-  });
-  class CredentialHost extends FakeHost {
-    override async reserve(input: any) {
-      this.reserves += 1;
-      this.refs.set(input.attemptId, process.custodyRef);
-      this.plans.push(input.launchPlan);
-      return Object.freeze({custodyRef: process.custodyRef});
-    }
-    override get(custodyRef: string) {return custodyRef === process.custodyRef ? process : null;}
-  }
-  const host = new CredentialHost();
-  const identity = ids("codex", "sensitive-output");
-  const mutableTokens = [oauthToken, tokenDigest, reviewToken];
-  const mutableInventory = {
-    credentialBindingDigest: access("codex").credentialBindingDigest,
-    credentialGeneration: access("codex").credentialGeneration,
-    sensitiveOutputTokens: mutableTokens,
-  };
-  const owner = createCodexCurrentKernelOwner({
-    effectCustody: syntheticCodexEffectCustody(), hostBootId: "host-boot:sensitive-output",
-    hostCustody: host as any, hostInstanceId: "host-instance:sensitive-output",
-    launchRecords: {resolve: async () => ({
-      boundary: createCodexAppServerPermissionBoundary({codexHome, intentMode: "analysis", workspaceRef}),
-      credentialOutputInventory: mutableInventory,
-      executablePath: "/synthetic/codex", privateRootPath, tmpDir,
-    })},
-    platformTarget: {architecture: "x64", platform: "linux"},
-    workspaceOwner: workspaceOwner(identity, workspaceRef),
-  });
-  await owner.custody.open(openInput(identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT));
-  mutableTokens.splice(0, mutableTokens.length, "later-substituted-token");
-  mutableInventory.credentialBindingDigest = "later-substituted-digest" as never;
-  mutableInventory.credentialGeneration = 2;
-  const output: unknown[] = [];
-  const outcome = await owner.provider.execute({...executeInput(
-    identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT,
-  ), emit: async chunk => {output.push(chunk);}});
-  const publicEvidence = JSON.stringify({outcome, output});
-  assert.equal(outcome.kind, "indeterminate");
-  assert.deepEqual(output, []);
-  assert.equal(publicEvidence.includes(oauthToken), false);
-  assert.equal(publicEvidence.includes(tokenDigest), false);
-  assert.equal(publicEvidence.includes(reviewToken), false);
-  assert.equal(JSON.stringify(openInput(identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT))
-    .includes(oauthToken), false);
-  owner.dispose();
-});
-
-test("Codex production owner fails closed on omitted or credential-drifted output inventory", async () => {
-  for (const [suffix, inventory] of [
-    ["omitted", undefined],
-    ["digest", {...codexCredentialOutputInventory(access("codex")), credentialBindingDigest: "drifted"}],
-    ["generation", {...codexCredentialOutputInventory(access("codex")), credentialGeneration: 2}],
-  ] as const) {
-    const identity = ids("codex", `inventory-${suffix}`);
-    const owner = createCodexCurrentKernelOwner({
-      effectCustody: syntheticCodexEffectCustody(), hostBootId: `host-boot:inventory-${suffix}`,
-      hostCustody: new FakeHost() as any, hostInstanceId: `host-instance:inventory-${suffix}`,
-      launchRecords: {resolve: async () => ({
-        boundary: codexFixtureBoundary,
-        ...(inventory === undefined ? {} : {credentialOutputInventory: inventory}),
-        executablePath: "/synthetic/codex", privateRootPath: codexFixturePrivateRoot, tmpDir: codexFixtureTmp,
-      } as never)},
-      platformTarget: {architecture: "x64", platform: "linux"},
-      workspaceOwner: workspaceOwner(identity, codexFixtureBoundary.workspaceRef),
-    });
-    await assert.rejects(owner.custody.open(openInput(
-      identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT,
-    )), /credential output inventory/u);
-    owner.dispose();
-  }
-});
-
-test("Codex credential inventory accepts only bounded dense exact Arrays without dispatching accessors", async t => {
-  let accessorReads = 0;
-  class OverriddenMapArray extends Array<string> {
-    override map<U>(_callback: (value: string, index: number, array: string[]) => U): U[] {return [];}
-  }
-  const cases: readonly [string, () => unknown][] = [
-    ["Array subclass overriding map", () => new OverriddenMapArray("subclass-secret")],
-    ["own overridden map", () => Object.defineProperty(["own-map-secret"], "map", {value: () => []})],
-    ["hostile prototype", () => Object.setPrototypeOf(["prototype-secret"], Object.create(Array.prototype))],
-    ["own accessor", () => Object.defineProperty(["accessor-secret"], "0", {
-      configurable: true, enumerable: true, get: () => {accessorReads += 1; return "accessor-secret";},
-    })],
-    ["sparse Array", () => Array<string>(1)],
-    ["non-string entry", () => [1]],
-    ["empty entry", () => [""]],
-    ["excessive count", () => Array.from({length: 257}, () => "x")],
-    ["excessive individual bytes", () => ["é".repeat(2_049)]],
-    ["excessive aggregate bytes", () => Array.from({length: 17}, () => "x".repeat(4_096))],
-  ];
-  for (const [suffix, tokens] of cases) {
-    await t.test(suffix, async () => {
-      const identity = ids("codex", `credential-array-${suffix.replaceAll(" ", "-")}`);
-      const host = new FakeHost();
-      const owner = createCodexCurrentKernelOwner({
-        effectCustody: syntheticCodexEffectCustody(), hostBootId: "host-boot:credential-array",
-        hostCustody: host as any, hostInstanceId: "host-instance:credential-array",
-        launchRecords: {resolve: async input => ({
-          boundary: codexFixtureBoundary,
-          credentialOutputInventory: {
-            credentialBindingDigest: input.credentialBindingDigest,
-            credentialGeneration: input.credentialGeneration, sensitiveOutputTokens: tokens(),
-          },
-          executablePath: "/synthetic/codex", privateRootPath: codexFixturePrivateRoot, tmpDir: codexFixtureTmp,
-        } as never)},
-        platformTarget: {architecture: "x64", platform: "linux"},
-        workspaceOwner: workspaceOwner(identity, codexFixtureBoundary.workspaceRef),
-      });
-      await assert.rejects(owner.custody.open(openInput(
-        identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT,
-      )), /credential output inventory/u);
-      assert.equal(host.reserves, 0);
-      assert.equal(host.starts, 0);
-      owner.dispose();
-    });
-  }
-  assert.equal(accessorReads, 0);
-});
-
 test("Codex and Claude current owners start only after the real atomic claim and cannot replay", async t => {
   for (const provider of ["codex", "claude"] as const) {
     await t.test(provider, async () => {
@@ -767,4 +474,94 @@ test("public root remains path-free and outer composition retains the exact seve
   const supplied = containedTurnFactoryPortKeys(composition);
   assert.deepEqual(supplied, ["operationStore", "security", "providerAccess", "workspace", "artifacts", "custody", "provider"]);
   assert.doesNotMatch(composition, /production/u);
+});
+
+// Exercise the same submission seam retained by both live harnesses, using
+// current owners and synthetic transports. No provider executable is invoked.
+test("live canary submission uses current owner contracts and rejects substituted dispatch proofs", async t => {
+  const { submitContainedTurnLiveCanary } = await import("../../live/contained-turn-live-canary-lifecycle.mjs");
+  const { committedDispatchProofV1 } = await import("../../../dist/features/contained-agent-turn/domain/committed-dispatch-proof-v1.js");
+  for (const provider of ["codex", "claude"] as const) {
+    for (const mutation of ["none", "fabricated", "stale", "mismatched"] as const) {
+      await t.test(`${provider}: ${mutation}`, async () => {
+        const root = await realpath(await mkdtemp(join(tmpdir(), "live-canary-contract-")));
+        try {
+          const host = new FakeHost();
+          const owner = await createClaimPathOwner(provider, root, host);
+          const fixture = createDependencies();
+          const selected = dependenciesForProvider(fixture, provider);
+          let starts = 0;
+          let opens = 0;
+          const custody = Object.freeze({
+            attestContainment: owner.custody.attestContainment.bind(owner.custody),
+            attestExecutionClosure: owner.custody.attestExecutionClosure.bind(owner.custody),
+            completionBoundary: owner.custody.completionBoundary.bind(owner.custody),
+            ensurePhysicalContainment: owner.custody.ensurePhysicalContainment.bind(owner.custody),
+            queryContainmentAttestation: owner.custody.queryContainmentAttestation.bind(owner.custody),
+            queryPhysicalContainment: owner.custody.queryPhysicalContainment.bind(owner.custody),
+            releaseReservation: owner.custody.releaseReservation.bind(owner.custody),
+            releaseRetiredReservation: owner.custody.releaseRetiredReservation.bind(owner.custody),
+            requestContainment: owner.custody.requestContainment.bind(owner.custody),
+            requestPhysicalContainment: owner.custody.requestPhysicalContainment.bind(owner.custody),
+            open: async (input: Parameters<typeof owner.custody.open>[0]) => {
+              opens += 1;
+              assert.equal(typeof input.commandId, "string");
+              assert.equal(typeof input.operationRevision, "number");
+              assert.equal(typeof input.operationCutoffRevision, "number");
+              assert.equal(typeof input.preparationToken, "string");
+              return owner.custody.open(input);
+            },
+            start: async (input: Parameters<typeof owner.custody.start>[0]) => {
+              starts += 1;
+              assert.equal(host.starts, 0);
+              assert.equal(input.intentMode, "analysis");
+              assert.equal("intent" in input || "startAuthority" in input, false);
+              assert.equal(fixture.current()?.dispatch.kind, "claimed");
+              if (mutation === "none") {return owner.custody.start(input);}
+              const {proofDigest: _digest, ...seed} = input.committedDispatchProof;
+              const proof = mutation === "fabricated"
+                ? {...input.committedDispatchProof, proofDigest: `sha256:${"0".repeat(64)}`}
+                : committedDispatchProofV1({...seed, ...(mutation === "stale"
+                  ? {committedOperationRevision: seed.committedOperationRevision + 1}
+                  : {commandId: containedTurnIdentity("command", "command:foreign")})});
+              return owner.custody.start({...input, committedDispatchProof: proof as never});
+            },
+          });
+          const command = {
+            commandId: `command:canary:${provider}:${mutation}`, expectedProvider: provider,
+            intent: {mode: "analysis" as const, prompt: "synthetic current-owner contract"},
+            scope: {projectId: "project:one", tenantId: "tenant:one"},
+          };
+          let accepted = false;
+          const operationStore = Object.freeze({
+            ...selected.operationStore,
+            accept: async (...input: Parameters<typeof selected.operationStore.accept>) => {
+              if (!accepted) {
+                accepted = true;
+                return selected.operationStore.accept(...input);
+              }
+              const operation = fixture.current();
+              if (operation === undefined) {throw new Error("live canary replay lacks accepted operation");}
+              return {kind: "replayed" as const, operation};
+            },
+          });
+          const dependencies = {...selected, custody, operationStore, provider: owner.provider};
+          const result = await submitContainedTurnLiveCanary({
+            command, dependencies, owner,
+          });
+          assert.equal(opens, 1);
+          assert.equal(starts, 1);
+          assert.equal(host.starts, mutation === "none" ? 1 : 0);
+          assert.equal(result.turn.status, "reconcile_required");
+          assert.equal(result.turn.commandId, command.commandId);
+          assert.equal(result.turn.operationId, fixture.current()?.operationId);
+          assert.equal(result.turn.effectId, fixture.current()?.effectId);
+          const replay = await createContainedTurnFeature(dependencies).submit.execute(command);
+          assert.equal(replay.status, "observed");
+          assert.equal(opens, 1);
+          assert.equal(starts, 1);
+        } finally {await rm(root, {recursive: true, force: true});}
+      });
+    }
+  }
 });

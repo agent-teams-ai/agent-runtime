@@ -2,6 +2,7 @@ import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { containedTurnIdentity, type ContainedTurnEvidenceId } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
+import { validateContainedTurnPreparationClosureProof } from "../domain/contained-turn-dispatch-preparation.js";
 import type { ContainedTurnProof } from "../domain/contained-turn-proofs.js";
 import { containedTurnSatisfactionDigest } from "../domain/contained-turn-satisfaction.js";
 import { assertContainedTurnExactRecord } from "../domain/contained-turn-record.js";
@@ -492,6 +493,20 @@ export const closeContainedTurnWithoutExecution = async (
   trustedScope: ContainedTurnScope,
 ): Promise<ContainedTurnKernelOperation> => {
   if (initial.providerExecution.kind !== "closed") {return initial;}
+  if (initial.dispatch.kind === "prevented") {
+    try {
+      const proof = await dependencies.operationStore.proveDispatchPreparationClosure?.({
+        authority: containedTurnOwnerStoreAuthority(initial, trustedScope),
+        expectedOperationCutoffRevision: initial.operationCutoff.revision,
+        expectedOperationRevision: initial.revision,
+      });
+      validateContainedTurnPreparationClosureProof(proof, initial, trustedScope);
+    } catch {
+      return recordContainedTurnRejectedDebt(
+        dependencies, initial, trustedScope, "custody_release_rejected", "containment",
+      );
+    }
+  }
   const staged = await sealArtifactsAndWorkspace(dependencies, initial, trustedScope);
   return staged.kind === "debt"
     ? staged.operation

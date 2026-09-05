@@ -1,3 +1,5 @@
+import { unwrapContainedTurnAuthorityOutcome, type AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
+import type { ContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
 import type {
   ObserveRuntimeContainedTurnOutcome,
   RuntimeContainedTurnAccess,
@@ -66,7 +68,7 @@ export interface ContainedTurnCapabilityBundle {
 
 export interface ContainedTurnRuntimeAccessDependencies {
   readonly assertActive: () => void;
-  readonly capability: ContainedTurnCapabilityBundle | undefined;
+  readonly capability: AuthorityBoundContainedTurnCapability | undefined;
   readonly hostSignal: AbortSignal;
   readonly isDisposed: () => boolean;
   readonly onAccepted: (
@@ -78,7 +80,7 @@ export interface ContainedTurnRuntimeAccessDependencies {
     status: ContainedTurnOwnerStatus | "contract_violation",
   ) => void;
   readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef) => Promise<unknown>;
-  readonly scope: ContainedTurnCompositionScope | undefined;
+  readonly scope: ContainedTurnAccessAuthority | undefined;
   readonly submissionCoordinator: ContainedTurnSubmissionCoordinator | undefined;
   readonly executeCall: <T>(operation: () => Promise<T>) => Promise<T>;
 }
@@ -86,7 +88,7 @@ export interface ContainedTurnRuntimeAccessDependencies {
 type SubmitResolution = (outcome: SubmitRuntimeContainedTurnOutcome) => void;
 
 interface ContainedTurnSubmissionOwnerDependencies {
-  readonly capability: ContainedTurnCapabilityBundle;
+  readonly capability: AuthorityBoundContainedTurnCapability;
   readonly hostSignal: AbortSignal;
   readonly isDisposed: () => boolean;
   readonly onAccepted: (
@@ -98,14 +100,14 @@ interface ContainedTurnSubmissionOwnerDependencies {
     status: ContainedTurnOwnerStatus | "contract_violation",
   ) => void;
   readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef) => Promise<unknown>;
-  readonly scope: ContainedTurnCompositionScope;
+  readonly scope: ContainedTurnAccessAuthority;
   readonly executeCall: <T>(operation: () => Promise<T>) => Promise<T>;
 }
 
 export interface ContainedTurnSubmissionCoordinator {
   acquire(
     input: Readonly<SubmitRuntimeContainedTurnInput>,
-    scope: ContainedTurnCompositionScope,
+    scope: ContainedTurnAccessAuthority,
   ): Promise<SubmitRuntimeContainedTurnOutcome>;
 }
 
@@ -184,12 +186,13 @@ class ContainedTurnSubmissionCustody {
     }
   };
 
-  readonly #accepted = (operation: ContainedTurnCompositionOperationRef): void => {
+  readonly #accepted = (envelope: unknown): void => {
     if (!this.#acceptanceOpen) {
       return;
     }
     let potentialOperationId: unknown;
     try {
+      const operation = unwrapContainedTurnAuthorityOutcome(envelope, this.#dependencies.scope) as ContainedTurnCompositionOperationRef;
       const operationId = this.#trackAcceptedOperation(
         operation,
         undefined,
@@ -243,7 +246,7 @@ class ContainedTurnSubmissionCustody {
     let potentialOperationId: unknown;
     let copied: CopiedSubmitOutcome;
     try {
-      copied = copySubmitOutcome(outcome, operationId => {potentialOperationId = operationId;});
+      copied = copySubmitOutcome(unwrapContainedTurnAuthorityOutcome(outcome, this.#dependencies.scope), operationId => {potentialOperationId = operationId;});
     } catch (error) {
       this.#retainPotentialAcceptedOperation(potentialOperationId);
       throw error;
@@ -291,6 +294,7 @@ class ContainedTurnSubmissionCustody {
         this.#dependencies.capability!.submit.execute({
           ...input,
           scope: this.#dependencies.scope!,
+          authority: this.#dependencies.scope,
         }, { onAccepted: this.#accepted, signal: this.#dependencies.hostSignal }));
     } catch {
       this.#acceptanceOpen = false;
@@ -304,19 +308,20 @@ class ContainedTurnSubmissionCustody {
 interface SubmissionIdentity {
   readonly input: Readonly<SubmitRuntimeContainedTurnInput>;
   readonly ownerCall: object;
-  readonly scope: ContainedTurnCompositionScope;
+  readonly scope: ContainedTurnAccessAuthority;
 }
 
 const sameSubmission = (
   candidate: SubmissionIdentity,
   input: Readonly<SubmitRuntimeContainedTurnInput>,
-  scope: ContainedTurnCompositionScope,
+  scope: ContainedTurnAccessAuthority,
 ): boolean => candidate.input.commandId === input.commandId &&
   candidate.input.expectedProvider === input.expectedProvider &&
   candidate.input.intent.mode === input.intent.mode &&
   candidate.input.intent.prompt === input.intent.prompt &&
   candidate.scope.projectId === scope.projectId &&
-  candidate.scope.tenantId === scope.tenantId;
+  candidate.scope.tenantId === scope.tenantId &&
+  candidate.scope.authorityRevision === scope.authorityRevision;
 
 export const createContainedTurnSubmissionCoordinator = (
   dependencies: Omit<ContainedTurnSubmissionOwnerDependencies, "scope">,
@@ -326,7 +331,7 @@ export const createContainedTurnSubmissionCoordinator = (
 
   const acquire = (
     input: Readonly<SubmitRuntimeContainedTurnInput>,
-    scope: ContainedTurnCompositionScope,
+    scope: ContainedTurnAccessAuthority,
   ): Promise<SubmitRuntimeContainedTurnOutcome> => {
     const identities = identitiesByCommand.get(input.commandId) ?? [];
     let identity = identities.find(candidate => sameSubmission(candidate, input, scope));
@@ -385,6 +390,7 @@ export const createContainedTurnRuntimeAccess = (
     const ownerCompletion = dependencies.executeCall(() => dependencies.capability!.cancel.execute({
         operationId,
         scope: dependencies.scope!,
+        authority: dependencies.scope!,
       }, { signal })).then(
         outcome => Object.freeze({ kind: "completed" as const, outcome }),
         () => Object.freeze({ kind: "owner_failure" as const }),
@@ -396,7 +402,7 @@ export const createContainedTurnRuntimeAccess = (
     }
     let outcome: ObserveRuntimeContainedTurnOutcome;
     try {
-      outcome = copyObservation(completion.outcome, operationId);
+      outcome = copyObservation(unwrapContainedTurnAuthorityOutcome(completion.outcome, dependencies.scope!), operationId);
     } catch (error) {
       dependencies.onObserved(operationId, "contract_violation");
       throw error;
@@ -417,10 +423,11 @@ export const createContainedTurnRuntimeAccess = (
     const ownerCompletion = dependencies.executeCall(() => dependencies.capability!.observe.execute({
         operationId,
         scope: dependencies.scope!,
+        authority: dependencies.scope!,
       })).catch(() => {throw containedTurnOwnerInvocationFailed;});
     let outcome: ObserveRuntimeContainedTurnOutcome;
     try {
-      outcome = copyObservation(await ownerCompletion, operationId);
+      outcome = copyObservation(unwrapContainedTurnAuthorityOutcome(await ownerCompletion, dependencies.scope!), operationId);
     } catch (error) {
       dependencies.onObserved(operationId, "contract_violation");
       throw error;

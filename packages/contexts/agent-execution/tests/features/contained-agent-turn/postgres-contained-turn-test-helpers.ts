@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { Pool } from "pg";
 
-import { applyContainedTurnPostgresSchema } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
+import { applyContainedTurnPostgresSchema, CONTAINED_TURN_POSTGRES_SCHEMA_VERSION } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 import { containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {
@@ -28,8 +28,9 @@ export const operationForProject = (
   projectId: string,
   suffix: string,
   commandId = fixtureCommandId,
+  tenantId = "tenant:postgres-durability",
 ) => {
-  const selectedScope = Object.freeze({ projectId, tenantId: "tenant:postgres-durability" });
+  const selectedScope = Object.freeze({ projectId, tenantId });
   const selectedAccess = Object.freeze({
     ...providerAccessSnapshot,
     projectId,
@@ -52,7 +53,7 @@ export const operationForProject = (
 
 export const resetSchema = async (
   pool: Pool,
-  targetVersion: 1 | 2 | 3 | 4 | 5 | 6 = 6,
+  targetVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
 ): Promise<void> => {
   await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
   await applyContainedTurnPostgresSchema(pool, {
@@ -71,12 +72,13 @@ export const runtimeQuery = async <Row extends import("pg").QueryResultRow = imp
   pool: Pool,
   text: string,
   values: readonly unknown[] = [],
+  schemaVersion = CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
 ): Promise<import("pg").QueryResult<Row>> => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query(
-      "SELECT set_config('agent_execution.contained_turn_schema_version', '6', true)",
+      "SELECT set_config('agent_execution.contained_turn_schema_version', $1, true)", [String(schemaVersion)],
     );
     const result = await client.query<Row>(text, [...values]);
     await client.query("COMMIT");

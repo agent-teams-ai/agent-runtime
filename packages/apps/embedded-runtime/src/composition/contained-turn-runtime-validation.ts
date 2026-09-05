@@ -1,10 +1,11 @@
+import { isContainedTurnAccessAuthorityIdentity } from "./contained-turn-access-authority.js";
 import type {
   ObserveRuntimeContainedTurnOutcome,
   RuntimeContainedTurnView,
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
 } from "../contracts/runtime-access.js";
-import { ContainedTurnOwnerContractError } from "./agent-runtime-host-disposal.js";
+import { ContainedTurnOwnerContractError } from "./contained-turn-owner-contract-error.js";
 import type { ContainedTurnCompositionOperationRef } from "./contained-turn-operation-ref.js";
 import type {
   OwnerTurnObservation,
@@ -29,7 +30,7 @@ const MAX_OUTPUT_CHUNKS = 10_000;
 const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
 
 export const isBoundedIdentity = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
   // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
   value.isWellFormed() && !/\s/u.test(value) && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
 
@@ -42,14 +43,14 @@ export const contractViolation = (
 ): never => {throw new ContainedTurnOwnerContractError(code);};
 
 const copyProviderIdentity = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
     // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
     value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
     ? value
     : undefined;
 
 const copyCommandId = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_COMMAND_ID_LENGTH &&
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_COMMAND_ID_LENGTH &&
     /^[\x20-\x7E]+$/u.test(value) && value.isWellFormed() &&
     !value.includes("\u0000")
     ? value
@@ -316,6 +317,9 @@ export interface CopiedSubmitOutcome {
 }
 
 interface OwnerSubmitOutcomeSnapshot {
+  readonly candidateOperationId: unknown;
+  readonly commandId: unknown;
+  readonly evidenceId: unknown;
   readonly code: unknown;
   readonly status: unknown;
   readonly turn: OwnerTurnSnapshot | undefined;
@@ -336,7 +340,12 @@ const snapshotOwnerSubmitOutcome = (
     const code = record.code;
     return Object.freeze({
       kind: "snapshot" as const,
-      value: Object.freeze({ code, status, turn }),
+      value: Object.freeze({
+        candidateOperationId: record.candidateOperationId,
+        commandId: record.commandId,
+        evidenceId: record.evidenceId,
+        code, status, turn,
+      }),
     });
   } catch {
     return ownerContractViolation;
@@ -351,7 +360,18 @@ export const copySubmitOutcome = (
   if (snapshot.kind === "contract_violation") {
     return contractViolation("malformed_owner_outcome");
   }
-  const { code, status, turn } = snapshot.value;
+  const { candidateOperationId, commandId, evidenceId, code, status, turn } = snapshot.value;
+  if (status === "potential_acceptance") {
+    const copiedCommandId = copyCommandId(commandId);
+    if (turn !== undefined || !isBoundedIdentity(candidateOperationId) ||
+      copiedCommandId === undefined || !isBoundedIdentity(evidenceId)) {
+      return contractViolation("malformed_owner_outcome");
+    }
+    return Object.freeze({ outcome: Object.freeze({
+      candidateOperationId, commandId: copiedCommandId, evidenceId,
+      status: "potential_acceptance" as const,
+    }) });
+  }
   if (status === "observed") {
     if (turn === undefined) {
       return contractViolation("malformed_owner_outcome");

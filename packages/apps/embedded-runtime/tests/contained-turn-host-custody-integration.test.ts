@@ -17,6 +17,18 @@ import { composeCandidateHostCustodiedContainedTurnForImplementationEvidence } f
 import { DeterministicCurrentOwnerHost } from "../../../contexts/agent-execution/tests/current-owner-success-fixture.ts";
 import { createDependencies } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
+import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
+  type EgressCurrentAuthorityV2, type RequestFinalEgressAuthorizationV2,
+  type SignedFirstApplicationByteGrantV2} from "@agent-teams/runtime-security/composition";
+import {authorityFor, digest} from "../../../contexts/runtime-security/tests/provider-process-egress-authorization.fixtures.ts";
+import {createStrictHttpEgressBroker} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
+import type {HostHttpGrant, HostHttpProvisionalDecision, HttpEgressBrokerPorts} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
+import {createEgressFixture, SECRET_MARKER} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/http-egress-test-fixture.ts";
+import {
+  createCredentialMaterializationRequestDigest,
+  createInMemoryContainedTurnDispatchConsumptionV1,
+} from "@agent-teams/provider-access/composition";
+
 const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
 const codexInitialization = Object.freeze({
   platformFamily: "unix" as const,
@@ -203,6 +215,7 @@ test("product Host composition rejects a candidate before Host Custody effects",
   try {
     const composed = await createCompositionInput(custody, root);
     assert.throws(() => createHostCustodiedAgentRuntimeHost({
+      authorityRevision: "runtime-access-authority:fixture",
       capabilities: setupCapabilities, containedTurn: composed.input,
     }), error => error instanceof ProviderRouteEnforcementUnsupportedError &&
       error.reason === "route-enforcement-unqualified");
@@ -228,4 +241,152 @@ test("ambiguous Host containment stays nonterminal without releasing operation c
     assert.equal(composed.fixture.workspaceQuarantines.length, 0);
     product.dispose();
   } finally {await rm(root, {recursive: true, force: true});}
+});
+
+const selected = "2606:4700:1111:1111:1111:1111:1111:1111";
+const canonical = ["2606:4700:0000:0000:0000:0000:0000:abcd",
+  "2606:4700:0001:0000:0000:0000:0000:0001", selected] as const;
+const candidates = [selected, "2606:4700:1::1", "2606:4700::ABCD"];
+
+const executeSigned = async (options: Readonly<{
+  addresses?: readonly string[]; selectedAddress?: string; peerAddress?: string; peerAtFirstByte?: string;
+  changeFinal?: (input: RequestFinalEgressAuthorizationV2) => RequestFinalEgressAuthorizationV2;
+  changeGrant?: (grant: SignedFirstApplicationByteGrantV2) => SignedFirstApplicationByteGrantV2;
+}> = {}) => {
+  const peerAddress = options.peerAddress ?? options.selectedAddress ?? selected;
+  const fixture = createEgressFixture({addresses: options.addresses ?? candidates,
+    selectedAddress: options.selectedAddress ?? selected,
+    binding: {peerAddress, certificateDigest: digest("8") as `sha256:${string}`, tlsPolicyDigest: digest("4")},
+    ...(options.peerAtFirstByte === undefined ? {} : {bindingAtFirstByte: {peerAddress: options.peerAtFirstByte}})});
+  const {ports: base} = fixture;
+  const snapshot = {...base.providerAccessSnapshot, scopeDigest: digest("1"), ownerAuthorityDigest: digest("3")};
+  const providerAccessHarness = createInMemoryContainedTurnDispatchConsumptionV1({bindings: [Object.freeze({
+    acceptedAuthorityDigest: "accepted-authority:http-egress", accessRef: snapshot.accessRef,
+    authorityHeadDigest: "authority-head:http-egress", bindingDigest: "binding:http-egress",
+    bindingRevision: snapshot.revision, claimBeforeControlTime: 100,
+    credentialBindingDigest: snapshot.ownerAuthorityDigest, credentialBindingRef: snapshot.credentialBindingRef,
+    credentialGeneration: snapshot.credentialGeneration, expiresAtControlTime: 100,
+    opaqueOwnerEvidenceRef: "owner-evidence:http-egress", projectId: snapshot.projectId,
+    provider: snapshot.provider, providerAccountRef: snapshot.providerAccountRef,
+    providerRouteRef: snapshot.providerRouteRef, scopeDigest: snapshot.scopeDigest,
+    tenantId: snapshot.tenantId,
+  })], initialControlTime: 50});
+  let authority: EgressCurrentAuthorityV2;
+  const candidate = createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate({
+    scope: {tenantId: snapshot.tenantId, projectId: snapshot.projectId,
+      operationId: base.identity.operationId, scopeDigest: snapshot.scopeDigest},
+    hostReservationId: base.identity.custodyId, keyRef: "resolver-regression-key", keyGeneration: "1",
+    signerRevision: "resolver-regression-v2", clock: {read: () => ({authorityId: "clock-authority",
+      epoch: "epoch-1", controlTime: 0})},
+    authorityOwner: {resolvePolicy: async input => {
+      const source = authorityFor(input.request);
+      const {signingKey: _key, ...policy} = source.policy;
+      authority = {authorityRef: source.authorityRef,
+        policy: {...policy, origin: {scheme: "https", hostname: base.route.originHost, port: base.route.originPort},
+          dnsIdentity: base.route.originHost},
+        providerAccess: {...source.providerAccess, providerRef: snapshot.provider,
+          routeGeneration: String(snapshot.revision), credentialGeneration: String(snapshot.credentialGeneration)}};
+      return {status: "current", authority};
+    }, readCurrent: async () => ({status: "current", authority})},
+  });
+  const finalInputs: RequestFinalEgressAuthorizationV2[] = [];
+  const signedGrants: SignedFirstApplicationByteGrantV2[] = [];
+  const verified: boolean[] = [];
+  const ports: HttpEgressBrokerPorts = {...base, providerAccessSnapshot: snapshot,
+    providerAccess: Object.freeze({
+      createRequestDigest: createCredentialMaterializationRequestDigest,
+      authorize: providerAccessHarness.materialization.authorize,
+      observe: providerAccessHarness.materialization.observe,
+    }),
+    evidence: {...base.evidence, digest: parts => `sha256:${base.evidence.digest(parts)}`},
+    runtimeSecurity: {
+      requestProvisional: async input => {
+        const outcome = await candidate.hostEgressAuthorizationV2.requestProvisional(input);
+        return outcome.status === "denied" ? outcome
+          : {status: "authorized", decision: outcome.decision as HostHttpProvisionalDecision};
+      },
+      authorizeFirstApplicationByte: async input => {
+        finalInputs.push(input);
+        const outcome = await candidate.hostEgressAuthorizationV2.authorizeFirstApplicationByte(
+          options.changeFinal?.(input) ?? input);
+        if (outcome.status === "denied") {return outcome;}
+        signedGrants.push(outcome.grant);
+        assert.equal(candidate.hostEgressVerifierV2.verifyGrant(outcome.grant), true);
+        return {status: "authorized", grant: (options.changeGrant?.(outcome.grant) ?? outcome.grant) as HostHttpGrant};
+      },
+    }, verifier: {...candidate.hostEgressVerifierV2, verifyGrant: grant => {
+      const valid = candidate.hostEgressVerifierV2.verifyGrant(grant);
+      verified.push(valid); return valid;
+    }},
+  };
+  try {
+    const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
+    return {fixture, receipt, finalInputs, signedGrants, verified};
+  } finally {candidate.dispose();}
+};
+
+test("accepts a real signed IPv6 grant with the signed canonical resolver ordering", async () => {
+  for (const addresses of [candidates, candidates.toReversed(), canonical]) {
+    const result = await executeSigned({addresses});
+    assert.equal(result.signedGrants.length, 1);
+    assert.deepEqual(result.verified, [true]);
+    assert.equal(result.receipt.outcome, "completed");
+    assert.equal(result.fixture.observations.dispatches, 1);
+    const input = result.finalInputs[0]; const grant = result.signedGrants[0];
+    assert.ok(input); assert.ok(grant);
+    const expected = canonical.map(address => ({family: "ipv6", address, classification: "public"}));
+    assert.deepEqual(input.resolver.addresses, expected);
+    assert.deepEqual(grant.payload.resolver.normalizedAddresses, expected);
+    assert.doesNotMatch(JSON.stringify([result.receipt, result.finalInputs, result.signedGrants]), new RegExp(SECRET_MARKER));
+  }
+});
+
+test("accepts compressed IPv6 transport observations against the expanded signed peer", async () => {
+  const result = await executeSigned({selectedAddress: "2606:4700::abcd", peerAddress: "2606:4700::abcd"});
+  assert.deepEqual(result.verified, [true]);
+  assert.equal(result.receipt.outcome, "completed");
+  assert.equal(result.fixture.observations.dispatches, 1);
+  const grant = result.signedGrants[0]; assert.ok(grant);
+  assert.equal(grant.payload.selectedPeer.address, canonical[0]);
+});
+
+test("preserves IPv4 signed grants and sorting", async () => {
+  const result = await executeSigned({addresses: ["93.184.216.9", "93.184.216.34"],
+    selectedAddress: "93.184.216.34"});
+  assert.deepEqual(result.verified, [true]);
+  assert.equal(result.receipt.outcome, "completed");
+  const input = result.finalInputs[0]; assert.ok(input);
+  assert.deepEqual(input.resolver.addresses.map(value => value.address), ["93.184.216.34", "93.184.216.9"]);
+});
+
+test("rejects valid signatures for different IPv6 resolver evidence or selected peer", async () => {
+  const changes: NonNullable<Parameters<typeof executeSigned>[0]>["changeFinal"][] = [
+    input => ({...input, resolver: {...input.resolver, resolverIdentity: "other-resolver"}}),
+    input => ({...input, resolver: {...input.resolver, resolverEpoch: "other-epoch"}}),
+    input => ({...input, resolver: {...input.resolver, addresses: [{family: "ipv6", address: selected, classification: "public"}]}}),
+    input => ({...input, pinnedDestination: {...input.pinnedDestination, address: canonical[0]},
+      observedPeer: {...input.observedPeer, address: canonical[0]}}),
+  ];
+  for (const changeFinal of changes) {
+    const result = await executeSigned({changeFinal});
+    assert.equal(result.signedGrants.length, 1);
+    assert.deepEqual(result.verified, [true]);
+    assert.equal(result.receipt.anomalyCode, "final_denied");
+    assert.equal(result.receipt.firstByteState, "not_sent");
+    assert.equal(result.fixture.observations.dispatches, 0);
+  }
+});
+
+test("rejects tampered IPv6 grants and peer drift before the first byte", async () => {
+  const tampered = await executeSigned({changeGrant: grant => ({...grant, payload: {...grant.payload,
+    resolver: {...grant.payload.resolver, normalizedAddresses: grant.payload.resolver.normalizedAddresses.toReversed()}}})});
+  assert.deepEqual(tampered.verified, [false]);
+  assert.equal(tampered.receipt.anomalyCode, "final_denied");
+  const drift = await executeSigned({peerAtFirstByte: "2606:4700::beef"});
+  assert.deepEqual(drift.verified, [true]);
+  assert.equal(drift.receipt.anomalyCode, "transport_binding_drift");
+  for (const result of [tampered, drift]) {
+    assert.equal(result.receipt.firstByteState, "not_sent");
+    assert.equal(result.fixture.observations.dispatches, 0);
+  }
 });

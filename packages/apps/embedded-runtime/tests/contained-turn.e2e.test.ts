@@ -1,3 +1,4 @@
+import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -11,7 +12,6 @@ import {
   AgentRuntimeHostDisposalIncompleteError,
   AgentRuntimeHostLifecycleError,
   ContainedTurnOwnerContractError,
-  createAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
 } from "../dist/composition.js";

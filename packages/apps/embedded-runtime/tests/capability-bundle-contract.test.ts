@@ -26,6 +26,7 @@ const codexSetup = Object.freeze({
 });
 
 const containedTurn = Object.freeze({
+  authorityRevision: "runtime-access-authority:fixture",
   cancel: { execute: unavailable },
   observe: { execute: unavailable },
   submit: { execute: unavailable },

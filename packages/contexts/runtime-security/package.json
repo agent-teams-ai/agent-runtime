@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.json --pretty false",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
+    "precheck": "pnpm --filter @agent-teams/filesystem-custody run build",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
     "test": "node --test --test-concurrency=1 tests/*.test.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"

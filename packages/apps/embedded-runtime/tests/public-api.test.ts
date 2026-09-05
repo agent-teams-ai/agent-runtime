@@ -91,7 +91,7 @@ test("contained-turn declarations stay owned across root and composition closure
   ]);
   assert.doesNotMatch(rootClosure, /@agent-teams\/agent-execution|\bContainedTurnView\b|ContainedTurnFeatureApi/u);
   assert.doesNotMatch(compositionClosure, /\bContainedTurnView\b|ContainedTurnFeatureApi/u);
-  assert.doesNotMatch(rootClosure, /readonly revision:/u);
+  assert.doesNotMatch(rootClosure, /readonly revision:|authorityRevision|ContainedTurnAccessAuthority|AuthorityBound|bindContainedTurnCapabilityAuthority|runtime-access-authority/u);
   assert.doesNotMatch(compositionClosure, /readonly revision:/u);
   assert.match(compositionClosure, /interface ContainedTurnCapabilityBundle/u);
   assert.match(compositionClosure, /expectedProvider: string/u);

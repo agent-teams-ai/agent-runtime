@@ -272,7 +272,9 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     if (await settleConsumedGrantReceipts(dependencies, claim.consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, cleanup.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
     return { kind: "observed", operation: cleanup.operation };
   }
-  if (claim.kind === "prevented") {
+  // No-dispatch closure also asserts that Host custody is no longer required.
+  // Only durable cleanup of the reservation and both grants permits that path.
+  if (claim.kind === "prevented" && cleanup.kind === "cleanup_closed") {
     return { kind: "prevented", operation: cleanup.operation, preventionProofId: claim.preventionProofId };
   }
   const reconciled = cleanup.operation.reconciliation.kind === "required"

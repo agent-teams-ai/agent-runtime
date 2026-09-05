@@ -8,6 +8,7 @@ import {
 } from "../../../dist/features/contained-agent-turn/application/contained-turn-closure-recovery.js";
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { containedTurnCancellationFingerprint } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnPreparationClosureBinding } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {
@@ -180,6 +181,12 @@ const createPreWorkspaceCancellation = (): ContainedTurnKernelOperation => {
 test("pre-workspace cancellation closes only with an authority-bound no-workspace fact", async () => {
   let current = createPreWorkspaceCancellation();
   const dependencies = { operationStore: {
+    proveDispatchPreparationClosure: async (input: Parameters<NonNullable<ContainedTurnKernelDependencies["operationStore"]["proveDispatchPreparationClosure"]>>[0]) => {
+      assert.equal(input.expectedOperationRevision, current.revision);
+      assert.equal(input.expectedOperationCutoffRevision, current.operationCutoff.revision);
+      assert.equal(current.workspaceId, undefined, "this store has never created a preparation workspace");
+      return { ...containedTurnPreparationClosureBinding(current, input.authority.scope), preparationCount: 0 };
+    },
     commit: async (input: { candidate: ContainedTurnKernelOperation; expectedRevision: number }) => {
       assert.equal(input.expectedRevision, current.revision);
       validateContainedTurnOperation(input.candidate, { previous: current });
@@ -273,6 +280,7 @@ test("closure request replay is exact and a concurrent stage or digest substitut
     kind: "begin_closure_stage", stage: "physical_containment",
   });
   if (pending.closureRecovery.kind !== "required") {assert.fail("closure debt must be durable");}
+  const request = pending.closureRecovery;
   assert.strictEqual(mutateContainedTurnOperation(pending, {
     kind: "begin_closure_stage", stage: "physical_containment",
   }), pending);
@@ -282,6 +290,6 @@ test("closure request replay is exact and a concurrent stage or digest substitut
   assert.throws(() => mutateContainedTurnOperation(pending, {
     kind: "complete_physical_containment",
     proof: physicalProof,
-    request: { ...pending.closureRecovery, requestDigest: digestContainedTurnCanonicalValue({ conflict: true }) },
+    request: { ...request, requestDigest: digestContainedTurnCanonicalValue({ conflict: true }) },
   }), /closure proof\/request substitution/u);
 });

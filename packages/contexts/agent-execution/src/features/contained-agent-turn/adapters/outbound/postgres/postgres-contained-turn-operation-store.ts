@@ -8,10 +8,13 @@ import { digestContainedTurnCanonicalValue } from "../../../domain/contained-tur
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnEvidenceId } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
+import { classifyContainedTurnOutputAppend } from "../../../domain/contained-turn-output-authority.js";
 import { appendContainedTurnOutputForOwnerStore } from "../../../domain/contained-turn-output-transitions.js";
 import { mutateContainedTurnOperation } from "../../../domain/contained-turn-transitions.js";
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
 import { encodeContainedTurnState } from "./contained-turn-state-codec.js";
+import type { ContainedTurnIntentAuthority } from "../../../domain/contained-turn-intent-guard.js";
+import { ContainedTurnPostgresIntentStore } from "./contained-turn-postgres-intent-store.js";
 import { ContainedTurnPostgresOperationRepository } from "./contained-turn-postgres-operation-repository.js";
 import { ContainedTurnPostgresPreparationRecovery } from "./contained-turn-postgres-preparation-recovery.js";
 import { ContainedTurnPostgresPreparationStore } from "./contained-turn-postgres-preparation-store.js";
@@ -40,16 +43,19 @@ export {
 
 export type { ContainedTurnPostgresIdentitySource } from "./contained-turn-postgres-operation-authority.js";
 export interface PostgresContainedTurnOperationStoreOptions {
+  /** Trusted composition only. Omission closes admission and claim; authority is never inferred from a request. */
+  readonly intentAuthority?: ContainedTurnIntentAuthority;
   readonly identities?: ContainedTurnPostgresIdentitySource;
   readonly pool: Pool;
   /** Used only for deterministic mixed-version migration tests and staged drains. */
-  readonly runtimeSchemaVersion?: 1 | 2 | 3 | 4 | 5 | 6;
+  readonly runtimeSchemaVersion?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   readonly timeouts?: Partial<ContainedTurnPostgresTimeouts>;
 }
 
 export class PostgresContainedTurnOperationStore implements ContainedTurnKernelOperationStore {
   readonly #evidence: ContainedTurnPostgresOperationEvidence;
   readonly #identities: ContainedTurnPostgresIdentitySource;
+  readonly #intents: ContainedTurnPostgresIntentStore;
   readonly #operations = new ContainedTurnPostgresOperationRepository();
   readonly #preparations: ContainedTurnPostgresPreparationStore;
   readonly #preparationRecovery: ContainedTurnPostgresPreparationRecovery;
@@ -71,11 +77,12 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       migrationDigest: migration.digest,
       schemaVersion,
     }, options.timeouts);
+    this.#intents = new ContainedTurnPostgresIntentStore(options.intentAuthority, this.#operations, this.#transactions);
     this.#preparationRecovery = new ContainedTurnPostgresPreparationRecovery(
       this.#operations, this.#runtimeSchemaVersion, this.#transactions,
     );
     this.#preparations = new ContainedTurnPostgresPreparationStore(
-      this.#identities, this.#operations, this.#transactions,
+      this.#identities, this.#operations, this.#transactions, this.#intents,
     );
   }
 
@@ -161,6 +168,9 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
         if (current === undefined) {return { kind: "not_found" as const };}
         assertAuthority(input.authority, current);
         if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
+        if (current.dispatch.kind !== "claimed" && input.candidate.dispatch.kind === "claimed") {
+          throw new TypeError("dispatch claim requires the guarded prepared-claim transaction");
+        }
         await this.#persist(client, current, input.candidate);
         return { kind: "applied" as const, operation: input.candidate };
       });
@@ -178,7 +188,11 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   public async identifyAcceptance(input: Parameters<ContainedTurnKernelOperationStore["identifyAcceptance"]>[0]) {
-    return this.#transactions.read(async client => {
+    return this.#transactions.write(async client => {
+      const admission = await this.#intents.admission(client, input);
+      if (admission !== "clear") {
+        return { kind: admission === "denied" ? "not_found" as const : "fingerprint_conflict" as const };
+      }
       const result = await client.query<{ operation_id: string }>(
         "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3",
         [input.scope.tenantId, input.scope.projectId, input.commandId],
@@ -207,8 +221,13 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     });
   }
 
-  public async accept(candidate: ContainedTurnKernelOperation, authority: ContainedTurnOwnerStoreAuthority) {
+  public async accept(
+    candidate: ContainedTurnKernelOperation,
+    authority: ContainedTurnOwnerStoreAuthority,
+  ): ReturnType<ContainedTurnKernelOperationStore["accept"]> {
     assertAuthority(authority, candidate);
+    validateContainedTurnOperation(candidate);
+    if (candidate.revision !== 0) {throw new TypeError("acceptance requires revision-zero intent");}
     type AttemptOutcome =
       | { readonly kind: "accepted"; readonly operation: ContainedTurnKernelOperation }
       | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }
@@ -216,7 +235,17 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       | { readonly kind: "not_found" };
     let attempted: AttemptOutcome | undefined;
     try {
-      return await this.#transactions.write(async client => {
+      return await this.#transactions.write<AttemptOutcome>(async client => {
+        const admission = await this.#intents.admission(client, {
+          commandId: candidate.commandId, commandFingerprint: candidate.commandFingerprint, scope: authority.scope,
+        });
+        if (admission !== "clear") {
+          const outcome: AttemptOutcome = {
+            kind: admission === "denied" ? "not_found" : "fingerprint_conflict",
+          };
+          attempted = outcome;
+          return outcome;
+        }
         const encoded = encodeContainedTurnState(candidate);
         const inserted = await client.query(
           `INSERT INTO agent_execution.contained_turn_operation_v1(operation_id,tenant_id,project_id,command_id,command_fingerprint,effect_id,revision,state,state_codec_version,state_digest,terminal)
@@ -227,9 +256,11 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
             encoded.json, encoded.codecVersion, encoded.digest],
         );
         if (inserted.rowCount === 1) {
+          await this.#intents.recordAcceptance(client, candidate);
           await this.#project(client, undefined, candidate);
-          attempted = { kind: "accepted", operation: candidate };
-          return attempted;
+          const outcome: AttemptOutcome = { kind: "accepted", operation: candidate };
+          attempted = outcome;
+          return outcome;
         }
         const existing = await client.query<{ operation_id: string }>(
           "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3 FOR UPDATE",
@@ -237,21 +268,25 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
         );
         const operationId = existing.rows[0]?.operation_id;
         if (operationId === undefined) {
-          attempted = { kind: "not_found" };
-          return attempted;
+          const outcome: AttemptOutcome = { kind: "not_found" };
+          attempted = outcome;
+          return outcome;
         }
         const operation = await this.#load(client, operationId, false, candidate.scope);
         if (operation === undefined) {
-          attempted = { kind: "not_found" };
-          return attempted;
+          const outcome: AttemptOutcome = { kind: "not_found" };
+          attempted = outcome;
+          return outcome;
         }
-        attempted = operation.commandFingerprint === candidate.commandFingerprint
+        const outcome: AttemptOutcome = operation.commandFingerprint === candidate.commandFingerprint
           ? { kind: "replayed", operation }
           : { kind: "fingerprint_conflict" };
-        return attempted;
+        attempted = outcome;
+        return outcome;
       });
     } catch (error) {
       if (!(error instanceof PostgresCommitIndeterminateError)) {throw error;}
+      if (attempted?.kind === "not_found") {return attempted;}
       const evidenceId = containedTurnIdentity(
         "evidence", `evidence:postgres-acceptance-commit:${digestContainedTurnCanonicalValue({
           commandId: candidate.commandId,
@@ -295,6 +330,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   public commit(input: Parameters<ContainedTurnKernelOperationStore["commit"]>[0]) {return this.#cas(input);}
+  public preventIntent(input: Parameters<ContainedTurnKernelOperationStore["preventIntent"]>[0]) {return this.#intents.prevent(input);}
   public requestCancellation(input: Parameters<ContainedTurnKernelOperationStore["requestCancellation"]>[0]) {return this.#cas(input);}
 
   public async appendOutput(input: Parameters<ContainedTurnKernelOperationStore["appendOutput"]>[0]) {
@@ -306,8 +342,16 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
         );
         if (current === undefined) {return { kind: "not_found" as const };}
         assertAuthority(input.authority, current);
-        if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
-        if (current.output.chunks.length !== input.expectedCursor) {return { current, kind: "stale" as const };}
+        const predicate = classifyContainedTurnOutputAppend({
+          authority: input.outputAuthority,
+          current,
+          expectedCursor: input.expectedCursor,
+          expectedRevision: input.expectedRevision,
+          operationId: input.authority.operationId,
+          scope: input.authority.scope,
+        });
+        if (predicate === "not_found") {return { kind: "not_found" as const };}
+        if (predicate === "stale") {return { current, kind: "stale" as const };}
         candidate = appendContainedTurnOutputForOwnerStore(current, input.output);
         await this.#persist(client, current, candidate);
         return { kind: "applied" as const, operation: candidate };
@@ -342,6 +386,12 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     return this.#preparationRecovery.list(input);
   }
 
+  public proveDispatchPreparationClosure(
+    input: Parameters<NonNullable<ContainedTurnKernelOperationStore["proveDispatchPreparationClosure"]>>[0],
+  ) {
+    return this.#preparations.proveClosure(input);
+  }
+
   public async prepareDispatch(input: Parameters<ContainedTurnKernelOperationStore["prepareDispatch"]>[0]) {
     return this.#preparations.prepare(input);
   }
@@ -372,7 +422,9 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     return this.#evidence.proofsForProcessNoStart(input);
   }
 
-  public async proofsForPrevention(input: Parameters<ContainedTurnKernelOperationStore["proofsForPrevention"]>[0]) {
+  public async proofsForPrevention(
+    input: Parameters<ContainedTurnKernelOperationStore["proofsForPrevention"]>[0],
+  ): ReturnType<ContainedTurnKernelOperationStore["proofsForPrevention"]> {
     return this.#evidence.proofsForPrevention(input);
   }
 

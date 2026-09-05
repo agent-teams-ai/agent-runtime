@@ -407,6 +407,7 @@ test("later Host construction failure disposes the contained owner and publishes
   let disposed = 0;
   let published: unknown;
   assert.throws(() => {published = composeHostCustodiedAgentRuntimeHost({
+    authorityRevision: "runtime-access-authority:fixture",
     capabilities: Object.freeze({claudeCodeSetup: Object.freeze({}), codexSetup: Object.freeze({})}),
     containedTurn: Object.freeze({}),
   } as never, () => Object.freeze({feature: capability, dispose: () => {disposed += 1;}}),
@@ -419,6 +420,7 @@ test("Host construction plus owner-cleanup failure is redacted", () => {
   const primary = new Error("host-construction-primary-secret");
   const cleanup = new Error("host-construction-cleanup-secret");
   const error = captureThrown(() => composeHostCustodiedAgentRuntimeHost({
+    authorityRevision: "runtime-access-authority:fixture",
     capabilities: Object.freeze({claudeCodeSetup: Object.freeze({}), codexSetup: Object.freeze({})}),
     containedTurn: Object.freeze({}),
   } as never, () => Object.freeze({
@@ -440,6 +442,7 @@ test("Host wrapper retries contained-owner disposal after a failed attempt", asy
   let hostDisposals = 0;
   let ownerDisposals = 0;
   const host = composeHostCustodiedAgentRuntimeHost({
+    authorityRevision: "runtime-access-authority:fixture",
     capabilities: Object.freeze({claudeCodeSetup: Object.freeze({}), codexSetup: Object.freeze({})}),
     containedTurn: Object.freeze({}),
   } as never, () => Object.freeze({

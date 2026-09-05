@@ -41,7 +41,7 @@ interface WorkerInput {
 
 interface WorkerResult {
   readonly workflow: RetainedWorkflow;
-  readonly closureOutcome: "closed" | "closure_timeout";
+  readonly closureOutcome: "closed" | "closure_timeout" | "closure_failed";
   readonly anomalies: readonly ProbeAnomaly[];
   readonly callbacks: readonly SafeCallbackEvidence[];
 }
