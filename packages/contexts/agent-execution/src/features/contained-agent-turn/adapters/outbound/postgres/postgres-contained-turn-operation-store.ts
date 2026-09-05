@@ -8,6 +8,7 @@ import { digestContainedTurnCanonicalValue } from "../../../domain/contained-tur
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnEvidenceId } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
+import { classifyContainedTurnOutputAppend } from "../../../domain/contained-turn-output-authority.js";
 import { appendContainedTurnOutputForOwnerStore } from "../../../domain/contained-turn-output-transitions.js";
 import { mutateContainedTurnOperation } from "../../../domain/contained-turn-transitions.js";
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
@@ -341,8 +342,16 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
         );
         if (current === undefined) {return { kind: "not_found" as const };}
         assertAuthority(input.authority, current);
-        if (current.revision !== input.expectedRevision) {return { current, kind: "stale" as const };}
-        if (current.output.chunks.length !== input.expectedCursor) {return { current, kind: "stale" as const };}
+        const predicate = classifyContainedTurnOutputAppend({
+          authority: input.outputAuthority,
+          current,
+          expectedCursor: input.expectedCursor,
+          expectedRevision: input.expectedRevision,
+          operationId: input.authority.operationId,
+          scope: input.authority.scope,
+        });
+        if (predicate === "not_found") {return { kind: "not_found" as const };}
+        if (predicate === "stale") {return { current, kind: "stale" as const };}
         candidate = appendContainedTurnOutputForOwnerStore(current, input.output);
         await this.#persist(client, current, candidate);
         return { kind: "applied" as const, operation: candidate };
