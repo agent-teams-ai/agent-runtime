@@ -99,8 +99,10 @@ for (const target of ["custody", "provider_access", "runtime_security"] as const
     const preparation = pending?.[0]?.preparation;
     if (preparation?.kind !== "cleanup_pending") {assert.fail("cleanup must remain recoverable");}
     assert.equal(preparation.custodyReleased, target !== "custody");
-    assert.equal(preparation.providerAccessSettled, target !== "provider_access");
-    assert.equal(preparation.runtimeSecuritySettled, target !== "runtime_security");
+    assert.equal(preparation.providerAccessNotConsumed, target !== "provider_access");
+    assert.equal(preparation.providerAccessSettled, false);
+    assert.equal(preparation.runtimeSecurityNotConsumed, target === "provider_access");
+    assert.equal(preparation.runtimeSecuritySettled, target === "custody");
     assert.ok(preparation.cleanupEvidenceIds.includes(evidenceId));
     assert.equal(cleanupCalls, 1, "cleanup must not be blindly retried");
     await assert.rejects(host.dispose(), error => {

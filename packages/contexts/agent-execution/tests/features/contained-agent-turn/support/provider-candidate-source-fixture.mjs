@@ -4,10 +4,30 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { registerHooks } from "node:module";
 import { sha256 } from "../../../live/provider-candidate-build-tree.mjs";
 import { installedClosureDigest } from "../../../live/provider-candidate-clean-build.mjs";
 
 const exec = promisify(execFile);
+const AUTHORITY_FIXTURE_SPECIFIER = "agent-runtime-provider-candidate-authority-fixture";
+const BUILD_FIXTURE_SPECIFIER = "agent-runtime-provider-candidate-build-fixture";
+const dynamicFixtureTargets = new Map();
+registerHooks({resolve(specifier, context, nextResolve) {
+  const target = dynamicFixtureTargets.get(specifier);
+  return target === undefined ? nextResolve(specifier, context) : nextResolve(target, context);
+}});
+const loadAuthorityFixture = async url => {
+  if (dynamicFixtureTargets.has(AUTHORITY_FIXTURE_SPECIFIER)) {throw new Error("provider candidate authority fixture load overlaps");}
+  dynamicFixtureTargets.set(AUTHORITY_FIXTURE_SPECIFIER, url);
+  try {return await import("agent-runtime-provider-candidate-authority-fixture");}
+  finally {dynamicFixtureTargets.delete(AUTHORITY_FIXTURE_SPECIFIER);}
+};
+const loadBuildFixture = async url => {
+  if (dynamicFixtureTargets.has(BUILD_FIXTURE_SPECIFIER)) {throw new Error("provider candidate build fixture load overlaps");}
+  dynamicFixtureTargets.set(BUILD_FIXTURE_SPECIFIER, url);
+  try {return await import("agent-runtime-provider-candidate-build-fixture");}
+  finally {dynamicFixtureTargets.delete(BUILD_FIXTURE_SPECIFIER);}
+};
 const environment = {GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", LC_ALL: "C", PATH: "/usr/bin:/bin"};
 export const git = async (root, ...args) => (await exec("/usr/bin/git", [
   "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", root, ...args,
@@ -92,7 +112,7 @@ export const sourceFixture = async (t, provider = "codex", withGit = true, linke
     }
   };
   await build();
-  const authority = await import(pathToFileURL(join(live, "provider-candidate-evidence-envelope.mjs")).href);
+  const authority = await loadAuthorityFixture(pathToFileURL(join(live, "provider-candidate-evidence-envelope.mjs")).href);
   const providerId = provider === "codex" ? "codex-app-server-current-kernel" : "claude-agent-sdk-current-kernel";
   const canaryId = `${provider}-contained-turn-live-canary/v1`;
   const resolve = async (overrides = {}, trustedQualification = qualification) => authority.resolveCanaryExecutionProvenance(Object.freeze({
@@ -101,7 +121,9 @@ export const sourceFixture = async (t, provider = "codex", withGit = true, linke
     claimedSourceSha: withGit ? await git(root, "rev-parse", "HEAD") : "0".repeat(40),
     provider: providerId, ...overrides,
   }), trustedQualification);
-  return {root, authority, build, canaryPath, resolve, canaryId, providerId, qualification, qualifyPackages,
+  const executeBuild = async revision => loadBuildFixture(`${pathToFileURL(join(root, AE, "dist/runtime.js")).href}${
+    revision === undefined ? "" : `?revision=${revision}`}`);
+  return {root, authority, build, canaryPath, resolve, canaryId, providerId, qualification, qualifyPackages, executeBuild,
     buildPath: join(root, AE, "dist/runtime.js"), sourcePath: join(root, AE, "src/runtime.ts"),
   };
 };

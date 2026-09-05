@@ -9,7 +9,7 @@ import { createProviderCandidateEvidenceEnvelope } from "../../live/provider-can
 test("candidate receipt binds a disposable clean build, HEAD, dependencies and canary", async t => {
   const fixture = await sourceFixture(t);
   const execution = await fixture.resolve();
-  const executed = await import(pathToFileURL(fixture.buildPath).href);
+  const executed = await fixture.executeBuild();
   assert.equal(executed.freshBuild, 1);
   const envelope = await fixture.authority.createProviderCandidateEvidenceEnvelope(evidenceInput(fixture, execution));
   assert.equal(envelope.schemaVersion, 3);
@@ -34,12 +34,12 @@ test("counterexample: clean source HEAD moves while ignored dist remains stale",
   assert.notEqual(await git(fixture.root, "rev-parse", "HEAD"), first.sourceSha);
   assert.equal(await git(fixture.root, "status", "--porcelain"), "");
   assert.deepEqual(await readFile(fixture.buildPath), stale);
-  assert.equal((await import(pathToFileURL(fixture.buildPath).href)).freshBuild, 1);
+  assert.equal((await fixture.executeBuild()).freshBuild, 1);
   await assert.rejects(fixture.resolve(), /differs from clean build/u);
   await assert.rejects(fixture.authority.revalidateCanaryExecutionProvenance(first), /changed during execution/u);
   await fixture.build();
   const next = await fixture.resolve();
-  assert.equal((await import(`${pathToFileURL(fixture.buildPath).href}?revision=${next.sourceSha}`)).freshBuild, 2);
+  assert.equal((await fixture.executeBuild(next.sourceSha)).freshBuild, 2);
   assert.notEqual(next.build.treeDigest, first.build.treeDigest);
   assert.notEqual(next.build.receiptDigest, first.build.receiptDigest);
 });

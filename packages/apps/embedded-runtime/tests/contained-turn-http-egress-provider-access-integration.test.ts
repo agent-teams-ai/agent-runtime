@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {describe, test} from "node:test";
-import {createCredentialMaterializationRequestDigest} from "../../../../provider-access/dist/composition.js";
-import {createHostHttpEgressSession} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
-import type {HttpEgressOperation} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js";
+import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
+import {createHostHttpEgressSession} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
+import type {HttpEgressOperation} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js";
 import type {HostHttpGrant, HostHttpMaterializationReceipt, HostHttpProvisionalDecision,
-  HttpEgressBrokerPorts} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
+  HttpEgressBrokerPorts} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 
 const enc = new TextEncoder(); const SECRET = "fixture-secret-do-not-observe";
 const bytes = (value: string) => enc.encode(value);
