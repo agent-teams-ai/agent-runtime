@@ -1,0 +1,7 @@
+{
+  "captureScriptSha256": "cd8c1bbc11c55767bbc4a62b0774ca1a4b565571f140c266987f3e7073769674",
+  "modelsSha256": "d7136a413cfac1b5b1686d9e0dcc5c80ca05bebed5e9fc3911376561d0ef6ee8",
+  "binarySha256": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+  "head": "f7f39d572203af14c60ed29fec26a205bad89df6",
+  "scope": "offline config/read and permissionProfile/list only; no native provider turn"
+}

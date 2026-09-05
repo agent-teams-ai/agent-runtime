@@ -1,0 +1,25 @@
+{
+  "version": "0.153.4",
+  "scope": "offline Linux initialization, config/read and permissionProfile/list observation only",
+  "sourceCommit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+  "executionBinding": "isolated-verified-path-before-and-after",
+  "liveQualified": false,
+  "retainedDescriptorProof": false,
+  "modelsCatalog": "../../codex-native-broker-0.153.4/models.json",
+  "modelsSha256": "d7136a413cfac1b5b1686d9e0dcc5c80ca05bebed5e9fc3911376561d0ef6ee8",
+  "artifacts": {
+    "binary-stage-receipt.json": "d74cd44b4535c72b1b7abb9e7b374668d73eec36b0d00be4fea8ab4959575739",
+    "capture-linux.mjs.txt": "cd8c1bbc11c55767bbc4a62b0774ca1a4b565571f140c266987f3e7073769674",
+    "cleanup-receipt.json": "86afb7005b0f118fec1c932e99bca116f825eb74558e8ab05c5f555459387878",
+    "codex-native-linux-broker-analysis/input-config.toml": "c15a464c6b298d9d9e4d6893ac4aa370a3ee16162ba440a018becd6acdc7e54b",
+    "codex-native-linux-broker-analysis/result.json": "d7893efc4546774add720d4963fc8ede5c7d552f9f6203a768b4fc59514669d6",
+    "codex-native-linux-broker-workspace-write/input-config.toml": "4314d63e2366aa54b2af8eef48cb1423b07ee5a7054111295d8f58776c4cf68c",
+    "codex-native-linux-broker-workspace-write/result.json": "8f671645d18430c61af5a5038221ef2ec3cd303473f4fd30f5ae661d44b38c35",
+    "codex-native-linux-permission-analysis/input-config.toml": "9a7fd52a1885815fba6559e975e91890579c3f612d10ce4a00567b8ca717a26a",
+    "codex-native-linux-permission-analysis/result.json": "439d0094cd22a4f0577299f940d0a4a8c3b4ed73fadbddd8a006daa77698326f",
+    "input-receipt.json": "4fd6a38ebfc75415706888ce82b5926122b1f0ea6c6b84a4663df9895723c95f",
+    "native-config-receipt.json": "8193afc96060e6fdc9e3ae19afaab5f764206ab8f6179d0dc54b00a9a37e3c10",
+    "run-native.py.txt": "ebee02a0096009aa159ed2e93cbc816988f108e83a8ae22162456bc07b47a2b1",
+    "stage-binary.py.txt": "c47c8ceec540973bc4be8773d3d203705526ea69d09d981fcbe9cfb4676d81bc"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "observedAt": "2026-09-05T22:19:51.959212+00:00",
+  "head": "f7f39d572203af14c60ed29fec26a205bad89df6",
+  "platform": "linux-x64",
+  "version": "0.153.4",
+  "binarySha256": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+  "executionBinding": "isolated-verified-path-before-and-after",
+  "isolatedNetwork": "unshare --net",
+  "authFilesSupplied": false,
+  "providerTurnRequested": false,
+  "peakAggregateRssBytes": 177287168,
+  "peakAllocatedDiskBytes": 392163328,
+  "profiles": [
+    {
+      "recipe": "permission",
+      "intent": "analysis",
+      "startedAt": "2026-09-05T22:19:41.363513+00:00",
+      "resultPath": "codex-native-linux-permission-analysis/result.json",
+      "resultSha256": "439d0094cd22a4f0577299f940d0a4a8c3b4ed73fadbddd8a006daa77698326f",
+      "configFields": 99,
+      "layers": 3,
+      "origins": 14,
+      "outerReturnCode": 0,
+      "childClose": {
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "temporarySandboxRemoved": true
+    },
+    {
+      "recipe": "broker",
+      "intent": "analysis",
+      "startedAt": "2026-09-05T22:19:45.150923+00:00",
+      "resultPath": "codex-native-linux-broker-analysis/result.json",
+      "resultSha256": "d7893efc4546774add720d4963fc8ede5c7d552f9f6203a768b4fc59514669d6",
+      "configFields": 99,
+      "layers": 3,
+      "origins": 36,
+      "outerReturnCode": 0,
+      "childClose": {
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "temporarySandboxRemoved": true
+    },
+    {
+      "recipe": "broker",
+      "intent": "workspace-write",
+      "startedAt": "2026-09-05T22:19:48.843463+00:00",
+      "resultPath": "codex-native-linux-broker-workspace-write/result.json",
+      "resultSha256": "8f671645d18430c61af5a5038221ef2ec3cd303473f4fd30f5ae661d44b38c35",
+      "configFields": 99,
+      "layers": 3,
+      "origins": 36,
+      "outerReturnCode": 0,
+      "childClose": {
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "temporarySandboxRemoved": true
+    }
+  ],
+  "scope": "offline config/read and permissionProfile/list only; no live qualification or retained-descriptor proof"
+}
