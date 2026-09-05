@@ -5,7 +5,7 @@ import type { HostHttpGrant, HttpEgressBrokerPorts, HttpEgressTransportAttempt,
 import { createPreparedHttpRequestV1, type PreparedHttpRequestV1, type PreparedHttpRequestCustodyV1 } from "./prepared-http-request-v1.js";
 import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 import { snapshotHttpEgressOperation } from "./http-ingress-validation.js";
-import { normalizeHttpEgressResolution } from "./public-address-policy.js";
+import { normalizeHttpResolverEvidence } from "./http-egress-resolver-evidence.js";
 import { readStrictHttpRequest, StrictHttpRequestError, type StrictHttpRequest } from "./strict-http-request.js";
 import { verifiedGrant, verifiedProvisional } from "./http-egress-runtime-security-v2.js";
 import { materializationAuthorizationRequest, observeMaterializationReceipt, presentationFields,
@@ -106,12 +106,6 @@ const zeroMaterializedFields = (fields: unknown): boolean => {
 
 const zeroLateMaterializedFields = (pendingFields: Promise<MaterializedFields> | undefined): void => {
   void pendingFields?.then(values => zeroMaterializedFields(values), () => false);
-};
-
-const normalizeSingleResolution = (rawResolution: Awaited<ReturnType<HttpEgressBrokerPorts["resolver"]["resolve"]>>) => {
-  const normalized = normalizeHttpEgressResolution(rawResolution.addresses.map(value => value.address), rawResolution.selectedAddress);
-  if (normalized === undefined || rawResolution.resolutionCount !== 1) {return;}
-  return normalized;
 };
 
 const transportOpenAllowed = (ports: HttpEgressBrokerPorts, operation: HttpEgressOperation,
@@ -228,7 +222,7 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
     state.policyGeneration = provisional.policy.policyGeneration; state.keyGeneration = provisional.signingKey.keyGeneration;
     let rawResolution: Awaited<ReturnType<typeof ports.resolver.resolve>>;
     try {rawResolution = await within(() => ports.resolver.resolve(ports.route.originHost));} catch {recordAuthorityFailure(operation, state, "resolution_denied"); return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
-    const normalized = normalizeSingleResolution(rawResolution);
+    const normalized = normalizeHttpResolverEvidence(rawResolution);
     if (normalized === undefined) {state.outcome = "denied"; state.anomalyCode = "resolution_denied";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     if (!transportOpenAllowed(ports, operation, state)) {
@@ -246,8 +240,8 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
     if (!await within(() => observeMaterializationReceipt(ports, paReceipt))) {state.outcome = "denied"; state.anomalyCode = "provider_generation_drift";
       return (await closeAndRecordHttpEgress(ports, operation, state, attempt)).receipt;}
-    const resolver = Object.freeze({resolverIdentity: rawResolution.resolverIdentity,
-      resolverEpoch: rawResolution.resolverEpoch, resolutionCount: 1 as const, addresses: rawResolution.addresses});
+    const resolver = Object.freeze({resolverIdentity: normalized.resolverIdentity,
+      resolverEpoch: normalized.resolverEpoch, resolutionCount: 1 as const, addresses: normalized.addresses});
     let finalOutcome: Awaited<ReturnType<typeof ports.runtimeSecurity.authorizeFirstApplicationByte>>;
     try {finalOutcome = await within(() => ports.runtimeSecurity.authorizeFirstApplicationByte({contractVersion:
       "provider-process-egress-final/v2", provisional, boundaryUseId: ids.boundaryUseId,

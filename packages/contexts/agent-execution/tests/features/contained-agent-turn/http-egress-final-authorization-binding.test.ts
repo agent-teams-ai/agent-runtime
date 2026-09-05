@@ -13,7 +13,7 @@ describe("HTTP signed final authorization binding", () => {
     assert.equal(input.contractVersion, "provider-process-egress-final/v2");
     assert.equal(input.provisional.contractVersion, "provider-process-egress-provisional-decision/v2");
     assert.deepEqual(input.resolver.addresses.map((value: {address: string}) => value.address),
-      ["2606:2800:0220:0001:0248:1893:25c8:1946", "93.184.216.34"]);
+      ["2606:2800:220:1:248:1893:25c8:1946", "93.184.216.34"]);
     assert.deepEqual(input.pinnedDestination, {address: "93.184.216.34", port: 443});
     assert.deepEqual(input.observedPeer, input.pinnedDestination);
     assert.equal(input.tls.certificateValidated, true);
@@ -56,6 +56,24 @@ describe("HTTP signed final authorization binding", () => {
     ];
     for (const mutateGrant of changes) {
       const fixture = createEgressFixture({mutateGrant});
+      const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
+      assert.equal(receipt.anomalyCode, "final_denied");
+      assert.equal(receipt.firstByteState, "not_sent");
+      assert.equal(fixture.observations.dispatches, 0);
+    }
+  });
+
+  test("retains signed resolver identity, epoch, count, and canonical address binding", async () => {
+    const substitutions = [
+      {resolverIdentity: "other-resolver"}, {resolverEpoch: "other-epoch"}, {resolutionCount: 2},
+      {normalizedAddresses: [{family: "ipv4", address: "93.184.216.35", classification: "public"}]},
+      {normalizedAddresses: [{family: "ipv6", address: "93.184.216.34", classification: "public"}]},
+      {normalizedAddresses: [{family: "ipv4", address: "93.184.216.34", classification: "private"}]},
+    ];
+    for (const substitution of substitutions) {
+      const fixture = createEgressFixture({mutateGrant: value => Object.freeze({...value,
+        payload: Object.freeze({...value.payload, resolver: Object.freeze({...value.payload.resolver,
+          ...substitution})})}) as HostHttpGrant});
       const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
       assert.equal(receipt.anomalyCode, "final_denied");
       assert.equal(receipt.firstByteState, "not_sent");
