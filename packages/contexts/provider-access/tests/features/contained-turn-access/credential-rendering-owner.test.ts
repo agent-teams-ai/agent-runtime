@@ -261,10 +261,11 @@ test("acquisition rejects with secret-safe canonical denial, no retry or receipt
   assert.equal(calls, 1);
 });
 
-for (const cutoff of ["abort", "dispose", "deadline"] as const) {
+for (const cutoff of ["abort", "suppressed-abort", "dispose", "deadline"] as const) {
   test(`${cutoff} during acquisition returns promptly, propagates abort, erases late completion`, async () => {
     const fixture = renderingFixture();
     if (cutoff === "deadline") {fixture.selection.deadline = performance.now() + 100;}
+    if (cutoff === "suppressed-abort") {fixture.controller.signal.addEventListener("abort", event => {event.stopImmediatePropagation();});}
     const gate = Promise.withResolvers<CredentialGenerationOutcome>();
     const entered = Promise.withResolvers<CredentialGenerationRequest>();
     let acquisitionSignal: AbortSignal | undefined;
@@ -272,10 +273,16 @@ for (const cutoff of ["abort", "dispose", "deadline"] as const) {
     const receipt = await fixture.fresh(owner);
     const pending = owner.rendering.render(receipt);
     const request = await entered.promise;
-    if (cutoff === "abort") {fixture.controller.abort();}
+    if (cutoff === "abort" || cutoff === "suppressed-abort") {fixture.controller.abort();}
     if (cutoff === "dispose") {owner.dispose();}
-    assert.deepEqual(await pending, {kind: "denied"});
-    assert.equal(acquisitionSignal?.aborted, true);
+    try {
+      if (cutoff === "suppressed-abort") {
+        await nextTurn();
+        assert.equal(acquisitionSignal?.aborted, true);
+      }
+      assert.deepEqual(await pending, {kind: "denied"});
+      assert.equal(acquisitionSignal?.aborted, true);
+    } finally {owner.dispose();}
     const late = generation(request);
     gate.resolve(late); await nextTurn();
     if (late.kind === "acquired") {late.fields.forEach(field => erased(field.valueBytes));}
@@ -293,6 +300,37 @@ test("abort before calls and synchronous abort inside acquisition fail closed", 
   assert.deepEqual(await active.rendering.render(await other.fresh(active)), {kind: "denied"});
   if (raw?.kind === "acquired") {raw.fields.forEach(field => erased(field.valueBytes));}
 });
+
+for (const phase of ["authorization", "final-observation"] as const) {
+  test(`suppressed abort promptly settles pending ${phase}`, async () => {
+    const fixture = renderingFixture();
+    fixture.controller.signal.addEventListener("abort", event => {event.stopImmediatePropagation();});
+    const repository = fixture.dependencies.repository;
+    const transact = repository.transact;
+    const entered = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    let transactions = 0;
+    repository.transact = async (...args) => {
+      transactions += 1;
+      if (transactions === (phase === "authorization" ? 1 : 3)) {entered.resolve(); await gate.promise;}
+      return transact(...args);
+    };
+    const owner = fixture.create();
+    try {
+      const pending = phase === "authorization"
+        ? owner.authorization.authorize(await fixture.request())
+        : owner.rendering.render(await fixture.fresh(owner));
+      let settled = false;
+      void pending.then(() => {settled = true; return null;});
+      await entered.promise;
+      fixture.controller.abort();
+      await nextTurn();
+      assert.equal(settled, true);
+      assert.equal((await pending).kind, phase === "authorization" ? "indeterminate" : "denied");
+      for (const raw of fixture.raw) {if (raw.kind === "acquired") {raw.fields.forEach(field => erased(field.valueBytes));}}
+    } finally {owner.dispose(); gate.resolve(); await nextTurn();}
+  });
+}
 
 test("PA authorization awaiting a transaction loses freshness on owner disposal", async () => {
   const fixture = renderingFixture();

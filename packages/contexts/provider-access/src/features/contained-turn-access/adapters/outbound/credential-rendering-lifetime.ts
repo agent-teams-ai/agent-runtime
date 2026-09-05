@@ -5,6 +5,7 @@ import type { CredentialGenerationRequest, RenderedCredentialFields } from "./cr
 const aborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")?.get;
 const addListener = EventTarget.prototype.addEventListener;
 const removeListener = EventTarget.prototype.removeEventListener;
+const dependentSignal = AbortSignal.any;
 const then = Promise.prototype.then;
 const closed = (): never => {throw new TypeError("credential rendering unavailable");};
 export const signalAborted = (signal: AbortSignal): boolean => {
@@ -21,6 +22,7 @@ export const signalAborted = (signal: AbortSignal): boolean => {
 /** Allocated only by explicit authorization/render/observe, never construction. */
 export class CredentialRenderingLifetime {
   readonly #signal: AbortSignal;
+  readonly #cancellationSignal: AbortSignal;
   readonly #deadline: number;
   readonly #controller = new AbortController();
   readonly #cancelled: Promise<never>;
@@ -31,12 +33,15 @@ export class CredentialRenderingLifetime {
 
   constructor(signal: AbortSignal, deadline: number) {
     this.#signal = signal;
+    // A private dependent signal cannot lose cancellation to a source listener
+    // that stops propagation. Keep the original signal for authority checks.
+    this.#cancellationSignal = Reflect.apply(dependentSignal, AbortSignal, [[signal]]) as AbortSignal;
     this.#deadline = deadline;
     this.#cancelled = new Promise<never>((_resolve, reject) => {this.#reject = reject;});
     // Keep cancellation handled even when it precedes the first wait.
     void this.#cancelled.catch(() => null);
     this.#timer = setTimeout(this.#onAbort, Math.max(0, deadline - performance.now()));
-    Reflect.apply(addListener, signal, ["abort", this.#onAbort, {once: true}]);
+    Reflect.apply(addListener, this.#cancellationSignal, ["abort", this.#onAbort, {once: true}]);
     if (signalAborted(signal) || performance.now() >= deadline) {this.close();}
   }
   get signal(): AbortSignal {return this.#controller.signal;}
@@ -47,7 +52,7 @@ export class CredentialRenderingLifetime {
     if (this.#closed) {return;}
     this.#closed = true;
     clearTimeout(this.#timer);
-    Reflect.apply(removeListener, this.#signal, ["abort", this.#onAbort]);
+    Reflect.apply(removeListener, this.#cancellationSignal, ["abort", this.#onAbort]);
     this.#controller.abort();
     this.#reject(new TypeError("credential rendering unavailable"));
   }
