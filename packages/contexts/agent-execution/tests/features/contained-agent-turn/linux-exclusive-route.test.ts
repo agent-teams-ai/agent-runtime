@@ -4,11 +4,12 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import test, { type TestContext } from "node:test";
+import timers from "node:timers";
 import { linuxExclusiveRouteRules, linuxExclusiveRouteRulesMatch, linuxExclusiveRouteSeccomp } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
 import { installLinuxExclusiveRoute, type LinuxExclusiveRouteBinding } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js";
-import { openNodeLinuxExclusiveRoute } from
+import { openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-exclusive-route.js";
 
 const endpoint = {address: "172.30.0.1", port: 18443};
@@ -188,9 +189,31 @@ const persistentKernel = (options: {readFailure?: number; transactionFailure?: n
 const fixture = (options: Parameters<typeof persistentKernel>[0] = {}) => {
   let time = 10; const state = persistentKernel(options);
   const owner = installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 10_000,
-    monotonicNow: () => time, kernel: state.kernel});
+    monotonicNow: () => time, kernel: state.kernel, scheduleCutoff: fakeTimer().scheduleCutoff});
   return {...state, owner, advance: (value: number) => {time = value;}};
 };
+
+const fakeTimer = () => {
+  let time = 10;
+  const tasks: {callback: () => void; delay: number; cancelled: boolean}[] = [];
+  return {tasks, now: () => time, advance: (value: number) => {time = value;},
+    scheduleCutoff(delay: number, callback: () => void) {
+      const task = {callback, delay, cancelled: false}; tasks.push(task);
+      return () => {task.cancelled = true;};
+    },
+    fire(index = tasks.length - 1) {tasks[index]?.callback();},
+  };
+};
+
+test("idle lease expiry autonomously removes installed permission without owner calls", () => {
+  const timer = fakeTimer(); const state = persistentKernel();
+  installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000, kernel: state.kernel,
+    monotonicNow: timer.now, scheduleCutoff: timer.scheduleCutoff});
+  assert.equal(state.rules().some(entry => entry.rule), true);
+  timer.advance(1010); timer.fire();
+  assert.equal(state.rules().some(entry => entry.rule), false);
+  assert.equal(state.counts().releases, 0);
+});
 
 test("nft 1.0.9 listings compare chain identities independently of transaction order", () => {
   for (const permit of [false, true]) {
@@ -301,7 +324,7 @@ test("observation loss and policy mismatch stay quarantined after successful den
 test("exclusive table creation rejects all existing tables and cannot revive a revoked attempt", () => {
   const state = persistentKernel();
   const install = (attemptId: string) => installLinuxExclusiveRoute({binding: {...binding, attemptId},
-    endpoint, lifetimeMs: 1000, kernel: state.kernel, monotonicNow: () => 10});
+    endpoint, lifetimeMs: 1000, kernel: state.kernel, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff});
   const first = install("attempt:first");
   const pending = first.reserveFirstWrite({...binding, attemptId: "attempt:first"}, "request:old");
   assert.equal(first.revoke(), "closed");
@@ -313,7 +336,7 @@ test("exclusive table creation rejects all existing tables and cannot revive a r
   for (const preexisting of ["deny", "permit"] as const) {
     const existing = persistentKernel({preexisting});
     assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000,
-      kernel: existing.kernel, monotonicNow: () => 10}), /EEXIST/u);
+      kernel: existing.kernel, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff}), /EEXIST/u);
     assert.equal(existing.rules().some(entry => entry.rule), false);
     assert.equal(existing.batches.length, 2); // failed admission followed by deny-only replacement
     assert.deepEqual(existing.batches[0][0], {create: {table: {family: "inet", name: "ar_provider_route_v1"}}});
@@ -338,14 +361,14 @@ test("binding shape, lease bounds and request inventory remain fail closed", () 
   for (const lifetimeMs of [0, 120_001, 1.5, Number.NaN]) {
     const state = persistentKernel();
     assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs,
-      kernel: state.kernel, monotonicNow: () => 10}));
+      kernel: state.kernel, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff}));
     assert.equal(state.counts().transactions, 0);
   }
 });
 
 test("lost installation acknowledgement attempts a deny cut while preserving the primary failure", () => {
   const transactions: any[] = []; const primary = new Error("synthetic primary failure");
-  assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000, monotonicNow: () => 10,
+  assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000, monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff,
     kernel: {
       transact(value) {transactions.push(JSON.parse(value)); throw transactions.length === 1 ? primary : new Error("synthetic cleanup failure");},
       readRules() {throw new Error("must not issue a lease after unknown installation");},
@@ -358,7 +381,7 @@ test("lost installation acknowledgement attempts a deny cut while preserving the
   for (const failure of [{transactionFailure: 1}, {readFailure: 1}]) {
     const state = persistentKernel(failure);
     assert.throws(() => installLinuxExclusiveRoute({binding, endpoint, lifetimeMs: 1000,
-      monotonicNow: () => 10, kernel: state.kernel}), /synthetic.*loss/u);
+      monotonicNow: () => 10, scheduleCutoff: fakeTimer().scheduleCutoff, kernel: state.kernel}), /synthetic.*loss/u);
     assert.equal(state.counts().transactions, 2);
     assert.equal(linuxExclusiveRouteRulesMatch(state.kernel.readRules(), endpoint, false), true);
   }
@@ -387,8 +410,9 @@ test("independent teardown revokes first, verifies removal, and quarantines all 
 // Intercept Node builtins only inside the test process. No root access, tool,
 // namespace, Docker transport, or injectable production command runner is used.
 const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "inode" | "device" | "pid" | "start";
-  closeFailure?: boolean; hashDrift?: boolean} = {}) => {
+  closeFailure?: boolean; hashDrift?: boolean; scheduleFailure?: boolean; unrefFailure?: boolean} = {}) => {
   const state = persistentKernel(); const closed: number[] = []; const invocations: any[] = [];
+  const timer = fakeTimer(); let unrefs = 0;
   const files = new Map([["/synthetic/nsenter", Buffer.from("pinned-nsenter")], ["/synthetic/nft", Buffer.from("pinned-nft")]]);
   const descriptors = new Map<number, {path: string; bytes: Buffer}>();
   let nextFd = 40; let inspections = 0; let removed = false; let toolFailure: string | undefined;
@@ -398,6 +422,14 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
   const namespaceIdentity = {dev: 4, ino: 100};
   t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
   t.mock.method(process, "geteuid", () => 0);
+  t.mock.method(performance, "now", timer.now);
+  t.mock.method(timers, "setTimeout", (callback: () => void, delay: number) => {
+    if (options.scheduleFailure) {throw new Error("synthetic scheduling failure");}
+    return {cancel: timer.scheduleCutoff(delay, callback), unref() {
+      unrefs += 1; if (options.unrefFailure) {throw new Error("synthetic unref failure");}
+    }};
+  });
+  t.mock.method(timers, "clearTimeout", (handle: {cancel(): void}) => {handle.cancel();});
   t.mock.method(fs, "realpathSync", (path: string) => path);
   t.mock.method(fs, "openSync", (path: string, flags: number) => {
     const namespace = path === "/proc/321/ns/net";
@@ -459,7 +491,7 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
         startedAt: inspections > 1 && options.drift === "start" ? "different" : "start:1"},
       resources: {seccompProfileSha256: linuxExclusiveRouteSeccomp().sha256}, engine: {cgroupVersion: "2"}} as any;
   }};
-  return {...state, closed, invocations, descriptors,
+  return {...state, closed, invocations, descriptors, timer, unrefs: () => unrefs,
     open: () => openNodeLinuxExclusiveRoute({authority, binding, endpoint, engine, lifetimeMs: 10_000, nsenter, nft}),
     remove: () => {removed = true;}, failNextTool: (code: string) => {toolFailure = code;}};
 };
@@ -475,16 +507,24 @@ test("Node route executes pinned descriptors after both tool paths are replaced"
 
 test("Node route rejects tool descriptor changes during digest verification", nodeOnly, async t => {
   const f = nodeFixture(t, {hashDrift: true});
-  await assert.rejects(f.open(), /enforcement unavailable/u);
-  assert.equal(f.invocations.length, 0); assert.deepEqual(f.closed, [41, 40]);
+  const failure = await f.open().catch(error => error);
+  assert.ok(failure instanceof LinuxExclusiveRouteOpeningError);
+  assert.equal(f.invocations.length, 0); assert.deepEqual(f.closed, [41]); // rejected tool, namespace retained
+  assert.equal(await failure.releaseAfterContainerRemoval(), "quarantined");
+  assert.deepEqual(f.closed, [41]);
+  f.remove(); assert.equal(await failure.releaseAfterContainerRemoval(), "quarantined");
+  assert.deepEqual(f.closed, [41, 40]);
   assert.equal(f.descriptors.size, 0);
 });
 
 for (const drift of ["inode", "device", "pid", "start"] as const) {
   test(`Node route rejects namespace identity drift: ${drift}`, nodeOnly, async t => {
     const f = nodeFixture(t, {drift});
-    await assert.rejects(f.open(), /enforcement unavailable/u);
-    assert.equal(f.invocations.length, 0); assert.deepEqual(f.closed, [42, 41, 40]);
+    const failure = await f.open().catch(error => error);
+    assert.ok(failure instanceof LinuxExclusiveRouteOpeningError);
+    assert.equal(f.invocations.length, 0); assert.deepEqual(f.closed, []);
+    f.remove(); assert.equal(await failure.releaseAfterContainerRemoval(), "quarantined");
+    assert.deepEqual(f.closed, [42, 41, 40]);
     assert.equal(f.descriptors.size, 0);
   });
 }
@@ -511,3 +551,43 @@ test("Node route retains descriptors until removal and quarantines close failure
   assert.equal(owner.revoke(), "quarantined");
   assert.throws(() => owner.reserveFirstWrite(binding, "request:closed"));
 });
+
+test("Node owns an unreferenced timer and retains namespace custody through idle cutoff", nodeOnly, async t => {
+  const f = nodeFixture(t); const owner = await f.open();
+  assert.equal(f.unrefs(), 1); assert.equal(f.timer.tasks[0]!.delay, 10_000);
+  f.timer.advance(10_010); f.timer.fire();
+  assert.equal(await owner.cutoff, "closed");
+  assert.equal(f.rules().some(entry => entry.rule), false);
+  assert.equal(f.descriptors.size, 3); assert.deepEqual(f.closed, []);
+  f.remove(); assert.equal(await owner.releaseAfterContainerRemoval(), "closed");
+  assert.equal(f.descriptors.size, 0);
+  const calls = f.invocations.length; f.timer.fire();
+  assert.equal(f.invocations.length, calls);
+});
+
+test("Node teardown cancels its timer before releasing descriptors", nodeOnly, async t => {
+  const f = nodeFixture(t); const owner = await f.open(); f.remove();
+  assert.equal(await owner.releaseAfterContainerRemoval(), "closed");
+  assert.equal(f.timer.tasks[0]!.cancelled, true);
+  const calls = f.invocations.length; f.timer.advance(20_000); f.timer.fire();
+  assert.equal(f.invocations.length, calls);
+  assert.equal(await owner.cutoff, "closed");
+});
+
+for (const options of [{scheduleFailure: true}, {unrefFailure: true}]) {
+  test(`Node scheduling failure retains cleanup-only custody: ${JSON.stringify(options)}`, nodeOnly, async t => {
+    const f = nodeFixture(t, options); const failure = await f.open().catch(error => error);
+    assert.ok(failure instanceof LinuxExclusiveRouteOpeningError);
+    assert.equal(f.rules().some(entry => entry.rule), false);
+    assert.equal(f.descriptors.size, 3); assert.deepEqual(f.closed, []);
+    assert.equal(await failure.releaseAfterContainerRemoval(), "quarantined");
+    assert.deepEqual(f.closed, []);
+    if (options.unrefFailure) {assert.equal(f.timer.tasks[0]!.cancelled, true);}
+    f.remove();
+    assert.deepEqual(await Promise.all([failure.releaseAfterContainerRemoval(), failure.releaseAfterContainerRemoval()]),
+      ["quarantined", "quarantined"]);
+    assert.deepEqual(f.closed, [42, 41, 40]);
+    const calls = f.invocations.length; f.timer.fire();
+    assert.equal(f.invocations.length, calls);
+  });
+}

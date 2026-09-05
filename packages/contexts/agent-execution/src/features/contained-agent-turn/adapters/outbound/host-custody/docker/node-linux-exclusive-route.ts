@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { clearTimeout, setTimeout } from "node:timers";
 import type { DockerContainerAuthority, DockerEnginePort } from "./engine/docker-engine-port.js";
 import { parseStrictJson } from "./serialization/strict-json.js";
 import { linuxExclusiveRouteSeccomp, type LinuxExclusiveRouteEndpoint } from "./linux-exclusive-route-policy.js";
@@ -13,6 +14,23 @@ export interface LinuxRouteToolPin {
 }
 
 const rejected = (): Error => new Error("Linux Docker exclusive route enforcement unavailable");
+/** Failed opening transfers only cleanup custody, never route/first-write authority. */
+export class LinuxExclusiveRouteOpeningError extends Error {
+  readonly releaseAfterContainerRemoval: () => Promise<"quarantined">;
+  constructor(releaseAfterContainerRemoval: () => Promise<"quarantined">) {
+    super("Linux Docker exclusive route enforcement unavailable");
+    this.releaseAfterContainerRemoval = releaseAfterContainerRemoval;
+  }
+}
+
+// Private production scheduling is mandatory. unref permits Host exit; neither
+// this timer nor performance.now proves cutoff during Host death or suspension.
+// The owner retains namespace custody independently until exact removal.
+const scheduleCutoff = (delayMs: number, callback: () => void): (() => void) => {
+  const timer = setTimeout(callback, Math.ceil(delayMs));
+  try {timer.unref();} catch (error) {clearTimeout(timer); throw error;}
+  return () => {clearTimeout(timer);};
+};
 const call = () => ({deadlineEpochMs: Date.now() + 5_000, signal: new AbortController().signal});
 const assertPlatform = (): void => {
   if (process.platform !== "linux" || process.arch !== "x64" || process.geteuid?.() !== 0) {throw rejected();}
@@ -88,16 +106,29 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
         });
       } catch {throw rejected();}
     };
-    return installLinuxExclusiveRoute({...input, monotonicNow: () => performance.now(), kernel: {
+    return installLinuxExclusiveRoute({...input, monotonicNow: () => performance.now(), scheduleCutoff, kernel: {
       transact: transaction => {invoke(["-j", "-f", "-"], transaction);},
       readRules: () => parseStrictJson(invoke(["-j", "list", "table", "inet", "ar_provider_route_v1"])),
       containerRemoved: async () => (await engine.inspect(authority, call())).existence === "absent",
       releaseNamespace: release,
     }});
   } catch {
-    // Closing our handles does not delete namespace policy while the container
-    // exists. Campaign cleanup must still kill/remove that exact container.
-    try {release();} catch { /* The caller must quarantine the failed opening. */ }
-    throw rejected();
+    // A failed installation has attempted a deny-only cut. Retain descriptors
+    // even on opening failure; the campaign must remove this exact container.
+    // Failed observations may be retried, but success cannot erase quarantine.
+    let flight: Promise<"quarantined"> | undefined;
+    throw new LinuxExclusiveRouteOpeningError(() => {
+      flight ??= (async () => {
+        try {if ((await engine.inspect(authority, call())).existence === "absent") {release();}}
+        catch { /* Unknown removal/close remains quarantined. */ }
+        return "quarantined" as const;
+      })();
+      const current = flight;
+      void current.then(result => {
+        if (opened.length > 0 && flight === current) {flight = undefined;}
+        return result;
+      });
+      return current;
+    });
   }
 };

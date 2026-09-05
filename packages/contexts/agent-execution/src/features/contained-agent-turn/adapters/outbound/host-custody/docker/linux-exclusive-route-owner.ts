@@ -70,6 +70,9 @@ export interface LinuxExclusiveFirstWrite {
 }
 
 export interface LinuxExclusiveRouteOwner {
+  /** One-way observation of the first local deny attempt, not a containment receipt.
+   * Later cleanup can add quarantine evidence, never revise this observation. */
+  readonly cutoff: Promise<"closed" | "quarantined">;
   reserveFirstWrite(expected: LinuxExclusiveRouteBinding, requestId: string): LinuxExclusiveFirstWrite;
   revoke(): "closed" | "quarantined";
   releaseAfterContainerRemoval(): Promise<"closed" | "quarantined">;
@@ -88,6 +91,8 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
   lifetimeMs: number;
   kernel: LinuxExclusiveRouteKernel;
   monotonicNow(): number;
+  /** Adapter-private, one-shot scheduler; returns cancellation. Must not call inline. */
+  scheduleCutoff(delayMs: number, callback: () => void): () => void;
 }>): LinuxExclusiveRouteOwner => {
   const binding = snapshotBinding(input.binding);
   const endpoint = Object.freeze({address: input.endpoint.address, port: input.endpoint.port});
@@ -96,18 +101,29 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
   if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 1 || lifetimeMs > 120_000) {
     throw new TypeError("route lease must be bounded to at most two minutes");
   }
-  const kernel = input.kernel; const now = input.monotonicNow;
+  const kernel = input.kernel; const now = input.monotonicNow; const schedule = input.scheduleCutoff;
+  if (typeof schedule !== "function") {throw new TypeError("autonomous route cutoff scheduler required");}
   const startedAt = now(); let highWater = startedAt;
   if (!Number.isFinite(startedAt) || startedAt < 0) {throw new TypeError("invalid route control time");}
   let revoked = false; let released = false; let quarantined = false; let installed = false;
+  const cutoff = Promise.withResolvers<"closed" | "quarantined">();
+  let timerGeneration = 0; let cancelTimer: (() => void) | undefined;
   let releaseFlight: Promise<"closed" | "quarantined"> | undefined;
   const requests = new Set<string>();
   const readTime = (): number => {
-    const observed = now();
-    if (!Number.isFinite(observed) || observed < highWater || observed - startedAt >= lifetimeMs) {
+    let observed: number;
+    try {observed = now();} catch (error) {quarantined = true; throw error;}
+    if (!Number.isFinite(observed) || observed < highWater) {
+      quarantined = true;
+      throw new TypeError("route control time changed");
+    }
+    highWater = observed;
+    if (observed - startedAt >= lifetimeMs) {
+      // A late observation cannot prove that the installed permission ended on time.
+      if (observed - startedAt > lifetimeMs) {quarantined = true;}
       throw new TypeError("route lease expired or control time changed");
     }
-    highWater = observed; return observed;
+    return observed;
   };
   const verify = (permit: boolean): void => {
     try {
@@ -121,24 +137,57 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
     }
   };
   const revoke = (): "closed" | "quarantined" => {
+    const firstCut = !revoked;
+    if (firstCut) {try {readTime();} catch { /* readTime records control-time uncertainty. */ }}
     revoked = true;
+    timerGeneration += 1;
+    const cancel = cancelTimer; cancelTimer = undefined;
+    try {cancel?.();} catch {quarantined = true;}
     if (released) {return quarantined ? "quarantined" : "closed";}
     try {
       kernel.transact(linuxExclusiveRouteTransaction(endpoint, installed, false));
       installed = true; verify(false);
     } catch {quarantined = true;}
+    if (firstCut) {try {readTime();} catch { /* Include delay/regression during the deny observation. */ }}
+    cutoff.resolve(quarantined ? "quarantined" : "closed");
     return quarantined ? "quarantined" : "closed";
+  };
+  const arm = (delayMs: number): void => {
+    const generation = ++timerGeneration;
+    let scheduling = true;
+    try {
+      const cancel = schedule(delayMs, () => {
+        if (revoked || released || generation !== timerGeneration) {return;}
+        if (scheduling) {quarantined = true; revoke(); return;}
+        cancelTimer = undefined;
+        try {
+          // Early wakeups do not extend the original deadline. Each arm fences
+          // callbacks from earlier timers, including callbacks retained by a scheduler.
+          arm(lifetimeMs - (readTime() - startedAt));
+          readTime(); // A blocking rearm cannot defer an already-due cutoff.
+        } catch {revoke();}
+      });
+      scheduling = false;
+      if (typeof cancel !== "function") {throw new TypeError("route cutoff cancellation required");}
+      if (revoked || generation !== timerGeneration) {
+        cancel(); throw new TypeError("route cutoff fired during scheduling");
+      }
+      cancelTimer = cancel;
+    } catch (error) {quarantined = true; throw error;}
   };
   try {
     // Fresh namespace admission fails if a previous campaign's table already exists.
     kernel.transact(linuxExclusiveRouteTransaction(endpoint, false, true));
-    installed = true; verify(true); readTime();
+    installed = true; verify(true);
+    arm(lifetimeMs - (readTime() - startedAt));
+    readTime(); // Scheduling is also inside the bounded installation window.
   } catch (error) {
     // An acknowledgement loss may have installed the table. Replacement only
     // reduces authority; preserve the original failure and always attempt it.
     installed = true; revoke(); throw error;
   }
   return Object.freeze({
+    cutoff: cutoff.promise,
     reserveFirstWrite(expected: LinuxExclusiveRouteBinding, requestId: string): LinuxExclusiveFirstWrite {
       const captured = snapshotBinding(expected);
       if (revoked || released || BINDING_KEYS.some(key => captured[key] !== binding[key]) ||
