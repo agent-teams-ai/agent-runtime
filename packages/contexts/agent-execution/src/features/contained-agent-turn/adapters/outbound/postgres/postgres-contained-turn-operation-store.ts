@@ -239,8 +239,11 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
           commandId: candidate.commandId, commandFingerprint: candidate.commandFingerprint, scope: authority.scope,
         });
         if (admission !== "clear") {
-          attempted = { kind: admission === "denied" ? "not_found" : "fingerprint_conflict" };
-          return attempted;
+          const outcome: AttemptOutcome = {
+            kind: admission === "denied" ? "not_found" : "fingerprint_conflict",
+          };
+          attempted = outcome;
+          return outcome;
         }
         const encoded = encodeContainedTurnState(candidate);
         const inserted = await client.query(
@@ -254,8 +257,9 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
         if (inserted.rowCount === 1) {
           await this.#intents.recordAcceptance(client, candidate);
           await this.#project(client, undefined, candidate);
-          attempted = { kind: "accepted", operation: candidate };
-          return attempted;
+          const outcome: AttemptOutcome = { kind: "accepted", operation: candidate };
+          attempted = outcome;
+          return outcome;
         }
         const existing = await client.query<{ operation_id: string }>(
           "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3 FOR UPDATE",
@@ -263,18 +267,21 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
         );
         const operationId = existing.rows[0]?.operation_id;
         if (operationId === undefined) {
-          attempted = { kind: "not_found" };
-          return attempted;
+          const outcome: AttemptOutcome = { kind: "not_found" };
+          attempted = outcome;
+          return outcome;
         }
         const operation = await this.#load(client, operationId, false, candidate.scope);
         if (operation === undefined) {
-          attempted = { kind: "not_found" };
-          return attempted;
+          const outcome: AttemptOutcome = { kind: "not_found" };
+          attempted = outcome;
+          return outcome;
         }
-        attempted = operation.commandFingerprint === candidate.commandFingerprint
+        const outcome: AttemptOutcome = operation.commandFingerprint === candidate.commandFingerprint
           ? { kind: "replayed", operation }
           : { kind: "fingerprint_conflict" };
-        return attempted;
+        attempted = outcome;
+        return outcome;
       });
     } catch (error) {
       if (!(error instanceof PostgresCommitIndeterminateError)) {throw error;}
