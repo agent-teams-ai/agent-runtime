@@ -28,7 +28,7 @@ export type NativeHttpRequestProfile = Readonly<{
 export const NATIVE_HTTP_HEADER_LIMITS = Object.freeze({maximumValueBytes: 4_096,
   maximumTotalValueBytes: 32_768, maximumInboundFields: 24});
 
-const codexValues = Object.freeze({"content-type": "application/json", version: "0.150.1"});
+const codexValues = Object.freeze({"content-type": "application/json", version: "0.153.4"});
 const codexRequired = Object.freeze(["accept", "content-type", "user-agent", "originator", "version"] as const);
 const claudeValues = Object.freeze({"content-type": "application/json", "anthropic-version": "2023-06-01",
   "x-app": "cli", "anthropic-dangerous-direct-browser-access": "true", "x-stainless-retry-count": "0",

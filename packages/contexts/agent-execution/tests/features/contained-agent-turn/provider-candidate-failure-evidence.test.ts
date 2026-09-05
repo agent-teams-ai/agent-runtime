@@ -142,7 +142,7 @@ for (const provider of ["codex", "claude"] as const) {
       assert.ok(reads > 0);
       assert.equal(fixture.providerCalls.value, 0);
       const input = evidenceInput(source, execution, {...observed.evidence("failed"),
-        binaryRevision: provider === "codex" ? `@openai/codex:0.150.1+${platform}-${platform === "linux" ? "x64" : "arm64"}` : `sha256:${digest}`,
+        binaryRevision: provider === "codex" ? `@openai/codex:0.153.4+${platform}-${platform === "linux" ? "x64" : "arm64"}` : `sha256:${digest}`,
         platformTuple: freeze({platform, architecture: platform === "linux" ? "x64" : "arm64"}),
       });
       const publish = source.authority.createProviderCandidateEvidenceEnvelope;

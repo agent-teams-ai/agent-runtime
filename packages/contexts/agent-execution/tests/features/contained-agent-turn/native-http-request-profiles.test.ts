@@ -153,7 +153,7 @@ test("generic synthetic routes remain two-header and do not inherit native admis
   const route = {...fixture.ports.route, forwardedRequestHeaderNames: ["version"]};
   assert.equal(snapshotHostHttpRoute(route), undefined);
   assert.throws(() => createPreparedHttpRequestV1({methodBytes: bytes("POST"), targetBytes: bytes("/v1/responses"),
-    hostBytes: bytes("api.openai.com"), presentationFields: [{name: "version", valueBytes: bytes("0.150.1")}],
+    hostBytes: bytes("api.openai.com"), presentationFields: [{name: "version", valueBytes: bytes("0.153.4")}],
     credentialHeaderNameAllowlist: ["authorization"], credentialFields: [{name: "authorization", valueBytes: bytes("synthetic")}],
     bodyBytes: body()}));
   assert.equal((await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation)).outcome, "completed");

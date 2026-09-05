@@ -201,7 +201,7 @@ export const parseCodexTurn = (result: unknown): { readonly id: string; readonly
     || !Array.isArray(turn.items) || !["full", "notLoaded", "summary"].includes(String(turn.itemsView))
     || !exactTurnStatusFields(turn, status)
     || Object.keys(turn).toSorted().join("\0") !== turnKeys.join("\0")) {
-    throw new Error("Codex turn result does not match the generated 0.150.1 shape");
+    throw new Error("Codex turn result does not match the generated 0.153.4 shape");
   }
   return { id, status };
 };

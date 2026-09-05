@@ -72,7 +72,7 @@ for (const provider of ["codex", "claude"] as const) {
       const provenance = await source.resolve();
       const input = evidenceInput(source, provenance, {
         ...observed.evidence("provider-completed"),
-        binaryRevision: provider === "codex" ? `@openai/codex:0.150.1+${platform}-${platform === "linux" ? "x64" : "arm64"}` : `sha256:${"a".repeat(64)}`,
+        binaryRevision: provider === "codex" ? `@openai/codex:0.153.4+${platform}-${platform === "linux" ? "x64" : "arm64"}` : `sha256:${"a".repeat(64)}`,
         platformTuple: Object.freeze({platform, architecture: platform === "linux" ? "x64" : "arm64"}),
       });
       const publish = source.authority.createProviderCandidateEvidenceEnvelope;

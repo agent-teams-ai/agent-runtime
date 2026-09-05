@@ -11,7 +11,7 @@ const layersOf = (config: ReturnType<typeof exactConfigResult>) => config.layers
 
 test("pins the divergent generated ConfigLayer schema and TypeScript evidence", () => {
   const fixture = JSON.parse(readFileSync(new URL(
-    "../../fixtures/linux-codex-app-server-0.150.1-permission-contract.json",
+    "../../fixtures/codex-app-server-0.153.4-permission-contract.json",
     import.meta.url,
   ), "utf8")) as {readonly configLayerEvidence: {
     readonly jsonSchema: {readonly disabledReason: {readonly required: boolean; readonly types: readonly string[]};
@@ -23,16 +23,16 @@ test("pins the divergent generated ConfigLayer schema and TypeScript evidence", 
     disabledReason: { required: false, types: ["string", "null"] },
     required: ["config", "name", "version"],
     source: "v2/ConfigReadResponse.json",
-    sourceSha256: "2de702bfaedcf8f4362b0122299ae412bdc0c244564a376a30fc9624c7df2514",
+    sourceSha256: "96a04a3f7fff2dc7fafc9f831e8bcd422e021d697dd2c14c801f098a9f21396d",
   });
   assert.equal(fixture.configLayerEvidence.typeScript.disabledReasonRequired, true);
   assert.equal(fixture.configLayerEvidence.typeScript.source, "v2/ConfigLayer.ts");
   assert.match(fixture.configLayerEvidence.typeScript.fragment, /disabledReason: string \| null/u);
   assert.match(fixture.configLayerEvidence.wireValidationBasis, /generated JSON Schema/u);
-  assert.match(fixture.configLayerEvidence.wireValidationBasis, /observed Codex 0\.150\.1 wire/u);
+  assert.match(fixture.configLayerEvidence.wireValidationBasis, /observed Codex 0\.153\.4 wire/u);
 });
 
-test("accepts omitted or null disabledReason from the exact 0.150.1 config wire", () => {
+test("accepts omitted or null disabledReason from the exact 0.153.4 config wire", () => {
   for (const omitted of [true, false]) {
     const config = exactConfigResult();
     for (const layer of layersOf(config)) {

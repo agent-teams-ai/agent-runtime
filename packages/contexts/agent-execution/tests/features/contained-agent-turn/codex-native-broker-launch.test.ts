@@ -12,8 +12,8 @@ import { codexTurnSandboxPolicy } from "../../../dist/features/contained-agent-t
 import { CODEX_APP_SERVER_ADAPTER_REVISION } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 import { FakeCodexProcess, manifest, executeInput } from "../../codex-app-server-contained-turn-provider-fixture.ts";
 import { emitAgentStarted, emitTurnStarted, generatedTurn } from "../../codex-app-server-test-messages.mjs";
-import { brokerFixture, nativeBrokerConfig, capture, fixtureCapability, fixtureEndpoint } from "../../fixtures/codex-native-broker-0.150.1/fixture.ts";
-import { rehashNativeLayers } from "../../fixtures/codex-native-config-0.150.1/fixture.ts";
+import { brokerFixture, nativeBrokerConfig, capture, fixtureCapability, fixtureEndpoint } from "../../fixtures/codex-native-broker-0.153.4/fixture.ts";
+import { rehashNativeLayers } from "../../fixtures/codex-native-config-0.153.4/fixture.ts";
 
 const nativePlan = async (f: ReturnType<typeof brokerFixture>) => createCodexAppServerLaunchPlan({
   ...f.launchOptions,
@@ -28,7 +28,7 @@ const handshake = (f: ReturnType<typeof brokerFixture>, message: Record<string, 
   if (message.method === "initialize") {
     target.emit({ id: message.id, result: {
       codexHome: f.home, platformFamily: "unix", platformOs: "linux",
-      userAgent: `agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; ${CODEX_APP_SERVER_ADAPTER_REVISION})`,
+      userAgent: `agent-runtime/0.153.4 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; ${CODEX_APP_SERVER_ADAPTER_REVISION})`,
     } }); return true;
   }
   if (message.method === "initialized") {return true;}
@@ -123,7 +123,7 @@ test("native plan and provider options reject accessor/Proxy/forgery before exec
     Object.defineProperty({ ...options }, "nativeBrokerLaunchPlan", { get: trap }),
     { ...options, boundary: { ...f.boundary } }, { ...options, tmpDir: "/different" },
     { ...options, privateRootPath: "/different" },
-    { ...options, manifest: { ...manifest, providerBinding: { ...manifest.providerBinding, binaryRevision: "@openai/codex:0.150.1+darwin-arm64" } } },
+    { ...options, manifest: { ...manifest, providerBinding: { ...manifest.providerBinding, binaryRevision: "@openai/codex:0.153.4+darwin-arm64" } } },
   ]) {assert.throws(() => new CodexAppServerContainedTurnProvider(bad), error => {
     assert.equal(String(error).includes(fixtureCapability), false); return true;
   });}

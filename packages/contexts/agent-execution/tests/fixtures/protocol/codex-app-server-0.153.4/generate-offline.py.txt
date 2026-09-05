@@ -1,0 +1,38 @@
+from pathlib import Path
+import hashlib,json,os,subprocess,tempfile,datetime
+root=Path(__file__).parent
+receipt=json.loads((root/'verified-darwin.json').read_text())
+binary=Path(receipt['files'][0]['path']); expected=receipt['files'][0]['sha256']
+assert hashlib.sha256(binary.read_bytes()).hexdigest()==expected
+assert Path('/usr/bin/sandbox-exec').is_file()
+for p in ['/etc/codex/config.toml','/etc/codex/requirements.toml']:
+    assert not Path(p).exists(), 'Ambient system Codex config: refuse'
+project=Path(tempfile.mkdtemp(prefix='codex-0.153.4-schema-',dir=root))
+(project/'.agent-runtime-test-sandbox').write_text('disposable offline protocol schema characterization\n')
+for p in ['home','codex-home','tmp']:(project/p).mkdir(mode=0o700)
+env={'HOME':str(project/'home'),'CODEX_HOME':str(project/'codex-home'),'TMPDIR':str(project/'tmp'),'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'}
+commands=[('version',['--version']),('generate-json-schema-help',['app-server','generate-json-schema','--help']),('generate-ts-help',['app-server','generate-ts','--help']),('schema',['app-server','generate-json-schema','--out',str(project/'schema'),'--experimental']),('types',['app-server','generate-ts','--out',str(project/'types'),'--experimental'])]
+results=[]
+for name,args in commands:
+    print('Running offline '+name,flush=True)
+    result=subprocess.run(['/usr/bin/sandbox-exec','-p','(version 1)(allow default)(deny network*)',str(binary),*args],cwd=project,env=env,capture_output=True,timeout=120)
+    assert len(result.stdout)<1024**2 and len(result.stderr)<1024**2
+    (project/(name+'.stdout')).write_bytes(result.stdout);(project/(name+'.stderr')).write_bytes(result.stderr)
+    results.append({'name':name,'args':args,'returnCode':result.returncode,'stdoutSha256':hashlib.sha256(result.stdout).hexdigest(),'stderrSha256':hashlib.sha256(result.stderr).hexdigest()})
+    assert result.returncode==0,(name,result.stderr.decode()[:500])
+    if name=='version':assert result.stdout.strip()==b'codex-cli 0.153.4'
+def tree(name):
+    folder=project/name
+    entries=sorted(folder.rglob('*'),key=lambda x:x.relative_to(folder).as_posix().encode())
+    records=[]
+    for p in entries:
+        assert not p.is_symlink()
+        if p.is_file():records.append(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(folder).as_posix()+'\n')
+        else:assert p.is_dir()
+    manifest=''.join(records)
+    (project/(name+'-manifest.txt')).write_text(manifest)
+    return {'fileCount':len(records),'manifestSha256':hashlib.sha256(manifest.encode()).hexdigest()}
+result={'version':'0.153.4','binarySha256':expected,'sourceCommit':'3d2ee51ca2d5db578f328aa75e20aa22c0197c9a','observedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'platform':'darwin-arm64','root':str(project),'isolatedNetwork':'sandbox-exec deny network*','authFilesSupplied':False,'providerTurnRequested':False,'commands':results,'schema':tree('schema'),'types':tree('types')}
+assert hashlib.sha256(binary.read_bytes()).hexdigest()==expected
+(root/'darwin-schema-receipt.json').write_text(json.dumps(result,indent=2)+'\n')
+print(json.dumps(result),flush=True)

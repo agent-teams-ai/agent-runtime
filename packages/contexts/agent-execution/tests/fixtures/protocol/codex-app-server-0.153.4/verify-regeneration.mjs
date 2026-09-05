@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-const EXPECTED_BINARY_SHA256 = "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386";
-const EXPECTED_SOURCE_SHA256 = "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370";
-const EXPECTED_PERMISSION_CONTRACT_SHA256 = "e692b97c71ce58c3ef2bb3ea109bc33bcd624768ac3cac1de520971da66aa7fb";
+const EXPECTED_BINARY_SHA256 = "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da";
+const EXPECTED_SOURCE_SHA256 = "69aba3fe5f72f38bf5c541e7e2c09de40778abe65ff969d9fc73372037812091";
+const EXPECTED_PERMISSION_CONTRACT_SHA256 = "fca19484cd7a10622cbc5b444a6055d855be1b4badd6e79eca3f660ed08baab7";
 const EXPECTED_PERMISSION_TYPE_SOURCES = Object.freeze([
   "v2/ActivePermissionProfile.ts",
   "v2/Config.ts",
@@ -29,12 +29,12 @@ const EXPECTED_PERMISSION_TYPE_SOURCES = Object.freeze([
 const EXPECTED_CONFIG_LAYER_SCHEMA_SOURCE = "v2/ConfigReadResponse.json";
 const EXPECTED_TREES = Object.freeze({
   schema: Object.freeze({
-    fileCount: 411,
-    manifestSha256: "9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56",
+    fileCount: 416,
+    manifestSha256: "60c1b926bc9720e7695c23bcc6f8cb1dd7dcfa92601dd3e9d7b9267804f28c87",
   }),
   types: Object.freeze({
-    fileCount: 812,
-    manifestSha256: "3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc",
+    fileCount: 827,
+    manifestSha256: "6884b9a77fe389ca3f0ed5c327115d5fa9398307390a2b080e6402c66c1e406b",
   }),
 });
 
@@ -212,7 +212,7 @@ const runExternalProof = async () => {
       assertTree("types", generatedTypes, EXPECTED_TREES.types),
     ]);
     const permissionContractBytes = await readFile(new URL(
-      "../../linux-codex-app-server-0.150.1-permission-contract.json", import.meta.url));
+      "../../codex-app-server-0.153.4-permission-contract.json", import.meta.url));
     assert.equal(digest(permissionContractBytes), EXPECTED_PERMISSION_CONTRACT_SHA256,
       "committed permission contract digest mismatch");
     const permissionContractClaims = await verifyPermissionContractClaims(
@@ -221,7 +221,7 @@ const runExternalProof = async () => {
       readFile(new URL("./ItemCompletedNotification.json", import.meta.url)),
       readFile(join(generatedSchema, "v2", "ItemCompletedNotification.json")),
     ]);
-    assert.equal(committed.length, 41_664);
+    assert.equal(committed.length, 45_968);
     assert.equal(digest(committed), EXPECTED_SOURCE_SHA256);
     assert.deepEqual(regenerated, committed, "regenerated ItemCompletedNotification schema bytes drifted");
     process.stdout.write(`${JSON.stringify({

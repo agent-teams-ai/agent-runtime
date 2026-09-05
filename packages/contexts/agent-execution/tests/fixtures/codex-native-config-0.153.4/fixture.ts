@@ -14,7 +14,7 @@ export interface NativeConfigResult {
   origins: Record<string, { name: NativeRecord; version: string }>;
 }
 
-export const nativeFixtureUrl = new URL("./config-read.linux-analysis.json", import.meta.url);
+export const nativeFixtureUrl = new URL("./config-read.darwin-analysis.json", import.meta.url);
 export const nativeFixtureHome = "/synthetic/agent-runtime-native-config/private-home";
 
 const canonical = (value: unknown): string => {

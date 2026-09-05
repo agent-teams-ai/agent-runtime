@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 5,
+  "wrapperPackage": "@openai/codex@0.153.4",
+  "dependencyAlias": "@openai/codex-linux-x64",
+  "package": "@openai/codex-linux-x64@0.153.4",
+  "resolvedPackageTarget": "@openai/codex@0.153.4-linux-x64",
+  "npmSri": {
+    "wrapper": "sha512-wbHDmit7S/YvBGVX1DQmk13xtWblZ2cApeJ/pB7xDZ10Cna+DZc5ij7f0F4OxdsXN4FW1oLT48OpogUI1+8Y2w==",
+    "native": "sha512-x1EcwBlY3AObM1VTUHNM2AzAJQsyreGdagpF+qFiYi/Oa30VBktvvG0C6tLtCzqW6hjZNWkGZQWmeVk7MuJKWg=="
+  },
+  "tarballSha256": "54818cb9fce3360cc6e44cfc5a96952cd5c1243efb43cbe488e11dda84663e08",
+  "nativeTarget": "x86_64-unknown-linux-musl",
+  "binarySha256": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+  "candidateTargets": {
+    "darwin-arm64": {
+      "authority": "checked-in-package-binary-initialize-candidate",
+      "binaryPath": "vendor/aarch64-apple-darwin/bin/codex",
+      "binarySha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+      "initialize": {
+        "platformFamily": "unix",
+        "platformOs": "macos",
+        "userAgent": "agent-runtime/0.153.4 (Mac OS 15.6.1; arm64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)"
+      },
+      "nativeDependencyAliasRevision": "@openai/codex-darwin-arm64@0.153.4",
+      "nativeTarget": "aarch64-apple-darwin",
+      "qualification": "candidate-pending-exact-local-canary",
+      "resolvedNativePackageRevision": "@openai/codex@0.153.4-darwin-arm64",
+      "wrapperPackage": "@openai/codex@0.153.4",
+      "npmSri": "sha512-B1qhN3fa1ay0R0wGziXqgwSkB5icpYChNKHhtBHff/0UtSTC7z+l8aTtvMlGjH3E8HEvY3+njIJelM9CAAoVWg=="
+    }
+  },
+  "generatorCommands": [
+    "codex app-server generate-json-schema --out <marked-disposable-root>/schema-experimental --experimental",
+    "codex app-server generate-ts --out <marked-disposable-root>/generated-experimental --experimental"
+  ],
+  "experimentalFlagUsed": true,
+  "schemaTreeFileCount": 416,
+  "schemaTreeManifestSha256": "60c1b926bc9720e7695c23bcc6f8cb1dd7dcfa92601dd3e9d7b9267804f28c87",
+  "typesTreeFileCount": 827,
+  "typesTreeManifestSha256": "6884b9a77fe389ca3f0ed5c327115d5fa9398307390a2b080e6402c66c1e406b",
+  "treeManifestAlgorithm": "SHA-256 of the concatenated UTF-8 records `<lowercase file SHA-256>  <relative path>\\n` for every regular file; relative paths have no leading `./`, contain neither backslash nor LF, and are sorted lexicographically by unsigned UTF-8 bytes (the order returned by Buffer.compare(Buffer.from(path, \"utf8\")))",
+  "source": "schema/v2/ItemCompletedNotification.json",
+  "sourceSha256": "69aba3fe5f72f38bf5c541e7e2c09de40778abe65ff969d9fc73372037812091",
+  "regenerationVerifier": {
+    "command": "pnpm --filter @agent-teams/agent-execution verify:codex-schema-regeneration",
+    "executionBinding": "retained-verified-descriptor",
+    "executionEvidenceField": "executedBinarySha256",
+    "optInEnvironment": "AR_CODEX_SCHEMA_REGEN_VERIFY=1",
+    "externalProof": true,
+    "runsInStaticTests": false
+  },
+  "artifact": "ItemCompletedNotification.json",
+  "artifactBytes": 45968,
+  "artifactSha256": "69aba3fe5f72f38bf5c541e7e2c09de40778abe65ff969d9fc73372037812091",
+  "generatedRuntimeBinding": {
+    "artifact": "src/features/contained-agent-turn/adapters/outbound/codex-app-server/generated-codex-item-schema.ts",
+    "generator": "protocol/codex-app-server-0.153.4/generate-runtime-item-schema.mjs",
+    "sha256": "7c07337a5391416e4b09a5e4267bad72fad677e8766520f60a3ebd3828395a7f",
+    "sourceExecutionBinding": "retained-open-descriptor"
+  },
+  "schemaGeneration": {
+    "platform": "darwin-arm64",
+    "binarySha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+    "executionBinding": "isolated-verified-path-before-and-after",
+    "linuxRegeneration": "pending",
+    "providerTurnRequested": false,
+    "receipt": "schema-generation.darwin.json",
+    "receiptSha256": "12218ef7c81cf2224e2baba4d62f1d01b4ad687c8fa21eb0eda7e92842291629",
+    "script": "generate-offline.py.txt",
+    "scriptSha256": "e91019a2ad453cbc80476b40b39e25ee3fbb1005ec7122252e9d61c16b2c4a32"
+  },
+  "priorEvidence": {
+    "version": "0.150.1",
+    "commit": "7a9e44200873f899a90ca8f5e0aa286c856e1168"
+  }
+}

@@ -21,8 +21,8 @@ export const beta = "claude-code-20250219,interleaved-thinking-2025-05-14,thinki
   + "context-management-2025-06-27,prompt-caching-scope-2026-01-05,effort-2025-11-24";
 
 export const headers = (provider: "codex" | "claude"): Header[] => Object.entries(provider === "codex" ? {
-  accept: "text/event-stream", "content-type": "application/json", version: "0.150.1", originator: "synthetic-app-server",
-  "user-agent": "synthetic-codex/0.150.1", "x-codex-beta-features": "synthetic-beta-marker",
+  accept: "text/event-stream", "content-type": "application/json", version: "0.153.4", originator: "synthetic-app-server",
+  "user-agent": "synthetic-codex/0.153.4", "x-codex-beta-features": "synthetic-beta-marker",
   "x-codex-window-id": "synthetic-window", "x-codex-turn-metadata": '{"turn_id":"synthetic-turn"}',
   "x-codex-routing-hint": "synthetic-route", "x-client-request-id": "synthetic-request",
   "session-id": "synthetic-session", "thread-id": "synthetic-thread",

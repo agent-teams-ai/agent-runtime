@@ -1,5 +1,5 @@
-/** Exact 0.150.1 permission-only config/read subset, not general Codex configuration.
- * Evidence: tests/fixtures/codex-native-config-0.150.1/provenance.json.
+/** Exact 0.153.4 permission-only config/read subset, not general Codex configuration.
+ * Evidence: tests/fixtures/codex-native-config-0.153.4/provenance.json.
  * ConfigToml serializes absent Option fields as null. No non-null override is admitted.
  */
 const NULL_CONFIG_FIELDS = Object.freeze([
@@ -15,7 +15,7 @@ const NULL_CONFIG_FIELDS = Object.freeze([
   "forced_login_method", "ghost_snapshot", "goals",
   "hooks", "instructions", "js_repl_node_module_dirs",
   "js_repl_node_path", "log_dir", "mcp_oauth_callback_port",
-  "mcp_oauth_callback_url", "memories", "model",
+  "mcp_oauth_callback_url", "mcp_optional_startup_grace_ms", "memories", "model",
   "model_auto_compact_token_limit", "model_auto_compact_token_limit_scope", "model_catalog_json",
   "model_context_window", "model_instructions_file", "model_provider",
   "model_reasoning_effort", "model_reasoning_summary", "model_verbosity",
@@ -68,7 +68,7 @@ export const codexNativeConfigDefaults = (): Record<string, unknown> => ({
     ...codexDisabledFeatures(),
     network_proxy: null, // FeaturesToml's absent structured field.
     // ConfigRequestProcessor::read materializes these pinned Features defaults.
-    auth_elicitation: true, mcp_2026_07_28: false, memories: false,
+    auth_elicitation: true, background_paginated_rollout_migration: false, mcp_2026_07_28: false, memories: false,
     mentions_v2: true, remote_control: false, tool_suggest: true,
   },
 });

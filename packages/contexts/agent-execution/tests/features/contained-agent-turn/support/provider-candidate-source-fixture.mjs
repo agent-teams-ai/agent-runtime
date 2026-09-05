@@ -129,11 +129,11 @@ export const sourceFixture = async (t, provider = "codex", withGit = true, linke
 };
 
 export const evidenceInput = (fixture, executionProvenance, overrides = {}) => Object.freeze({
-  binaryRevision: fixture.providerId.startsWith("codex") ? "@openai/codex:0.150.1+linux-x64" : `sha256:${"a".repeat(64)}`,
+  binaryRevision: fixture.providerId.startsWith("codex") ? "@openai/codex:0.153.4+linux-x64" : `sha256:${"a".repeat(64)}`,
   binarySha256: "a".repeat(64),
   canaryId: fixture.canaryId, provider: fixture.providerId, executionProvenance,
   compositeContainment: "indeterminate", physicalContainment: "indeterminate",
   observations: Object.freeze({failureKind: "canary-failed", ownerDisposal: "not_observed", runtimeDisposal: "not_observed"}),
-  packageIdentity: Object.freeze(fixture.providerId.startsWith("codex") ? {wrapperPackageRevision: "@openai/codex@0.150.1"} : {sdkRevision: "@anthropic-ai/claude-agent-sdk@0.3.251"}),
+  packageIdentity: Object.freeze(fixture.providerId.startsWith("codex") ? {wrapperPackageRevision: "@openai/codex@0.153.4"} : {sdkRevision: "@anthropic-ai/claude-agent-sdk@0.3.251"}),
   platformTuple: Object.freeze({architecture: "x64", platform: "linux"}), status: "failed", ...overrides,
 });

@@ -89,11 +89,11 @@ export const createProviderCandidateEvidenceEnvelope = async value => {
   choice(input.compositeContainment, ["indeterminate"]);
   const binaryDigest = exactDigest(input.binarySha256);
   if (typeof input.binaryRevision !== "string" || input.binaryRevision.length > 192 ||
-      !/^(?:sha256:[a-f0-9]{64}|@openai\/codex:0\.150\.1\+(?:linux-x64|darwin-arm64))$/u.test(input.binaryRevision)) {
+      !/^(?:sha256:[a-f0-9]{64}|@openai\/codex:0\.153\.4\+(?:linux-x64|darwin-arm64))$/u.test(input.binaryRevision)) {
     throw new TypeError("canary binary revision must be exact");
   }
   if ((input.provider.startsWith("claude") ? input.binaryRevision !== binaryDigest :
-      input.binaryRevision !== `@openai/codex:0.150.1+${tuple.platform}-${tuple.architecture}`) ||
+      input.binaryRevision !== `@openai/codex:0.153.4+${tuple.platform}-${tuple.architecture}`) ||
       (tuple.binaryRevision !== undefined && tuple.binaryRevision !== input.binaryRevision) ||
       [tuple.binarySha256, tuple.executableSha256].some(candidateDigest => candidateDigest !== undefined && candidateDigest !== binaryDigest)) {
     throw new TypeError("canary binary identity is inconsistent");

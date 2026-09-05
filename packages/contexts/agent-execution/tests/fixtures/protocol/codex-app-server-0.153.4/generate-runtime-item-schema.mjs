@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { open, readFile } from "node:fs/promises";
 
-const EXPECTED_SOURCE_SHA256 = "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370";
+const EXPECTED_SOURCE_SHA256 = "69aba3fe5f72f38bf5c541e7e2c09de40778abe65ff969d9fc73372037812091";
 const sourceUrl = new URL("./ItemCompletedNotification.json", import.meta.url);
 const outputUrl = new URL("../../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/generated-codex-item-schema.ts", import.meta.url);
 const handle = await open(sourceUrl, "r");
@@ -21,7 +21,7 @@ const sourceSha256 = createHash("sha256").update(sourceBytes).digest("hex");
 if (sourceSha256 !== EXPECTED_SOURCE_SHA256) {throw new Error("pinned Codex item schema digest mismatch");}
 const schema = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(sourceBytes));
 const generated = [
-  "// Generated deterministically from the descriptor-bound retained Codex 0.150.1 schema. Do not edit.",
+  "// Generated deterministically from the descriptor-bound retained Codex 0.153.4 schema. Do not edit.",
   `export const CODEX_ITEM_SCHEMA_SOURCE_SHA256 = ${JSON.stringify(sourceSha256)} as const;`,
   `export const CODEX_ITEM_COMPLETED_SCHEMA = ${JSON.stringify(schema)} as const;`,
   "",

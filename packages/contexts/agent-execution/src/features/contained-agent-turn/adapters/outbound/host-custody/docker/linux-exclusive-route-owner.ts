@@ -38,7 +38,7 @@ const BINDING_KEYS = ["tenantId", "projectId", "scopeDigest", "operationId", "at
 // tuple matches the pinned Linux SDK launch plan; Darwin remains unsupported by
 // this Linux namespace owner. Tests bind these literals to the provider tuple.
 const supportedLinuxCandidate = (binding: LinuxExclusiveRouteBinding): boolean =>
-  binding.binaryRevision === "@openai/codex:0.150.1+linux-x64" ||
+  binding.binaryRevision === "@openai/codex:0.153.4+linux-x64" ||
   (binding.binaryRevision === "sha256:fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7" &&
     binding.adapterRevision === "claude-agent-sdk-contained-turn:0.3.251" &&
     binding.capabilityManifestRevision === "claude-contained-turn-v1@1");

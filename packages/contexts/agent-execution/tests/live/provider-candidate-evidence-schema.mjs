@@ -20,11 +20,11 @@ export const record = (value, fields, required = fields) => {
 export const choice = (value, values) => values.includes(value) ? value : reject();
 const text = (value, pattern) => typeof value === "string" && value.length <= 512 && pattern.test(value) ? value : reject();
 export const exactDigest = value => `sha256:${text(value, /^[a-f0-9]{64}$/u)}`;
-const packageRevision = value => text(value, /^@(?:openai\/codex(?:-linux-x64|-darwin-arm64)?[@:]0\.150\.1(?:[+-](?:linux-x64|darwin-arm64))?|anthropic-ai\/claude-agent-sdk@0\.3\.251)$/u);
-const version = value => choice(value, ["0.150.1", "0.3.251", "2.1.251"]);
+const packageRevision = value => text(value, /^@(?:openai\/codex(?:-linux-x64|-darwin-arm64)?[@:]0\.153\.4(?:[+-](?:linux-x64|darwin-arm64))?|anthropic-ai\/claude-agent-sdk@0\.3\.251)$/u);
+const version = value => choice(value, ["0.153.4", "0.3.251", "2.1.251"]);
 
 const TUPLE_FIELDS = Object.freeze({
-  adapterRevision: value => choice(value, ["codex-app-server-contained-turn:0.150.1+native-permission-config-v2", "claude-agent-sdk-contained-turn:0.3.251"]),
+  adapterRevision: value => choice(value, ["codex-app-server-contained-turn:0.153.4+native-permission-config-v2", "claude-agent-sdk-contained-turn:0.3.251"]),
   architecture: value => choice(value, ["x64", "arm64"]),
   binaryRevision: value => typeof value === "string" && value.startsWith("sha256:") ? text(value, /^sha256:[a-f0-9]{64}$/u) : packageRevision(value),
   binarySha256: exactDigest, clientName: value => choice(value, ["agent-runtime"]),
@@ -32,7 +32,7 @@ const TUPLE_FIELDS = Object.freeze({
   nativeDependencyAliasRevision: packageRevision, packageRevision,
   platform: value => choice(value, ["linux", "darwin"]), platformFamily: value => choice(value, ["unix"]),
   platformOs: value => choice(value, ["linux", "macos"]),
-  protocolRevision: value => text(value, /^contained-turn:v1:codex-app-server:0\.150\.1:schema-[a-f0-9]{64}:bindings-[a-f0-9]{64}:agent-runtime-contained-v1:native-permission-config-v2$/u),
+  protocolRevision: value => text(value, /^contained-turn:v1:codex-app-server:0\.153\.4:schema-[a-f0-9]{64}:bindings-[a-f0-9]{64}:agent-runtime-contained-v1:native-permission-config-v2$/u),
   resolvedNativePackageRevision: packageRevision, userAgentArchitecture: value => choice(value, ["arm64", "x86_64"]),
   userAgentOsName: value => choice(value, ["Mac OS", "Ubuntu"]), version,
   bundledCliVersion: version, executableSha256: exactDigest,

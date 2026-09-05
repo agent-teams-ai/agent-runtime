@@ -15,7 +15,7 @@ import type { CodexEffectCustodyAuthority } from "../../../dist/features/contain
 import type { CustodiedProviderProcess } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { agentMessage, commandExecution, emitAgentCompleted, emitAgentStarted, fileChange,
   generatedTurn } from "../../codex-app-server-test-messages.mjs";
-import { nativeConfigResult } from "../../fixtures/codex-native-config-0.150.1/fixture.ts";
+import { nativeConfigResult } from "../../fixtures/codex-native-config-0.153.4/fixture.ts";
 
 type Message = Record<string, unknown>;
 
@@ -105,7 +105,7 @@ class ProtocolProcess implements CustodiedProviderProcess {
   #handshake(message: Message): boolean {
     if (message.method === "initialize") {
       this.emit({ id: message.id, result: {
-        codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
+        codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.153.4 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)",
       } });
       return true;
     }
@@ -227,7 +227,7 @@ test("never treats unsolicited or unacknowledged interrupted notifications as ca
   assert.equal("containmentRequired" in beforeAcknowledgement && beforeAcknowledgement.containmentRequired, true);
 });
 
-test("fails closed for unknown and non-command effectful 0.150.1 item-union members", async () => {
+test("fails closed for unknown and non-command effectful 0.153.4 item-union members", async () => {
   const unknown = { id: "item:unknown", type: "unknownTool" };
   const effectStarted = fileChange("item:effect");
   for (const { completed, started } of [

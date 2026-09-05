@@ -310,7 +310,7 @@ test("fails before turn bytes when initialize reports the wrong private Codex ho
     if (message.method === "initialize") {
       target.emit({
         id: message.id,
-        result: { codexHome: "/synthetic/substituted-home", platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)" },
+        result: { codexHome: "/synthetic/substituted-home", platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.153.4 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)" },
       });
     }
   });
@@ -639,7 +639,7 @@ test("returns typed uncertainty when pre-dispatch stdin closure is unproven", as
   const process = new FakeCodexProcess((message, target) => {
     if (message.method === "initialize") {
       target.emit({ id: message.id, result: {
-        codexHome: "/wrong-home", platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
+        codexHome: "/wrong-home", platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.153.4 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)",
       } });
     }
   }, { hangClose: true });

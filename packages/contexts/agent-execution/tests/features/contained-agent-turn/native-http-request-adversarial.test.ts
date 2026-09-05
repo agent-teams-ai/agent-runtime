@@ -186,7 +186,7 @@ test("native admission snapshots headers and prepared custody detaches all mutab
 });
 
 test("native transport connection nominations are refused and encoded metadata cannot smuggle fields", async () => {
-  for (const extra of [{name: "Connection", value: "version"}, {name: "version", value: "0.150.1\r\nX-Arbitrary: injected"}]) {
+  for (const extra of [{name: "Connection", value: "version"}, {name: "version", value: "0.153.4\r\nX-Arbitrary: injected"}]) {
     const fixture = nativeFixture(cases[0], [...headers("codex"), extra]);
     const result = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
     assert.notEqual(result.outcome, "completed"); assert.equal(fixture.observations.opens, 0);

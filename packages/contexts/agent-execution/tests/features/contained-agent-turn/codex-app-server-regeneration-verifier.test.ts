@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { verifyPermissionContractClaims } from
-  "../../fixtures/protocol/codex-app-server-0.150.1/verify-regeneration.mjs";
+  "../../fixtures/protocol/codex-app-server-0.153.4/verify-regeneration.mjs";
 
 interface PermissionContractFixture {
   readonly configLayerEvidence: {
@@ -25,7 +25,7 @@ test("regeneration claim verification fails closed on retained permission/config
     const schemaRoot = join(caseRoot, "schema");
     const typesRoot = join(caseRoot, "types");
     const fixture = JSON.parse(readFileSync(new URL(
-      "../../fixtures/linux-codex-app-server-0.150.1-permission-contract.json", import.meta.url), "utf8")) as
+      "../../fixtures/codex-app-server-0.153.4-permission-contract.json", import.meta.url), "utf8")) as
       PermissionContractFixture;
     const evidence = structuredClone(fixture);
     for (const source of new Set(evidence.generatedTypeFragments.map(claim => claim.source))) {

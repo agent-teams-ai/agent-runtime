@@ -75,7 +75,7 @@ test("canonical envelope retains bounded failure facts, detaches data and reject
   const fixture = await sourceFixture(t);
   const execution = await fixture.resolve();
   const input = evidenceInput(fixture, execution, {
-    binaryRevision: "@openai/codex:0.150.1+darwin-arm64",
+    binaryRevision: "@openai/codex:0.153.4+darwin-arm64",
     platformTuple: freeze({platform: "darwin", architecture: "arm64"}),
     observations: freeze({
       failureKind: "canary-failed", ownerDisposal: "failed", runtimeDisposal: "completed",

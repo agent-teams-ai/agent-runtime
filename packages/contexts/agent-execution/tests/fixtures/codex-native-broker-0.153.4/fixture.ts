@@ -2,13 +2,13 @@ import { readFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
-import { rehashNativeLayers, type NativeConfigResult } from "../codex-native-config-0.150.1/fixture.ts";
+import { rehashNativeLayers, type NativeConfigResult } from "../codex-native-config-0.153.4/fixture.ts";
 import { createCodexAppServerPermissionBoundary } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import { createCodexNativeBrokerRecipe, renderCodexNativeBrokerConfig } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js";
 import { prepareCodexNativeBrokerFiles } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.js";
 
 export type Mode = "analysis" | "workspace-write";
-export const captureUrl = (mode: Mode) => new URL(`./capture.linux-${mode}.json`, import.meta.url);
+export const captureUrl = (mode: Mode) => new URL(`./capture.darwin-${mode}.json`, import.meta.url);
 export const capture = (mode: Mode) => JSON.parse(readFileSync(captureUrl(mode), "utf8"));
 export const catalogUrl = new URL("./models.json", import.meta.url);
 export const fixtureEndpoint = "http://10.203.0.1:43129/backend-api/codex";

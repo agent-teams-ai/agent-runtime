@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { createCodexAppServerPermissionBoundary, validateCodexConfigEvidence } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import { BoundedCodexJsonLineReader } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.js";
 import { boundary, createProvider, executeInput, exactConfigResult, FakeCodexProcess, standardHandshake } from "../../codex-app-server-contained-turn-provider-fixture.ts";
-import { nativeConfigResult, nativeFixtureHome, nativeFixtureUrl, rehashNativeLayers, type NativeConfigResult, type NativeRecord } from "../../fixtures/codex-native-config-0.150.1/fixture.ts";
+import { nativeConfigResult, nativeFixtureHome, nativeFixtureUrl, rehashNativeLayers, type NativeConfigResult, type NativeRecord } from "../../fixtures/codex-native-config-0.153.4/fixture.ts";
 
 const profileId = "agent-runtime-contained-v1";
 const exact = () => nativeConfigResult(boundary.codexHome);
@@ -20,13 +20,13 @@ const rejectMutation = (change: (result: NativeConfigResult) => void): void => {
 
 test("retains the complete native capture with digest-bound provenance and no reduced alternative", () => {
   const bytes = readFileSync(nativeFixtureUrl);
-  const provenance = JSON.parse(readFileSync(new URL("../../fixtures/codex-native-config-0.150.1/provenance.json", import.meta.url), "utf8"));
+  const provenance = JSON.parse(readFileSync(new URL("../../fixtures/codex-native-config-0.153.4/provenance.json", import.meta.url), "utf8"));
   assert.equal(createHash("sha256").update(bytes).digest("hex"), provenance.normalization.sha256);
-  assert.equal(provenance.capture.rawArtifactSha256, "ad8d812b7ce8ea51e6bc0f214ab26eba57dab8aa46997077479f5d21bfd81ff6");
-  assert.equal(provenance.source.commit, "90854393966b21e9ebfd21b122334eb09a20c93d");
-  assert.equal(provenance.capture.binarySha256, "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386");
+  assert.equal(provenance.capture.rawArtifactSha256, "778b394b1ebd80645e1a543da28e5580c703ef230ce8cc3d8b107fcf39d0919a");
+  assert.equal(provenance.source.commit, "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a");
+  assert.equal(provenance.capture.binarySha256, "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3");
   const result = exact();
-  assert.equal(Object.keys(result.config).length, 98);
+  assert.equal(Object.keys(result.config).length, 99);
   assert.equal(Object.keys(result.origins).length, 14);
   assert.equal(result.layers.length, 3);
   validateCodexConfigEvidence(result, boundary);
@@ -52,7 +52,7 @@ test("supports deterministic intent inheritance and opaque dotted/Unicode privat
   } finally {rmSync(root, { recursive: true, force: true });}
 });
 
-test("rejects omission and nondefault values for every one of the 98 effective fields", () => {
+test("rejects omission and nondefault values for every one of the 99 effective fields", () => {
   for (const [key, value] of Object.entries(exact().config)) {
     rejectMutation(result => {delete result.config[key];});
     for (const replacement of [value === null ? "nondefault" : null, [], { enabled: true }]) {

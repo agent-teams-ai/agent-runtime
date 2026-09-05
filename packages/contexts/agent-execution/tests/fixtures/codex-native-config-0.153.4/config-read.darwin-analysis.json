@@ -26,64 +26,23 @@
     "browser_use": null,
     "computer_use": null,
     "desktop": null,
-    "mcp_oauth_credentials_store": "auto",
-    "experimental_realtime_start_instructions": null,
+    "suppress_unstable_features_warning": null,
+    "experimental_use_unified_exec_tool": null,
     "history": {
       "persistence": "save-all",
       "max_bytes": null
     },
-    "experimental_realtime_ws_backend_prompt": null,
+    "auto_review": null,
     "otel": null,
-    "notice": null,
-    "suppress_unstable_features_warning": null,
-    "js_repl_node_module_dirs": null,
-    "background_terminal_max_timeout": 300000,
-    "check_for_update_on_startup": null,
     "experimental_realtime_ws_base_url": null,
-    "feedback": null,
-    "mcp_oauth_callback_url": null,
-    "include_environment_context": true,
-    "responses_api_metadata": null,
+    "mcp_optional_startup_grace_ms": null,
     "tool_suggest": null,
-    "agents": null,
-    "skills": null,
-    "realtime": null,
-    "projects": null,
-    "experimental_use_unified_exec_tool": null,
+    "profiles": {},
+    "cli_auth_credentials_store": "file",
+    "background_terminal_max_timeout": 300000,
+    "personality": null,
     "experimental_realtime_ws_startup_context": null,
-    "project_doc_max_bytes": 32768,
-    "file_opener": "vscode",
-    "orchestrator": null,
-    "model_providers": {},
-    "chatgpt_base_url": "https://chatgpt.com/backend-api/",
-    "goals": null,
-    "experimental_thread_store": null,
-    "sqlite_home": null,
-    "openai_base_url": null,
-    "experimental_thread_store_endpoint": null,
-    "memories": null,
-    "js_repl_node_path": null,
-    "include_permissions_instructions": true,
-    "plan_mode_reasoning_effort": null,
-    "windows": null,
-    "features": {
-      "multi_agent_v2": false,
-      "network_proxy": null,
-      "apps": false,
-      "browser_use": false,
-      "computer_use": false,
-      "image_generation": false,
-      "multi_agent": false,
-      "plugins": false,
-      "remote_plugin": false,
-      "auth_elicitation": true,
-      "mcp_2026_07_28": false,
-      "memories": false,
-      "mentions_v2": true,
-      "remote_control": false,
-      "tool_suggest": true
-    },
-    "plugins": {},
+    "mcp_oauth_credentials_store": "auto",
     "permissions": {
       "agent-runtime-contained-v1": {
         "description": null,
@@ -112,25 +71,67 @@
         }
       }
     },
-    "marketplaces": {},
-    "project_root_markers": [
-      ".git"
-    ],
-    "project_doc_fallback_filenames": [],
-    "hide_agent_reasoning": false,
-    "auto_review": null,
-    "cli_auth_credentials_store": "file",
-    "experimental_realtime_webrtc_call_base_url": null,
-    "apps_mcp_product_sku": null,
-    "profiles": {},
-    "model_catalog_json": null,
     "notify": null,
+    "js_repl_node_module_dirs": null,
+    "file_opener": "vscode",
+    "apps_mcp_product_sku": null,
+    "hide_agent_reasoning": false,
+    "experimental_realtime_start_instructions": null,
+    "model_providers": {},
+    "mcp_oauth_callback_port": null,
+    "allow_login_shell": true,
+    "include_collaboration_mode_instructions": true,
+    "sqlite_home": null,
+    "project_doc_max_bytes": 32768,
+    "profile": null,
+    "marketplaces": {},
+    "features": {
+      "multi_agent_v2": false,
+      "network_proxy": null,
+      "apps": false,
+      "browser_use": false,
+      "computer_use": false,
+      "image_generation": false,
+      "multi_agent": false,
+      "plugins": false,
+      "remote_plugin": false,
+      "auth_elicitation": true,
+      "background_paginated_rollout_migration": false,
+      "mcp_2026_07_28": false,
+      "memories": false,
+      "mentions_v2": true,
+      "remote_control": false,
+      "tool_suggest": true
+    },
+    "check_for_update_on_startup": null,
     "mcp_servers": {},
-    "oss_provider": null,
-    "disable_paste_burst": null,
+    "orchestrator": null,
+    "experimental_thread_store": null,
+    "include_environment_context": true,
+    "agents": null,
+    "show_raw_agent_reasoning": null,
+    "include_apps_instructions": true,
+    "experimental_thread_store_endpoint": null,
+    "feedback": null,
+    "experimental_compact_prompt_file": null,
+    "projects": null,
+    "model_instructions_file": null,
+    "goals": null,
+    "experimental_realtime_ws_backend_prompt": null,
+    "skills": null,
+    "project_doc_fallback_filenames": [],
+    "mcp_oauth_callback_url": null,
+    "experimental_realtime_webrtc_call_base_url": null,
+    "log_dir": null,
+    "model_catalog_json": null,
+    "realtime": null,
     "tool_output_token_limit": null,
     "tui": null,
-    "model_instructions_file": null,
+    "experimental_realtime_ws_model": null,
+    "chatgpt_base_url": "https://chatgpt.com/backend-api/",
+    "openai_base_url": null,
+    "ghost_snapshot": null,
+    "memories": null,
     "shell_environment_policy": {
       "inherit": null,
       "ignore_default_excludes": null,
@@ -140,30 +141,23 @@
       "filters": null,
       "experimental_use_profile": null
     },
-    "include_apps_instructions": true,
-    "include_collaboration_mode_instructions": true,
-    "profile": null,
-    "audio": null,
+    "project_root_markers": [
+      ".git"
+    ],
+    "plugins": {},
+    "disable_paste_burst": null,
+    "include_permissions_instructions": true,
+    "plan_mode_reasoning_effort": null,
+    "responses_api_metadata": null,
     "default_permissions": "agent-runtime-contained-v1",
-    "experimental_compact_prompt_file": null,
-    "show_raw_agent_reasoning": null,
-    "allow_login_shell": true,
-    "mcp_oauth_callback_port": null,
-    "personality": null,
-    "ghost_snapshot": null,
-    "log_dir": null,
+    "windows": null,
+    "oss_provider": null,
+    "audio": null,
+    "js_repl_node_path": null,
     "hooks": null,
-    "experimental_realtime_ws_model": null
+    "notice": null
   },
   "origins": {
-    "permissions.agent-runtime-contained-v1.extends": {
-      "name": {
-        "type": "user",
-        "file": "/synthetic/agent-runtime-native-config/private-home/config.toml",
-        "profile": null
-      },
-      "version": "sha256:d6c383f10c1cb929b329500e6cc63721dfde6aab6bd241af7d130990bd0e3b51"
-    },
     "permissions.agent-runtime-contained-v1.filesystem.:slash_tmp": {
       "name": {
         "type": "user",
@@ -172,7 +166,73 @@
       },
       "version": "sha256:d6c383f10c1cb929b329500e6cc63721dfde6aab6bd241af7d130990bd0e3b51"
     },
+    "default_permissions": {
+      "name": {
+        "type": "sessionFlags"
+      },
+      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
+    },
+    "features.image_generation": {
+      "name": {
+        "type": "sessionFlags"
+      },
+      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
+    },
     "permissions.agent-runtime-contained-v1.filesystem./synthetic/agent-runtime-native-config/private-home": {
+      "name": {
+        "type": "user",
+        "file": "/synthetic/agent-runtime-native-config/private-home/config.toml",
+        "profile": null
+      },
+      "version": "sha256:d6c383f10c1cb929b329500e6cc63721dfde6aab6bd241af7d130990bd0e3b51"
+    },
+    "features.computer_use": {
+      "name": {
+        "type": "sessionFlags"
+      },
+      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
+    },
+    "features.multi_agent_v2.enabled": {
+      "name": {
+        "type": "sessionFlags"
+      },
+      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
+    },
+    "features.plugins": {
+      "name": {
+        "type": "sessionFlags"
+      },
+      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
+    },
+    "permissions.agent-runtime-contained-v1.filesystem.:tmpdir": {
+      "name": {
+        "type": "user",
+        "file": "/synthetic/agent-runtime-native-config/private-home/config.toml",
+        "profile": null
+      },
+      "version": "sha256:d6c383f10c1cb929b329500e6cc63721dfde6aab6bd241af7d130990bd0e3b51"
+    },
+    "permissions.agent-runtime-contained-v1.network.enabled": {
+      "name": {
+        "type": "user",
+        "file": "/synthetic/agent-runtime-native-config/private-home/config.toml",
+        "profile": null
+      },
+      "version": "sha256:d6c383f10c1cb929b329500e6cc63721dfde6aab6bd241af7d130990bd0e3b51"
+    },
+    "features.browser_use": {
+      "name": {
+        "type": "sessionFlags"
+      },
+      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
+    },
+    "features.apps": {
+      "name": {
+        "type": "sessionFlags"
+      },
+      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
+    },
+    "permissions.agent-runtime-contained-v1.extends": {
       "name": {
         "type": "user",
         "file": "/synthetic/agent-runtime-native-config/private-home/config.toml",
@@ -186,69 +246,11 @@
       },
       "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
     },
-    "default_permissions": {
-      "name": {
-        "type": "sessionFlags"
-      },
-      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
-    },
-    "features.browser_use": {
-      "name": {
-        "type": "sessionFlags"
-      },
-      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
-    },
-    "features.computer_use": {
-      "name": {
-        "type": "sessionFlags"
-      },
-      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
-    },
-    "permissions.agent-runtime-contained-v1.network.enabled": {
-      "name": {
-        "type": "user",
-        "file": "/synthetic/agent-runtime-native-config/private-home/config.toml",
-        "profile": null
-      },
-      "version": "sha256:d6c383f10c1cb929b329500e6cc63721dfde6aab6bd241af7d130990bd0e3b51"
-    },
-    "features.plugins": {
-      "name": {
-        "type": "sessionFlags"
-      },
-      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
-    },
     "features.remote_plugin": {
       "name": {
         "type": "sessionFlags"
       },
       "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
-    },
-    "features.multi_agent_v2.enabled": {
-      "name": {
-        "type": "sessionFlags"
-      },
-      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
-    },
-    "features.image_generation": {
-      "name": {
-        "type": "sessionFlags"
-      },
-      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
-    },
-    "features.apps": {
-      "name": {
-        "type": "sessionFlags"
-      },
-      "version": "sha256:f272c294a8c0ba34b9cb72f690759a709c82d067629e630a300c38bb48036a69"
-    },
-    "permissions.agent-runtime-contained-v1.filesystem.:tmpdir": {
-      "name": {
-        "type": "user",
-        "file": "/synthetic/agent-runtime-native-config/private-home/config.toml",
-        "profile": null
-      },
-      "version": "sha256:d6c383f10c1cb929b329500e6cc63721dfde6aab6bd241af7d130990bd0e3b51"
     }
   },
   "layers": [

@@ -12,7 +12,7 @@ const endpoint = {address: "172.30.0.1", port: 18443};
 const binding: LinuxExclusiveRouteBinding = {
   tenantId: "tenant:test", projectId: "project:test", scopeDigest: "scope:test", operationId: "operation:test",
   attemptId: "attempt:test", custodyId: "custody:test", sourceRevision: "1711995513bf60fbf0c9042b59f6ab8ab1a8f6cb",
-  binaryRevision: "@openai/codex:0.150.1+linux-x64", hostBootId: "boot:test", executionGenerationId: "generation:test",
+  binaryRevision: "@openai/codex:0.153.4+linux-x64", hostBootId: "boot:test", executionGenerationId: "generation:test",
   adapterRevision: "adapter:test", capabilityManifestRevision: "manifest:test", authorityVectorDigest: "authority:test",
   providerAccountRef: "account:test", accessRef: "access:test", bindingRevision: 3, credentialBindingRef: "credential:test",
   providerRouteRef: "route:test", routeRevision: "revision:1", credentialBindingDigest: "pa-opaque-binding:test",

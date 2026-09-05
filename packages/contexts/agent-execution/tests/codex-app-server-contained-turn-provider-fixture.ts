@@ -15,7 +15,7 @@ import {
 import { CodexAppServerContainedTurnProvider } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
 import type { CustodiedProviderProcess } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { emitTurnStarted, generatedTurn } from "./codex-app-server-test-messages.mjs";
-import { nativeConfigResult } from "./fixtures/codex-native-config-0.150.1/fixture.ts";
+import { nativeConfigResult } from "./fixtures/codex-native-config-0.153.4/fixture.ts";
 
 export type Message = Record<string, unknown>;
 interface FakeCodexProcessBehavior {
@@ -142,7 +142,7 @@ export const standardHandshake = (message: Message, process: FakeCodexProcess): 
   if (message.method === "initialize") {
     process.emit({
       id: message.id,
-      result: { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)" },
+      result: { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.153.4 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)" },
     });
     return true;
   }

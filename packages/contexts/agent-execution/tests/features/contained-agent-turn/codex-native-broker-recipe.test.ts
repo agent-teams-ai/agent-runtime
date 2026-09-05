@@ -10,40 +10,40 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js";
 import { prepareCodexNativeBrokerFiles, validateCodexNativeBrokerFiles } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.js";
 import { createCodexAppServerPermissionBoundary, validateCodexConfigEvidence, validateCodexPermissionProfileEvidence } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
-import { brokerFixture, nativeBrokerConfig, capture, captureUrl, catalogUrl, fixtureEndpoint, fixtureCapability } from "../../fixtures/codex-native-broker-0.150.1/fixture.ts";
-import { nativeConfigResult, rehashNativeLayers, type NativeConfigResult } from "../../fixtures/codex-native-config-0.150.1/fixture.ts";
+import { brokerFixture, nativeBrokerConfig, capture, captureUrl, catalogUrl, fixtureEndpoint, fixtureCapability } from "../../fixtures/codex-native-broker-0.153.4/fixture.ts";
+import { nativeConfigResult, rehashNativeLayers, type NativeConfigResult } from "../../fixtures/codex-native-config-0.153.4/fixture.ts";
 
 const hash = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 test("both native captures retain exact binary, source, safety facts and normalized digest provenance", t => {
-  const provenance = JSON.parse(readFileSync(new URL("../../fixtures/codex-native-broker-0.150.1/provenance.json", import.meta.url), "utf8"));
-  assert.equal(provenance.source.officialSourceCommit, "90854393966b21e9ebfd21b122334eb09a20c93d");
-  assert.equal(provenance.source.archiveSha256, "c107d525a8eaf2df6e21b0e76ada96fab4077ff38471c20c69ec2f4ca4b623cb");
+  const provenance = JSON.parse(readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/provenance.json", import.meta.url), "utf8"));
+  assert.equal(provenance.source.officialSourceCommit, "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a");
+  assert.equal(provenance.source.retrieval, "gh api contents at exact commit");
   for (const [file, digest] of Object.entries(provenance.files)) {
-    assert.equal(hash(readFileSync(new URL(`../../fixtures/codex-native-broker-0.150.1/${file}`, import.meta.url))), digest);
+    assert.equal(hash(readFileSync(new URL(`../../fixtures/codex-native-broker-0.153.4/${file}`, import.meta.url))), digest);
   }
   assert.equal(readFileSync(catalogUrl).length, CODEX_NATIVE_CATALOG_BYTES);
   assert.equal(hash(readFileSync(catalogUrl)), CODEX_NATIVE_CATALOG_SHA256);
   for (const mode of ["analysis", "workspace-write"] as const) {
     const f = brokerFixture(t, mode); const raw = capture(mode);
     assert.equal(raw.intent, mode);
-    assert.equal(raw.binarySha256, "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386");
-    assert.equal(raw.isolatedNetwork, true); assert.equal(raw.authFilesSupplied, false);
+    assert.equal(raw.binarySha256, "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3");
+    assert.equal(raw.isolatedNetwork, "sandbox-exec deny network*"); assert.equal(raw.authFilesSupplied, false);
     assert.equal(raw.providerTurnRequested, false); assert.equal(raw.stage, "complete");
     assert.equal(raw.closeResult.signal, "SIGTERM");
     const retained = raw.messages.find((message: { id?: string }) => message.id === "config").result;
     assert.deepEqual(nativeBrokerConfig(`${raw.project}/private-home`, mode), retained);
-    assert.equal(hash(readFileSync(captureUrl(mode))), provenance.files[`capture.linux-${mode}.json`]);
+    assert.equal(hash(readFileSync(captureUrl(mode))), provenance.files[`capture.darwin-${mode}.json`]);
     const normalized = nativeBrokerConfig(`${provenance.captures[mode].syntheticRoot}/private-home`, mode);
     assert.equal(hash(`${JSON.stringify(normalized, null, 2)}\n`), provenance.captures[mode].normalizedSha256);
-    assert.equal(Object.keys(normalized.config).length, 98);
+    assert.equal(Object.keys(normalized.config).length, 99);
     assert.equal(Object.keys(normalized.origins).length, 36);
     assert.equal(normalized.layers.length, 3);
     validateCodexConfigEvidence(nativeBrokerConfig(f.home, mode), f.boundary, f.recipe);
     validateCodexPermissionProfileEvidence(raw.messages.find((message: { id?: string }) => message.id === "permission-list").result, f.boundary);
-    // Explicit second mode: legacy permission-only is still 98 / 14 / 3.
+    // Explicit second mode: legacy permission-only is still 99 / 14 / 3.
     const legacy = nativeConfigResult(f.home, mode);
-    assert.equal(Object.keys(legacy.config).length, 98); assert.equal(Object.keys(legacy.origins).length, 14);
+    assert.equal(Object.keys(legacy.config).length, 99); assert.equal(Object.keys(legacy.origins).length, 14);
     assert.equal(legacy.layers.length, 3); validateCodexConfigEvidence(legacy, f.boundary);
     assert.throws(() => validateCodexConfigEvidence(legacy, f.boundary, f.recipe));
     assert.throws(() => validateCodexConfigEvidence(nativeBrokerConfig(f.home, mode), f.boundary));
@@ -54,7 +54,7 @@ test("pure renderer matches supplied TOML and keeps local capability out of meta
   const f = brokerFixture(t);
   assert.deepEqual(readdirSync(f.home), []);
   const raw = capture("analysis");
-  const input = readFileSync(new URL("../../fixtures/codex-native-broker-0.150.1/input-config.analysis.toml", import.meta.url), "utf8");
+  const input = readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/input-config.analysis.toml", import.meta.url), "utf8");
   const text = renderCodexNativeBrokerConfig(f.recipe);
   assert.equal(text, input.replaceAll(`${raw.project}/private-home`, f.home));
   const effective = nativeBrokerConfig(f.home).config;

@@ -7,8 +7,8 @@ export const CODEX_LOCAL_BROKER_CAPABILITY_ENV = "AR_PRIVATE_BROKER_CAPABILITY";
 export const CODEX_NATIVE_BROKER_DISABLED_FEATURES = Object.freeze([
   ...DISABLED_CODEX_FEATURES, "unbounded_connection_retries", "enable_request_compression",
 ]);
-export const CODEX_NATIVE_CATALOG_SHA256 = "eb0d7b9a5dcaf103895c5f8a14c16b269df46e039b375a55ba97f6238542d2ed";
-export const CODEX_NATIVE_CATALOG_BYTES = 424117;
+export const CODEX_NATIVE_CATALOG_SHA256 = "d7136a413cfac1b5b1686d9e0dcc5c80ca05bebed5e9fc3911376561d0ef6ee8";
+export const CODEX_NATIVE_CATALOG_BYTES = 515145;
 
 /** Native input selection only. Neither this object nor a private IP proves Host
  * listener ownership, PA/RS authority, a post-claim binding or route qualification.
@@ -98,7 +98,7 @@ export const codexNativeBrokerUserOverrides = (recipe: CodexNativeBrokerRecipe) 
       name: "OpenAI", base_url: recipe.endpoint, wire_api: "responses",
       requires_openai_auth: false, env_key: CODEX_LOCAL_BROKER_CAPABILITY_ENV,
       supports_websockets: false, supports_standalone_web_search: false,
-      request_max_retries: 0, stream_max_retries: 0, http_headers: { version: "0.150.1" },
+      request_max_retries: 0, stream_max_retries: 0, http_headers: { version: "0.153.4" },
     } },
     analytics: { enabled: false },
     otel: { exporter: "none", trace_exporter: "none", metrics_exporter: "none" },
@@ -153,7 +153,7 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 0
 stream_max_retries = 0
-http_headers = { version = "0.150.1" }
+http_headers = { version = "0.153.4" }
 [analytics]
 enabled = false
 [otel]
