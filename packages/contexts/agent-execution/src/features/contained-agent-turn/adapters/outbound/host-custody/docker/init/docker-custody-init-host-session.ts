@@ -145,8 +145,12 @@ export class DockerCustodyInitHostSession {
   #inputEof = false;
   #rootExit: DockerCustodyInitHostRootExit | undefined;
   #settled: DockerCustodyInitHostResult | undefined;
+  #cleanup: Promise<void> | undefined;
+  #cleanupComplete = false;
   #writeTail: Promise<unknown> = Promise.resolve(null);
   public readonly completion: Promise<DockerCustodyInitHostResult>;
+
+  public get cleanupComplete(): boolean {return this.#cleanupComplete;}
 
   public constructor(options: DockerCustodyInitHostOptions) {
     const maximum = {stderr: boundedInteger(options.maximumStderrBytes, "maximumStderrBytes"),
@@ -504,7 +508,7 @@ export class DockerCustodyInitHostSession {
   }
 
   async #settle(result: DockerCustodyInitHostResult): Promise<DockerCustodyInitHostResult> {
-    if (this.#settled !== undefined) {return this.#settled;}
+    if (this.#settled !== undefined) {await this.#cleanup; return this.#settled;}
     if (result.kind === "closed") {this.#assertGeneration();}
     this.#settled = Object.freeze(result);
     this.#resolveCompletion(this.#settled);
@@ -513,8 +517,18 @@ export class DockerCustodyInitHostSession {
     if (this.#abort !== undefined) {
       this.#signal?.removeEventListener("abort", this.#abort); this.#abort = undefined;
     }
-    try {await this.#channel.close();} catch {}
-    try {await this.#outputIterator?.return?.();} catch {}
+    // Protocol completion is distinct from acknowledged resource cleanup. Repeated cancellation
+    // joins this same work, even when completion was published by an earlier callback or failure.
+    const cleanup = Promise.withResolvers<void>();
+    this.#cleanup = cleanup.promise;
+    void Promise.allSettled([
+      (async () => this.#channel.close())(),
+      (async () => this.#outputIterator?.return?.())(),
+    ]).then(results => {
+      this.#cleanupComplete = results.every(observation => observation.status === "fulfilled");
+      return cleanup.resolve();
+    });
+    await this.#cleanup;
     return this.#settled;
   }
 

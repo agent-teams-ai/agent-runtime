@@ -20,6 +20,16 @@ export class DockerContainedTurnHostCustody {
   #cutoff = false;
   #executeUsed = false;
   #executionCall: DockerEngineCall | undefined;
+  #launchFinished = false;
+  #closing: Promise<void> | undefined;
+  #channelClosed = false;
+
+  public finishLaunch(): void {this.#launchFinished = true;}
+
+  public get cleanupComplete(): boolean {
+    return this.#launchFinished && this.#cutoff && (this.#session !== undefined
+      ? this.#session.cleanupComplete : this.#channel === undefined || this.#channelClosed);
+  }
 
   public owns(authority: DockerContainerAuthority): boolean {
     return this.#authority !== undefined && sameDockerAuthority(this.#authority, authority);
@@ -37,6 +47,7 @@ export class DockerContainedTurnHostCustody {
     if (this.#authority !== undefined) {throw new TypeError("Docker custody attach retention is one-use");}
     this.#authority = authority;
     this.#channel = channel;
+    if (this.#cutoff) {void this.close();}
   }
 
   public openInitSession(options: DockerContainedTurnInitOptions, call: DockerEngineCall): DockerContainedTurnInitSession {
@@ -79,10 +90,30 @@ export class DockerContainedTurnHostCustody {
     return this.#session.execute(exec);
   }
 
-  public async close(): Promise<void> {
+  public close(): Promise<void> {
     this.#cutoff = true;
-    const channel = this.#channel; this.#channel = undefined;
-    if (this.#session !== undefined) {await this.#session.cancel();}
-    else {await channel?.close();}
+    if (this.#closing !== undefined) {return this.#closing;}
+    if (this.#session === undefined && this.#channel === undefined) {return Promise.resolve();}
+    // Publish the shared cleanup before calling external code; retain handles on stall or rejection.
+    this.#closing = Promise.resolve().then(async () => {
+      if (this.#session !== undefined) {await this.#session.cancel();}
+      else {await this.#channel!.close(); this.#channelClosed = true;}
+      return;
+    }).catch(() => {});
+    return this.#closing;
+  }
+
+  /** Called only after physical containment; a deadline cannot discard the retained cleanup. */
+  public async closeWithin(call: DockerEngineCall): Promise<boolean> {
+    const closing = this.close();
+    if (this.cleanupComplete) {return true;}
+    if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {return false;}
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([closing, new Promise<void>(resolve => {
+        timer = setTimeout(resolve, call.deadlineEpochMs - Date.now());
+      })]);
+      return this.cleanupComplete;
+    } finally {if (timer !== undefined) {clearTimeout(timer);}}
   }
 }
