@@ -163,7 +163,8 @@ const nextWithDeadline = async (
   }
 };
 
-const parseBoundedRequestHead = (
+// Owner-local reuse by TCP framing; the generic iterable still requires EOF.
+export const parseBoundedRequestHead = (
   buffered: Uint8Array,
   headerEnd: number,
   expected: HttpEgressExpectedRequest,
