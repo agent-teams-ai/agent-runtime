@@ -33,6 +33,7 @@ import {
   NodeCustodiedSdkProcess,
 } from "./host-custody-process-tree.js";
 import type { OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
+import { bindCooperativeProcessGroupGuardian } from "./host-custody-posix-process-group.js";
 import { launchGuardedProvider } from "./node-provider-process-custody-launch.js";
 import {
   assertHostCustodyReservationMode,
@@ -371,6 +372,9 @@ export class NodeProviderProcessCustodyCore implements
     live.launchAuthority = launched.authority;
     live.spawnStatus = "ambiguous";
     live.guardian = launched.guardian;
+    if (this.#runtimeProfile.containmentProfile === "cooperative-darwin-posix-process-group") {
+      bindCooperativeProcessGroupGuardian(live.residueAuthority, launched.guardian);
+    }
     live.spawnAcknowledgement = acknowledgeProviderSpawn(live, launched.guardian, {
       hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
       identityObservationAfterMs: this.#identityObservationAfterMs,

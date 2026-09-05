@@ -60,7 +60,7 @@ test("Darwin production custody cannot be enabled by spoofing a public platform 
   });
 });
 
-test("Darwin escaped-session descendant survives group closure while custody retains unproven evidence", async () => {
+test("Darwin escaped-session descendant survives group closure while custody retains unproven evidence", async context => {
   const workspaceRef = await disposableRoot();
   const providerOutput = "provider-secret-output-must-not-enter-evidence";
   const entry = await cooperativeEntry(workspaceRef, "eager", String.raw`
@@ -121,7 +121,25 @@ setInterval(() => {}, 1000);
     assert.doesNotMatch(canonicalEvidence, new RegExp(workspaceRef, "u"));
     assert.doesNotMatch(canonicalEvidence, new RegExp(entry.plan.privateRootPath, "u"));
     assert.doesNotMatch(canonicalEvidence, new RegExp(providerOutput, "u"));
+
+    const originalKill = process.kill;
+    const numericSignals: number[] = [];
+    context.mock.method(process, "kill", (pid: number, signal?: NodeJS.Signals | number) => {
+      if (signal === "SIGKILL") {numericSignals.push(pid); return true;}
+      return originalKill(pid, signal);
+    });
+    const repeated = await custody.requestContainment({ ...request, custodyRef: opened.custodyRef });
+    const concurrent = await Promise.all([
+      custody.requestContainment({ ...request, custodyRef: opened.custodyRef }),
+      custody.requestContainment({ ...request, custodyRef: opened.custodyRef }),
+    ]);
+    assert.deepEqual(repeated, outcome);
+    assert.deepEqual(concurrent, [outcome, outcome]);
+    assert.deepEqual(numericSignals, []);
+    assert.deepEqual(custody.evidence(opened.custodyRef), evidence);
+    assert.doesNotThrow(() => {process.kill(detachedPid as number, 0);});
   } finally {
+    context.mock.restoreAll();
     if (detachedPid !== undefined) {
       try {process.kill(-detachedPid, "SIGKILL");} catch {}
       try {process.kill(detachedPid, "SIGKILL");} catch {}
@@ -440,7 +458,7 @@ test("Darwin fail-closed release preserves destination exclusivity and swapped p
   assert.notEqual(childSwap.custody.evidence(childSwap.opened.custodyRef)?.privateRoot.status, "deleted");
 });
 
-test("Darwin custody escalates TERM to KILL and fails closed on ambiguous group closure", async () => {
+test("Darwin custody escalates TERM to KILL and fails closed on ambiguous group closure", async context => {
   const workspaceRef = await disposableRoot();
   const entry = await cooperativeEntry(
     workspaceRef,
@@ -496,4 +514,15 @@ test("Darwin custody escalates TERM to KILL and fails closed on ambiguous group 
   });
   assert.equal(outcome.kind, "unproven");
   assert.equal(ambiguous.evidence(ambiguousOpened.custodyRef)?.closure.status, "unproven");
+  assert.equal(ambiguous.evidence(ambiguousOpened.custodyRef)?.guardianExit.status, "observed");
+  // The guardian has exited but group emptiness is still unproved. Retrying
+  // may observe the group, but its numeric PGID no longer grants signal power.
+  const kill = context.mock.method(globalThis.process, "kill", () => true);
+  const repeated = await ambiguous.requestContainment({
+    ...ambiguousRequest,
+    custodyRef: ambiguousOpened.custodyRef,
+  });
+  assert.equal(repeated.kind, "unproven");
+  assert.match(repeated.kind === "unproven" ? repeated.evidenceRef : "", /posix-process-group-kill-unproven/u);
+  assert.equal(kill.mock.callCount(), 0);
 });

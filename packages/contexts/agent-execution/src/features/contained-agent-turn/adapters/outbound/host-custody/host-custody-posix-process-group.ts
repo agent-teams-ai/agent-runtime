@@ -2,6 +2,7 @@ import type {
   OperationResidueAuthority,
   OperationResidueAuthorityFactory,
 } from "./host-custody-cgroup-v2.js";
+import type { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
 
 export type PosixProcessGroupObservation = "empty" | "residue" | "unproven";
 
@@ -21,32 +22,38 @@ const defaultObserver: PosixProcessGroupObserver = Object.freeze({
   },
 });
 
-const signalGroup = (pgid: number): boolean => {
-  try {
-    process.kill(-pgid, "SIGKILL");
-    return true;
-  } catch (error) {
-    return error instanceof Error && "code" in error && error.code === "ESRCH";
-  }
-};
+type CooperativeGroupGuardian = Pick<StableProcessGroupGuardian, "child" | "signalGroup">;
 
 class CooperativeProcessGroupAuthority implements OperationResidueAuthority {
+  #guardian: CooperativeGroupGuardian | undefined;
   #pgid: number | undefined;
-  #provedClosed = false;
+  #retired = false;
   readonly #observer: PosixProcessGroupObserver;
 
   public constructor(observer: PosixProcessGroupObserver) {this.#observer = observer;}
 
+  public bindGuardian(guardian: CooperativeGroupGuardian): void {
+    if (!this.#retired) {this.#guardian ??= guardian;}
+  }
+
   public async attachGuardian(pid: number): Promise<boolean> {
-    if (!Number.isSafeInteger(pid) || pid <= 0 || this.#pgid !== undefined) {return false;}
+    if (!Number.isSafeInteger(pid) || pid <= 0 || this.#pgid !== undefined || this.#retired) {return false;}
     this.#pgid = pid;
     return true;
   }
 
-  public async close(): Promise<boolean> {return this.#pgid === undefined || this.#provedClosed;}
+  public async close(): Promise<boolean> {
+    if (this.#pgid === undefined) {this.#retired = true;}
+    return this.#retired;
+  }
 
   public async killAll(): Promise<boolean> {
-    return this.#pgid === undefined || signalGroup(this.#pgid);
+    if (this.#pgid === undefined || this.#retired) {return true;}
+    const guardian = this.#guardian;
+    if (guardian === undefined || guardian.child.pid !== this.#pgid) {return false;}
+    // The retained IPC channel lets the live guardian signal its own group;
+    // a numeric PGID alone cannot authorize a signal after guardian exit.
+    return await guardian.signalGroup("SIGKILL") === "sent";
   }
 
   public async proveEmpty(
@@ -54,18 +61,29 @@ class CooperativeProcessGroupAuthority implements OperationResidueAuthority {
     monotonicNow: () => number,
   ): Promise<PosixProcessGroupObservation> {
     const pgid = this.#pgid;
-    if (pgid === undefined) {return "empty";}
+    if (pgid === undefined || this.#retired) {return "empty";}
     while (monotonicNow() < deadline) {
+      if (this.#retired) {return "empty";}
       const observed = await this.#observer.observe(pgid);
+      if (this.#retired) {return "empty";}
       if (observed !== "residue") {
-        if (observed === "empty") {this.#provedClosed = true;}
+        // Retire this exact group permanently, even though escaped descendants
+        // still prevent a physical containment proof on cooperative Darwin.
+        if (observed === "empty") {this.#retired = true;}
         return observed;
       }
       await new Promise(resolve => {setTimeout(resolve, Math.min(5, Math.max(1, deadline - monotonicNow())));});
     }
-    return "unproven";
+    return this.#retired ? "empty" : "unproven";
   }
 }
+
+export const bindCooperativeProcessGroupGuardian = (
+  authority: OperationResidueAuthority | undefined,
+  guardian: CooperativeGroupGuardian,
+): void => {
+  if (authority instanceof CooperativeProcessGroupAuthority) {authority.bindGuardian(guardian);}
+};
 
 export const createCooperativeProcessGroupAuthorityFactory = (
   observer: PosixProcessGroupObserver = defaultObserver,
