@@ -55,6 +55,12 @@ const testFiles = [
       import.meta.url,
     ),
   ),
+  fileURLToPath(
+    new URL(
+      "../tests/features/contained-agent-turn/postgres-preparation-cancellation-retirement.test.ts",
+      import.meta.url,
+    ),
+  ),
 ];
 
 const addSecret = (secrets, value) => {

@@ -25,6 +25,7 @@ const postgresTests = [
   join(containedTurnTestRoot, "postgres-current-owner-submit-integration.test.ts"),
   join(containedTurnTestRoot, "postgres-contained-turn-recovery.test.ts"),
   join(containedTurnTestRoot, "postgres-contained-turn-bounds.test.ts"),
+  join(containedTurnTestRoot, "postgres-preparation-cancellation-retirement.test.ts"),
 ];
 
 const environmentWithoutDatabaseUrl = (): NodeJS.ProcessEnv => {
