@@ -1,0 +1,623 @@
+{
+  "schemaVersion": 1,
+  "intent": "workspace-write",
+  "kind": "offline-native-custom-broker-config-only",
+  "binarySha256": "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
+  "project": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl",
+  "isolatedNetwork": true,
+  "authFilesSupplied": false,
+  "providerTurnRequested": false,
+  "stage": "complete",
+  "sawConfig": true,
+  "closeResult": {
+    "code": null,
+    "signal": "SIGTERM"
+  },
+  "messages": [
+    {
+      "id": "init",
+      "result": {
+        "userAgent": "ar_private_config_diagnostic/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (ar_private_config_diagnostic; 0.0.0)",
+        "codexHome": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home",
+        "platformFamily": "unix",
+        "platformOs": "linux"
+      }
+    },
+    {
+      "method": "remoteControl/status/changed",
+      "params": {
+        "status": "disabled",
+        "serverName": "prod",
+        "installationId": "68a6b3e3-e3a7-42a2-8ae4-57efb25607d2",
+        "environmentId": null
+      },
+      "emittedAtMs": 1788616407744
+    },
+    {
+      "id": "config",
+      "result": {
+        "config": {
+          "model": "gpt-5.4",
+          "review_model": null,
+          "model_context_window": null,
+          "model_auto_compact_token_limit": null,
+          "model_auto_compact_token_limit_scope": null,
+          "model_provider": "ar_broker",
+          "approval_policy": null,
+          "approvals_reviewer": null,
+          "sandbox_mode": null,
+          "sandbox_workspace_write": null,
+          "forced_chatgpt_workspace_id": null,
+          "forced_login_method": null,
+          "web_search": null,
+          "tools": null,
+          "instructions": null,
+          "developer_instructions": null,
+          "compact_prompt": null,
+          "model_reasoning_effort": null,
+          "model_reasoning_summary": null,
+          "model_verbosity": null,
+          "service_tier": null,
+          "analytics": {
+            "enabled": false
+          },
+          "apps": null,
+          "browser_use": null,
+          "computer_use": null,
+          "desktop": null,
+          "personality": null,
+          "file_opener": "vscode",
+          "windows": null,
+          "mcp_servers": {},
+          "audio": null,
+          "experimental_realtime_webrtc_call_base_url": null,
+          "profile": null,
+          "memories": null,
+          "apps_mcp_product_sku": null,
+          "js_repl_node_path": null,
+          "openai_base_url": null,
+          "background_terminal_max_timeout": 300000,
+          "experimental_realtime_ws_startup_context": null,
+          "features": {
+            "multi_agent_v2": false,
+            "network_proxy": null,
+            "apps": false,
+            "browser_use": false,
+            "computer_use": false,
+            "enable_request_compression": false,
+            "image_generation": false,
+            "multi_agent": false,
+            "plugins": false,
+            "remote_plugin": false,
+            "unbounded_connection_retries": false,
+            "auth_elicitation": true,
+            "mcp_2026_07_28": false,
+            "memories": false,
+            "mentions_v2": true,
+            "remote_control": false,
+            "tool_suggest": true
+          },
+          "model_providers": {
+            "ar_broker": {
+              "name": "OpenAI",
+              "base_url": "http://10.203.0.1:43129/backend-api/codex",
+              "env_key": "AR_PRIVATE_BROKER_CAPABILITY",
+              "env_key_instructions": null,
+              "experimental_bearer_token": null,
+              "auth": null,
+              "aws": null,
+              "wire_api": "responses",
+              "query_params": null,
+              "http_headers": {
+                "version": "0.150.1"
+              },
+              "env_http_headers": null,
+              "request_max_retries": 0,
+              "stream_max_retries": 0,
+              "stream_idle_timeout_ms": null,
+              "websocket_connect_timeout_ms": null,
+              "requires_openai_auth": false,
+              "supports_websockets": false,
+              "supports_standalone_web_search": false
+            }
+          },
+          "experimental_thread_store_endpoint": null,
+          "include_permissions_instructions": true,
+          "chatgpt_base_url": "https://chatgpt.com/backend-api/",
+          "plan_mode_reasoning_effort": null,
+          "disable_paste_burst": null,
+          "auto_review": null,
+          "default_permissions": "agent-runtime-contained-v1",
+          "tool_output_token_limit": null,
+          "goals": null,
+          "include_collaboration_mode_instructions": true,
+          "experimental_realtime_ws_backend_prompt": null,
+          "check_for_update_on_startup": null,
+          "notice": null,
+          "marketplaces": {},
+          "history": {
+            "persistence": "save-all",
+            "max_bytes": null
+          },
+          "responses_api_metadata": null,
+          "allow_login_shell": false,
+          "include_apps_instructions": true,
+          "project_root_markers": [
+            ".git"
+          ],
+          "mcp_oauth_callback_url": null,
+          "show_raw_agent_reasoning": null,
+          "tool_suggest": null,
+          "projects": null,
+          "hooks": null,
+          "log_dir": null,
+          "js_repl_node_module_dirs": null,
+          "oss_provider": null,
+          "model_instructions_file": null,
+          "plugins": {},
+          "include_environment_context": true,
+          "profiles": {},
+          "project_doc_fallback_filenames": [],
+          "shell_environment_policy": {
+            "inherit": null,
+            "ignore_default_excludes": null,
+            "exclude": [
+              "AR_PRIVATE_BROKER_CAPABILITY"
+            ],
+            "set": null,
+            "include_only": null,
+            "filters": null,
+            "experimental_use_profile": null
+          },
+          "orchestrator": null,
+          "project_doc_max_bytes": 32768,
+          "permissions": {
+            "agent-runtime-contained-v1": {
+              "description": null,
+              "extends": ":workspace",
+              "workspace_roots": null,
+              "filesystem": {
+                "glob_scan_max_depth": null,
+                "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home": "deny",
+                ":slash_tmp": "read",
+                ":tmpdir": "read"
+              },
+              "network": {
+                "enabled": false,
+                "proxy_url": null,
+                "enable_socks5": null,
+                "socks_url": null,
+                "enable_socks5_udp": null,
+                "allow_upstream_proxy": null,
+                "dangerously_allow_non_loopback_proxy": null,
+                "dangerously_allow_all_unix_sockets": null,
+                "mode": null,
+                "domains": null,
+                "unix_sockets": null,
+                "allow_local_binding": null,
+                "mitm": null
+              }
+            }
+          },
+          "notify": null,
+          "cli_auth_credentials_store": "file",
+          "tui": null,
+          "experimental_realtime_ws_base_url": null,
+          "realtime": null,
+          "experimental_thread_store": null,
+          "feedback": null,
+          "experimental_use_unified_exec_tool": null,
+          "experimental_realtime_start_instructions": null,
+          "mcp_oauth_credentials_store": "auto",
+          "sqlite_home": null,
+          "suppress_unstable_features_warning": null,
+          "skills": null,
+          "otel": {
+            "tool_result": {
+              "max_bytes": 2048
+            },
+            "log_user_prompt": null,
+            "environment": null,
+            "exporter": "none",
+            "trace_exporter": "none",
+            "metrics_exporter": "none",
+            "span_attributes": null,
+            "tracestate": null
+          },
+          "experimental_realtime_ws_model": null,
+          "agents": null,
+          "hide_agent_reasoning": false,
+          "model_catalog_json": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/models.json",
+          "mcp_oauth_callback_port": null,
+          "experimental_compact_prompt_file": null,
+          "ghost_snapshot": null
+        },
+        "origins": {
+          "model_providers.ar_broker.supports_websockets": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "analytics.enabled": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "features.image_generation": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "features.remote_plugin": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "shell_environment_policy.exclude.0": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "otel.trace_exporter": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model_providers.ar_broker.supports_standalone_web_search": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model_providers.ar_broker.stream_max_retries": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "features.enable_request_compression": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "features.plugins": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "otel.metrics_exporter": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "features.multi_agent": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "allow_login_shell": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model_catalog_json": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model_providers.ar_broker.http_headers.version": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "otel.exporter": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "permissions.agent-runtime-contained-v1.filesystem./var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model_providers.ar_broker.request_max_retries": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "default_permissions": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "permissions.agent-runtime-contained-v1.filesystem.:slash_tmp": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model_provider": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "permissions.agent-runtime-contained-v1.network.enabled": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "features.computer_use": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "permissions.agent-runtime-contained-v1.extends": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "features.unbounded_connection_retries": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "model_providers.ar_broker.requires_openai_auth": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model_providers.ar_broker.name": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "features.apps": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "model_providers.ar_broker.env_key": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "model_providers.ar_broker.wire_api": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "features.multi_agent_v2.enabled": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "cli_auth_credentials_store": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "features.browser_use": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "model_providers.ar_broker.base_url": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          },
+          "permissions.agent-runtime-contained-v1.filesystem.:tmpdir": {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776"
+          }
+        },
+        "layers": [
+          {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5",
+            "config": {
+              "default_permissions": "agent-runtime-contained-v1",
+              "features": {
+                "apps": false,
+                "browser_use": false,
+                "computer_use": false,
+                "image_generation": false,
+                "multi_agent": false,
+                "multi_agent_v2": false,
+                "plugins": false,
+                "remote_plugin": false,
+                "unbounded_connection_retries": false,
+                "enable_request_compression": false
+              }
+            }
+          },
+          {
+            "name": {
+              "type": "user",
+              "file": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776",
+            "config": {
+              "model_provider": "ar_broker",
+              "model": "gpt-5.4",
+              "model_catalog_json": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home/models.json",
+              "cli_auth_credentials_store": "file",
+              "allow_login_shell": false,
+              "shell_environment_policy": {
+                "exclude": [
+                  "AR_PRIVATE_BROKER_CAPABILITY"
+                ]
+              },
+              "model_providers": {
+                "ar_broker": {
+                  "name": "OpenAI",
+                  "base_url": "http://10.203.0.1:43129/backend-api/codex",
+                  "wire_api": "responses",
+                  "requires_openai_auth": false,
+                  "env_key": "AR_PRIVATE_BROKER_CAPABILITY",
+                  "supports_websockets": false,
+                  "supports_standalone_web_search": false,
+                  "request_max_retries": 0,
+                  "stream_max_retries": 0,
+                  "http_headers": {
+                    "version": "0.150.1"
+                  }
+                }
+              },
+              "analytics": {
+                "enabled": false
+              },
+              "otel": {
+                "exporter": "none",
+                "trace_exporter": "none",
+                "metrics_exporter": "none"
+              },
+              "permissions": {
+                "agent-runtime-contained-v1": {
+                  "extends": ":workspace",
+                  "filesystem": {
+                    "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl/private-home": "deny",
+                    ":tmpdir": "read",
+                    ":slash_tmp": "read"
+                  },
+                  "network": {
+                    "enabled": false
+                  }
+                }
+              }
+            }
+          },
+          {
+            "name": {
+              "type": "system",
+              "file": "/etc/codex/config.toml"
+            },
+            "version": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "config": {}
+          }
+        ]
+      }
+    },
+    {
+      "id": "permission-list",
+      "result": {
+        "data": [
+          {
+            "id": ":read-only",
+            "description": null,
+            "allowed": true
+          },
+          {
+            "id": ":workspace",
+            "description": null,
+            "allowed": true
+          },
+          {
+            "id": ":danger-full-access",
+            "description": null,
+            "allowed": true
+          },
+          {
+            "id": "agent-runtime-contained-v1",
+            "description": null,
+            "allowed": true
+          }
+        ],
+        "nextCursor": null
+      }
+    }
+  ],
+  "stderr": ""
+}

@@ -4,6 +4,12 @@ import { types as utilTypes } from "node:util";
 import { codexDisabledFeatures, codexNativeConfigDefaults, DISABLED_CODEX_FEATURES } from "./codex-app-server-config-defaults.js";
 import type { CodexAppServerPermissionBoundary } from "./codex-app-server-permission-boundary.js";
 
+import {
+  assertCodexNativeBrokerBoundary, codexNativeBrokerUserOverrides, codexNativeBrokerEffectiveOverrides,
+  CODEX_NATIVE_BROKER_DISABLED_FEATURES, CODEX_NATIVE_BROKER_USER_LEAVES,
+  type CodexNativeBrokerRecipe,
+} from "./codex-native-broker-recipe.js";
+
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type RecordValue = { [key: string]: Json };
 const rejected = (reason: string): Error => new Error(`Codex permission evidence rejected: ${reason}`);
@@ -83,8 +89,21 @@ const canonical = (value: unknown): string => {
   }
   return JSON.stringify(value);
 };
+// Compare inert snapshots structurally; rejected wire values (including any
+// echoed capability) are never serialized into comparisons or diagnostics.
+const equal = (actual: unknown, expected: unknown): boolean => {
+  if (actual === expected) {return true;}
+  if (Array.isArray(actual) && Array.isArray(expected)) {
+    return actual.length === expected.length && actual.every((value, index) => equal(value, expected[index]));
+  }
+  if (typeof actual !== "object" || actual === null || Array.isArray(actual)
+    || typeof expected !== "object" || expected === null || Array.isArray(expected)) {return false;}
+  const a = actual as Record<string, unknown>; const b = expected as Record<string, unknown>;
+  return Object.keys(a).length === Object.keys(b).length
+    && Object.keys(a).every(key => Object.hasOwn(b, key) && equal(a[key], b[key]));
+};
 const exact = (actual: unknown, expected: unknown, reason: string): void => {
-  if (canonical(actual) !== canonical(expected)) {throw rejected(reason);}
+  if (!equal(actual, expected)) {throw rejected(reason);}
 };
 const version = (config: unknown): string =>
   `sha256:${createHash("sha256").update(canonical(config)).digest("hex")}`;
@@ -112,28 +131,37 @@ export const isExactCodexPermissionProfile = (
   actual: unknown,
   boundary: CodexAppServerPermissionBoundary,
 ): boolean => {
-  try {return canonical(snapshotWire(actual)) === canonical(effectiveProfile(boundary));}
+  try {return equal(snapshotWire(actual), effectiveProfile(boundary));}
   catch {return false;}
 };
 
 /** Current permission-only recipe, not a general Config schema. Every observed
  * default, feature, layer and leaf origin is validated before accepting evidence.
- * No reduced synthetic schema, project/managed policy, or custom route is admitted.
- * The capture is Linux analysis; workspace-write and Darwin remain synthetic
- * contract coverage only. Existing tuple selection/qualification stays upstream.
+ * The optional private native recipe is a second exact mode, never an allowlist.
+ * No reduced synthetic schema or project/managed policy is admitted.
+ * Permission-only has a Linux analysis capture; its workspace-write and Darwin
+ * coverage stays synthetic. Native broker has separate Linux captures for both
+ * intents. Existing tuple selection/qualification stays upstream.
  */
 export const validateCodexConfigEvidence = (
   input: unknown,
   boundary: CodexAppServerPermissionBoundary,
+  nativeBrokerRecipe?: CodexNativeBrokerRecipe,
 ): void => {
+  if (nativeBrokerRecipe !== undefined) {assertCodexNativeBrokerBoundary(nativeBrokerRecipe, boundary);}
   const result = snapshotWire(input);
   if (!record(result) || !record(result.config) || !record(result.origins) || !Array.isArray(result.layers)) {
     throw rejected("config/read evidence is incomplete");
   }
   const actualLayers = result.layers;
   const profileId = boundary.permissionProfileId;
-  const sessionConfig = { default_permissions: profileId, features: codexDisabledFeatures() };
-  const userConfig = { permissions: { [profileId]: userProfile(boundary) } };
+  const disabledFeatures = nativeBrokerRecipe === undefined ? DISABLED_CODEX_FEATURES : CODEX_NATIVE_BROKER_DISABLED_FEATURES;
+  const sessionConfig = { default_permissions: profileId, features: nativeBrokerRecipe === undefined
+    ? codexDisabledFeatures() : Object.fromEntries(disabledFeatures.map(key => [key, false])) };
+  const userConfig = {
+    ...(nativeBrokerRecipe === undefined ? {} : codexNativeBrokerUserOverrides(nativeBrokerRecipe)),
+    permissions: { [profileId]: userProfile(boundary) },
+  };
   const session = { name: { type: "sessionFlags" }, version: version(sessionConfig) };
   const user = {
     name: { type: "user", file: `${boundary.codexHome}/config.toml`, profile: null },
@@ -157,10 +185,11 @@ export const validateCodexConfigEvidence = (
   // contain dots. Exact opaque key membership excludes aliases and malformed leaves.
   const permissionPrefix = `permissions.${profileId}`;
   const userLeaves = [
+    ...(nativeBrokerRecipe === undefined ? [] : CODEX_NATIVE_BROKER_USER_LEAVES),
     `${permissionPrefix}.extends`, `${permissionPrefix}.network.enabled`,
     ...[boundary.codexHome, ":tmpdir", ":slash_tmp"].map(path => `${permissionPrefix}.filesystem.${path}`),
   ];
-  const sessionLeaves = ["default_permissions", ...DISABLED_CODEX_FEATURES.map(feature =>
+  const sessionLeaves = ["default_permissions", ...disabledFeatures.map(feature =>
     feature === "multi_agent_v2" ? "features.multi_agent_v2.enabled" : `features.${feature}`)];
   const origins = Object.fromEntries([
     ...userLeaves.map(key => [key, user]), ...sessionLeaves.map(key => [key, session]),
@@ -168,8 +197,10 @@ export const validateCodexConfigEvidence = (
   exact(result.origins, origins, "config leaf origins do not match unique exact layer names and versions");
   exact(result.config, {
     ...codexNativeConfigDefaults(),
+    ...(nativeBrokerRecipe === undefined ? {} : codexNativeBrokerEffectiveOverrides(nativeBrokerRecipe)),
     default_permissions: profileId,
     permissions: { [profileId]: effectiveProfile(boundary) },
-  }, "effective config differs from the exact native permission-only defaults");
+  }, nativeBrokerRecipe === undefined ? "effective config differs from the exact native permission-only defaults"
+    : "effective config differs from the exact native broker defaults");
   exact(Object.keys(result).toSorted(), ["config", "layers", "origins"], "config/read has unknown fields");
 };

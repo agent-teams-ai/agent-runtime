@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
+import { retainIssuedCodexPermissionBoundary } from "./codex-native-broker-boundary.js";
 import { codexDisabledFeatures } from "./codex-app-server-config-defaults.js";
 
 export { isExactCodexPermissionProfile, validateCodexConfigEvidence } from "./codex-app-server-config-wire.js";
@@ -185,7 +186,7 @@ export const createCodexAppServerPermissionBoundary = (input: {
     schema: "agent-runtime/codex-contained-permission-policy/v1",
     workspaceRef,
   });
-  return Object.freeze({
+  const boundary = Object.freeze({
     codexHome,
     codexHomeIdentity: privateHome.identity,
     effectivePolicyDigest: `sha256:${createHash("sha256").update(canonicalCodexJson(policyPreimage)).digest("hex")}`,
@@ -195,6 +196,8 @@ export const createCodexAppServerPermissionBoundary = (input: {
     workspaceRef,
     workspaceIdentity: workspace.identity,
   });
+  retainIssuedCodexPermissionBoundary(boundary);
+  return boundary;
 };
 
 const evidenceError = (message: string): Error => new Error(`Codex permission evidence rejected: ${message}`);

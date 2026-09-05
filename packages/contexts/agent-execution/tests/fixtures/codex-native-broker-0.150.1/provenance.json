@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "status": "offline native config/read and permission-list evidence only; no route, auth or provider success qualification",
+  "binarySha256": "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
+  "version": "0.150.1",
+  "platform": "linux-x64",
+  "source": {
+    "officialSourceCommit": "90854393966b21e9ebfd21b122334eb09a20c93d",
+    "archiveSha256": "c107d525a8eaf2df6e21b0e76ada96fab4077ff38471c20c69ec2f4ca4b623cb",
+    "sources": [
+      "model-provider-info/src/lib.rs",
+      "config/src/shell_environment_policy.rs",
+      "protocol/src/shell_environment.rs",
+      "protocol/src/config_types.rs",
+      "models-manager/models.json"
+    ]
+  },
+  "files": {
+    "capture.linux-analysis.json": "6b68772dfb6271c930267648f2731530bdd7ef6335025aa2ef32175e3edd6adc",
+    "capture.linux-workspace-write.json": "d626c93351510fe673a31867ea9af9dc2028dc9bf83ea741b3de1ba5f8511923",
+    "models.json": "eb0d7b9a5dcaf103895c5f8a14c16b269df46e039b375a55ba97f6238542d2ed",
+    "input-config.analysis.toml": "885d8612c5e3aa60b3a0aff577afd4a01360ff9bc9eb6c6b790e5e39e20eabc7",
+    "capture-script.mjs.txt": "cd79dbc871b692c9d7b74535cbe19bfd60c3617e921a1d009bf09f6c7b8b6bf0"
+  },
+  "sourceFiles": {
+    "upstream-1-shell_environment_policy.rs": "93a3c447504f940a266a50ecbb0467dcf08fd7e920f5434455c6e09fad2b25c5",
+    "upstream-0-lib.rs": "2168b93576dff1d336f0c3d390b6ff8c38376340fc8ed2eea8da9857ddb1eeb7",
+    "upstream-2-shell_environment.rs": "e16f61ea96db99307e3d8d2eb2fbb1b6fc703ce0ca7651fa97170dd6e0557da0",
+    "upstream-3-config_types.rs": "96b4050a2498275ba5a11da0021bc75d5fb2fd2c50802f0930629aa7716a282a"
+  },
+  "captures": {
+    "analysis": {
+      "originalRoot": "/var/data/worker-jobs/ar69-r55c-native-broker-config/analysis/disposable-2ja9KP",
+      "syntheticRoot": "/synthetic/agent-runtime-native-broker/analysis",
+      "rawUserVersion": "sha256:646d68c94da38e38239ca0f1dd002fe3cbdbd6eb508196a16fac6413e5d5a51d",
+      "normalizedSha256": "3bd9eb77954a34346c237352bd5d01b08b9d28d3a1d04c5ff29459c30e84d506",
+      "configFields": 98,
+      "origins": 36,
+      "layers": 3
+    },
+    "workspace-write": {
+      "originalRoot": "/var/data/worker-jobs/ar69-r55c-native-broker-config/workspace-write/disposable-FRZCGl",
+      "syntheticRoot": "/synthetic/agent-runtime-native-broker/workspace-write",
+      "rawUserVersion": "sha256:97ce1a47eeff3ef15eb246d42b6437fa780065dca1e63a25a017aac416140776",
+      "normalizedSha256": "ab5d34ab20776222e1e45f2e0ac6a892cb53e49904d3621a1d21e80ec68f6199",
+      "configFields": 98,
+      "origins": 36,
+      "layers": 3
+    }
+  },
+  "normalization": "Select only config result; replace project root in string values and opaque keys; recompute layer versions and matching origin versions with UTF-8 ordered canonical JSON. Both intents are independent native captures. Never derive workspace-write from analysis.",
+  "safety": "Supplied captures record unshare network isolation, no auth files, no turn; SIGTERM and sandbox removal are recorded by supplied script/task. Script is retained as text and never executed by this checkpoint.",
+  "catalog": "Exact upstream models.json bytes; no invented metadata. Host must install it as mode 0600 in isolated private home; preparation checks size, digest, single-link identity and lineage.",
+  "limits": [
+    "No captured native GET suppression test is promoted here. Prior negative 503 observation is task context only, not subscription compatibility proof.",
+    "Native selector codex-chatgpt names the observed base path; exact HTTP profile/Host listener binding is outside this base/checkpoint.",
+    "Capability value is not configuration evidence; only its fixed env key is. No native auth/login RPC is enabled by this change."
+  ]
+}

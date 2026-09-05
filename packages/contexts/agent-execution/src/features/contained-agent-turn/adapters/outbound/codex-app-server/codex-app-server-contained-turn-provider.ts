@@ -66,6 +66,9 @@ import {
   type CodexCanonicalOutputPolicy,
 } from "./codex-app-server-output-policy.js";
 
+import { codexNativeBrokerLaunchInput, type CodexAppServerLaunchPlan } from "./codex-app-server-launch-plan.js";
+import { codexNativeBrokerThreadConfig, type CodexNativeBrokerRecipe } from "./codex-native-broker-recipe.js";
+
 export type {
   CodexAppServerExecutionOutcome,
   CodexContainmentReconciliationRequiredOutcome,
@@ -88,6 +91,7 @@ export interface CodexAppServerContainedTurnProviderOptions {
   readonly cancellationPollMs?: number;
   readonly effectCustody?: CodexEffectCustodyAuthority;
   readonly manifest: ContainedTurnAdapterCapabilityManifest;
+  readonly nativeBrokerLaunchPlan?: CodexAppServerLaunchPlan;
   readonly maxActiveNotificationBytes?: number;
   readonly maxActiveNotifications?: number;
   readonly maxLineBytes?: number;
@@ -138,6 +142,7 @@ const stderrEvidenceCode = (status: "drained" | "read_failed" | "unknown"): Code
 export class CodexAppServerContainedTurnProvider implements ContainedTurnProviderPort {
   public readonly manifest: ContainedTurnAdapterCapabilityManifest;
   readonly #boundary: CodexAppServerPermissionBoundary;
+  readonly #nativeBrokerRecipe: CodexNativeBrokerRecipe | undefined;
   readonly #cancellationPollMs: number;
   readonly #effectCustody: CodexEffectCustodyAuthority | undefined;
   readonly #maxLineBytes: number;
@@ -175,16 +180,9 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       || options.privateRootPath === "/") {
       throw new TypeError("Codex App Server adapter requires a normalized absolute private root");
     }
-    this.#boundary = Object.freeze({
-      ...options.boundary,
-      permissionProfile: Object.freeze({
-        ...options.boundary.permissionProfile,
-        file_system: Object.freeze({
-          entries: Object.freeze(options.boundary.permissionProfile.file_system.entries.map(entry => Object.freeze({ ...entry }))),
-        }),
-        network: Object.freeze({ ...options.boundary.permissionProfile.network }),
-      }),
-    });
+    this.#boundary = options.boundary;
+    this.#nativeBrokerRecipe = options.nativeBrokerLaunchPlan === undefined
+      ? undefined : codexNativeBrokerLaunchInput(options.nativeBrokerLaunchPlan).recipe;
     this.manifest = manifest;
     this.#platformTuple = platformTuple;
     this.#privateRootPath = options.privateRootPath;
@@ -443,7 +441,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         method: "config/read",
         params: { cwd: input.workspaceRef, includeLayers: true },
       }, false, preTurnNotifications, preTurnBudget);
-      validateCodexConfigEvidence(configResult, this.#boundary);
+      validateCodexConfigEvidence(configResult, this.#boundary, this.#nativeBrokerRecipe);
       const profileResult = await this.#request(process, reader, {
         id: `${input.attemptId}:permission-profiles`,
         method: "permissionProfile/list",
@@ -455,7 +453,8 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         method: "thread/start",
         params: {
           approvalPolicy: "never",
-          config: codexContainedThreadConfig(),
+          config: this.#nativeBrokerRecipe === undefined ? codexContainedThreadConfig()
+            : codexNativeBrokerThreadConfig(this.#nativeBrokerRecipe),
           cwd: input.workspaceRef,
           ephemeral: true,
           permissions: this.#boundary.permissionProfileId,
