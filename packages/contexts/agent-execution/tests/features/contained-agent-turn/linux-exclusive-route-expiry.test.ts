@@ -5,6 +5,9 @@ import { installLinuxExclusiveRoute, type LinuxExclusiveRouteBinding } from
 import { linuxExclusiveRouteRules } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
 
+import { CLAUDE_AGENT_SDK_LINUX_X64_TUPLE, CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE } from
+  "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
+
 const endpoint = {address: "172.30.0.1", port: 18443};
 const binding: LinuxExclusiveRouteBinding = {
   tenantId: "tenant:test", projectId: "project:test", scopeDigest: "scope:test", operationId: "operation:test",
@@ -18,7 +21,7 @@ const binding: LinuxExclusiveRouteBinding = {
 
 // This fixture models lifecycle and scheduling only; the companion route suite
 // independently validates nft listing bytes, command semantics and exclusive create.
-const fixture = () => {
+const fixture = (routeBinding: LinuxExclusiveRouteBinding = binding) => {
   let time = 10; let timeoutSeconds = 0; let expiresAt = 0; let present = false; let permit = false;
   let transactions = 0; let reads = 0; let removals = 0; let releases = 0;
   const tasks: {delay: number; callback(): void; cancelled: boolean}[] = [];
@@ -68,7 +71,7 @@ const fixture = () => {
       if (controls.releaseFailure) {throw new Error("synthetic close failure");}
     },
   };
-  const input = {binding, endpoint, lifetimeMs: 10_000, startedAtMs: 10, kernel,
+  const input = {binding: routeBinding, endpoint, lifetimeMs: 10_000, startedAtMs: 10, kernel,
     monotonicNow: () => {if (controls.clockFailure) {throw new Error("synthetic clock failure");} return time;},
     scheduleCutoff(delay: number, callback: () => void): () => void {
       const task = {delay, callback, cancelled: false}; tasks.push(task);
@@ -348,3 +351,58 @@ test("zero displayed seconds and stale read windows never authorize first-write 
   assert.throws(blocked.open, /readback expired/u);
   assert.equal(blocked.member(), false); assert.equal(blocked.tasks[0]!.cancelled, true);
 });
+
+const claudeBinding = Object.freeze({
+  ...binding,
+  binaryRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.binaryRevision,
+  adapterRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.adapterRevision,
+  capabilityManifestRevision: CLAUDE_AGENT_SDK_LINUX_X64_TUPLE.manifestRevision,
+});
+
+test("the exact Claude Linux tuple retains one-shot route admission and cleanup ordering", async () => {
+  const f = fixture(claudeBinding); const owner = f.open();
+  const first = owner.reserveFirstWrite(claudeBinding, "request:claude");
+  assert.equal(first.consume(), true);
+  assert.equal(first.consume(), false);
+  assert.throws(() => owner.reserveFirstWrite(binding, "request:wrong-provider"));
+  assert.throws(() => owner.reserveFirstWrite(claudeBinding, "request:claude"));
+  assert.equal(owner.revoke(), "closed");
+  assert.equal(f.counts().releases, 0);
+  assert.equal(await owner.releaseAfterContainerRemoval(), "quarantined");
+  assert.equal(f.counts().releases, 0);
+  f.controls.removed = true;
+  assert.equal(await owner.releaseAfterContainerRemoval(), "quarantined");
+  assert.equal(f.counts().releases, 1);
+});
+
+test("Claude candidate never inherits a Codex owner or an expired kernel permission", async () => {
+  const codex = fixture(); const codexOwner = codex.open();
+  assert.throws(() => codexOwner.reserveFirstWrite(claudeBinding, "request:wrong-provider"));
+  codex.controls.removed = true;
+  assert.equal(await codexOwner.releaseAfterContainerRemoval(), "closed");
+  const claude = fixture(claudeBinding); const claudeOwner = claude.open();
+  const pending = claudeOwner.reserveFirstWrite(claudeBinding, "request:pending");
+  claude.advance(10010); claude.fire();
+  assert.equal(pending.consume(), false);
+  assert.equal(await claudeOwner.cutoff, "closed");
+  assert.throws(() => claudeOwner.reserveFirstWrite(claudeBinding, "request:late"));
+  claude.controls.removed = true;
+  assert.equal(await claudeOwner.releaseAfterContainerRemoval(), "closed");
+});
+
+for (const [label, delta] of [
+  ["Darwin binary", { binaryRevision: CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE.binaryRevision }],
+  ["unqualified binary", { binaryRevision: "sha256:" + "a".repeat(64) }],
+  ["bare version", { binaryRevision: "@anthropic-ai/claude-agent-sdk:0.3.251" }],
+  ["SDK version drift", { adapterRevision: "claude-agent-sdk-contained-turn:0.3.250" }],
+  ["unqualified adapter", { adapterRevision: "adapter:test" }],
+  ["manifest drift", { capabilityManifestRevision: "claude-contained-turn-v1@2" }],
+  ["Codex manifest", { capabilityManifestRevision: "codex-contained-turn-v1@1" }],
+  ["source revision drift", { sourceRevision: "invalid" }],
+] as const) {
+  test(`Claude tuple rejects ${label} before kernel I/O`, () => {
+    const f = fixture({ ...claudeBinding, ...delta });
+    assert.throws(f.open);
+    assert.deepEqual(f.counts(), { transactions: 0, reads: 0, removals: 0, releases: 0 });
+  });
+}

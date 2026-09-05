@@ -34,6 +34,15 @@ const BINDING_KEYS = ["tenantId", "projectId", "scopeDigest", "operationId", "at
   "capabilityManifestRevision", "authorityVectorDigest", "providerAccountRef", "accessRef",
   "bindingRevision", "credentialBindingRef"] as const;
 
+// Private candidate admission, not a live qualification receipt. The Claude
+// tuple matches the pinned Linux SDK launch plan; Darwin remains unsupported by
+// this Linux namespace owner. Tests bind these literals to the provider tuple.
+const supportedLinuxCandidate = (binding: LinuxExclusiveRouteBinding): boolean =>
+  binding.binaryRevision === "@openai/codex:0.150.1+linux-x64" ||
+  (binding.binaryRevision === "sha256:fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7" &&
+    binding.adapterRevision === "claude-agent-sdk-contained-turn:0.3.251" &&
+    binding.capabilityManifestRevision === "claude-contained-turn-v1@1");
+
 const snapshotBinding = (input: LinuxExclusiveRouteBinding): LinuxExclusiveRouteBinding => {
   if (input === null || typeof input !== "object" || types.isProxy(input) ||
       Reflect.ownKeys(input).length !== BINDING_KEYS.length) {throw new TypeError("invalid exact route binding");}
@@ -50,8 +59,8 @@ const snapshotBinding = (input: LinuxExclusiveRouteBinding): LinuxExclusiveRoute
   }
   const binding = Object.freeze(Object.fromEntries(BINDING_KEYS.map(key => [key, fields[key]!.value]))) as unknown as LinuxExclusiveRouteBinding;
   if (!/^[a-f0-9]{40}$/u.test(binding.sourceRevision) ||
-      binding.binaryRevision !== "@openai/codex:0.150.1+linux-x64") {
-    throw new TypeError("exclusive route requires the exact Linux Codex candidate and source revision");
+      !supportedLinuxCandidate(binding)) {
+    throw new TypeError("exclusive route requires an exact supported Linux candidate and source revision");
   }
   return binding;
 };
