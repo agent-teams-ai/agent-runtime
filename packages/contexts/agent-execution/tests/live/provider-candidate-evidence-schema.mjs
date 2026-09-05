@@ -118,12 +118,17 @@ const validateClosure = (input, observations, tuple) => {
   if (["closureStatus", "containmentProfile", "containmentLimitations"].every(key => observations[key] === undefined)) {return;}
   if (observations.closureStatus === undefined || observations.containmentProfile !== profile ||
       JSON.stringify(observations.containmentLimitations) !== JSON.stringify(darwin ? [...DARWIN_LIMITATIONS].sort() : [])) {return reject();}
-  if (darwin && observations.closureStatus === "closed") {return reject();}
+  if (observations.closureStatus === "closed" &&
+      (darwin || input.physicalContainment !== "contained" || observations.containmentProofDigest === undefined)) {return reject();}
   if (observations.closureStatus === "unproven" &&
       (input.physicalContainment !== "indeterminate" || observations.terminalKind === "final" ||
+       observations.terminalStatus !== "reconcile_required" || observations.closureRecovery !== "required" ||
        observations.containmentProofDigest !== undefined || observations.terminalProofDigest !== undefined)) {return reject();}
+  if (observations.closureStatus === "not-started" &&
+      (input.physicalContainment !== "indeterminate" || observations.terminalStatus === "succeeded" ||
+       observations.containmentProofDigest !== undefined)) {return reject();}
 };
-const validateTerminal = observations => {
+const validateTerminal = (input, observations, tuple) => {
   const keys = ["terminalKind", "terminalStatus", "reconciliation", "closureRecovery"];
   if (keys.every(key => observations[key] === undefined)) {return;}
   if (keys.some(key => observations[key] === undefined)) {return reject();}
@@ -132,10 +137,13 @@ const validateTerminal = observations => {
       final !== (observations.terminalProofDigest !== undefined)) {return reject();}
   const debt = observations.reconciliation === "required" || observations.closureRecovery === "required";
   if (debt !== (observations.terminalStatus === "reconcile_required")) {return reject();}
+  if (observations.terminalStatus === "succeeded" &&
+      (tuple.platform !== "linux" || observations.providerOutcome !== "succeeded" ||
+       observations.closureStatus !== "closed" || input.physicalContainment !== "contained")) {return reject();}
 };
 export const validateCompletion = (input, observations, tuple) => {
   validateClosure(input, observations, tuple);
-  validateTerminal(observations);
+  validateTerminal(input, observations, tuple);
   if ((input.physicalContainment === "contained") !== (observations.containmentProofDigest !== undefined)) {return reject();}
   if (input.status === "failed") {
     if (observations.failureKind !== "canary-failed") {return reject();}

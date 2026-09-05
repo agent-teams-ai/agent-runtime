@@ -118,6 +118,18 @@ for (const provider of ["codex", "claude"] as const) {
         observations: Object.freeze({...input.observations, failureKind: "canary-failed",
           closureStatus: "unproven", terminalKind: "final", terminalStatus: "failed",
           terminalProofDigest: "a".repeat(64), reconciliation: "clear", closureRecovery: "clear"})})), TypeError);
+      if (platform === "darwin") {
+        await assert.rejects(publish(Object.freeze({...input, status: "failed",
+          observations: Object.freeze({...input.observations, failureKind: "canary-failed",
+            closureStatus: "unproven", terminalKind: "open", terminalStatus: "running",
+            terminalProofDigest: undefined, reconciliation: "clear", closureRecovery: "clear"})})), TypeError);
+      } else {
+        await assert.rejects(publish(Object.freeze({...input, status: "failed", physicalContainment: "indeterminate",
+          observations: Object.freeze({...input.observations, failureKind: "canary-failed",
+            closureStatus: "not-started", containmentProofDigest: undefined,
+            terminalKind: "final", terminalStatus: "succeeded", terminalProofDigest: "a".repeat(64),
+            reconciliation: "clear", closureRecovery: "clear"})})), TypeError);
+      }
       assert.throws(() => observeProviderCandidateCompletion({platform, result, closure, expectedOutput: "wrong"}));
       assert.throws(() => observeProviderCandidateCompletion({
         platform, result: {...result, kernel: {...result.kernel, proofs: []}}, closure, expectedOutput: "ok",
