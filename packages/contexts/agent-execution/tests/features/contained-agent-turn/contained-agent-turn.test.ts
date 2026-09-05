@@ -88,6 +88,11 @@ test("prevention after custody reservation releases the exact reservation before
   assert.deepEqual(openedCustodies, [custodyId]);
   assert.deepEqual(custodyReleases.map(release => release.reason), ["claim_lost"]);
   assert.equal(current()?.dispatch.kind, "prevented");
+  assert.equal(current()?.terminal.kind, "final");
+  assert.equal(current()?.reconciliation.kind, "clear");
+  assert.equal((await dependencies.operationStore.listDispatchPreparations?.({
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }))?.length, 0);
   assert.equal(providerCalls.value, 0);
 });
 
