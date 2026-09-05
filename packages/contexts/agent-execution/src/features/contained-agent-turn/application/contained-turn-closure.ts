@@ -492,6 +492,26 @@ export const closeContainedTurnWithoutExecution = async (
   trustedScope: ContainedTurnScope,
 ): Promise<ContainedTurnKernelOperation> => {
   if (initial.providerExecution.kind !== "closed") {return initial;}
+  if (initial.dispatch.kind === "prevented" && initial.workspaceId !== undefined) {
+    // Prevention has fenced the operation, so older preparations cannot appear
+    // after this read. Cancellation must consult durable cleanup before closing
+    // workspace/artifact custody; submission may still await its cleanup acknowledgement.
+    try {
+      const limit = 1_000;
+      const preparations = await dependencies.operationStore.listDispatchPreparations?.({
+        kinds: ["active", "cleanup_pending"], limit, scope: trustedScope,
+      });
+      // A missing or full enumeration cannot prove absence for this operation.
+      if (preparations === undefined || preparations.length >= limit ||
+          preparations.some(row => row.preparation.operationId === initial.operationId)) {
+        throw new Error("contained-turn preparation cleanup is not proved closed");
+      }
+    } catch {
+      return recordContainedTurnRejectedDebt(
+        dependencies, initial, trustedScope, "custody_release_rejected", "containment",
+      );
+    }
+  }
   const staged = await sealArtifactsAndWorkspace(dependencies, initial, trustedScope);
   return staged.kind === "debt"
     ? staged.operation
