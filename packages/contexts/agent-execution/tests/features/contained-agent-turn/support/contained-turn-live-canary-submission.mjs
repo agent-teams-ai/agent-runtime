@@ -51,6 +51,17 @@ const submitAndVerifyCanary = async (input, createContainedTurnFeature) => {
       !operation.proofs.some(proof => proof.kind === "terminal_truth"))) {
     throw new Error("canary success lacks durable drain, artifact, or terminal evidence");
   }
-  return Object.freeze({physicalContainment: operation.physicalContainment.kind === "contained"
-    ? operation.physicalContainment : Object.freeze({kind: "indeterminate"}), turn});
+  // Read the owner's persisted observations. Provider completion is independent
+  // of physical containment and never grants this harness terminal authority.
+  return Object.freeze({
+    kernel: Object.freeze({
+      providerExecution: operation.providerExecution,
+      proofs: operation.proofs,
+      reconciliation: operation.reconciliation.kind,
+      terminal: operation.terminal,
+    }),
+    physicalContainment: operation.physicalContainment.kind === "contained"
+      ? operation.physicalContainment : Object.freeze({kind: "indeterminate"}),
+    turn,
+  });
 };

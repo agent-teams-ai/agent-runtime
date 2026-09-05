@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rmdir, stat, statfs, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 
-import { query as claudeQuery } from "@anthropic-ai/claude-agent-sdk";
 
 import {
   createProviderCandidateEvidenceEnvelope,
@@ -14,6 +13,8 @@ import {
   createDisposableContainedTurnCanaryRuntime,
   submitContainedTurnLiveCanary,
 } from "./contained-turn-live-canary-lifecycle.mjs";
+
+import { observeCustodyReservation, observeProviderCandidateCompletion } from "./provider-candidate-observation.mjs";
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const requiredEnvironment = name => {
@@ -144,16 +145,6 @@ const createPlatformCustody = async (platformTarget, launchPlans, candidateBuild
   throw new Error("unsupported Claude canary Host Custody target");
 };
 
-const createSuccessfulEvidence = (evidence, physicalContainment, output, outputEvents, turn) =>
-  createProviderCandidateEvidenceEnvelope({
-    ...evidence,
-    compositeContainment: "indeterminate",
-    observations: Object.freeze({ outputDigest: sha256(output), outputEvents,
-      terminalStatus: turn.status, artifactManifestRef: turn.artifactManifestRef, resultRef: turn.resultRef }),
-    physicalContainment,
-    status: "succeeded",
-  });
-
 const run = async () => {
   // This current checkout has no qualified enforced route. Resolve authority
   // before inspecting credential paths, allocating custody, or connecting to PG.
@@ -161,6 +152,7 @@ const run = async () => {
   const platformTarget = exactPlatformTarget();
   const executionProvenance = await resolveCandidateExecution();
   const candidateBuild = await loadCandidateBuild();
+  const { query: claudeQuery } = await import("@anthropic-ai/claude-agent-sdk");
   const {
     CONTAINED_TURN_REQUIRED_PROOF_KINDS, createClaudeAgentSdkPrivateProjection,
     createClaudeCurrentKernelOwner, selectClaudeAgentSdkPlatformTuple,
@@ -212,11 +204,12 @@ const run = async () => {
       resolve: async () => {throw new Error("ambient launch-plan resolution is forbidden");},
     });
     const hostCustody = await createPlatformCustody(platformTarget, launchPlans, candidateBuild);
+    const observedCustody = observeCustodyReservation(hostCustody);
     const privateDirectoryCustody = Object.freeze({assertPrivateDirectory});
     const owner = createClaudeCurrentKernelOwner({
       adapterSnapshot: snapshot, executablePath,
       executableSha256: tuple.executableSha256,
-      hostBootId: "host-boot:claude-live-canary", hostCustody,
+      hostBootId: "host-boot:claude-live-canary", hostCustody: observedCustody.hostCustody,
       hostInstanceId: "host-instance:claude-live-canary",
       launchRecords: Object.freeze({resolve: async input => {
         assert.equal(input.intentMode, "analysis");
@@ -249,7 +242,7 @@ const run = async () => {
       mode: "analysis",
       prompt: "Reply with exactly AR_CLAUDE_CANARY_OK. Do not invoke tools, spawn agents, or modify files.",
     });
-    const {physicalContainment, turn} = await submitContainedTurnLiveCanary({
+    const result = await submitContainedTurnLiveCanary({
       dependencies: runtime.dependencies(owner), owner,
       command: {
         commandId: "command:claude-live-canary",
@@ -257,33 +250,39 @@ const run = async () => {
         scope: {projectId: "project:disposable-live-canary", tenantId: "tenant:disposable-live-canary"},
       },
     });
-    const output = turn.output.map(chunk => chunk.text);
-    const finalCursor = turn.output.length;
-    assert.equal(turn.status, "succeeded");
-    assert.equal(output.join(""), "AR_CLAUDE_CANARY_OK");
-    if (platformTarget.platform === "linux") {
-      assert.equal(physicalContainment.kind, "contained");
-    } else {
-      assert.equal(physicalContainment.kind, "indeterminate");
-    }
-    return createSuccessfulEvidence(candidateEvidence, physicalContainment.kind, output.join(""), finalCursor, turn);
+    const observations = observeProviderCandidateCompletion({
+      platform: platformTarget.platform, result, closure: observedCustody.closure(),
+      expectedOutput: "AR_CLAUDE_CANARY_OK",
+    });
+    return Object.freeze({observations, physicalContainment: result.physicalContainment.kind});
   } finally {await runtime.dispose();}
+};
+
+const successfulEvidence = async () => {
+  const completed = await run();
+  return createProviderCandidateEvidenceEnvelope(Object.freeze({
+    ...candidateEvidence,
+    compositeContainment: "indeterminate",
+    observations: Object.freeze({...completed.observations, runtimeDisposal: "completed"}),
+    physicalContainment: completed.physicalContainment,
+    status: "provider-completed",
+  }));
 };
 
 let candidateEvidence;
 try {
-  process.stdout.write(`${JSON.stringify(await run())}\n`);
+  process.stdout.write(`${JSON.stringify(await successfulEvidence())}\n`);
 } catch (error) {
   const failure = error instanceof Error ? `${error.name}:${error.message}` : String(error);
   if (candidateEvidence === undefined) {
     process.stderr.write(`invalid Claude canary invocation (${error?.reason ?? sha256(failure)})\n`);
   } else {
     try {
-      process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope({
+      process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope(Object.freeze({
         ...candidateEvidence, compositeContainment: "indeterminate",
         observations: Object.freeze({errorDigest: sha256(failure)}),
         physicalContainment: "indeterminate", status: "failed",
-      }))}\n`);
+      })))}\n`);
     } catch (provenanceError) {
       const detail = provenanceError instanceof Error ? provenanceError.name : "UnknownError";
       process.stderr.write(`invalid Claude canary evidence (${sha256(detail)})\n`);

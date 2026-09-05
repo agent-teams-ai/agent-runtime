@@ -14,6 +14,8 @@ import {
 } from "./contained-turn-live-canary-lifecycle.mjs";
 import { readCodexCanaryCredentialInventory } from "./codex-canary-credential-inventory.mjs";
 
+import { observeCustodyReservation, observeProviderCandidateCompletion } from "./provider-candidate-observation.mjs";
+
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const requiredEnvironment = name => {
   const value = process.env[name];
@@ -86,54 +88,6 @@ const cgroupV2Factory = delegatedRoot => Object.freeze({
     });
   },
 });
-
-const observeCustodyReservation = custody => {
-  let openedCustody;
-  const hostCustody = new Proxy(custody, {
-    get(target, property) {
-      if (property === "reserve") {
-        return async input => {
-          const opened = await target.reserve(input);
-          assert.equal(openedCustody, undefined);
-          openedCustody = opened;
-          return opened;
-        };
-      }
-      const value = Reflect.get(target, property, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-  return Object.freeze({
-    hostCustody,
-    opened() { assert.ok(openedCustody); return openedCustody; },
-  });
-};
-
-const safeContainmentEvidence = (custody, opened, physicalContainment, platformTarget) => {
-  const evidence = custody.evidence(opened.custodyRef);
-  assert.ok(evidence);
-  const safe = Object.freeze({
-    limitations: evidence.closure.limitations,
-    profile: evidence.closure.profile,
-    status: evidence.closure.status,
-  });
-  assert.equal(safe.status, "closed");
-  if (platformTarget.platform === "linux") {
-    assert.equal(physicalContainment.kind, "contained");
-    assert.equal(safe.profile, "strict-linux-cgroup-v2");
-    assert.deepEqual(safe.limitations, []);
-  } else {
-    assert.equal(physicalContainment.kind, "indeterminate");
-    assert.equal(safe.profile, "cooperative-darwin-posix-process-group");
-    assert.deepEqual(safe.limitations, [
-      "canonical-executable-path-is-name-bound-at-spawn",
-      "canonical-workspace-path-is-name-bound-at-spawn",
-      "private-environment-paths-are-name-bound-at-spawn",
-      "descendant-may-escape-via-new-session",
-    ]);
-  }
-  return safe;
-};
 
 const resolveCandidateExecution = () => {
   const canaryId = "codex-contained-turn-live-canary/v1";
@@ -269,7 +223,7 @@ const run = async () => {
       mode: "analysis",
       prompt: "Reply with exactly AR_CODEX_CANARY_OK. Do not invoke tools, spawn agents, or modify files.",
     });
-    const {physicalContainment, turn} = await submitContainedTurnLiveCanary({
+    const result = await submitContainedTurnLiveCanary({
       dependencies: runtime.dependencies(owner), owner,
       command: {
         commandId: "command:codex-live-canary",
@@ -277,45 +231,39 @@ const run = async () => {
         scope: {projectId: "project:disposable-live-canary", tenantId: "tenant:disposable-live-canary"},
       },
     });
-    const output = turn.output.map(chunk => chunk.text);
-    const finalCursor = turn.output.length;
-    assert.equal(turn.status, "succeeded");
-    assert.equal(output.join(""), "AR_CODEX_CANARY_OK");
-    const containmentEvidence = safeContainmentEvidence(
-      custody, observedCustody.opened(), physicalContainment, platformTarget,
-    );
-    return createProviderCandidateEvidenceEnvelope({
-      ...candidateEvidence,
-      compositeContainment: "indeterminate",
-      observations: Object.freeze({
-        ...(physicalContainment.kind === "contained"
-          ? {containmentProofDigest: sha256(physicalContainment.proofId)} : {}),
-        terminalStatus: turn.status, artifactManifestRef: turn.artifactManifestRef, resultRef: turn.resultRef,
-        closureStatus: containmentEvidence.status,
-        containmentLimitations: containmentEvidence.limitations,
-        containmentProfile: containmentEvidence.profile,
-        outputDigest: sha256(output.join("")), outputEvents: finalCursor,
-      }),
-      physicalContainment: physicalContainment.kind,
-      status: "succeeded",
+    const observations = observeProviderCandidateCompletion({
+      platform: platformTarget.platform, result, closure: observedCustody.closure(),
+      expectedOutput: "AR_CODEX_CANARY_OK",
     });
+    return Object.freeze({observations, physicalContainment: result.physicalContainment.kind});
   } finally {await runtime.dispose();}
+};
+
+const successfulEvidence = async () => {
+  const completed = await run();
+  return createProviderCandidateEvidenceEnvelope(Object.freeze({
+    ...candidateEvidence,
+    compositeContainment: "indeterminate",
+    observations: Object.freeze({...completed.observations, runtimeDisposal: "completed"}),
+    physicalContainment: completed.physicalContainment,
+    status: "provider-completed",
+  }));
 };
 
 let candidateEvidence;
 try {
-  process.stdout.write(`${JSON.stringify(await run())}\n`);
+  process.stdout.write(`${JSON.stringify(await successfulEvidence())}\n`);
 } catch (error) {
   const failure = error instanceof Error ? `${error.name}:${error.message}` : String(error);
   if (candidateEvidence === undefined) {
     process.stderr.write(`invalid Codex canary invocation (${error?.reason ?? sha256(failure)})\n`);
   } else {
     try {
-      process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope({
+      process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope(Object.freeze({
         ...candidateEvidence, compositeContainment: "indeterminate",
         observations: Object.freeze({errorDigest: sha256(failure)}),
         physicalContainment: "indeterminate", status: "failed",
-      }))}\n`);
+      })))}\n`);
     } catch (provenanceError) {
       const detail = provenanceError instanceof Error ? provenanceError.name : "UnknownError";
       process.stderr.write(`invalid Codex canary evidence (${sha256(detail)})\n`);
