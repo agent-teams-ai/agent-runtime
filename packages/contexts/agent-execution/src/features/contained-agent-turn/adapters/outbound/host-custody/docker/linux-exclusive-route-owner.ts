@@ -110,8 +110,14 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
     highWater = observed; return observed;
   };
   const verify = (permit: boolean): void => {
-    if (!linuxExclusiveRouteRulesMatch(kernel.readRules(), endpoint, permit)) {
-      throw new TypeError("kernel exclusive route differs from the installed policy");
+    try {
+      if (!linuxExclusiveRouteRulesMatch(kernel.readRules(), endpoint, permit)) {
+        throw new TypeError("kernel exclusive route differs from the installed policy");
+      }
+    } catch (error) {
+      // An unobserved or changed cut leaves uncertainty about earlier traffic.
+      // Record it before any deny transaction; later cleanup cannot erase it.
+      quarantined = true; throw error;
     }
   };
   const revoke = (): "closed" | "quarantined" => {

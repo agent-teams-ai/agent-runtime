@@ -105,29 +105,68 @@ export const linuxExclusiveRouteRules = (endpoint: LinuxExclusiveRouteEndpoint, 
 export const linuxExclusiveRouteTransaction = (endpoint: LinuxExclusiveRouteEndpoint, replace: boolean,
   permit: boolean): string => JSON.stringify({nftables: [
     ...(replace ? [{delete: {table: {family: "inet", name: table}}}] : []),
-    ...linuxExclusiveRouteRules(endpoint, permit).map(value => ({add: value})),
+    // nft's add is idempotent for tables. Only create excludes a previous
+    // owner's deny-only table, atomically with the rest of fresh admission.
+    ...linuxExclusiveRouteRules(endpoint, permit).map(value => "table" in value ? {create: value} : {add: value}),
   ]});
 
-/** nft adds handles. Everything else must match the exact installed recipe. */
+type PolicyChain = {definition: object; rules: object[]};
+const chainIdentity = (body: Record<string, unknown>, name: unknown): string =>
+  canonical([body.family, body.table, name]);
+
+const policyEntry = (entry: unknown): {kind: string; body: Record<string, unknown>} | undefined => {
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {return undefined;}
+  const keys = Object.keys(entry);
+  if (keys.length !== 1) {return undefined;}
+  const kind = keys[0]!; const value = Reflect.get(entry, kind) as Record<string, unknown>;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {return undefined;}
+  if (kind === "metainfo") {
+    if (value.json_schema_version !== 1 || typeof value.version !== "string" ||
+        typeof value.release_name !== "string" || Object.keys(value).length !== 3) {return undefined;}
+  } else if (value.handle !== undefined && (!Number.isSafeInteger(value.handle) || Number(value.handle) < 1)) {return undefined;}
+  const {handle: _handle, ...body} = value;
+  return {kind, body};
+};
+
+/** Table listings group rules with chains, unlike transaction command order.
+ * Compare identities independently of chain order, retaining rule/expr order.
+ * Only nft's object handles and listing metadata are non-policy fields.
+ */
 export const linuxExclusiveRouteRulesMatch = (observed: unknown, endpoint: LinuxExclusiveRouteEndpoint,
   permit: boolean): boolean => {
-  if (typeof observed !== "object" || observed === null || !Array.isArray(Reflect.get(observed, "nftables"))) {return false;}
-  const entries = (observed as {nftables: unknown[]}).nftables;
-  if (entries.length > 16) {return false;}
-  const normalized: object[] = [];
+  if (typeof observed !== "object" || observed === null || Array.isArray(observed) ||
+      Object.keys(observed).length !== 1 || !Array.isArray(Reflect.get(observed, "nftables"))) {return false;}
+  const actual = normalizePolicy((observed as {nftables: unknown[]}).nftables);
+  return actual !== undefined && actual === normalizePolicy(linuxExclusiveRouteRules(endpoint, permit));
+};
+
+const normalizePolicy = (entries: readonly unknown[]): string | undefined => {
+  if (entries.length > 16) {return undefined;}
+  let definition: object | undefined; let metainfo = false;
+  const chains = new Map<string, PolicyChain>(); const rules: Record<string, unknown>[] = [];
   for (const entry of entries) {
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {return false;}
-    const keys = Object.keys(entry);
-    if (keys.length !== 1) {return false;}
-    const kind = keys[0]!;
-    if (kind === "metainfo") {continue;}
-    if (!["table", "chain", "rule"].includes(kind)) {return false;}
-    const value = Reflect.get(entry, kind) as Record<string, unknown>;
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {return false;}
-    const {handle: _handle, ...body} = value;
-    normalized.push({[kind]: body});
+    const parsed = policyEntry(entry);
+    if (parsed === undefined) {return undefined;}
+    const {kind, body} = parsed;
+    if (kind === "metainfo") {
+      if (metainfo || entry !== entries[0]) {return undefined;}
+      metainfo = true; continue;
+    }
+    if (kind === "table") {
+      if (definition !== undefined) {return undefined;} definition = body;
+    } else if (kind === "chain") {
+      const identity = chainIdentity(body, body.name);
+      if (chains.has(identity)) {return undefined;}
+      chains.set(identity, {definition: body, rules: []});
+    } else if (kind === "rule") {rules.push(body);} else {return undefined;}
   }
-  return canonical(normalized) === canonical(linuxExclusiveRouteRules(endpoint, permit));
+  if (definition === undefined) {return undefined;}
+  for (const rule of rules) {
+    const chain = chains.get(chainIdentity(rule, rule.chain));
+    if (chain === undefined) {return undefined;}
+    chain.rules.push(rule);
+  }
+  return canonical({table: definition, chains: [...chains.entries()].toSorted(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)});
 };
 
 const canonical = (value: unknown): string => {
