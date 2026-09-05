@@ -86,6 +86,44 @@ const assertClosedWithoutBytes = (fixture: ReturnType<typeof signedFixture>, rec
   assert.equal(JSON.stringify(receipt).includes(SECRET_MARKER), false);
 };
 
+test("cancellation after a valid final grant is recorded before journal consumption or dispatch", async () => {
+  const abort = new AbortController();
+  const fixture = createEgressFixture({ signal: abort.signal });
+  let journalCalls = 0;
+  const ports = { ...fixture.ports,
+    runtimeSecurity: { ...fixture.ports.runtimeSecurity, authorizeFirstApplicationByte: async input => {
+      const result = await fixture.ports.runtimeSecurity.authorizeFirstApplicationByte(input);
+      assert.equal(result.status, "authorized");
+      abort.abort();
+      return result;
+    } },
+    journal: { consume: (...args) => { journalCalls += 1; return fixture.ports.journal.consume(...args); } },
+  } satisfies HttpEgressBrokerPorts;
+  const broker = createStrictHttpEgressBroker(ports);
+  const receipt = await broker.execute(fixture.operation);
+  assert.equal(receipt.outcome, "cancelled");
+  assert.equal(receipt.anomalyCode, "inbound_cancelled");
+  assert.equal(receipt.finalAuthorizationReceiptDigest, "final-receipt-digest");
+  assert.equal(receipt.firstByteState, "not_sent");
+  assert.equal(receipt.upstreamRequestBytes, 0);
+  assert.equal(receipt.upstreamResponseBytes, 0);
+  assert.equal(receipt.outboundResponseBytes, 0);
+  assert.equal(journalCalls, 0);
+  assert.equal(fixture.observations.order.includes("dispatch"), false);
+  assert.deepEqual(fixture.observations.dispatchedRequests, []);
+  assert.deepEqual(fixture.observations.outboundWrites, []);
+  assert.equal(receipt.inboundClosure, "closed");
+  assert.equal(receipt.upstreamClosure, "closed");
+  assert.equal(fixture.observations.closes, 1);
+  assert.ok(Object.isFrozen(receipt));
+  assert.deepEqual(fixture.observations.receipts, [receipt]);
+  assert.equal(JSON.stringify(receipt).includes(SECRET_MARKER), false);
+  assert.equal(fixture.ports.guard.snapshot().state, "closed");
+  await broker.execute(fixture.operation);
+  assert.equal(fixture.observations.opens, 1);
+  assert.equal(journalCalls, 0);
+});
+
 for (const requestBytes of [1, 2, bytes(requestWire).byteLength - bytes(`authorization: Bearer ${SECRET_MARKER}\r\n`).byteLength,
   bytes(requestWire).byteLength - 1]) {
   test(`signed wire budget ${requestBytes} rejects the entire request before journal or emission`, async () => {

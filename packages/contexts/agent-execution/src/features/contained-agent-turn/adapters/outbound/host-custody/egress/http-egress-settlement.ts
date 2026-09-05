@@ -116,7 +116,7 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
       boundaryAnomaly = "provider_generation_drift"; return false;}
     return true;
   };
-  if (!current()) {state.outcome = "denied"; state.anomalyCode = boundaryAnomaly;
+  if (!current()) {state.outcome = operation.signal?.aborted ? "cancelled" : "denied"; state.anomalyCode = boundaryAnomaly;
     return closeAndRecordHttpEgress(ports, operation, state, attempt);}
   const boundary = createHttpDispatchBoundary(prepared, () => {
     // Journal I/O may block synchronously. Observe current authority/time before
