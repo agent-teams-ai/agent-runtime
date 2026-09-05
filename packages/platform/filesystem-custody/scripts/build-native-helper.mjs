@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-if (process.platform === "linux") {
+if (process.platform === "linux" || process.platform === "darwin") {
   const includeDirectory = [
     resolve(dirname(process.execPath), "../include/node"),
     "/usr/local/include/node",
@@ -13,7 +13,8 @@ if (process.platform === "linux") {
   }
   mkdirSync("dist", { recursive: true });
   const result = spawnSync("cc", [
-    "-O2", "-Wall", "-Wextra", "-Werror", "-fPIC", "-shared",
+    "-O2", "-Wall", "-Wextra", "-Werror", "-fPIC",
+    ...(process.platform === "darwin" ? ["-bundle", "-undefined", "dynamic_lookup"] : ["-shared"]),
     `-I${includeDirectory}`,
     "native/rename-no-replace.c",
     "-o", "dist/rename-no-replace.node",

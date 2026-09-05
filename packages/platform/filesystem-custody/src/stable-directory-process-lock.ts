@@ -29,13 +29,15 @@ const loadNativeBinding = (): NativeProcessLockBinding => {
   return nativeBinding;
 };
 
+/** Process serialization on a retained directory descriptor only. This does not
+ * qualify descriptor-relative mutation, publication, or provider containment. */
 export const withStableDirectoryProcessLock = async <Result>(
   directory: Pick<FileHandle, "fd">,
   operation: () => Promise<Result>,
   options: Readonly<{ onContention?: (() => Promise<void> | void) | undefined }> = {},
 ): Promise<Result> => {
-  if (process.platform !== "linux") {
-    throw new Error("stable directory process locks are qualified only on Linux");
+  if (process.platform !== "linux" && process.platform !== "darwin") {
+    throw new Error("stable directory process locks are supported only on Linux and Darwin");
   }
   const binding = loadNativeBinding();
   let contentionReported = false;

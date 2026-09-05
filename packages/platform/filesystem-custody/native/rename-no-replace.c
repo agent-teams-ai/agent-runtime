@@ -2,7 +2,9 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#ifdef __linux__
 #include <linux/fs.h>
+#endif
 #include <node_api.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -13,6 +15,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#ifdef __linux__
 enum outcome {
   outcome_exists = 73,
   outcome_unsupported = 74,
@@ -172,6 +175,8 @@ static napi_value test_crash_after_capture(napi_env env, napi_callback_info info
   return publish_no_replace_impl(env, info, true);
 }
 
+#endif
+
 static napi_value try_lock_directory(napi_env env, napi_callback_info info) {
   size_t argc = 1;
   napi_value argv[1];
@@ -214,45 +219,25 @@ static napi_value unlock_directory(napi_env env, napi_callback_info info) {
 }
 
 NAPI_MODULE_INIT() {
+#ifdef __linux__
   napi_value publication;
   napi_value crash_test;
+  if (napi_create_function(env, "publishNoReplace", NAPI_AUTO_LENGTH,
+        publish_no_replace, NULL, &publication) != napi_ok ||
+      napi_set_named_property(env, exports, "publishNoReplace", publication) != napi_ok ||
+      napi_create_function(env, "testCrashAfterCapture", NAPI_AUTO_LENGTH,
+        test_crash_after_capture, NULL, &crash_test) != napi_ok ||
+      napi_set_named_property(env, exports, "testCrashAfterCapture", crash_test) != napi_ok) {
+    return NULL;
+  }
+#endif
   napi_value process_lock;
   napi_value process_unlock;
-  if (napi_create_function(
-        env,
-        "publishNoReplace",
-        NAPI_AUTO_LENGTH,
-        publish_no_replace,
-        NULL,
-        &publication
-      ) != napi_ok ||
-      napi_set_named_property(env, exports, "publishNoReplace", publication) != napi_ok ||
-      napi_create_function(
-        env,
-        "testCrashAfterCapture",
-        NAPI_AUTO_LENGTH,
-        test_crash_after_capture,
-        NULL,
-        &crash_test
-      ) != napi_ok ||
-      napi_set_named_property(env, exports, "testCrashAfterCapture", crash_test) != napi_ok ||
-      napi_create_function(
-        env,
-        "tryLockDirectory",
-        NAPI_AUTO_LENGTH,
-        try_lock_directory,
-        NULL,
-        &process_lock
-      ) != napi_ok ||
+  if (napi_create_function(env, "tryLockDirectory", NAPI_AUTO_LENGTH,
+        try_lock_directory, NULL, &process_lock) != napi_ok ||
       napi_set_named_property(env, exports, "tryLockDirectory", process_lock) != napi_ok ||
-      napi_create_function(
-        env,
-        "unlockDirectory",
-        NAPI_AUTO_LENGTH,
-        unlock_directory,
-        NULL,
-        &process_unlock
-      ) != napi_ok ||
+      napi_create_function(env, "unlockDirectory", NAPI_AUTO_LENGTH,
+        unlock_directory, NULL, &process_unlock) != napi_ok ||
       napi_set_named_property(env, exports, "unlockDirectory", process_unlock) != napi_ok) {
     return NULL;
   }
