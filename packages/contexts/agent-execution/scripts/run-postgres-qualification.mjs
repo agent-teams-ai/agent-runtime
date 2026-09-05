@@ -52,6 +52,12 @@ const testFiles = [
   ),
   fileURLToPath(
     new URL(
+      "../tests/features/contained-agent-turn/postgres-contained-turn-output.test.ts",
+      import.meta.url,
+    ),
+  ),
+  fileURLToPath(
+    new URL(
       "../tests/features/contained-agent-turn/postgres-contained-turn-bounds.test.ts",
       import.meta.url,
     ),
