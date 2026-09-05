@@ -220,7 +220,10 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     });
   }
 
-  public async accept(candidate: ContainedTurnKernelOperation, authority: ContainedTurnOwnerStoreAuthority) {
+  public async accept(
+    candidate: ContainedTurnKernelOperation,
+    authority: ContainedTurnOwnerStoreAuthority,
+  ): ReturnType<ContainedTurnKernelOperationStore["accept"]> {
     assertAuthority(authority, candidate);
     validateContainedTurnOperation(candidate);
     if (candidate.revision !== 0) {throw new TypeError("acceptance requires revision-zero intent");}
@@ -231,7 +234,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
       | { readonly kind: "not_found" };
     let attempted: AttemptOutcome | undefined;
     try {
-      return await this.#transactions.write(async client => {
+      return await this.#transactions.write<AttemptOutcome>(async client => {
         const admission = await this.#intents.admission(client, {
           commandId: candidate.commandId, commandFingerprint: candidate.commandFingerprint, scope: authority.scope,
         });

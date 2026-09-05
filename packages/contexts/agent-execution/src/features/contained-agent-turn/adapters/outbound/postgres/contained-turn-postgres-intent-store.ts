@@ -141,7 +141,9 @@ export class ContainedTurnPostgresIntentStore {
   ): ContainedTurnPreventionReceipt {
     return {
       command,
-      cutoffProofId: current?.operationCutoff.kind === "closed" ? current.operationCutoff.proofId ?? null : null,
+      cutoffProofId: current?.operationCutoff.kind === "closed" && "proofId" in current.operationCutoff
+        ? current.operationCutoff.proofId
+        : null,
       disposition: current === undefined ? "intent_guarded" : current.terminal.kind === "final" ? "already_terminal" : current.dispatch.kind === "claimed" ? "cutoff_requested" : "operation_fenced",
       operationId: current?.operationId ?? null,
       operationRevision: current?.revision ?? null,
