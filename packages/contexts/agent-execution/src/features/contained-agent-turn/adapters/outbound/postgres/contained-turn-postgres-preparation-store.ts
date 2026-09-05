@@ -51,15 +51,20 @@ const decodePreparationRow = (row: PreparationRow): ContainedTurnDispatchPrepara
 };
 
 const assertRetirementReceiptAuthority = (
-  input: Parameters<ContainedTurnKernelOperationStore["retireDispatchPreparation"]>[0],
+  preparation: ContainedTurnDispatchPreparation,
   current: ContainedTurnKernelOperation,
 ): void => {
-  for (const receipt of [input.consumedGrantRequestIds?.providerAccessConsumptionReceipt,
-    input.consumedGrantRequestIds?.runtimeSecurityConsumptionReceipt]) {
-    if (receipt !== undefined && (receipt.operationId !== current.operationId ||
+  for (const receipt of [preparation.providerAccessConsumptionReceipt,
+    preparation.runtimeSecurityConsumptionReceipt]) {
+    if (receipt === undefined) {continue;}
+    if (receipt.operationId !== current.operationId ||
         receipt.scope.tenantId !== current.scope.tenantId || receipt.scope.projectId !== current.scope.projectId ||
-        receipt.scope.scopeDigest !== containedTurnScopeDigest(current.scope))) {
+        receipt.scope.scopeDigest !== containedTurnScopeDigest(current.scope)) {
       throw new TypeError("retired consumption receipt authority mismatch");
+    }
+    if (current.dispatch.kind === "claimed" && current.dispatch.grantReceipts.some(claimed =>
+      claimed.owner === receipt.owner && claimed.grantRequestId === receipt.grantRequestId)) {
+      throw new TypeError("claimed grant cannot belong to a losing preparation cleanup");
     }
   }
 };
@@ -292,10 +297,10 @@ export class ContainedTurnPostgresPreparationStore {
       const preparation = persisted === undefined ? undefined : decodePreparationRow(persisted);
       if (preparation === undefined) {return { current, kind: "stale" as const };}
       if (preparation.kind === "claimed") {return { current, kind: "stale" as const };}
-      // Cancellation excludes a future claim under the locked, validated operation.
-      // Keep the preparation's original cutoff in its identity and cleanup permit.
-      const cancelledWithoutClaim = current.dispatch.kind !== "claimed" &&
-        current.cancellation.kind === "requested" &&
+      // The exact claimed preparation is protected above. Cancellation also
+      // fences a different, losing preparation when the operation has a winner.
+      // Its original cutoff still binds only its own retirement and cleanup.
+      const cancelledPreparation = current.cancellation.kind === "requested" &&
         current.operationCutoff.kind === "closed" &&
         current.operationCutoff.reason === "cancellation" &&
         current.operationCutoff.revision > preparation.operationCutoffRevision &&
@@ -304,12 +309,11 @@ export class ContainedTurnPostgresPreparationStore {
           preparation.preparationToken !== input.preparationToken ||
           preparation.workspaceId !== current.workspaceId ||
           (preparation.operationCutoffRevision !== current.operationCutoff.revision &&
-            !cancelledWithoutClaim) ||
+            !cancelledPreparation) ||
           preparation.preparedOperationRevision !== input.expectedOperationRevision ||
           preparation.operationCutoffRevision !== input.expectedOperationCutoffRevision) {
         return { current, kind: "stale" as const };
       }
-      assertRetirementReceiptAuthority(input, current);
       const retired = retireContainedTurnDispatchPreparation(
         preparation,
         this.identities.nextId("cleanup", `retirement:${digestContainedTurnCanonicalValue({
@@ -320,6 +324,7 @@ export class ContainedTurnPostgresPreparationStore {
         input.consumedGrantRequestIds,
         input.consumptionEvidenceIds,
       );
+      assertRetirementReceiptAuthority(retired, current);
       const encoded = encodeContainedTurnPreparation(retired);
       await client.query(
         "UPDATE agent_execution.contained_turn_dispatch_preparation_v1 SET state=$3::jsonb,state_codec_version=$4,state_digest=$5 WHERE operation_id=$1 AND preparation_token=$2",

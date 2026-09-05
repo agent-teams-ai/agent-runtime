@@ -13,7 +13,9 @@ import { mutateContainedTurnOperation } from "../../../dist/features/contained-a
 import {
   operationAuthority, operationForProject, postgresTest, resetSchema, runtimeQuery, withPool,
 } from "./postgres-contained-turn-test-helpers.ts";
-import { preparePostgresClaim } from "./support/postgres-committed-dispatch-fixture.ts";
+import { postgresClaimInput, preparePostgresClaim } from "./support/postgres-committed-dispatch-fixture.ts";
+
+import { createPostgresReplayApplication } from "./support/postgres-replay-application.ts";
 
 type Fixture = Awaited<ReturnType<typeof preparePostgresClaim>>;
 
@@ -316,24 +318,155 @@ postgresTest("cancellation retirement retains exact scope, token, revision, cuto
   });
 });
 
-postgresTest("a durable claimed preparation cannot be retired after cancellation", async () => {
+postgresTest("claim plus cancellation retires only the losing preparation across recovery and replay", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
     const fixture = await preparePostgresClaim(pool, "claimed-cancelled-preparation");
     const { store, claim, bound } = fixture;
-    const other = await store.prepareDispatch({ authority: operationAuthority(bound), operation: bound });
-    const otherToken = containedTurnPreparationToken({ ...other, operationId: bound.operationId });
-    const claimed = await store.claimPreparedDispatch(claim.claimInput);
-    assert.equal(claimed.kind, "claimed");
-    if (claimed.kind !== "claimed") {throw new Error("durable claim missing");}
-    await cancel(store, claimed.operation);
-    assert.equal((await store.retireDispatchPreparation(retirementInput(fixture))).kind, "claimed");
-    assert.equal((await store.retireDispatchPreparation({
-      ...retirementInput(fixture), preparationToken: otherToken,
-    })).kind, "stale");
-    const remaining = await store.listDispatchPreparations({ scope: bound.scope });
-    assert.equal(remaining.length, 1);
-    assert.equal(remaining[0]?.preparation.preparationToken, otherToken);
-    assert.equal(remaining[0]?.preparation.kind, "active");
+    const reservation = await store.prepareDispatch({ authority: operationAuthority(bound), operation: bound });
+    const loser = postgresClaimInput(bound, bound.workspaceId!, reservation, "cancelled-loser");
+    for (const index of [0, 1] as const) {
+      assert.notEqual(loser.receipts[index].grantRequestId, claim.receipts[index].grantRequestId);
+    }
+    const reachedClaim = Promise.withResolvers<void>();
+    const resumeClaim = Promise.withResolvers<void>();
+    const consumed: string[] = [];
+    const submitting = claimContainedTurnWithConsumedGrants({
+      operationStore: { claimPreparedDispatch: async input => {
+        reachedClaim.resolve();
+        await resumeClaim.promise;
+        const result = await store.claimPreparedDispatch(input);
+        assert.equal(result.kind, "stale");
+        assert.equal("committedDispatchProof" in result, false);
+        return result;
+      } },
+      providerAccess: { consumeForDispatch: async () => {
+        consumed.push("provider_access"); return { kind: "consumed", receipt: loser.receipts[0] };
+      } },
+      security: { consumeForDispatch: async () => {
+        consumed.push("runtime_security"); return { kind: "consumed", receipt: loser.receipts[1] };
+      } },
+    } as unknown as ContainedTurnKernelDependencies, bound, bound.scope, loser.subject, loser.claimInput.hostCustodyProof);
+    await Promise.race([reachedClaim.promise, submitting.then(() => assert.fail("loser stopped before the claim barrier"))]);
+    try {
+      assert.deepEqual(consumed, ["provider_access", "runtime_security"]);
+      const claimed = await store.claimPreparedDispatch(claim.claimInput);
+      if (claimed.kind !== "claimed") {throw new Error("durable claim missing");}
+      const cancelled = await cancel(store, claimed.operation);
+      assert.deepEqual(cancelled.dispatch, claimed.operation.dispatch);
+      assert.equal(cancelled.terminal.kind, "open");
+      assert.equal(cancelled.operationCutoff.revision, bound.operationCutoff.revision + 1);
+      // B's receipts have not reached PostgreSQL yet; it still cannot adopt A's grants.
+      for (const consumedGrantRequestIds of [
+        { providerAccessConsumptionReceipt: claim.receipts[0] },
+        { runtimeSecurityConsumptionReceipt: claim.receipts[1] },
+      ]) {
+        await assert.rejects(store.retireDispatchPreparation({ ...retirementInput(fixture),
+          preparationToken: loser.preparationToken, consumedGrantRequestIds }), /claimed grant/u);
+      }
+      resumeClaim.resolve();
+      assert.equal((await submitting).kind, "unavailable", "a losing claim cannot authorize provider start");
+      const winnerRow = async () => (await runtimeQuery(pool,
+        "SELECT state,state_digest,state_codec_version FROM agent_execution.contained_turn_dispatch_preparation_v1 WHERE operation_id=$1 AND preparation_token=$2",
+        [bound.operationId, claim.preparationToken])).rows;
+      const winnerBefore = await winnerRow();
+      const input = { ...retirementInput(fixture), preparationToken: loser.preparationToken };
+      assert.equal((await store.retireDispatchPreparation(retirementInput(fixture))).kind, "claimed");
+      for (const patch of [
+        { expectedOperationRevision: cancelled.revision },
+        { expectedOperationCutoffRevision: cancelled.operationCutoff.revision },
+        { preparationToken: containedTurnIdentity("preparation", "preparation:missing-loser") },
+      ]) {assert.equal((await store.retireDispatchPreparation({ ...input, ...patch })).kind, "stale");}
+      for (const scope of [{ ...bound.scope, tenantId: "tenant:foreign" }, { ...bound.scope, projectId: "project:foreign" }]) {
+        assert.equal((await store.retireDispatchPreparation({ ...input, authority: { ...input.authority, scope } })).kind, "indeterminate");
+      }
+      await assert.rejects(store.retireDispatchPreparation({ ...input, consumedGrantRequestIds: {
+        providerAccessConsumptionReceipt: claim.receipts[0], runtimeSecurityConsumptionReceipt: claim.receipts[1],
+      } }), /substitution/u);
+      let allowSecurity = false;
+      let released = false;
+      const settled = new Set<string>();
+      const settlementIds = new Map<string, string>();
+      const calls: string[] = [];
+      const owner = (index: 0 | 1) => ({ settleConsumedGrant: async ({ receipt, disposition, settlementRequestId }) => {
+        assert.deepEqual(receipt, loser.receipts[index]);
+        assert.equal(disposition, "abandoned_without_claim");
+        if (index === 1 && !allowSecurity) {throw new Error("disposable owner unavailable");}
+        calls.push(receipt.owner);
+        if (settled.has(receipt.owner)) {
+          assert.equal(settlementIds.get(receipt.owner), settlementRequestId);
+          return { kind: "already_settled" };
+        }
+        settled.add(receipt.owner);
+        settlementIds.set(receipt.owner, settlementRequestId);
+        if (index === 0) {throw new Error("disposable lost settlement acknowledgement");}
+        return { kind: "settled" };
+      } });
+      const restarted = new PostgresContainedTurnOperationStore({ pool });
+      const dependencies = {
+        custody: { releaseRetiredReservation: async ({ cleanupPermit }) => {
+          assert.equal(cleanupPermit.preparationToken, loser.preparationToken);
+          assert.equal(cleanupPermit.attemptId, loser.subject.attemptId);
+          assert.equal(cleanupPermit.custodyId, loser.subject.custodyId);
+          assert.equal(cleanupPermit.workspaceId, bound.workspaceId);
+          assert.equal(cleanupPermit.operationCutoffRevision, bound.operationCutoff.revision);
+          assert.equal(cleanupPermit.preparedOperationRevision, bound.revision);
+          calls.push("custody");
+          if (released) {return { kind: "already_released" };}
+          released = true;
+          throw new Error("disposable lost custody acknowledgement");
+        } },
+        operationStore: restarted,
+        provider: { execute: async () => assert.fail("cleanup cannot start a provider") },
+        providerAccess: owner(0), security: owner(1),
+      } as unknown as ContainedTurnKernelDependencies;
+      const pendingPreparation = async () => (await restarted.listDispatchPreparations({ scope: bound.scope }))[0]?.preparation;
+      assert.deepEqual(await recoverContainedTurnDispatchPreparations(dependencies, bound.scope), { discovered: 1, retired: 1 });
+      const pending = await pendingPreparation();
+      if (pending?.kind !== "cleanup_pending") {throw new Error("loser retirement missing");}
+      assert.equal(pending.custodyReleased, false);
+      assert.equal(pending.providerAccessSettled, false);
+      assert.equal(pending.runtimeSecuritySettled, false);
+      const retirementReplay = await restarted.retireDispatchPreparation(input);
+      assert.equal(retirementReplay.kind, "retired");
+      if (retirementReplay.kind === "retired") {assert.deepEqual(retirementReplay.preparation, pending);}
+      for (const patch of [
+        { preparationToken: claim.preparationToken }, { custodyId: claim.subject.custodyId },
+        { preparedOperationRevision: cancelled.revision }, { operationCutoffRevision: cancelled.operationCutoff.revision },
+      ]) {
+        await assert.rejects(restarted.recordDispatchPreparationCleanup({ authority: input.authority,
+          permit: { ...pending.cleanupPermit, ...patch }, target: "custody" }), /exact retired preparation permit/u);
+      }
+      assert.deepEqual(await recoverContainedTurnDispatchPreparations(dependencies, bound.scope), { discovered: 1, retired: 0 });
+      const partial = await pendingPreparation();
+      if (partial?.kind !== "cleanup_pending") {throw new Error("security obligation disappeared");}
+      assert.equal(partial.custodyReleased, true);
+      assert.equal(partial.providerAccessSettled, true);
+      assert.equal(partial.runtimeSecuritySettled, false);
+      assert.deepEqual(partial.cleanupPermit, pending.cleanupPermit);
+      allowSecurity = true;
+      const recovered = new PostgresContainedTurnOperationStore({ pool });
+      assert.deepEqual(await recoverContainedTurnDispatchPreparations({ ...dependencies, operationStore: recovered }, bound.scope), { discovered: 1, retired: 0 });
+      const closed = await recovered.recordDispatchPreparationCleanup({ authority: input.authority,
+        permit: pending.cleanupPermit, target: "runtime_security" });
+      assert.equal(closed.kind, "cleanup_closed", "exact cleanup acknowledgement replay is idempotent");
+      assert.deepEqual(await recoverContainedTurnDispatchPreparations({ ...dependencies, operationStore: recovered }, bound.scope), { discovered: 0, retired: 0 });
+      assert.deepEqual(calls, ["custody", "provider_access", "custody", "provider_access", "runtime_security"]);
+      assert.equal((await recovered.claimPreparedDispatch(loser.claimInput)).kind, "stale");
+      const replay = await recovered.claimPreparedDispatch(claim.claimInput);
+      assert.equal(replay.kind, "observed_claim");
+      assert.equal("committedDispatchProof" in replay, false);
+      const application = createPostgresReplayApplication(recovered, bound.scope);
+      for (let index = 0; index < 2; index += 1) {
+        const result = await application.application.submit({ commandId: bound.commandId,
+          expectedProvider: bound.adapterSnapshot.provider, intent: bound.intent, scope: bound.scope });
+        assert.equal(result.status, "observed");
+      }
+      assert.equal(application.providerCalls.value, 0, "recovery and duplicate submit cannot create a second attempt");
+      assert.equal(application.starts.value, 0);
+      assert.equal(application.claims.length, 0);
+      assert.deepEqual(await winnerRow(), winnerBefore);
+      assert.deepEqual(await recovered.read({ operationId: bound.operationId, scope: bound.scope }), cancelled);
+    } finally {resumeClaim.resolve(); await submitting;}
   });
 });

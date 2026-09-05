@@ -11,7 +11,7 @@ import { recoverContainedTurnCommittedGrantSettlements, recoverContainedTurnDisp
 import { claimContainedTurnWithConsumedGrants } from "../../../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "../../../dist/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.js";
 import { createContainedTurnPreparationScopeDependencies } from "../../../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
-import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnCancellationFingerprint, containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
   completeContainedTurnDispatchGrantSubject,
@@ -133,17 +133,22 @@ test("dispatch preparation cleanup retains possible winners and releases only pr
   assert.equal((await exercise()).releases.length, 0, "unknown ownership retains the possible winner");
 });
 
-test("retirement closes the cleanup TOCTOU and exact permit replay is monotone", () => {
-  const receipts = validateContainedTurnConsumedGrantReceipts(grantSubject(), [
-    consumedReceipt("provider_access", grantSubject()), consumedReceipt("runtime_security", grantSubject()),
+test("claim then cancellation protects the winner while exact loser cleanup is monotone", () => {
+  const subject = completeContainedTurnDispatchGrantSubject({
+    ...grantSubject(), attemptId: containedTurnIdentity("attempt", "attempt:loser"),
+    custodyId: containedTurnIdentity("custody", "custody:loser"),
+    preparationToken: containedTurnIdentity("preparation", "preparation:loser"),
+  });
+  const receipts = validateContainedTurnConsumedGrantReceipts(subject, [
+    consumedReceipt("provider_access", subject), consumedReceipt("runtime_security", subject),
   ]);
   const active = Object.freeze({
-    attemptId,
-    custodyId,
+    attemptId: subject.attemptId,
+    custodyId: subject.custodyId,
     kind: "active" as const,
     operationCutoffRevision: 0,
     operationId,
-    preparationToken,
+    preparationToken: subject.preparationToken,
     preparedOperationRevision: 1,
     providerAccessConsumptionReceipt: receipts[0],
     providerAccessGrantRequestId: receipts[0].grantRequestId,
@@ -151,10 +156,36 @@ test("retirement closes the cleanup TOCTOU and exact permit replay is monotone",
     runtimeSecurityGrantRequestId: receipts[1].grantRequestId,
     workspaceId,
   });
+  const winner = claimContainedTurnDispatchPreparation({
+    ...active, attemptId, custodyId, preparationToken,
+    providerAccessConsumptionReceipt: consumedReceipt("provider_access", grantSubject()) as typeof receipts[0],
+    providerAccessGrantRequestId: grantSubject().providerAccessRequest.grantRequestId,
+    runtimeSecurityConsumptionReceipt: consumedReceipt("runtime_security", grantSubject()) as typeof receipts[1],
+    runtimeSecurityGrantRequestId: grantSubject().runtimeSecurityRequest.grantRequestId,
+  });
+  assert.notEqual(active.providerAccessGrantRequestId, winner.providerAccessGrantRequestId);
+  assert.notEqual(active.runtimeSecurityGrantRequestId, winner.runtimeSecurityGrantRequestId);
+  const claimed = createReservedOperation();
+  const cancellationCommandId = containedTurnIdentity("cancellation_command", "cancellation-command:loser-cleanup");
+  const command = { cancellationCommandId, operationId, scopeDigest: containedTurnScopeDigest(scope),
+    fingerprint: containedTurnCancellationFingerprint({ cancellationCommandId, operationId, scopeDigest: containedTurnScopeDigest(scope) }) };
+  const binding = { authorityVectorDigest: claimed.acceptedAuthorityVectorDigest, operationId, cancellationCommandId };
+  const cancelled = mutateContainedTurnOperation(claimed, { command, kind: "request_cancellation",
+    cutoffProof: { binding, kind: "cutoff", proofId: containedTurnIdentity("proof", "proof:loser-cutoff") },
+    proof: { binding: { ...binding, cancellationFingerprint: command.fingerprint }, kind: "cancellation",
+      proofId: containedTurnIdentity("proof", "proof:loser-cancellation") } });
+  assert.equal(cancelled.operationCutoff.revision, active.operationCutoffRevision + 1);
+  assert.deepEqual(cancelled.dispatch, claimed.dispatch);
+  assert.throws(() => retireContainedTurnDispatchPreparation(winner, "winner"), /claimed dispatch preparation/u);
   const retired = retireContainedTurnDispatchPreparation(active, "retirement:1");
   assert.equal(retired.kind, "cleanup_pending");
   assert.throws(() => claimContainedTurnDispatchPreparation(retired), /never be claimed/u);
   if (retired.kind !== "cleanup_pending") {return;}
+  assert.equal(retired.cleanupPermit.preparationToken, subject.preparationToken);
+  assert.equal(retired.cleanupPermit.operationCutoffRevision, active.operationCutoffRevision);
+  assert.throws(() => recordContainedTurnPreparationCleanup(winner, {
+    permit: retired.cleanupPermit, target: "custody",
+  }), /exact retired preparation permit/u);
 
   const wrongPermit = {
     ...retired.cleanupPermit,
@@ -182,6 +213,9 @@ test("retirement closes the cleanup TOCTOU and exact permit replay is monotone",
     target: "runtime_security",
   }), closed, "exact cleanup replay preserves terminal evidence");
   assert.throws(() => claimContainedTurnDispatchPreparation(closed), /never be claimed/u);
+  assert.equal(winner.kind, "claimed");
+  assert.deepEqual(cancelled.dispatch, claimed.dispatch);
+  assert.equal(cancelled.terminal.kind, "open");
 });
 
 test("retirement durably preserves and reconciles every indeterminate grant consumption", () => {

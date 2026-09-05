@@ -1,6 +1,9 @@
 import type { ContainedTurnDispatchPreparation } from "../../../domain/contained-turn-dispatch-preparation.js";
 import { CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT } from "../../../domain/contained-turn-dispatch-preparation.js";
 import { snapshotContainedTurnDispatchPreparation } from "../../../application/contained-turn-preparation-scope.js";
+import { validateContainedTurnIdentity } from "../../../domain/contained-turn-identities.js";
+import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "../../../domain/contained-turn-limits.js";
+import { assertContainedTurnCanonicalArray } from "../../../domain/contained-turn-record.js";
 import {
   canonicalContainedTurnPostgresJson,
   digestContainedTurnPostgresJson,
@@ -63,6 +66,47 @@ const addConsumptionEvidenceFields = (legacy: Record<string, unknown>): Record<s
     : {}),
 });
 
+const validateLegacyGrantIdentities = (legacy: Record<string, unknown>): void => {
+  for (const key of ["providerAccessGrantRequestId", "runtimeSecurityGrantRequestId"]) {
+    if (!Object.hasOwn(legacy, key) || legacy[key] === null) {continue;}
+    const value = legacy[key];
+    if (typeof value !== "string") {throw new TypeError("legacy grant identity must be text");}
+    validateContainedTurnText("legacy grant identity", value, CONTAINED_TURN_LIMITS.text.identifier);
+  }
+};
+
+const validateLegacyConsumptionEvidence = (legacy: Record<string, unknown>): void => {
+  for (const key of ["providerAccessConsumptionEvidenceId", "runtimeSecurityConsumptionEvidenceId"]) {
+    if (!Object.hasOwn(legacy, key) || legacy[key] === null) {continue;}
+    const value = legacy[key];
+    if (typeof value !== "string") {throw new TypeError("legacy consumption evidence must be text");}
+    validateContainedTurnIdentity("evidence", value);
+  }
+  if (!Object.hasOwn(legacy, "cleanupEvidenceIds")) {return;}
+  const evidence = legacy.cleanupEvidenceIds;
+  if (!Array.isArray(evidence) || evidence.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
+    throw new TypeError("legacy cleanup evidence must be a bounded array");
+  }
+  assertContainedTurnCanonicalArray(evidence);
+  for (const evidenceId of evidence) {validateContainedTurnIdentity("evidence", evidenceId);}
+};
+
+// Upcasting may discard valid historical claims, but must not erase corruption.
+// Fields retained by the upcast still pass the complete current validator.
+const validateLegacyFields = (legacy: Record<string, unknown>, codecVersion: number): void => {
+  try {
+    for (const key of ["custodyReleased", "providerAccessSettled", "runtimeSecuritySettled"]) {
+      if (Object.hasOwn(legacy, key) && typeof legacy[key] !== "boolean") {
+        throw new TypeError("legacy cleanup flags must be primitive booleans");
+      }
+    }
+    if (codecVersion === 1) {validateLegacyGrantIdentities(legacy);}
+    if (codecVersion <= 2) {validateLegacyConsumptionEvidence(legacy);}
+  } catch {
+    throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
+  }
+};
+
 const recoverLegacyCleanupDebt = (legacy: Record<string, unknown>): Record<string, unknown> => legacy.kind === "cleanup_pending"
   ? {
     ...legacy,
@@ -73,8 +117,10 @@ const recoverLegacyCleanupDebt = (legacy: Record<string, unknown>): Record<strin
   : legacy;
 
 const upcastV1 = (state: unknown): ContainedTurnDispatchPreparation => {
+  const original = record(state);
+  validateLegacyFields(original, 1);
   const legacy = recoverLegacyCleanupDebt(addConsumptionEvidenceFields({
-    ...record(state),
+    ...original,
     providerAccessGrantRequestId: null,
     runtimeSecurityGrantRequestId: null,
   }));
@@ -89,6 +135,7 @@ const decodeEnvelope = (state: unknown, codecVersion: 2 | 3 | 4 | 5): ContainedT
       envelope.codecVersion !== codecVersion) {
     throw new ContainedTurnStateQuarantineError(codecVersion, "malformed");
   }
+  if (codecVersion < 5) {validateLegacyFields(record(envelope.payload), codecVersion);}
   const payload = codecVersion < 5
     ? recoverLegacyCleanupDebt(codecVersion === 2
       ? addConsumptionEvidenceFields(record(envelope.payload)) : record(envelope.payload))
