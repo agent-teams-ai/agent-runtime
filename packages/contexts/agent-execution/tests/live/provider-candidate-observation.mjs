@@ -26,7 +26,7 @@ export const observeCustodyReservation = custody => {
       },
     }),
     closure() {
-      if (opened === undefined) {return undefined;}
+      if (opened === undefined) {return;}
       const evidence = custody.evidence(opened.custodyRef);
       assert.ok(evidence);
       return evidence.closure;

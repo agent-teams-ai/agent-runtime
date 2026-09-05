@@ -90,6 +90,14 @@ const tlsBinding = (route: HttpEgressRoute, change: LegacyBinding = {}): HttpEgr
   alpn: change.alpn ?? "http/1.1",
 });
 
+const createInboundConnection = (
+  options: FixtureOptions, observations: EgressFixture["observations"],
+): HttpEgressConnection => Object.freeze({request: chunks(options.request ?? [defaultRequest]),
+  write: async value => {observations.order.push("write-output"); if (options.connectionWriteThrows) {
+    throw new Error("synthetic backpressure failure");} observations.outboundWrites.push(value.slice());},
+  close: async () => {observations.order.push("inbound-close"); return Object.freeze({state:
+    options.inboundClosure ?? "closed", receiptDigest: "inbound-closure-digest"});}});
+
 export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture => {
   const legacyRoute = options.route ?? defaultRoute; const route = narrowRoute(legacyRoute);
   const observations: EgressFixture["observations"] = {order: [], outboundWrites: [], dispatchedRequests: [], receipts: [],
@@ -233,11 +241,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
     hostGeneration: portsWithoutGuard.identity.hostBootId,
     liveProcessSessionIdentity: portsWithoutGuard.identity.liveProcessSessionIdentity});
   const ports = Object.freeze({...portsWithoutGuard, guard});
-  const connection: HttpEgressConnection = Object.freeze({request: chunks(options.request ?? [defaultRequest]),
-    write: async value => {observations.order.push("write-output"); if (options.connectionWriteThrows) {
-      throw new Error("synthetic backpressure failure");} observations.outboundWrites.push(value.slice());},
-    close: async () => {observations.order.push("inbound-close"); return Object.freeze({state:
-      options.inboundClosure ?? "closed", receiptDigest: "inbound-closure-digest"});}});
+  const connection = createInboundConnection(options, observations);
   const operation: HttpEgressOperation = Object.freeze({operationId: "operation-egress-1", attemptId: "attempt-egress-1",
     expectedRequest: Object.freeze({requestId: "request-egress-1", method: "POST", path: "/invoke", host: "broker.invalid"}),
     connection, limits: defaultLimits, ...(options.signal === undefined ? {} : {signal: options.signal})});

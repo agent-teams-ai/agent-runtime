@@ -95,7 +95,7 @@ export const createProviderCandidateEvidenceEnvelope = async value => {
   if ((input.provider.startsWith("claude") ? input.binaryRevision !== binaryDigest :
       input.binaryRevision !== `@openai/codex:0.150.1+${tuple.platform}-${tuple.architecture}`) ||
       (tuple.binaryRevision !== undefined && tuple.binaryRevision !== input.binaryRevision) ||
-      [tuple.binarySha256, tuple.executableSha256].some(value => value !== undefined && value !== binaryDigest)) {
+      [tuple.binarySha256, tuple.executableSha256].some(candidateDigest => candidateDigest !== undefined && candidateDigest !== binaryDigest)) {
     throw new TypeError("canary binary identity is inconsistent");
   }
   if (tuple.platform === "darwin" && (input.physicalContainment !== "indeterminate" ||

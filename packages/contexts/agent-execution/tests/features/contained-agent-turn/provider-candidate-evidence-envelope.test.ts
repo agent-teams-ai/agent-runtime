@@ -6,7 +6,7 @@ import { safeTuple } from "../../live/provider-candidate-evidence-schema.mjs";
 
 const freeze = Object.freeze;
 const digest = "a".repeat(64);
-const reversed = (value: Record<string, unknown>) => freeze(Object.fromEntries(Object.entries(value).reverse()));
+const reversed = (value: Record<string, unknown>) => freeze(Object.fromEntries(Object.entries(value).toReversed()));
 
 // All rejection cases call the publishing boundary with a genuine locally
 // minted provenance object; validation cannot pass merely by rejecting a fake.
@@ -56,10 +56,12 @@ test("bounded evidence rejects raw, executable, mutable and oversized inputs wit
     await reject(freeze({...input, binarySha256: value}));
   }
   const limits = [...DARWIN_LIMITATIONS];
+  const sparseLimits: string[] = [];
+  sparseLimits.length = 2;
   const accessorArray = freeze(Object.defineProperty([limits[0]], "0", getter));
   const symbolArray = freeze(Object.assign([...limits], {[Symbol("extra")]: true}));
   for (const value of [limits, proxy(freeze(limits)), accessorArray, symbolArray,
-    freeze(new Array(2)), freeze([...limits, limits[0]]), freeze([limits[0], limits[0]]), freeze(["raw-secret"])]) {
+    freeze(sparseLimits), freeze([...limits, limits[0]]), freeze([limits[0], limits[0]]), freeze(["raw-secret"])]) {
     await reject(freeze({...input, observations: freeze({...input.observations, containmentLimitations: value})}));
   }
   await reject(freeze({...input, observations: freeze({})}));
@@ -91,7 +93,7 @@ test("canonical envelope retains bounded failure facts, detaches data and reject
   const first = await publish(input);
   const second = await publish(reversed({...input, platformTuple: reversed(input.platformTuple),
     packageIdentity: reversed(input.packageIdentity), observations: reversed({...input.observations,
-      containmentLimitations: freeze([...DARWIN_LIMITATIONS].reverse())})}));
+      containmentLimitations: freeze(DARWIN_LIMITATIONS.toReversed())})}));
   assert.equal(JSON.stringify(first), JSON.stringify(second));
   assert.equal(first.schemaVersion, 3);
   assert.equal(first.observations.resultRef, input.observations.resultRef);

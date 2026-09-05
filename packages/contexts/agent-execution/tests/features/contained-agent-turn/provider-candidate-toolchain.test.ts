@@ -87,11 +87,11 @@ test("missing or malformed outer qualification cannot authorize workspace tools"
 test("independently pinned fixture tools produce deterministic receipt and canonical toolchain identity", async t => {
   const fixture = await sourceFixture(t);
   const qualification = fixture.qualification;
-  const canonical = Object.fromEntries(Object.entries(qualification).sort(([a], [b]) => a.localeCompare(b, "en")));
+  const canonical = Object.fromEntries(Object.entries(qualification).toSorted(([a], [b]) => a.localeCompare(b, "en")));
   const execution = await fixture.resolve();
   assert.equal(execution.build.compilerDigest, qualification.compilerDigest);
   assert.equal(execution.build.toolchainQualificationDigest, sha256(JSON.stringify(canonical)));
-  const reversed = Object.freeze(Object.fromEntries(Object.entries(qualification).reverse()));
+  const reversed = Object.freeze(Object.fromEntries(Object.entries(qualification).toReversed()));
   assert.deepEqual(await fixture.resolve({}, reversed), execution);
   const envelope = await fixture.authority.createProviderCandidateEvidenceEnvelope(evidenceInput(fixture, execution));
   assert.equal(envelope.buildIdentity.compilerDigest, `sha256:${qualification.compilerDigest}`);

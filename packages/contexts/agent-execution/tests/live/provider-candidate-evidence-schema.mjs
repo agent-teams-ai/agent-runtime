@@ -10,7 +10,7 @@ export const record = (value, fields, required = fields) => {
   if (keys.length > fields.length || keys.some(key => typeof key !== "string" || !fields.includes(key)) ||
       required.some(key => !keys.includes(key))) {return reject();}
   const result = {};
-  for (const key of keys.sort()) {
+  for (const key of keys.toSorted()) {
     const property = Object.getOwnPropertyDescriptor(value, key);
     if (!Object.hasOwn(property, "value") || !property.enumerable) {return reject();}
     result[key] = property.value;
@@ -81,7 +81,7 @@ const limitations = input => {
     result.push(choice(property.value, DARWIN_LIMITATIONS));
   }
   if (new Set(result).size !== result.length) {return reject();}
-  return Object.freeze(result.sort());
+  return Object.freeze(result.toSorted());
 };
 const OBSERVATIONS = Object.freeze({
   artifactManifestRef: value => text(value, /^urn:agent-runtime:artifact-manifest:[a-f0-9]{64}$/u),
@@ -113,15 +113,7 @@ export const safeObservations = input => {
   return Object.freeze(result);
 };
 
-const validateClosure = (input, observations, tuple) => {
-  const darwin = tuple.platform === "darwin";
-  const profile = darwin ? "cooperative-darwin-posix-process-group" : "strict-linux-cgroup-v2";
-  if (tuple.containmentProfile !== undefined && tuple.containmentProfile !== profile) {return reject();}
-  if (["closureStatus", "containmentProfile", "containmentLimitations"].every(key => observations[key] === undefined)) {return;}
-  if (observations.closureStatus === undefined || observations.containmentProfile !== profile ||
-      JSON.stringify(observations.containmentLimitations) !== JSON.stringify(darwin ? [...DARWIN_LIMITATIONS].sort() : [])) {return reject();}
-  if (observations.closureStatus === "closed" &&
-      (darwin || input.physicalContainment !== "contained" || observations.containmentProofDigest === undefined)) {return reject();}
+const validateUnprovenOrNotStartedClosure = (input, observations) => {
   if (observations.closureStatus === "unproven" &&
       (input.physicalContainment !== "indeterminate" || observations.terminalKind === "final" ||
        (observations.terminalStatus !== undefined && observations.terminalStatus !== "reconcile_required") ||
@@ -132,6 +124,17 @@ const validateClosure = (input, observations, tuple) => {
        observations.containmentProofDigest !== undefined || observations.providerOutcome === "succeeded" ||
        observations.executionClosureProofDigest !== undefined || observations.providerTerminalProofDigest !== undefined ||
        observations.outputDrainProofDigest !== undefined)) {return reject();}
+};
+const validateClosure = (input, observations, tuple) => {
+  const darwin = tuple.platform === "darwin";
+  const profile = darwin ? "cooperative-darwin-posix-process-group" : "strict-linux-cgroup-v2";
+  if (tuple.containmentProfile !== undefined && tuple.containmentProfile !== profile) {return reject();}
+  if (["closureStatus", "containmentProfile", "containmentLimitations"].every(key => observations[key] === undefined)) {return;}
+  if (observations.closureStatus === undefined || observations.containmentProfile !== profile ||
+      JSON.stringify(observations.containmentLimitations) !== JSON.stringify(darwin ? DARWIN_LIMITATIONS.toSorted() : [])) {return reject();}
+  if (observations.closureStatus === "closed" &&
+      (darwin || input.physicalContainment !== "contained" || observations.containmentProofDigest === undefined)) {return reject();}
+  validateUnprovenOrNotStartedClosure(input, observations);
 };
 const requireFacts = (observations, keys) => {
   if (keys.some(key => observations[key] === undefined)) {return reject();}
@@ -145,6 +148,12 @@ const validateOutputDrainEvidence = observations => {
   if (noStart && (observations.closureStatus !== "not-started" || observations.outputEvents !== 0 ||
       observations.outputDigest !== undefined)) {return reject();}
 };
+const validateRecoveryStatus = observations => {
+  const debt = observations.reconciliation === "required" || observations.closureRecovery === "required";
+  const recoveryKnown = observations.reconciliation !== undefined && observations.closureRecovery !== undefined;
+  if ((debt && observations.terminalStatus !== undefined && observations.terminalStatus !== "reconcile_required") ||
+      (recoveryKnown && !debt && observations.terminalStatus === "reconcile_required")) {return reject();}
+};
 const validateTerminal = (input, observations, tuple) => {
   const keys = ["terminalKind", "terminalStatus", "reconciliation", "closureRecovery"];
   const final = observations.terminalKind === "final";
@@ -156,10 +165,7 @@ const validateTerminal = (input, observations, tuple) => {
     if (!final || !finalStatus || (observations.providerOutcome !== undefined &&
         observations.providerOutcome !== observations.terminalStatus)) {return reject();}
   } else if (input.status !== "failed") {requireFacts(observations, keys);}
-  const debt = observations.reconciliation === "required" || observations.closureRecovery === "required";
-  const recoveryKnown = observations.reconciliation !== undefined && observations.closureRecovery !== undefined;
-  if ((debt && observations.terminalStatus !== undefined && observations.terminalStatus !== "reconcile_required") ||
-      (recoveryKnown && !debt && observations.terminalStatus === "reconcile_required")) {return reject();}
+  validateRecoveryStatus(observations);
   if (observations.terminalStatus === "succeeded" &&
       (tuple.platform !== "linux" || observations.providerOutcome !== "succeeded" ||
        observations.closureStatus !== "closed" || input.physicalContainment !== "contained")) {return reject();}

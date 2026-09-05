@@ -11,7 +11,7 @@ import { recoverContainedTurnCommittedGrantSettlements, recoverContainedTurnDisp
 import { claimContainedTurnWithConsumedGrants } from "../../../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "../../../dist/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.js";
 import { createContainedTurnPreparationScopeDependencies } from "../../../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
-import { containedTurnCancellationFingerprint, containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnCancellationFingerprint, containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
   completeContainedTurnDispatchGrantSubject,
@@ -34,62 +34,16 @@ import {
   createReservedOperation,
   custodyId,
   effectId,
-  executionGenerationId,
-  hostBootId,
-  hostInstanceId,
   operationId,
   preparationToken,
   scope,
   workspaceId,
 } from "../../contained-turn-kernel-fixtures.ts";
+import { consumedReceipt, grantSubject } from "./support/dispatch-grant-fixture.ts";
 import { committedDispatchProofForClaim } from "./support/committed-dispatch-proof-fixture.ts";
 
 const unusedMandatoryDependency = async (): Promise<never> => {
   throw new Error("unused mandatory dependency");
-};
-
-const grantSubject = (operation: ContainedTurnKernelOperation = createOperation()) => {
-  const providerAccess = operation.providerAccessSnapshot;
-  const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
-  return completeContainedTurnDispatchGrantSubject({
-    attemptId, custodyId, effectId, executionGenerationId, hostBootId, hostInstanceId,
-    operationCutoffRevision: operation.operationCutoff.revision, operationId, preparationToken,
-    provider: operation.adapterSnapshot.provider,
-    providerAccessExpectation: {
-      acceptedAuthorityDigest: operation.acceptedAuthorityVectorDigest, accessRef: providerAccess.accessRef,
-      authorityHeadDigest: providerAccess.ownerAuthorityDigest, bindingDigest: providerBindingDigest,
-      bindingRevision: providerAccess.revision, credentialBindingDigest: providerAccess.credentialBindingDigest,
-      credentialBindingRef: providerAccess.credentialBindingRef, credentialGeneration: providerAccess.credentialGeneration,
-      providerAccountRef: providerAccess.providerAccountRef, providerRouteRef: providerAccess.providerRouteRef,
-    },
-    purpose: "contained_turn_provider_start_v1",
-    runtimeSecurityExpectation: {
-      acceptedAuthorityDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
-      authorityGeneration: operation.acceptedAuthorityVector.operationAuthorityRevision,
-      authorityHeadDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
-      authorityRevision: operation.acceptedAuthorityVector.securityAuthorityRevision,
-      constraintsDigest: digestContainedTurnCanonicalValue({
-        adapterSnapshot: operation.adapterSnapshot, capabilityManifest: operation.capabilityManifest, intentMode: operation.intent.mode,
-      } as never),
-      containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
-      providerBindingDigest, providerId: operation.adapterSnapshot.provider,
-    },
-    scope, scopeDigest: containedTurnScopeDigest(scope), workspaceId,
-  });
-};
-
-const consumedReceipt = (owner: "provider_access" | "runtime_security", subject: ReturnType<typeof grantSubject>) => {
-  const request = owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
-  return Object.freeze({
-    authorityFacts: owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation,
-    claimBeforeControlTime: 100, claimBindingDigest: request.claimBindingDigest, consumedAtControlTime: 50,
-    consumptionDigest: `${owner}-consumption:one`, grantRequestDigest: request.grantRequestId.slice("grant-request:".length) as never,
-    grantRequestId: request.grantRequestId, operationId: subject.operationId, owner,
-    ownerEvidenceRef: `${owner}-evidence:v1:one`, provider: subject.provider,
-    purpose: "contained-turn.provider-dispatch/v1" as const, requestDigest: request.requestDigest,
-    scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
-    validThroughOperationCutoffRevision: subject.operationCutoffRevision,
-  });
 };
 
 test("dispatch preparation cleanup retains possible winners and releases only proved losers", async () => {
