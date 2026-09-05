@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 
 // Observe the captured cleanup intrinsic, including buffers never dispatched.
 // Restore the global before running tests; only Host byte cleanup retains it.
 const intrinsicFill = Uint8Array.prototype.fill;
 const decoder = new TextDecoder();
 let clears: Array<{bytes: Uint8Array; before: string}> = [];
-Object.defineProperty(Uint8Array.prototype, "fill", {configurable: true, writable: true,
-  value: function(this: Uint8Array, value: number): Uint8Array {
+const observedFill = mock.method(Uint8Array.prototype, "fill",
+  function(this: Uint8Array, value: number): Uint8Array {
     if (value === 0) {clears.push({bytes: this, before: decoder.decode(this)});}
     return Reflect.apply(intrinsicFill, this, [value]);
-  }});
+  });
 const {createStrictHttpEgressBroker} = await import(
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js");
 const {createEgressFixture, SECRET_MARKER} = await import("./http-egress-test-fixture.ts");
-Object.defineProperty(Uint8Array.prototype, "fill", {configurable: true, writable: true, value: intrinsicFill});
+observedFill.mock.restore();
 
 for (const scenario of ["success", "observe", "projection", "provisional", "final", "before-dispatch",
   "after-dispatch", "cancel-before", "cancel-after", "unknown", "close-throws", "record-throws", "clock-throws"] as const) {

@@ -1,4 +1,4 @@
-import type { HttpEgressLimits, HttpEgressReceipt } from "./http-egress-contracts.js";
+import type { HttpEgressReceipt } from "./http-egress-contracts.js";
 import type { HostHttpAdmissionGuard } from "./host-http-admission-guard.js";
 
 export type HttpEgressRoute = Readonly<{

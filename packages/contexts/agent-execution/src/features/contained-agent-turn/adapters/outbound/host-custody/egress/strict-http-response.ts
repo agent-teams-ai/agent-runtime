@@ -309,8 +309,7 @@ export const forwardStrictHttpResponse = async (
   connection: HttpEgressConnection,
   limits: HttpEgressLimits,
   clock: HttpEgressClock,
-  signal?: AbortSignal,
-  onHeadAccepted?: (status: number) => boolean,
+  ...[signal, onHeadAccepted]: [signal?: AbortSignal, onHeadAccepted?: (status: number) => boolean]
 ): Promise<StrictHttpResponseResult> => {
   const writeContext = Object.freeze({ connection, clock, limits, signal });
   const reader = new DeadlineByteReader(source, clock, limits, signal);

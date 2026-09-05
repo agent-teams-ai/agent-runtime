@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import vm from "node:vm";
 
 // The repository build normally supplies .js siblings under dist. This narrow
@@ -19,17 +19,17 @@ registerHooks({resolve(specifier, context, nextResolve) {
 
 const intrinsicFill = Uint8Array.prototype.fill;
 let capturedClears: Uint8Array[] | undefined;
-Object.defineProperty(Uint8Array.prototype, "fill", {configurable: true, writable: true,
-  value: function(this: Uint8Array, value: number): Uint8Array {
+const observedFill = mock.method(Uint8Array.prototype, "fill",
+  function(this: Uint8Array, value: number): Uint8Array {
     if (value === 0) {capturedClears?.push(this);}
     return Reflect.apply(intrinsicFill, this, [value]);
-  }});
+  });
 const {
   PREPARED_HTTP_REQUEST_V1_LIMITS: LIMITS,
   PreparedHttpRequestV1Error,
   createPreparedHttpRequestV1,
 } = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.ts");
-Object.defineProperty(Uint8Array.prototype, "fill", {configurable: true, writable: true, value: intrinsicFill});
+observedFill.mock.restore();
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -113,7 +113,7 @@ test("emits one exact HTTP/1.1 wire product and exact immutable spans", () => {
     "Content-Length: 15\r\n",
   ];
   const expectedWire = "POST /v1/messages HTTP/1.1\r\n"
-    + expectedLines.join("") + "\r\n" + '{"prompt":"hi"}';
+    + expectedLines.join("") + '\r\n{"prompt":"hi"}';
   assert.deepEqual(prepared.wireBytes, bytes(expectedWire));
   assert.equal(decoder.decode(slice(prepared.wireBytes, prepared.targetSpan.offset,
     prepared.targetSpan.length)), "/v1/messages");
@@ -364,7 +364,8 @@ test("rejects proxy-shaped root, arrays, and field records without consulting tr
 });
 
 test("rejects sparse arrays, array accessors, symbols, and extra record properties", () => {
-  const sparse = new Array(1);
+  const sparse: unknown[] = [];
+  sparse.length = 1;
   assertRejected({credentialFields: sparse});
   const accessor: unknown[] = [];
   Object.defineProperty(accessor, "0", {get: () => ({name: "x", valueBytes: bytes("x")})});
@@ -508,7 +509,7 @@ test("length-framed header ambiguity candidates produce distinct projections", (
   const second = consumePreparedHttpRequestV1(baseInput({presentationFields: [], bodyBytes: new Uint8Array(),
     credentialHeaderNameAllowlist: ["x-ab", "x-d"],
     credentialFields: [{name: "x-ab", valueBytes: bytes("c")}, {name: "x-d", valueBytes: bytes("e")}] }));
-  assert.equal("x-a" + "bc" + "x-d" + "e", "x-ab" + "c" + "x-d" + "e",
+  assert.equal(["x-a", "bc", "x-d", "e"].join(""), ["x-ab", "c", "x-d", "e"].join(""),
     "the deliberately unframed name/value sequences collide");
   assert.notDeepEqual(first.headerProjectionBytes, second.headerProjectionBytes);
   assert.deepEqual(first.headerProjectionBytes, expectedProjection([
