@@ -59,6 +59,13 @@ export interface ContainedTurnApplicationView {
 }
 
 export type ContainedTurnApplicationSubmitOutcome =
+  | {
+      /** Acceptance is unresolved; these references are evidence, not a persisted operation or retry permission. */
+      readonly candidateOperationId: string;
+      readonly commandId: string;
+      readonly evidenceId: string;
+      readonly status: "potential_acceptance";
+    }
   | { readonly code: "command_fingerprint_conflict"; readonly status: "conflict" }
   | { readonly code: "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
   | { readonly status: "denied" }

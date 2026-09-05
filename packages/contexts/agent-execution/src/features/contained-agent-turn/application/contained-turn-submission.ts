@@ -7,7 +7,6 @@ import {
 } from "../domain/contained-turn-authority.js";
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
-import { mutateContainedTurnOperation } from "../domain/contained-turn-transitions.js";
 import {
   assertContainedTurnExactRecord,
   detachAndFreezeContainedTurnValue,
@@ -120,13 +119,14 @@ const finishContainedTurnAcceptance = async (
     return { code: "command_fingerprint_conflict", status: "conflict" };
   }
   if (accepted.kind === "potential_acceptance") {
-    const potential = mutateContainedTurnOperation(accepted.candidateOperation, {
-      evidenceId: accepted.evidenceId,
-      kind: "record_reconciliation_debt",
-      source: "store_commit",
+    // No durable operation was returned. Preserve reconciliation references without
+    // fabricating kernel state or invoking the confirmed-acceptance callback.
+    return Object.freeze({
+      candidateOperationId: accepted.candidateOperation.operationId,
+      commandId: accepted.candidateOperation.commandId,
+      evidenceId: containedTurnIdentity("evidence", accepted.evidenceId),
+      status: "potential_acceptance",
     });
-    try {options?.onAccepted?.(potential);} catch {}
-    return { operation: potential, status: "observed" };
   }
   if (accepted.kind === "replayed") {
     try {options?.onAccepted?.(accepted.operation);} catch {}

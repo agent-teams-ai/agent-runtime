@@ -317,6 +317,9 @@ export interface CopiedSubmitOutcome {
 }
 
 interface OwnerSubmitOutcomeSnapshot {
+  readonly candidateOperationId: unknown;
+  readonly commandId: unknown;
+  readonly evidenceId: unknown;
   readonly code: unknown;
   readonly status: unknown;
   readonly turn: OwnerTurnSnapshot | undefined;
@@ -337,7 +340,12 @@ const snapshotOwnerSubmitOutcome = (
     const code = record.code;
     return Object.freeze({
       kind: "snapshot" as const,
-      value: Object.freeze({ code, status, turn }),
+      value: Object.freeze({
+        candidateOperationId: record.candidateOperationId,
+        commandId: record.commandId,
+        evidenceId: record.evidenceId,
+        code, status, turn,
+      }),
     });
   } catch {
     return ownerContractViolation;
@@ -352,7 +360,18 @@ export const copySubmitOutcome = (
   if (snapshot.kind === "contract_violation") {
     return contractViolation("malformed_owner_outcome");
   }
-  const { code, status, turn } = snapshot.value;
+  const { candidateOperationId, commandId, evidenceId, code, status, turn } = snapshot.value;
+  if (status === "potential_acceptance") {
+    const copiedCommandId = copyCommandId(commandId);
+    if (turn !== undefined || !isBoundedIdentity(candidateOperationId) ||
+      copiedCommandId === undefined || !isBoundedIdentity(evidenceId)) {
+      return contractViolation("malformed_owner_outcome");
+    }
+    return Object.freeze({ outcome: Object.freeze({
+      candidateOperationId, commandId: copiedCommandId, evidenceId,
+      status: "potential_acceptance" as const,
+    }) });
+  }
   if (status === "observed") {
     if (turn === undefined) {
       return contractViolation("malformed_owner_outcome");
