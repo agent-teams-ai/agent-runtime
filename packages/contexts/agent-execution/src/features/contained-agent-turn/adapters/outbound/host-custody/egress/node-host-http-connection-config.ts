@@ -33,7 +33,7 @@ const bounded = (value: number, minimum: number, maximum: number): boolean =>
 
 const supportedBodyPolicy = (expected: HttpEgressExpectedRequest, limits: HttpEgressLimits): boolean => {
   if (expected.bodyMode === undefined) {return expected.method === "POST";}
-  return expected.bodyMode === "forbidden" && (expected.method === "GET" || expected.method === "HEAD")
+  return expected.bodyMode === "forbidden" && expected.method === "HEAD"
     && limits.maxInboundBodyBytes === 0;
 };
 

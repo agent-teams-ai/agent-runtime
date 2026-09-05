@@ -178,7 +178,7 @@ export const parseBoundedRequestHead = (
   limits: HttpEgressLimits,
 ): ParsedRequestHead => {
   if (expected.bodyMode !== undefined && (expected.bodyMode !== "forbidden"
-    || (expected.method !== "GET" && expected.method !== "HEAD") || limits.maxInboundBodyBytes !== 0)) {
+    || expected.method !== "HEAD" || limits.maxInboundBodyBytes !== 0)) {
     throw new StrictHttpRequestError("malformed");
   }
   if (headerEnd + CRLFCRLF.byteLength > limits.maxInboundHeaderBytes) {

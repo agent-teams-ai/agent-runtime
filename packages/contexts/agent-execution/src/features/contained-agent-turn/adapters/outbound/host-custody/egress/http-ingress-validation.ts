@@ -16,7 +16,7 @@ const exact = (value: unknown, names: readonly string[]): Record<string, unknown
 };
 const validateBodyPolicy = (expected: Record<string, unknown>, limits: HttpEgressLimits): void => {
   if (Object.hasOwn(expected, "bodyMode") && (expected.bodyMode !== "forbidden"
-    || (expected.method !== "GET" && expected.method !== "HEAD") || limits.maxInboundBodyBytes !== 0)) {
+    || expected.method !== "HEAD" || limits.maxInboundBodyBytes !== 0)) {
     throw new TypeError("invalid HTTP egress body policy");
   }
 };

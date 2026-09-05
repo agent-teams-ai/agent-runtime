@@ -6,14 +6,14 @@ import { readStrictHttpRequest } from "../../../dist/features/contained-agent-tu
 import { snapshotHttpEgressOperation } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-ingress-validation.js";
 import { defaults, encode, fixture, flush, ManualClock } from "./node-host-http-connection-fixture.ts";
 
-const config = (method: "GET" | "HEAD") => ({...defaults,
+const config = (method: "HEAD") => ({...defaults,
   expectedRequest: {...defaults.expectedRequest, method, path: "/api/hello", bodyMode: "forbidden" as const},
   limits: {...defaults.limits, maxInboundBodyBytes: 0}});
 const wire = (method: string, fields = "") =>
   `${method} /api/hello HTTP/1.1\r\nHost: broker.invalid\r\n${fields}\r\n`;
 const source = (parts: readonly string[]) => ({async *[Symbol.asyncIterator]() {for (const p of parts) {yield encode(p);}}});
 
-for (const method of ["GET", "HEAD"] as const) {
+for (const method of ["HEAD"] as const) {
   for (const fields of ["", "Content-Length: 0\r\n"]) {
     test(`explicit bodyless ${method} preserves raw headers at every split: ${JSON.stringify(fields)}`, async () => {
       const raw = encode(wire(method, fields));
@@ -77,7 +77,7 @@ for (const method of ["GET", "HEAD"] as const) {
 }
 
 test("bodyless declaration is explicit, closed and paired with a zero body budget", async () => {
-  for (const method of ["GET", "HEAD"] as const) {
+  for (const method of ["HEAD"] as const) {
     const c = config(method); const {bodyMode: _mode, ...unspecified} = c.expectedRequest;
     assert.throws(() => fixNodeHostHttpConnectionConfig({...c, expectedRequest: unspecified}), /invalid_configuration/);
     await assert.rejects(readStrictHttpRequest(source([wire(method)]), unspecified, c.limits, new ManualClock()), /smuggling/);
@@ -85,7 +85,7 @@ test("bodyless declaration is explicit, closed and paired with a zero body budge
     await assert.rejects(readStrictHttpRequest(source([wire(method)]), c.expectedRequest,
       {...c.limits, maxInboundBodyBytes: 1}, new ManualClock()));
   }
-  for (const change of [{method: "POST"}, {method: "PUT"}, {bodyMode: "optional"}, {bodyMode: null}]) {
+  for (const change of [{method: "GET"}, {method: "POST"}, {method: "PUT"}, {bodyMode: "optional"}, {bodyMode: null}]) {
     const c = config("HEAD"); const expected = {...c.expectedRequest, ...change} as HttpEgressExpectedRequest;
     assert.throws(() => fixNodeHostHttpConnectionConfig({...c, expectedRequest: expected}), /invalid_configuration/);
     await assert.rejects(readStrictHttpRequest(source([wire(expected.method, "Content-Length: 0\r\n")]),
