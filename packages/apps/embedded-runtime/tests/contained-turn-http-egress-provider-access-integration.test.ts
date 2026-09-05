@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {describe, test} from "node:test";
 import {createCredentialMaterializationRequestDigest, createInMemoryContainedTurnDispatchConsumptionV1} from "@agent-teams/provider-access/composition";
+import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate, createNodeSha256EgressDigest,
+  type EgressCurrentAuthorityV2} from "@agent-teams/runtime-security/composition";
 import {createContainedTurnHttpProviderAccessAuthorization} from "../dist/composition/contained-turn-http-provider-access.js";
+import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
+import {canonical} from "../../../contexts/runtime-security/tests/provider-process-egress-authorization.fixtures.ts";
 import {createHostHttpEgressSession} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
-import type {HttpEgressOperation} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js";
+import type {HttpEgressOperation, HttpEgressReceipt} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js";
 import type {HostHttpGrant, HostHttpProvisionalDecision,
   HttpEgressBrokerPorts} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 
@@ -12,49 +16,99 @@ const enc = new TextEncoder(); const SECRET = "fixture-secret-do-not-observe";
 const bytes = (value: string) => enc.encode(value);
 async function* chunks(value: string): AsyncIterable<Uint8Array> {yield bytes(value);}
 const digest = (parts: readonly Uint8Array[]) => {const hash = createHash("sha256");
-  for (const part of parts) {hash.update(part);} return hash.digest("hex");};
+  for (const part of parts) {hash.update(part);} return `sha256:${hash.digest("hex")}` as const;};
 const key = Object.freeze({algorithm: "ed25519" as const, signatureEncoding: "hex-lower" as const,
   keyRef: "key-1", publicKeyDigest: "public-key-digest", keyGeneration: "key-generation-4",
   signerRevision: "signer-revision-2", hostReservationId: "custody-1"});
 const signature = Object.freeze({...key, value: "a".repeat(128)});
-const snapshot = Object.freeze({tenantId: "tenant-1", projectId: "project-1", scopeDigest: "scope-digest",
+const snapshot = Object.freeze({tenantId: "tenant-1", projectId: "project-1", scopeDigest: digest([bytes("scope")]),
   accessRef: "access-1", provider: "codex" as const, providerAccountRef: "account-1", providerRouteRef: "route-1",
-  credentialBindingRef: "binding-1", ownerAuthorityDigest: "pa-original-binding-digest", revision: 7,
+  credentialBindingRef: "binding-1", ownerAuthorityDigest: digest([bytes("pa-original-binding")]), revision: 7,
   credentialGeneration: 11, availability: "available" as const, revocation: "active" as const});
 const route = Object.freeze({routeReceiptDigest: "route-receipt", originHost: "provider.example", originPort: 443,
   upstreamMethod: "POST" as const, upstreamPath: "/fixed", forwardedRequestHeaderNames: Object.freeze(["content-type"] as const),
   credentialFieldNames: Object.freeze(["authorization"])});
 const response = (status = 200) => `HTTP/1.1 ${status} Status\r\nContent-Length: 2\r\n\r\nok`;
+const scope = Object.freeze({tenantId: snapshot.tenantId, projectId: snapshot.projectId,
+  operationId: "operation-1", scopeDigest: snapshot.scopeDigest});
+const tlsPolicyDigest = digest([bytes("tls-policy")]);
+const policy = (requestDigest: string) => Object.freeze({policyRef: "policy-1", policyRevision: "revision-3",
+  policyGeneration: "policy-generation-9", authorizedRequestDigest: requestDigest,
+  origin: Object.freeze({scheme: "https" as const, hostname: route.originHost, port: route.originPort}),
+  dnsIdentity: route.originHost, tlsPolicyDigest, limits: Object.freeze({requestBytes: 1_000_000,
+    responseBytes: 1_000_000, totalMilliseconds: 900}), decisionTtlMilliseconds: 100, revoked: false});
+const providerAccess = Object.freeze({accessRef: snapshot.accessRef, providerRef: snapshot.provider,
+  accountRef: snapshot.providerAccountRef, routeRef: snapshot.providerRouteRef,
+  routeAuthorityDigest: digest([bytes("runtime-security-owned-route-authority")]),
+  credentialBindingDigest: snapshot.ownerAuthorityDigest,
+  routeGeneration: String(snapshot.revision), credentialGeneration: String(snapshot.credentialGeneration)});
+
+// Synthetic policy/current-authority owners only: this lane composes real RS signing
+// and verification with real PA application decisions, not production owner stores.
+const realSecurityFixture = (drift?: "policyGeneration" | "credentialGeneration") => {
+  let authority: EgressCurrentAuthorityV2 | undefined;
+  const resolves: unknown[] = []; const reads: unknown[] = [];
+  const candidate = createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate({
+    scope, hostReservationId: "custody-1", keyRef: "key-1", keyGeneration: "key-generation-4",
+    signerRevision: "signer-revision-2",
+    clock: {read: () => ({authorityId: "clock-authority", epoch: "epoch-1", controlTime: 10})},
+    authorityOwner: {
+      async resolvePolicy(input) {
+        resolves.push(input);
+        authority = {authorityRef: "authority-1",
+          policy: policy(createNodeSha256EgressDigest().digest(canonical(input.request))), providerAccess};
+        return {status: "current", authority};
+      },
+      async readCurrent(input) {
+        reads.push(input);
+        if (authority === undefined) {throw new Error("fixture policy unresolved");}
+        if (drift === "policyGeneration") {authority = {...authority,
+          policy: {...authority.policy, policyGeneration: "policy-generation-10"}};}
+        if (drift === "credentialGeneration") {authority = {...authority,
+          providerAccess: {...authority.providerAccess, credentialGeneration: "12"}};}
+        return {status: "current", authority};
+      },
+    },
+  });
+  try {return {candidate, binding: bindContainedTurnHttpRuntimeSecurity(candidate), resolves, reads};}
+  catch (error) {candidate.dispose(); throw error;}
+};
 
 type Options = Readonly<{status?: number; paAuthorizeKind?: "authorized" | "observed"; firstObserveDenied?: boolean;
-  revokeBeforeObserve?: boolean; secondObserveDenied?: boolean; verifierProvisional?: boolean; verifierGrant?: boolean; substituteKey?: boolean;
+  revokeBeforeObserve?: boolean; revokeBeforeSecondObserve?: boolean; secondObserveDenied?: boolean;
+  verifierProvisional?: boolean; verifierGrant?: boolean; substituteKey?: boolean;
   mutateProvisional?: (value: HostHttpProvisionalDecision) => HostHttpProvisionalDecision;
   mutateGrant?: (value: HostHttpGrant) => HostHttpGrant; journal?: "consumed" | "duplicate" | "mismatch" | "unknown";
   cut?: "current" | "revoked" | "unknown"; cutEpoch?: string; dispatch?: "success" | "lost" | "throw";
   truncated?: boolean; upstreamClosure?: "closed" | "unknown"; inboundClosure?: "closed" | "unknown";
   evidence?: "recorded" | "unknown"}>;
 
-const fixture = (options: Options = {}) => {
+const fixture = (options: Options = {}, security?: ReturnType<typeof bindContainedTurnHttpRuntimeSecurity>) => {
   const order: string[] = []; const writes: Uint8Array[] = []; const wires: Uint8Array[] = [];
-  const paInputs: unknown[] = []; const provisionalInputs: unknown[] = []; const finalInputs: unknown[] = [];
+  const paInputs: Parameters<HttpEgressBrokerPorts["providerAccess"]["authorize"]>[0][] = [];
+  const provisionalInputs: Parameters<HttpEgressBrokerPorts["runtimeSecurity"]["requestProvisional"]>[0][] = [];
+  const finalInputs: Parameters<HttpEgressBrokerPorts["runtimeSecurity"]["authorizeFirstApplicationByte"]>[0][] = [];
+  const decisions: HostHttpProvisionalDecision[] = []; const grants: HostHttpGrant[] = [];
+  const journalInputs: {key: HostHttpGrant["payload"]["consumption"]["journalKey"]; requestFingerprint: string}[] = [];
+  const consumed = new Map<string, string>();
+  const materializedBuffers: Uint8Array[] = []; const wireBuffers: Uint8Array[] = [];
   let ids = 0; let observes = 0; let opens = 0; let journalCalls = 0; let renders = 0;
   const paBinding = Object.freeze({...snapshot, acceptedAuthorityDigest: "accepted:1", authorityHeadDigest: "authority:1",
     bindingDigest: "binding:1", bindingRevision: snapshot.revision, credentialBindingDigest: snapshot.ownerAuthorityDigest,
     claimBeforeControlTime: 1000, expiresAtControlTime: 1000, opaqueOwnerEvidenceRef: "pa:evidence"});
   const {revision: _revision, ownerAuthorityDigest: _ownerAuthorityDigest, ...paSeed} = paBinding;
   const pa = createInMemoryContainedTurnDispatchConsumptionV1({bindings: [paSeed], initialControlTime: 10});
-  const policy = (requestDigest: string) => Object.freeze({policyRef: "policy-1", policyRevision: "revision-3",
-    policyGeneration: "policy-generation-9", authorizedRequestDigest: requestDigest,
-    origin: Object.freeze({scheme: "https" as const, hostname: route.originHost, port: route.originPort}),
-    dnsIdentity: route.originHost, tlsPolicyDigest: "tls-policy-digest", limits: Object.freeze({requestBytes: 1_000_000,
-      responseBytes: 1_000_000, totalMilliseconds: 900}), decisionTtlMilliseconds: 100, revoked: false});
-  const providerAccess = Object.freeze({accessRef: snapshot.accessRef, providerRef: snapshot.provider,
-    accountRef: snapshot.providerAccountRef, routeRef: snapshot.providerRouteRef,
-    routeAuthorityDigest: "runtime-security-owned-route-authority", credentialBindingDigest: snapshot.ownerAuthorityDigest,
-    routeGeneration: String(snapshot.revision), credentialGeneration: String(snapshot.credentialGeneration)});
+  const paOutcomes: Awaited<ReturnType<typeof pa.materialization.authorize>>[] = [];
   const runtimeSecurity: HttpEgressBrokerPorts["runtimeSecurity"] = Object.freeze({
     requestProvisional: async input => {
       order.push("rs-provisional"); provisionalInputs.push(input);
+      if (security !== undefined) {
+        const outcome = await security.runtimeSecurity.requestProvisional(input);
+        if (outcome.status !== "authorized") {return outcome;}
+        decisions.push(outcome.decision);
+        return Object.freeze({status: "authorized" as const,
+          decision: options.mutateProvisional?.(outcome.decision) ?? outcome.decision});
+      }
       const signedRequestDigest = digest([bytes(JSON.stringify(input.request))]);
       let decision: HostHttpProvisionalDecision = Object.freeze({contractVersion: "provider-process-egress-provisional-decision/v2",
         authorizationRequestId: input.authorizationRequestId, authorityRef: "authority-1",
@@ -69,6 +123,13 @@ const fixture = (options: Options = {}) => {
     },
     authorizeFirstApplicationByte: async input => {
       order.push("rs-final"); finalInputs.push(input);
+      if (security !== undefined) {
+        const outcome = await security.runtimeSecurity.authorizeFirstApplicationByte(input);
+        if (outcome.status !== "authorized") {return outcome;}
+        grants.push(outcome.grant);
+        return Object.freeze({status: "authorized" as const,
+          grant: options.mutateGrant?.(outcome.grant) ?? outcome.grant});
+      }
       let grant: HostHttpGrant = Object.freeze({payload: Object.freeze({
         contractVersion: "provider-process-first-application-byte-grant/v2", authorizationRequestId: input.provisional.authorizationRequestId,
         authorityRef: input.provisional.authorityRef, scope: input.provisional.scope, policy: input.provisional.policy,
@@ -104,27 +165,35 @@ const fixture = (options: Options = {}) => {
           const {requestDigest, ...unsigned} = input;
           assert.equal(requestDigest, await createCredentialMaterializationRequestDigest(unsigned));
           if (options.paAuthorizeKind === "observed") {await pa.materialization.authorize(input);}
-          return pa.materialization.authorize(input);
+          const outcome = await pa.materialization.authorize(input); paOutcomes.push(outcome); return outcome;
         },
         async observe(input) {
           observes += 1; order.push(`pa-observe-${observes}`);
           if ((observes === 1 && options.firstObserveDenied) || (observes === 2 && options.secondObserveDenied)) {
             return Object.freeze({kind: "indeterminate" as const});
           }
-          if (options.revokeBeforeObserve) {await pa.control.replaceBindingHead({...paSeed, revocation: "revoked"});}
-          return pa.materialization.observe(input);
+          if (options.revokeBeforeObserve || options.revokeBeforeSecondObserve && observes === 2) {
+            await pa.control.replaceBindingHead({...paSeed, revocation: "revoked"});}
+          const outcome = await pa.materialization.observe(input); paOutcomes.push(outcome); return outcome;
         },
       },
     }), materializer: Object.freeze({render: async receipt => {order.push("render"); renders += 1;
       assert.equal(receipt.credentialBindingDigest, snapshot.ownerAuthorityDigest);
-      return Object.freeze([Object.freeze({name: "authorization", valueBytes: bytes(`Bearer ${SECRET}`)})]);}}),
-    runtimeSecurity, verifier: Object.freeze({signingKey: key,
+      const valueBytes = bytes(`Bearer ${SECRET}`); materializedBuffers.push(valueBytes);
+      return Object.freeze([Object.freeze({name: "authorization", valueBytes})]);}}),
+    runtimeSecurity, verifier: security?.verifier ?? Object.freeze({signingKey: key,
       verifyProvisionalDecision: () => options.verifierProvisional ?? true,
       verifyGrant: () => options.verifierGrant ?? true}),
     localAuthorityCut: Object.freeze({read: () => {return Object.freeze({
       status: journalCalls === 0 ? "current" as const : options.cut ?? "current",
       authorityId: "clock-authority", epoch: journalCalls === 0 ? "epoch-1" : options.cutEpoch ?? "epoch-1", controlTime: 10});}}),
-    journal: Object.freeze({consume: () => {journalCalls += 1; order.push("journal"); return options.journal ?? "consumed";}}),
+    journal: Object.freeze({consume: (key, requestFingerprint) => {
+      journalCalls += 1; order.push("journal"); journalInputs.push({key, requestFingerprint});
+      if (options.journal !== undefined) {return options.journal;}
+      const id = JSON.stringify(key); const previous = consumed.get(id);
+      if (previous !== undefined) {return previous === requestFingerprint ? "duplicate" : "mismatch";}
+      consumed.set(id, requestFingerprint); return "consumed";
+    }}),
     resolver: Object.freeze({resolve: async () => {order.push("resolve"); return Object.freeze({resolverIdentity: "resolver-1",
       resolverEpoch: "resolver-epoch-1", resolutionCount: 1 as const,
       addresses: Object.freeze([Object.freeze({family: "ipv4" as const, address: "93.184.216.34",
@@ -132,12 +201,12 @@ const fixture = (options: Options = {}) => {
     transport: Object.freeze({beginOpen: () => {order.push("open"); opens += 1; let closed = false;
       const binding = Object.freeze({peerAddress: "93.184.216.34", peerPort: 443, tlsProtocol: "TLSv1.3" as const,
         requestedSni: route.originHost, observedSni: route.originHost, chainValidated: true as const,
-        dnsIdentity: route.originHost, certificateDigest: "sha256:certificate" as const,
-        tlsPolicyDigest: "tls-policy-digest", spkiDigest: "sha256:spki" as const, alpn: "http/1.1" as const});
+        dnsIdentity: route.originHost, certificateDigest: digest([bytes("certificate")]),
+        tlsPolicyDigest, spkiDigest: digest([bytes("spki")]), alpn: "http/1.1" as const});
       return Object.freeze({ready: async () => Object.freeze({binding, dispatch: async consume => {
         order.push("dispatch"); const wire = consume(); if (wire === undefined || closed) {return Object.freeze({status: "failed" as const,
           acceptedRequestBytes: 0, acknowledgement: "acknowledged" as const});}
-        wires.push(wire.slice()); if (options.dispatch === "throw") {throw new Error("write failed");}
+        wireBuffers.push(wire); wires.push(wire.slice()); if (options.dispatch === "throw") {throw new Error("write failed");}
         if (options.dispatch === "lost") {return Object.freeze({status: "failed" as const, acceptedRequestBytes: "unknown" as const,
           acknowledgement: "lost" as const});}
         const body = options.truncated ? "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nok" : response(options.status);
@@ -157,7 +226,9 @@ const fixture = (options: Options = {}) => {
         return Object.freeze({state: options.inboundClosure ?? "closed", receiptDigest: "inbound-close-receipt"});}}),
     limits: Object.freeze({maxInboundHeaderBytes: 2048, maxInboundBodyBytes: 1024, maxUpstreamHeaderBytes: 2048,
       maxOutputBytes: 4096, maxBufferedBytes: 256, maxUpstreamWireBytes: 8192, deadline: 1000, closureDeadline: 1100})});
-  return {session, operation, order, writes, wires, provisionalInputs, finalInputs,
+  return {session, operation, order, writes, wires, paInputs, paOutcomes, provisionalInputs, finalInputs,
+    decisions, grants, journalInputs, consumed, materializedBuffers, wireBuffers,
+    dispose: () => {session.close(); for (const buffer of [...materializedBuffers, ...wireBuffers, ...wires, ...writes]) {buffer.fill(0);}},
     counts: () => ({ids, observes, opens, journalCalls, renders})};
 };
 
@@ -242,4 +313,146 @@ describe("Host HTTP PA and signed RS integration", () => {
       assert.notEqual(first.outcome, "completed"); await f.session.execute(f.operation()); assert.deepEqual(f.counts(), counts);
     }
   });
+});
+
+const assertZeroed = (buffers: readonly Uint8Array[]) => {
+  for (const buffer of buffers) {assert.ok(buffer.byteLength > 0); assert.ok(buffer.every(value => value === 0));}
+};
+const assertBeforeByteDenial = (f: ReturnType<typeof fixture>, receipt: HttpEgressReceipt,
+  anomaly: HttpEgressReceipt["anomalyCode"], opened: boolean) => {
+  assert.equal(receipt.outcome, "denied"); assert.equal(receipt.anomalyCode, anomaly);
+  assert.equal(receipt.firstByteState, "not_sent"); assert.equal(receipt.upstreamRequestBytes, 0);
+  assert.equal(receipt.outboundResponseBytes, 0); assert.equal(receipt.inboundClosure, "closed");
+  assert.equal(receipt.upstreamClosure, opened ? "closed" : "not_opened");
+  assert.equal(f.counts().opens, opened ? 1 : 0); assert.equal(f.counts().journalCalls, 0);
+  assert.equal(f.wires.length, 0); assert.equal(f.writes.length, 0);
+  assert.equal(f.materializedBuffers.length, 1); assertZeroed(f.materializedBuffers);
+};
+
+describe("Host HTTP with real Ed25519 RS binding and PA application", () => {
+  test("two sequential broker requests consume fresh signed grants with original PA scope and fingerprint", async t => {
+    const security = realSecurityFixture();
+    t.after(() => {security.candidate.dispose(); assert.equal(security.candidate.isDisposed(), true);});
+    const f = fixture({}, security.binding); t.after(f.dispose);
+    const receipts = [await f.session.execute(f.operation()), await f.session.execute(f.operation())];
+    assert.deepEqual(f.counts(), {ids: 2, observes: 4, opens: 2, journalCalls: 2, renders: 2});
+    assert.deepEqual(f.paOutcomes.map(outcome => outcome.kind),
+      ["authorized", "observed", "observed", "authorized", "observed", "observed"]);
+    assert.equal(security.resolves.length, 2); assert.equal(security.reads.length, 2);
+    assert.equal(f.decisions.length, 2); assert.equal(f.grants.length, 2); assert.equal(f.consumed.size, 2);
+    assert.equal(f.wires.length, 2); assert.equal(f.wireBuffers.length, 2); assert.equal(f.materializedBuffers.length, 2);
+    for (const [index, receipt] of receipts.entries()) {
+      const decision = f.decisions[index]!; const grant = f.grants[index]!; const input = f.paInputs[index]!;
+      assert.equal(receipt.outcome, "completed"); assert.equal(receipt.anomalyCode, "none");
+      assert.equal(receipt.firstByteState, "sent"); assert.equal(receipt.upstreamRequestBytes, f.wires[index]!.byteLength);
+      assert.equal(receipt.inboundClosure, "closed"); assert.equal(receipt.upstreamClosure, "closed");
+      assert.equal(receipt.provisionalAuthorizationReceiptDigest, decision.decisionDigest);
+      assert.equal(receipt.finalAuthorizationReceiptDigest, grant.finalAuthorizationDigest);
+      assert.equal(security.candidate.hostEgressVerifierV2.verifyProvisionalDecision(decision), true);
+      assert.equal(security.candidate.hostEgressVerifierV2.verifyGrant(grant), true);
+      assert.equal(security.binding.verifier.verifyProvisionalDecision(decision), true);
+      assert.equal(security.binding.verifier.verifyGrant(grant), true);
+      assert.equal(grant.signature.algorithm, "ed25519"); assert.match(grant.signature.value, /^[a-f0-9]{128}$/);
+      assert.deepEqual(decision.scope, scope); assert.deepEqual(grant.payload.scope, scope);
+      assert.deepEqual(decision.providerAccess, providerAccess); assert.deepEqual(grant.payload.providerAccess, providerAccess);
+      assert.equal(input.credentialBindingDigest, snapshot.ownerAuthorityDigest);
+      assert.equal(input.scopeDigest, scope.scopeDigest); assert.equal(input.tenantId, scope.tenantId);
+      assert.equal(input.projectId, scope.projectId); assert.equal(input.authorizationRequestId, `pa-${index + 1}`);
+      assert.equal(grant.payload.authorizationRequestId, `rs-${index + 1}`);
+      assert.equal(grant.payload.boundaryUseId, `boundary-${index + 1}`);
+      assert.equal(grant.payload.connectionAttemptId, `connection-${index + 1}`);
+      assert.equal(grant.payload.streamId, `stream-${index + 1}`);
+      assert.deepEqual(grant.payload.request, f.provisionalInputs[index]!.request);
+      assert.equal(grant.payload.request.headers.credentialFields[0]!.credentialBindingDigest, snapshot.ownerAuthorityDigest);
+      const {requestFingerprint, ...consumption} = grant.payload.consumption;
+      assert.equal(requestFingerprint, createNodeSha256EgressDigest().digest(canonical({...grant.payload, consumption})));
+      assert.deepEqual(f.journalInputs[index], {key: {namespace: "provider-process-egress/v2",
+        tenantId: scope.tenantId, projectId: scope.projectId, operationId: scope.operationId,
+        boundaryUseId: grant.payload.boundaryUseId}, requestFingerprint});
+      assert.equal(f.consumed.get(JSON.stringify(consumption.journalKey)), requestFingerprint);
+      assert.match(new TextDecoder().decode(f.wires[index]), new RegExp(SECRET));
+    }
+    for (const outcome of f.paOutcomes) {
+      assert.ok("receipt" in outcome); assert.equal(outcome.receipt.credentialBindingDigest, snapshot.ownerAuthorityDigest);
+    }
+    assert.notEqual(f.paInputs[0]!.requestDigest, f.paInputs[1]!.requestDigest);
+    assert.notEqual(f.decisions[0]!.decisionDigest, f.decisions[1]!.decisionDigest);
+    assert.notEqual(f.grants[0]!.finalAuthorizationDigest, f.grants[1]!.finalAuthorizationDigest);
+    assert.notEqual(f.grants[0]!.signature.value, f.grants[1]!.signature.value);
+    assert.notEqual(f.journalInputs[0]!.requestFingerprint, f.journalInputs[1]!.requestFingerprint);
+    assert.deepEqual(f.order.filter(step => ["dispatch", "journal", "upstream-close", "inbound-close", "evidence"].includes(step)),
+      ["dispatch", "journal", "upstream-close", "inbound-close", "evidence",
+        "dispatch", "journal", "upstream-close", "inbound-close", "evidence"]);
+    assert.equal(f.writes.reduce((total, value) => total + value.byteLength, 0),
+      receipts.reduce((total, receipt) => total + receipt.outboundResponseBytes, 0));
+    assertZeroed(f.materializedBuffers); assertZeroed(f.wireBuffers);
+    assert.doesNotMatch(JSON.stringify([f.paOutcomes, f.decisions, f.grants, f.journalInputs, receipts]), new RegExp(SECRET));
+  });
+
+  test("current PA revocation after a real signed provisional decision denies before the first byte", async t => {
+    const security = realSecurityFixture();
+    t.after(() => {security.candidate.dispose(); assert.equal(security.candidate.isDisposed(), true);});
+    const f = fixture({revokeBeforeSecondObserve: true}, security.binding); t.after(f.dispose);
+    const receipt = await f.session.execute(f.operation());
+    assertBeforeByteDenial(f, receipt, "provider_generation_drift", true);
+    assert.equal(f.decisions.length, 1);
+    assert.equal(security.binding.verifier.verifyProvisionalDecision(f.decisions[0]!), true);
+    assert.deepEqual(f.paOutcomes.map(outcome => outcome.kind), ["authorized", "observed", "rejected"]);
+    const revoked = f.paOutcomes[2]!; assert.equal(revoked.kind, "rejected");
+    if (revoked.kind !== "rejected") {assert.fail("Expected current PA rejection");}
+    assert.equal(revoked.reason, "revoked"); assert.equal(revoked.receipt.decision, "authorized");
+    assert.equal(f.finalInputs.length, 0); assert.equal(f.grants.length, 0); assert.equal(security.reads.length, 0);
+    const counts = f.counts(); await f.session.execute(f.operation()); assert.deepEqual(f.counts(), counts);
+  });
+
+  for (const drift of ["policyGeneration", "credentialGeneration"] as const) {
+    test(`fresh RS ${drift} drift denies the broker final grant before the first byte`, async t => {
+      const security = realSecurityFixture(drift);
+      t.after(() => {security.candidate.dispose(); assert.equal(security.candidate.isDisposed(), true);});
+      const f = fixture({}, security.binding); t.after(f.dispose);
+      const receipt = await f.session.execute(f.operation());
+      assertBeforeByteDenial(f, receipt, "final_denied", true);
+      assert.equal(f.decisions.length, 1); assert.equal(f.finalInputs.length, 1); assert.equal(f.grants.length, 0);
+      assert.equal(security.binding.verifier.verifyProvisionalDecision(f.decisions[0]!), true);
+      assert.deepEqual(f.decisions[0]!.providerAccess, providerAccess);
+      assert.equal(f.decisions[0]!.policy.policyGeneration, "policy-generation-9");
+      assert.deepEqual(f.paOutcomes.map(outcome => outcome.kind), ["authorized", "observed", "observed"]);
+      assert.equal(security.resolves.length, 1);
+      assert.deepEqual(security.reads, [{scope, authorityRef: "authority-1"}]);
+      const counts = f.counts(); await f.session.execute(f.operation()); assert.deepEqual(f.counts(), counts);
+    });
+  }
+
+  const flipSignature = (value: string) => `${value[0] === "0" ? "1" : "0"}${value.slice(1)}`;
+  const tampering: readonly {name: string; options: Options}[] = [
+    {name: "provisional signature", options: {mutateProvisional: value => Object.freeze({...value,
+      signature: Object.freeze({...value.signature, value: flipSignature(value.signature.value)})})}},
+    {name: "final signature", options: {mutateGrant: value => Object.freeze({...value,
+      signature: Object.freeze({...value.signature, value: flipSignature(value.signature.value)})})}},
+    {name: "signed scope", options: {mutateProvisional: value => Object.freeze({...value,
+      scope: Object.freeze({...value.scope, scopeDigest: digest([bytes("other-scope")])})})}},
+    {name: "signed journal fingerprint", options: {mutateGrant: value => Object.freeze({...value,
+      payload: Object.freeze({...value.payload, consumption: Object.freeze({...value.payload.consumption,
+        requestFingerprint: digest([bytes("other-fingerprint")])})})})}},
+  ];
+  for (const {name, options} of tampering) {
+    test(`real verifier rejects tampered ${name} before dispatch or journal consumption`, async t => {
+      const security = realSecurityFixture();
+      t.after(() => {security.candidate.dispose(); assert.equal(security.candidate.isDisposed(), true);});
+      const f = fixture(options, security.binding); t.after(f.dispose);
+      const receipt = await f.session.execute(f.operation()); const final = options.mutateGrant !== undefined;
+      assertBeforeByteDenial(f, receipt, final ? "final_denied" : "provisional_denied", final);
+      assert.equal(f.decisions.length, 1); assert.equal(f.finalInputs.length, final ? 1 : 0);
+      assert.equal(f.grants.length, final ? 1 : 0); assert.equal(security.reads.length, final ? 1 : 0);
+      assert.equal(security.binding.verifier.verifyProvisionalDecision(f.decisions[0]!), true);
+      if (options.mutateProvisional) {
+        assert.equal(security.binding.verifier.verifyProvisionalDecision(options.mutateProvisional(f.decisions[0]!)), false);
+      }
+      if (options.mutateGrant) {
+        assert.equal(security.binding.verifier.verifyGrant(f.grants[0]!), true);
+        assert.equal(security.binding.verifier.verifyGrant(options.mutateGrant(f.grants[0]!)), false);
+      }
+      const counts = f.counts(); await f.session.execute(f.operation()); assert.deepEqual(f.counts(), counts);
+    });
+  }
 });
