@@ -4,6 +4,7 @@ import {
 } from "./contained-turn-authority.js";
 import {
   containedTurnClosureRequest,
+  isContainedTurnClosureStageCompleted,
   type ContainedTurnClosureRecovery,
   type ContainedTurnClosureStage,
 } from "./contained-turn-closure-recovery.js";
@@ -56,6 +57,7 @@ export const mutateContainedTurnOperation = (
       candidate = { ...operation, revision: operation.revision + 1, workspaceId: mutation.workspaceId };
       break;
     case "begin_closure_stage": {
+      if (isContainedTurnClosureStageCompleted(operation, mutation.stage)) {return operation;}
       if (operation.closureRecovery.kind === "required") {
         invariant(operation.closureRecovery.stage === mutation.stage, "only one exact closure stage may be pending");
         return operation;
