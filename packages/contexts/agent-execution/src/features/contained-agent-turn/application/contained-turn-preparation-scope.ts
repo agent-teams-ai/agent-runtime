@@ -180,27 +180,10 @@ const snapshotSimplePreparation = (
   return Object.freeze({ ...preparationBase(preparation), kind });
 };
 
-const snapshotCleanupPendingPreparation = (
-  preparation: ContainedTurnDispatchPreparation,
-): ContainedTurnDispatchPreparation => {
-  requireOrdinaryRecord("dispatch preparation", preparation, [
-    ...preparationIdentityKeys(preparation), "cleanupEvidenceIds", "cleanupPermit", "custodyReleased", "kind",
-    "providerAccessConsumptionEvidenceId", "providerAccessNotConsumed", "providerAccessSettled",
-    "runtimeSecurityConsumptionEvidenceId", "runtimeSecurityNotConsumed", "runtimeSecuritySettled",
-  ]);
-  const pending = preparation as Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }>;
-  if (pending.cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
-    throw new TypeError("cleanup evidence limit exceeded");
-  }
-  assertContainedTurnCanonicalArray(pending.cleanupEvidenceIds);
-  const cleanupEvidenceIds = Object.freeze(pending.cleanupEvidenceIds.map(evidenceId =>
-    validateContainedTurnIdentity("evidence", evidenceId)));
-  const providerAccessConsumptionEvidenceId = pending.providerAccessConsumptionEvidenceId === null
-    ? null
-    : validateContainedTurnIdentity("evidence", pending.providerAccessConsumptionEvidenceId);
-  const runtimeSecurityConsumptionEvidenceId = pending.runtimeSecurityConsumptionEvidenceId === null
-    ? null
-    : validateContainedTurnIdentity("evidence", pending.runtimeSecurityConsumptionEvidenceId);
+type CleanupPendingPreparation = Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }>;
+type CleanupPreparation = Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" | "cleanup_closed" }>;
+
+const validateCleanupSettlementFlags = (pending: CleanupPendingPreparation): void => {
   if (typeof pending.custodyReleased !== "boolean" || typeof pending.providerAccessNotConsumed !== "boolean" ||
       typeof pending.providerAccessSettled !== "boolean" || typeof pending.runtimeSecurityNotConsumed !== "boolean" ||
       typeof pending.runtimeSecuritySettled !== "boolean") {
@@ -210,6 +193,14 @@ const snapshotCleanupPendingPreparation = (
       (pending.runtimeSecuritySettled && pending.runtimeSecurityConsumptionReceipt === undefined)) {
     throw new TypeError("cleanup preparation cannot settle an owner without a consumed receipt");
   }
+};
+
+const validateCleanupConsumptionEvidence = (
+  pending: CleanupPendingPreparation,
+  cleanupEvidenceIds: readonly string[],
+  providerAccessConsumptionEvidenceId: CleanupPendingPreparation["providerAccessConsumptionEvidenceId"],
+  runtimeSecurityConsumptionEvidenceId: CleanupPendingPreparation["runtimeSecurityConsumptionEvidenceId"],
+): void => {
   if ((pending.providerAccessNotConsumed && (pending.providerAccessGrantRequestId !== null ||
       pending.providerAccessConsumptionReceipt !== undefined || providerAccessConsumptionEvidenceId !== null)) ||
       (pending.runtimeSecurityNotConsumed && (pending.runtimeSecurityGrantRequestId !== null ||
@@ -224,6 +215,33 @@ const snapshotCleanupPendingPreparation = (
       !cleanupEvidenceIds.includes(runtimeSecurityConsumptionEvidenceId))) {
     throw new TypeError("cleanup preparation dropped grant consumption evidence");
   }
+};
+
+const snapshotCleanupPendingPreparation = (
+  preparation: ContainedTurnDispatchPreparation,
+): ContainedTurnDispatchPreparation => {
+  requireOrdinaryRecord("dispatch preparation", preparation, [
+    ...preparationIdentityKeys(preparation), "cleanupEvidenceIds", "cleanupPermit", "custodyReleased", "kind",
+    "providerAccessConsumptionEvidenceId", "providerAccessNotConsumed", "providerAccessSettled",
+    "runtimeSecurityConsumptionEvidenceId", "runtimeSecurityNotConsumed", "runtimeSecuritySettled",
+  ]);
+  const pending = preparation as CleanupPendingPreparation;
+  if (pending.cleanupEvidenceIds.length > CONTAINED_TURN_PREPARATION_CLEANUP_EVIDENCE_LIMIT) {
+    throw new TypeError("cleanup evidence limit exceeded");
+  }
+  assertContainedTurnCanonicalArray(pending.cleanupEvidenceIds);
+  const cleanupEvidenceIds = Object.freeze(pending.cleanupEvidenceIds.map(evidenceId =>
+    validateContainedTurnIdentity("evidence", evidenceId)));
+  const providerAccessConsumptionEvidenceId = pending.providerAccessConsumptionEvidenceId === null
+    ? null
+    : validateContainedTurnIdentity("evidence", pending.providerAccessConsumptionEvidenceId);
+  const runtimeSecurityConsumptionEvidenceId = pending.runtimeSecurityConsumptionEvidenceId === null
+    ? null
+    : validateContainedTurnIdentity("evidence", pending.runtimeSecurityConsumptionEvidenceId);
+  validateCleanupSettlementFlags(pending);
+  validateCleanupConsumptionEvidence(
+    pending, cleanupEvidenceIds, providerAccessConsumptionEvidenceId, runtimeSecurityConsumptionEvidenceId,
+  );
   return Object.freeze({
     ...preparationBase(preparation),
     cleanupEvidenceIds,
@@ -363,29 +381,42 @@ export const isContainedTurnRetiredPreparation = (
   preparation.operationCutoffRevision === owner.operationCutoffRevision &&
   cleanupPermitMatchesPreparation(preparation.cleanupPermit, preparation);
 
+const sameCleanupPreparationIdentity = (
+  expected: CleanupPreparation,
+  actual: CleanupPreparation,
+): boolean => actual.operationId === expected.operationId &&
+  actual.preparationToken === expected.preparationToken && actual.attemptId === expected.attemptId &&
+  actual.custodyId === expected.custodyId && actual.workspaceId === expected.workspaceId &&
+  actual.preparedOperationRevision === expected.preparedOperationRevision &&
+  actual.operationCutoffRevision === expected.operationCutoffRevision;
+
+const sameCleanupConsumptionFacts = (
+  expected: CleanupPreparation,
+  actual: CleanupPreparation,
+): boolean => actual.providerAccessGrantRequestId === expected.providerAccessGrantRequestId &&
+  actual.runtimeSecurityGrantRequestId === expected.runtimeSecurityGrantRequestId &&
+  actual.providerAccessConsumptionEvidenceId === expected.providerAccessConsumptionEvidenceId &&
+  actual.providerAccessNotConsumed === expected.providerAccessNotConsumed &&
+  actual.runtimeSecurityConsumptionEvidenceId === expected.runtimeSecurityConsumptionEvidenceId &&
+  actual.runtimeSecurityNotConsumed === expected.runtimeSecurityNotConsumed;
+
+const isCleanupPermitContinuation = (
+  expected: CleanupPreparation,
+  actual: CleanupPreparation,
+): boolean => expected.kind === "cleanup_closed"
+  ? actual.kind === "cleanup_closed" && actual.cleanupPermitId === expected.cleanupPermitId
+  : actual.kind === "cleanup_pending"
+    ? actual.cleanupPermit.permitId === expected.cleanupPermit.permitId &&
+      actual.cleanupPermit.permitDigest === expected.cleanupPermit.permitDigest &&
+      cleanupPermitMatchesPreparation(actual.cleanupPermit, actual)
+    : actual.cleanupPermitId === expected.cleanupPermit.permitId;
+
 /** Exact permit and owner identities for each cleanup-store continuation. */
-// oxlint-disable-next-line complexity -- exact monotone cleanup continuation checks stay explicit.
 export const isContainedTurnPreparationCleanupContinuation = (
   expected: ContainedTurnDispatchPreparation,
   actual: ContainedTurnDispatchPreparation,
 ): boolean => (expected.kind === "cleanup_pending" || expected.kind === "cleanup_closed") &&
   (actual.kind === "cleanup_pending" || actual.kind === "cleanup_closed") &&
-  actual.operationId === expected.operationId &&
-  actual.preparationToken === expected.preparationToken && actual.attemptId === expected.attemptId &&
-  actual.custodyId === expected.custodyId && actual.workspaceId === expected.workspaceId &&
-  actual.preparedOperationRevision === expected.preparedOperationRevision &&
-  actual.operationCutoffRevision === expected.operationCutoffRevision &&
-  actual.providerAccessGrantRequestId === expected.providerAccessGrantRequestId &&
-  actual.runtimeSecurityGrantRequestId === expected.runtimeSecurityGrantRequestId &&
-  actual.providerAccessConsumptionEvidenceId === expected.providerAccessConsumptionEvidenceId &&
-  actual.providerAccessNotConsumed === expected.providerAccessNotConsumed &&
-  actual.runtimeSecurityConsumptionEvidenceId === expected.runtimeSecurityConsumptionEvidenceId &&
-  actual.runtimeSecurityNotConsumed === expected.runtimeSecurityNotConsumed &&
+  sameCleanupPreparationIdentity(expected, actual) && sameCleanupConsumptionFacts(expected, actual) &&
   expected.cleanupEvidenceIds.every(evidenceId => actual.cleanupEvidenceIds.includes(evidenceId)) &&
-  (expected.kind === "cleanup_closed"
-    ? actual.kind === "cleanup_closed" && actual.cleanupPermitId === expected.cleanupPermitId
-    : actual.kind === "cleanup_pending"
-      ? actual.cleanupPermit.permitId === expected.cleanupPermit.permitId &&
-        actual.cleanupPermit.permitDigest === expected.cleanupPermit.permitDigest &&
-        cleanupPermitMatchesPreparation(actual.cleanupPermit, actual)
-      : actual.cleanupPermitId === expected.cleanupPermit.permitId);
+  isCleanupPermitContinuation(expected, actual);

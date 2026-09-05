@@ -256,6 +256,32 @@ const advanceContainedTurnPreparationCleanup = (
     (evidenceId === undefined && target === "runtime_security"),
 });
 
+const closeContainedTurnPreparationCleanup = (
+  preparation: CleanupPendingPreparation,
+  cleanupEvidenceIds: readonly string[],
+): Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_closed" }> => {
+  return Object.freeze({
+    attemptId: preparation.attemptId,
+    cleanupEvidenceIds,
+    cleanupPermitId: preparation.cleanupPermit.permitId,
+    custodyId: preparation.custodyId,
+    kind: "cleanup_closed",
+    operationCutoffRevision: preparation.operationCutoffRevision,
+    operationId: preparation.operationId,
+    preparationToken: preparation.preparationToken,
+    preparedOperationRevision: preparation.preparedOperationRevision,
+    ...(preparation.providerAccessConsumptionReceipt === undefined ? {} : { providerAccessConsumptionReceipt: preparation.providerAccessConsumptionReceipt }),
+    providerAccessConsumptionEvidenceId: preparation.providerAccessConsumptionEvidenceId,
+    providerAccessNotConsumed: preparation.providerAccessNotConsumed,
+    providerAccessGrantRequestId: preparation.providerAccessGrantRequestId,
+    ...(preparation.runtimeSecurityConsumptionReceipt === undefined ? {} : { runtimeSecurityConsumptionReceipt: preparation.runtimeSecurityConsumptionReceipt }),
+    runtimeSecurityConsumptionEvidenceId: preparation.runtimeSecurityConsumptionEvidenceId,
+    runtimeSecurityNotConsumed: preparation.runtimeSecurityNotConsumed,
+    runtimeSecurityGrantRequestId: preparation.runtimeSecurityGrantRequestId,
+    workspaceId: preparation.workspaceId,
+  });
+};
+
 export const recordContainedTurnPreparationCleanup = (
   preparation: ContainedTurnDispatchPreparation,
   input: Readonly<{
@@ -294,26 +320,7 @@ export const recordContainedTurnPreparationCleanup = (
   if (candidate.custodyReleased &&
       (candidate.providerAccessSettled || candidate.providerAccessNotConsumed) &&
       (candidate.runtimeSecuritySettled || candidate.runtimeSecurityNotConsumed)) {
-    return Object.freeze({
-      attemptId: preparation.attemptId,
-      cleanupEvidenceIds: candidate.cleanupEvidenceIds,
-      cleanupPermitId: preparation.cleanupPermit.permitId,
-      custodyId: preparation.custodyId,
-      kind: "cleanup_closed",
-      operationCutoffRevision: preparation.operationCutoffRevision,
-      operationId: preparation.operationId,
-      preparationToken: preparation.preparationToken,
-      preparedOperationRevision: preparation.preparedOperationRevision,
-      ...(preparation.providerAccessConsumptionReceipt === undefined ? {} : { providerAccessConsumptionReceipt: preparation.providerAccessConsumptionReceipt }),
-      providerAccessConsumptionEvidenceId: preparation.providerAccessConsumptionEvidenceId,
-      providerAccessNotConsumed: preparation.providerAccessNotConsumed,
-      providerAccessGrantRequestId: preparation.providerAccessGrantRequestId,
-      ...(preparation.runtimeSecurityConsumptionReceipt === undefined ? {} : { runtimeSecurityConsumptionReceipt: preparation.runtimeSecurityConsumptionReceipt }),
-      runtimeSecurityConsumptionEvidenceId: preparation.runtimeSecurityConsumptionEvidenceId,
-      runtimeSecurityNotConsumed: preparation.runtimeSecurityNotConsumed,
-      runtimeSecurityGrantRequestId: preparation.runtimeSecurityGrantRequestId,
-      workspaceId: preparation.workspaceId,
-    });
+    return closeContainedTurnPreparationCleanup(preparation, candidate.cleanupEvidenceIds);
   }
   return Object.freeze(candidate);
 };
