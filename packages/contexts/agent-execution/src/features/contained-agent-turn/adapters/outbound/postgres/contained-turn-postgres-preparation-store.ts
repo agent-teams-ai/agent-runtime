@@ -276,10 +276,19 @@ export class ContainedTurnPostgresPreparationStore {
       const preparation = persisted === undefined ? undefined : decodePreparationRow(persisted);
       if (preparation === undefined) {return { current, kind: "stale" as const };}
       if (preparation.kind === "claimed") {return { current, kind: "stale" as const };}
+      // Cancellation excludes a future claim under the locked, validated operation.
+      // Keep the preparation's original cutoff in its identity and cleanup permit.
+      const cancelledWithoutClaim = current.dispatch.kind !== "claimed" &&
+        current.cancellation.kind === "requested" &&
+        current.operationCutoff.kind === "closed" &&
+        current.operationCutoff.reason === "cancellation" &&
+        current.operationCutoff.revision > preparation.operationCutoffRevision &&
+        current.revision > preparation.preparedOperationRevision;
       if (preparation.operationId !== current.operationId ||
           preparation.preparationToken !== input.preparationToken ||
           preparation.workspaceId !== current.workspaceId ||
-          preparation.operationCutoffRevision !== current.operationCutoff.revision ||
+          (preparation.operationCutoffRevision !== current.operationCutoff.revision &&
+            !cancelledWithoutClaim) ||
           preparation.preparedOperationRevision !== input.expectedOperationRevision ||
           preparation.operationCutoffRevision !== input.expectedOperationCutoffRevision) {
         return { current, kind: "stale" as const };
