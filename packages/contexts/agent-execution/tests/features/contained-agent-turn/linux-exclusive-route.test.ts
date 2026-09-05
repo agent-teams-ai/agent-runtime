@@ -486,10 +486,12 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
     assert.equal(config.timeout, 1000); assert.equal(config.maxBuffer, 65_536);
     assert.equal(descriptors.get(41)!.bytes.toString(), "pinned-nsenter");
     assert.equal(descriptors.get(42)!.bytes.toString(), "pinned-nft");
-    if (config.input !== undefined) {
-      assert.deepEqual(args.slice(3), ["-j", "-f", "-"]);
-      assert.ok(Buffer.byteLength(config.input) < 65_536);
-      state.kernel.transact(config.input); return Buffer.alloc(0);
+    assert.equal(config.input, undefined);
+    if (args.length === 5) {
+      assert.equal(args[3], "-j");
+      const transaction = args[4]!;
+      assert.ok(Buffer.byteLength(transaction) < 65_536);
+      state.kernel.transact(transaction); return Buffer.alloc(0);
     }
     assert.deepEqual(args.slice(3), ["-j", "list", "table", "inet", "ar_provider_route_v1"]);
     if (toolFailure) {const code = toolFailure; toolFailure = undefined; throw Object.assign(new Error(code), {code});}
