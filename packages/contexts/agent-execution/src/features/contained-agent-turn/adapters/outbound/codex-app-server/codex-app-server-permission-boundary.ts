@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
+import { codexDisabledFeatures } from "./codex-app-server-config-defaults.js";
+
+export { isExactCodexPermissionProfile, validateCodexConfigEvidence } from "./codex-app-server-config-wire.js";
 
 import {
   codexNotificationMethod,
@@ -29,10 +32,7 @@ export const CODEX_APP_SERVER_BINARY_REVISION = CODEX_APP_SERVER_LINUX_X64_TUPLE
 export const CODEX_APP_SERVER_BINARY_SHA256 = CODEX_APP_SERVER_LINUX_X64_TUPLE.binarySha256;
 
 export const codexContainedThreadConfig = (): CodexJsonRecord => ({
-  features: {
-    apps: false, browser_use: false, computer_use: false, image_generation: false,
-    multi_agent: false, multi_agent_v2: false, plugins: false, remote_plugin: false,
-  },
+  features: codexDisabledFeatures(),
 });
 
 export type CodexContainedTurnMode = "analysis" | "workspace-write";
@@ -197,63 +197,6 @@ export const createCodexAppServerPermissionBoundary = (input: {
   });
 };
 
-export const isExactCodexPermissionProfile = (
-  actual: unknown,
-  boundary: CodexAppServerPermissionBoundary,
-): boolean => {
-  return normalizeCodexProviderPermissionProfile(actual, boundary) !== undefined;
-};
-
-/**
- * Codex's config/read response is not the same shape as our internal policy.
- * Keep that wire translation in this adapter and
- * accept only the exact 0.150.1 response shape.  In particular, do not
- * silently accept new provider fields: a changed policy shape must fail
- * closed until it is qualified.
- */
-const CODEX_PROVIDER_NETWORK_KEYS = [
-  "allow_local_binding", "allow_upstream_proxy", "dangerously_allow_all_unix_sockets",
-  "dangerously_allow_non_loopback_proxy", "domains", "enable_socks5", "enable_socks5_udp",
-  "enabled", "mitm", "mode", "proxy_url", "socks_url", "unix_sockets",
-] as const;
-
-const normalizeCodexProviderPermissionProfile = (
-  actual: unknown,
-  boundary: CodexAppServerPermissionBoundary,
-): CodexAppServerPermissionBoundary["permissionProfile"] | undefined => {
-  if (!isCodexRecord(actual) || !hasExactKeys(actual, [
-    "description", "extends", "filesystem", "network", "workspace_roots",
-  ]) || actual.description !== null || actual.extends !== boundary.permissionProfile.extends
-    || actual.workspace_roots !== null || !isCodexRecord(actual.filesystem)
-    || !isCodexRecord(actual.network)) {return undefined;}
-
-  const filesystem = actual.filesystem;
-  if (!hasExactKeys(filesystem, [boundary.codexHome, ":tmpdir", ":slash_tmp", "glob_scan_max_depth"])
-    || filesystem[boundary.codexHome] !== "deny" || filesystem[":tmpdir"] !== "read"
-    || filesystem[":slash_tmp"] !== "read" || filesystem.glob_scan_max_depth !== null) {
-    return undefined;
-  }
-  const network = actual.network;
-  if (!hasExactKeys(network, CODEX_PROVIDER_NETWORK_KEYS)
-    || network.enabled !== false
-    || CODEX_PROVIDER_NETWORK_KEYS.some(key => key !== "enabled" && network[key] !== null)) {
-    return undefined;
-  }
-  return boundary.permissionProfile;
-};
-
-/** User layers retain raw TOML fields; effective config materializes nullable defaults. */
-const isExactCodexUserPermissionProfile = (
-  actual: unknown,
-  boundary: CodexAppServerPermissionBoundary,
-): boolean => isCodexRecord(actual) && hasExactKeys(actual, ["extends", "filesystem", "network"])
-  && actual.extends === boundary.permissionProfile.extends
-  && isCodexRecord(actual.filesystem) && hasExactKeys(actual.filesystem, [boundary.codexHome, ":tmpdir", ":slash_tmp"])
-  && actual.filesystem[boundary.codexHome] === "deny"
-  && actual.filesystem[":tmpdir"] === "read" && actual.filesystem[":slash_tmp"] === "read"
-  && isCodexRecord(actual.network) && hasExactKeys(actual.network, ["enabled"])
-  && actual.network.enabled === false;
-
 const evidenceError = (message: string): Error => new Error(`Codex permission evidence rejected: ${message}`);
 
 const hasExactKeys = (value: CodexJsonRecord, keys: readonly string[]): boolean =>
@@ -278,154 +221,6 @@ export const validateCodexInitializeEvidence = (
   }
   try {validateCodexAppServerUserAgent(result.userAgent, platformTuple);}
   catch {throw evidenceError("initialization does not match the pinned candidate runtime tuple");}
-};
-
-const layerType = (layer: CodexJsonRecord): string | undefined =>
-  isCodexRecord(layer.name) ? codexStringField(layer.name, "type") : undefined;
-
-const exactLayerName = (name: CodexJsonRecord, type: string): boolean => {
-  if (type === "packagedDefaults" || type === "system") {
-    return hasExactKeys(name, ["file", "type"]) && typeof name.file === "string";
-  }
-  if (type === "user") {
-    return hasExactKeys(name, ["file", "profile", "type"])
-      && typeof name.file === "string" && (name.profile === null || typeof name.profile === "string");
-  }
-  return type === "sessionFlags" && hasExactKeys(name, ["type"]);
-};
-
-const validateUserLayer = (
-  layer: CodexJsonRecord,
-  boundary: CodexAppServerPermissionBoundary,
-  expectedConfigFile: string,
-): void => {
-  const name = layer.name as CodexJsonRecord;
-  const config = layer.config as CodexJsonRecord;
-  if (name.file !== expectedConfigFile || name.profile !== null || !hasExactKeys(config, ["permissions"])) {
-    throw evidenceError("user config layer substituted the permission policy");
-  }
-  const layerProfiles = config.permissions;
-  if (!isCodexRecord(layerProfiles)
-    || !hasExactKeys(layerProfiles, [boundary.permissionProfileId])
-    || !isExactCodexUserPermissionProfile(layerProfiles[boundary.permissionProfileId], boundary)) {
-    throw evidenceError("user config layer substituted the permission policy");
-  }
-};
-
-const isActiveConfigLayer = (
-  value: unknown,
-): value is CodexJsonRecord & { config: CodexJsonRecord; name: CodexJsonRecord; version: string } =>
-  isCodexRecord(value) && hasExactKeys(value, ["config", "name", "version",
-    ...(Object.hasOwn(value, "disabledReason") ? ["disabledReason"] : [])])
-  && isCodexRecord(value.config) && isCodexRecord(value.name) && typeof value.version === "string"
-  && (!Object.hasOwn(value, "disabledReason") || value.disabledReason === null);
-
-const validateCodexConfigLayers = (
-  layers: readonly unknown[],
-  boundary: CodexAppServerPermissionBoundary,
-): void => {
-  const expectedConfigFile = `${boundary.codexHome}/config.toml`;
-  let emptySystemLayerCount = 0;
-  let userLayerCount = 0;
-  let sessionLayerCount = 0;
-  for (const value of layers) {
-    if (!isActiveConfigLayer(value)) {
-      throw evidenceError("config layer is malformed");
-    }
-    const type = layerType(value);
-    if (type === undefined || !exactLayerName(value.name, type)) {
-      throw evidenceError("config layer name is malformed");
-    }
-    if (type === "user") {
-      validateUserLayer(value, boundary, expectedConfigFile);
-      userLayerCount += 1;
-    } else if (type === "sessionFlags") {
-      if (!hasExactKeys(value.config, ["default_permissions"])
-        || value.config.default_permissions !== boundary.permissionProfileId) {
-        throw evidenceError("launch flag did not select the permission profile");
-      }
-      sessionLayerCount += 1;
-    } else if (type === "system" && value.name.file === "/etc/codex/config.toml"
-      && hasExactKeys(value.config, [])) {
-      // 0.150.1 includes this empty layer even when the system file is absent.
-      // Any system policy remains unqualified; never silently ignore its contents.
-      emptySystemLayerCount += 1;
-    } else {
-      throw evidenceError("config contains an unqualified or unknown effective layer");
-    }
-  }
-  if (emptySystemLayerCount !== 1 || userLayerCount !== 1 || sessionLayerCount !== 1) {
-    throw evidenceError("effective config layers are absent or non-unique");
-  }
-};
-
-const validateCodexEffectiveConfig = (
-  config: CodexJsonRecord,
-  boundary: CodexAppServerPermissionBoundary,
-): void => {
-  if (!hasExactKeys(config, ["default_permissions", "permissions"])) {
-    throw evidenceError("effective config contains unknown keys");
-  }
-  const profiles = config.permissions;
-  if (config.default_permissions !== boundary.permissionProfileId || !isCodexRecord(profiles)
-    || !hasExactKeys(profiles, [boundary.permissionProfileId])
-    || !isExactCodexPermissionProfile(profiles[boundary.permissionProfileId], boundary)) {
-    throw evidenceError("effective permission policy does not match the launch boundary");
-  }
-};
-
-const validateCodexConfigOrigins = (origins: CodexJsonRecord): void => {
-  if (!hasExactKeys(origins, ["default_permissions", "permissions"])) {
-    throw evidenceError("config provenance contains unknown origins");
-  }
-  for (const metadata of Object.values(origins)) {
-    if (!isCodexRecord(metadata) || !hasExactKeys(metadata, ["name", "version"])
-      || typeof metadata.version !== "string" || !isCodexRecord(metadata.name)) {
-      throw evidenceError("config origin metadata is malformed");
-    }
-    const type = codexStringField(metadata.name, "type");
-    if (type === undefined || !exactLayerName(metadata.name, type)) {
-      throw evidenceError("config origin layer name is malformed");
-    }
-  }
-};
-
-const originMatchesLayer = (origin: unknown, layer: unknown): boolean =>
-  isCodexRecord(origin) && isCodexRecord(layer) && isCodexRecord(layer.name)
-  && typeof layer.version === "string"
-  && canonicalCodexJson(origin.name) === canonicalCodexJson(layer.name)
-  && origin.version === layer.version;
-
-const validateCodexConfigProvenance = (
-  layers: readonly unknown[],
-  origins: CodexJsonRecord,
-  boundary: CodexAppServerPermissionBoundary,
-): void => {
-  const sessionLayer = layers.find(value => isCodexRecord(value)
-    && layerType(value) === "sessionFlags");
-  const userLayer = layers.find(value => isCodexRecord(value)
-    && layerType(value) === "user");
-  if (!originMatchesLayer(origins.default_permissions, sessionLayer)
-    || !originMatchesLayer(origins.permissions, userLayer)
-    || !isCodexRecord(userLayer) || !isCodexRecord(userLayer.name)
-    || userLayer.name.file !== `${boundary.codexHome}/config.toml`) {
-    throw evidenceError("config provenance is incomplete");
-  }
-};
-
-export const validateCodexConfigEvidence = (
-  result: unknown,
-  boundary: CodexAppServerPermissionBoundary,
-): void => {
-  if (!isCodexRecord(result) || !hasExactKeys(result, ["config", "layers", "origins"])
-    || !isCodexRecord(result.config)
-    || !isCodexRecord(result.origins) || !Array.isArray(result.layers)) {
-    throw evidenceError("config/read evidence is incomplete");
-  }
-  validateCodexEffectiveConfig(result.config, boundary);
-  validateCodexConfigLayers(result.layers, boundary);
-  validateCodexConfigOrigins(result.origins);
-  validateCodexConfigProvenance(result.layers, result.origins, boundary);
 };
 
 export const validateCodexPermissionProfileEvidence = (

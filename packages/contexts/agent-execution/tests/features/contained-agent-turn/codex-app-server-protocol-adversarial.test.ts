@@ -15,7 +15,7 @@ import type { CodexEffectCustodyAuthority } from "../../../dist/features/contain
 import type { CustodiedProviderProcess } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { agentMessage, commandExecution, emitAgentCompleted, emitAgentStarted, fileChange,
   generatedTurn } from "../../codex-app-server-test-messages.mjs";
-import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./codex-permission-profile-fixture.ts";
+import { nativeConfigResult } from "../../fixtures/codex-native-config-0.150.1/fixture.ts";
 
 type Message = Record<string, unknown>;
 
@@ -111,31 +111,7 @@ class ProtocolProcess implements CustodiedProviderProcess {
     }
     if (message.method === "initialized") {return true;}
     if (message.method === "config/read") {
-      this.emit({ id: message.id, result: {
-        config: {
-          default_permissions: boundary.permissionProfileId,
-          permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(codexHome, this.#mode) },
-        },
-        layers: [
-          { config: {}, disabledReason: null, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
-          {
-            config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(codexHome, this.#mode) } },
-            disabledReason: null,
-            name: { file: `${codexHome}/config.toml`, profile: null, type: "user" },
-            version: "2",
-          },
-          {
-            config: { default_permissions: boundary.permissionProfileId },
-            disabledReason: null,
-            name: { type: "sessionFlags" },
-            version: "3",
-          },
-        ],
-        origins: {
-          default_permissions: { name: { type: "sessionFlags" }, version: "3" },
-          permissions: { name: { file: `${codexHome}/config.toml`, profile: null, type: "user" }, version: "2" },
-        },
-      } });
+      this.emit({ id: message.id, result: nativeConfigResult(codexHome, this.#mode) });
       return true;
     }
     if (message.method === "permissionProfile/list") {

@@ -15,16 +15,7 @@ import {
   type CodexAppServerPlatformTarget,
 } from "./codex-app-server-platform-tuple.js";
 
-const DISABLED_CODEX_FEATURES = Object.freeze([
-  "apps",
-  "browser_use",
-  "computer_use",
-  "image_generation",
-  "multi_agent",
-  "multi_agent_v2",
-  "plugins",
-  "remote_plugin",
-] as const);
+import { DISABLED_CODEX_FEATURES } from "./codex-app-server-config-defaults.js";
 
 export interface CodexAppServerLaunchPlanOptions {
   readonly boundary: CodexAppServerPermissionBoundary;

@@ -1,3 +1,4 @@
+import { nativeConfigResult } from "../../fixtures/codex-native-config-0.150.1/fixture.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync,
@@ -374,27 +375,7 @@ test("rejects unknown keys throughout config and profile evidence shapes", () =>
     mkdirSync(workspace, { mode: 0o755 });
     mkdirSync(home, { mode: 0o700 });
     const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
-    const layerNames = {
-      system: { file: "/etc/codex/config.toml", type: "system" },
-      session: { type: "sessionFlags" },
-      user: { file: `${home}/config.toml`, profile: null, type: "user" },
-    };
-    const exactConfig = {
-      config: { default_permissions: boundary.permissionProfileId, permissions: {
-        [boundary.permissionProfileId]: codexEffectivePermissionProfile(home),
-      } },
-      layers: [
-        { config: {}, disabledReason: null, name: layerNames.system, version: "1" },
-        { config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(home) } },
-          disabledReason: null, name: layerNames.user, version: "2" },
-        { config: { default_permissions: boundary.permissionProfileId }, disabledReason: null,
-          name: layerNames.session, version: "3" },
-      ],
-      origins: {
-        default_permissions: { name: layerNames.session, version: "3" },
-        permissions: { name: layerNames.user, version: "2" },
-      },
-    };
+    const exactConfig = nativeConfigResult(home);
     validateCodexConfigEvidence(exactConfig, boundary);
     const effective = codexEffectivePermissionProfile(home);
     const user = codexUserPermissionProfile(home);
@@ -456,27 +437,12 @@ test("requires the exact empty system baseline and rejects packaged or mixed lay
     const workspace = join(caseRoot, "workspace"); const home = join(caseRoot, "home");
     mkdirSync(workspace); mkdirSync(home, { mode: 0o700 });
     const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
-    const exact = {
-      config: { default_permissions: boundary.permissionProfileId, permissions: {
-        [boundary.permissionProfileId]: codexEffectivePermissionProfile(home),
-      }},
-      layers: [
-        { config: {}, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
-        { config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(home) } }, disabledReason: null,
-          name: { file: `${home}/config.toml`, profile: null, type: "user" }, version: "2" },
-        { config: { default_permissions: boundary.permissionProfileId }, disabledReason: null,
-          name: { type: "sessionFlags" }, version: "3" },
-      ],
-      origins: {
-        default_permissions: { name: { type: "sessionFlags" }, version: "3" },
-        permissions: { name: { file: `${home}/config.toml`, profile: null, type: "user" }, version: "2" },
-      },
-    };
+    const exact = nativeConfigResult(home);
     validateCodexConfigEvidence(exact, boundary);
     for (const layers of [
-      exact.layers.map((layer, index) => index === 0 ? { config: {}, name: { file: "/opt/defaults.toml", type: "packagedDefaults" }, version: "1" } : layer),
+      exact.layers.map(layer => layer.name.type === "system" ? { config: {}, name: { file: "/opt/defaults.toml", type: "packagedDefaults" }, version: "1" } : layer),
       [...exact.layers, { config: {}, name: { file: "/opt/defaults.toml", type: "packagedDefaults" }, version: "4" }],
-      exact.layers.map((layer, index) => index === 0 ? { config: { unsafe: true }, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" } : layer),
+      exact.layers.map(layer => layer.name.type === "system" ? { config: { unsafe: true }, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" } : layer),
     ]) {
       assert.throws(() => validateCodexConfigEvidence({ ...exact, layers }, boundary), /rejected/u);
     }

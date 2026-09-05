@@ -44,7 +44,9 @@ test("accepts omitted or null disabledReason from the exact 0.150.1 config wire"
 
 test("admits only an empty exact system placeholder, never a system policy or duplicate layer", () => {
   const config = exactConfigResult();
-  const [system, ...remaining] = layersOf(config);
+  const all = layersOf(config);
+  const system = all.find(layer => layer.name.type === "system");
+  const remaining = all.filter(layer => layer !== system);
   assert.ok(system);
   for (const replacement of [
     {...system, config: {model: "unqualified-system-policy"}},
@@ -52,9 +54,9 @@ test("admits only an empty exact system placeholder, never a system policy or du
     {...system, name: {type: "system", file: "/other/config.toml"}},
     {...system, extra: true},
   ]) {
-    assert.throws(() => validateCodexConfigEvidence({...config, layers: [replacement, ...remaining]}, boundary), /rejected/u);
+    assert.throws(() => validateCodexConfigEvidence({...config, layers: [...remaining, replacement]}, boundary), /rejected/u);
   }
-  assert.throws(() => validateCodexConfigEvidence({...config, layers: [system, system, ...remaining]}, boundary), /rejected/u);
+  assert.throws(() => validateCodexConfigEvidence({...config, layers: [...remaining, system, system]}, boundary), /rejected/u);
   assert.throws(() => validateCodexConfigEvidence({...config, layers: remaining}, boundary), /rejected/u);
 });
 
@@ -74,17 +76,18 @@ test("rejects extra effective, layer, origin, and policy-bearing keys", () => {
   const effectiveConfig = exact.config as Record<string, unknown>;
   const effectivePermissions = effectiveConfig.permissions as Record<string, unknown>;
   const origins = exact.origins as Record<string, Origin>;
+  const leaf = `permissions.${boundary.permissionProfileId}.extends`;
   const user = layers.find(layer => layer.name.type === "user")!;
   const session = layers.find(layer => layer.name.type === "sessionFlags")!;
   const mutations = [
-    { ...exact, config: { ...effectiveConfig, mcp_servers: {} } },
+    { ...exact, config: { ...effectiveConfig, mcp_servers: { injected: {} } } },
     { ...exact, config: { ...effectiveConfig, permissions: { ...effectivePermissions, extra: {} } } },
     { ...exact, layers: layers.map(layer => layer === user ? { ...layer, config: { ...layer.config, instructions: "unsafe" } } : layer) },
     { ...exact, layers: layers.map(layer => layer === session ? { ...layer, config: { ...layer.config, policy: "unsafe" } } : layer) },
-    { ...exact, origins: { ...origins, extra: origins.permissions } },
-    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, version: "1" } } },
-    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, name: { ...origins.permissions.name, file: "/other/config.toml" } } } },
-    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, name: { ...origins.permissions.name, type: "system", file: "/etc/codex/config.toml" } } } },
+    { ...exact, origins: { ...origins, extra: origins[leaf] } },
+    { ...exact, origins: { ...origins, [leaf]: { ...origins[leaf], version: "1" } } },
+    { ...exact, origins: { ...origins, [leaf]: { ...origins[leaf], name: { ...origins[leaf].name, file: "/other/config.toml" } } } },
+    { ...exact, origins: { ...origins, [leaf]: { ...origins[leaf], name: { ...origins[leaf].name, type: "system", file: "/etc/codex/config.toml" } } } },
   ];
   for (const mutation of mutations) {
     assert.throws(() => validateCodexConfigEvidence(mutation, boundary), /rejected/u);

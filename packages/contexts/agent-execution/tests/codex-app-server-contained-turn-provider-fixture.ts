@@ -15,7 +15,7 @@ import {
 import { CodexAppServerContainedTurnProvider } from "../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
 import type { CustodiedProviderProcess } from "../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { emitTurnStarted, generatedTurn } from "./codex-app-server-test-messages.mjs";
-import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./features/contained-agent-turn/codex-permission-profile-fixture.ts";
+import { nativeConfigResult } from "./fixtures/codex-native-config-0.150.1/fixture.ts";
 
 export type Message = Record<string, unknown>;
 interface FakeCodexProcessBehavior {
@@ -136,31 +136,7 @@ export class FakeCodexProcess implements CustodiedProviderProcess {
   }
 }
 
-export const exactConfigResult = (): Message => ({
-  config: {
-    default_permissions: boundary.permissionProfileId,
-    permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(boundary.codexHome) },
-  },
-  layers: [
-      { config: {}, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
-    {
-      config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(boundary.codexHome) } },
-      disabledReason: null,
-      name: { file: `${boundary.codexHome}/config.toml`, profile: null, type: "user" },
-      version: "2",
-    },
-    {
-      config: { default_permissions: boundary.permissionProfileId },
-      disabledReason: null,
-      name: { type: "sessionFlags" },
-      version: "3",
-    },
-  ],
-  origins: {
-    default_permissions: { name: { type: "sessionFlags" }, version: "3" },
-    permissions: { name: { file: `${boundary.codexHome}/config.toml`, profile: null, type: "user" }, version: "2" },
-  },
-});
+export const exactConfigResult = (): Message => ({ ...nativeConfigResult(boundary.codexHome, boundary.intentMode) });
 
 export const standardHandshake = (message: Message, process: FakeCodexProcess): boolean => {
   if (message.method === "initialize") {
