@@ -44,13 +44,13 @@ const nativeIgnoredHeader = (profile: NativeHttpRequestProfile, name: string, va
 const readHeader = (entry: unknown): Readonly<{name: string; value: string}> => {
   const field = data(entry, ["name", "value"]);
   const name: unknown = field.name?.value; const value: unknown = field.value?.value;
-  if (typeof name !== "string" || !/^[!#$%&'*+.^_`|~0-9a-z-]{1,128}$/.test(name)
-    || typeof value !== "string" || !/^[\t\x20-\x7e]*$/.test(value) || value.length > 16_384) {return invalid();}
+  if (typeof name !== "string" || !/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)
+    || typeof value !== "string" || !/^[\t\x20-\x7e]*$/.test(value)) {return invalid();}
   return {name, value};
 };
 
 const validateNativeHeaderBounds = (name: string, value: string, names: ReadonlySet<string>, total: number): void => {
-  if (names.has(name) || value.length > NATIVE_HTTP_HEADER_LIMITS.maximumValueBytes
+  if (names.has(name) || name.length > 128 || value.length > NATIVE_HTTP_HEADER_LIMITS.maximumValueBytes
     || total > NATIVE_HTTP_HEADER_LIMITS.maximumTotalValueBytes || !/^[\x20-\x7e]+$/.test(value)) {invalid();}
 };
 
@@ -59,8 +59,10 @@ export const selectHttpPresentationFields = (request: unknown, allowed: readonly
   const descriptors = data(request, ["method", "path", "headers", "body", "wireBytes"]);
   if (profile !== undefined && (descriptors.method?.value !== profile.upstreamMethod
     || descriptors.path?.value !== profile.upstreamPath)) {return invalid();}
+  // Generic ingress is already bounded by its strict parser. Discarded fields
+  // must not inherit native profile limits; forwarded fields retain serializer limits.
   const entries = headerEntries(descriptors.headers?.value,
-    profile === undefined ? 1_024 : NATIVE_HTTP_HEADER_LIMITS.maximumInboundFields);
+    profile === undefined ? Number.MAX_SAFE_INTEGER : NATIVE_HTTP_HEADER_LIMITS.maximumInboundFields);
   const names = new Set<string>(); const selected: PresentationField[] = []; let totalValueBytes = 0;
   for (const entry of entries) {
     const {name, value} = readHeader(entry);
