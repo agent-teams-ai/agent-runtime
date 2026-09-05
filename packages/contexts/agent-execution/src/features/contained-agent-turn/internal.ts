@@ -2,8 +2,6 @@ export {
   createNodeContainedTurnArtifacts,
   type NodeContainedTurnArtifactOptions,
 } from "./adapters/outbound/filesystem/node-contained-turn-artifacts.js";
-export { createHostHttpEgressSession } from "./adapters/outbound/host-custody/egress/host-http-egress-session.js";
-export type { HostHttpEgressSessionDependencies } from "./adapters/outbound/host-custody/egress/host-http-egress-session.js";
 export {
   createNodeContainedTurnWorkspace,
   type NodeContainedTurnWorkspaceOptions,
@@ -70,6 +68,8 @@ export {
   type ClaudeCurrentKernelPlatformTarget,
   type CreateClaudeCurrentKernelOwnerOptions,
 } from "./composition/claude-current-kernel-owner.js";
-export type {
-  ContainedTurnKernelWorkspaceOwner,
+export {
+  createHostHttpEgressSession,
+  type HostHttpEgressSessionDependencies,
+  type ContainedTurnKernelWorkspaceOwner,
 } from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";

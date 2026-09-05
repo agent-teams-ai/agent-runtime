@@ -1,17 +1,38 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { createContainedTurnFeature, type ContainedTurnFeatureDependencies } from "@agent-teams/agent-execution/composition";
-// Reuse the existing in-memory owner fixture; this is not a production package export.
-import { createDependencies } from "../../../packages/contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
-import { characterizeOpenCodeExactContract, parseOpenCodeExactContractFixture } from "../src/features/acp-compatibility/opencode-exact-contract.ts";
+import { createContainedTurnFeature, type ContainedTurnFeatureDependencies } from "../../../dist/composition.js";
+import { createDependencies } from "./support/contained-agent-turn-fixture.ts";
 
 test("replays exact fixture characterization through the neutral kernel with OpenCode identity", async () => {
-  const fixture = await parseOpenCodeExactContractFixture(await readFile(new URL(
-    "../fixtures/acp-compatibility/opencode-1-18-5-contract.json", import.meta.url,
-  )));
-  const projection = characterizeOpenCodeExactContract(fixture);
+  const bytes = await readFile(new URL(
+    "../../../../../../experiments/runtime-profile-behavior/fixtures/acp-compatibility/opencode-1-18-5-contract.json", import.meta.url,
+  ));
+  // The experiment's exact-contract-closure suite authenticates and characterizes
+  // these immutable bytes. Replay stays with the existing Agent Execution fixture.
+  assert.equal(createHash("sha256").update(bytes).digest("hex"),
+    "7366d7e295e9ae5a2464f0056ed1fa2157b2b338f49acbdbfd6ea62f58d8baff");
+  const fixture = JSON.parse(bytes.toString("utf8")) as {
+    boundedObservation: { terminal: "succeeded" };
+    capabilityDisposition: readonly { status: string }[];
+    claim: "contract_only_no_production_adapter";
+    neutralContract: {
+      manifestRevision: string;
+      supportedModes: readonly ["analysis"];
+      unknownCapabilityPolicy: "fail_closed";
+    };
+    pin: { providerRevision: string };
+  };
+  const projection = {
+    manifestRevision: fixture.neutralContract.manifestRevision,
+    provider: "opencode",
+    providerRevision: fixture.pin.providerRevision,
+    supportedModes: fixture.neutralContract.supportedModes,
+    terminalObservation: fixture.boundedObservation.terminal,
+    unknownCapabilityPolicy: fixture.neutralContract.unknownCapabilityPolicy,
+  };
   const harness = createDependencies();
   const original = harness.dependencies;
   let executions = 0;

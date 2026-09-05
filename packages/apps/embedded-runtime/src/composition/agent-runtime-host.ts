@@ -1,4 +1,3 @@
-import { types } from "node:util";
 import { copyContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
 import type { AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
 import { randomBytes } from "node:crypto";
@@ -51,6 +50,8 @@ import {
 } from "./contained-turn-runtime-access.js";
 import { createAgentRuntimeHostDisposalLifecycle } from "./agent-runtime-host-disposal.js";
 import { raceWithAbort } from "./runtime-access-lifecycle.js";
+
+const { types } = process.getBuiltinModule("node:util");
 
 export {
   AgentRuntimeHostDisposalIncompleteError,
