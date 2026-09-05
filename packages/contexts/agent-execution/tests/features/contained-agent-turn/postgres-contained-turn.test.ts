@@ -1,3 +1,5 @@
+import { seedLegacyIntentOperation } from "./support/intent-guard-legacy-fixture.ts";
+import { intentAuthority } from "./support/intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -210,7 +212,7 @@ postgresTest("operation reads reject oversized JSON before pg materializes the s
   await withPool(async pool => {
     await resetSchema(pool);
     const operation = operationForProject("project:oversized-state", "oversized-state");
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
     await runtimeQuery(
       pool,
@@ -344,21 +346,22 @@ postgresTest("expand migration accepts legacy writes before the contract migrati
        VALUES ($1,$2,$3::jsonb)`,
       [operation.operationId, legacyPreparation.preparationToken, JSON.stringify(legacyPreparation)],
     );
-    const stored = await new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 3 }).read({
+    const stored = await new PostgresContainedTurnOperationStore({ intentAuthority, pool, runtimeSchemaVersion: 3 }).read({
       operationId: operation.operationId,
       scope: operation.scope,
     });
     assert.equal(stored?.schemaVersion, 2);
     assert.equal(stored?.scope.projectId, operation.scope.projectId);
-    const recoveries = await new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 3 })
+    const recoveries = await new PostgresContainedTurnOperationStore({ intentAuthority, pool, runtimeSchemaVersion: 3 })
       .listDispatchPreparations({ scope: operation.scope });
     assert.equal(recoveries[0]?.preparation.providerAccessGrantRequestId, null);
     assert.equal(recoveries[0]?.preparation.runtimeSecurityGrantRequestId, null);
-    await applyContainedTurnPostgresSchema(pool);
+    await applyContainedTurnPostgresSchema(pool, { targetVersion: 6 });
+    await assert.rejects(applyContainedTurnPostgresSchema(pool), /refuses populated/u);
     const digestColumn = await runtimeQuery(pool,
       `SELECT state_digest FROM agent_execution.contained_turn_dispatch_preparation_v1
         WHERE operation_id=$1 AND preparation_token=$2`,
-      [operation.operationId, legacyPreparation.preparationToken],
+      [operation.operationId, legacyPreparation.preparationToken], 6,
     );
     assert.match(digestColumn.rows[0]?.state_digest, /^[a-f0-9]{64}$/u);
   });
@@ -368,8 +371,7 @@ postgresTest("real codec-1 preparation backfill crosses two page boundaries and 
   await withPool(async pool => {
     await resetSchema(pool, 3);
     const operation = operationForProject("project:legacy-pages", "legacy-pages");
-    const store = new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 3 });
-    assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
+    await seedLegacyIntentOperation(pool, operation, 3);
     const legacyRows = Array.from({ length: 9 }, (_unused, index) => {
       const suffix = String(index).padStart(2, "0");
       return {
@@ -396,7 +398,7 @@ postgresTest("real codec-1 preparation backfill crosses two page boundaries and 
       })))],
     );
 
-    await applyContainedTurnPostgresSchema(pool);
+    await applyContainedTurnPostgresSchema(pool, { targetVersion: 6 });
 
     const migrated = await pool.query<{ count: number; null_digests: number }>(
       `SELECT count(*)::integer AS count,
@@ -419,16 +421,16 @@ postgresTest("real codec-1 preparation backfill crosses two page boundaries and 
 postgresTest("contract migration waits for old transactions and durably excludes the old binary", async () => {
   await withPool(async pool => {
     await resetSchema(pool, 4);
-    const oldStore = new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 4 });
+    const oldStore = new PostgresContainedTurnOperationStore({ intentAuthority, pool, runtimeSchemaVersion: 4 });
     const operation = operationForProject("project:mixed-version", "mixed-version");
-    assert.equal((await oldStore.accept(operation, operationAuthority(operation))).kind, "accepted");
+    await seedLegacyIntentOperation(pool, operation, 4);
 
     const oldTransaction = await pool.connect();
     await oldTransaction.query("BEGIN");
     await oldTransaction.query("SELECT pg_advisory_xact_lock_shared($1)", [
       CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.advisoryLockId,
     ]);
-    const migration = applyContainedTurnPostgresSchema(pool);
+    const migration = applyContainedTurnPostgresSchema(pool, { targetVersion: 6 });
     let beforeRelease: "migrated" | "waiting";
     try {
       beforeRelease = await Promise.race([
@@ -446,7 +448,7 @@ postgresTest("contract migration waits for old transactions and durably excludes
       oldStore.read({ operationId: operation.operationId, scope: operation.scope }),
       /runtime schema fence rejected this binary/u,
     );
-    const currentStore = new PostgresContainedTurnOperationStore({ pool });
+    const currentStore = new PostgresContainedTurnOperationStore({ intentAuthority, pool, runtimeSchemaVersion: 6 });
     assert.equal(
       (await currentStore.read({ operationId: operation.operationId, scope: operation.scope }))?.operationId,
       operation.operationId,
@@ -458,7 +460,7 @@ postgresTest("tenant identity trigger fences tenant_id-only updates", async () =
   await withPool(async pool => {
     await resetSchema(pool);
     const operation = operationForProject("project:tenant-trigger", "tenant-trigger");
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
     await assert.rejects(
       runtimeQuery(
@@ -478,7 +480,7 @@ postgresTest("tenant identity trigger fences tenant_id-only updates", async () =
 postgresTest("acceptance replay is isolated by tenant and project and projections rebuild from authority", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const first = operationForProject("project:isolation-a", "isolation-a");
     const second = operationForProject("project:isolation-b", "isolation-b");
     assert.equal((await store.accept(first, operationAuthority(first))).kind, "accepted");
@@ -527,7 +529,7 @@ postgresTest("lost COMMIT acknowledgement creates separately committed durable r
   await withPool(async pool => {
     await resetSchema(pool);
     const initial = operationForProject("project:commit-loss", "commit-loss");
-    const normal = new PostgresContainedTurnOperationStore({ pool });
+    const normal = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     assert.equal((await normal.accept(initial, operationAuthority(initial))).kind, "accepted");
 
     let loseNextCommit = true;
@@ -559,7 +561,7 @@ postgresTest("lost COMMIT acknowledgement creates separately committed durable r
         };
       },
     }) as unknown as Pool;
-    const store = new PostgresContainedTurnOperationStore({ pool: ambiguousPool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool: ambiguousPool });
     const candidate = mutateContainedTurnOperation(initial, {
       kind: "bind_workspace",
       workspaceId: containedTurnIdentity("workspace", "workspace:commit-loss"),
@@ -584,7 +586,7 @@ postgresTest("lost COMMIT acknowledgement creates separately committed durable r
 postgresTest("two claimers persist exact loser grants and restart-safe cleanup state", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const initial = operationForProject("project:claim-race", "claim-race");
     assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
     const workspaceId = containedTurnIdentity("workspace", "workspace:claim-race");
@@ -616,7 +618,7 @@ postgresTest("two claimers persist exact loser grants and restart-safe cleanup s
     assert.equal(replay.kind, "observed_claim");
     assert.equal("committedDispatchProof" in replay, false);
 
-    const restarted = new PostgresContainedTurnOperationStore({ pool });
+    const restarted = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const recoveries = await restarted.listDispatchPreparations({ scope: bound.scope });
     const recovered = recoveries.find(item => item.preparation.preparationToken === loser.preparationToken);
     assert.equal(recovered?.preparation.kind, "active");

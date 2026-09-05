@@ -23,6 +23,7 @@ postgresTest("committed PostgreSQL authority survives fresh Node processes witho
   const committed = run("seed");
   const recovered = JSON.parse(run("recover", committed));
   assert.equal(recovered.recovered, true);
+  assert.equal(recovered.preventedReceiptReplayed, true);
   assert.equal(JSON.parse(committed).providerCalls, 1);
   assert.equal(recovered.providerCalls, 0);
   assert.equal(recovered.totalProviderCalls, 1);

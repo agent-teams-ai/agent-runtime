@@ -38,7 +38,17 @@ export interface ContainedTurnPreventionReceipt {
   readonly version: 1;
 }
 
-const digestPattern = /^[a-f0-9]{64}$/u;
+// Check primitive type/length before UTF-8 encoding or canonicalization.
+const guardText = (value: string, maximumBytes = 512): void => {
+  if (typeof value !== "string" || value.length > maximumBytes) {throw new TypeError("invalid intent guard text");}
+  validateContainedTurnText("intent guard text", value, { encoding: "ascii", maximumBytes });
+};
+const guardIdentity = (namespace: Parameters<typeof containedTurnIdentity>[0], value: string): void => {
+  guardText(value);
+  containedTurnIdentity(namespace, value);
+};
+
+const digestPattern = /^sha256:[a-f0-9]{64}$/u;
 export const validateContainedTurnGuardDigest = (value: string): void => {
   if (typeof value !== "string" || !digestPattern.test(value)) {throw new TypeError("invalid intent guard digest");}
 };
@@ -48,7 +58,7 @@ export const validateContainedTurnIntentAuthority = (authority: ContainedTurnInt
     "audience", "authorityRevision", "deploymentId", "deploymentIncarnation", "externalAuthorityDigest", "runtimeScopeRevision",
   ]);
   for (const value of Object.values(authority)) {
-    validateContainedTurnText("intent authority field", value, CONTAINED_TURN_LIMITS.text.identifier);
+    guardText(value);
   }
   validateContainedTurnGuardDigest(authority.externalAuthorityDigest);
 };
@@ -71,15 +81,15 @@ export const validateContainedTurnPreventionCommand = (command: ContainedTurnPre
   validateContainedTurnIntentAuthority(command.authority);
   assertContainedTurnExactRecord("prevention scope", command.scope, ["projectId", "tenantId"]);
   for (const value of Object.values(command.scope)) {
-    validateContainedTurnText("prevention scope", value, CONTAINED_TURN_LIMITS.text.identifier);
+    guardText(value);
   }
-  containedTurnIdentity("command", command.commandId);
-  validateContainedTurnText("original command", command.commandId, CONTAINED_TURN_LIMITS.text.commandId);
-  containedTurnIdentity("cancellation_command", command.preventionCommandId);
+  guardIdentity("command", command.commandId);
+  guardText(command.commandId, CONTAINED_TURN_LIMITS.text.commandId.maximumBytes);
+  guardIdentity("cancellation_command", command.preventionCommandId);
   validateContainedTurnGuardDigest(command.commandFingerprint);
   validateContainedTurnGuardDigest(command.preventionDigest);
   if (command.targetIntentCorrelation !== null) {
-    validateContainedTurnText("intent correlation", command.targetIntentCorrelation, CONTAINED_TURN_LIMITS.text.identifier);
+    guardText(command.targetIntentCorrelation);
   }
   const { preventionDigest, ...preimage } = command;
   if (command.version !== 1 || containedTurnPreventionDigest(preimage) !== preventionDigest) {
@@ -92,7 +102,10 @@ export const validateContainedTurnPreventionReceipt = (receipt: ContainedTurnPre
     "command", "disposition", "operationId", "operationRevision", "cutoffProofId", "receiptId", "version",
   ]);
   validateContainedTurnPreventionCommand(receipt.command);
-  containedTurnIdentity("proof", receipt.receiptId);
+  guardIdentity("proof", receipt.receiptId);
+  if (receipt.receiptId !== `proof:intent-receipt:${receipt.command.preventionDigest}`) {
+    throw new TypeError("intent receipt identity mismatch");
+  }
   if (receipt.version !== 1 || !["intent_guarded", "operation_fenced", "cutoff_requested", "already_terminal"].includes(receipt.disposition)) {
     throw new TypeError("invalid prevention receipt disposition");
   }
@@ -101,12 +114,12 @@ export const validateContainedTurnPreventionReceipt = (receipt: ContainedTurnPre
       throw new TypeError("pre-acceptance guard cannot materialize operation evidence");
     }
   } else {
-    containedTurnIdentity("operation", receipt.operationId!);
+    guardIdentity("operation", receipt.operationId!);
     if (!Number.isSafeInteger(receipt.operationRevision) || receipt.operationRevision! < 0) {
       throw new TypeError("invalid prevention operation revision");
     }
     if (receipt.disposition !== "already_terminal" || receipt.cutoffProofId !== null) {
-      containedTurnIdentity("proof", receipt.cutoffProofId!);
+      guardIdentity("proof", receipt.cutoffProofId!);
     }
   }
   return detachAndFreezeContainedTurnValue(receipt);

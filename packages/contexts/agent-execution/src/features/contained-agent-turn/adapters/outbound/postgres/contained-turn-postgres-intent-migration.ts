@@ -13,15 +13,15 @@ $$;
 CREATE TABLE agent_execution.contained_turn_intent_namespace_v1 (
   tenant_id text NOT NULL CHECK (octet_length(tenant_id) BETWEEN 1 AND 512),
   project_id text NOT NULL CHECK (octet_length(project_id) BETWEEN 1 AND 512),
-  authority_digest text NOT NULL CHECK (authority_digest ~ '^[a-f0-9]{64}$'),
+  authority_digest text NOT NULL CHECK (authority_digest ~ '^sha256:[a-f0-9]{64}$'),
   PRIMARY KEY (tenant_id, project_id)
 );
 CREATE TABLE agent_execution.contained_turn_intent_v1 (
   tenant_id text NOT NULL,
   project_id text NOT NULL,
   command_id text NOT NULL CHECK (octet_length(command_id) BETWEEN 1 AND 256),
-  command_fingerprint text NOT NULL CHECK (command_fingerprint ~ '^[a-f0-9]{64}$'),
-  authority_digest text NOT NULL CHECK (authority_digest ~ '^[a-f0-9]{64}$'),
+  command_fingerprint text NOT NULL CHECK (command_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+  authority_digest text NOT NULL CHECK (authority_digest ~ '^sha256:[a-f0-9]{64}$'),
   operation_id text REFERENCES agent_execution.contained_turn_operation_v1(operation_id) ON DELETE RESTRICT,
   PRIMARY KEY (tenant_id, project_id, command_id),
   FOREIGN KEY (tenant_id, project_id) REFERENCES agent_execution.contained_turn_intent_namespace_v1 ON DELETE RESTRICT

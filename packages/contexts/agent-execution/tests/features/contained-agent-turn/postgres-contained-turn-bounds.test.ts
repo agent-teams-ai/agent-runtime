@@ -1,3 +1,4 @@
+import { intentAuthority } from "./support/intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -79,7 +80,7 @@ for (const corrupt of ["output", "receipt"] as const) {
     await withPool(async pool => {
       await resetSchema(pool);
       const operation = operationForProject(`project:corrupt-${corrupt}`, `corrupt-${corrupt}`);
-      const store = new PostgresContainedTurnOperationStore({ pool });
+      const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
       assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
       await runtimeQuery(pool, corrupt === "output"
         ? `INSERT INTO agent_execution.contained_turn_output_v1
@@ -167,7 +168,7 @@ test("legacy operation validation rejects cumulative bytes across bounded batche
 postgresTest("supported-codec active and cleanup debt cannot disappear through unverified kind", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const operation = operationForProject("project:kind-corruption", "kind-corruption");
     assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
     const missingToken = "preparation:000-missing-active-kind";
@@ -263,7 +264,7 @@ postgresTest("supported-codec active and cleanup debt cannot disappear through u
 postgresTest("later operation projection overflow outranks an earlier preparation digest", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const first = operationForProject("project:cumulative-recovery", "000-cumulative-recovery");
     const later = operationForProject(
       "project:cumulative-recovery",

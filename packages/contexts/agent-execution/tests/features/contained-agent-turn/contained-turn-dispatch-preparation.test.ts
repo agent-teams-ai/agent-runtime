@@ -701,6 +701,7 @@ test("final claim follows both owner consumptions and only a fresh CAS exposes c
   );
   const dependencies = createContainedTurnPreparationScopeDependencies({
     operationStore: {
+      preventIntent: async () => ({ kind: "denied" as const }),
       claimPreparedDispatch: async () => {
         events.push("agent-execution:final-claim");
         return observed

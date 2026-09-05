@@ -1,3 +1,4 @@
+import { intentAuthority, intentHarness, prevention, submission } from "./intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -14,7 +15,7 @@ const history = async (pool: Parameters<typeof resetSchema>[0]) => (await pool.q
 
 const seed = async (pool: Parameters<typeof resetSchema>[0]) => {
   await resetSchema(pool);
-  const store = new PostgresContainedTurnOperationStore({ pool });
+  const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
   const scope = { projectId: "project:fresh-process", tenantId: "tenant:postgres-durability" };
   const fixture = createPostgresReplayApplication(store, scope);
   const input = {
@@ -39,8 +40,10 @@ const seed = async (pool: Parameters<typeof resetSchema>[0]) => {
   assert.equal((await store.accept(corrupt, operationAuthority(corrupt))).kind, "accepted");
   await runtimeQuery(pool, "UPDATE agent_execution.contained_turn_operation_v1 SET state_digest=repeat('0',64) WHERE operation_id=$1", [corrupt.operationId]);
   const preparations = await seedScopedPreparations(store, scope);
+  const negative = await intentHarness(pool).feature.cancel.execute({ prevention: prevention(), scope: submission.scope });
+  assert.equal(negative.kind, "committed");
   return { pid: process.pid, input, providerCalls: fixture.providerCalls.value,
-    claimInput: fixture.claims[0]!, ambiguous, other, otherTenant, corrupt, preparations,
+    negative, claimInput: fixture.claims[0]!, ambiguous, other, otherTenant, corrupt, preparations,
     migrations: await history(pool) };
 };
 
@@ -53,7 +56,13 @@ const recover = async (pool: Parameters<typeof resetSchema>[0], snapshot: Snapsh
     predecessorDigest: row.predecessor_digest })), CONTAINED_TURN_POSTGRES_MIGRATIONS.map(row => ({
     version: row.version, digest: row.digest, predecessorDigest: row.predecessorDigest ?? null,
   })));
-  const store = new PostgresContainedTurnOperationStore({ pool });
+  const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
+  const prevented = intentHarness(pool);
+  assert.deepEqual(await prevented.feature.cancel.execute({ prevention: prevention(), scope: submission.scope }), snapshot.negative);
+  assert.deepEqual(await prevented.feature.submit.execute(submission), { status: "denied" });
+  assert.equal(prevented.counts.provider, 0);
+  assert.equal(prevented.counts.workspace, 0);
+  assert.equal((await runtimeQuery(pool, "SELECT 1 FROM agent_execution.contained_turn_operation_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3", [submission.scope.tenantId, submission.scope.projectId, submission.commandId])).rowCount, 0);
   const { ambiguous, other, otherTenant, corrupt } = snapshot;
   const fixture = createPostgresReplayApplication(store, ambiguous.scope);
   assert.equal(snapshot.providerCalls, 1);
@@ -116,7 +125,7 @@ const recover = async (pool: Parameters<typeof resetSchema>[0], snapshot: Snapsh
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await assert.rejects(applyContainedTurnPostgresSchema(pool), /schema identity mismatch/u);
   }
-  return { pid: process.pid, recovered: true, providerCalls: fixture.providerCalls.value,
+  return { pid: process.pid, recovered: true, preventedReceiptReplayed: true, providerCalls: fixture.providerCalls.value,
     totalProviderCalls: snapshot.providerCalls + fixture.providerCalls.value };
 };
 

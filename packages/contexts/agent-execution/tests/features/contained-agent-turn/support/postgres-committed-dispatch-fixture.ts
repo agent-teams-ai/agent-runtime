@@ -1,3 +1,4 @@
+import { intentAuthority } from "./intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 
 import type { Pool } from "pg";
@@ -111,7 +112,7 @@ export const postgresClaimInput = (
 };
 
 export const preparePostgresClaim = async (pool: Pool, suffix: string) => {
-  const store = new PostgresContainedTurnOperationStore({ pool });
+  const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
   const initial = operationForProject(`project:${suffix}`, suffix);
   assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
   const workspaceId = containedTurnIdentity("workspace", `workspace:${suffix}`);

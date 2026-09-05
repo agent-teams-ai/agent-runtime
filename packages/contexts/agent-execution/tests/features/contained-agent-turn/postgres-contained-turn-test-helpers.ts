@@ -53,7 +53,7 @@ export const operationForProject = (
 
 export const resetSchema = async (
   pool: Pool,
-  targetVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 = CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
+  targetVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 = CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
 ): Promise<void> => {
   await pool.query("DROP SCHEMA IF EXISTS agent_execution CASCADE");
   await applyContainedTurnPostgresSchema(pool, {
@@ -72,12 +72,13 @@ export const runtimeQuery = async <Row extends import("pg").QueryResultRow = imp
   pool: Pool,
   text: string,
   values: readonly unknown[] = [],
+  schemaVersion = CONTAINED_TURN_POSTGRES_SCHEMA_VERSION,
 ): Promise<import("pg").QueryResult<Row>> => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query(
-      "SELECT set_config('agent_execution.contained_turn_schema_version', version::text, true) FROM agent_execution.schema_migration WHERE component='contained-agent-turn'",
+      "SELECT set_config('agent_execution.contained_turn_schema_version', $1, true)", [String(schemaVersion)],
     );
     const result = await client.query<Row>(text, [...values]);
     await client.query("COMMIT");

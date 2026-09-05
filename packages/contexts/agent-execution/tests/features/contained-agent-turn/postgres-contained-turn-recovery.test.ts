@@ -1,3 +1,4 @@
+import { intentAuthority } from "./support/intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -34,7 +35,7 @@ import {
 postgresTest("persisted v2 true flags preserve conservative cleanup debt without replaying consumption", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const initial = operationForProject("project:v2-cleanup-recovery", "v2-cleanup-recovery");
     assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
     const workspaceId = containedTurnIdentity("workspace", "workspace:v2-cleanup-recovery");
@@ -82,7 +83,7 @@ postgresTest("persisted v2 true flags preserve conservative cleanup debt without
         digestContainedTurnPostgresJson(v2State)],
     );
 
-    const restarted = new PostgresContainedTurnOperationStore({ pool });
+    const restarted = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const decoded = (await restarted.listDispatchPreparations({ scope: bound.scope }))[0]?.preparation;
     assert.equal(decoded?.kind, "cleanup_pending");
     if (decoded?.kind !== "cleanup_pending") {throw new Error("v2 recovery preparation was not decoded");}
@@ -124,7 +125,7 @@ postgresTest("persisted v2 true flags preserve conservative cleanup debt without
 postgresTest("unsupported preparation codecs quarantine independently and recovery keeps progressing", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const initial = operationForProject("project:poison-preparation", "poison-preparation");
     assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
     const workspaceId = containedTurnIdentity("workspace", "workspace:poison-preparation");
@@ -207,7 +208,7 @@ postgresTest("unsupported preparation codecs quarantine independently and recove
 postgresTest("legacy quarantine is linked atomically to scoped owner debt and replay is idempotent", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const owned = operationForProject("project:quarantine-owner", "quarantine-owner");
     const other = operationForProject("project:quarantine-other", "quarantine-other");
     assert.equal((await store.accept(owned, operationAuthority(owned))).kind, "accepted");
@@ -272,7 +273,7 @@ postgresTest("legacy quarantine is linked atomically to scoped owner debt and re
 postgresTest("recovery pages retained history and validates debt and later supported corruption", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const operation = operationForProject("project:paged-history", "paged-history");
     assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
     const base = {
@@ -358,7 +359,7 @@ postgresTest("recovery pages retained history and validates debt and later suppo
 postgresTest("retirement rejects a payload token that disagrees with its row key", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const initial = operationForProject("project:retirement-token", "retirement-token");
     assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
     const workspaceId = containedTurnIdentity("workspace", "workspace:retirement-token");
@@ -455,7 +456,7 @@ test("recovery verifies phase-one identity and size metadata before decoding mat
 postgresTest("a later recovery batch violation takes precedence over an earlier digest mismatch", async () => {
   await withPool(async pool => {
     await resetSchema(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     const operation = operationForProject("project:oversized-recovery", "oversized-recovery");
     assert.equal((await store.accept(operation, operationAuthority(operation))).kind, "accepted");
     for (const suffix of ["a", "b"]) {

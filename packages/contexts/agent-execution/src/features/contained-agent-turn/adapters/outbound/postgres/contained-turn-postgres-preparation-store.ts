@@ -73,6 +73,23 @@ const assertRetirementReceiptAuthority = (
   }
 };
 
+const matchesPreparationClaim = (
+  preparation: ContainedTurnDispatchPreparation,
+  current: ContainedTurnKernelOperation,
+  input: Parameters<ContainedTurnKernelOperationStore["claimPreparedDispatch"]>[0],
+): boolean =>
+  preparation.operationId === current.operationId &&
+  preparation.operationId === input.subject.operationId &&
+  preparation.preparationToken === input.subject.preparationToken &&
+  preparation.attemptId === input.subject.attemptId &&
+  preparation.custodyId === input.subject.custodyId &&
+  preparation.workspaceId === current.workspaceId &&
+  preparation.workspaceId === input.subject.workspaceId &&
+  preparation.operationCutoffRevision === input.subject.operationCutoffRevision &&
+  preparation.preparedOperationRevision === input.expectedOperationRevision &&
+  current.effectId === input.subject.effectId &&
+  containedTurnScopeDigest(current.scope) === input.subject.scopeDigest;
+
 export class ContainedTurnPostgresPreparationStore {
   public constructor(
     private readonly identities: ContainedTurnPostgresIdentitySource,
@@ -223,19 +240,7 @@ export class ContainedTurnPostgresPreparationStore {
       const persisted = row.rows[0];
       const preparation = persisted === undefined ? undefined : decodePreparationRow(persisted);
       if (preparation === undefined || !["active", "cleanup_pending"].includes(preparation.kind)) {return { current, kind: "stale" as const };}
-      if (preparation.operationId !== current.operationId ||
-          preparation.operationId !== input.subject.operationId ||
-          preparation.preparationToken !== input.subject.preparationToken ||
-          preparation.attemptId !== input.subject.attemptId ||
-          preparation.custodyId !== input.subject.custodyId ||
-          preparation.workspaceId !== current.workspaceId ||
-          preparation.workspaceId !== input.subject.workspaceId ||
-          preparation.operationCutoffRevision !== input.subject.operationCutoffRevision ||
-          preparation.preparedOperationRevision !== input.expectedOperationRevision ||
-          current.effectId !== input.subject.effectId ||
-          containedTurnScopeDigest(current.scope) !== input.subject.scopeDigest) {
-        return { current, kind: "stale" as const };
-      }
+      if (!matchesPreparationClaim(preparation, current, input)) {return { current, kind: "stale" as const };}
       const providerAccessReceipt = consumedReceipts[0];
       const runtimeSecurityReceipt = consumedReceipts[1];
       const bound = bindContainedTurnPreparationGrantRequests(preparation, {

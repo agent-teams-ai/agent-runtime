@@ -1,3 +1,4 @@
+import { intentAuthority } from "./support/intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
@@ -361,7 +362,7 @@ test("PostgreSQL current owners durably claim once through real Codex and Claude
           const preventedHost = new FakeHost();
           const preventedOwner = await createOwner(provider, join(root, "prevented"), preventedHost);
           const preventedFixture = createDependencies({dispatchPrevented: true});
-          const preventedStore = new PostgresContainedTurnOperationStore({identities: createIdentities(`${testRunId}:${provider}:prevented`), pool});
+          const preventedStore = new PostgresContainedTurnOperationStore({ intentAuthority,identities: createIdentities(`${testRunId}:${provider}:prevented`), pool});
           const preventedSelected = forProvider(preventedFixture, provider);
           const prevention = await createContainedTurnFeature({...preventedSelected,
             custody: preventedOwner.custody,
@@ -381,7 +382,7 @@ test("PostgreSQL current owners durably claim once through real Codex and Claude
           const fixture = createDependencies();
           const selected = forProvider(fixture, provider);
           const identities = createIdentities(`${testRunId}:${provider}:claimed`);
-          const durable = new PostgresContainedTurnOperationStore({identities, pool});
+          const durable = new PostgresContainedTurnOperationStore({ intentAuthority,identities, pool});
           let releaseClaim!: () => void;
           let reportClaim!: () => void;
           const wait = new Promise<void>(resolve => {releaseClaim = resolve;});
@@ -424,7 +425,7 @@ test("PostgreSQL current owners durably claim once through real Codex and Claude
           assert.equal(secondSubmit.status, "observed");
           assert.equal(host.starts, 1);
 
-          const reconstructed = new PostgresContainedTurnOperationStore({identities, pool});
+          const reconstructed = new PostgresContainedTurnOperationStore({ intentAuthority,identities, pool});
           const storedRow = await pool.query<{operation_id: string}>(
             "SELECT operation_id FROM agent_execution.contained_turn_operation_v1 WHERE command_id=$1",
             [request.commandId],
@@ -476,7 +477,7 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
           const fixture = createDependencies();
           const selected = forProvider(fixture, provider);
           const identities = createIdentities(`${testRunId}:${provider}:success`);
-          const durable = new PostgresContainedTurnOperationStore({identities, pool});
+          const durable = new PostgresContainedTurnOperationStore({ intentAuthority,identities, pool});
           let releaseClaim!: () => void;
           let reportClaim!: () => void;
           const wait = new Promise<void>(resolve => {releaseClaim = resolve;});
@@ -509,7 +510,7 @@ test("PostgreSQL current owners durably close deterministic Codex and Claude suc
           assert.equal(duplicate.turn.status, "succeeded");
           assert.equal(host.starts, 1, "duplicate submission cannot start the provider again");
 
-          const reconstructed = new PostgresContainedTurnOperationStore({identities, pool});
+          const reconstructed = new PostgresContainedTurnOperationStore({ intentAuthority,identities, pool});
           const persisted = await reconstructed.read({operationId: result.turn.operationId, scope: request.scope});
           assert.equal(persisted?.providerExecution.kind, "closed");
           assert.equal(persisted?.terminal.kind, "final");
@@ -555,7 +556,7 @@ test("lost PostgreSQL claim COMMIT acknowledgement reconciles without a provider
     const selected = forProvider(fixture, "codex");
     const identities = createIdentities(`${testRunId}:codex:claim-commit-loss`);
     const ambiguous = poolWithLostClaimCommit(pool);
-    const durable = new PostgresContainedTurnOperationStore({identities, pool: ambiguous.pool});
+    const durable = new PostgresContainedTurnOperationStore({ intentAuthority,identities, pool: ambiguous.pool});
     const feature = createContainedTurnFeature({...selected,
       custody: owner.custody, operationStore: delegatingStore(durable), provider: owner.provider});
     const request = {
@@ -609,7 +610,7 @@ test("PostgreSQL current owners resume proved durable closure without replaying 
           const fixture = createDependencies();
           const selected = forProvider(fixture, provider);
           const identities = createIdentities(`${testRunId}:${provider}:recovery`);
-          const durable = new PostgresContainedTurnOperationStore({identities, pool});
+          const durable = new PostgresContainedTurnOperationStore({ intentAuthority,identities, pool});
           let withholdAcknowledgement = true;
           const artifacts = Object.freeze({...durableFilesystem.artifacts,
             ensureSealed: async (input: Parameters<typeof durableFilesystem.artifacts.ensureSealed>[0]) => {
@@ -643,7 +644,7 @@ test("PostgreSQL current owners resume proved durable closure without replaying 
           const completed = await durable.read({operationId: duplicate.turn.operationId, scope: request.scope});
           assert.equal(completed?.terminal.kind, "final");
 
-          const reconstructed = new PostgresContainedTurnOperationStore({identities, pool});
+          const reconstructed = new PostgresContainedTurnOperationStore({ intentAuthority,identities, pool});
           const replayFixture = createDependencies();
           const replaySelected = forProvider(replayFixture, provider);
           const replay = await createContainedTurnFeature({...replaySelected,

@@ -42,7 +42,7 @@ export {
 
 export type { ContainedTurnPostgresIdentitySource } from "./contained-turn-postgres-operation-authority.js";
 export interface PostgresContainedTurnOperationStoreOptions {
-  /** Trusted composition only. Omission closes admission and claim pending product seam authority. */
+  /** Trusted composition only. Omission closes admission and claim; authority is never inferred from a request. */
   readonly intentAuthority?: ContainedTurnIntentAuthority;
   readonly identities?: ContainedTurnPostgresIdentitySource;
   readonly pool: Pool;
@@ -222,6 +222,8 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
 
   public async accept(candidate: ContainedTurnKernelOperation, authority: ContainedTurnOwnerStoreAuthority) {
     assertAuthority(authority, candidate);
+    validateContainedTurnOperation(candidate);
+    if (candidate.revision !== 0) {throw new TypeError("acceptance requires revision-zero intent");}
     type AttemptOutcome =
       | { readonly kind: "accepted"; readonly operation: ContainedTurnKernelOperation }
       | { readonly kind: "replayed"; readonly operation: ContainedTurnKernelOperation }

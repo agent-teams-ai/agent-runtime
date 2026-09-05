@@ -1,4 +1,5 @@
 /* oxlint-disable max-lines -- The test-only factory keeps its exact owner-port composition in one fixture. */
+import { adapterSnapshot, manifest, providerAccessSnapshot } from "./contained-turn-fixture-snapshots.ts";
 import assert from "node:assert/strict";
 import { digestContainedTurnCanonicalValue } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
@@ -8,7 +9,7 @@ import { mutateContainedTurnOperation } from "../../../../dist/features/containe
 import type { ContainedTurnKernelOperation } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-kernel-model.js";
 import type { ContainedTurnProof } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-proofs.js";
 import type { ContainedTurnKernelDependencies } from "../../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
-import { containedTurnProviderAccessSnapshotDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnProviderAccessSnapshotDigest } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { containedTurnDispatchClaimBindingDigest, validateContainedTurnConsumedGrantReceipts } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import { containedTurnPreparationClosureBinding, CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT, bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation, recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.js";
 import { containedTurnPreparationToken } from "../../../../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
@@ -35,38 +36,6 @@ interface ClaimAuthorityObservation {
   readonly runtimeSecurityDispatchProofId: string;
   readonly securityAuthorityRevision: string;
 }
-
-const adapterSnapshot = Object.freeze({
-  adapterRevision: "adapter:one",
-  binaryRevision: "binary:one",
-  capabilityManifestRevision: "manifest:one",
-  provider: "codex" as const,
-});
-const providerAccessSnapshot = Object.freeze({
-  accessRef: "access:one",
-  credentialBindingDigest: digestContainedTurnCanonicalValue({ binding: "one" }),
-  credentialBindingRef: "credential-binding:one",
-  credentialGeneration: 1,
-  ownerAuthorityDigest: "authority-digest:one",
-  projectId: "project:one",
-  provider: "codex" as const,
-  providerAccountRef: "account:one",
-  providerRouteRef: "route:one",
-  revision: 1,
-  tenantId: "tenant:one",
-});
-const manifest = Object.freeze({
-  effectCardinality: "one_coarse_effect_per_operation" as const,
-  effectClass: "contained_unmediated_effect" as const,
-  manifestRevision: adapterSnapshot.capabilityManifestRevision,
-  manifestVersion: 1 as const,
-  provider: "codex" as const,
-  providerAttemptCardinality: "at_most_one" as const,
-  requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS,
-  resourceScopeRevision: "resource-scope:one",
-  supportedModes: Object.freeze(["analysis"] as const),
-  unknownCapabilityPolicy: "fail_closed" as const,
-});
 
 const operationBinding = (operation: ContainedTurnKernelOperation) => ({
   authorityVectorDigest: operation.acceptedAuthorityVectorDigest,

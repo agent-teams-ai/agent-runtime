@@ -1,3 +1,4 @@
+import { validateContainedTurnIntentCatalog } from "./contained-turn-postgres-intent-catalog.js";
 import { createHash } from "node:crypto";
 
 import type { Pool, PoolClient } from "pg";
@@ -226,6 +227,7 @@ const validatePreparationCleanupCatalog = async (client: PoolClient, version: nu
 };
 
 const validateCurrentCatalog = async (client: PoolClient, version: number): Promise<void> => {
+  if (version >= 8) {await validateContainedTurnIntentCatalog(client);}
   if (version < 3) {return;}
   const columns = await client.query<{ column_name: string; is_nullable: "NO" | "YES" }>(
     `SELECT column_name, is_nullable
