@@ -29,6 +29,14 @@ const fixed = (value: unknown, prefix: string): string => {
   if (typeof value !== "string" || !value.startsWith(`${prefix}:`)) { throw new HostHttpEgressV4Error("conflict"); }
   v4Digest(value.slice(prefix.length + 1)); return value;
 };
+// Same FULL_IMAGE grammar as docker-engine-codec/create-request; retain the exact
+// repository, optional registry port/tag and digest. Engine differential tests bind it.
+const imageDigest = (value: unknown): string => {
+  if (typeof value !== "string" || !/^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$/u.test(value)) {
+    throw new HostHttpEgressV4Error("conflict");
+  }
+  return value;
+};
 export const v4Subject = (value: unknown): HostHttpEgressV4Subject => {
   v4Exact(value, ["attempt", "effectId", "workspaceId", "executionGenerationId", "scopeSha256",
     "acceptedAuthoritySha256", "committedClaimSha256", "observerSha256", "imageDigest",
@@ -42,7 +50,7 @@ export const v4Subject = (value: unknown): HostHttpEgressV4Subject => {
   return Object.freeze({ attempt, effectId: fixed(value.effectId, "effect"), workspaceId: fixed(value.workspaceId, "workspace"),
     executionGenerationId: fixed(value.executionGenerationId, "execution-generation"), scopeSha256: v4Digest(value.scopeSha256),
     acceptedAuthoritySha256: v4Digest(value.acceptedAuthoritySha256), committedClaimSha256: v4Digest(value.committedClaimSha256),
-    observerSha256: v4Digest(value.observerSha256), imageDigest: fixed(value.imageDigest, "sha256"),
+    observerSha256: v4Digest(value.observerSha256), imageDigest: imageDigest(value.imageDigest),
     networkHandle: fixed(value.networkHandle, "network"), listenerHandle: fixed(value.listenerHandle, "listener"),
     routeHandle: fixed(value.routeHandle, "route") });
 };
@@ -51,6 +59,11 @@ export const v4Locator = (s: HostHttpEgressV4Subject): string => v4Hash({ versio
   tenantId: s.attempt.tenantId, projectId: s.attempt.projectId, operationId: s.attempt.operationId });
 export const v4Intents = Object.freeze(["network_intent", "listener_intent", "route_intent", "inbound_intent",
   "upstream_intent", "sockets_close", "cutoff", "listener_release", "network_release", "uncertain", "retired"] as const);
+export const v4Intent = (value: unknown): Extract<HostHttpEgressV4Event, { targetSha256: string }> => {
+  v4Exact(value, ["kind", "targetSha256"]);
+  if (!v4Intents.includes(value.kind as never)) { throw new HostHttpEgressV4Error("conflict"); }
+  return Object.freeze({ kind: value.kind as typeof v4Intents[number], targetSha256: v4Digest(value.targetSha256) });
+};
 const observed = Object.freeze(["network_allocated", "listener_allocated", "container_attached", "route_installed",
   "inbound_allocated", "upstream_allocated", "sockets_closed", "cutoff_observed", "container_absent",
   "listener_absent", "network_absent"] as const);
@@ -61,7 +74,7 @@ export const v4Observation = (value: unknown): HostHttpEgressV4Observation => {
   if (value.container !== null) {
     dockerCustodyAuthoritySha256(value.container as DockerContainerAuthority);
     container = Object.freeze({ ...value.container as DockerContainerAuthority });
-    v4Digest(container.containerId); fixed(container.imageDigest, "sha256");
+    v4Digest(container.containerId); imageDigest(container.imageDigest);
   }
   if (value.kind === "sockets_closed" ? !["settled", "unknown"].includes(value.writeOutcome as string) : value.writeOutcome !== null) {
     throw new HostHttpEgressV4Error("conflict");
@@ -78,8 +91,7 @@ export const v4Event = (value: unknown): HostHttpEgressV4Event => {
     v4Exact(value, ["kind", "subject"]); return Object.freeze({ kind, subject: v4Subject(value.subject) });
   }
   if (v4Intents.includes(kind as never)) {
-    v4Exact(value, ["kind", "targetSha256"]);
-    return Object.freeze({ kind: kind as typeof v4Intents[number], targetSha256: v4Digest(value.targetSha256) });
+    return v4Intent(value);
   }
   v4Exact(value, ["kind", "observation"]);
   const observation = v4Observation(value.observation);

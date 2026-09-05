@@ -14,7 +14,7 @@ export const subject: HostHttpEgressV4Subject = Object.freeze({
     hostBootGenerationSha256: v4Hash("host-boot-generation"), launchFingerprintSha256: v4Hash("launch"), operationNonceSha256: v4Hash("nonce") }),
   effectId: id("effect"), workspaceId: id("workspace"), executionGenerationId: id("execution-generation"),
   scopeSha256: v4Hash("scope"), acceptedAuthoritySha256: v4Hash("accepted"), committedClaimSha256: v4Hash("committed"),
-  observerSha256: v4Hash("retained-owner"), imageDigest: id("sha256"), networkHandle: id("network"), listenerHandle: id("listener"), routeHandle: id("route"),
+  observerSha256: v4Hash("retained-owner"), imageDigest: `registry.invalid:5443/runtime@${id("sha256")}`, networkHandle: id("network"), listenerHandle: id("listener"), routeHandle: id("route"),
 });
 export const container = Object.freeze({ containerId: v4Hash("actual-container"),
   daemonIdentitySha256: subject.attempt.daemonIdentitySha256, daemonBootGenerationSha256: subject.attempt.daemonBootGenerationSha256,

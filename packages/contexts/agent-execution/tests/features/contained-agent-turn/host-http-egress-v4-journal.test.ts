@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { v4Decode, v4DecodeTombstone, v4Encode, v4Hash, v4Record, v4Subject } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.js";
+import { v4Decode, v4DecodeTombstone, v4Encode, v4Hash, v4Observation, v4Record, v4Subject } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.js";
+import { validateAuthorityShape } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-codec.js";
+import type { HostHttpEgressV4Observed } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-types.js";
 import { HostHttpEgressV4Journal } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-journal.js";
 import { v4Replay } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-replay.js";
 import { HOST_HTTP_EGRESS_V4_LIMITS as LIMITS } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-types.js";
@@ -58,7 +60,7 @@ test("forged observations, another owner's capability, wrong scope/target and ex
     await assert.rejects(f.observe("container_absent", { [field]: v4Hash("foreign") }), { code: "conflict" });
   }
   for (const field of Object.keys(container) as (keyof typeof container)[]) {
-    const value = field === "imageDigest" ? `sha256:${v4Hash("foreign")}` : v4Hash("foreign");
+    const value = field === "imageDigest" ? `registry.invalid:5443/runtime@sha256:${v4Hash("foreign")}` : v4Hash("foreign");
     await assert.rejects(f.observe("container_absent", { container: { ...container, [field]: value } }), { code: "conflict" });
   }
   await assert.rejects(f.observe("container_absent", { container: null }), { code: "conflict" });
@@ -265,4 +267,139 @@ test("tombstone corruption, wrong tail and premature retirement cannot authorize
     const f = new V4Fixture(storage); await assert.rejects(f.open()); await assert.rejects(f.journal.cleanupHandles());
   }
   const fresh = new V4Fixture(); await fresh.open(); await assert.rejects(fresh.intent("retired"), { code: "conflict" });
+});
+
+// Deliberately cross the TypeScript boundary as a JavaScript caller would.
+const runtimeIntent = (f: V4Fixture, command: string, value: unknown) =>
+  f.journal.recordIntent(command, value as Parameters<HostHttpEgressV4Journal["recordIntent"]>[1]);
+const nonIntentKinds = ["opened", "network_allocated", "listener_allocated", "container_attached", "route_installed",
+  "inbound_allocated", "upstream_allocated", "sockets_closed", "cutoff_observed", "container_absent",
+  "listener_absent", "network_absent"] as const satisfies readonly ("opened" | HostHttpEgressV4Observed)[];
+
+for (const kind of nonIntentKinds) {
+  test(`runtime intent boundary rejects ${kind} at its otherwise admissible recipe position`, async () => {
+    const baseline = new V4Fixture(); await baseline.setup(); await baseline.exchange(); await baseline.settle();
+    const f = new V4Fixture(); await f.open();
+    for (const record of v4Decode(baseline.storage.journal!)) {
+      const event = record.event;
+      if (event.kind === kind) { break; }
+      if ("observation" in event) { await f.observe(event.kind); }
+      else if (event.kind !== "opened") { await f.intent(event.kind); }
+    }
+    const event = kind === "opened" ? { kind, subject } : { kind, observation: f.data(kind) };
+    const before = f.storage.journal!.slice(); const evidence = f.journal.evidence();
+    const calls = f.storage.calls; const reads = f.owner.reads; const command = f.command();
+    await assert.rejects(runtimeIntent(f, command, event), { code: "conflict" });
+    // Neither the ordinary observation shape nor the two-field intent shape may pass.
+    await assert.rejects(runtimeIntent(f, command, { kind, targetSha256: v4Hash(null) }), { code: "conflict" });
+    assert.deepEqual(f.storage.journal, before); assert.equal(f.storage.marker, null);
+    assert.deepEqual(f.journal.evidence(), evidence); assert.equal(f.storage.calls, calls); assert.equal(f.owner.reads, reads);
+    if ("observation" in event) {
+      assert.equal((await f.journal.recordObservation(command, f.owner.token(event.observation))).kind, "recorded");
+      assert.equal(f.owner.reads, reads + 1);
+    }
+  });
+}
+
+test("runtime intent boundary rejects malformed data without accessors, proxy traps or persistence", async () => {
+  const f = new V4Fixture(); await f.open(); const valid = { kind: "network_intent", targetSha256: f.journal.target("network_intent") };
+  let touched = 0;
+  const getter = () => { touched += 1; return valid.kind; };
+  const accessor = Object.defineProperty({ ...valid }, "kind", { get: getter });
+  const targetAccessor = Object.defineProperty({ ...valid }, "targetSha256", { get: getter });
+  const hidden = Object.defineProperty({ ...valid }, "kind", { enumerable: false });
+  const proxy = new Proxy(valid, { get: getter, ownKeys: () => { touched += 1; return []; },
+    getPrototypeOf: () => { touched += 1; return Object.prototype; } });
+  const malformed: unknown[] = [null, undefined, true, 7, "network_intent", [], new Date(0), {},
+    { kind: "network_intent" }, { targetSha256: valid.targetSha256 }, { ...valid, extra: true },
+    { ...valid, [Symbol("extra")]: true }, { ...valid, kind: "unknown" }, { ...valid, kind: null },
+    { ...valid, kind: 1 }, { ...valid, targetSha256: null }, { ...valid, targetSha256: 1 },
+    { ...valid, targetSha256: "a".repeat(63) }, { ...valid, targetSha256: "A".repeat(64) },
+    { ...valid, targetSha256: `sha256:${valid.targetSha256}` }, { ...valid, observation: {} },
+    { kind: "network_intent", observation: {} }, Object.create(valid), Object.assign(Object.create(null), valid),
+    accessor, targetAccessor, hidden, proxy];
+  const before = f.storage.journal!.slice(); const evidence = f.journal.evidence(); const calls = f.storage.calls;
+  for (const input of malformed) { await assert.rejects(runtimeIntent(f, f.command(), input), { code: "conflict" }); }
+  assert.equal(touched, 0); assert.equal(f.owner.reads, 0); assert.equal(f.storage.calls, calls);
+  assert.deepEqual(f.storage.journal, before); assert.equal(f.storage.marker, null); assert.deepEqual(f.journal.evidence(), evidence);
+  assert.equal((await f.intent("network_intent")).kind, "recorded");
+});
+
+test("runtime intent is snapshotted before awaited ownership checks; concurrent calls cannot swap in an observation", async () => {
+  const f = new V4Fixture(); await f.open(); await f.intent("network_intent");
+  const input: Record<string, unknown> = { kind: "cutoff", targetSha256: f.journal.target("cutoff") };
+  const observation = f.data("network_allocated");
+  const command = f.command(); const before = f.storage.journal!.slice();
+  const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<void>();
+  const original = f.storage.assertOwned.bind(f.storage);
+  f.storage.assertOwned = async () => { entered.resolve(); await release.promise; await original(); };
+  const pending = runtimeIntent(f, command, input); await entered.promise;
+  try {
+    delete input.targetSha256; input.kind = "network_allocated"; input.observation = observation;
+    await assert.rejects(runtimeIntent(f, f.command(), input), { code: "busy" });
+    assert.deepEqual(f.storage.journal, before);
+  } finally { release.resolve(); }
+  assert.equal((await pending).kind, "recorded");
+  assert.equal(v4Decode(f.storage.journal!).at(-1)!.event.kind, "cutoff");
+  assert.equal(f.owner.reads, 0); assert.equal(f.state().network.phase, 1);
+  assert.equal(f.journal.evidence().admission, "closed"); assert.equal(f.journal.evidence().reconcileRequired, true);
+  await f.journal.close(); const recovered = new V4Fixture(f.storage); await recovered.open(); await recovered.settle();
+  assert.equal(recovered.journal.evidence().resourceLedger, "retired"); assert.equal(recovered.journal.evidence().reconcileRequired, true);
+});
+
+const imageSha256 = "a".repeat(64);
+const imageCases: readonly (readonly [unknown, boolean])[] = [
+  [`runtime@sha256:${imageSha256}`, true], [`registry.invalid:5443/team/runtime@sha256:${imageSha256}`, true],
+  [`registry.invalid:00001/team-a/runtime_b.v1:Release_1.2-3@sha256:${imageSha256}`, true],
+  [`runtime:tag@sha256:${imageSha256}`, true], [`runtime:123456@sha256:${imageSha256}`, true],
+  [`sha256:${imageSha256}`, false], [`@sha256:${imageSha256}`, false], ["runtime:latest", false],
+  [`https://registry.invalid/runtime@sha256:${imageSha256}`, false],
+  [`user@registry.invalid/runtime@sha256:${imageSha256}`, false],
+  [`Registry.invalid/runtime@sha256:${imageSha256}`, false], [`registry.invalid/Runtime@sha256:${imageSha256}`, false],
+  [`registry.invalid:123456/runtime@sha256:${imageSha256}`, false],
+  [`registry.invalid//runtime@sha256:${imageSha256}`, false], [`runtime__name@sha256:${imageSha256}`, false],
+  [`runtime@SHA256:${imageSha256}`, false], [`runtime@sha256:${imageSha256.toUpperCase()}`, false],
+  [`runtime@sha256:${imageSha256.slice(1)}`, false], [`runtime@sha256:${imageSha256}a`, false],
+  [`runtime@sha512:${imageSha256}`, false], [` runtime@sha256:${imageSha256}`, false],
+  [`runtime@sha256:${imageSha256}\n`, false], [`runtime@sha256:${imageSha256}?tag=x`, false],
+  [`runtime@sha256:${imageSha256}#fragment`, false], [null, false], [undefined, false], [1, false], [{}, false],
+];
+for (const [index, [imageDigest, valid]] of imageCases.entries()) {
+  test(`V4 image case ${index} matches existing engine authority validation without rewriting`, () => {
+    const authority = { ...container, imageDigest: imageDigest as string };
+    const candidate = { ...subject, imageDigest };
+    const observation = { kind: "container_attached", subjectSha256: v4Hash(candidate), observerSha256: subject.observerSha256,
+      targetSha256: v4Hash(null), actualSha256: v4Hash("container"), evidenceSha256: v4Hash("evidence"), container: authority, writeOutcome: null };
+    if (valid) {
+      assert.deepEqual(validateAuthorityShape(authority), authority);
+      assert.equal(v4Subject(candidate).imageDigest, imageDigest);
+      assert.deepEqual(v4Observation(observation).container, authority);
+      const record = v4Record({ sequence: 0, subjectSha256: v4Hash(candidate), commandId: id("command"),
+        event: { kind: "opened", subject: v4Subject(candidate) }, previousSha256: null });
+      assert.deepEqual(v4Decode(v4Encode(record))[0], record);
+    } else {
+      assert.throws(() => validateAuthorityShape(authority), { code: "invalid-authority" });
+      assert.throws(() => v4Subject(candidate)); assert.throws(() => v4Observation(observation));
+    }
+  });
+}
+
+test("exact engine image authority survives attachment, cleanup handles and cleanup-only restart", async () => {
+  assert.deepEqual(validateAuthorityShape(container), container);
+  const f = new V4Fixture(); await f.setup();
+  const attached = v4Decode(f.storage.journal!).find(record => record.event.kind === "container_attached")!;
+  assert.ok("observation" in attached.event); assert.deepEqual(attached.event.observation.container, container);
+  assert.deepEqual((await f.journal.cleanupHandles()).handles.container, container);
+  await f.intent("cutoff"); await f.observe("cutoff_observed");
+  for (const imageDigest of [container.imageDigest.replace("/runtime@", "/other@"),
+    container.imageDigest.replace(":5443/", ":5444/"), container.imageDigest.replace("@", ":tag@")]) {
+    const relabeled = { ...container, imageDigest }; assert.deepEqual(validateAuthorityShape(relabeled), relabeled);
+    const before = f.storage.journal!.slice();
+    await assert.rejects(f.observe("container_absent", { container: relabeled }), { code: "conflict" });
+    assert.deepEqual(f.storage.journal, before);
+  }
+  await f.journal.close(); const recovered = new V4Fixture(f.storage); assert.equal((await recovered.open()).kind, "cleanup_only");
+  assert.deepEqual((await recovered.journal.cleanupHandles()).handles.container, container);
+  await assert.rejects(recovered.intent("inbound_intent"), { code: "conflict" }); await recovered.settle();
+  assert.equal(recovered.journal.evidence().reconcileRequired, true);
 });

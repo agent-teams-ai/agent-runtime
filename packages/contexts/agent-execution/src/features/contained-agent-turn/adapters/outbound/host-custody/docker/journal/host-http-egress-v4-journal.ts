@@ -1,5 +1,5 @@
 import {
-  v4Decode, v4DecodeTombstone, v4Encode, v4Event, v4Hash, v4Locator,
+  v4Decode, v4DecodeTombstone, v4Encode, v4Event, v4Hash, v4Intent, v4Locator,
   v4Observation, v4Record, v4Subject, v4Tombstone,
 } from "./host-http-egress-v4-codec.js";
 import { v4Apply, v4CleanupHandles, v4EmptyLedger, v4Replay, v4Target, type HostHttpEgressV4Ledger } from "./host-http-egress-v4-replay.js";
@@ -152,7 +152,12 @@ export class HostHttpEgressV4Journal {
   }
   public async recordIntent(commandId: string, input: Readonly<{ kind: HostHttpEgressV4Intent; targetSha256: string }>) {
     this.#admit(); this.#busy = true;
-    try { await this.#storage.assertOwned(); return await this.#persist(commandId, input); }
+    try {
+      // Validate and detach before the first await: only the retained observer
+      // may supply observation events, including after a caller mutates input.
+      const intent = v4Intent(input);
+      await this.#storage.assertOwned(); return await this.#persist(commandId, intent);
+    }
     catch (error) {
       if (error instanceof HostHttpEgressV4Error && ["conflict", "capacity"].includes(error.code)) { throw error; }
       return this.#quarantine();
