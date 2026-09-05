@@ -5,6 +5,7 @@ import type { HostHttpGrant, HostHttpMaterializationReceipt, HttpEgressBrokerPor
 import { createPreparedHttpRequestV1, type PreparedHttpRequestV1, type PreparedHttpRequestCustodyV1 } from "./prepared-http-request-v1.js";
 import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 import { snapshotHttpEgressOperation } from "./http-ingress-validation.js";
+import { HostHttpIngressDeniedError } from "./host-http-ingress-authorization.js";
 import { normalizeHttpResolverEvidence } from "./http-egress-resolver-evidence.js";
 import { normalizePublicAddress } from "./public-address-policy.js";
 import { readStrictHttpRequest, StrictHttpRequestError, type StrictHttpRequest } from "./strict-http-request.js";
@@ -170,11 +171,14 @@ const recordExecutionError = (operation: HttpEgressOperation, state: HttpEgressM
     state.anomalyCode = "inbound_cancelled";}
   else if (error instanceof StrictHttpRequestError) {state.inboundRequestBytes = error.observedBytes;
     state.outcome = error.kind === "cancelled" ? "cancelled" : "rejected"; state.anomalyCode = requestError(error);}
+  else if (error instanceof HostHttpIngressDeniedError) {state.outcome = "denied";
+    state.anomalyCode = "inbound_authentication_denied";}
   else {state.outcome = state.firstByteState === "not_sent" ? "denied" : "reconcile_required";
     if (state.anomalyCode === "inbound_malformed") {state.anomalyCode = "provider_access_denied";}}
 };
 
-export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts): Readonly<{
+export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts,
+  authenticateIngress?: (request: StrictHttpRequest) => StrictHttpRequest): Readonly<{
   execute(operation: HttpEgressOperation): Promise<HttpEgressReceipt>;
 }> => Object.freeze({execute: async (input): Promise<HttpEgressReceipt> => {
   const operation = snapshotHttpEgressOperation(input);
@@ -211,7 +215,9 @@ export const createStrictHttpEgressBroker = (dependencies: HttpEgressBrokerPorts
     state.routeReceiptDigest = route.routeReceiptDigest;
     request = await readStrictHttpRequest(operation.connection.request, operation.expectedRequest, operation.limits,
       ports.clock, operation.signal); state.inboundRequestBytes = request.wireBytes;
+    // Validate native limits against the original headers, including the local bearer.
     const forwardedFields = presentationFields(request, ports.route);
+    if (authenticateIngress !== undefined) {request = authenticateIngress(request);}
     const ids = ports.ids.fresh();
     state.requestDigest = digest(ports, [encoder.encode("agent-runtime.host-http-materialization-request/v1\n"),
       encoder.encode(operation.expectedRequest.requestId), encoder.encode(ports.route.routeReceiptDigest), request.body]);
