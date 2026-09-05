@@ -262,8 +262,10 @@ const allowedEnvironmentKeys = Object.freeze({
     "PATH",
     "TMPDIR",
   ]),
-  codex: new Set(["CODEX_HOME", "HOME", "LANG", "PATH", "TMPDIR"]),
+  codex: new Set(["AR_PRIVATE_BROKER_CAPABILITY", "CODEX_HOME", "HOME", "LANG", "PATH", "TMPDIR"]),
 } as const);
+
+const privateDirectoryEnvironmentKeys = new Set(["CLAUDE_CONFIG_DIR", "CODEX_HOME", "HOME", "TMPDIR"]);
 
 const environmentKeysForProvider = (provider: string): ReadonlySet<string> | undefined => {
   if (provider === "claude") {return allowedEnvironmentKeys.claude;}
@@ -279,6 +281,9 @@ const declaredPrivateEnvironmentKeys = (plan: HostCustodyLaunchPlan): readonly s
   const allowed = environmentKeysForProvider(plan.provider);
   if (allowed === undefined || declared.some(key => !allowed.has(key))) {
     throw new Error("Host Custody private environment key is not allowlisted");
+  }
+  if (declared.some(key => !privateDirectoryEnvironmentKeys.has(key))) {
+    throw new Error("Host Custody private environment key is not a path");
   }
   return Object.freeze([...declared].toSorted());
 };
@@ -303,6 +308,14 @@ const assertAllowlistedEnvironment = (plan: HostCustodyLaunchPlan): void => {
   for (const [key, value] of Object.entries(plan.environment)) {
     if (value.length === 0 || value.includes("\0") || !value.isWellFormed()) {
       throw new Error("Host Custody environment contains malformed bytes");
+    }
+    // The Host will issue 32 random bytes as lower-case hex for native env_key.
+    // This validates local capability syntax only, never route ownership or PA/RS
+    // authority. Upstream credentials stay in the broker; this value is hashed
+    // into the private launch fingerprint and never treated as a directory.
+    if (key === "AR_PRIVATE_BROKER_CAPABILITY" &&
+        (value.length !== 64 || !/^[a-f0-9]{64}$/u.test(value))) {
+      throw new Error("Host Custody local broker capability is malformed");
     }
     if (key === "LANG" && value !== "C.UTF-8") {
       throw new Error("Host Custody environment locale is not qualified");
