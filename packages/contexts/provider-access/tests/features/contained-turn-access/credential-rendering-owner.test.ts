@@ -384,3 +384,37 @@ test("closed selection recipes, no mode/provider mismatch or caller native accou
   }
   assert.deepEqual(fixture.events, []);
 });
+
+for (const property of ["aborted", "reason"] as const) {
+  for (const phase of ["authorization", "acquisition", "final-observation"] as const) {
+    test(`rejects shadowed signal ${property} at ${phase} without retaining acquired bytes`, async () => {
+      const fixture = renderingFixture();
+      const shadow = () => Object.defineProperty(fixture.controller.signal, property, {value: true});
+      const owner = fixture.create({async acquire(request) {
+        const raw = generation(request); fixture.raw.push(raw);
+        if (phase === "final-observation") {shadow();}
+        return raw;
+      }});
+      try {
+        if (phase === "authorization") {
+          shadow(); assert.equal((await owner.authorization.authorize(await fixture.request())).kind, "indeterminate");
+        } else {
+          const receipt = await fixture.fresh(owner);
+          if (phase === "acquisition") {shadow();}
+          assert.equal((await owner.rendering.render(receipt)).kind, "denied");
+        }
+        for (const raw of fixture.raw) {if (raw.kind === "acquired") {raw.fields.forEach(field => erased(field.valueBytes));}}
+        if (phase !== "final-observation") {assert.equal(fixture.raw.length, 0);}
+      } finally {owner.dispose();}
+    });
+  }
+}
+
+test("native abort cannot be hidden by an own aborted:false data property", async () => {
+  const fixture = renderingFixture(); const owner = fixture.create();
+  fixture.controller.abort(); Object.defineProperty(fixture.controller.signal, "aborted", {value: false});
+  try {
+    assert.equal((await owner.authorization.authorize(await fixture.request())).kind, "indeterminate");
+    assert.equal(fixture.events.length, 0);
+  } finally {owner.dispose();}
+});

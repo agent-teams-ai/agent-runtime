@@ -10,7 +10,7 @@ const then = Promise.prototype.then;
 const closed = (): never => {throw new TypeError("credential rendering unavailable");};
 export const signalAborted = (signal: AbortSignal): boolean => {
   if (!aborted || signal === null || typeof signal !== "object" || isRuntimeProxy(signal) ||
-    Object.getPrototypeOf(signal) !== AbortSignal.prototype) {return closed();}
+    Object.getPrototypeOf(signal) !== AbortSignal.prototype || Object.hasOwn(signal, "aborted") || Object.hasOwn(signal, "reason")) {return closed();}
   // Node's signal getter reads symbol-backed state. Reject shadows before it runs.
   if (Reflect.ownKeys(signal).some(key => {
     const descriptor = Object.getOwnPropertyDescriptor(signal, key);
@@ -32,6 +32,7 @@ export class CredentialRenderingLifetime {
   #closed = false;
 
   constructor(signal: AbortSignal, deadline: number) {
+    if (signalAborted(signal)) {closed();}
     this.#signal = signal;
     // A private dependent signal cannot lose cancellation to a source listener
     // that stops propagation. Keep the original signal for authority checks.
@@ -42,7 +43,7 @@ export class CredentialRenderingLifetime {
     void this.#cancelled.catch(() => null);
     this.#timer = setTimeout(this.#onAbort, Math.max(0, deadline - performance.now()));
     Reflect.apply(addListener, this.#cancellationSignal, ["abort", this.#onAbort, {once: true}]);
-    if (signalAborted(signal) || performance.now() >= deadline) {this.close();}
+    if (signalAborted(signal) || signalAborted(this.#cancellationSignal) || performance.now() >= deadline) {this.close();}
   }
   get signal(): AbortSignal {return this.#controller.signal;}
   check(): void {
