@@ -92,7 +92,8 @@ const OBSERVATIONS = Object.freeze({
   containmentLimitations: limitations, containmentProfile: TUPLE_FIELDS.containmentProfile,
   containmentProofDigest: exactDigest, failureKind: value => choice(value, ["canary-failed"]), outputDigest: exactDigest,
   executionClosureProofDigest: exactDigest, operationIdentityDigest: exactDigest,
-  outputDrainProofDigest: exactDigest, providerTerminalProofDigest: exactDigest, terminalProofDigest: exactDigest,
+  outputDrainProofDigest: exactDigest, outputNoStartDrainProofDigest: exactDigest,
+  providerTerminalProofDigest: exactDigest, terminalProofDigest: exactDigest,
   outputEvents: value => Number.isSafeInteger(value) && value >= 0 && value <= 100_000 ? value : reject(),
   providerOutcome: value => choice(value, ["succeeded", "failed", "cancelled", "indeterminate"]),
   reconciliation: value => choice(value, ["clear", "required"]),
@@ -128,12 +129,22 @@ const validateClosure = (input, observations, tuple) => {
        observations.containmentProofDigest !== undefined || observations.terminalProofDigest !== undefined)) {return reject();}
   if (observations.closureStatus === "not-started" &&
       (input.physicalContainment !== "indeterminate" || observations.terminalStatus === "succeeded" ||
-       observations.containmentProofDigest !== undefined)) {return reject();}
+       observations.containmentProofDigest !== undefined || observations.providerOutcome === "succeeded" ||
+       observations.executionClosureProofDigest !== undefined || observations.providerTerminalProofDigest !== undefined ||
+       observations.outputDrainProofDigest !== undefined)) {return reject();}
 };
 const requireFacts = (observations, keys) => {
   if (keys.some(key => observations[key] === undefined)) {return reject();}
 };
 const hasReference = (observations, key) => observations[key] !== undefined || observations[`${key}Digest`] !== undefined;
+const validateOutputDrainEvidence = observations => {
+  const ordinary = observations.outputDrainProofDigest !== undefined;
+  const noStart = observations.outputNoStartDrainProofDigest !== undefined;
+  if (ordinary === noStart) {return reject();}
+  requireFacts(observations, [ordinary ? "outputDrainProofDigest" : "outputNoStartDrainProofDigest", "outputEvents"]);
+  if (noStart && (observations.closureStatus !== "not-started" || observations.outputEvents !== 0 ||
+      observations.outputDigest !== undefined)) {return reject();}
+};
 const validateTerminal = (input, observations, tuple) => {
   const keys = ["terminalKind", "terminalStatus", "reconciliation", "closureRecovery"];
   const final = observations.terminalKind === "final";
@@ -156,13 +167,15 @@ const validateTerminal = (input, observations, tuple) => {
 const validateArtifactEvidence = observations => {
   for (const [reference, proof] of [["artifactManifestRef", "artifactManifestProofDigest"], ["resultRef", "resultPublicationProofDigest"]]) {
     if (hasReference(observations, reference) || observations[proof] !== undefined) {
-      requireFacts(observations, ["operationIdentityDigest", proof, "outputDrainProofDigest", "outputEvents"]);
+      requireFacts(observations, ["operationIdentityDigest", proof]);
+      validateOutputDrainEvidence(observations);
       if (!hasReference(observations, reference) || observations.closureRecovery === "proved_no_workspace") {return reject();}
     }
   }
   if (hasReference(observations, "resultRef") && !hasReference(observations, "artifactManifestRef")) {return reject();}
   if (observations.terminalStatus === "succeeded") {
     requireFacts(observations, ["outputDrainProofDigest", "outputEvents"]);
+    if (observations.outputNoStartDrainProofDigest !== undefined) {return reject();}
     if (!["artifactManifestRef", "resultRef"].every(key => hasReference(observations, key))) {return reject();}
   }
 };
@@ -177,8 +190,10 @@ const validateClaimEvidence = (input, observations) => {
     requireFacts(observations, ["operationIdentityDigest", "executionClosureProofDigest", "providerTerminalProofDigest"]);
     choice(observations.providerOutcome, ["succeeded", "failed", "cancelled"]);
   }
-  if (observations.outputDigest !== undefined || observations.outputDrainProofDigest !== undefined) {
-    requireFacts(observations, ["operationIdentityDigest", "outputDrainProofDigest", "outputEvents"]);
+  if (observations.outputDigest !== undefined || observations.outputDrainProofDigest !== undefined ||
+      observations.outputNoStartDrainProofDigest !== undefined) {
+    requireFacts(observations, ["operationIdentityDigest"]);
+    validateOutputDrainEvidence(observations);
   }
   validateArtifactEvidence(observations);
 };

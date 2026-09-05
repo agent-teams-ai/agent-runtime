@@ -49,6 +49,7 @@ export const observeProviderCandidateResult = ({kernel, physicalContainment, tur
   for (const [kind, key] of [
     ["execution_closure", "executionClosureProofDigest"],
     ["output_drain", "outputDrainProofDigest"],
+    ["output_no_start_drain", "outputNoStartDrainProofDigest"],
     ["provider_terminal_observation", "providerTerminalProofDigest"],
     ["artifact_manifest_seal", "artifactManifestProofDigest"],
     ["result_publication", "resultPublicationProofDigest"],

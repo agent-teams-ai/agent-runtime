@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { sourceFixture, evidenceInput } from "./support/provider-candidate-source-fixture.mjs";
 import { createDependencies } from "./support/contained-agent-turn-fixture.ts";
@@ -8,6 +9,7 @@ import { DARWIN_LIMITATIONS } from "../../live/provider-candidate-observation.mj
 
 const freeze = Object.freeze;
 const digest = "a".repeat(64);
+const proofDigest = (value: string) => createHash("sha256").update(value).digest("hex");
 const without = (value: Record<string, unknown>, ...keys: string[]) =>
   freeze(Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key))));
 
@@ -41,6 +43,12 @@ for (const provider of ["codex", "claude"] as const) {
     ]) {
       await assert.rejects(publish(freeze({...unknown, observations: freeze({...unknown.observations, ...claim})})), TypeError);
     }
+    await assert.rejects(publish(freeze({...unknown, observations: freeze({
+      ...unknown.observations, operationIdentityDigest: digest, closureStatus: "not-started",
+      containmentProfile: "strict-linux-cgroup-v2", containmentLimitations: freeze([]),
+      providerOutcome: "succeeded", executionClosureProofDigest: digest,
+      providerTerminalProofDigest: digest,
+    })})), TypeError);
     // Physical closure is useful failure evidence independently of provider
     // completion, output verification or a final kernel result.
     const contained = freeze({...input, observations: freeze({...input.observations,
@@ -59,6 +67,52 @@ for (const provider of ["codex", "claude"] as const) {
       {reconciliation: "clear", closureRecovery: "clear", terminalStatus: "reconcile_required"},
     ]) {
       await assert.rejects(publish(freeze({...unknown, observations: freeze({...unknown.observations, ...patch})})), TypeError);
+    }
+  });
+
+  test(`${provider}: dispatch prevention retains a typed no-start drain proof`, async t => {
+    const source = await sourceFixture(t, provider);
+    const execution = await source.resolve();
+    const observed = createCandidateRunObservation();
+    const fixture = createDependencies({dispatchPrevented: true});
+    const result = await submitContainedTurnLiveCanary({
+      command: {commandId: "command:one", expectedProvider: "codex",
+        intent: {mode: "analysis", prompt: "disposable dispatch prevention"},
+        scope: {projectId: "project:one", tenantId: "tenant:one"}},
+      dependencies: fixture.dependencies,
+      onObserved: observed.result,
+      owner: {dispose: () => observed.dispose("ownerDisposal", async () => {
+        observed.closure({status: "not-started", profile: "strict-linux-cgroup-v2", limitations: []});
+      })},
+    });
+    await observed.dispose("runtimeDisposal", async () => {});
+    assert.equal(fixture.providerCalls.value, 0);
+    const noStartProof = result.kernel.proofs.find(proof => proof.kind === "output_no_start_drain");
+    assert.ok(noStartProof);
+    const input = evidenceInput(source, execution, observed.evidence("failed"));
+    const publish = source.authority.createProviderCandidateEvidenceEnvelope;
+    const envelope = await publish(input);
+    assert.equal(envelope.status, "failed");
+    assert.equal(envelope.observations.closureStatus, "not-started");
+    assert.equal(envelope.observations.outputNoStartDrainProofDigest, `sha256:${proofDigest(noStartProof.proofId)}`);
+    assert.equal(envelope.observations.outputDrainProofDigest, undefined);
+    assert.equal(envelope.observations.outputEvents, 0);
+    assert.equal(envelope.observations.providerOutcome, "failed");
+    assert.match(envelope.observations.artifactManifestProofDigest, /^sha256:[a-f0-9]{64}$/u);
+    assert.match(envelope.observations.resultPublicationProofDigest, /^sha256:[a-f0-9]{64}$/u);
+    assert.equal(envelope.networkRouteEnforcement, "unqualified");
+    assert.equal(envelope.qualification, "implementation-evidence-only");
+
+    const noStartDigest = input.observations.outputNoStartDrainProofDigest;
+    const withoutNoStart = without(input.observations, "outputNoStartDrainProofDigest");
+    for (const observations of [
+      withoutNoStart,
+      freeze({...withoutNoStart, outputDrainProofDigest: noStartDigest}),
+      freeze({...input.observations, outputDrainProofDigest: noStartDigest}),
+      freeze({...input.observations, outputDigest: digest}),
+      freeze({...input.observations, outputEvents: 1}),
+    ]) {
+      await assert.rejects(publish(freeze({...input, observations})), TypeError);
     }
   });
 
