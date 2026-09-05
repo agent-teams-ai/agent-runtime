@@ -1,0 +1,116 @@
+"""Offline version/schema cross-check; run only after separate resource clearance."""
+from pathlib import Path
+import datetime
+import hashlib
+import json
+import os
+import resource
+import shutil
+import signal
+import subprocess
+import tempfile
+import time
+
+ROOT = Path('/var/data/worker-jobs/ar69-r109')
+EXPECTED = '56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da'
+assert Path('/etc/machine-id').read_text().strip() == '93732118417e46618cefafc022c8b1db'
+binary = ROOT / 'codex-linux-0.153.4'
+assert binary.is_file() and not binary.is_symlink()
+assert binary.stat().st_size == 258659424
+def digest(path):
+    with path.open('rb') as source:
+        return hashlib.file_digest(source, 'sha256').hexdigest()
+assert digest(binary) == EXPECTED
+for path in ['/etc/codex/config.toml', '/etc/codex/requirements.toml']:
+    assert not Path(path).exists(), 'Ambient system configuration: refuse'
+assert shutil.which('unshare') and shutil.which('timeout')
+assert not (ROOT / 'attempt-started.json').exists(), 'Do not repeat an attempt'
+(ROOT / 'attempt-started.json').write_text(json.dumps({'startedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'scope': 'offline version/schema/types only'}))
+def resources():
+    memory={x.split(':')[0]:int(x.split()[1])*1024 for x in Path('/proc/meminfo').read_text().splitlines() if x.split(':')[0] in ['MemAvailable','SwapFree']}
+    assert shutil.disk_usage(ROOT).free >= 5*1024**3 and shutil.disk_usage('/mnt/my_first_volume_ams3_1783285769353').free >= 5*1024**3, 'Host disk below user floor'
+    assert memory['MemAvailable'] >= 1024**3, 'Dangerous memory pressure'
+    allocated=sum(x.lstat().st_blocks*512 for x in ROOT.rglob('*'))
+    assert allocated <= 320*1024**2, 'Own native disk envelope exceeded'
+    return {'allocatedBytes': allocated, **memory}
+resources()
+project = Path(tempfile.mkdtemp(prefix='codex-linux-offline-', dir=ROOT))
+(project / '.agent-runtime-test-sandbox').write_text('Disposable offline schema characterization, no provider turn\n')
+for name in ['home', 'codex-home', 'tmp']:
+    (project / name).mkdir(mode=0o700)
+env = {'HOME': str(project / 'home'), 'CODEX_HOME': str(project / 'codex-home'),
+       'TMPDIR': str(project / 'tmp'), 'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'}
+commands = [('version', ['--version']),
+            ('schema', ['app-server', 'generate-json-schema', '--out', str(project / 'schema'), '--experimental']),
+            ('types', ['app-server', 'generate-ts', '--out', str(project / 'types'), '--experimental'])]
+results = []
+try:
+    for name, args in commands:
+        resources()
+        print('Offline Linux ' + name, flush=True)
+        with (project / (name + '.stdout')).open('xb') as output, (project / (name + '.stderr')).open('xb') as error:
+            child = subprocess.Popen(['/usr/bin/unshare', '--net', '--', str(binary), *args],
+                                     cwd=project, env=env, stdout=output, stderr=error, start_new_session=True)
+            try:
+                deadline = time.monotonic() + 45
+                peak_rss_kib = 0
+                while child.poll() is None:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Offline native phase exceeded 45 seconds')
+                    try:
+                        fields = Path(f'/proc/{child.pid}/status').read_text().splitlines()
+                        rss = next((int(line.split()[1]) for line in fields if line.startswith('VmRSS:')), 0)
+                        peak_rss_kib = max(peak_rss_kib, rss)
+                    except FileNotFoundError:
+                        pass
+                    if peak_rss_kib > 512 * 1024:
+                        raise RuntimeError('Offline native process exceeded approved RSS envelope')
+                    if shutil.disk_usage(ROOT).free < 5 * 1024**3:
+                        raise RuntimeError('Host disk dropped below user reserve')
+                    time.sleep(0.05)
+                code = child.wait(timeout=5)
+            except BaseException:
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                child.wait(timeout=5)
+                raise
+        usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        results.append({'name': name, 'args': args, 'returnCode': code,
+                        'maxChildRssKiB': usage.ru_maxrss, 'sampledPeakRssKiB': peak_rss_kib,
+                        'stdoutSha256': digest(project / (name + '.stdout')),
+                        'stderrSha256': digest(project / (name + '.stderr'))})
+        assert code == 0, (name, code)
+        assert usage.ru_maxrss <= 512 * 1024, 'Observed RSS exceeded envelope; no next phase'
+        if name == 'version':
+            assert (project / 'version.stdout').read_bytes().strip() == b'codex-cli 0.153.4'
+    def tree(name):
+        folder = project / name
+        records = []
+        for path in sorted(folder.rglob('*'), key=lambda p: p.relative_to(folder).as_posix().encode()):
+            assert not path.is_symlink()
+            if path.is_file():
+                records.append(digest(path) + '  ' + path.relative_to(folder).as_posix() + '\n')
+            else:
+                assert path.is_dir()
+        manifest = ''.join(records)
+        (project / (name + '-manifest.txt')).write_text(manifest)
+        return {'fileCount': len(records), 'manifestSha256': hashlib.sha256(manifest.encode()).hexdigest()}
+    schema, types = tree('schema'), tree('types')
+    assert schema == {'fileCount': 416, 'manifestSha256': '60c1b926bc9720e7695c23bcc6f8cb1dd7dcfa92601dd3e9d7b9267804f28c87'}
+    assert types == {'fileCount': 827, 'manifestSha256': '6884b9a77fe389ca3f0ed5c327115d5fa9398307390a2b080e6402c66c1e406b'}
+    assert digest(binary) == EXPECTED
+    receipt = {'resources': resources(), 'observedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+               'head': '5ccd986bb14eb6bc30bde704e9acfca86fa074b1',
+               'version': '0.153.4', 'platform': 'linux-x64', 'binarySha256': EXPECTED,
+               'sourceCommit': '3d2ee51ca2d5db578f328aa75e20aa22c0197c9a',
+               'root': str(project), 'isolatedNetwork': 'unshare --net', 'authFilesSupplied': False,
+               'providerTurnRequested': False, 'commands': results, 'schema': schema, 'types': types,
+               'darwinSchemaParity': True, 'configurationCapture': 'pending'}
+    (ROOT / 'linux-schema-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    print(json.dumps(receipt), flush=True)
+finally:
+    for name in ['home', 'codex-home', 'tmp']:
+        shutil.rmtree(project / name)
+    (project / 'attempt-commands.json').write_text(json.dumps(results, indent=2) + '\n')

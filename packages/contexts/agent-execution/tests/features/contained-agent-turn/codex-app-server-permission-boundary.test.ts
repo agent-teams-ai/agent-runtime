@@ -577,7 +577,7 @@ test("binds exact response assumptions to the generated Codex 0.153.4 contract",
   assert.equal(authorityManifest.schemaVersion, 5);
   assert.equal(authorityManifest.schemaGeneration.platform, "darwin-arm64");
   assert.equal(authorityManifest.schemaGeneration.binarySha256, fixture.provenance.binarySha256);
-  assert.equal(authorityManifest.schemaGeneration.linuxRegeneration, "pending");
+  assert.equal(authorityManifest.schemaGeneration.linuxRegeneration, "offline-tree-parity-observed");
   assert.equal(authorityManifest.dependencyAlias, "@openai/codex-linux-x64");
   assert.equal(authorityManifest.package, "@openai/codex-linux-x64@0.153.4");
   assert.equal(authorityManifest.package,
@@ -685,4 +685,45 @@ test("binds exact response assumptions to the generated Codex 0.153.4 contract",
   const agentMessageAuthority = CODEX_THREAD_ITEM_DECODER_AUTHORITY.agentMessage;
   assert.deepEqual(agentMessageAuthority.optionalKeys, ["delivery", "memoryCitation", "phase", "questions"]);
   assert.deepEqual(agentMessageAuthority.defaults, { delivery: null, memoryCitation: null, phase: null, questions: null });
+});
+
+
+test("Linux 0.153.4 offline schema evidence preserves the separate qualification gate", () => {
+  const root = new URL("../../fixtures/protocol/codex-app-server-0.153.4/", import.meta.url);
+  const manifest = JSON.parse(readFileSync(new URL("manifest.json", root), "utf8"));
+  const observation = manifest.schemaGeneration.linuxObservation;
+  assert.equal(observation.qualification, "offline-generation-only");
+  assert.equal(manifest.regenerationVerifier.executionBinding, "retained-verified-descriptor");
+  assert.equal(manifest.regenerationVerifier.externalProof, true);
+  assert.equal(manifest.regenerationVerifier.runsInStaticTests, false);
+  const receiptBytes = readFileSync(new URL(observation.receipt, root));
+  assert.equal(createHash("sha256").update(receiptBytes).digest("hex"), observation.receiptSha256);
+  const receipt = JSON.parse(receiptBytes.toString("utf8"));
+  assert.equal(receipt.version, "0.153.4"); assert.equal(receipt.platform, "linux-x64");
+  assert.equal(receipt.binarySha256, manifest.binarySha256);
+  assert.equal(receipt.isolatedNetwork, "unshare --net");
+  assert.equal(receipt.authFilesSupplied, false); assert.equal(receipt.providerTurnRequested, false);
+  assert.equal(receipt.configurationCapture, "pending");
+  assert.deepEqual(receipt.commands.map((command: {name: string; returnCode: number}) =>
+    [command.name, command.returnCode]), [["version", 0], ["schema", 0], ["types", 0]]);
+  const script = readFileSync(new URL(observation.script, root));
+  assert.equal(createHash("sha256").update(script).digest("hex"), observation.scriptSha256);
+  for (const [name, count, digest] of [
+    [observation.schemaManifest, manifest.schemaTreeFileCount, manifest.schemaTreeManifestSha256],
+    [observation.typesManifest, manifest.typesTreeFileCount, manifest.typesTreeManifestSha256],
+  ] as const) {
+    const bytes = readFileSync(new URL(name, root));
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), digest);
+    const text = bytes.toString("utf8"); assert.ok(text.endsWith("\n"));
+    const records = text.slice(0, -1).split("\n"); assert.equal(records.length, count);
+    for (const record of records) {assert.match(record, /^[a-f0-9]{64}  [A-Za-z0-9_./-]+$/u);}
+    const paths = records.map(record => record.slice(66));
+    assert.equal(new Set(paths).size, paths.length);
+    assert.ok(paths.every(path => !path.startsWith("/") && !path.split("/").includes("..")));
+    assert.deepEqual(paths, paths.toSorted((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))));
+  }
+  assert.deepEqual(receipt.schema, {fileCount: manifest.schemaTreeFileCount,
+    manifestSha256: manifest.schemaTreeManifestSha256});
+  assert.deepEqual(receipt.types, {fileCount: manifest.typesTreeFileCount,
+    manifestSha256: manifest.typesTreeManifestSha256});
 });

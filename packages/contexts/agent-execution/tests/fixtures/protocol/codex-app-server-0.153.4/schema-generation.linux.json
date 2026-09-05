@@ -1,0 +1,70 @@
+{
+  "resources": {
+    "allocatedBytes": 267845632,
+    "MemAvailable": 13663068160,
+    "SwapFree": 1260224512
+  },
+  "observedAt": "2026-09-05T21:26:20.039582+00:00",
+  "head": "5ccd986bb14eb6bc30bde704e9acfca86fa074b1",
+  "version": "0.153.4",
+  "platform": "linux-x64",
+  "binarySha256": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+  "sourceCommit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+  "root": "/var/data/worker-jobs/ar69-r109/codex-linux-offline-eda39tmx",
+  "isolatedNetwork": "unshare --net",
+  "authFilesSupplied": false,
+  "providerTurnRequested": false,
+  "commands": [
+    {
+      "name": "version",
+      "args": [
+        "--version"
+      ],
+      "returnCode": 0,
+      "maxChildRssKiB": 22016,
+      "sampledPeakRssKiB": 140,
+      "stdoutSha256": "616dba4e87de2b1f07e61fe30ff4a5b3b075986c986c466ac5d244597eac0f36",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "schema",
+      "args": [
+        "app-server",
+        "generate-json-schema",
+        "--out",
+        "/var/data/worker-jobs/ar69-r109/codex-linux-offline-eda39tmx/schema",
+        "--experimental"
+      ],
+      "returnCode": 0,
+      "maxChildRssKiB": 35252,
+      "sampledPeakRssKiB": 33604,
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "types",
+      "args": [
+        "app-server",
+        "generate-ts",
+        "--out",
+        "/var/data/worker-jobs/ar69-r109/codex-linux-offline-eda39tmx/types",
+        "--experimental"
+      ],
+      "returnCode": 0,
+      "maxChildRssKiB": 35252,
+      "sampledPeakRssKiB": 33944,
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "schema": {
+    "fileCount": 416,
+    "manifestSha256": "60c1b926bc9720e7695c23bcc6f8cb1dd7dcfa92601dd3e9d7b9267804f28c87"
+  },
+  "types": {
+    "fileCount": 827,
+    "manifestSha256": "6884b9a77fe389ca3f0ed5c327115d5fa9398307390a2b080e6402c66c1e406b"
+  },
+  "darwinSchemaParity": true,
+  "configurationCapture": "pending"
+}

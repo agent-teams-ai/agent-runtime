@@ -62,12 +62,21 @@
     "platform": "darwin-arm64",
     "binarySha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
     "executionBinding": "isolated-verified-path-before-and-after",
-    "linuxRegeneration": "pending",
+    "linuxRegeneration": "offline-tree-parity-observed",
     "providerTurnRequested": false,
     "receipt": "schema-generation.darwin.json",
     "receiptSha256": "12218ef7c81cf2224e2baba4d62f1d01b4ad687c8fa21eb0eda7e92842291629",
     "script": "generate-offline.py.txt",
-    "scriptSha256": "e91019a2ad453cbc80476b40b39e25ee3fbb1005ec7122252e9d61c16b2c4a32"
+    "scriptSha256": "e91019a2ad453cbc80476b40b39e25ee3fbb1005ec7122252e9d61c16b2c4a32",
+    "linuxObservation": {
+      "qualification": "offline-generation-only",
+      "receipt": "schema-generation.linux.json",
+      "receiptSha256": "d30f4314452f7763e820f9b95369be3c7c4e4498215dbd6e59005ee99b81a2fe",
+      "script": "generate-offline.linux.py.txt",
+      "scriptSha256": "fd46b918c1e1ba7532967215b3cae059040c38c0b3212664004342aa4f15f515",
+      "schemaManifest": "schema-generation.linux.manifest.txt",
+      "typesManifest": "types-generation.linux.manifest.txt"
+    }
   },
   "priorEvidence": {
     "version": "0.150.1",
