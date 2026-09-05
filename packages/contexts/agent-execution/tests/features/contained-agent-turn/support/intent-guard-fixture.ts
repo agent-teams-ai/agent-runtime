@@ -41,7 +41,15 @@ export const intentHarness = (pool: Pool, hooks: Readonly<{
   beforeProvider?: () => Promise<void>;
 }> = {}) => {
   const fixture = createDependencies();
+  const processStartCommitted = gate();
   class ObservedStore extends PostgresContainedTurnOperationStore {
+    override async commit(input: Parameters<PostgresContainedTurnOperationStore["commit"]>[0]) {
+      const outcome = await super.commit(input);
+      if (outcome.kind === "applied" && outcome.operation.providerProcessStart.kind === "execution_started") {
+        processStartCommitted.release();
+      }
+      return outcome;
+    }
     override async claimPreparedDispatch(input: Parameters<PostgresContainedTurnOperationStore["claimPreparedDispatch"]>[0]) {
       await hooks.beforeClaimCas?.(input);
       return super.claimPreparedDispatch(input);
@@ -89,7 +97,10 @@ export const intentHarness = (pool: Pool, hooks: Readonly<{
     provider: { ...fixture.dependencies.provider, execute: async input => {
       counts.provider += 1;
       input.start.createProcess(() => Object.freeze({ synthetic: true }));
-      await hooks.beforeProvider?.();
+      if (hooks.beforeProvider !== undefined) {
+        await processStartCommitted.promise;
+        await hooks.beforeProvider();
+      }
       return { kind: "indeterminate", evidenceId: containedTurnIdentity("evidence", "evidence:synthetic-provider-unknown") };
     } },
   };

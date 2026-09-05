@@ -138,7 +138,9 @@ export const mutateContainedTurnOperation = (
       invariant(operation.dispatch.kind === "unclaimed", "dispatch prevention must atomically win before claim");
       candidate = {
         ...operation,
-        admissionFence: { kind: "fenced", proofId: mutation.cutoffProof.proofId },
+        admissionFence: operation.admissionFence.kind === "fenced"
+          ? operation.admissionFence
+          : { kind: "fenced", proofId: mutation.cutoffProof.proofId },
         containment: { kind: "qualified_not_required", proofId: mutation.containmentProof.proofId },
         dispatch: { kind: "prevented", noDispatchProofId: mutation.noDispatchProof.proofId },
         effect: { disposition: "not_committed", kind: "resolved", proofId: mutation.effectProof.proofId },

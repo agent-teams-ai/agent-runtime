@@ -93,7 +93,7 @@ export const createContainedTurnEngine = (
   function cancel(input: ContainedTurnApplicationRefInput): Promise<ContainedTurnApplicationObserveOutcome>;
   function cancel(input: ContainedTurnIntentCancellationInput): Promise<ContainedTurnIntentCancellationOutcome>;
   function cancel(input: ContainedTurnApplicationRefInput | ContainedTurnIntentCancellationInput) {
-    return "prevention" in input ? preventContainedTurnIntent(authority.operationStore, input)
+    return "prevention" in input ? preventContainedTurnIntent(authority, input)
       : requestContainedTurnCancellation(authority, input);
   }
   const api: ContainedTurnApplicationApi = {

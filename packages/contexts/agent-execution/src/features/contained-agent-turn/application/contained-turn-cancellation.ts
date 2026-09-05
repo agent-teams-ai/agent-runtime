@@ -1,4 +1,6 @@
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
+import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
+import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import type { ContainedTurnApplicationRefInput, ContainedTurnApplicationObserveOutcome } from "./contained-turn-engine.js";
 import { assertContainedTurnExactRecord } from "../domain/contained-turn-record.js";
@@ -33,8 +35,9 @@ export const requestContainedTurnCancellation = async (
   const operation = await readContainedTurnOwnedOperation(dependencies, operationId, input.scope);
   if (operation === undefined) {return { status: "not_found" };}
   const observed = { operation, status: "observed" as const };
-  if (observed.operation.terminal.kind === "final" || observed.operation.cancellation.kind === "requested") {
-    return observed;
+  if (observed.operation.terminal.kind === "final") {return observed;}
+  if (observed.operation.cancellation.kind === "requested") {
+    return { operation: await resumeContainedTurnCancellation(dependencies, operation, input.scope), status: "observed" };
   }
   const prepared = await dependencies.operationStore.prepareCancellation({
     authority: containedTurnOwnerStoreAuthority(observed.operation, input.scope),
@@ -72,36 +75,59 @@ export const requestContainedTurnCancellation = async (
     }
     cancellationBase = result.current;
   }
+  return { operation: await resumeContainedTurnCancellation(dependencies, current, input.scope), status: "observed" };
+};
+
+/** Resume closure from the durable command without accepting a second cancellation. */
+export const resumeContainedTurnCancellation = async (
+  dependencies: ContainedTurnKernelDependencies,
+  operation: ContainedTurnKernelOperation,
+  trustedScope: ContainedTurnScope,
+): Promise<ContainedTurnKernelOperation> => {
+  if (operation.terminal.kind === "final" || operation.cancellation.kind !== "requested") {return operation;}
+  let current = operation;
   try {
     if (current.dispatch.kind === "unclaimed" && current.workspaceId === undefined) {
-      current = await bindContainedTurnCancellationWorkspace(dependencies, current, input.scope);
+      current = await bindContainedTurnCancellationWorkspace(dependencies, current, trustedScope);
     }
     if (current.dispatch.kind === "unclaimed" && current.workspaceId !== undefined) {
+      const preventionProofId = containedTurnIdentity("proof", `proof:cancellation-prevention:${digestContainedTurnCanonicalValue({
+        cancellationCommandId: operation.cancellation.command.cancellationCommandId,
+        cancellationProofId: operation.cancellation.proofId,
+        operationId: operation.operationId,
+      })}`);
       const proofs = await dependencies.operationStore.proofsForPrevention({
-        authority: containedTurnOwnerStoreAuthority(current, input.scope),
+        authority: containedTurnOwnerStoreAuthority(current, trustedScope),
         operation: current,
-        preventionProofId: prepared.preventionProofId,
+        preventionProofId,
       });
-      current = await advanceContainedTurn(dependencies, current, input.scope, {
+      if (proofs.noDispatchProof.proofId !== preventionProofId) {
+        throw new TypeError("cancellation prevention must preserve the exact authority proof identity");
+      }
+      current = await advanceContainedTurn(dependencies, current, trustedScope, {
         ...proofs,
         kind: "prevent_dispatch",
       });
-      current = await closeContainedTurnWithoutExecution(dependencies, current, input.scope);
+    }
+    if (current.dispatch.kind === "prevented") {
+      current = await closeContainedTurnWithoutExecution(dependencies, current, trustedScope);
     } else if (current.dispatch.kind === "claimed" && current.custodyId !== undefined &&
         current.physicalContainment.kind !== "contained") {
-      current = await closeContainedTurnPhysicalContainment(dependencies, current, input.scope);
+      current = await closeContainedTurnPhysicalContainment(dependencies, current, trustedScope);
     }
   } catch (error) {
     if (error instanceof ContainedTurnIndeterminateCommitError) {current = error.operation;}
-    else if (!(error instanceof ContainedTurnCasLostError)) {
+    else if (error instanceof ContainedTurnCasLostError) {
+      current = await readContainedTurnOwnedOperation(dependencies, operation.operationId, trustedScope) ?? current;
+    } else {
       current = await recordContainedTurnRejectedDebt(
         dependencies,
         current,
-        input.scope,
+        trustedScope,
         "cancellation_closure_rejected",
         "store_commit",
       );
     }
   }
-  return { operation: current, status: "observed" };
+  return current;
 };

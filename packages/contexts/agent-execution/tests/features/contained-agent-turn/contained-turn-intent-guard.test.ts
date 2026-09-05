@@ -59,7 +59,7 @@ test("acceptance-first prevention wins over prepared claim and original replay o
     assert.equal(outcome.receipt.disposition, "operation_fenced");
     assert.ok(outcome.receipt.cutoffProofId);
     const current = await runner.store.read({ operationId: outcome.receipt.operationId!, scope: submission.scope });
-    assert.equal(current?.dispatch.kind, "unclaimed");
+    assert.equal(current?.dispatch.kind, "prevented");
     assert.equal(current?.admissionFence.kind, "fenced");
     assert.equal(current?.operationCutoff.kind, "closed");
   } finally {release.release();}
