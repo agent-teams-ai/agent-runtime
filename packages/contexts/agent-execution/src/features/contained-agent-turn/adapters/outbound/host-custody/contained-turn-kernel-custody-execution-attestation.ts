@@ -22,7 +22,7 @@ export const createExecutionAttestation = (
   reservation: ReservationProofAuthority,
   observed: HostCustodyEvidence,
   completion: SealedProviderCompletion,
-  receiptRef: string,
+  receiptRef: string | undefined,
   finalCursor: number,
 ): ExecutionAttestation => {
   const binding = Object.freeze({
@@ -35,7 +35,7 @@ export const createExecutionAttestation = (
     completion: completionProjection(completion),
     evidence: hostEvidenceProjection(observed),
     proofDigest: reservation.proofDigest ?? null,
-    receiptRef,
+    receiptRef: receiptRef ?? null,
     reservation: reservationIdentity(reservation),
   });
   return Object.freeze({

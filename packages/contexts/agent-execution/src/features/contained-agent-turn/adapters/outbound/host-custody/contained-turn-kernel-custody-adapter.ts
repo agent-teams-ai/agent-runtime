@@ -345,7 +345,8 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     const contained = await this.#contain(reservation, true);
     const observed = this.#hostCustody.evidence(reservation.underlyingCustodyRef);
     const completion = reservation.providerCompletion;
-    if (contained === undefined || observed === undefined || completion === undefined ||
+    if (observed === undefined || completion === undefined ||
+        (contained === undefined && observed.closure.profile !== "cooperative-darwin-posix-process-group") ||
         reservation.providerCompletionState !== "sealed" || !reservation.processStartProved ||
         !executionEvidenceIsClosed(observed)) {
       return this.#indeterminate("execution-closure", reservation, observed);

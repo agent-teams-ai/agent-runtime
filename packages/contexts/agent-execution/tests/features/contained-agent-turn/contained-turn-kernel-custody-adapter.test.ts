@@ -99,13 +99,19 @@ const syntheticWorkspaceOwner = (workspaceRef: string) => Object.freeze({
   },
 });
 
-const runningEvidence = (): HostCustodyEvidence => Object.freeze({
-  closure: Object.freeze({
+const runningEvidence = (cooperative = false): HostCustodyEvidence => Object.freeze({
+  closure: cooperative ? Object.freeze({
+    limitations: DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS,
+    profile: "cooperative-darwin-posix-process-group",
+    status: "unproven",
+  }) : Object.freeze({
     limitations: Object.freeze([] as const),
     profile: "strict-linux-cgroup-v2",
     status: "unproven",
   }),
-  fingerprint,
+  fingerprint: cooperative ? Object.freeze({
+    ...fingerprint, containmentProfile: "cooperative-darwin-posix-process-group" as const,
+  }) : fingerprint,
   guardianExit: Object.freeze({ status: "unobserved" }),
   identity: Object.freeze({
     binarySha256: fingerprint.executableSha256,
@@ -125,14 +131,8 @@ const runningEvidence = (): HostCustodyEvidence => Object.freeze({
   stdout: Object.freeze({ ...drain, status: "incomplete" }),
 });
 
-const pendingNoStartEvidence = (): HostCustodyEvidence => Object.freeze({
-  closure: Object.freeze({
-    limitations: Object.freeze([] as const),
-    profile: "strict-linux-cgroup-v2",
-    status: "unproven",
-  }),
-  fingerprint,
-  guardianExit: Object.freeze({ status: "unobserved" }),
+const pendingNoStartEvidence = (cooperative = false): HostCustodyEvidence => Object.freeze({
+  ...runningEvidence(cooperative),
   identity: Object.freeze({
     binarySha256: EMPTY_SHA256,
     childProcessInstanceSha256: EMPTY_SHA256,
@@ -149,30 +149,28 @@ const pendingNoStartEvidence = (): HostCustodyEvidence => Object.freeze({
 });
 
 interface HarnessOptions {
+  readonly ambiguousStart?: boolean;
+  readonly closureStatus?: HostCustodyEvidence["closure"]["status"];
   readonly cooperative?: boolean;
   readonly guardianCode?: number | null;
+  readonly identityStatus?: HostCustodyEvidence["identity"]["status"];
+  readonly missingGuardianExit?: boolean;
   readonly missingProviderExit?: boolean;
+  readonly missingReceipt?: boolean;
   readonly noStart?: boolean;
   readonly providerCode?: number | null;
   readonly releaseFailures?: number;
-  readonly stderrStatus?: "complete" | "incomplete";
-  readonly stdoutStatus?: "complete" | "incomplete";
+  readonly sealed?: boolean;
+  readonly spawnStatus?: HostCustodyEvidence["spawn"];
+  readonly stderrStatus?: HostCustodyEvidence["stderr"]["status"];
+  readonly stdoutStatus?: HostCustodyEvidence["stdout"]["status"];
 }
 
 const createHarness = (options: HarnessOptions = {}) => {
-  let evidence = options.noStart === true ? pendingNoStartEvidence() : runningEvidence();
-  if (options.cooperative === true) {
+  let evidence = options.noStart === true ? pendingNoStartEvidence(options.cooperative) : runningEvidence(options.cooperative);
+  if (options.ambiguousStart === true) {
     evidence = Object.freeze({
-      ...evidence,
-      closure: Object.freeze({
-        limitations: DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS,
-        profile: "cooperative-darwin-posix-process-group" as const,
-        status: evidence.closure.status,
-      }),
-      fingerprint: Object.freeze({
-        ...evidence.fingerprint,
-        containmentProfile: "cooperative-darwin-posix-process-group" as const,
-      }),
+      ...evidence, identity: Object.freeze({ ...evidence.identity, status: "ambiguous" as const }),
     });
   }
   let executeCalls = 0;
@@ -205,12 +203,7 @@ const createHarness = (options: HarnessOptions = {}) => {
         ? Object.freeze({
           ...evidence,
           closure: Object.freeze({
-            limitations: options.cooperative === true
-              ? DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS
-              : Object.freeze([] as const),
-            profile: options.cooperative === true
-              ? "cooperative-darwin-posix-process-group" as const
-              : "strict-linux-cgroup-v2" as const,
+            ...evidence.closure,
             status: "not-started" as const,
           }),
           identity: Object.freeze({ ...evidence.identity, status: "not-started" as const }),
@@ -223,19 +216,17 @@ const createHarness = (options: HarnessOptions = {}) => {
         : Object.freeze({
           ...evidence,
           closure: Object.freeze({
-            limitations: options.cooperative === true
-              ? DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS
-              : Object.freeze([] as const),
-            profile: options.cooperative === true
-              ? "cooperative-darwin-posix-process-group" as const
-              : "strict-linux-cgroup-v2" as const,
-            status: "closed" as const,
+            ...evidence.closure,
+            status: options.closureStatus ?? (options.cooperative === true ? "unproven" : "closed"),
           }),
-          guardianExit: Object.freeze({
-            code: options.guardianCode ?? 0,
-            signal: null,
-            status: "observed" as const,
-          }),
+          guardianExit: options.missingGuardianExit === true
+            ? Object.freeze({ status: "unobserved" as const })
+            : Object.freeze({
+              code: options.guardianCode ?? 0,
+              signal: null,
+              status: "observed" as const,
+            }),
+          identity: Object.freeze({ ...evidence.identity, status: options.identityStatus ?? "proved" }),
           providerExit: options.missingProviderExit === true
             ? Object.freeze({ status: "unobserved" as const })
             : Object.freeze({
@@ -243,11 +234,14 @@ const createHarness = (options: HarnessOptions = {}) => {
               signal: null,
               status: "observed" as const,
             }),
-          sealed: true,
+          sealed: options.sealed ?? true,
+          spawn: options.spawnStatus ?? "acknowledged",
           stderr: Object.freeze({ ...drain, status: options.stderrStatus ?? "complete" }),
           stdout: Object.freeze({ ...drain, status: options.stdoutStatus ?? "complete" }),
         });
-      return Object.freeze({ kind: "contained" as const, receiptRef: "host-containment:synthetic" });
+      return (options.cooperative === true && options.noStart !== true) || options.missingReceipt === true
+        ? Object.freeze({ evidenceRef: "host-containment:unproven", kind: "unproven" as const })
+        : Object.freeze({ kind: "contained" as const, receiptRef: "host-containment:synthetic" });
     },
   });
   const custody = new ContainedTurnKernelCustodyAdapter(hostCustody, {
@@ -372,62 +366,112 @@ const applyCurrentKernelClosure = (
   return operation;
 };
 
-test("exact seven-port composition dispatches once through the dedicated Host mapper", async () => {
-  let evidence = runningEvidence();
-  let hostOpenCalls = 0;
-  let hostContainmentCalls = 0;
-  const hostCustody: ContainedTurnHostCustodyPort = Object.freeze({
-    evidence: (custodyRef: string) => custodyRef === "host-custody:composition" ? evidence : undefined,
-    reserve: async () => {
-      hostOpenCalls += 1;
-      return Object.freeze({ custodyRef: "host-custody:composition" });
-    },
-    open: async () => {throw new Error("generic Host open must not serve kernel reservation");},
-    release: async () => Object.freeze({ kind: "released" as const }),
-    requestContainment: async () => {
-      hostContainmentCalls += 1;
-      evidence = Object.freeze({
-        ...evidence,
-        closure: Object.freeze({
-          limitations: Object.freeze([] as const),
-          profile: "strict-linux-cgroup-v2",
-          status: "closed",
-        }),
-        guardianExit: Object.freeze({ code: 12, signal: null, status: "observed" }),
-        providerExit: Object.freeze({ code: 27, signal: null, status: "observed" }),
-        sealed: true,
-        stderr: drain,
-        stdout: drain,
-      });
-      return Object.freeze({ kind: "contained" as const, receiptRef: "host-containment:composition" });
-    },
+for (const cooperative of [false, true]) {
+  test(`seven-port composition retains execution truth with cooperative=${cooperative}`, async () => {
+    let evidence = runningEvidence(cooperative);
+    let hostOpenCalls = 0;
+    let hostContainmentCalls = 0;
+    const hostCustody: ContainedTurnHostCustodyPort = Object.freeze({
+      evidence: (custodyRef: string) => custodyRef === "host-custody:composition" ? evidence : undefined,
+      reserve: async () => {
+        hostOpenCalls += 1;
+        return Object.freeze({ custodyRef: "host-custody:composition" });
+      },
+      open: async () => {throw new Error("generic Host open must not serve kernel reservation");},
+      release: async () => Object.freeze({ kind: "released" as const }),
+      requestContainment: async () => {
+        hostContainmentCalls += 1;
+        evidence = Object.freeze({
+          ...evidence,
+          closure: Object.freeze({
+            ...evidence.closure, status: cooperative ? "unproven" : "closed",
+          }),
+          guardianExit: Object.freeze({ code: 12, signal: null, status: "observed" }),
+          providerExit: Object.freeze({ code: 27, signal: null, status: "observed" }),
+          sealed: true,
+          stderr: drain,
+          stdout: drain,
+        });
+        return cooperative
+          ? Object.freeze({ evidenceRef: "host-containment:unproven", kind: "unproven" as const })
+          : Object.freeze({ kind: "contained" as const, receiptRef: "host-containment:composition" });
+      },
+    });
+    const fixture = createDependencies();
+    let sealCalls = 0;
+    let closeCalls = 0;
+    const { custody: _fixtureCustody, ...otherOwners } = fixture.dependencies;
+    const mappedCustody = new ContainedTurnKernelCustodyAdapter(hostCustody, {
+      attemptOwner: syntheticAttemptOwner,
+      completionAfterMs: 100,
+      hostBootId: "host-boot:one",
+      hostInstanceId: "host-instance:one",
+      startObservationAfterMs: 100,
+      workspaceOwner: syntheticWorkspaceOwner("/synthetic/composed-workspace"),
+    });
+    const feature = createContainedTurnFeature(Object.freeze({
+      ...otherOwners,
+      artifacts: {
+        ...otherOwners.artifacts,
+        ensureSealed: async (input: Parameters<typeof otherOwners.artifacts.ensureSealed>[0]) => {
+          sealCalls += 1;
+          return otherOwners.artifacts.ensureSealed(input);
+        },
+      },
+      custody: mappedCustody,
+      workspace: {
+        ...otherOwners.workspace,
+        ensureClosed: async (input: Parameters<typeof otherOwners.workspace.ensureClosed>[0]) => {
+          closeCalls += 1;
+          return otherOwners.workspace.ensureClosed(input);
+        },
+      },
+    }));
+    const result = await feature.submit.execute({
+      commandId: "command:one",
+      expectedProvider: "codex",
+      intent: { mode: "analysis", prompt: "inspect disposable state" },
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    });
+    assert.equal(result.status, "observed");
+    assert.equal(result.status === "observed" && result.turn.status, cooperative ? "reconcile_required" : "succeeded");
+    assert.equal(fixture.providerCalls.value, 1);
+    assert.equal(hostOpenCalls, 1);
+    assert.equal(hostContainmentCalls, cooperative ? 2 : 1);
+    assert.equal(sealCalls, cooperative ? 0 : 1);
+    assert.equal(closeCalls, cooperative ? 0 : 1);
+    if (!cooperative) {return;}
+    const current = fixture.current();
+    assert.ok(current);
+    validateContainedTurnOperation(current);
+    assert.equal(current.providerProcessStart.kind, "execution_started");
+    assert.equal(current.providerExecution.kind, "closed");
+    assert.equal(current.providerExecution.kind === "closed" && current.providerExecution.outcome, "succeeded");
+    assert.equal(current.output.fence.kind, "fenced");
+    assert.equal(current.output.fence.kind === "fenced" && current.output.fence.finalCursor, 1);
+    for (const kind of ["execution_closure", "output_drain", "provider_terminal_observation"]) {
+      assert.equal(current.proofs.filter(proof => proof.kind === kind).length, 1);
+    }
+    assert.equal(current.terminal.kind, "open");
+    assert.equal(current.physicalContainment.kind, "pending");
+    assert.equal(current.containment.kind, "pending");
+    assert.equal(current.closureRecovery.kind, "required");
+    assert.equal(current.closureRecovery.kind === "required" && current.closureRecovery.stage, "physical_containment");
+    assert.ok(current.closureRecovery.kind === "required" && current.closureRecovery.evidenceIds.length > 0);
+    assert.equal(result.status === "observed" && result.turn.artifactManifestRef, undefined);
+    assert.equal(result.status === "observed" && result.turn.resultRef, undefined);
+    assert.equal(current.artifactManifestRef, undefined);
+    assert.equal(current.resultRef, undefined);
+    assert.equal(current.proofs.some(proof => [
+      "physical_containment", "containment", "workspace_closure", "artifact_manifest_seal",
+      "result_publication", "terminal_truth",
+    ].includes(proof.kind)), false);
+    assert.equal(evidence.closure.status, "unproven");
+    assert.deepEqual(await feature.observe.execute({
+      operationId: current.operationId, scope: current.scope,
+    }), result);
   });
-  const fixture = createDependencies();
-  const { custody: _fixtureCustody, ...otherOwners } = fixture.dependencies;
-  const mappedCustody = new ContainedTurnKernelCustodyAdapter(hostCustody, {
-    attemptOwner: syntheticAttemptOwner,
-    completionAfterMs: 100,
-    hostBootId: "host-boot:one",
-    hostInstanceId: "host-instance:one",
-    startObservationAfterMs: 100,
-    workspaceOwner: syntheticWorkspaceOwner("/synthetic/composed-workspace"),
-  });
-  const feature = createContainedTurnFeature(Object.freeze({
-    ...otherOwners,
-    custody: mappedCustody,
-  }));
-  const result = await feature.submit.execute({
-    commandId: "command:one",
-    expectedProvider: "codex",
-    intent: { mode: "analysis", prompt: "inspect disposable state" },
-    scope: { projectId: "project:one", tenantId: "tenant:one" },
-  });
-  assert.equal(result.status, "observed");
-  assert.equal(result.status === "observed" && result.turn.status, "succeeded");
-  assert.equal(fixture.providerCalls.value, 1);
-  assert.equal(hostOpenCalls, 1);
-  assert.equal(hostContainmentCalls, 1);
-});
+}
 
 test("current seven-port composition closes true failed and cancelled observations", async t => {
   for (const row of [
@@ -524,11 +568,31 @@ test("protocol outcome, not independently varied OS exit, closes the current ker
   }
 });
 
-test("missing raw provider exit or incomplete ingress remains ambiguous", async t => {
-  for (const options of [
+test("inexact Host execution evidence remains ambiguous for both profiles", async t => {
+  const failures: readonly HarnessOptions[] = [
     { missingProviderExit: true },
+    { missingGuardianExit: true },
     { stdoutStatus: "incomplete" as const },
     { stderrStatus: "incomplete" as const },
+    { stdoutStatus: "error" },
+    { stderrStatus: "error" },
+    { stdoutStatus: "overflow" },
+    { stderrStatus: "overflow" },
+    { stdoutStatus: "not-started" },
+    { stderrStatus: "not-started" },
+    { sealed: false },
+    { identityStatus: "ambiguous" },
+    { identityStatus: "not-started" },
+    { identityStatus: "unproven" },
+    { spawnStatus: "ambiguous" },
+    { spawnStatus: "error-before-start" },
+    { spawnStatus: "never-started" },
+    { closureStatus: "not-started" },
+  ];
+  for (const options of [
+    ...failures.flatMap(failure => [failure, { ...failure, cooperative: true }]),
+    { closureStatus: "unproven" as const },
+    { missingReceipt: true },
   ]) {
     await t.test(JSON.stringify(options), async () => {
       const harness = createHarness(options);
@@ -583,60 +647,70 @@ test("kernel reservation defers process creation to its one-use start callback",
   });
 });
 
-test("provider completion arriving after execution cutoff cannot be sealed", async () => {
-  const harness = createHarness();
-  await openHarness(harness);
-  let resolveCompletion!: (value: { readonly kind: "completed"; readonly outcome: "succeeded" }) => void;
-  const providerCompletion = new Promise<{ readonly kind: "completed"; readonly outcome: "succeeded" }>(
-    resolve => {resolveCompletion = resolve;},
-  );
-  const started = await harness.custody.start(Object.freeze({
-    ...startInput(harness, "succeeded"),
-    execute: async delegated => {
-      harness.incrementExecution();
-      delegated.createProcess(() => {
-        harness.incrementProcess();
-        return Object.freeze({ syntheticProcess: true });
-      });
-      return providerCompletion;
-    },
-  }));
-  assert.equal(started.kind, "execution_started");
-  if (started.kind !== "execution_started") {return;}
-  const boundary = harness.custody.completionBoundary({
-    attemptId, custodyId, operationId, phase: "execution",
+for (const cooperative of [false, true]) {
+  test(`late provider completion cannot be sealed with cooperative=${cooperative}`, async () => {
+    const harness = createHarness({ cooperative });
+    await openHarness(harness);
+    let resolveCompletion!: (value: { readonly kind: "completed"; readonly outcome: "succeeded" }) => void;
+    const providerCompletion = new Promise<{ readonly kind: "completed"; readonly outcome: "succeeded" }>(
+      resolve => {resolveCompletion = resolve;},
+    );
+    const started = await harness.custody.start(Object.freeze({
+      ...startInput(harness, "succeeded"),
+      execute: async delegated => {
+        harness.incrementExecution();
+        delegated.createProcess(() => {
+          harness.incrementProcess();
+          return Object.freeze({ syntheticProcess: true });
+        });
+        return providerCompletion;
+      },
+    }));
+    assert.equal(started.kind, "execution_started");
+    if (started.kind !== "execution_started") {return;}
+    const boundary = harness.custody.completionBoundary({
+      attemptId, custodyId, operationId, phase: "execution",
+    });
+    assert.equal((await boundary.expiration).kind, "expired");
+    resolveCompletion(Object.freeze({ kind: "completed", outcome: "succeeded" }));
+    assert.deepEqual(await started.execution, { kind: "completed", outcome: "succeeded" });
+    boundary.release();
+    assert.equal((await attest(harness.custody)).kind, "indeterminate");
   });
-  assert.equal((await boundary.expiration).kind, "expired");
-  resolveCompletion(Object.freeze({ kind: "completed", outcome: "succeeded" }));
-  assert.deepEqual(await started.execution, { kind: "completed", outcome: "succeeded" });
-  boundary.release();
-  assert.equal((await attest(harness.custody)).kind, "indeterminate");
-});
 
-test("invalid protocol completion cannot be converted into terminal truth", async () => {
-  const harness = createHarness();
-  await openHarness(harness);
-  const conflictingObservation = Object.freeze({
-    kind: "completed" as const,
-    outcome: "succeeded" as const,
-    reportedOutcome: "failed" as const,
+  test(`invalid protocol completion cannot be sealed with cooperative=${cooperative}`, async () => {
+    const harness = createHarness({ cooperative });
+    await openHarness(harness);
+    const conflictingObservation = Object.freeze({
+      kind: "completed" as const,
+      outcome: "succeeded" as const,
+      reportedOutcome: "failed" as const,
+    });
+    const started = await harness.custody.start(Object.freeze({
+      ...startInput(harness, "succeeded"),
+      execute: async delegated => {
+        harness.incrementExecution();
+        delegated.createProcess(() => {
+          harness.incrementProcess();
+          return Object.freeze({ syntheticProcess: true });
+        });
+        return conflictingObservation;
+      },
+    }));
+    assert.equal(started.kind, "execution_started");
+    if (started.kind !== "execution_started") {return;}
+    assert.deepEqual(await started.execution, conflictingObservation);
+    assert.equal((await attest(harness.custody)).kind, "indeterminate");
   });
-  const started = await harness.custody.start(Object.freeze({
-    ...startInput(harness, "succeeded"),
-    execute: async delegated => {
-      harness.incrementExecution();
-      delegated.createProcess(() => {
-        harness.incrementProcess();
-        return Object.freeze({ syntheticProcess: true });
-      });
-      return conflictingObservation;
-    },
-  }));
-  assert.equal(started.kind, "execution_started");
-  if (started.kind !== "execution_started") {return;}
-  assert.deepEqual(await started.execution, conflictingObservation);
-  assert.equal((await attest(harness.custody)).kind, "indeterminate");
-});
+
+  test(`ambiguous start cannot later attest execution with cooperative=${cooperative}`, async () => {
+    const harness = createHarness({ ambiguousStart: true, cooperative });
+    const start = await openAndStart(harness, "succeeded");
+    assert.equal(start.kind, "indeterminate");
+    assert.equal((await attest(harness.custody)).kind, "indeterminate");
+    assert.equal(harness.hostCustody.evidence("host-custody:synthetic")?.identity.status, "proved");
+  });
+}
 
 test("cooperative closure proves execution and drain but cannot become physical containment", async () => {
   const harness = createHarness({ cooperative: true });
@@ -646,6 +720,9 @@ test("cooperative closure proves execution and drain but cannot become physical 
   assert.deepEqual(await started.execution, { kind: "completed", outcome: "succeeded" });
   const execution = await attest(harness.custody);
   assert.equal(execution.kind, "proved");
+  assert.equal(await attest(harness.custody), execution);
+  assert.equal((await attest(harness.custody, 1)).kind, "indeterminate");
+  assert.equal(harness.hostCustody.evidence("host-custody:synthetic")?.closure.status, "unproven");
   const physicalInput = Object.freeze({
     attemptId,
     authorityVectorDigest: authorityDigest,
@@ -655,7 +732,9 @@ test("cooperative closure proves execution and drain but cannot become physical 
     requestId: "closure-request:cooperative-physical" as never,
   });
   assert.equal((await harness.custody.ensurePhysicalContainment(physicalInput)).kind, "indeterminate");
+  assert.equal((await harness.custody.queryPhysicalContainment(physicalInput)).kind, "indeterminate");
   assert.equal((await harness.custody.requestPhysicalContainment(physicalInput)).kind, "indeterminate");
+  assert.equal((await harness.custody.requestContainment(physicalInput)).kind, "indeterminate");
 });
 
 test("start identity conflict is rejected before the provider callback", async () => {
