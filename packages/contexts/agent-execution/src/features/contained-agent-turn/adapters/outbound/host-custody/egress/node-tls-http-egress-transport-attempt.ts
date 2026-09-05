@@ -193,6 +193,10 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
         const authorizedBytes = bytes as Uint8Array;
         consumed = true;
         acceptedLength = byteLength;
+        // Consumption may synchronously revoke custody or close this attempt.
+        // Recheck before borrowing bytes for the socket, without an async gap.
+        if (settled || failedDisposition) {return;}
+        if (!this.#isUsable() || signal?.aborted) {failed(); return;}
         // Deliberately no await or promise boundary between authority consumption and this write.
         this.#socket.write(authorizedBytes, error => {
           if (error !== undefined && error !== null) {failed();}

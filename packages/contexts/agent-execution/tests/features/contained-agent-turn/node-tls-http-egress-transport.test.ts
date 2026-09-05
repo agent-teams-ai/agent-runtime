@@ -509,6 +509,29 @@ describe("NodeTlsHttpEgressTransport deterministic synthetic fault injection", (
     await expectClosed(attempt);
   });
 
+  for (const cutoff of ["abort", "destroy", "close"] as const) {
+    test(`a ${cutoff} during authorization consumption prevents the first write`, async () => {
+      const socket = new SyntheticOwnedTlsSocket();
+      const attempt = injectedTransport(socket).beginOpen(target(443));
+      const session = await attempt.ready();
+      const controller = new AbortController();
+      let consumed = 0;
+      const dispatch = await session.dispatch(() => {
+        consumed += 1;
+        if (cutoff === "abort") {controller.abort();}
+        else if (cutoff === "destroy") {socket.destroy();}
+        else {void attempt.close();}
+        return utf8("owned bytes");
+      }, controller.signal);
+      assert.equal(dispatch.status, "failed");
+      assert.equal(consumed, 1);
+      assert.equal(socket.writes.length, 0);
+      await session.dispatch(() => {consumed += 1; return utf8("forbidden");});
+      assert.equal(consumed, 1);
+      await expectClosed(attempt);
+    });
+  }
+
   for (const write of ["throw", "callback-error"] as const) {
     test(`a synthetic ${write} after consumption can never claim zero accepted bytes`, async () => {
       const socket = new SyntheticOwnedTlsSocket({ write });
