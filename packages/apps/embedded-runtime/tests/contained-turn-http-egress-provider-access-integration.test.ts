@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {describe, test} from "node:test";
-import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
+import {createCredentialMaterializationRequestDigest, createInMemoryContainedTurnDispatchConsumptionV1} from "@agent-teams/provider-access/composition";
+import {createContainedTurnHttpProviderAccessAuthorization} from "../dist/composition/contained-turn-http-provider-access.js";
 import {createHostHttpEgressSession} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
 import type {HttpEgressOperation} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js";
-import type {HostHttpGrant, HostHttpMaterializationReceipt, HostHttpProvisionalDecision,
+import type {HostHttpGrant, HostHttpProvisionalDecision,
   HttpEgressBrokerPorts} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 
 const enc = new TextEncoder(); const SECRET = "fixture-secret-do-not-observe";
@@ -26,21 +27,22 @@ const route = Object.freeze({routeReceiptDigest: "route-receipt", originHost: "p
 const response = (status = 200) => `HTTP/1.1 ${status} Status\r\nContent-Length: 2\r\n\r\nok`;
 
 type Options = Readonly<{status?: number; paAuthorizeKind?: "authorized" | "observed"; firstObserveDenied?: boolean;
-  secondObserveDenied?: boolean; verifierProvisional?: boolean; verifierGrant?: boolean; substituteKey?: boolean;
+  revokeBeforeObserve?: boolean; secondObserveDenied?: boolean; verifierProvisional?: boolean; verifierGrant?: boolean; substituteKey?: boolean;
   mutateProvisional?: (value: HostHttpProvisionalDecision) => HostHttpProvisionalDecision;
   mutateGrant?: (value: HostHttpGrant) => HostHttpGrant; journal?: "consumed" | "duplicate" | "mismatch" | "unknown";
   cut?: "current" | "revoked" | "unknown"; cutEpoch?: string; dispatch?: "success" | "lost" | "throw";
   truncated?: boolean; upstreamClosure?: "closed" | "unknown"; inboundClosure?: "closed" | "unknown";
   evidence?: "recorded" | "unknown"}>;
 
-const receiptFor = (input: Record<string, unknown>): HostHttpMaterializationReceipt => Object.freeze({
-  ...input, decision: "authorized", rejectionReason: null,
-}) as HostHttpMaterializationReceipt;
-
 const fixture = (options: Options = {}) => {
   const order: string[] = []; const writes: Uint8Array[] = []; const wires: Uint8Array[] = [];
   const paInputs: unknown[] = []; const provisionalInputs: unknown[] = []; const finalInputs: unknown[] = [];
-  let ids = 0; let observes = 0; let opens = 0; let journalCalls = 0; let renders = 0; let cutReads = 0;
+  let ids = 0; let observes = 0; let opens = 0; let journalCalls = 0; let renders = 0;
+  const paBinding = Object.freeze({...snapshot, acceptedAuthorityDigest: "accepted:1", authorityHeadDigest: "authority:1",
+    bindingDigest: "binding:1", bindingRevision: snapshot.revision, credentialBindingDigest: snapshot.ownerAuthorityDigest,
+    claimBeforeControlTime: 1000, expiresAtControlTime: 1000, opaqueOwnerEvidenceRef: "pa:evidence"});
+  const {revision: _revision, ownerAuthorityDigest: _ownerAuthorityDigest, ...paSeed} = paBinding;
+  const pa = createInMemoryContainedTurnDispatchConsumptionV1({bindings: [paSeed], initialControlTime: 10});
   const policy = (requestDigest: string) => Object.freeze({policyRef: "policy-1", policyRevision: "revision-3",
     policyGeneration: "policy-generation-9", authorizedRequestDigest: requestDigest,
     origin: Object.freeze({scheme: "https" as const, hostname: route.originHost, port: route.originPort}),
@@ -94,29 +96,34 @@ const fixture = (options: Options = {}) => {
     ids: Object.freeze({fresh: () => {ids += 1; order.push("ids"); return Object.freeze({
       materializationAuthorizationId: `pa-${ids}`, runtimeAuthorizationId: `rs-${ids}`,
       boundaryUseId: `boundary-${ids}`, connectionAttemptId: `connection-${ids}`, streamId: `stream-${ids}`});}}),
-    providerAccessSnapshot: snapshot, route, providerAccess: Object.freeze({
+    providerAccessSnapshot: snapshot, route, providerAccess: createContainedTurnHttpProviderAccessAuthorization({
       createRequestDigest: createCredentialMaterializationRequestDigest,
-      authorize: async input => {order.push("pa-authorize"); paInputs.push(input);
-        const {requestDigest, ...unsigned} = input;
-        assert.equal(requestDigest, await createCredentialMaterializationRequestDigest(unsigned));
-        const receipt = receiptFor(input as unknown as Record<string, unknown>);
-        return Object.freeze({kind: options.paAuthorizeKind ?? "authorized", receipt}) as never;},
-      observe: async input => {observes += 1; order.push(`pa-observe-${observes}`);
-        const original = paInputs.at(-1) as Record<string, unknown>; const receipt = receiptFor(original);
-        if ((observes === 1 && options.firstObserveDenied) || (observes === 2 && options.secondObserveDenied)) {
-          return Object.freeze({kind: "indeterminate" as const});
-        }
-        assert.equal(input.authorizationRequestId, receipt.authorizationRequestId);
-        return Object.freeze({kind: "observed" as const, receipt});},
+      authorization: {
+        async authorize(input) {
+          order.push("pa-authorize"); paInputs.push(input);
+          const {requestDigest, ...unsigned} = input;
+          assert.equal(requestDigest, await createCredentialMaterializationRequestDigest(unsigned));
+          if (options.paAuthorizeKind === "observed") {await pa.materialization.authorize(input);}
+          return pa.materialization.authorize(input);
+        },
+        async observe(input) {
+          observes += 1; order.push(`pa-observe-${observes}`);
+          if ((observes === 1 && options.firstObserveDenied) || (observes === 2 && options.secondObserveDenied)) {
+            return Object.freeze({kind: "indeterminate" as const});
+          }
+          if (options.revokeBeforeObserve) {await pa.control.replaceBindingHead({...paSeed, revocation: "revoked"});}
+          return pa.materialization.observe(input);
+        },
+      },
     }), materializer: Object.freeze({render: async receipt => {order.push("render"); renders += 1;
       assert.equal(receipt.credentialBindingDigest, snapshot.ownerAuthorityDigest);
       return Object.freeze([Object.freeze({name: "authorization", valueBytes: bytes(`Bearer ${SECRET}`)})]);}}),
     runtimeSecurity, verifier: Object.freeze({signingKey: key,
       verifyProvisionalDecision: () => options.verifierProvisional ?? true,
       verifyGrant: () => options.verifierGrant ?? true}),
-    localAuthorityCut: Object.freeze({read: () => {cutReads += 1; return Object.freeze({
-      status: cutReads === 1 ? "current" as const : options.cut ?? "current",
-      authorityId: "clock-authority", epoch: cutReads === 1 ? "epoch-1" : options.cutEpoch ?? "epoch-1", controlTime: 10});}}),
+    localAuthorityCut: Object.freeze({read: () => {return Object.freeze({
+      status: journalCalls === 0 ? "current" as const : options.cut ?? "current",
+      authorityId: "clock-authority", epoch: journalCalls === 0 ? "epoch-1" : options.cutEpoch ?? "epoch-1", controlTime: 10});}}),
     journal: Object.freeze({consume: () => {journalCalls += 1; order.push("journal"); return options.journal ?? "consumed";}}),
     resolver: Object.freeze({resolve: async () => {order.push("resolve"); return Object.freeze({resolverIdentity: "resolver-1",
       resolverEpoch: "resolver-epoch-1", resolutionCount: 1 as const,
@@ -179,6 +186,14 @@ describe("Host HTTP PA and signed RS integration", () => {
     }
   });
 
+  test("a real PA revocation prevents transport despite an earlier authorized receipt", async () => {
+    const f = fixture({revokeBeforeObserve: true});
+    const result = await f.session.execute(f.operation());
+    assert.equal(result.outcome, "denied"); assert.equal(result.anomalyCode, "provider_generation_drift");
+    assert.equal(result.firstByteState, "not_sent"); assert.equal(f.wires.length, 0);
+    assert.equal(f.counts().opens, 0); assert.equal(f.counts().journalCalls, 0);
+  });
+
   test("rejects signatures, V2 key substitution, projection and TLS/peer substitution", async () => {
     const cases: Options[] = [{verifierProvisional: false}, {verifierGrant: false}, {substituteKey: true},
       {mutateProvisional: value => Object.freeze({...value, request: Object.freeze({...value.request,
@@ -197,7 +212,7 @@ describe("Host HTTP PA and signed RS integration", () => {
   test("consumes signed journal key first and rejects duplicate, cut and epoch drift", async () => {
     for (const item of [{journal: "duplicate" as const}, {cut: "revoked" as const}, {cut: "unknown" as const},
       {cutEpoch: "epoch-other"}]) {const f = fixture(item); const result = await f.session.execute(f.operation());
-      assert.equal(result.firstByteState, "not_sent"); assert.equal(f.counts().journalCalls, 1);
+      assert.equal(result.firstByteState, "not_sent"); assert.equal(f.counts().journalCalls, 1, JSON.stringify({item, result, counts: f.counts(), order: f.order}));
       assert.equal(result.anomalyCode, item.journal === "duplicate" ? "final_denied" : "provider_generation_drift");
       assert.deepEqual(f.order.filter(step => step === "dispatch" || step === "journal"), ["dispatch", "journal"]);
       assert.equal(f.wires.length, 0);}
