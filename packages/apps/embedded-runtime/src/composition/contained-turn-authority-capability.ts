@@ -33,6 +33,10 @@ export interface AuthorityBoundContainedTurnCapability {
   };
 }
 
+const scopeOf = (authority: ContainedTurnAccessAuthority) => Object.freeze({
+  projectId: authority.projectId, tenantId: authority.tenantId,
+});
+
 /**
  * Trusted composition assigns a revision to the selected owner capability.
  * Rebinding/rotation requires a new composition product. The owner still owns
@@ -62,9 +66,6 @@ export const bindContainedTurnCapabilityAuthority = (
     }
     return authority;
   };
-  const scopeOf = (authority: ContainedTurnAccessAuthority) => Object.freeze({
-    projectId: authority.projectId, tenantId: authority.tenantId,
-  });
   return Object.freeze({
     authorityRevision,
     cancel: Object.freeze({ async execute(input: Parameters<AuthorityBoundContainedTurnCapability["cancel"]["execute"]>[0], options?: { readonly signal?: AbortSignal }) {

@@ -5,7 +5,7 @@ import type {
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
 } from "../contracts/runtime-access.js";
-import { ContainedTurnOwnerContractError } from "./agent-runtime-host-disposal.js";
+import { ContainedTurnOwnerContractError } from "./contained-turn-owner-contract-error.js";
 import type { ContainedTurnCompositionOperationRef } from "./contained-turn-operation-ref.js";
 import type {
   OwnerTurnObservation,

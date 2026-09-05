@@ -165,7 +165,7 @@ test("trusted owner composition pins revision and caller methods remain detached
   assert.equal(cancellation.status, "observed");
   assert.deepEqual(rawScopes, [scope(), scope(), scope()]);
   for (const rawScope of rawScopes) { assert.equal(Object.isFrozen(rawScope), true); }
-  assert.deepEqual(Reflect.ownKeys(handle.containedTurn).sort(), ["cancel", "observe", "submit"]);
+  assert.deepEqual(Reflect.ownKeys(handle.containedTurn).toSorted(), ["cancel", "observe", "submit"]);
   assert.equal(Object.isFrozen(handle), true);
   assert.equal(Object.isFrozen(handle.containedTurn), true);
   assert.doesNotMatch(JSON.stringify([handle, accepted, observation, cancellation]), /authority|revision|scope|dispose/u);

@@ -317,7 +317,7 @@ export const createAgentRuntimeHost = (
         () => {
           if (types.isProxy(scope)) { throw new TypeError("Contained-turn access scope is invalid"); }
           const descriptor = Object.getOwnPropertyDescriptor(scope, "containedTurn");
-          if (descriptor === undefined) { return undefined; }
+          if (descriptor === undefined) { return; }
           if (!("value" in descriptor)) { throw new TypeError("Contained-turn access scope is invalid"); }
           return descriptor.value as ContainedTurnCompositionScope | undefined;
         },
