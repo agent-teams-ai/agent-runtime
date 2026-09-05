@@ -91,7 +91,7 @@ test("canonical envelope retains bounded failure facts, detaches data and reject
     packageIdentity: reversed(input.packageIdentity), observations: reversed({...input.observations,
       containmentLimitations: freeze([...DARWIN_LIMITATIONS].reverse())})}));
   assert.equal(JSON.stringify(first), JSON.stringify(second));
-  assert.equal(first.schemaVersion, 2);
+  assert.equal(first.schemaVersion, 3);
   assert.equal(first.observations.resultRef, input.observations.resultRef);
   assert.equal(first.observations.artifactManifestRef, input.observations.artifactManifestRef);
   assert.equal(first.observations.ownerDisposal, "failed");

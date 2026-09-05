@@ -111,13 +111,17 @@ export const safeObservations = input => {
   return Object.freeze(result);
 };
 
-const validateClosure = (observations, tuple) => {
+const validateClosure = (input, observations, tuple) => {
   const darwin = tuple.platform === "darwin";
   const profile = darwin ? "cooperative-darwin-posix-process-group" : "strict-linux-cgroup-v2";
   if (tuple.containmentProfile !== undefined && tuple.containmentProfile !== profile) {return reject();}
   if (["closureStatus", "containmentProfile", "containmentLimitations"].every(key => observations[key] === undefined)) {return;}
   if (observations.closureStatus === undefined || observations.containmentProfile !== profile ||
       JSON.stringify(observations.containmentLimitations) !== JSON.stringify(darwin ? [...DARWIN_LIMITATIONS].sort() : [])) {return reject();}
+  if (darwin && observations.closureStatus === "closed") {return reject();}
+  if (observations.closureStatus === "unproven" &&
+      (input.physicalContainment !== "indeterminate" || observations.terminalKind === "final" ||
+       observations.containmentProofDigest !== undefined || observations.terminalProofDigest !== undefined)) {return reject();}
 };
 const validateTerminal = observations => {
   const keys = ["terminalKind", "terminalStatus", "reconciliation", "closureRecovery"];
@@ -130,7 +134,7 @@ const validateTerminal = observations => {
   if (debt !== (observations.terminalStatus === "reconcile_required")) {return reject();}
 };
 export const validateCompletion = (input, observations, tuple) => {
-  validateClosure(observations, tuple);
+  validateClosure(input, observations, tuple);
   validateTerminal(observations);
   if ((input.physicalContainment === "contained") !== (observations.containmentProofDigest !== undefined)) {return reject();}
   if (input.status === "failed") {
@@ -139,11 +143,13 @@ export const validateCompletion = (input, observations, tuple) => {
   }
   const darwin = tuple.platform === "darwin";
   const expected = {
-    providerOutcome: "succeeded", closureStatus: "closed", ownerDisposal: "completed", runtimeDisposal: "completed",
+    providerOutcome: "succeeded", closureStatus: darwin ? "unproven" : "closed", ownerDisposal: "completed", runtimeDisposal: "completed",
+    closureRecovery: darwin ? "required" : "clear",
     terminalStatus: darwin ? "reconcile_required" : "succeeded", terminalKind: darwin ? "open" : "final",
     containmentProfile: darwin ? "cooperative-darwin-posix-process-group" : "strict-linux-cgroup-v2",
   };
   for (const [key, value] of Object.entries(expected)) {if (observations[key] !== value) {return reject();}}
+  if (!darwin && observations.reconciliation !== "clear") {return reject();}
   if (observations.failureKind !== undefined || input.physicalContainment !== (darwin ? "indeterminate" : "contained")) {return reject();}
   for (const key of ["operationIdentityDigest", "executionClosureProofDigest", "providerTerminalProofDigest", "outputDrainProofDigest", "outputDigest", "outputEvents"]) {
     if (observations[key] === undefined) {return reject();}

@@ -75,8 +75,8 @@ export const observeProviderCandidateCompletion = ({ platform, result, closure, 
   assert.equal(proof("execution_closure").binding.outcome, "succeeded");
   assert.equal(proof("output_drain").binding.finalCursor, turn.output.length);
   assert.equal(turn.output.map(chunk => chunk.text).join(""), expectedOutput);
-  assert.equal(closure.status, "closed");
   if (platform === "linux") {
+    assert.equal(closure.status, "closed");
     assert.equal(physicalContainment.kind, "contained");
     assert.equal(turn.status, "succeeded");
     assert.equal(kernel.terminal.kind, "final");
@@ -87,10 +87,12 @@ export const observeProviderCandidateCompletion = ({ platform, result, closure, 
     assert.deepEqual(closure.limitations, []);
   } else {
     assert.equal(platform, "darwin");
+    assert.equal(closure.status, "unproven");
     assert.equal(physicalContainment.kind, "indeterminate");
     assert.equal(turn.status, "reconcile_required");
     assert.equal(kernel.terminal.kind, "open");
-    assert.ok(kernel.reconciliation === "required" || kernel.closureRecovery === "required");
+    assert.equal(kernel.closureRecovery, "required");
+    assert.ok(["clear", "required"].includes(kernel.reconciliation));
     assert.equal(closure.profile, "cooperative-darwin-posix-process-group");
     assert.deepEqual(closure.limitations, DARWIN_LIMITATIONS);
   }

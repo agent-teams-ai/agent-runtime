@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, writeFile, symlink, mkdir } from "node:fs/promises";
+import { readFile, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
@@ -12,10 +12,10 @@ test("candidate receipt binds a disposable clean build, HEAD, dependencies and c
   const executed = await import(pathToFileURL(fixture.buildPath).href);
   assert.equal(executed.freshBuild, 1);
   const envelope = await fixture.authority.createProviderCandidateEvidenceEnvelope(evidenceInput(fixture, execution));
-  assert.equal(envelope.schemaVersion, 2);
+  assert.equal(envelope.schemaVersion, 3);
   assert.equal(envelope.networkRouteEnforcement, "unqualified");
-  assert.equal(envelope.buildIdentity.profile, "local-offline-clean-build/v1");
-  for (const key of ["receiptDigest", "treeDigest", "sourceTreeDigest", "packageClosureDigest", "commandDigest", "dependenciesDigest", "nodeDigest"]) {
+  assert.equal(envelope.buildIdentity.profile, "qualified-offline-clean-build/v2");
+  for (const key of ["receiptDigest", "treeDigest", "sourceTreeDigest", "packageClosureDigest", "commandDigest", "dependenciesDigest", "nodeDigest", "compilerDigest", "toolchainQualificationDigest"]) {
     assert.match(envelope.buildIdentity[key], /^sha256:[a-f0-9]{64}$/u);
   }
   assert.equal(envelope.sourceSha, await git(fixture.root, "rev-parse", "HEAD"));
@@ -79,11 +79,8 @@ test("installed dependency edits invalidate an already issued execution receipt"
 });
 
 test("dependency link target bytes are bound, while external links fail closed", async t => {
-  const fixture = await sourceFixture(t);
+  const fixture = await sourceFixture(t, "codex", true, true);
   const target = join(fixture.root, ".cache/linked-sdk");
-  await mkdir(target, {recursive: true});
-  await writeFile(join(target, "sdk.js"), "export const revision = 1;\n");
-  await symlink(target, join(fixture.root, "node_modules/sdk"));
   const execution = await fixture.resolve();
   await writeFile(join(target, "sdk.js"), "export const revision = 2;\n");
   assert.equal(await git(fixture.root, "status", "--porcelain"), "");
@@ -97,14 +94,16 @@ test("unchanged generated JS cannot hide changes to package closure or canary so
   const first = await fixture.resolve();
   await writeFile(join(fixture.root, "pnpm-lock.yaml"), 'lockfileVersion: "9.0"\n# revised closure\n');
   await commit(fixture.root);
-  const changedLock = await fixture.resolve();
+  await assert.rejects(fixture.resolve(), /does not match separately trusted qualification/u);
+  const qualification = fixture.qualifyPackages([["pnpm-lock.yaml", 'lockfileVersion: "9.0"\n# revised closure\n']]);
+  const changedLock = await fixture.resolve({}, qualification);
   assert.equal(changedLock.build.treeDigest, first.build.treeDigest);
   assert.notEqual(changedLock.build.sourceTreeDigest, first.build.sourceTreeDigest);
   assert.notEqual(changedLock.build.packageClosureDigest, first.build.packageClosureDigest);
   assert.notEqual(changedLock.build.receiptDigest, first.build.receiptDigest);
   await writeFile(fixture.canaryPath, "export const canary = false;\n");
   await commit(fixture.root);
-  const changedCanary = await fixture.resolve();
+  const changedCanary = await fixture.resolve({}, qualification);
   assert.notEqual(changedCanary.canary.sourceDigest, changedLock.canary.sourceDigest);
   assert.notEqual(changedCanary.build.receiptDigest, changedLock.build.receiptDigest);
   await assert.rejects(fixture.resolve({canarySourceUrl: pathToFileURL(fixture.sourcePath).href}), /exact provider entrypoint/u);
@@ -134,7 +133,7 @@ test("provenance input rejects getters, proxies, mutable records and mutable URL
     canarySourceUrl: pathToFileURL(fixture.canaryPath).href,
     buildRootUrl: pathToFileURL(join(fixture.root, "packages/contexts/agent-execution/dist")).href});
   let calls = 0;
-  const reject = (input: unknown) => assert.rejects(fixture.authority.resolveCanaryExecutionProvenance(input), TypeError);
+  const reject = (input: unknown) => assert.rejects(fixture.authority.resolveCanaryExecutionProvenance(input, fixture.qualification), TypeError);
   await reject({...value});
   await reject(new Proxy(value, {get() {calls += 1; throw new Error("must not evaluate");}}));
   await reject(Object.freeze(Object.defineProperty({...value}, "provider", {get() {calls += 1; return fixture.providerId;}})));

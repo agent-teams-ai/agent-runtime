@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { sha256 } from "./provider-candidate-build-tree.mjs";
 import { sourceSnapshot, sourceFileDigest } from "./provider-candidate-source.mjs";
 import { executedBuildIdentity, installedClosureDigest, verifyCleanBuild } from "./provider-candidate-clean-build.mjs";
+import { trustedToolchainQualification } from "./provider-candidate-toolchain.mjs";
 import {
   record, choice, exactDigest, safeTuple, safePackageIdentity,
   safeObservations, validateCompletion, evidenceDigest,
@@ -13,8 +14,12 @@ const executionAuthorities = new WeakMap();
 const PROVIDERS = ["codex-app-server-current-kernel", "claude-agent-sdk-current-kernel"];
 const CANARIES = ["codex-contained-turn-live-canary/v1", "claude-contained-turn-live-canary/v1"];
 
-export const resolveCanaryExecutionProvenance = async value => {
+// Qualification is a separate trusted-composition argument. The current live
+// entrypoints have no such authority and fail closed; do not fill this argument
+// from the checkout, AR_SOURCE_SHA, environment flags, or caller evidence.
+export const resolveCanaryExecutionProvenance = async (value, trustedBuildQualification) => {
   const input = record(value, ["provider", "canaryId", "claimedSourceSha", "canarySourceUrl", "buildRootUrl"]);
+  const qualification = trustedToolchainQualification(trustedBuildQualification);
   for (const key of ["canarySourceUrl", "buildRootUrl"]) {
     if (typeof input[key] !== "string" || input[key].length > 4096) {throw new TypeError("canary source location must be bounded text");}
     const url = new URL(input[key]);
@@ -38,7 +43,7 @@ export const resolveCanaryExecutionProvenance = async value => {
   }
   const canaryDigest = sourceFileDigest(source, canarySourceUrl);
   const authorityDigest = sourceFileDigest(source, import.meta.url);
-  const build = await verifyCleanBuild(source);
+  const build = await verifyCleanBuild(source, qualification);
   await sourceSnapshot(import.meta.url, sourceSha);
   const receiptDigest = evidenceDigest({authorityDigest, build, canaryDigest, canaryId, provider, sourceSha});
   const execution = Object.freeze({
@@ -104,7 +109,7 @@ export const createProviderCandidateEvidenceEnvelope = async value => {
     throw new TypeError("canary execution provenance does not match provider and canary");
   }
   return Object.freeze({
-    schemaVersion: 2,
+    schemaVersion: 3,
     binaryIdentity: Object.freeze({digest: binaryDigest, revisionDigest: exactDigest(sha256(input.binaryRevision))}),
     buildIdentity: Object.freeze({
       bytes: execution.build.bytes, files: execution.build.files,
@@ -114,6 +119,8 @@ export const createProviderCandidateEvidenceEnvelope = async value => {
       commandDigest: exactDigest(execution.build.commandDigest),
       dependenciesDigest: exactDigest(execution.build.dependenciesDigest),
       nodeDigest: exactDigest(execution.build.nodeDigest),
+      compilerDigest: exactDigest(execution.build.compilerDigest),
+      toolchainQualificationDigest: exactDigest(execution.build.toolchainQualificationDigest),
       profile: execution.build.profile, receiptDigest: exactDigest(execution.build.receiptDigest),
     }),
     canaryIdentity: Object.freeze({

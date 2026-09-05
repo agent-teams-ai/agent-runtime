@@ -49,7 +49,8 @@ for (const provider of ["codex", "claude"] as const) {
           },
         },
       });
-      const closure = Object.freeze({status: "closed",
+      // Host custody retains unproven after cooperative Darwin group shutdown.
+      const closure = Object.freeze({status: platform === "linux" ? "closed" : "unproven",
         profile: platform === "linux" ? "strict-linux-cgroup-v2" : "cooperative-darwin-posix-process-group",
         limitations: platform === "linux" ? Object.freeze([]) : DARWIN_LIMITATIONS,
       });
@@ -68,12 +69,16 @@ for (const provider of ["codex", "claude"] as const) {
       assert.equal(physicalQueries > 0, platform === "darwin");
       const source = await sourceFixture(t, provider);
       const provenance = await source.resolve();
-      const envelope = await source.authority.createProviderCandidateEvidenceEnvelope(evidenceInput(source, provenance, {
+      const input = evidenceInput(source, provenance, {
         ...observed.evidence("provider-completed"),
         binaryRevision: provider === "codex" ? `@openai/codex:0.150.1+${platform}-${platform === "linux" ? "x64" : "arm64"}` : `sha256:${"a".repeat(64)}`,
         platformTuple: Object.freeze({platform, architecture: platform === "linux" ? "x64" : "arm64"}),
-      }));
+      });
+      const publish = source.authority.createProviderCandidateEvidenceEnvelope;
+      const envelope = await publish(input);
       assert.equal(envelope.observations.terminalStatus, observation.terminalStatus);
+      assert.equal(envelope.observations.closureStatus, closure.status);
+      assert.equal(envelope.observations.closureRecovery, platform === "linux" ? "clear" : "required");
       assert.equal(envelope.observations.ownerDisposal, "completed");
       assert.equal(envelope.observations.runtimeDisposal, "completed");
       assert.equal(envelope.observations.outputDigest.length, 71);
@@ -85,10 +90,53 @@ for (const provider of ["codex", "claude"] as const) {
         assert.equal(envelope.observations.terminalProofDigest, undefined);
         assert.equal(envelope.observations.containmentProofDigest, undefined);
       }
+      const invalid = [
+        {closureStatus: platform === "linux" ? "unproven" : "closed"},
+        {closureStatus: "not-started"},
+        {containmentProfile: platform === "linux" ? "cooperative-darwin-posix-process-group" : "strict-linux-cgroup-v2"},
+        {containmentLimitations: platform === "linux" ? DARWIN_LIMITATIONS : Object.freeze([])},
+        {providerOutcome: "indeterminate"},
+        {executionClosureProofDigest: undefined},
+        {outputDrainProofDigest: undefined},
+        {providerTerminalProofDigest: undefined},
+        {closureRecovery: "clear", reconciliation: "clear", terminalKind: "open", terminalStatus: "reconcile_required"},
+        ...(platform === "darwin" ? [
+          {closureRecovery: "clear", reconciliation: "required"},
+          {terminalKind: "final", terminalStatus: "succeeded", terminalProofDigest: "a".repeat(64)},
+          {terminalKind: "final", terminalStatus: "failed", terminalProofDigest: "a".repeat(64)},
+          {containmentProofDigest: "a".repeat(64)},
+        ] : [{reconciliation: "required"}]),
+      ];
+      for (const patch of invalid) {
+        await assert.rejects(publish(Object.freeze({...input,
+          observations: Object.freeze({...input.observations, ...patch})})), TypeError);
+      }
+      await assert.rejects(publish(Object.freeze({...input,
+        physicalContainment: platform === "linux" ? "indeterminate" : "contained"})), TypeError);
+      // Even failed canary teardown must not project unproven custody as final.
+      await assert.rejects(publish(Object.freeze({...input, status: "failed",
+        observations: Object.freeze({...input.observations, failureKind: "canary-failed",
+          closureStatus: "unproven", terminalKind: "final", terminalStatus: "failed",
+          terminalProofDigest: "a".repeat(64), reconciliation: "clear", closureRecovery: "clear"})})), TypeError);
       assert.throws(() => observeProviderCandidateCompletion({platform, result, closure, expectedOutput: "wrong"}));
       assert.throws(() => observeProviderCandidateCompletion({
         platform, result: {...result, kernel: {...result.kernel, proofs: []}}, closure, expectedOutput: "ok",
       }));
+      for (const status of platform === "linux" ? ["unproven", "not-started"] : ["closed", "not-started"]) {
+        assert.throws(() => observeProviderCandidateCompletion({
+          platform, result, closure: {...closure, status}, expectedOutput: "ok",
+        }));
+      }
+      if (platform === "darwin") {
+        for (const terminal of [{kind: "final", outcome: "succeeded"}, {kind: "final", outcome: "failed"}]) {
+          assert.throws(() => observeProviderCandidateCompletion({
+            platform, result: {...result, kernel: {...result.kernel, terminal}}, closure, expectedOutput: "ok",
+          }));
+        }
+        assert.throws(() => observeProviderCandidateCompletion({
+          platform, result: {...result, kernel: {...result.kernel, closureRecovery: "clear"}}, closure, expectedOutput: "ok",
+        }));
+      }
     });
   }
 }

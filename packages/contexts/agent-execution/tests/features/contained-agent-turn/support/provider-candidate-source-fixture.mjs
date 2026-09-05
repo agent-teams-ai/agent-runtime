@@ -1,9 +1,11 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { sha256 } from "../../../live/provider-candidate-build-tree.mjs";
+import { installedClosureDigest } from "../../../live/provider-candidate-clean-build.mjs";
 
 const exec = promisify(execFile);
 const environment = {GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", LC_ALL: "C", PATH: "/usr/bin:/bin"};
@@ -17,13 +19,43 @@ export const commit = async root => {
 };
 const AE = "packages/contexts/agent-execution";
 const FS = "packages/platform/filesystem-custody";
+const packageFiles = new Map([
+  ["pnpm-lock.yaml", 'lockfileVersion: "9.0"\n'],
+  ["pnpm-workspace.yaml", 'packages: ["packages/*/*"]\n'],
+  ...["package.json", `${FS}/package.json`, `${AE}/package.json`].map(path => [path, '{"type":"module"}\n']),
+]);
+const nativeHelper = "// No native code in this disposable compiler fixture.\n";
 
 // Real Git commits and fresh temporary packages. A small installed compiler
 // stand-in makes the fixed build recipe executable without dependencies.
 // No provider, SDK query, transport, credentials, or injected build callback.
-export const sourceFixture = async (t, provider = "codex", withGit = true) => {
+export const sourceFixture = async (t, provider = "codex", withGit = true, linkedDependency = false) => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "ar-canary-source-")));
   t.after(() => rm(root, {recursive: true, force: true}));
+  // The test qualifier builds its expected tree OUTSIDE the candidate from
+  // reviewed fixture bytes. Never mint expectations by hashing candidate tools.
+  // This stand-in qualifies only this fixture, not TypeScript or a native build.
+  const trustedRoot = await realpath(await mkdtemp(join(tmpdir(), "ar-canary-test-qualifier-")));
+  t.after(() => rm(trustedRoot, {recursive: true, force: true}));
+  await mkdir(join(trustedRoot, "node_modules/typescript/bin"), {recursive: true});
+  await writeFile(join(trustedRoot, "node_modules/typescript/package.json"), '{"type":"module"}\n');
+  const compilerBytes = await readFile(new URL("./provider-candidate-fixture-compiler.mjs", import.meta.url));
+  await writeFile(join(trustedRoot, "node_modules/typescript/bin/tsc"), compilerBytes);
+  if (linkedDependency) {
+    await mkdir(join(trustedRoot, ".cache/linked-sdk"), {recursive: true});
+    await writeFile(join(trustedRoot, ".cache/linked-sdk/sdk.js"), "export const revision = 1;\n");
+    await symlink("../.cache/linked-sdk", join(trustedRoot, "node_modules/sdk"));
+  }
+  const qualifiedDependencies = await installedClosureDigest(trustedRoot);
+  const nodeDigest = sha256(await readFile(process.execPath));
+  const qualifyPackages = (overrides = []) => Object.freeze({
+    profile: "node-only-offline-toolchain/v1", platform: process.platform,
+    architecture: process.arch, nodeVersion: process.version, nodeDigest,
+    compilerDigest: sha256(compilerBytes), dependenciesDigest: qualifiedDependencies,
+    nativeHelperDigest: sha256(nativeHelper),
+    packageClosureDigest: sha256(JSON.stringify([...new Map([...packageFiles, ...overrides])].map(([path, bytes]) => [path, sha256(bytes)]))),
+  });
+  const qualification = qualifyPackages();
   const live = join(root, AE, "tests/live");
   await mkdir(live, {recursive: true});
   const origin = new URL("../../../live/", import.meta.url);
@@ -35,12 +67,12 @@ export const sourceFixture = async (t, provider = "codex", withGit = true) => {
   const canaryPath = join(live, `${provider}-contained-turn-live-canary.mjs`);
   await writeFile(canaryPath, "export const canary = true;\n");
   await writeFile(join(root, ".gitignore"), "node_modules/\n**/dist/\n**/.cache/\n");
-  await writeFile(join(root, "package.json"), '{"type":"module"}\n');
-  await writeFile(join(root, "pnpm-lock.yaml"), 'lockfileVersion: "9.0"\n');
-  await writeFile(join(root, "pnpm-workspace.yaml"), 'packages: ["packages/*/*"]\n');
-  await mkdir(join(root, "node_modules/typescript/bin"), {recursive: true});
-  await writeFile(join(root, "node_modules/typescript/package.json"), '{"type":"module"}\n');
-  await cp(new URL("./provider-candidate-fixture-compiler.mjs", import.meta.url), join(root, "node_modules/typescript/bin/tsc"));
+  for (const [path, bytes] of packageFiles) {
+    await mkdir(dirname(join(root, path)), {recursive: true});
+    await writeFile(join(root, path), bytes);
+  }
+  await cp(join(trustedRoot, "node_modules"), join(root, "node_modules"), {recursive: true, verbatimSymlinks: true});
+  if (linkedDependency) {await cp(join(trustedRoot, ".cache"), join(root, ".cache"), {recursive: true});}
   for (const pkg of [FS, AE]) {
     await mkdir(join(root, pkg, "src"), {recursive: true});
     await writeFile(join(root, pkg, "package.json"), '{"type":"module"}\n');
@@ -51,7 +83,7 @@ export const sourceFixture = async (t, provider = "codex", withGit = true) => {
     await writeFile(join(root, pkg, "src/runtime.ts"), "export const freshBuild: number = 1;\n");
   }
   await mkdir(join(root, FS, "scripts"));
-  await writeFile(join(root, FS, "scripts/build-native-helper.mjs"), "// No native code in this disposable compiler fixture.\n");
+  await writeFile(join(root, FS, "scripts/build-native-helper.mjs"), nativeHelper);
   if (withGit) {await git(root, "init", "--quiet"); await commit(root);}
   const build = async () => {
     for (const pkg of [FS, AE]) {
@@ -63,13 +95,13 @@ export const sourceFixture = async (t, provider = "codex", withGit = true) => {
   const authority = await import(pathToFileURL(join(live, "provider-candidate-evidence-envelope.mjs")).href);
   const providerId = provider === "codex" ? "codex-app-server-current-kernel" : "claude-agent-sdk-current-kernel";
   const canaryId = `${provider}-contained-turn-live-canary/v1`;
-  const resolve = async (overrides = {}) => authority.resolveCanaryExecutionProvenance(Object.freeze({
+  const resolve = async (overrides = {}, trustedQualification = qualification) => authority.resolveCanaryExecutionProvenance(Object.freeze({
     buildRootUrl: pathToFileURL(join(root, AE, "dist")).href, canaryId,
     canarySourceUrl: pathToFileURL(canaryPath).href,
     claimedSourceSha: withGit ? await git(root, "rev-parse", "HEAD") : "0".repeat(40),
     provider: providerId, ...overrides,
-  }));
-  return {root, authority, build, canaryPath, resolve, canaryId, providerId,
+  }), trustedQualification);
+  return {root, authority, build, canaryPath, resolve, canaryId, providerId, qualification, qualifyPackages,
     buildPath: join(root, AE, "dist/runtime.js"), sourcePath: join(root, AE, "src/runtime.ts"),
   };
 };
