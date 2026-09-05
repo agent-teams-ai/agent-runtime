@@ -11,6 +11,7 @@ import type {CredentialGenerationOutcome, CredentialGenerationRequest} from
   "../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js";
 import {hostWipe, pairedFixture, type HostReceipt} from "./contained-turn-http-credential-materialization-fixture.ts";
 
+const indexOf = (id: string) => Number(id.split(":").at(-1));
 const unavailable = /^TypeError: HTTP Provider Access credential rendering unavailable$/u;
 const eraseRaw = (raw: CredentialGenerationOutcome): void => {
   assert.equal(raw.kind, "acquired");
@@ -42,6 +43,7 @@ for (const [recipe, names, values] of [
     fields.forEach((field, index) => {
       assert.ok(Object.isFrozen(field));
       assert.equal(field.valueBytes.buffer.byteLength, field.valueBytes.byteLength);
+      assert.ok(field.valueBytes.buffer instanceof ArrayBuffer);
       assert.equal(field.valueBytes.buffer.resizable, false);
       assert.notEqual(field.valueBytes.buffer, f.renderedBuffers[index]?.buffer);
     });
@@ -74,7 +76,6 @@ test("concurrent authorization and acquisition completion cannot exchange origin
   const authorizationGates = Array.from({length: count}, () => Promise.withResolvers<void>());
   const acquired = Array.from({length: count}, () => Promise.withResolvers<CredentialGenerationRequest>());
   const acquisitionGates = Array.from({length: count}, () => Promise.withResolvers<CredentialGenerationOutcome>());
-  const indexOf = (id: string) => Number(id.split(":").at(-1));
   const f = pairedFixture({
     async afterAuthorize(result) {
       assert.ok(result.kind === "authorized"); const index = indexOf(result.receipt.authorizationRequestId);
@@ -157,7 +158,7 @@ test("failed exact-data projection never registers a render capability", async t
 for (const failure of ["first-allocation", "second-allocation", "validation", "release", "dispose-during-copy"] as const) {
   test(`${failure}: failure erases partial Host copies and releases every PA buffer`, async t => {
     const NativeBytes = Uint8Array; const copies: Uint8Array[] = []; let allocations = 0;
-    let restore = () => {}; let releases = 0;
+    let restore: (() => void) | undefined; let releases = 0;
     const f = pairedFixture({async afterRender(result) {
       assert.ok(result.kind === "rendered");
       if (failure === "validation") {result.credentials.fields[1]!.valueBytes[0] = 13;}
@@ -174,7 +175,7 @@ for (const failure of ["first-allocation", "second-allocation", "validation", "r
       }}};
     }}); t.after(f.pair.dispose);
     const receipt = await f.fresh();
-    try {await assert.rejects(f.pair.materializer.render(receipt), unavailable);} finally {restore();}
+    try {await assert.rejects(f.pair.materializer.render(receipt), unavailable);} finally {restore?.();}
     assert.equal(releases, 1); assert.equal(copies.length, failure === "first-allocation" ? 0 : failure === "second-allocation" ? 1 : 2);
     copies.forEach(erased); f.renderedBuffers.forEach(erased); f.fixture.raw.forEach(eraseRaw);
     await assert.rejects(f.pair.materializer.render(receipt), unavailable); assert.equal(f.fixture.requests.length, 1);
