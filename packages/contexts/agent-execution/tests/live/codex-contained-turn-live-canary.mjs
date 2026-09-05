@@ -12,7 +12,7 @@ import {
   createDisposableContainedTurnCanaryRuntime,
   submitContainedTurnLiveCanary,
 } from "./contained-turn-live-canary-lifecycle.mjs";
-import { readCodexCanaryCredentialInventory } from "./codex-canary-credential-inventory.mjs";
+import { bindCodexCanaryOutputInventory, readCodexCanaryCredentialInventory } from "./codex-canary-credential-inventory.mjs";
 
 import { observeCustodyReservation, observeProviderCandidateCompletion } from "./provider-candidate-observation.mjs";
 import { createCandidateRunObservation } from "./provider-candidate-run-observation.mjs";
@@ -126,16 +126,13 @@ const prepareCandidateEvidence = (platformTuple, executionProvenance) => {
   });
 };
 
-const readBoundCredentialOutputInventory = async (codexHome, input) => {
+const readBoundCredentialOutputInventory = async (codexHome, input, expectedInventory) => {
   // Candidate-only re-observation: route qualification must separately bind the
   // exact material later opened by Codex through custody-owned provisioning.
   const inventory = await readCodexCanaryCredentialInventory(
     join(codexHome, "auth.json"), input.credentialGeneration,
   );
-  if (inventory.credentialBindingDigest !== input.credentialBindingDigest) {
-    throw new Error("disposable Codex credential inventory changed before launch planning");
-  }
-  return inventory;
+  return bindCodexCanaryOutputInventory(inventory, expectedInventory, input);
 };
 
 const run = async () => {
@@ -197,6 +194,7 @@ const run = async () => {
       throw new Error("unsupported Codex canary Host Custody target");
     }
     observedCustody = observeCustodyReservation(custody);
+    let expectedCredentialInventory;
     const owner = createCodexCurrentKernelOwner({
       effectCustody: Object.freeze({admit() {throw new Error("analysis canary forbids provider effects");}}),
       hostBootId: "host-boot:codex-live-canary", hostCustody: observedCustody.hostCustody,
@@ -209,7 +207,12 @@ const run = async () => {
         } else {
           assert.equal(input.workspaceAuthority.descriptorPath, launchWorkspace);
         }
-        const credentialOutputInventory = await readBoundCredentialOutputInventory(codexHome, input);
+        // Keep the first content observation distinct from accepted PA authority.
+        // This remains candidate redaction evidence, not immutable file custody.
+        expectedCredentialInventory ??= await readCodexCanaryCredentialInventory(
+          join(codexHome, "auth.json"), input.credentialGeneration,
+        );
+        const credentialOutputInventory = await readBoundCredentialOutputInventory(codexHome, input, expectedCredentialInventory);
         return Object.freeze({
           boundary: createCodexAppServerPermissionBoundary({codexHome, intentMode: input.intentMode, workspaceRef: launchWorkspace}),
           credentialOutputInventory,
