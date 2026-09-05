@@ -76,9 +76,9 @@ test("corrupt guard persistence fails closed on both acceptance and receipt repl
   await assert.rejects(() => runner.feature.submit.execute(submission), /lost its durable guard/u);
 });
 
-test("V7 migration has exact predecessor/digest, rejects unsafe backfill, and retains the namespace", async () => {
-  const migration = migrationFor(7);
-  assert.equal(migration.predecessorDigest, migrationFor(6).digest);
+test("V8 migration has exact predecessor/digest, rejects unsafe backfill, and retains the namespace", async () => {
+  const migration = migrationFor(8);
+  assert.equal(migration.predecessorDigest, migrationFor(7).digest);
   assert.equal(migration.digest, createHash("sha256").update(migration.sql).digest("hex"));
   assert.match(migration.sql, /refuses populated authority-incompatible schema/u);
   assert.match(migration.sql, /command_fingerprint ~ '\^sha256:/u);

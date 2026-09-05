@@ -148,12 +148,12 @@ postgresTest("settlement migration rejects legacy unproved closure and fences th
     assert.deepEqual((await pool.query("SELECT * FROM agent_execution.schema_migration_history ORDER BY version")).rows, history.rows);
     assert.equal((await pool.query("SELECT version FROM agent_execution.schema_migration")).rows[0].version, 6);
     await writeLegacy({ ...retired.preparation, custodyReleased: true, providerAccessSettled: true, runtimeSecuritySettled: true });
-    await applyContainedTurnPostgresSchema(pool);
-    await applyContainedTurnPostgresSchema(pool);
+    await applyContainedTurnPostgresSchema(pool, { targetVersion: 7 });
+    await applyContainedTurnPostgresSchema(pool, { targetVersion: 7 });
     const identity = (await pool.query("SELECT version,migration_digest FROM agent_execution.schema_migration")).rows[0];
     assert.deepEqual(identity, { version: 7, migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[6]!.digest });
     await assert.rejects(oldStore.read({ operationId: bound.operationId, scope: bound.scope }), /schema/u);
-    const restarted = new PostgresContainedTurnOperationStore({ pool });
+    const restarted = new PostgresContainedTurnOperationStore({ pool, runtimeSchemaVersion: 7 });
     const pending = (await restarted.listDispatchPreparations({ scope: bound.scope }))[0]?.preparation;
     assert.equal(pending?.kind, "cleanup_pending");
     if (pending?.kind !== "cleanup_pending") {throw new Error("legacy obligations disappeared");}

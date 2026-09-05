@@ -129,7 +129,7 @@ export class IntentGuardSqlFixture {
       if (sql === "ROLLBACK") {finish(); return result();}
       if (sql.startsWith("SELECT set_config") || sql.startsWith("SELECT pg_advisory_xact_lock_shared")) {return result();}
       if (sql.startsWith("SELECT version, migration_digest")) {
-        return result([{ version: 7, migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[6]!.digest }]);
+        return result([{ version: 8, migration_digest: CONTAINED_TURN_POSTGRES_MIGRATIONS[7]!.digest }]);
       }
       const requireLock = (scope: readonly unknown[]) => assert.deepEqual(lockedScope, scope.slice(0, 2), "intent writes must hold the scoped namespace lock");
       if (sql.startsWith("INSERT INTO agent_execution.contained_turn_intent_namespace_v1")) {
