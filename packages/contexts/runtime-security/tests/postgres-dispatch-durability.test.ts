@@ -7,20 +7,18 @@ import { lockId } from "../dist/features/contained-turn-dispatch-authority/adapt
 import type { DispatchPgPool } from
   "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.js";
 import { authority, input, scope } from "./contained-turn-dispatch-authority.fixtures.ts";
+import { validateDisposablePostgresUrl } from "./postgres-dispatch-url.fixtures.ts";
 
 const databaseUrl = process.env.RS_POSTGRES_DISPOSABLE_URL;
 const operation = (operationId: string) => ({ scope, operationId, providerId: "provider-a",
   authorityGeneration: "generation-a" });
 
 test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, timeout: 45_000 }, async t => {
-  const url = new URL(databaseUrl!);
-  assert.ok(["postgres:", "postgresql:"].includes(url.protocol));
-  assert.ok(["127.0.0.1", "[::1]"].includes(url.hostname));
-  assert.match(url.pathname, /^\/ar69_rs_test_[a-z0-9]+$/u);
+  const connectionString = validateDisposablePostgresUrl(databaseUrl!);
   const { Pool } = await import("pg");
   const pools: InstanceType<typeof Pool>[] = [];
   const pool = () => {
-    const p = new Pool({ connectionString: databaseUrl, max: 4, connectionTimeoutMillis: 5_000,
+    const p = new Pool({ connectionString, max: 4, connectionTimeoutMillis: 5_000,
       query_timeout: 5_000, idleTimeoutMillis: 1_000, application_name: "ar69-rs-disposable-test" });
     pools.push(p); return p;
   };
@@ -99,6 +97,16 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
     ]) {assert.deepEqual(await two.api.observeDispatchConsumption({ ...request, ...delta }), { status: "not_found" });}
   });
 
+  await t.test("accepted lone UTF-16 surrogates survive actual PostgreSQL persistence", async () => {
+    const request = input({ operationId: "operation-\ud800", grantRequestId: "grant-\udfff",
+      scope: { tenantId: "tenant-\ud800", projectId: "project-\udfff", scopeDigest: "scope-\ud800" } });
+    await one.repository.replaceAuthority(authority({ operationId: request.operationId, scope: request.scope }), "0");
+    const consumed = await one.api.consumeForDispatch(request);
+    assert.equal(consumed.status, "consumed");
+    assert.deepEqual(await two.api.consumeForDispatch(request), consumed);
+    assert.equal((await two.api.observeDispatchConsumption(request)).status, "consumed");
+  });
+
   await t.test("SQL cannot update, delete or truncate historical facts or rewind the head", async () => {
     for (const table of ["consume_requests", "consumptions", "settlement_requests"]) {
       for (const statement of [`UPDATE ${table} SET operation_key = operation_key`, `DELETE FROM ${table}`, `TRUNCATE ${table} CASCADE`]) {
@@ -146,7 +154,7 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
     await a.query(`CREATE FUNCTION runtime_security_dispatch_v1.suppress_test_receipt() RETURNS trigger
       LANGUAGE plpgsql AS $fn$ BEGIN RETURN NULL; END $fn$;
       CREATE TRIGGER suppress_test_receipt BEFORE INSERT ON runtime_security_dispatch_v1.consumptions
-      FOR EACH ROW WHEN (NEW.receipt->>'operationId' = 'suppressed-insert')
+      FOR EACH ROW WHEN (NEW.receipt::jsonb->>'operationId' = 'suppressed-insert')
       EXECUTE FUNCTION runtime_security_dispatch_v1.suppress_test_receipt()`);
     try {
       assert.deepEqual(await one.api.consumeForDispatch(request), { status: "indeterminate", reason: "owner_unavailable" });

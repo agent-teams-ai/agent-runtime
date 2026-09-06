@@ -87,3 +87,27 @@ test("a substituted settlement fingerprint cannot replay an opposing disposition
   assert.deepEqual(await f.api.observeDispatchConsumption(input()), unavailable);
   f.db.assertReleased();
 });
+
+test("corrupt applied settlement metadata cannot hide a settled disposition", async () => {
+  const f = await seeded(); const consumed = await f.api.consumeForDispatch(input());
+  if (consumed.status !== "consumed") {throw new Error("Expected consumption");}
+  const original = settlement(consumed.receipt.consumptionDigest);
+  assert.equal((await f.api.settleDispatchConsumption(original)).status, "settled");
+  f.db.tables.settlement_requests.get(settlementId(original))!.applies = false;
+  assert.deepEqual(await f.api.observeDispatchConsumption(input()), unavailable);
+  assert.deepEqual(await f.api.settleDispatchConsumption({ ...original,
+    settlementRequestId: "other", disposition: "abandoned_without_claim" }), unavailable);
+  f.db.assertReleased();
+});
+
+test("accepted lone UTF-16 surrogates round-trip without entering JSONB", async () => {
+  const f = createHarness(); await f.repository.migrate();
+  const request = input({ operationId: "operation-\ud800", grantRequestId: "grant-\udfff",
+    scope: { tenantId: "tenant-\ud800", projectId: "project-\udfff", scopeDigest: "scope-\ud800" } });
+  await f.repository.replaceAuthority(authority({ operationId: request.operationId, scope: request.scope }), "0");
+  const consumed = await f.api.consumeForDispatch(request);
+  assert.equal(consumed.status, "consumed");
+  assert.deepEqual(await f.api.consumeForDispatch(request), consumed);
+  assert.equal((await f.api.observeDispatchConsumption(request)).status, "consumed");
+  f.db.assertReleased();
+});

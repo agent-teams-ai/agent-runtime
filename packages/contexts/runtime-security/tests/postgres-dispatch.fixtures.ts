@@ -17,13 +17,8 @@ export const deferred = <Value = void>() => {
   return { promise, resolve: complete };
 };
 const result = (rows: Row[] = [], rowCount = rows.length): Result => ({ rows, rowCount });
-const sort = (item: unknown): unknown => typeof item === "object" && item !== null && !Array.isArray(item)
-    ? Object.fromEntries(Object.entries(item).toSorted(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, sort(v)]))
-    : item;
-
-const jsonb = (value: unknown): string => {
-  return JSON.stringify(sort(JSON.parse(value as string)));
-};
+// The adapter stores JSON source text, preserving lone UTF-16 surrogates losslessly.
+const storedText = (value: unknown): string => String(value);
 
 /** Synthetic SQL driver only: staged writes, shared committed state, connection locks.
  * This is fault-injection evidence, not an implementation of PostgreSQL or a durability claim.
@@ -101,10 +96,7 @@ export class DispatchClient implements DispatchPgClient {
       const c = this.rows("consumptions").get(String(values[0]));
       if (c === undefined) {return result();}
       const r = this.rows("consume_requests").get(String(c.request_key));
-      const s = [...this.rows("settlement_requests").values()].find(row =>
-        row.operation_key === c.operation_key && row.applies === true);
-      return result([{ ...c, consume_fact: r !== undefined && r.operation_key === c.operation_key ? r.fact : null,
-        settlement_key: s?.request_key ?? null, settlement_fact: s?.fact ?? null }]);
+      return result([{ ...c, consume_fact: r !== undefined && r.operation_key === c.operation_key ? r.fact : null }]);
   }
   private async execute(sql: string, values: unknown[]): Promise<Result> {
     assert.equal(this.released, false);
@@ -133,6 +125,9 @@ export class DispatchClient implements DispatchPgClient {
     }
     assert.ok([...this.db.locks.values()].includes(this), "owner lock precedes reads and writes");
     if (sql.startsWith("SELECT c.operation_key")) {return this.readConsumption(values);}
+    if (sql.includes("FROM runtime_security_dispatch_v1.settlement_requests WHERE operation_key")) {
+      return result([...this.rows("settlement_requests").values()].filter(row => row.operation_key === values[0]).map(row => structuredClone(row)));
+    }
     const table = sql.match(/runtime_security_dispatch_v1\.(authority_heads|consume_requests|consumptions|settlement_requests)/u)?.[1] as Table;
     assert.ok(table, `unsupported synthetic SQL: ${sql}`);
     if (sql.startsWith("SELECT")) {
@@ -146,7 +141,7 @@ export class DispatchClient implements DispatchPgClient {
     const current = this.rows(table).get(key);
     if (sql.startsWith("UPDATE")) {
       assert.equal(table, "authority_heads", "historical rows must never be updated");
-      if (current === undefined || current.head_version !== values[4] || current.selector !== jsonb(values[1])) {
+      if (current === undefined || current.head_version !== values[4] || current.selector !== storedText(values[1])) {
         return result([], 0);
       }
       assert.equal(BigInt(String(values[2])), BigInt(String(current.head_version)) + 1n);
@@ -156,19 +151,19 @@ export class DispatchClient implements DispatchPgClient {
     }
     let row: Row;
     if (table === "authority_heads") {
-      row = { operation_key: key, selector: jsonb(values[1]), head_version: values[2],
-        authority: values[3] === null ? null : jsonb(values[3]) };
+      row = { operation_key: key, selector: storedText(values[1]), head_version: values[2],
+        authority: values[3] === null ? null : storedText(values[3]) };
     } else if (table === "consumptions") {
       assert.equal(this.rows("consume_requests").get(String(values[1]))?.operation_key, key);
-      row = { operation_key: key, request_key: values[1], receipt: jsonb(values[2]) };
+      row = { operation_key: key, request_key: values[1], receipt: storedText(values[2]) };
     } else if (table === "consume_requests") {
-      row = { request_key: key, operation_key: values[1], fact: jsonb(values[2]) };
+      row = { request_key: key, operation_key: values[1], fact: storedText(values[2]) };
     } else {
       if (values[2] === true) {
         assert.equal([...this.rows(table).values()].some(r =>
           r.operation_key === values[1] && r.applies === true), false, "one applied settlement");
       }
-      row = { request_key: key, operation_key: values[1], applies: values[2], fact: jsonb(values[3]) };
+      row = { request_key: key, operation_key: values[1], applies: values[2], fact: storedText(values[3]) };
     }
     this.writes.push({ table, key, row });
     return result([], 1);

@@ -1,4 +1,4 @@
-/** Explicit PostgreSQL 18 migration. Nothing invokes this during construction or reads. */
+/** Explicit PostgreSQL 18 migration. Facts use JSON text to preserve all accepted UTF-16 strings, including lone surrogates; JSONB cannot represent them. Construction and reads never migrate. */
 export const dispatchSchemaV1 = `
 CREATE SCHEMA IF NOT EXISTS runtime_security_dispatch_v1;
 CREATE TABLE IF NOT EXISTS runtime_security_dispatch_v1.schema_version (
@@ -7,20 +7,20 @@ CREATE TABLE IF NOT EXISTS runtime_security_dispatch_v1.schema_version (
 INSERT INTO runtime_security_dispatch_v1.schema_version VALUES (true, 1) ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS runtime_security_dispatch_v1.authority_heads (
   operation_key text PRIMARY KEY,
-  selector jsonb NOT NULL,
+  selector text NOT NULL,
   head_version bigint NOT NULL CHECK (head_version > 0),
-  authority jsonb
+  authority text
 );
 CREATE TABLE IF NOT EXISTS runtime_security_dispatch_v1.consume_requests (
   request_key text PRIMARY KEY,
   operation_key text NOT NULL,
-  fact jsonb NOT NULL,
+  fact text NOT NULL,
   UNIQUE (operation_key, request_key)
 );
 CREATE TABLE IF NOT EXISTS runtime_security_dispatch_v1.consumptions (
   operation_key text PRIMARY KEY,
   request_key text NOT NULL UNIQUE,
-  receipt jsonb NOT NULL,
+  receipt text NOT NULL,
   FOREIGN KEY (operation_key, request_key)
     REFERENCES runtime_security_dispatch_v1.consume_requests (operation_key, request_key)
 );
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS runtime_security_dispatch_v1.settlement_requests (
   request_key text PRIMARY KEY,
   operation_key text NOT NULL,
   applies boolean NOT NULL,
-  fact jsonb NOT NULL
+  fact text NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_dispatch_settlement
   ON runtime_security_dispatch_v1.settlement_requests (operation_key) WHERE applies;

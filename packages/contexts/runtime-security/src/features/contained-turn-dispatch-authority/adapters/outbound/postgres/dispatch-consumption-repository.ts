@@ -71,25 +71,39 @@ const assertPendingSettlement = (settle: unknown, consumption: PersistedConsumpt
 };
 
 const createRecordReaders = (digest: DispatchDigest["digestCanonical"]) => {
+  const readAppliedSettlement = async (tx: Transaction, key: OperationKey) => {
+    const { rows } = await tx.query(`SELECT request_key, operation_key, applies, fact::text
+      FROM ${schema}.settlement_requests WHERE operation_key = $1`, [operationId(key)]);
+    let applied: ReturnType<typeof settlementFact> | null = null;
+    for (const row of rows) {
+      const fields = exact(row, ["request_key", "operation_key", "applies", "fact"]);
+      const parsed = exact(parseFact(fields.fact), ["scope", "providerId", "authorityGeneration",
+        "operationId", "grantRequestId", "settlementRequestId", "consumptionDigest", "settlementDigest", "outcome"]);
+      const selector = captureConsume({ ...operationSelector(key), grantRequestId: parsed.grantRequestId });
+      const fact = settlementFact(parsed, selector, digest);
+      if (fields.request_key !== settlementId(fact) || fields.operation_key !== operationId(key) ||
+        fields.applies !== (fact.outcome.status === "settled")) {return invalid();}
+      if (fact.outcome.status === "settled") {
+        if (applied !== null) {return invalid();}
+        applied = fact;
+      }
+    }
+    return applied;
+  };
   const readConsumption = async (tx: Transaction, key: OperationKey): Promise<PersistedConsumption | undefined> => {
     const row = oneOrNone((await tx.query(`SELECT c.operation_key, c.request_key, c.receipt::text,
-      r.fact::text AS consume_fact, s.request_key AS settlement_key, s.fact::text AS settlement_fact
-      FROM ${schema}.consumptions c
+      r.fact::text AS consume_fact FROM ${schema}.consumptions c
       LEFT JOIN ${schema}.consume_requests r ON r.request_key = c.request_key AND r.operation_key = c.operation_key
-      LEFT JOIN ${schema}.settlement_requests s ON s.operation_key = c.operation_key AND s.applies
       WHERE c.operation_key = $1`, [operationId(key)])).rows);
     if (row === undefined) {return;}
-    const fields = exact(row, ["operation_key", "request_key", "receipt", "consume_fact",
-      "settlement_key", "settlement_fact"]);
+    const fields = exact(row, ["operation_key", "request_key", "receipt", "consume_fact"]);
     if (fields.operation_key !== operationId(key)) {return invalid();}
-    const settled = fields.settlement_fact === null ? null : parseFact(fields.settlement_fact);
+    const settled = await readAppliedSettlement(tx, key);
     const consumption = consumptionRecord(parseFact(fields.receipt), settled, key, digest);
     if (fields.request_key !== requestId(consumption.receipt)) {return invalid();}
     const request = consumeFact(parseFact(fields.consume_fact), consumption.receipt, digest);
     if (request.outcome.status !== "consumed") {return invalid();}
     bindConsumedRequest(request, consumption);
-    if (settled === null ? fields.settlement_key !== null : fields.settlement_key !==
-      settlementId(settlementFact(settled, consumption.receipt, digest))) {return invalid();}
     return consumption;
   };
   const readRequest = async (tx: Transaction, key: ConsumeKey) => {
@@ -146,9 +160,9 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
       authority === null ? null : serializeFact(authority)];
     const result = current.headVersion === "0"
       ? await tx.query(`INSERT INTO ${schema}.authority_heads
-          (operation_key, selector, head_version, authority) VALUES ($1, $2::jsonb, $3::bigint, $4::jsonb)`, values)
-      : await tx.query(`UPDATE ${schema}.authority_heads SET head_version = $3::bigint, authority = $4::jsonb
-          WHERE operation_key = $1 AND selector = $2::jsonb AND head_version = $5::bigint`, [...values, expected]);
+          (operation_key, selector, head_version, authority) VALUES ($1, $2, $3::bigint, $4)`, values)
+      : await tx.query(`UPDATE ${schema}.authority_heads SET head_version = $3::bigint, authority = $4
+          WHERE operation_key = $1 AND selector = $2 AND head_version = $5::bigint`, [...values, expected]);
     if (result.rowCount !== 1) {return invalid();}
     return Object.freeze({ status: "applied", headVersion: next });
   });
@@ -208,10 +222,10 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
         }
         if ((fact.outcome.status === "consumed") !== (receipt !== undefined)) {return invalid();}
         await insertOne(tx, `INSERT INTO ${schema}.consume_requests (request_key, operation_key, fact)
-          VALUES ($1, $2, $3::jsonb)`, [requestId(key), operationId(key), serializeFact(fact)]);
+          VALUES ($1, $2, $3)`, [requestId(key), operationId(key), serializeFact(fact)]);
         if (receipt !== undefined) {
           await insertOne(tx, `INSERT INTO ${schema}.consumptions (operation_key, request_key, receipt)
-            VALUES ($1, $2, $3::jsonb)`, [operationId(key), requestId(key), serializeFact(receipt)]);
+            VALUES ($1, $2, $3)`, [operationId(key), requestId(key), serializeFact(receipt)]);
         }
         return outcome;
       });
@@ -255,7 +269,7 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
           outcome: result }, key, digest, key.settlementRequestId);
         if (result.status === "settled" && result.receipt.consumptionDigest !== key.consumptionDigest) {return invalid();}
         await insertOne(tx, `INSERT INTO ${schema}.settlement_requests (request_key, operation_key, applies, fact)
-          VALUES ($1, $2, $3, $4::jsonb)`,
+          VALUES ($1, $2, $3, $4)`,
         [settlementId(key), operationId(key), persistence.settle, serializeFact(fact)]);
         return result;
       });
