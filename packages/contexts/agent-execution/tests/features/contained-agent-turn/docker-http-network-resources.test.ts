@@ -158,6 +158,58 @@ test("launch abort remains subscribed after successful preparation and cuts admi
   assert.equal(await f.owner.cleanupNetwork(), "absent");
 });
 
+test("stopped original lifetime abort cuts prepared resources and prevents membership admission", async () => {
+  const f = fixture(); await f.open(); const launch = new AbortController();
+  launch.signal.addEventListener("abort", event => event.stopImmediatePropagation());
+  await f.prepare(launch.signal); launch.abort();
+  assert.equal(f.owner.signal.aborted, true);
+  f.attach(); const calls = f.io.calls.length;
+  await assert.rejects(f.owner.observeContainer(f.container, call()));
+  assert.equal(f.io.calls.length, calls); assert.equal(f.state().container, null);
+  assert.equal(f.journal.evidence().admission, "closed");
+  assert.equal(f.io.writes.filter(value => value.method === "POST").length, 1);
+});
+
+for (const kind of ["network_release", "network_absent", "uncertain"] as const) {
+  test(`cleanup deadline bounds retained ${kind} acknowledgement without retrying effects`, async t => {
+    const storage = new MemoryV4Storage(); const f = fixture(storage, 20);
+    await f.open(); await f.prepare(); await f.releasePrerequisites();
+    if (kind === "uncertain") {f.io.removeFault = "lost";}
+    const reached = deferred(); const release = deferred(); const append = storage.append.bind(storage);
+    let acknowledgements = 0;
+    storage.append = async (expected, bytes) => {
+      await append(expected, bytes);
+      if (v4Decode(storage.journal!).at(-1)!.event.kind === kind) {
+        acknowledgements += 1; reached.resolve(); await release.promise;
+      }
+    };
+    const first = f.owner.cleanupNetwork(); assert.equal(f.owner.cleanupNetwork(), first);
+    await reached.promise;
+    // A watchdog exposes the pre-fix hang while finally always releases the fixture.
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    const bounded = (pending: Promise<"absent" | "unknown">) => Promise.race([pending,
+      new Promise<"stuck">(resolve => {watchdog = setTimeout(() => resolve("stuck"), 100);})]);
+    try {
+      assert.equal(await bounded(first), "unknown"); clearTimeout(watchdog);
+      const second = f.owner.cleanupNetwork(); assert.notEqual(second, first);
+      assert.equal(await bounded(second), "unknown"); clearTimeout(watchdog);
+      assert.equal(acknowledgements, 1);
+      assert.equal(f.io.writes.filter(value => value.method === "DELETE").length, kind === "network_release" ? 0 : 1);
+    } finally {clearTimeout(watchdog); release.resolve(); await first;}
+    // Let the retained flight settle; only a later explicit call may resume cleanup.
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    // Recovery has no held IO. Keep CPU scheduling from spending its fresh
+    // 20 ms Engine budget after the real caller-deadline probes above.
+    const recoveredAt = Date.now(); t.mock.method(Date, "now", () => recoveredAt);
+    assert.equal(await f.owner.cleanupNetwork(), "absent");
+    assert.equal(acknowledgements, 1);
+    assert.equal(f.io.writes.filter(value => value.method === "POST").length, 1);
+    assert.equal(f.io.writes.filter(value => value.method === "DELETE").length, 1);
+    assert.equal(f.state().network.phase, 4); assert.equal(f.state().retired, false);
+    if (kind === "uncertain") {assert.equal(f.journal.evidence().reconcileRequired, true);}
+  });
+}
+
 test("cleanup deadline bounds a stuck preparation while retaining the late allocation", async () => {
   const f = fixture(new MemoryV4Storage(), 40); await f.open();
   const reached = deferred(); const release = deferred();

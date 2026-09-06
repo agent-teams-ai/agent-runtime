@@ -68,9 +68,13 @@ export const createDockerHostHttpResources = (input: Readonly<{
         sealListener = listener.sealAdmission;
         const consumption = data(resources.consumption);
         const localCut = data(resources.localCut);
+        const clock = data(localCut.clock);
         const fixedResources = {...resources, listener,
           consumption: Object.freeze({prepare: consumption.prepare.bind(resources.consumption)}),
-          localCut: {...localCut, clock: data(localCut.clock), expectedClock: data(localCut.expectedClock)}};
+          // Retain callbacks, never receiver state: time must keep advancing on
+          // the borrowed Host clock even when it stores controlTime on `this`.
+          localCut: {...localCut, clock: Object.freeze({read: clock.read.bind(localCut.clock),
+            within: clock.within.bind(localCut.clock)}), expectedClock: data(localCut.expectedClock)}};
         lifetimeAbort = addAbortListener(lifetime.signal, cutoff);
         const prepared = await network.prepare(journal, current, {signal: lifetime.signal, deadlineEpochMs});
         if (lifetime.signal.aborted || network.signal.aborted) {throw new TypeError("Host resource admission closed");}

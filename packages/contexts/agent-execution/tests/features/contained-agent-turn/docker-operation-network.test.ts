@@ -1,7 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DockerOperationNetwork } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-operation-network.js";
+import { snapshotDockerEngineCall } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.js";
 import { call, deferred, networkFixture } from "../../fixtures/docker-operation-network-fixture.ts";
+
+for (const boundary of ["original", "snapshot"] as const) {
+  test(`stopped ${boundary} abort before POST write cannot allocate`, async () => {
+    const f = networkFixture(); const owner = f.open(); const launch = new AbortController();
+    const invocation = boundary === "snapshot" ? snapshotDockerEngineCall(call(launch.signal)) : call(launch.signal);
+    invocation.signal.addEventListener("abort", event => event.stopImmediatePropagation());
+    const reached = deferred(); const release = deferred();
+    f.state.before = async label => {
+      if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}
+    };
+    const opening = owner.allocate(invocation); await reached.promise;
+    launch.abort(); release.resolve();
+    await assert.rejects(opening);
+    assert.equal(owner.reconcileRequired, true);
+    assert.equal(f.state.writes.length, 0); assert.equal(f.state.network, undefined);
+    assert.throws(() => owner.allocate(call()));
+  });
+}
+
+test("native root abort survives source shadows and a stopped synthetic abort event", () => {
+  const launch = new AbortController(); const reason = new Error("synthetic native reason");
+  launch.signal.addEventListener("abort", event => event.stopImmediatePropagation());
+  for (const key of ["addEventListener", "removeEventListener", "aborted", "reason"]) {
+    Object.defineProperty(launch.signal, key, {configurable: true, get() {throw new Error("source shadow invoked");}});
+  }
+  const captured = snapshotDockerEngineCall(call(launch.signal));
+  launch.signal.dispatchEvent(new Event("abort"));
+  assert.equal(captured.signal.aborted, false);
+  launch.abort(reason);
+  assert.equal(captured.signal.aborted, true); assert.equal(captured.signal.reason, reason);
+  assert.equal(snapshotDockerEngineCall(captured).signal, captured.signal);
+});
 
 test("reservation and fixed network naming are effect-free and snapshot generation", () => {
   const f = networkFixture(); const owner = f.open();

@@ -63,6 +63,7 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
   #releaseIntent = false;
   #networkAbsent = false;
   #cleanup: Promise<"absent" | "unknown"> | undefined;
+  #cleanupWork: Promise<"absent" | "unknown"> | undefined;
 
   public constructor(input: DockerHttpNetworkResourceInput) {
     v4Exact(input, ["subject", "engine", "cleanupMilliseconds"]);
@@ -179,14 +180,21 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
   public cleanupNetwork(): Promise<"absent" | "unknown"> {
     if (this.#cleanup !== undefined) {return this.#cleanup;}
     const completion = Promise.withResolvers<"absent" | "unknown">(); this.#cleanup = completion.promise;
+    const call = {signal: new AbortController().signal, deadlineEpochMs: Date.now() + this.#cleanupMilliseconds};
     this.cutoff();
-    void this.#clean().then(result => {
+    // The caller's deadline covers the entire flight, including journal work.
+    // Timed-out callers detach; late acknowledgements and mutation state stay
+    // owned by this same flight until it settles. No parallel cleanup or retry.
+    this.#cleanupWork ??= this.#clean(call).then(result => {
+      this.#cleanupWork = undefined; return result;
+    }, () => {this.#cleanupWork = undefined; return "unknown" as const;});
+    const work = this.#cleanupWork;
+    void awaitNetworkCleanupWork(work, call).then(() => work).then(result => {
       this.#cleanup = undefined; return completion.resolve(result);
     }, () => {this.#cleanup = undefined; return completion.resolve("unknown");});
     return completion.promise;
   }
-  async #clean(): Promise<"absent" | "unknown"> {
-    const call = {signal: new AbortController().signal, deadlineEpochMs: Date.now() + this.#cleanupMilliseconds};
+  async #clean(call: DockerEngineCall): Promise<"absent" | "unknown"> {
     // A stuck acknowledgement must not hold the cleanup caller forever. Its
     // allocation/membership slot remains retained for a later cleanup call.
     await awaitNetworkCleanupWork(Promise.all([this.#pending, this.#membership]), call);

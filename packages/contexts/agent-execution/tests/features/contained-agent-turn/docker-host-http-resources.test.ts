@@ -3,6 +3,7 @@ import test from "node:test";
 import { fixture as hostFixture } from "./node-custody-http-reservation-fixture.ts";
 import { networkFixture } from "../../fixtures/docker-operation-network-fixture.ts";
 const {createDockerHostHttpResources} = await import("../../../dist/features/contained-agent-turn/composition/docker-host-http-resources.js");
+const {createHostHttpLocalCutOwner} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-local-cut-owner.js");
 
 test("composition rejects structural Host preparation suppliers before any Engine IO", () => {
   const network = networkFixture();
@@ -121,3 +122,55 @@ test("composition cutoff during delayed POST prevents Host listener and consumpt
   assert.equal(f.network.state.writes.filter(value => value.method === "POST").length, 1);
   assert.equal(await f.product.cleanupNetwork(), "unknown");
 });
+
+for (const method of ["read", "within"] as const) {
+  test(`composition clock ${method} retains the original mutable receiver across network IO`, async () => {
+    const f = await preparedFixture(); const reached = deferred(); const release = deferred();
+    const clock = {
+      controlTime: 0, withinCalls: 0,
+      read() {return {authorityId: "synthetic-clock", epoch: "1", controlTime: this.controlTime};},
+      async within<T>(deadline: number, action: () => Promise<T>): Promise<T> {
+        this.withinCalls += 1;
+        if (this.controlTime >= deadline) {throw new Error("synthetic deadline");}
+        return action();
+      },
+    };
+    f.resources.localCut = {...f.resources.localCut, clock, operationDeadline: 1000};
+    let owner: ReturnType<typeof createHostHttpLocalCutOwner> | undefined;
+    // Inspect the actual projection delivered to the existing Host consumer.
+    // Reuse the acquired lifetime's real identity/proof; no reservation is invented.
+    const reservation = f.host.live().httpReservation; const prepare = reservation.prepareResources;
+    reservation.prepareResources = (lifetime, input) => {
+      const proof = lifetime.committedDispatchProof;
+      owner = createHostHttpLocalCutOwner({...input.localCut,
+        claimed: {signal: lifetime.signal, committedDispatchProof: proof, underlyingCustodyRef: lifetime.underlyingCustodyRef},
+        identity: {operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
+          hostBootId: proof.hostBootId, liveProcessSessionIdentity: lifetime.executionSessionIdentity}});
+      return prepare.call(reservation, lifetime, input);
+    };
+    f.network.state.after = async label => {
+      if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}
+    };
+    const preparing = f.prepare(); await reached.promise;
+    assert.equal(Object.isFrozen(clock), false);
+    clock.read = () => {throw new Error("replaced read must not be invoked");};
+    clock.within = async () => {throw new Error("replaced within must not be invoked");};
+    release.resolve(); await preparing; assert.ok(owner);
+    let borrowed: Parameters<Parameters<typeof owner.bindSession>[1]>[0]["clock"] | undefined;
+    owner.bindSession({} as never, ports => {
+      borrowed = ports.clock;
+      return {close() {}, async execute() {throw new Error("synthetic session never executes");}} as never;
+    });
+    try {
+      assert.equal(owner.cut.read().status, "current");
+      if (method === "within") {
+        assert.equal(await borrowed!.within(1000, async () => "observed"), "observed");
+        assert.equal(clock.withinCalls, 1);
+      }
+      clock.controlTime = 1000;
+      if (method === "within") {await assert.rejects(borrowed!.within(1000, async () => "expired"), /deadline/u);}
+      assert.deepEqual(owner.cut.read(), {authorityId: "synthetic-clock", epoch: "1", controlTime: 1000, status: "revoked"});
+      assert.equal(owner.signal.aborted, true);
+    } finally {owner.dispose(); f.product.cutoff();}
+  });
+}
