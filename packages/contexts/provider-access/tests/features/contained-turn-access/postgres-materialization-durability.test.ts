@@ -5,18 +5,17 @@ import { createPostgresMaterializationRepository } from "../../../dist/features/
 import { createPostgresCredentialRenderingOwner } from "../../../dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js";
 import { renderingFixture, selectorFor } from "./credential-rendering-test-fixture.ts";
 
+import { validateDisposablePostgresUrl } from "./postgres-materialization-url.fixtures.ts";
+
 // Opt-in only: a newly created, caller-owned test database. No ambient application URL.
 const databaseUrl = process.env.PA_POSTGRES_DISPOSABLE_URL;
 
 test("PA-M1 PostgreSQL durability and concurrent current-owner contract", {skip: !databaseUrl, timeout: 30_000}, async t => {
-  const url = new URL(databaseUrl!);
-  assert.ok(["postgres:", "postgresql:"].includes(url.protocol));
-  assert.ok(["127.0.0.1", "[::1]"].includes(url.hostname), "Disposable loopback PostgreSQL only");
-  assert.match(url.pathname, /^\/ar69_pa_test_[a-z0-9]+$/u);
+  const connectionString = validateDisposablePostgresUrl(databaseUrl!);
   const {Pool} = await import("pg");
   const pools: InstanceType<typeof Pool>[] = [];
   const pool = () => {
-    const value = new Pool({connectionString: databaseUrl, max: 4, connectionTimeoutMillis: 2_000,
+    const value = new Pool({connectionString, max: 4, connectionTimeoutMillis: 2_000,
       query_timeout: 5_000, idleTimeoutMillis: 1_000, application_name: "ar69-pa-m1-disposable-test"});
     pools.push(value); return value;
   };
