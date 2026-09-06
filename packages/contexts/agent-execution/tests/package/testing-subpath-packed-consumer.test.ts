@@ -118,6 +118,8 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createNodeContainedTurnWorkspace",
       "createNodeExecutableFileObserver",
       "createRuntimeInstallationDiscoveryFeature",
+      // Embedded Runtime consumes this value; NativeHttpRequestProfileId is type-only.
+      "nativeHttpRequestProfile",
       "recoverContainedTurnCommittedGrantSettlements",
       "recoverContainedTurnDispatchPreparations",
       "rollbackContainedTurnPostgresSchemaV4",
