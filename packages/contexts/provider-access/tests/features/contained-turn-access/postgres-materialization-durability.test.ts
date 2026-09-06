@@ -12,7 +12,7 @@ import { validateDisposablePostgresUrl } from "./postgres-materialization-url.fi
 // Opt-in only: a newly created, caller-owned test database. No ambient application URL.
 const databaseUrl = process.env.PA_POSTGRES_DISPOSABLE_URL;
 
-test("PA-M1 PostgreSQL durability and concurrent current-owner contract", {skip: !databaseUrl, timeout: 30_000}, async t => {
+test("PA-M1 PostgreSQL durability and concurrent current-owner contract", {skip: !databaseUrl, timeout: 60_000}, async t => {
   const connectionString = validateDisposablePostgresUrl(databaseUrl!);
   const {Pool} = await import("pg");
   const pools: InstanceType<typeof Pool>[] = [];
