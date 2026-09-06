@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import test from "node:test";
-import { hostHttpAbortOperations } from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-http-resource-lifetime.ts";
+import { hostHttpAbortOperations } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-http-resource-lifetime.js";
 
 test("HTTP lifetime cleanup invokes the retained abort Disposable", () => {
   let disposed = 0;

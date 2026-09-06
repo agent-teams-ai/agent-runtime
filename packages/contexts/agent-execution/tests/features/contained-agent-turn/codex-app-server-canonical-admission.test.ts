@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCodexActiveTurnProgress, handleCodexActiveMessage } from "../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.ts";
+import { createCodexActiveTurnProgress, handleCodexActiveMessage } from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.js";
 import { agentMessage, generatedTurn } from "../../codex-app-server-test-messages.mjs";
 import { boundary, executeInput, FakeCodexProcess } from "../../codex-app-server-contained-turn-provider-fixture.ts";
 
