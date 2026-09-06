@@ -301,6 +301,7 @@ boundaries:
         - production.embedded-runtime
       packages:
         - "@agent-teams/agent-execution"
+        - "@agent-teams/provider-access"
         - "@agent-teams/runtime-configuration"
         - "@agent-teams/runtime-security"
       builtins:

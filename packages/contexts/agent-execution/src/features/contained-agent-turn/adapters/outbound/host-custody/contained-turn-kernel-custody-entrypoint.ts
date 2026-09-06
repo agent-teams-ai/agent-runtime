@@ -8,3 +8,4 @@ export {
   createHostHttpEgressSession,
   type HostHttpEgressSessionDependencies,
 } from "./egress/host-http-egress-session.js";
+export { nativeHttpRequestProfile, type NativeHttpRequestProfileId } from "./egress/native-http-request-profile.js";

@@ -129,16 +129,15 @@ importers:
       '@agent-teams/agent-execution':
         specifier: workspace:*
         version: link:../../contexts/agent-execution
+      '@agent-teams/provider-access':
+        specifier: workspace:*
+        version: link:../../contexts/provider-access
       '@agent-teams/runtime-configuration':
         specifier: workspace:*
         version: link:../../contexts/runtime-configuration
       '@agent-teams/runtime-security':
         specifier: workspace:*
         version: link:../../contexts/runtime-security
-    devDependencies:
-      '@agent-teams/provider-access':
-        specifier: workspace:*
-        version: link:../../contexts/provider-access
 
   packages/contexts/agent-execution:
     dependencies:

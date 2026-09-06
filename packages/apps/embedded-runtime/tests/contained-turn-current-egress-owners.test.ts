@@ -123,7 +123,7 @@ for (const drift of ["forwarded-headers", "required-headers", "version", "query"
       const descriptor = f.endorsed.descriptor;
       const current = drift === "forwarded-headers" ? changed(f.endorsed, "descriptor.forwardedRequestHeaderNames",
         [...descriptor.forwardedRequestHeaderNames, "x-extra"]) :
-        drift === "required-headers" ? changed(f.endorsed, "descriptor.requiredHeaderNames", [...descriptor.requiredHeaderNames].reverse()) :
+        drift === "required-headers" ? changed(f.endorsed, "descriptor.requiredHeaderNames", [...descriptor.requiredHeaderNames].toReversed()) :
         drift === "version" ? changed(f.endorsed, "descriptor.exactValues.anthropic-version", "2023-06-02") :
         drift === "query" ? changed(f.endorsed, "descriptor.upstreamPath", "/v1/messages?beta=false") :
         drift === "id" ? changed(f.endorsed, "descriptor.id", "claude-authorization-messages/v2") :

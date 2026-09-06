@@ -16,11 +16,9 @@
   },
   "dependencies": {
     "@agent-teams/agent-execution": "workspace:*",
+    "@agent-teams/provider-access": "workspace:*",
     "@agent-teams/runtime-configuration": "workspace:*",
     "@agent-teams/runtime-security": "workspace:*"
-  },
-  "devDependencies": {
-    "@agent-teams/provider-access": "workspace:*"
   },
   "files": [
     "dist"
