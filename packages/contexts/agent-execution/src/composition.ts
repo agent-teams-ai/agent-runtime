@@ -29,6 +29,8 @@ export {
   createNodeContainedTurnArtifacts,
   createNodeContainedTurnWorkspace,
   createHostHttpEgressSession,
+  nativeHttpRequestProfile,
+  type NativeHttpRequestProfileId,
   DarwinCooperativeProcessCustody,
   NodeProviderProcessCustody,
   PostgresContainedTurnOperationStore,

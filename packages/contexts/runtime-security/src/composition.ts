@@ -1,4 +1,9 @@
 export { createNodePathCanonicalizer } from "./features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.js";
+export { createCurrentEgressOwner } from "./features/provider-process-egress-authorization/composition/current-egress-owner.js";
+export type { CurrentEgressOwnerInput, CurrentEgressDispatchHead, CurrentEgressEndorsement,
+  CurrentEgressOperation, CurrentEgressRoute } from "./features/provider-process-egress-authorization/composition/current-egress-inputs.js";
+export { snapshotDispatchAuthorityHead } from "./features/contained-turn-dispatch-authority/domain/dispatch-authority-head.js";
+export type { PostgresDispatchConsumptionRepository } from "./features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
 export { createInMemoryDispatchConsumptionRepository } from "./features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.js";
 export type { InMemoryDispatchConsumptionRepository } from "./features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.js";
 export { createNodeSha256DispatchDigest } from "./features/contained-turn-dispatch-authority/adapters/outbound/node-sha256-dispatch-digest.js";

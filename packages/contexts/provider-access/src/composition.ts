@@ -1,4 +1,8 @@
 export {
+  createPostgresRouteSelectionOwner,
+  snapshotRouteSelectionCurrent,
+  type RouteSelectionInput,
+  type RouteSelectionCurrent,
   createDispatchConsumptionRequestDigests,
   createCredentialMaterializationRequestDigest,
   createInMemoryContainedTurnDispatchConsumptionV1,

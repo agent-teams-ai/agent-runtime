@@ -82,6 +82,7 @@ export type {
   ContainedTurnPreventionReceipt,
 } from "./domain/contained-turn-intent-guard.js";
 export { containedTurnPreventionDigest } from "./domain/contained-turn-intent-guard.js";
+export { nativeHttpRequestProfile, type NativeHttpRequestProfileId } from "./adapters/outbound/host-custody/egress/native-http-request-profile.js";
 export type {
   ContainedTurnPrivateFeatureApi,
   ContainedTurnIntentCancellationInput,
