@@ -18,7 +18,7 @@ for (const [recipe, names, values] of [
     const fixture = renderingFixture(recipe);
     const {owner, admission} = createAdmittedMaterialCredentialRenderingOwner(fixture.selection, fixture.dependencies);
     t.after(() => owner.dispose());
-    assert.deepEqual(Object.keys(owner).sort(), ["authorization", "dispose", "rendering"]);
+    assert.deepEqual(Object.keys(owner).toSorted(), ["authorization", "dispose", "rendering"]);
     assert.deepEqual(admission.admit(materialFor(fixture.selection)), {kind: "admitted"});
     const outputs = [];
     for (let index = 0; index < 2; index += 1) {
@@ -190,7 +190,7 @@ test("private Postgres assembly exposes bootstrap admission only through control
   const pool = {async connect(): Promise<never> {connects += 1; throw new Error("synthetic pool not activated");}};
   const allocations = watchBytes(t);
   const concrete = createPostgresCredentialRenderingOwner(pool, fixture.selection);
-  assert.equal(connects, 0); assert.deepEqual(Object.keys(concrete.owner).sort(), ["authorization", "dispose", "rendering"]);
+  assert.equal(connects, 0); assert.deepEqual(Object.keys(concrete.owner).toSorted(), ["authorization", "dispose", "rendering"]);
   assert.equal(concrete.control.materialAdmission?.admit(materialFor(fixture.selection)).kind, "admitted");
   const seed = allocations.slice(-2); concrete.owner.dispose(); seed.forEach(erased); assert.equal(connects, 0);
   const legacy = createPostgresCredentialRenderingOwner(pool, fixture.selection, fixture.acquisition);
