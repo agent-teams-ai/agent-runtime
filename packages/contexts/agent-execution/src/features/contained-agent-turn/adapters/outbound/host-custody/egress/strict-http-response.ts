@@ -1,6 +1,6 @@
 import type { HttpEgressConnection, HttpEgressLimits } from "./http-egress-contracts.js";
 import type { HttpEgressClock } from "./http-egress-ports.js";
-import { zeroHttpBytes } from "./http-byte-intrinsics.js";
+import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 
 const decoder = new TextDecoder("ascii", { fatal: true });
 const encoder = new TextEncoder();
@@ -115,10 +115,40 @@ class DeadlineByteReader {
     if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
   }
 
-  public async requireSourceEnd(deadline: number): Promise<void> {
+  private assertSourceObservation(deadline: number, signal: AbortSignal | undefined): void {
+    if (signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
+    const now = this.clock.now();
+    if (!Number.isSafeInteger(now) || now >= deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
+  }
+
+  public async requireSourceEnd(hostClosed: boolean): Promise<void> {
+    const deadline = hostClosed ? this.limits.closureDeadline : this.limits.deadline;
+    const signal = hostClosed ? undefined : this.signal;
     while (!this.ended) {
-      await this.pull(deadline);
-      if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
+      this.assertSourceObservation(deadline, signal);
+      let observed: Readonly<{done: boolean; size: number | undefined}>;
+      try {
+        observed = await this.clock.within(deadline, async () => {
+          const next = await this.iterator.next();
+          const size = intrinsicUint8ArrayLength(next.value);
+          // Retain only metadata. Even a source that resolves after the bounded
+          // wait has failed must erase its bytes without refilling this reader.
+          zeroHttpBytes(next.value);
+          return {done: next.done === true, size};
+        }, signal);
+      } catch {
+        throw new StrictHttpResponseError(signal?.aborted ? "cancelled" : "stalled", this.bytesRead, 0);
+      }
+      if (!observed.done && observed.size !== undefined) {
+        this.bytesRead = addObservedBytes(this.bytesRead, observed.size);
+      }
+      this.assertSourceObservation(deadline, signal);
+      if (observed.done) {this.ended = true; return;}
+      if (observed.size === undefined) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
+      if (observed.size > this.limits.maxBufferedBytes || this.bytesRead > this.limits.maxUpstreamWireBytes) {
+        throw new StrictHttpResponseError("oversized", this.bytesRead, 0);
+      }
+      if (observed.size !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
     }
   }
 
@@ -373,8 +403,12 @@ export const forwardStrictHttpResponse = async (
       await forwardFramedBody(reader, head, limits, emit);
       // The Host owns closure; the parser owns the final bounded source check.
       // Unknown closure is reconciled by the Host without waiting for peer EOF.
-      if (onFramedEnd === undefined || await onFramedEnd()) {
-        await reader.requireSourceEnd(onFramedEnd === undefined ? limits.deadline : limits.closureDeadline);
+      if (onFramedEnd === undefined) {
+        await reader.requireSourceEnd(false);
+      } else if (await onFramedEnd() === true) {
+        // Only positively acknowledged Host closure releases this observation
+        // from execution cancellation. Framing and every write stay fenced.
+        await reader.requireSourceEnd(true);
       }
     } catch (error) {
       if (!(error instanceof StrictHttpResponseError)) {

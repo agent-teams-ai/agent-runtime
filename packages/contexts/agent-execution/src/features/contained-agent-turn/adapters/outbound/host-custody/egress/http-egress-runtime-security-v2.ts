@@ -6,6 +6,8 @@ import type {
 import {validHostHttpGrant, validHostHttpProvisionalDecision} from "./http-egress-signed-proof-validation.js";
 import {normalizePublicAddress} from "./public-address-policy.js";
 
+const validTime = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
+
 // One execution owns this high-water mark, including final verification and both
 // sides of synchronous journal consumption. No caller wrapper identity or global
 // registry carries clock authority. Uncertainty is sticky until execution closes.
@@ -15,7 +17,7 @@ export const retainHttpEgressClock = (clock: HttpEgressClock): HttpEgressClock =
   return Object.freeze({
     now: () => {
       const now = clock.now();
-      uncertain ||= !Number.isSafeInteger(now) || now < 0 || now < latest;
+      uncertain ||= !validTime(now) || now < latest;
       if (uncertain) {return Number.NaN;}
       latest = now;
       return now;
@@ -52,8 +54,22 @@ const readCut = (ports: HttpEgressBrokerPorts) => {
   const status = descriptors.status?.value; const authorityId = descriptors.authorityId?.value;
   const epoch = descriptors.epoch?.value; const controlTime = descriptors.controlTime?.value;
   if ((status !== "current" && status !== "revoked" && status !== "unknown")
-    || typeof authorityId !== "string" || typeof epoch !== "string" || !Number.isSafeInteger(controlTime)) {return null;}
+    || typeof authorityId !== "string" || typeof epoch !== "string" || !validTime(controlTime)) {return null;}
   return Object.freeze({status, authorityId, epoch, controlTime});
+};
+
+// Time observation does not grant execution permission. Re-read local authority
+// after the closing clock sample, which may synchronously revoke execution.
+// All four fresh observations must be ordered in the same clock domain; the
+// final cut supplies the latest time for signed freshness and dispatch deadlines.
+const readBracketedCut = (ports: HttpEgressBrokerPorts) => {
+  const before = ports.clock.now(); const cut = readCut(ports); const now = ports.clock.now();
+  const final = readCut(ports);
+  return {cut: cut !== null && final !== null && validTime(before) && validTime(now)
+    && cut.status === "current" && final.status === "current"
+    && cut.authorityId === final.authorityId && cut.epoch === final.epoch
+    && before <= cut.controlTime && cut.controlTime <= now && now <= final.controlTime ? final : null,
+  now: final?.controlTime ?? Number.NaN};
 };
 
 const sameKey = (left: HostHttpSigningKey, right: HostHttpSigningKey): boolean =>
@@ -81,7 +97,7 @@ export const verifiedProvisional = (input: Readonly<{
   receipt: HostHttpMaterializationReceipt;
 }>): boolean => {
   const {decision, ports} = input;
-  const cut = readCut(ports); const now = ports.clock.now();
+  const {cut, now} = readBracketedCut(ports);
   return validHostHttpProvisionalDecision(decision)
     && decision.contractVersion === "provider-process-egress-provisional-decision/v2"
     && input.verifier.verifyProvisionalDecision(decision)
@@ -99,9 +115,9 @@ export const verifiedProvisional = (input: Readonly<{
     && decision.policy.origin.scheme === "https" && decision.policy.origin.hostname === ports.route.originHost
     && decision.policy.origin.port === ports.route.originPort && decision.policy.dnsIdentity === ports.route.originHost
     && cut !== null && cut.status === "current" && cut.authorityId === decision.time.authorityId && cut.epoch === decision.time.epoch
-    && cut.controlTime === now && Number.isSafeInteger(now) && now >= decision.time.controlTime
+    && now >= decision.time.controlTime
     && now < decision.time.expiresAtControlTime
-    && !decision.policy.revoked;
+    && !decision.policy.revoked && ports.guard.snapshot().state === "active";
 };
 
 // oxlint-disable-next-line complexity -- exact signed proof binding is intentionally one closed conjunction
@@ -148,7 +164,7 @@ export const verifiedGrant = (input: Readonly<{
     && payload.tls.dnsIdentity === input.tls.dnsIdentity
     && payload.tls.certificateDigest === input.tls.certificateDigest
     && payload.tls.tlsPolicyDigest === input.tls.tlsPolicyDigest && payload.tls.alpn === input.tls.alpn
-    && Number.isSafeInteger(now) && now >= payload.time.authorizedAtControlTime
+    && validTime(now) && now >= payload.time.authorizedAtControlTime
     && now < payload.time.expiresAtControlTime
     && grant.evidence.boundaryUseRef === input.boundaryUseId
     && grant.evidence.decisionDigest === input.provisional.decisionDigest
@@ -160,10 +176,9 @@ export const verifiedGrant = (input: Readonly<{
 
 export const dispatchGrantIsCurrent = (ports: HttpEgressBrokerPorts, grant: HostHttpGrant,
   deadline = grant.payload.time.expiresAtControlTime): boolean => {
-  const cut = readCut(ports);
-  const now = ports.clock.now();
+  const {cut, now} = readBracketedCut(ports);
   return cut !== null && cut.status === "current" && cut.authorityId === grant.payload.time.authorityId
-    && cut.epoch === grant.payload.time.epoch && cut.controlTime === now
-    && Number.isSafeInteger(now) && now >= grant.payload.time.authorizedAtControlTime
-    && now < grant.payload.time.expiresAtControlTime && now < deadline;
+    && cut.epoch === grant.payload.time.epoch && now >= grant.payload.time.authorizedAtControlTime
+    && now < grant.payload.time.expiresAtControlTime && now < deadline
+    && ports.guard.snapshot().state === "active";
 };
