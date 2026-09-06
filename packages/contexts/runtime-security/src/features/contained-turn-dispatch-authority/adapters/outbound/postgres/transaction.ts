@@ -1,5 +1,3 @@
-import { performance } from "node:perf_hooks";
-
 /** Borrowed pg-compatible pool. Each connect must lend one exclusive, idle client. */
 export interface DispatchPgClient {
   query(sql: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[];
@@ -16,6 +14,10 @@ export interface DispatchPgTransaction {
   query(sql: string, values?: unknown[]): ReturnType<DispatchPgClient["query"]>;
   assertOpen(): void;
 }
+
+const release = (connection: DispatchPgClient, discard: boolean) => {
+  try {connection.release(discard);} catch { /* Never expose driver diagnostics. */ }
+};
 
 const unavailable = () => new Error("dispatch PostgreSQL owner unavailable");
 
@@ -44,9 +46,6 @@ export const createDispatchPgTransactions = (pool: DispatchPgPool, options: Disp
       let discarded = false;
       let begun = false;
       let committing = false;
-      const release = (connection: DispatchPgClient, discard: boolean) => {
-        try {connection.release(discard);} catch { /* Never expose driver diagnostics. */ }
-      };
       const assertOpen = () => {
         if (closed || controller.signal.aborted || performance.now() >= expires) {throw unavailable();}
       };

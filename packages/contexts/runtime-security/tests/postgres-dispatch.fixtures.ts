@@ -12,15 +12,16 @@ type Result = { rows: Row[]; rowCount: number | null };
 type Table = "authority_heads" | "consume_requests" | "consumptions" | "settlement_requests";
 type Write = { table: Table; key: string; row: Row };
 export const deferred = <Value = void>() => {
-  let resolve!: (value: Value | PromiseLike<Value>) => void;
-  const promise = new Promise<Value>(done => {resolve = done;});
-  return { promise, resolve };
+  let complete!: (value: Value | PromiseLike<Value>) => void;
+  const promise = new Promise<Value>(resolve => {complete = resolve;});
+  return { promise, resolve: complete };
 };
 const result = (rows: Row[] = [], rowCount = rows.length): Result => ({ rows, rowCount });
-const jsonb = (value: unknown): string => {
-  const sort = (item: unknown): unknown => typeof item === "object" && item !== null && !Array.isArray(item)
-    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, sort(v)]))
+const sort = (item: unknown): unknown => typeof item === "object" && item !== null && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).toSorted(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, sort(v)]))
     : item;
+
+const jsonb = (value: unknown): string => {
   return JSON.stringify(sort(JSON.parse(value as string)));
 };
 
@@ -96,6 +97,15 @@ export class DispatchClient implements DispatchPgClient {
     return new Map([...this.db.tables[table], ...this.writes.filter(w => w.table === table)
       .map(w => [w.key, w.row] as const)]);
   }
+  private readConsumption(values: unknown[]): Result {
+      const c = this.rows("consumptions").get(String(values[0]));
+      if (c === undefined) {return result();}
+      const r = this.rows("consume_requests").get(String(c.request_key));
+      const s = [...this.rows("settlement_requests").values()].find(row =>
+        row.operation_key === c.operation_key && row.applies === true);
+      return result([{ ...c, consume_fact: r !== undefined && r.operation_key === c.operation_key ? r.fact : null,
+        settlement_key: s?.request_key ?? null, settlement_fact: s?.fact ?? null }]);
+  }
   private async execute(sql: string, values: unknown[]): Promise<Result> {
     assert.equal(this.released, false);
     if (sql.startsWith("BEGIN")) {assert.equal(this.begun, false); this.begun = true; return result();}
@@ -122,21 +132,16 @@ export class DispatchClient implements DispatchPgClient {
       return result([{ version }]);
     }
     assert.ok([...this.db.locks.values()].includes(this), "owner lock precedes reads and writes");
-    if (sql.startsWith("SELECT c.operation_key")) {
-      const c = this.rows("consumptions").get(String(values[0]));
-      if (c === undefined) {return result();}
-      const r = this.rows("consume_requests").get(String(c.request_key));
-      const s = [...this.rows("settlement_requests").values()].find(row =>
-        row.operation_key === c.operation_key && row.applies === true);
-      return result([{ ...c, consume_fact: r?.operation_key === c.operation_key ? r.fact : null,
-        settlement_key: s?.request_key ?? null, settlement_fact: s?.fact ?? null }]);
-    }
+    if (sql.startsWith("SELECT c.operation_key")) {return this.readConsumption(values);}
     const table = sql.match(/runtime_security_dispatch_v1\.(authority_heads|consume_requests|consumptions|settlement_requests)/u)?.[1] as Table;
     assert.ok(table, `unsupported synthetic SQL: ${sql}`);
     if (sql.startsWith("SELECT")) {
       const row = this.rows(table).get(String(values[0]));
       return result(row === undefined ? [] : [structuredClone(row)]);
     }
+    return this.writeRow(sql, values, table);
+  }
+  private writeRow(sql: string, values: unknown[], table: Table): Result {
     const key = String(values[0]);
     const current = this.rows(table).get(key);
     if (sql.startsWith("UPDATE")) {

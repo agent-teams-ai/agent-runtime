@@ -11,7 +11,7 @@ test("late acquisition is released once and never begins work", async () => {
   assert.equal(f.db.events.length, 0);
   assert.equal(f.db.clients[0]?.releaseCount, 0);
   acquired.resolve();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => {setImmediate(resolve);});
   assert.equal(f.db.clients[0]?.discarded, true);
   f.db.assertReleased();
 });
@@ -45,7 +45,7 @@ for (const [name, pattern] of [
     assert.equal(f.db.events.at(-1)?.sql, stage);
     assert.equal(f.db.tables.consumptions.size, 0);
     stalled.resolve();
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => {setImmediate(resolve);});
     f.db.assertReleased();
   });
 }
@@ -64,7 +64,7 @@ test("ROLLBACK has its own bounded wait and discards on timeout", async () => {
   assert.equal(f.db.clients.at(-1)?.discarded, true);
   assert.equal(f.db.tables.consume_requests.size, 0);
   stalled.resolve();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => {setImmediate(resolve);});
   f.db.assertReleased();
 });
 
@@ -153,7 +153,7 @@ for (const stage of ["acquire", "read", "commit"] as const) {
     await assert.rejects(f.repository.migrate());
     assert.equal(f.db.clients.length, calls);
     resume.resolve();
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => {setImmediate(resolve);});
     f.db.connectHook = undefined;
     f.db.hook = undefined;
     assert.equal((await createHarness(f.db).api.consumeForDispatch(input())).status, "consumed");
@@ -179,6 +179,6 @@ test("settlement write timeout cannot publish a settled result or change the rec
   assert.equal(f.db.tables.settlement_requests.size, 0);
   assert.equal([...f.db.tables.consumptions.values()][0]?.receipt, bytes);
   stalled.resolve();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => {setImmediate(resolve);});
   f.db.assertReleased();
 });

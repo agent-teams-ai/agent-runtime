@@ -36,7 +36,7 @@ test("durable CAS is independent of domain revision and survives replacement ins
     f.repository.replaceAuthority(authority({ constraintsDigest: "constraints-b" }), "1"),
     other.repository.replaceAuthority(authority({ constraintsDigest: "constraints-c" }), "1"),
   ]);
-  assert.deepEqual(outcomes.map(x => x.status).sort(), ["applied", "conflict"]);
+  assert.deepEqual(outcomes.map(x => x.status).toSorted(), ["applied", "conflict"]);
   const head = await other.repository.readAuthority(operation());
   assert.equal(head.headVersion, "2");
   assert.equal(head.authority?.authorityRevision, authority().authorityRevision);
@@ -87,7 +87,7 @@ test("two instances serialize absent/current identities before application callb
     assert.equal(snapshot.priorRequest?.outcome.status, "consumed");
     return { outcome: snapshot.priorRequest!.outcome };
   });
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => {setImmediate(resolve);});
   assert.equal(secondCallbacks, 0);
   release.resolve();
   const [a, b] = await Promise.all([first, second]);
@@ -103,7 +103,7 @@ test("concurrent grants consume once; replay preserves bytes after expiry, revok
   const other = createHarness(f.db);
   const requests = [input(), input({ grantRequestId: "grant-b" })];
   const outcomes = await Promise.all(requests.map((r, i) => (i ? other.api : f.api).consumeForDispatch(r)));
-  assert.deepEqual(outcomes.map(x => x.status).sort(), ["consumed", "prevented"]);
+  assert.deepEqual(outcomes.map(x => x.status).toSorted(), ["consumed", "prevented"]);
   const winner = outcomes.findIndex(x => x.status === "consumed");
   const consumed = outcomes[winner]!;
   assert.equal(consumed.status, "consumed");
@@ -144,7 +144,7 @@ for (const initial of ["absent", "current"] as const) {
     let controlled = false;
     const control = (initial === "current" ? f.repository.revokeAuthority(operation(), "1") :
       f.repository.replaceAuthority(authority(), "0")).then(value => {controlled = true; return value;});
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => {setImmediate(resolve);});
     assert.equal(controlled, false);
     release.resolve();
     assert.equal((await consuming).status, initial === "current" ? "consumed" : "not_found");
@@ -238,7 +238,7 @@ test("settlement requests preserve replay, digest conflict, not-found and monoto
     f.api.settleDispatchConsumption(request),
     other.api.settleDispatchConsumption({ ...request, settlementRequestId: "other", disposition: "abandoned_without_claim" }),
   ]);
-  assert.deepEqual(results.map(x => x.status).sort(), ["conflict", "settled"]);
+  assert.deepEqual(results.map(x => x.status).toSorted(), ["conflict", "settled"]);
   const won = results[0]!.status === "settled" ? request :
     { ...request, settlementRequestId: "other", disposition: "abandoned_without_claim" as const };
   const settled = await other.api.settleDispatchConsumption(won);

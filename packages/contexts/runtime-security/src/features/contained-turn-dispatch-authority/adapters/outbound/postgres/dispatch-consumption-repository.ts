@@ -54,24 +54,19 @@ const readHead = async (tx: Transaction, key: OperationKey): Promise<Head> => {
   return Object.freeze({ headVersion: currentVersion, authority });
 };
 
-export interface PostgresDispatchConsumptionRepository extends DispatchConsumptionRepository {
-  migrate(): Promise<void>;
-  readAuthority(key: OperationKey): Promise<Head>;
-  replaceAuthority(head: DispatchAuthorityHead, expectedHeadVersion: string): Promise<HeadChange>;
-  revokeAuthority(key: OperationKey, expectedHeadVersion: string): Promise<HeadChange>;
-  close(): void;
-}
+const assertPriorSettlement = (
+  prior: Awaited<ReturnType<ReturnType<typeof createRecordReaders>["readSettlement"]>>,
+  consumption: PersistedConsumption | undefined,
+) => {
+  if (prior?.outcome.status === "settled" && (consumption === undefined ||
+    !same(prior.outcome.receipt, consumption.settlement))) {invalid();}
+};
+const assertPendingSettlement = (settle: unknown, consumption: PersistedConsumption | undefined) => {
+  if (settle && (consumption === undefined || consumption.lifecycleState !== "consumed_pending" ||
+    consumption.settlement !== undefined)) {invalid();}
+};
 
-/** Private owner adapter. The caller supplies the SAME digest used by the RS factory.
- * Construction is inert. Migrate and head control are explicit trusted composition
- * actions. Version "0" means no head row; revoking absence persists a CAS tombstone.
- * All runtime calls use one RS-owned transaction; there are no automatic retries.
- */
-export const createPostgresDispatchConsumptionRepository = (options: DispatchPgDeadlines & {
-  readonly pool: DispatchPgPool; readonly digest: DispatchDigest;
-}): PostgresDispatchConsumptionRepository => {
-  const transactions = createDispatchPgTransactions(options.pool, options);
-  const digest = options.digest.digestCanonical.bind(options.digest);
+const createRecordReaders = (digest: DispatchDigest["digestCanonical"]) => {
   const readConsumption = async (tx: Transaction, key: OperationKey): Promise<PersistedConsumption | undefined> => {
     const row = oneOrNone((await tx.query(`SELECT c.operation_key, c.request_key, c.receipt::text,
       r.fact::text AS consume_fact, s.request_key AS settlement_key, s.fact::text AS settlement_fact
@@ -111,6 +106,28 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
       fields.applies !== (fact.outcome.status === "settled")) {return invalid();}
     return fact;
   };
+  return { readConsumption, readRequest, readSettlement };
+};
+
+export interface PostgresDispatchConsumptionRepository extends DispatchConsumptionRepository {
+  migrate(): Promise<void>;
+  readAuthority(key: OperationKey): Promise<Head>;
+  replaceAuthority(head: DispatchAuthorityHead, expectedHeadVersion: string): Promise<HeadChange>;
+  revokeAuthority(key: OperationKey, expectedHeadVersion: string): Promise<HeadChange>;
+  close(): void;
+}
+
+/** Private owner adapter. The caller supplies the SAME digest used by the RS factory.
+ * Construction is inert. Migrate and head control are explicit trusted composition
+ * actions. Version "0" means no head row; revoking absence persists a CAS tombstone.
+ * All runtime calls use one RS-owned transaction; there are no automatic retries.
+ */
+export const createPostgresDispatchConsumptionRepository = (options: DispatchPgDeadlines & {
+  readonly pool: DispatchPgPool; readonly digest: DispatchDigest;
+}): PostgresDispatchConsumptionRepository => {
+  const transactions = createDispatchPgTransactions(options.pool, options);
+  const digest = options.digest.digestCanonical.bind(options.digest);
+  const { readConsumption, readRequest, readSettlement } = createRecordReaders(digest);
   const changeHead = async (key: OperationKey, expected: string,
     replace?: DispatchAuthorityHead): Promise<HeadChange> => transactions.run(async tx => {
     await lock(tx, key);
@@ -214,8 +231,7 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
         const record = await readConsumption(tx, key);
         const consumption = record !== undefined && matchesGrant(record.receipt, key) &&
           record.receipt.consumptionDigest === key.consumptionDigest ? record : undefined;
-        if (priorRequest?.outcome.status === "settled" && (consumption === undefined ||
-          !same(priorRequest.outcome.receipt, consumption.settlement))) {return invalid();}
+        assertPriorSettlement(priorRequest, consumption);
         tx.assertOpen();
         const raw = decide(Object.freeze({ ...(priorRequest === undefined ? {} : { priorRequest }),
           ...(consumption === undefined ? {} : { consumption }) }));
@@ -230,8 +246,7 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
         const persistence = exact(fields.persist, ["settlementDigest", "settle"]);
         if (priorRequest !== undefined || (result.status !== "settled" && result.status !== "not_found") ||
           persistence.settle !== (result.status === "settled")) {return invalid();}
-        if (persistence.settle && (consumption === undefined ||
-          consumption.lifecycleState !== "consumed_pending" || consumption.settlement !== undefined)) {return invalid();}
+        assertPendingSettlement(persistence.settle, consumption);
         const fact = settlementFact({ ...key, settlementDigest: persistence.settlementDigest,
           outcome: result }, key, key.settlementRequestId);
         if (result.status === "settled" && result.receipt.consumptionDigest !== key.consumptionDigest) {return invalid();}
