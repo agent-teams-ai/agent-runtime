@@ -1,3 +1,11 @@
+import {
+  copyProviderIdentity,
+  isBoundedIdentity,
+  isTerminalTurnStatus,
+  MAX_OUTPUT_CHUNKS,
+  MAX_OUTPUT_TEXT_LENGTH,
+} from "./contained-turn-runtime-validation.js";
+
 type CancellationProof =
   | Readonly<{ kind: "contract_violation" }> | Readonly<{ kind: "not_found" }>
   | Readonly<{ kind: "nonterminal"; status: "accepted" | "reconcile_required" | "running" }>
@@ -28,11 +36,6 @@ type CancellationOutcomeSnapshot =
   | Readonly<{ kind: "snapshot"; status: unknown; turn: CancellationTurnSnapshot | undefined }>;
 
 const cancellationContractViolation = Object.freeze({ kind: "contract_violation" as const });
-const MAX_OWNER_IDENTITY_LENGTH = 512;
-const MAX_PROVIDER_IDENTITY_LENGTH = 128;
-const MAX_OUTPUT_CHUNKS = 10_000;
-const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
-
 const snapshotCancellationOutput = (
   value: unknown,
 ): readonly (CancellationOutputChunkSnapshot | undefined)[] | undefined => {
@@ -86,16 +89,6 @@ const snapshotCancellationOutcome = (rawOutcome: unknown): CancellationOutcomeSn
   }
 };
 
-const isBoundedOwnerIdentity = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
-  // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
-  value.isWellFormed() && !/\s/u.test(value) && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
-
-const isBoundedProviderIdentity = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
-  // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
-  value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
-
 type CancellationTurnStatus =
   | "accepted" | "cancelled" | "failed"
   | "reconcile_required" | "running" | "succeeded";
@@ -108,16 +101,16 @@ const validateCancellationTurn = (
     artifactManifestRef, commandId, effectId, operationId, output, provider, resultRef, revision,
     status,
   } = turn;
-  if (!isBoundedOwnerIdentity(operationId) || !isBoundedOwnerIdentity(commandId) ||
-    !isBoundedOwnerIdentity(effectId) || !isBoundedProviderIdentity(provider) || output === undefined ||
-    (artifactManifestRef !== undefined && !isBoundedOwnerIdentity(artifactManifestRef)) ||
-    (resultRef !== undefined && !isBoundedOwnerIdentity(resultRef)) ||
+  if (!isBoundedIdentity(operationId) || !isBoundedIdentity(commandId) ||
+    !isBoundedIdentity(effectId) || copyProviderIdentity(provider) === undefined || output === undefined ||
+    (artifactManifestRef !== undefined && !isBoundedIdentity(artifactManifestRef)) ||
+    (resultRef !== undefined && !isBoundedIdentity(resultRef)) ||
     typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0 ||
     (status !== "accepted" && status !== "cancelled" && status !== "failed" &&
       status !== "reconcile_required" && status !== "running" && status !== "succeeded")) {
     return;
   }
-  if ((status === "cancelled" || status === "failed" || status === "succeeded") &&
+  if (isTerminalTurnStatus(status) &&
     (artifactManifestRef === undefined || resultRef === undefined)) {
     return;
   }
@@ -157,7 +150,7 @@ export const snapshotCancellationProof = (
   if (turn.operationId !== expectedOperationId) {
     return Object.freeze({ kind: "operation_mismatch" });
   }
-  if (turn.status === "cancelled" || turn.status === "failed" || turn.status === "succeeded") {
+  if (isTerminalTurnStatus(turn.status)) {
     return Object.freeze({ kind: "terminal", status: turn.status });
   }
   return Object.freeze({ kind: "nonterminal", status: turn.status });

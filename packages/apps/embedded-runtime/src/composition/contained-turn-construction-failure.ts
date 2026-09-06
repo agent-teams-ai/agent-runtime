@@ -27,6 +27,8 @@ export const disposeAfterContainedTurnConstructionFailure = (
   try {
     dispose();
   } catch {
+    // Both failures are untrusted and may contain credentials or provider paths.
+    // Keep the fixed cleanup-stage diagnostic; do not retain raw cause or stack.
     throw new ContainedTurnConstructionCleanupError();
   }
   throw primary;

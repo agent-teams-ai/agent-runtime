@@ -20,6 +20,9 @@ import {
 import { unwrapContainedTurnAuthorityOutcome, type AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
 import { copyContainedTurnAccessAuthority, type ContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
 
+// Bounds the caller wait only; expiry proves neither call settlement nor termination.
+const HOST_DISPOSAL_WAIT_DEADLINE_MS = 1_000;
+
 export type AgentRuntimeHostDisposalStatus =
   | "disposal_incomplete"
   | "termination_unproven";
@@ -155,6 +158,9 @@ class ContainedTurnOwnershipLedger {
   readonly #cancellations = new Map<string, Promise<unknown>>();
   readonly #containedTurn: AuthorityBoundContainedTurnCapability | undefined;
   readonly #executeCall: HostCallLedger["execute"];
+  // Retained for the Host lifetime, including terminal operations: eviction would
+  // permit operation identity reuse. Like submission identitiesByCommand, this
+  // anti-aliasing history is intentionally unbounded; a cap needs admission policy.
   readonly #owners = new Map<string, object>();
 
   public constructor(
@@ -354,7 +360,7 @@ class HostDisposalOrchestrator {
   };
 
   readonly #rejectAtDeadline = async (): Promise<never> => {
-    await delay(1_000, null, { ref: false });
+    await delay(HOST_DISPOSAL_WAIT_DEADLINE_MS, null, { ref: false });
     const { containedTurns, omittedContainedTurnCount } = this.#containedTurns.diagnostics();
     throw new AgentRuntimeHostDisposalIncompleteError(
       this.#calls.activeCount,

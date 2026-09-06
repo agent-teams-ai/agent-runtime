@@ -78,3 +78,35 @@ test("disposal cancels with the immutable registered authority and retains nonte
   });
   assert.equal(cancellations, 1);
 });
+
+test("reserved authority in cancellation terminal proof cannot release operation ownership", async () => {
+  const scope = authority();
+  let cancellations = 0;
+  const capability: AuthorityBoundContainedTurnCapability = {
+    authorityRevision: scope.authorityRevision,
+    cancel: { async execute(input) {
+      cancellations += 1;
+      return { authority: input.authority, outcome: {
+        status: "observed",
+        turn: {
+          operationId: "operation", commandId: "command", effectId: "effect",
+          provider: "provider", revision: 1, output: [], status: "cancelled",
+          artifactManifestRef: "artifact", resultRef: scope.authorityRevision,
+        },
+      } };
+    } },
+    observe: { async execute() { assert.fail("unexpected observation"); } },
+    submit: { async execute() { assert.fail("unexpected submission"); } },
+  };
+  const lifecycle = createAgentRuntimeHostDisposalLifecycle(capability);
+  lifecycle.registerContainedTurn({ operationId: "operation", scope }, {});
+  const disposal = lifecycle.dispose();
+  await assert.rejects(disposal, error => {
+    assert.ok(error instanceof AgentRuntimeHostDisposalIncompleteError);
+    assert.equal(error.status, "termination_unproven");
+    assert.deepEqual(error.containedTurns, [{ operationId: "operation", status: "contract_violation" }]);
+    return true;
+  });
+  assert.equal(lifecycle.dispose(), disposal);
+  assert.equal(cancellations, 1);
+});

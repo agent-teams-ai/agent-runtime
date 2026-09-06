@@ -40,6 +40,8 @@ export const composeHostCustodiedAgentRuntimeHost = (
     return disposeAfterContainedTurnConstructionFailure(error, containedTurn.dispose);
   }
   const dispose = async (): Promise<void> => {
+    // Owner disposal can clear custody records; call settlement alone does not
+    // prove that releasing them is safe. Preserve ownership on failed shutdown.
     await host.dispose();
     if (!ownerDisposed) {
       containedTurn.dispose();

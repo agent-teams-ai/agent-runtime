@@ -26,8 +26,8 @@ const MAX_PROVIDER_IDENTITY_LENGTH = 128;
 const MAX_COMMAND_ID_LENGTH = 256;
 const MAX_PROMPT_BYTES = 65_536;
 const MAX_OWNER_IDENTITY_LENGTH = 512;
-const MAX_OUTPUT_CHUNKS = 10_000;
-const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
+export const MAX_OUTPUT_CHUNKS = 10_000;
+export const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
 
 export const isBoundedIdentity = (value: unknown): value is string =>
   typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
@@ -42,7 +42,7 @@ export const contractViolation = (
   code: ConstructorParameters<typeof ContainedTurnOwnerContractError>[0],
 ): never => {throw new ContainedTurnOwnerContractError(code);};
 
-const copyProviderIdentity = (value: unknown): string | undefined =>
+export const copyProviderIdentity = (value: unknown): string | undefined =>
   typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
     // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
     value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
@@ -161,7 +161,9 @@ const snapshotOwnerObservationOutcome = (
   }
 };
 
-export const isTerminalTurnStatus = (status: OwnerTurnObservation["status"]): boolean =>
+export const isTerminalTurnStatus = (
+  status: OwnerTurnObservation["status"],
+): status is "cancelled" | "failed" | "succeeded" =>
   status === "cancelled" || status === "failed" || status === "succeeded";
 
 // oxlint-disable-next-line complexity -- this anti-corruption boundary validates every detached DTO field.
