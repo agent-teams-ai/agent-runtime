@@ -62,11 +62,12 @@ const preparedFixture = async (address = "172.30.0.1") => {
   await journal.prepare(`command:${v4Hash("open-composition")}`);
   const physical = {opens: 0, seals: 0, closes: 0, consumption: 0, firstWrites: 0, sealed: false};
   const listener = {
+    observe() {throw new Error("synthetic recipe supplies no physical observation");},
     async open() {
       physical.opens += 1;
       assert.equal(v4Replay(v4Decode(storage.journal!), network.subject).listener.phase, 1);
       return {address: {address, family: "IPv4", port: 43129}, sealAdmission: listener.sealAdmission,
-        close: listener.close};
+        close: listener.close, observe: listener.observe};
     },
     sealAdmission() {physical.seals += 1; physical.sealed = true;},
     async close() {physical.closes += 1; return {state: "closed"};},

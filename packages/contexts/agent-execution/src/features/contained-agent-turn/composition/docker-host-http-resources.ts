@@ -64,7 +64,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
         resources = data(resources);
         const recipe = data(resources.listener);
         const listener = Object.freeze({open: recipe.open.bind(resources.listener), close: recipe.close.bind(resources.listener),
-          sealAdmission: recipe.sealAdmission.bind(resources.listener)});
+          sealAdmission: recipe.sealAdmission.bind(resources.listener), observe: recipe.observe.bind(resources.listener)});
         sealListener = listener.sealAdmission;
         const consumption = data(resources.consumption);
         const localCut = data(resources.localCut);
