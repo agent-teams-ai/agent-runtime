@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync, readSync, realpathSync } from "node:fs";
 import { basename, dirname, resolve as resolvePath } from "node:path";
 import type { Readable, Writable } from "node:stream";
@@ -13,6 +13,7 @@ import {
   type DockerCustodyHostSignal,
   type DockerCustodyIdentity,
   type DockerCustodyInitMessage,
+  type DockerCustodyProviderInstanceFacts,
 } from "./docker-custody-init-protocol.js";
 import {
   DockerCustodyInitRuntime,
@@ -30,6 +31,7 @@ interface ProviderGeneration {
   readonly child: ChildProcessWithoutNullStreams;
   exit: DockerCustodyProviderRootExit | null;
   exitReported: boolean;
+  instance: DockerCustodyProviderInstanceFacts | null;
   readonly root: DockerCustodyProviderRootHandle;
   readonly stderr: DockerCustodyProviderOutputHandle;
   readonly stdout: DockerCustodyProviderOutputHandle;
@@ -150,6 +152,7 @@ const childSignal = (signal: NodeJS.Signals | null): DockerCustodyChildSignal | 
 
 class NodeInitSyscalls implements DockerCustodyInitSyscalls {
   #generation: ProviderGeneration | undefined;
+  readonly #initInstanceId = randomBytes(32).toString("hex");
   readonly #identity: DockerCustodyIdentity;
   readonly #observeTopology: () => DockerCustodyTopologyFacts;
   readonly #observeRestrictedIdentity: () => {readonly gid: number; readonly uid: number};
@@ -187,7 +190,16 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     try {child = this.#spawnProcess({...specification, executablePath: executable.descriptorPath});}
     catch {executable.close(); return {kind: "not-started"};}
     let notStarted = false;
-    const spawned = (): void => {executable.close();};
+    const spawned = (): void => {
+      executable.close();
+      const retained = this.#generation;
+      // Only this retained ChildProcess's native spawn event issues an identity. Late/error events cannot.
+      if (retained === undefined || retained.child !== child || retained.exit !== null || notStarted ||
+        child.pid === undefined || retained.instance !== null) {return;}
+      retained.instance = Object.freeze({childInstanceId: randomBytes(32).toString("hex"),
+        executableSha256: specification.executableSha256, initInstanceId: this.#initInstanceId, pid: child.pid});
+      this.runtime?.tick();
+    };
     const spawnError = (): void => {
       child.removeListener("spawn", spawned); executable.close(); if (!notStarted) {this.runtime?.failInit();}
     };
@@ -195,13 +207,14 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     child.once("spawn", spawned);
     if (child.pid === undefined) {notStarted = true; executable.close(); return {kind: "not-started"};}
     const generation: ProviderGeneration = {
-      child, exit: null, exitReported: false,
+      child, exit: null, exitReported: false, instance: null,
       root: Object.freeze({}) as DockerCustodyProviderRootHandle,
       stderr: Object.freeze({}) as DockerCustodyProviderOutputHandle,
       stdout: Object.freeze({}) as DockerCustodyProviderOutputHandle,
     };
     this.#generation = generation;
     child.once("exit", (exitCode, signal) => {
+      child.removeListener("spawn", spawned); executable.close();
       child.removeListener("error", spawnError);
       try {generation.exit = Object.freeze({exitCode, signal: childSignal(signal)});} catch {this.runtime?.failInit();}
     });
@@ -251,6 +264,10 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
   }
   public closeProviderInput(): void {this.#generation?.child.stdin.end();}
 
+  public observeProviderInstance(handle: DockerCustodyProviderRootHandle): DockerCustodyProviderInstanceFacts | null {
+    const generation = this.#generation;
+    return generation !== undefined && handle === generation.root ? generation.instance : null;
+  }
   public observeProviderRootExit(handle: DockerCustodyProviderRootHandle): DockerCustodyProviderRootExit | null {
     const generation = this.#generation;
     if (generation === undefined || handle !== generation.root || generation.exit === null || generation.exitReported) {return null;}

@@ -34,6 +34,7 @@ class DockerProviderProcess {
   #session: DockerContainedTurnInitSession | undefined;
   #failure: Error | undefined;
   #completion: DockerCustodyInitHostResult | undefined;
+  #inputClosed = false;
   #write: Promise<void> | undefined;
   #close: Promise<void> | undefined;
   #interruptWrite: (() => void) | undefined;
@@ -78,7 +79,7 @@ class DockerProviderProcess {
 
   public write(bytes: Uint8Array): Promise<void> {
     if (this.#failure !== undefined) {return Promise.reject(this.#failure);}
-    if (this.#close !== undefined || this.#completion !== undefined) {
+    if (this.#inputClosed || this.#close !== undefined || this.#completion !== undefined) {
       return Promise.reject(new DockerProviderProcessIoError("input-closed", {kind: "closed", committedBytes: 0}));
     }
     if (this.#write !== undefined) {return Promise.reject(new DockerProviderProcessIoError("write-in-progress"));}
@@ -104,7 +105,7 @@ class DockerProviderProcess {
     // ambiguous close remains rejected forever; subsequent calls never retry.
     this.#close ??= Promise.resolve(this.#write).then(() => {
       if (this.#failure !== undefined) {throw this.#failure;}
-      if (this.#completion !== undefined) {
+      if (this.#inputClosed || this.#completion !== undefined) {
         throw new DockerProviderProcessIoError("input-closed", {kind: "closed", committedBytes: 0});
       }
       return this.writeOnce(() => this.#session!.closeProviderInput(), 0);
@@ -114,12 +115,19 @@ class DockerProviderProcess {
 
   private async writeOnce(write: () => Promise<DockerCustodyInitHostWriteResult>, bytes: number, committedPrefix = 0): Promise<void> {
     const interrupted = Promise.withResolvers<DockerCustodyInitHostWriteResult>();
+    let admissionRejection: DockerProviderProcessIoError | undefined;
     // One fixed pending-write slot, not one retained completion reaction per write.
     this.#interruptWrite = () => interrupted.resolve({kind: "unknown", committedBytes: "unknown"});
     try {
       // Completion/abort cannot prove zero bytes for a pending channel write.
       const result = await Promise.race([write(), interrupted.promise]);
-      if (result.kind !== "committed" || result.committedBytes !== bytes) {
+      if (result.kind === "closed" && result.committedBytes === 0 && committedPrefix === 0 && this.#failure === undefined) {
+        // Admission rejected this entire logical operation before any bytes or
+        // EOF committed. Seal input without cancelling the sole output reader:
+        // the Host still owns physical stop, final observations and cleanup.
+        this.#inputClosed = true;
+        admissionRejection = new DockerProviderProcessIoError("input-write-unacknowledged", result);
+      } else if (result.kind !== "committed" || result.committedBytes !== bytes) {
         throw new DockerProviderProcessIoError("input-write-unacknowledged", committedPrefix === 0
           ? result : {kind: "unknown", committedBytes: "unknown"});
       }
@@ -130,6 +138,9 @@ class DockerProviderProcess {
       this.fail(error instanceof Error ? error : new DockerProviderProcessIoError("input-write-failed"));
       throw error;
     } finally {this.#interruptWrite = undefined;}
+    // Expected zero-effect rejection remains an honest method failure, outside
+    // the fatal IO path. Unknown results and committed prefixes still fail above.
+    if (admissionRejection !== undefined) {throw admissionRejection;}
   }
 }
 
@@ -150,6 +161,7 @@ export const createDockerProviderProcessBridge = () => Object.freeze({
       authority: Object.freeze({...options.authority,
       expectedIdentity: Object.freeze({...options.authority.expectedIdentity})}),
       isCurrentGeneration: options.isCurrentGeneration.bind(options),
+      ...(options.isObservationActive === undefined ? {} : {isObservationActive: options.isObservationActive.bind(options)}),
       ...(options.monotonicNow === undefined ? {} : {monotonicNow: options.monotonicNow.bind(options)})});
     if (!sameDockerAuthority(expected.authority, issued.authority) || expected.custodyRef !== issued.custodyRef ||
         expected.workspaceAuthorityPath !== issued.workspaceAuthorityPath || expected.generation !== init.authority.generation) {

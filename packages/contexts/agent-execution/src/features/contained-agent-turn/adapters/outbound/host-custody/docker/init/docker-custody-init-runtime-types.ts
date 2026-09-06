@@ -5,6 +5,7 @@ import type {
   DockerCustodyInitClosureSubresult,
   DockerCustodyInitMessage,
   DockerCustodyProviderObservation,
+  DockerCustodyProviderInstanceFacts,
   DockerCustodySignalObservation,
 } from "./docker-custody-init-protocol.js";
 
@@ -29,6 +30,8 @@ export interface DockerCustodyInitSyscalls {
   readonly closeProviderInput: () => void;
   readonly monotonicNowMs: () => number;
   readonly observeProviderRootExit: (handle: DockerCustodyProviderRootHandle) => DockerCustodyProviderRootExit | null;
+  /** Absent/null means no driver-observed spawn, never proof inferred from an acknowledgement or PID. */
+  readonly observeProviderInstance?: (handle: DockerCustodyProviderRootHandle) => DockerCustodyProviderInstanceFacts | null;
   readonly observeIdentity: () => DockerCustodyIdentity;
   readonly signalProviderRoot: (handle: DockerCustodyProviderRootHandle, signal: DockerCustodyHostSignal | "SIGKILL") => "absent" | "sent";
   readonly spawnProvider: (spawn: DockerCustodyProviderSpawn) =>

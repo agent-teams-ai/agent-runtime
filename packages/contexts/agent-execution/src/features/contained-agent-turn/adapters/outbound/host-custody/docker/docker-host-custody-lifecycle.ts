@@ -1,17 +1,10 @@
+import {DockerLifecycleObservations, createDockerLifecycleJournal, type DockerLifecycleObservation} from "./docker-lifecycle-observations.js";
+import {createDockerProviderProcessLaunchIssuer, type LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
 import {DockerContainedTurnHostCustody, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
 import type {DockerCustodyInitHostExec} from "./init/docker-custody-init-host-session.js";
 import { createDockerRemovalObservationOwner, type DockerHostCustodyContainmentInput } from "./docker-removal-observation-owner.js";
-import type {
-  DockerContainerAuthority,
-  DockerContainerObservation,
-  DockerEngineCall,
-  DockerEnginePort,
-} from "./engine/docker-engine-port.js";
-import {
-  DockerCustodyJournal,
-  type DockerCustodyJournalRecoveryReader,
-  type DockerCustodyJournalWriter,
-} from "./journal/docker-custody-journal.js";
+import type {DockerContainerAuthority, DockerContainerObservation, DockerEngineCall, DockerEnginePort} from "./engine/docker-engine-port.js";
+import type {DockerCustodyJournalRecoveryReader, DockerCustodyJournalWriter} from "./journal/docker-custody-journal.js";
 import { dockerCustodyAttemptLocator, dockerCustodyAuthoritySha256 } from "./journal/docker-custody-journal-codec.js";
 import {
   DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS,
@@ -39,8 +32,7 @@ import type {
   DockerCustodyRecoveryObservation,
 } from "./journal/docker-custody-journal-types.js";
 
-export interface DockerHostCustodyJournalPort
-  extends DockerCustodyJournalWriter, DockerCustodyJournalRecoveryReader {}
+export interface DockerHostCustodyJournalPort extends DockerCustodyJournalWriter, DockerCustodyJournalRecoveryReader {}
 
 export interface DockerHostCustodyResiduePort {
   proveEmpty(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<"empty" | "residue" | "unknown">;
@@ -90,36 +82,11 @@ export type DockerHostCustodyContainment =
       reason: "authority_mismatch" | "authority_unavailable";
     }>;
 
+const launchIssuer = createDockerProviderProcessLaunchIssuer();
+export const claimDockerProviderProcessLaunch = launchIssuer.claim;
+export const dockerProviderProcessMountFacts = launchIssuer.mountFacts;
+
 const proved = Object.freeze({ status: "proved" as const });
-
-type LaunchedDockerCustody = Awaited<ReturnType<DockerHostCustodyLifecycle["launch"]>>;
-interface ProviderProcessLaunch {
-  readonly authority: DockerContainerAuthority;
-  readonly custodyRef: string;
-  readonly workspaceAuthorityPath: string;
-  readonly mountFacts: Readonly<{workspaceSource: string; privateRootSource: string; imageDigest: string}>;
-  openInitSession(options: DockerContainedTurnInitOptions): DockerContainedTurnInitSession;
-  execute(exec: DockerCustodyInitHostExec, call: DockerEngineCall): Promise<DockerCustodyJournalRecord>;
-}
-// Only successful actual launches issue this capability. It is neither a brand
-// constructor nor a second resource registry: the lifecycle retains the session.
-const providerProcessLaunches = new WeakMap<LaunchedDockerCustody, ProviderProcessLaunch>();
-
-/** Read-only mount facts of an unused actual launch; this does not consume IO custody. */
-export const dockerProviderProcessMountFacts = (launch: LaunchedDockerCustody) => {
-  const issued = providerProcessLaunches.get(launch);
-  if (issued === undefined) {throw new TypeError("Docker mount projection requires an unused actual launch");}
-  return issued.mountFacts;
-};
-
-/** Docker-private one-use transfer; never exported through the composition entrypoint. */
-export const claimDockerProviderProcessLaunch = (launch: LaunchedDockerCustody): ProviderProcessLaunch => {
-  const issued = providerProcessLaunches.get(launch);
-  if (issued === undefined) {throw new TypeError("Docker provider process requires an unused actual lifecycle launch");}
-  providerProcessLaunches.delete(launch);
-  return issued;
-};
-
 const journalUnavailable = (error: unknown): boolean =>
   error instanceof DockerCustodyJournalUnavailableError || error instanceof DockerCustodyJournalCorruptionError;
 
@@ -129,6 +96,8 @@ export class DockerHostCustodyLifecycle {
   /** Volatile exact binding permits safe cleanup after same-instance journal loss, but is not restart authority. */
   private readonly liveAuthorityBindings = new Map<string, string>();
   private readonly liveLaunches = new Map<string, DockerContainedTurnHostCustody>();
+  readonly #observations = new DockerLifecycleObservations();
+  private readonly journal: DockerHostCustodyJournalPort;
   /** One-use fences outlive zero-effect volatile capacity release. Journal capacity is separate. */
   private readonly failedBeforeCreate = new Set<string>();
 
@@ -140,11 +109,19 @@ export class DockerHostCustodyLifecycle {
 
   public constructor(
     private readonly engine: DockerEnginePort,
-    private readonly journal: DockerHostCustodyJournalPort,
+    journal: DockerHostCustodyJournalPort,
     private readonly residue: DockerHostCustodyResiduePort,
     private readonly maxLiveAuthorityBindings = DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS.maxJournalFiles,
   ) {
+    this.journal = this.#observations.journal(journal);
     this.removalObservation = createDockerRemovalObservationOwner(engine, this.contain.bind(this));
+  }
+
+  /** Historical Host-readable evidence; possession never supplies new execution authority. */
+  public observeLaunch(launch: LaunchedDockerCustody): DockerLifecycleObservation {return this.#observations.read(launch);}
+
+  private async inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation> {
+    return this.#observations.engine(authority, await this.engine.inspect(authority, call));
   }
 
   private holdAuthority(key: DockerCustodyAttemptKey, authority: DockerContainerAuthority): string {
@@ -213,9 +190,9 @@ export class DockerHostCustodyLifecycle {
       this.assertLaunchOpen(key, input.call);
       live.retain(authority, await this.engine.attachCustody(authority, input.call));
       this.assertLaunchOpen(key, input.call);
-      await this.engine.start(authority, input.call);
+      await this.engine.start(authority, live.startCall(input.call));
       this.assertLaunchOpen(key, input.call);
-      const observation = await this.engine.inspect(authority, input.call);
+      const observation = await this.inspect(authority, input.call);
       this.assertLaunchOpen(key, input.call);
       const journal = await this.journal.observe({
         key,
@@ -233,12 +210,13 @@ export class DockerHostCustodyLifecycle {
       const launched = Object.freeze({ authority, journal, key, kind: "launched" as const,
         openInitSession: (options: DockerContainedTurnInitOptions) => live.openInitSession(options, input.call),
       });
-      providerProcessLaunches.set(launched, Object.freeze({authority, custodyRef: key.custodyId,
+      this.#observations.issue(launched, launched, live, observation);
+      launchIssuer.issue(launched, {authority, custodyRef: key.custodyId,
         mountFacts: Object.freeze({workspaceSource: create.workspaceSource,
           privateRootSource: create.privateRootSource, imageDigest: authority.imageDigest}),
         workspaceAuthorityPath: create.workspaceSource, openInitSession: launched.openInitSession,
         execute: (exec: DockerCustodyInitHostExec, call: DockerEngineCall) => executeProvider({authority, call, exec, key}),
-      }));
+      }, () => live.assertOpen(input.call));
       return launched;
     } catch (error) {
       if (!createInvoked) {
@@ -267,19 +245,18 @@ export class DockerHostCustodyLifecycle {
       throw new TypeError("Docker Host Custody provider execution requires exact created authority");
     }
     if (current.state !== "init_ready" || current.evidence.status !== "proved" ||
-        !isRunningDockerObservation(await this.engine.inspect(input.authority, input.call))) {
+        !isRunningDockerObservation(await this.inspect(input.authority, input.call))) {
       throw new TypeError("Docker Host Custody provider execution requires exact live init authority");
     }
     this.assertLaunchOpen(input.key, input.call);
     const requested = await this.journal.beforeAction({
-      key: input.key,
-      expectedSequence: current.sequence,
+      key: input.key, expectedSequence: current.sequence,
       state: "provider_exec_requested",
     });
     let evidence: DockerCustodyJournalEvidence;
     try {
       this.assertLaunchOpen(input.key, input.call);
-      const observation = await this.engine.inspect(input.authority, input.call);
+      const observation = await this.inspect(input.authority, input.call);
       this.assertLaunchOpen(input.key, input.call);
       if (!isRunningDockerObservation(observation)) {throw new TypeError("Docker init identity is no longer live");}
       const start = await live.execute(input.exec);
@@ -300,32 +277,42 @@ export class DockerHostCustodyLifecycle {
 
   public async contain(input: DockerHostCustodyContainmentInput): Promise<DockerHostCustodyContainment> {
     assertDockerAuthorityBinding(input.key, input.authority);
-    // Seal before the first await; a delayed exec-intent acknowledgement cannot reopen it.
-    const live = this.liveLaunches.get(dockerCustodyAttemptLocator(input.key));
-    if (live !== undefined && (live.owns(input.authority) || this.authorityMatch(input.key, input.authority) === "match")) {
-      void live.close();
-    }
-    for (let transition = 0; transition < 16; transition += 1) {
-      let current: DockerCustodyJournalRecord;
-      try {current = await this.journal.lookup(input.key);} catch (error) {
+    const candidate = this.liveLaunches.get(dockerCustodyAttemptLocator(input.key));
+    const live = candidate !== undefined && (candidate.owns(input.authority) || this.authorityMatch(input.key, input.authority) === "match")
+      ? candidate : undefined;
+    // Seal before the first await, preserving the sole reader through physical stop.
+    live?.cutOffAdmission();
+    let result: DockerHostCustodyContainment;
+    let cleaned = true;
+    try {
+      try {result = await this.containJournalled(input, live);} catch (error) {
         if (!journalUnavailable(error)) {throw error;}
         const match = this.authorityMatch(input.key, input.authority);
-        if (match !== "match") {return this.authorityIndeterminate(input.authority, match);}
-        return Object.freeze({
-          authority: input.authority,
-          containment: await this.containWithoutJournal(input.authority, input.call),
-          kind: "indeterminate" as const,
-          reason: "journal_unavailable" as const,
+        result = match !== "match" ? this.authorityIndeterminate(input.authority, match) : Object.freeze({
+          authority: input.authority, containment: await this.containWithoutJournal(input.authority, input.call, live),
+          kind: "indeterminate", reason: "journal_unavailable",
         });
       }
+    } finally {
+      // Faults and indeterminate physical results must also retain and join attachment cleanup.
+      if (live !== undefined) {await live.drainWithin(input.call); cleaned = await live.closeWithin(input.call);}
+    }
+    if (!cleaned && result.kind === "closed") {return Object.freeze({journal: result.journal, kind: "indeterminate", reason: "containment_unproven"});}
+    if (!cleaned && result.kind === "indeterminate" && result.reason === "journal_unavailable") {
+      return Object.freeze({...result, containment: "indeterminate"});
+    }
+    return result;
+  }
+
+  private async containJournalled(input: DockerHostCustodyContainmentInput, live?: DockerContainedTurnHostCustody): Promise<DockerHostCustodyContainment> {
+    for (let transition = 0; transition < 16; transition += 1) {
+      const current = await this.journal.lookup(input.key);
       const match = this.authorityMatch(input.key, input.authority, current);
       if (match !== "match") {return this.authorityIndeterminate(input.authority, match);}
       try {
+        if (current.state === "remove_requested") {await live?.drainWithin(input.call);}
         const result = await this.advanceContainment(input, current);
-        if (result !== null) {
-          return result.kind === "closed" && live !== undefined && !await live.closeWithin(input.call)
-            ? Object.freeze({journal: result.journal, kind: "indeterminate", reason: "containment_unproven"}) : result;
-        }
+        if (result !== null) {return result;}
       } catch (error) {
         if (error instanceof DockerCustodyJournalConflictError) {continue;}
         throw error;
@@ -380,8 +367,7 @@ export class DockerHostCustodyLifecycle {
         return null;
       case "empty_observed":
         await this.journal.beforeAction({
-          key: input.key,
-          expectedSequence: current.sequence,
+          key: input.key, expectedSequence: current.sequence,
           state: current.evidence.status === "proved" ? "remove_requested" : "contain_requested",
         });
         return null;
@@ -408,7 +394,7 @@ export class DockerHostCustodyLifecycle {
     current: DockerCustodyJournalRecord,
   ): Promise<DockerHostCustodyContainment | null> {
     let observation: DockerContainerObservation;
-    try {observation = await this.engine.inspect(input.authority, input.call);} catch {
+    try {observation = await this.inspect(input.authority, input.call);} catch {
       return Object.freeze({ journal: current, kind: "indeterminate" as const, reason: "containment_unproven" as const });
     }
     if (observation.existence === "present") {
@@ -419,6 +405,7 @@ export class DockerHostCustodyLifecycle {
       return null;
     }
     const empty = await this.residue.proveEmpty(input.authority, input.call).catch(() => "unknown" as const);
+    this.#observations.empty(input.authority, empty);
     if (empty !== "empty") {return Object.freeze({ journal: current, kind: "indeterminate" as const, reason: "containment_unproven" as const });}
     const closed = await this.journal.observe({
       key: input.key, expectedSequence: current.sequence, state: "closed", evidence: proved,
@@ -432,8 +419,7 @@ export class DockerHostCustodyLifecycle {
   ): Promise<DockerHostCustodyContainment | null> {
     const contained = await this.observeEmpty(input.authority, input.call);
     const emptyRecord = await this.journal.observe({
-      key: input.key,
-      expectedSequence: current.sequence,
+      key: input.key, expectedSequence: current.sequence,
       state: "empty_observed",
       evidence: contained === "empty"
         ? proved
@@ -450,8 +436,7 @@ export class DockerHostCustodyLifecycle {
   ): Promise<DockerHostCustodyContainment | null> {
     const removalProved = await this.observeRemoved(input.authority, input.call);
     const removedRecord = await this.journal.observe({
-      key: input.key,
-      expectedSequence: current.sequence,
+      key: input.key, expectedSequence: current.sequence,
       state: "removed_observed",
       evidence: removalProved ? proved : { status: "unproven", reason: "removal_unproven" },
     });
@@ -460,27 +445,28 @@ export class DockerHostCustodyLifecycle {
       : Object.freeze({ journal: removedRecord, kind: "indeterminate" as const, reason: "containment_unproven" as const });
   }
 
-  private async observeEmpty(
-    authority: DockerContainerAuthority,
-    call: DockerEngineCall,
+  private async observeEmpty(authority: DockerContainerAuthority, call: DockerEngineCall,
   ): Promise<"empty" | "residue" | "unknown"> {
-    let observation = await this.engine.inspect(authority, call).catch(() => null);
+    let observation = await this.inspect(authority, call).catch(() => null);
     if (observation?.existence === "present" && observation.state.running) {
       try {await this.engine.stop(authority, call);} catch {
         try {await this.engine.kill(authority, call);} catch {}
       }
-      observation = await this.engine.inspect(authority, call).catch(() => null);
+      observation = await this.inspect(authority, call).catch(() => null);
     }
     if (observation === null || !isInactiveDockerObservation(observation)) {return "unknown";}
-    return this.residue.proveEmpty(authority, call).catch(() => "unknown" as const);
+    const empty = await this.residue.proveEmpty(authority, call).catch(() => "unknown" as const);
+    this.#observations.empty(authority, empty);
+    return empty;
   }
 
   private async observeRemoved(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<boolean> {
-    let observation = await this.engine.inspect(authority, call).catch(() => null);
+    let observation = await this.inspect(authority, call).catch(() => null);
     if (observation?.existence === "present") {
       try {await this.engine.remove(authority, call);} catch {}
-      observation = await this.engine.inspect(authority, call).catch(() => null);
+      observation = await this.inspect(authority, call).catch(() => null);
     }
+    this.#observations.removed(observation);
     return observation?.existence === "absent";
   }
 
@@ -497,7 +483,7 @@ export class DockerHostCustodyLifecycle {
       try {canonical = await this.engine.reconcileCreate(create, resolved.call);} catch {
         if (this.authorityMatch(key, resolved.authority, journal) !== "match") {return undefined;}
         try {
-          return (await this.engine.inspect(resolved.authority, resolved.call)).existence === "absent"
+          return (await this.inspect(resolved.authority, resolved.call)).existence === "absent"
             ? resolved.authority
             : undefined;
         } catch {return undefined;}
@@ -516,11 +502,10 @@ export class DockerHostCustodyLifecycle {
     }
   }
 
-  private async containWithoutJournal(
-    authority: DockerContainerAuthority,
-    call: DockerEngineCall,
+  private async containWithoutJournal(authority: DockerContainerAuthority, call: DockerEngineCall, live?: DockerContainedTurnHostCustody,
   ): Promise<"closed" | "indeterminate"> {
     if (await this.observeEmpty(authority, call) !== "empty") {return "indeterminate";}
+    await live?.drainWithin(call);
     return await this.observeRemoved(authority, call) ? "closed" : "indeterminate";
   }
 
@@ -602,7 +587,7 @@ export const createDockerHostCustodyLifecycle = (
   dependencies: DockerHostCustodyCompositionDependencies,
 ): DockerHostCustodyLifecycle => new DockerHostCustodyLifecycle(
   dependencies.engine,
-  new DockerCustodyJournal(dependencies.journalStorage, dependencies.journalLimits),
+  createDockerLifecycleJournal(dependencies.journalStorage, dependencies.journalLimits),
   dependencies.residue,
   dependencies.journalLimits?.maxJournalFiles ?? DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS.maxJournalFiles,
 );

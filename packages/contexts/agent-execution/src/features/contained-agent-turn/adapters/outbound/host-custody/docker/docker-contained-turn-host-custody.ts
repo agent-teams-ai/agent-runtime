@@ -18,6 +18,7 @@ export class DockerContainedTurnHostCustody {
   #channel: DockerCustodyDuplexChannel | undefined;
   #session: DockerCustodyInitHostSession | undefined;
   #cutoff = false;
+  readonly #startAbort = new AbortController();
   #executeUsed = false;
   #executionCall: DockerEngineCall | undefined;
   #launchFinished = false;
@@ -25,6 +26,15 @@ export class DockerContainedTurnHostCustody {
   #channelClosed = false;
 
   public finishLaunch(): void {this.#launchFinished = true;}
+
+  /** Irreversible command cutoff; authenticated observations retain their own lifetime. */
+  public cutOffAdmission(): void {this.#cutoff = true; this.#session?.cutOffAdmission(); this.#startAbort.abort();}
+
+  /** Fence queued Docker start without aborting the separately retained attach call. */
+  public startCall(call: DockerEngineCall): DockerEngineCall {
+    this.assertOpen(call);
+    return Object.freeze({deadlineEpochMs: call.deadlineEpochMs, signal: AbortSignal.any([call.signal, this.#startAbort.signal])});
+  }
 
   public get cleanupComplete(): boolean {
     return this.#launchFinished && this.#cutoff && (this.#session !== undefined
@@ -37,7 +47,7 @@ export class DockerContainedTurnHostCustody {
 
   public assertOpen(call: DockerEngineCall): void {
     if (this.#cutoff || call.signal.aborted || Date.now() >= call.deadlineEpochMs) {
-      this.#cutoff = true;
+      this.cutOffAdmission();
       throw new TypeError("Docker Host Custody launch authority is cut off");
     }
   }
@@ -63,9 +73,9 @@ export class DockerContainedTurnHostCustody {
     }
     const isCurrentGeneration = options.isCurrentGeneration;
     this.#session = new DockerCustodyInitHostSession({...options, channel: this.#channel,
-      isCurrentGeneration: generation => !this.#cutoff && !call.signal.aborted &&
+      isObservationActive: () => !call.signal.aborted &&
         (this.#executionCall === undefined || !this.#executionCall.signal.aborted && Date.now() < this.#executionCall.deadlineEpochMs) &&
-        isCurrentGeneration(generation)});
+        (options.isObservationActive?.() ?? true), isCurrentGeneration});
     this.#channel = undefined;
     const session = this.#session;
     return Object.freeze({ready: session.ready.bind(session), completion: session.completion,
@@ -91,7 +101,7 @@ export class DockerContainedTurnHostCustody {
   }
 
   public close(): Promise<void> {
-    this.#cutoff = true;
+    this.cutOffAdmission();
     if (this.#closing !== undefined) {return this.#closing;}
     if (this.#session === undefined && this.#channel === undefined) {return Promise.resolve();}
     // Publish the shared cleanup before calling external code; retain handles on stall or rejection.
@@ -103,17 +113,33 @@ export class DockerContainedTurnHostCustody {
     return this.#closing;
   }
 
+  /** Docker removal retires its hijack, so join the reader after stop and before removal. */
+  public async drainWithin(call: DockerEngineCall): Promise<void> {
+    this.cutOffAdmission();
+    await this.waitWithin(this.#session?.drain() ?? Promise.resolve(), call);
+  }
+
   /** Called only after physical containment; a deadline cannot discard the retained cleanup. */
   public async closeWithin(call: DockerEngineCall): Promise<boolean> {
     const closing = this.close();
     if (this.cleanupComplete) {return true;}
-    if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {return false;}
+    await this.waitWithin(closing, call);
+    return this.cleanupComplete;
+  }
+
+  private async waitWithin(pending: Promise<void>, call: DockerEngineCall): Promise<void> {
+    if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {void this.close(); return;}
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let abort: (() => void) | undefined;
     try {
-      await Promise.race([closing, new Promise<void>(resolve => {
-        timer = setTimeout(resolve, call.deadlineEpochMs - Date.now());
+      await Promise.race([pending, new Promise<void>(resolve => {
+        abort = () => {void this.close(); resolve();};
+        call.signal.addEventListener("abort", abort, {once: true});
+        timer = setTimeout(abort, Math.max(0, call.deadlineEpochMs - Date.now()));
       })]);
-      return this.cleanupComplete;
-    } finally {if (timer !== undefined) {clearTimeout(timer);}}
+    } finally {
+      if (timer !== undefined) {clearTimeout(timer);}
+      if (abort !== undefined) {call.signal.removeEventListener("abort", abort);}
+    }
   }
 }
