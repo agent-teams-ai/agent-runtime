@@ -109,3 +109,23 @@ test("cutoff during commit cannot publish a late successful current read", async
   h.setHook(async sql => {if (sql === "COMMIT") {owner.dispose();}});
   assert.equal(await owner.readCurrent(), undefined); assert.equal(h.releases.at(-1), true);
 });
+
+for (const cutoff of ["abort", "deadline"] as const) {
+  test(`base migration cannot dispatch DDL or commit after ${cutoff}`, async () => {
+    const controller = new AbortController();
+    const h = await harness({...selection(), operationAbortSignal: controller.signal,
+      deadline: performance.now() + (cutoff === "deadline" ? 80 : 60_000)});
+    const owner = h.owner(); const entered = deferred<void>(); const release = deferred<void>();
+    h.setHook(async sql => {
+      if (sql.includes("pg_advisory_xact_lock")) {entered.resolve(); await release.promise;}
+    });
+    const pending = owner.control.migrate(); await entered.promise;
+    if (cutoff === "abort") {controller.abort();}
+    await assert.rejects(pending);
+    const cutoffIndex = h.calls.length; release.resolve(); await turn(); await turn();
+    assert.deepEqual(h.calls.slice(cutoffIndex).filter(({sql}) => /^(?:CREATE|INSERT|COMMIT)/u.test(sql.trim())), []);
+    const connects = h.connects(); await assert.rejects(owner.control.migrate());
+    assert.equal(h.connects(), connects); assert.equal(await owner.readCurrent(), undefined);
+    const client = await h.pool.connect(); client.release(); owner.dispose();
+  });
+}

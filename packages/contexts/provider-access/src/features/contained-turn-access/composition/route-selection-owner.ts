@@ -42,6 +42,12 @@ export const createPostgresRouteSelectionOwner = (pool: MaterializationPostgresP
     const lifetime = new CredentialRenderingLifetime(signal, deadline);
     const checkOpen = () => {check(); lifetime.check();};
     try {const result = await lifetime.wait(work(checkOpen)); checkOpen(); return result;}
+    catch (error) {
+      // Stop this transaction owner before a cancelled base migration can
+      // resume. Ordinary database failures still permit explicit observation.
+      try {checkOpen();} catch {closed = true; store.dispose();}
+      throw error;
+    }
     finally {lifetime.close();}
   };
   const expected = async (): Promise<RouteSelectionCurrent> => Object.freeze({...facts,
