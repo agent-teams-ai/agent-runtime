@@ -30,7 +30,12 @@ const loadNativeBinding = (): NativeProcessLockBinding => {
 };
 
 /** Process serialization on a retained directory descriptor only. This does not
- * qualify descriptor-relative mutation, publication, or provider containment. */
+ * qualify descriptor-relative mutation, publication, or provider containment.
+ * Each concurrent call must own a separately opened descriptor (a distinct open
+ * file description): sharing a FileHandle or duplicating its descriptor does not
+ * serialize flock acquisition. Retain the handle until this call settles; neither
+ * callback may close it. Closing it before finally unlocks can throw EBADF and
+ * mask the operation result or error. */
 export const withStableDirectoryProcessLock = async <Result>(
   directory: Pick<FileHandle, "fd">,
   operation: () => Promise<Result>,

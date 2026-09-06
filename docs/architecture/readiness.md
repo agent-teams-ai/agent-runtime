@@ -359,8 +359,12 @@ Contained Agent Turn V1 accepted:
 
 Contained Agent Turn V1 implementation present; qualification remains open:
 
-- Codex `0.150.1` and Claude Agent SDK `0.3.251` are candidate
-  implementations only. The production/default Embedded Runtime selection path
+- Codex `@openai/codex@0.153.4` and Claude Agent SDK `0.3.251` are current
+  candidate implementations only. As of candidate
+  `32c639e396a6c1f886545c33d45bfead865d42da`, `0.153.4` supersedes `0.150.1`
+  here to match the source-pinned platform tuples and protocol fixtures; this
+  revision sync does not transfer historical evidence or promote live qualification.
+  The production/default Embedded Runtime selection path
   fails closed with `route-enforcement-unqualified` before provider-owner or
   seven-port feature construction because no exact Provider Access enforced
   network-route target is registered. A route reference, authority digest,
@@ -387,11 +391,11 @@ Contained Agent Turn V1 implementation present; qualification remains open:
   Caller abort detaches a waiter; Host disposal issues a durable cancellation
   command and waits within a bounded deadline without asserting containment or
   terminal truth;
-- focused synthetic evidence includes 58 Agent Execution tests, 63 Embedded
-  Runtime tests, and five PostgreSQL restart/concurrency/corruption tests;
+- historical focused synthetic evidence at `735f2422` includes 58 Agent Execution
+  tests, 63 Embedded Runtime tests, and five PostgreSQL restart/concurrency/corruption tests;
 - the exact Codex `0.150.1` hosted Linux x64 canary harness and static tuple are
-  retained candidate implementation evidence. No content-addressed successful
-  live-turn receipt bound to the current source SHA is committed. Darwin arm64
+  retained historical candidate implementation evidence. No content-addressed
+  successful live-turn receipt bound to the current source SHA is committed. Darwin arm64
   has independently checked-in immutable package,
   binary-SHA, and initialize candidate authority, plus synthetic cooperative
   composition coverage, but no registered exact-SHA local macOS canary and no

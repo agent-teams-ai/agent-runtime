@@ -11,6 +11,9 @@ const captureAcquisition = (value: CredentialGenerationAcquisition | undefined):
   const data = exactCredentialData(value, ["acquire"]);
   const method: unknown = data.acquire?.value;
   if (typeof method !== "function" || isRuntimeProxy(method)) {throw new TypeError("invalid credential acquisition capability");}
+  // Best-effort shape heuristic, not security proof of the function's behavior
+  // or provenance: arrow wrappers pass and legitimate bound methods are rejected.
+  // PA authorization and current binding rereads remain independently required.
   const source = Reflect.apply(Function.prototype.toString, method, []) as string;
   if (/\{\s*\[native code\]\s*\}\s*$/u.test(source) || source.trimStart().startsWith("class")) {
     throw new TypeError("invalid credential acquisition capability");

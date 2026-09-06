@@ -21,6 +21,10 @@ CREATE TRIGGER materialization_receipt_immutable BEFORE UPDATE OR DELETE
 ON provider_access.materialization_authorization FOR EACH ROW
 EXECUTE FUNCTION provider_access.reject_materialization_receipt_mutation();
 `;
+// Exact full-text pin for disposable qualification; editing schema changes the
+// digest and fails closed for databases retaining the prior revision.
+// TODO: Add explicit versioned migrations before evolving a durable production
+// schema; preserve prior revision validation rather than replacing its pin.
 export const materializationPostgresSchemaDigest = async (): Promise<string> =>
   (await createSha256DispatchConsumptionDigest().digest(schema)).slice(7);
 const versionQuery = "SELECT version, digest FROM provider_access.materialization_schema WHERE component = 'pa-m1'";

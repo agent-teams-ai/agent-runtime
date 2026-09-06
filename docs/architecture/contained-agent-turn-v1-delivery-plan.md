@@ -50,11 +50,15 @@ observe and cancellation remain bound to the trusted tenant/project scope.
 Caller abort only detaches its waiter. Host disposal submits durable
 cancellation and cannot manufacture containment or terminal truth.
 
-Focused evidence is green: 58 Agent Execution tests, 63 Embedded Runtime
-tests, and five PostgreSQL restart/concurrency/corruption tests. The exact
-Codex `0.150.1` hosted Linux x64 canary harness and static tuple are retained
-candidate implementation evidence; no content-addressed successful live-turn
-receipt bound to the current source SHA is committed.
+Historical focused evidence at `735f2422` was green: 58 Agent Execution tests,
+63 Embedded Runtime tests, and five PostgreSQL restart/concurrency/corruption
+tests. The exact Codex `0.150.1` hosted Linux x64 canary harness and static tuple
+are retained historical candidate implementation evidence; no content-addressed
+successful live-turn receipt bound to the current source SHA is committed.
+As of candidate `32c639e396a6c1f886545c33d45bfead865d42da`, the current static
+Codex candidate supersedes `0.150.1` with `@openai/codex@0.153.4` to match
+the source-pinned platform tuples and protocol fixtures; this revision sync
+does not transfer historical evidence or promote live qualification.
 Its bounded credential inventory is only a pre-spawn observation: it does not
 prove the exact bytes later opened by Codex and does not close same-UID file
 mutation. That proof remains part of route and deployment qualification.
@@ -421,7 +425,7 @@ appear below composition.
 5. Implement the ADR-0004 pre-materialization negative guard in the model before
    any provider adapter exists.
 6. Record provider version and capability fixtures at exact revisions. The
-   current static candidates are Codex `@openai/codex@0.150.1` and Claude SDK
+   current static candidates are Codex `@openai/codex@0.153.4` and Claude SDK
    `@anthropic-ai/claude-agent-sdk@0.3.251`; static characterization must not be
    described as behavior qualification. Do not use floating versions or mutable evidence.
 7. Freeze an identity matrix proving module/generation identities are disjoint
