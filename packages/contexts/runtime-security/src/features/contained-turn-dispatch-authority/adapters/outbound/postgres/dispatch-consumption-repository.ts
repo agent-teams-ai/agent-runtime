@@ -12,7 +12,7 @@ import type { DispatchPgDeadlines, DispatchPgPool, DispatchPgTransaction } from 
 import { bindConsumedRequest, captureConsume, captureHead, captureOperation, captureSettlement,
   consumeFact, consumptionRecord, exact, headVersion, invalid, lockId, matchesGrant,
   matchesOperation, operationId, operationSelector, parseFact, requestId, settlementFact,
-  settlementId } from "./records.js";
+  settlementId, serializeFact } from "./records.js";
 import type { ConsumeKey, OperationKey, SettlementKey } from "./records.js";
 
 type Transaction = DispatchPgTransaction;
@@ -27,6 +27,10 @@ const variant = (value: unknown, names: readonly (readonly string[])[]) => {
 const oneOrNone = (rows: Record<string, unknown>[]) => {
   if (rows.length > 1) {return invalid();}
   return rows[0];
+};
+const insertOne = async (tx: Transaction, sql: string, values: unknown[]) => {
+  const result = await tx.query(sql, values);
+  if (result.rowCount !== 1) {invalid();}
 };
 const version = async (tx: Transaction) => {
   const { rows } = await tx.query(`SELECT version FROM ${schema}.schema_version WHERE singleton`);
@@ -85,7 +89,7 @@ const createRecordReaders = (digest: DispatchDigest["digestCanonical"]) => {
     if (request.outcome.status !== "consumed") {return invalid();}
     bindConsumedRequest(request, consumption);
     if (settled === null ? fields.settlement_key !== null : fields.settlement_key !==
-      settlementId(settlementFact(settled, consumption.receipt))) {return invalid();}
+      settlementId(settlementFact(settled, consumption.receipt, digest))) {return invalid();}
     return consumption;
   };
   const readRequest = async (tx: Transaction, key: ConsumeKey) => {
@@ -101,7 +105,7 @@ const createRecordReaders = (digest: DispatchDigest["digestCanonical"]) => {
       FROM ${schema}.settlement_requests WHERE request_key = $1`, [settlementId(key)])).rows);
     if (row === undefined) {return;}
     const fields = exact(row, ["request_key", "operation_key", "applies", "fact"]);
-    const fact = settlementFact(parseFact(fields.fact), key, key.settlementRequestId);
+    const fact = settlementFact(parseFact(fields.fact), key, digest, key.settlementRequestId);
     if (fields.request_key !== settlementId(key) || fields.operation_key !== operationId(key) ||
       fields.applies !== (fact.outcome.status === "settled")) {return invalid();}
     return fact;
@@ -138,8 +142,8 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
     const next = headVersion((BigInt(current.headVersion) + 1n).toString());
     const authority = replace ?? (current.authority === undefined ? null :
       captureHead({ ...current.authority, revoked: true }));
-    const values = [operationId(key), JSON.stringify(operationSelector(key)), next,
-      authority === null ? null : JSON.stringify(authority)];
+    const values = [operationId(key), serializeFact(operationSelector(key)), next,
+      authority === null ? null : serializeFact(authority)];
     const result = current.headVersion === "0"
       ? await tx.query(`INSERT INTO ${schema}.authority_heads
           (operation_key, selector, head_version, authority) VALUES ($1, $2::jsonb, $3::bigint, $4::jsonb)`, values)
@@ -203,11 +207,11 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
           receipt = record.receipt;
         }
         if ((fact.outcome.status === "consumed") !== (receipt !== undefined)) {return invalid();}
-        await tx.query(`INSERT INTO ${schema}.consume_requests (request_key, operation_key, fact)
-          VALUES ($1, $2, $3::jsonb)`, [requestId(key), operationId(key), JSON.stringify(fact)]);
+        await insertOne(tx, `INSERT INTO ${schema}.consume_requests (request_key, operation_key, fact)
+          VALUES ($1, $2, $3::jsonb)`, [requestId(key), operationId(key), serializeFact(fact)]);
         if (receipt !== undefined) {
-          await tx.query(`INSERT INTO ${schema}.consumptions (operation_key, request_key, receipt)
-            VALUES ($1, $2, $3::jsonb)`, [operationId(key), requestId(key), JSON.stringify(receipt)]);
+          await insertOne(tx, `INSERT INTO ${schema}.consumptions (operation_key, request_key, receipt)
+            VALUES ($1, $2, $3::jsonb)`, [operationId(key), requestId(key), serializeFact(receipt)]);
         }
         return outcome;
       });
@@ -248,11 +252,11 @@ export const createPostgresDispatchConsumptionRepository = (options: DispatchPgD
           persistence.settle !== (result.status === "settled")) {return invalid();}
         assertPendingSettlement(persistence.settle, consumption);
         const fact = settlementFact({ ...key, settlementDigest: persistence.settlementDigest,
-          outcome: result }, key, key.settlementRequestId);
+          outcome: result }, key, digest, key.settlementRequestId);
         if (result.status === "settled" && result.receipt.consumptionDigest !== key.consumptionDigest) {return invalid();}
-        await tx.query(`INSERT INTO ${schema}.settlement_requests (request_key, operation_key, applies, fact)
+        await insertOne(tx, `INSERT INTO ${schema}.settlement_requests (request_key, operation_key, applies, fact)
           VALUES ($1, $2, $3, $4::jsonb)`,
-        [settlementId(key), operationId(key), persistence.settle, JSON.stringify(fact)]);
+        [settlementId(key), operationId(key), persistence.settle, serializeFact(fact)]);
         return result;
       });
     },

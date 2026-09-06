@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { requestCanonical, settlementCanonical } from "../../../application/dispatch-canonical.js";
 import { isNodeDispatchProxy } from "../../node-dispatch-proxy.js";
 import { snapshotExactDispatchRecord } from "../../../domain/dispatch-exact-record.js";
 import { sameScope, snapshotDispatchAuthorityHead } from "../../../domain/dispatch-authority-head.js";
@@ -77,8 +78,17 @@ export const settlementId = (key: Pick<SettlementKey, keyof ConsumeKey | "settle
   hash(["rs-dispatch-settle/v1", ...parts(key), key.grantRequestId, key.settlementRequestId]);
 export const lockId = (key: OperationKey) =>
   BigInt.asIntN(64, BigInt(`0x${operationId(key).slice(0, 16)}`)).toString();
+// Closed V1 records have fewer than 64 members, including nested/duplicated fields.
+// Each string is at most 512 UTF-16 units, each unit can escape to six JSON characters;
+// 128 characters per member cover the fixed key, separators, numbers and nesting.
+const maxFactCharacters = 64 * (512 * 6 + 128);
+export const serializeFact = (value: unknown): string => {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined || serialized.length > maxFactCharacters) {return invalid();}
+  return serialized;
+};
 export const parseFact = (value: unknown): unknown => {
-  if (typeof value !== "string" || value.length > 65_536) {return invalid();}
+  if (typeof value !== "string" || value.length > maxFactCharacters) {return invalid();}
   return JSON.parse(value) as unknown;
 };
 export const headVersion = (value: unknown): string => {
@@ -98,13 +108,22 @@ export const consumeFact = (value: unknown, key: ConsumeKey, digest: Digest): Co
   if (outcome.status === "conflict" || outcome.status === "indeterminate") {return invalid();}
   if (outcome.status === "consumed" && (!matchesGrant(outcome.receipt, key) ||
     outcome.receipt.requestDigest !== fields.requestDigest)) {return invalid();}
+  if (outcome.status === "consumed") {
+    const receipt = outcome.receipt;
+    const expected = digest(requestCanonical({ ...receipt,
+      expectedAuthorityHeadDigest: receipt.authorityHeadDigestAtConsumption,
+      expectedAuthorityRevision: receipt.authorityRevision,
+      expectedConstraintsDigest: receipt.constraintsDigest,
+      expectedContainmentPolicyDigest: receipt.containmentPolicyDigest }));
+    if (fields.requestFingerprint !== expected) {return invalid();}
+  }
   if (outcome.status === "prevented" && (!sameScope(outcome.evidence.scope, key.scope) ||
     outcome.evidence.operationId !== key.operationId || outcome.evidence.grantRequestId !== key.grantRequestId ||
     outcome.evidence.requestDigest !== fields.requestDigest)) {return invalid();}
   return Object.freeze({ ...identity, requestDigest: fields.requestDigest as string,
     requestFingerprint: fields.requestFingerprint as string, outcome });
 };
-export const settlementFact = (value: unknown, key: ConsumeKey,
+export const settlementFact = (value: unknown, key: ConsumeKey, digest: Digest,
   expectedRequestId?: string): SettlementFact => {
   const fields = exact(value, [...operationNames, "grantRequestId", "settlementRequestId",
     "consumptionDigest", "settlementDigest", "outcome"]);
@@ -119,6 +138,10 @@ export const settlementFact = (value: unknown, key: ConsumeKey,
     outcome.receipt.authorityGeneration !== key.authorityGeneration ||
     outcome.receipt.settlementRequestId !== fields.settlementRequestId ||
     outcome.receipt.consumptionDigest !== fields.consumptionDigest)) {return invalid();}
+  if (outcome.status === "settled" && fields.settlementDigest !== digest(settlementCanonical({
+    ...identity, settlementRequestId: fields.settlementRequestId as string,
+    consumptionDigest: fields.consumptionDigest as string, disposition: outcome.receipt.disposition,
+  }))) {return invalid();}
   return Object.freeze({ ...identity, settlementRequestId: fields.settlementRequestId as string,
     consumptionDigest: fields.consumptionDigest as string,
     settlementDigest: fields.settlementDigest as string, outcome });
@@ -130,7 +153,7 @@ export const consumptionRecord = (receiptValue: unknown, settlementValue: unknow
   if (settlementValue === null) {
     return Object.freeze({ receipt: result.receipt, lifecycleState: "consumed_pending" });
   }
-  const fact = settlementFact(settlementValue, result.receipt);
+  const fact = settlementFact(settlementValue, result.receipt, digest);
   if (fact.outcome.status !== "settled" ||
     fact.consumptionDigest !== result.receipt.consumptionDigest) {return invalid();}
   return Object.freeze({ receipt: result.receipt, lifecycleState: fact.outcome.receipt.disposition,
