@@ -1,4 +1,4 @@
-import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./features/contained-agent-turn/codex-permission-profile-fixture.ts";
+import { nativeConfigResult } from "./fixtures/codex-native-config-0.153.4/fixture.ts";
 
 type Message = Record<string, any>;
 
@@ -161,24 +161,10 @@ class CodexProtocolProcess {
     const permissionProfileId = this.#plan.permissionProfileId as string;
     const workspaceRef = this.#plan.workspaceRef as string;
     const intentMode = this.#plan.intentMode as "analysis" | "workspace-write";
-    const permissionProfile = codexEffectivePermissionProfile(codexHome, intentMode);
     if (message.method === "initialize") {
       this.#emit({id: message.id, result: {codexHome, ...this.#initialization}});
     } else if (message.method === "config/read") {
-      this.#emit({id: message.id, result: {
-        config: {default_permissions: permissionProfileId, permissions: {[permissionProfileId]: permissionProfile}},
-        layers: [
-          {config: {}, disabledReason: null, name: {file: "/etc/codex/config.toml", type: "system"}, version: "1"},
-          {config: {permissions: {[permissionProfileId]: codexUserPermissionProfile(codexHome, intentMode)}}, disabledReason: null,
-            name: {file: `${codexHome}/config.toml`, profile: null, type: "user"}, version: "2"},
-          {config: {default_permissions: permissionProfileId}, disabledReason: null,
-            name: {type: "sessionFlags"}, version: "3"},
-        ],
-        origins: {
-          default_permissions: {name: {type: "sessionFlags"}, version: "3"},
-          permissions: {name: {file: `${codexHome}/config.toml`, profile: null, type: "user"}, version: "2"},
-        },
-      }});
+      this.#emit({id: message.id, result: nativeConfigResult(codexHome, intentMode)});
     } else if (message.method === "permissionProfile/list") {
       this.#emit({id: message.id, result: {data: [{allowed: true, description: null, id: permissionProfileId}], nextCursor: null}});
     } else if (message.method === "thread/start") {
