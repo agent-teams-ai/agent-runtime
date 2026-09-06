@@ -795,6 +795,13 @@ Stop and request a new decision when:
 - a second TCK or competing state machine appears;
 - hosted E2E would require a real user project or ambient live session.
 
+## Deferred Rust custody discussion
+
+TODO after this delivery: discuss the [Rust custody migration follow-up](rust-custody-migration-follow-up.md).
+The owner explicitly deferred that transfer to separate work on 2026-09-06.
+Keep PR #69's existing implementation scope and acceptance criteria unchanged;
+the future migration estimate is not part of this plan's progress denominator.
+
 ## Definition of Done
 
 - Phase 0 decision and oracle packet is accepted.

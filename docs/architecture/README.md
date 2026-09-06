@@ -37,6 +37,8 @@ Documents:
 - [Contained Agent Turn V1 delivery plan](contained-agent-turn-v1-delivery-plan.md):
   staged implementation, provider, module, custody, qualification, and hosted
   worker plan for the first contained execution turn.
+- [Rust custody migration follow-up](rust-custody-migration-follow-up.md):
+  deferred discussion, research boundary and migration TODO outside PR #69.
 - [Provider setup delivery roadmap](provider-setup-delivery-roadmap.md): legacy
   capability disposition and delivery order for Codex, Claude Code, and
   OpenCode setup.
