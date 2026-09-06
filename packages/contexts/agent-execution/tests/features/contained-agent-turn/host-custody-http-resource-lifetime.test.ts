@@ -31,3 +31,20 @@ test("HTTP lifetime abort survives stopped propagation and disposal after delive
   assert.equal(calls, 1);
   assert.equal(getEventListeners(controller.signal, "abort").length, 1);
 });
+
+
+test("HTTP lifetime disposal ignores signal cleanup replaced after subscription", () => {
+  const controller = new AbortController();
+  let reads = 0;
+  let calls = 0;
+  const subscription = hostHttpAbortOperations.subscribe(controller.signal, () => { calls += 1; });
+  Object.defineProperty(controller.signal, "removeEventListener", {
+    get() { reads += 1; throw new Error("mutable cleanup"); },
+  });
+  hostHttpAbortOperations.remove(subscription);
+  hostHttpAbortOperations.remove(subscription);
+  assert.equal(reads, 0);
+  assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+  controller.abort();
+  assert.equal(calls, 0);
+});

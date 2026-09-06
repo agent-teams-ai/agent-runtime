@@ -50,10 +50,20 @@ export const readHostCustodyHttpHandoff = (input: HostCustodyHttpHandoff): HostC
 
 const nativeAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")!.get!;
 const nativeAbort = AbortController.prototype.abort;
+const nativeRemoveEventListener = EventTarget.prototype.removeEventListener;
+const subscribe = (signal: AbortSignal, listener: (event: Event) => void): ReturnType<typeof addAbortListener> => {
+  addAbortListener(signal, listener);
+  // Node's Disposable reads signal.removeEventListener when disposed. The
+  // caller can replace that property after admission, so retain the native
+  // cleanup operation while keeping addAbortListener's propagation protection.
+  return Object.freeze({[Symbol.dispose](): void {
+    nativeRemoveEventListener.call(signal, "abort", listener);
+  }});
+};
 /** Physical abort operations retained for the private resource composition. */
 export const hostHttpAbortOperations = Object.freeze({
   aborted: (signal: AbortSignal): boolean => nativeAborted.call(signal),
-  subscribe: addAbortListener,
+  subscribe,
   remove: (subscription: ReturnType<typeof addAbortListener>): void => subscription[Symbol.dispose](),
   abort: (controller: AbortController): void => nativeAbort.call(controller),
 });
