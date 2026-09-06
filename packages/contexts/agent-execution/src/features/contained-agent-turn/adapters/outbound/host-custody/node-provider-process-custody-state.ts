@@ -29,6 +29,7 @@ import type { OperationResidueAuthority, OperationResidueAuthorityFactory } from
 import type { HostStderrIngress, HostStdoutIngress } from "./host-custody-stdio.js";
 import { notStartedIdentity, strictClosure } from "./host-custody-evidence.js";
 import type { RetainedHostCustodyWorkspaceAuthority } from "./private-host-custody-reservation.js";
+import { NodeProviderProcessCustodyHttpReservation } from "./node-provider-process-custody-http-reservation.js";
 
 export const HOST_CUSTODY_LIMITS = Object.freeze({
   maxDiagnosticBytes: 65_536,
@@ -42,6 +43,7 @@ export interface LiveCustody {
   abortRequested: boolean;
   readonly attemptId: string;
   readonly custodyRef: string;
+  readonly httpReservation: NodeProviderProcessCustodyHttpReservation;
   readonly inputIdentitySha256: string;
   readonly operationId: string;
   readonly providerBinding: Parameters<ProviderProcessCustodyPort["open"]>[0]["providerBinding"];
@@ -109,6 +111,7 @@ export const createLiveCustody = (
   closureEvidence: strictClosure("unproven", options.containmentProfile),
   custodyRef,
   evidenceSealed: false,
+  httpReservation: new NodeProviderProcessCustodyHttpReservation(),
   identity: notStartedIdentity(hostLifecycleGenerationSha256),
   inputIdentitySha256,
   opening: options.opening,

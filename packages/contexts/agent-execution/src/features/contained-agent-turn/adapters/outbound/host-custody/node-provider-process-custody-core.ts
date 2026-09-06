@@ -19,9 +19,7 @@ import {
 } from "./custodied-provider-process.js";
 import { containCustody, snapshotEvidence, unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
 import {
-  assertDelegatedStartFingerprint,
   canonicalJson,
-  createFingerprint,
   inputIdentity,
   positiveInteger,
   resolveLaunchCandidate,
@@ -61,6 +59,12 @@ import {
   type ProcessCustodyRuntimeProfile,
 } from "./host-custody-runtime-profile.js";
 import { acknowledgeProviderSpawn } from "./node-provider-process-custody-spawn-acknowledgement.js";
+import { readCustodyStartAdmission } from "./node-provider-process-custody-start-admission.js";
+import {
+  custodyDataRecord,
+  readNodeCustodyHttpHandoff,
+  type NodeCustodyHttpPreparation,
+} from "./node-provider-process-custody-http-reservation.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
 export class NodeProviderProcessCustodyCore implements
   ProviderProcessCustodyPort,
@@ -95,7 +99,24 @@ export class NodeProviderProcessCustodyCore implements
   readonly #tombstonesByAttempt = new Map<string, CustodyTombstone>();
   readonly #tombstonesByRef = new Map<string, CustodyTombstone>();
 
+  readonly #httpPreparation: NodeCustodyHttpPreparation = Object.freeze({
+    acquire: (input: Parameters<NodeCustodyHttpPreparation["acquire"]>[0]) => {
+      const handoff = readNodeCustodyHttpHandoff(input);
+      const live = this.#byRef.get(handoff.underlyingCustodyRef);
+      if (live === undefined) {throw new TypeError("Host Custody HTTP reservation is unavailable");}
+      return live.httpReservation.acquire(live, handoff);
+    },
+  });
+
+  /** Host-private inspection is inert, including foreign/proxied owners. No package export. */
+  public static httpPreparation(owner: unknown): NodeCustodyHttpPreparation | undefined {
+    return typeof owner === "object" && owner !== null && #httpPreparation in owner
+      ? owner.#httpPreparation : undefined;
+  }
+
   public constructor(options: NodeProviderProcessCustodyOptions, runtimeProfile: ProcessCustodyRuntimeProfile) {
+    options = custodyDataRecord(options);
+    runtimeProfile = custodyDataRecord(runtimeProfile);
     assertRuntimeProfilePlatform(runtimeProfile);
     this.#runtimeProfile = runtimeProfile;
     this.#launchPlans = options.launchPlans;
@@ -137,6 +158,10 @@ export class NodeProviderProcessCustodyCore implements
     const live = input.custodyRef === undefined
       ? this.#byAttempt.get(input.attemptId)
       : this.#byRef.get(input.custodyRef);
+    if (live?.attemptId === input.attemptId && live.operationId === input.operationId &&
+        live.contained?.receiptRef === input.receiptRef && live.evidenceSealed) {
+      live.httpReservation.cutoff();
+    }
     const outcome = await releaseHostCustody({
       byAttempt: this.#byAttempt,
       byRef: this.#byRef,
@@ -224,8 +249,13 @@ export class NodeProviderProcessCustodyCore implements
       launchPlans: reservationLaunchPlans ?? this.#launchPlans,
       live,
       opening,
-      rejectOpening,
+      rejectOpening: error => {
+        live.sealed = true;
+        live.httpReservation.cutoff();
+        rejectOpening?.(error);
+      },
       removeUnfingerprintedReservation: () => {
+        live.httpReservation.cutoff();
         this.#byAttempt.delete(live.attemptId);
         this.#byRef.delete(live.custodyRef);
       },
@@ -247,62 +277,50 @@ export class NodeProviderProcessCustodyCore implements
   }): CustodiedSdkProcess {
     const live = this.#byRef.get(custodyRef);
     if (live === undefined) {throw new Error("Host Custody reservation does not exist");}
+    live.httpReservation.assertActive();
     if (live.sealed) {throw new Error("Host Custody reservation is sealed");}
     const plan = live.plan;
     if (plan === undefined || (plan.spawnMode ?? "eager") !== "sdk-delegated") {
       throw new Error("Host Custody reservation does not permit delegated SDK start");
     }
-    const environment = assertDelegatedStartFingerprint(input, plan, live.workspaceRef);
-    const startIdentitySha256 = sha256(canonicalJson([
-      live.fingerprint?.planSha256,
-      sha256(input.command),
-      input.cwd === undefined ? undefined : sha256(input.cwd),
-      input.arguments,
-      Object.keys(environment).toSorted(),
-    ]));
+    const admission = readCustodyStartAdmission(input, live);
+    const disposeAbort = (): void => {
+      // Also removes a listener if registration threw before returning a handle.
+      admission.abort.remove(requestAbort);
+    };
     const requestAbort = (): void => {
       live.abortRequested = true;
       void this.#triggerAbortContainment(live);
+      disposeAbort();
     };
-    input.signal.addEventListener("abort", requestAbort, { once: true });
-    if (input.signal.aborted) {
-      requestAbort();
-      input.signal.removeEventListener("abort", requestAbort);
-      throw delegatedStartAbortError();
-    }
-    if (live.startIdentitySha256 !== undefined) {
-      if (live.startIdentitySha256 !== startIdentitySha256 || live.sdkProcess === undefined) {
-        input.signal.removeEventListener("abort", requestAbort);
-        throw new HostCustodyFingerprintConflictError("Host Custody delegated start fingerprint conflict");
-      }
-      void live.exit?.finally(() => input.signal.removeEventListener("abort", requestAbort));
-      return live.sdkProcess;
-    }
-    live.startIdentitySha256 = startIdentitySha256;
-    const startFingerprint = createFingerprint({
-      attemptId: live.attemptId,
-      intentMode: plan.intentMode,
-      operationId: live.operationId,
-      providerBinding: live.providerBinding,
-      workspaceRef: live.workspaceRef,
-    }, plan, live.workspaceRef, input.arguments);
-    if (live.fingerprint?.fingerprintSha256 !== startFingerprint.fingerprintSha256) {
-      throw new HostCustodyFingerprintConflictError("Host Custody delegated start fingerprint conflict");
-    }
-    let sdkProcess: NodeCustodiedSdkProcess;
     try {
-      sdkProcess = this.#spawn(live, input.arguments, environment);
+      // All caller data, both fingerprints and replay eligibility are now fixed.
+      // Own the entire admitted phase, including cancellation and return setup.
+      live.startIdentitySha256 = admission.startIdentitySha256;
+      if (admission.abort.aborted) {requestAbort(); throw delegatedStartAbortError();}
+      admission.abort.subscribe(requestAbort);
+      let sdkProcess = admission.replay;
+      if (sdkProcess === undefined) {
+        sdkProcess = this.#spawn(live, admission.arguments, admission.environment);
+      }
+      if (live.exit === undefined) {throw new HostCustodyLaunchRejectedError();}
+      void live.exit.then(disposeAbort, disposeAbort);
+      if (admission.abort.aborted) {requestAbort();}
+      return sdkProcess;
     } catch (error) {
-      input.signal.removeEventListener("abort", requestAbort);
+      try {live.httpReservation.cutoff();}
+      finally {
+        // Cleanup failure cannot strand resources already retained by launch.
+        void this.#triggerStartFailureContainment(live);
+        disposeAbort();
+      }
+      if (live.abortRequested) {throw delegatedStartAbortError();}
       if (
         error instanceof HostCustodyFingerprintConflictError ||
         error instanceof HostCustodyUnsupportedError
       ) {throw error;}
       throw new HostCustodyLaunchRejectedError();
     }
-    if (input.signal.aborted) {requestAbort();}
-    void live.exit?.finally(() => input.signal.removeEventListener("abort", requestAbort));
-    return sdkProcess;
   }
 
   public requestContainment(input: {
@@ -330,6 +348,7 @@ export class NodeProviderProcessCustodyCore implements
     arguments_: readonly string[],
     environment: Readonly<Record<string, string>>,
   ): NodeCustodiedSdkProcess {
+    live.httpReservation.assertActive();
     if (live.sealed) {throw new Error("Host Custody reservation is sealed");}
     if (live.child !== undefined || live.spawnAcknowledgement !== undefined) {
       if (live.sdkProcess !== undefined) {return live.sdkProcess;}
@@ -344,6 +363,8 @@ export class NodeProviderProcessCustodyCore implements
       throw new Error("Host Custody launch reservation is incomplete");
     }
     if (live.retainedWorkspaceAuthority !== undefined) {assertRetainedWorkspaceAuthority(live);}
+    // A thrown delegated launch cannot itself prove that no process started.
+    if (live.plan.spawnMode === "sdk-delegated") {live.spawnStatus = "ambiguous";}
     let launched: ReturnType<typeof launchGuardedProvider>;
     try {
       launched = launchGuardedProvider({
@@ -364,14 +385,22 @@ export class NodeProviderProcessCustodyCore implements
           workspaceDescriptorPath: live.retainedWorkspaceAuthority.descriptorPath,
         }),
       });
+      // Retain every returned resource before descriptor release or observation
+      // can fail. Containment must still own a launch whose start call rejects.
+      live.launchAuthority = launched.authority;
+      live.guardian = launched.guardian;
+      live.child = launched.child;
+      live.exit = launched.exit;
+      live.process = launched.process;
+      live.sdkProcess = launched.sdkProcess;
+      live.stderr = launched.stderr;
+      live.stdout = launched.stdout;
+      live.spawnStatus = "ambiguous";
     } finally {
       closeRetainedWorkspaceAuthority(live);
     }
     live.childProcessInstanceSha256 = sha256(randomUUID());
     live.executable = launched.authority.executable;
-    live.launchAuthority = launched.authority;
-    live.spawnStatus = "ambiguous";
-    live.guardian = launched.guardian;
     if (this.#runtimeProfile.containmentProfile === "cooperative-darwin-posix-process-group") {
       bindCooperativeProcessGroupGuardian(live.residueAuthority, launched.guardian);
     }
@@ -384,12 +413,6 @@ export class NodeProviderProcessCustodyCore implements
       spawnAcknowledgementAfterMs: this.#spawnAcknowledgementAfterMs,
       spawnAcknowledgementObserver: this.#spawnAcknowledgementObserver,
     });
-    live.child = launched.child;
-    live.exit = launched.exit;
-    live.process = launched.process;
-    live.sdkProcess = launched.sdkProcess;
-    live.stderr = launched.stderr;
-    live.stdout = launched.stdout;
     return launched.sdkProcess;
   }
 
@@ -398,8 +421,10 @@ export class NodeProviderProcessCustodyCore implements
     input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },
   ): Promise<ContainmentResult> {
     if (live.containment !== undefined) {return live.containment;}
-    const containment = this.#contain(live, input);
+    // Publish single-flight ownership before synchronous abort listeners can reenter.
+    const {promise: containment, resolve, reject} = Promise.withResolvers<ContainmentResult>();
     live.containment = containment;
+    void this.#contain(live, input).then(resolve, reject);
     void containment.then(
       result => {
         if (result.kind === "unproven" && live.containment === containment) {
@@ -420,8 +445,16 @@ export class NodeProviderProcessCustodyCore implements
     input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },
   ): Promise<ContainmentResult> {
     live.sealed = true;
+    live.httpReservation.cutoff();
     live.containmentDeadline ??= this.#monotonicNow() + this.#containmentAfterMs;
     try {
+      if (live.startIdentitySha256 !== undefined && live.spawnStatus === "ambiguous" && live.guardian === undefined) {
+        // Reentrant abort may precede the synchronous launch's resource return.
+        // If it throws instead, keep custody for reconciliation: the no-guardian
+        // no-start cleanup path has no evidence for this admitted launch.
+        await Promise.resolve();
+        if (live.guardian === undefined) {return unprovenResult("stable-guardian-unavailable", input, live);}
+      }
       return await containCustody(live, input, {
         containmentAfterMs: this.#containmentAfterMs,
         drainAfterMs: this.#drainAfterMs,
