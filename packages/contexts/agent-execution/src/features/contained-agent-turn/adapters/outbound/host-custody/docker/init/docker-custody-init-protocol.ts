@@ -71,9 +71,21 @@ export interface DockerCustodyObservationBinding {
 }
 export interface DockerCustodyProviderInstanceFacts {
   readonly childInstanceId: string;
+  readonly executableMapping?: DockerCustodyExecutableMapping;
   readonly executableSha256: string;
   readonly initInstanceId: string;
   readonly pid: number;
+}
+/** Trusted init's point-in-time kernel file-object comparison; not a pidfd or a lifetime claim.
+ * The surrounding instance binds the held SHA, child/init identity, request, launch and challenge.
+ * Absence preserves the legacy wire shape and means executable mapping is unproven.
+ */
+export interface DockerCustodyExecutableMapping {
+  readonly device: string;
+  readonly inode: string;
+  readonly kind: "linux-procfs-exe-v1";
+  readonly scope: "spawn-observation";
+  readonly startTimeTicks: string;
 }
 export interface DockerCustodyProviderInstance extends DockerCustodyProviderInstanceFacts {
   readonly binding: DockerCustodyObservationBinding;
@@ -274,14 +286,16 @@ export const decodeDockerCustodyProviderBytes = (value: string): Uint8Array =>
 
 const parseProviderIoMessage = (value: JsonObject, kind: string): DockerCustodyProtocolMessage | undefined => {
   switch (kind) {
-    case "provider-instance":
+    case "provider-instance": {
+      const extension = Object.hasOwn(value, "executableMapping") ? {executableMapping: executableMapping(value.executableMapping)} : {};
       exactKeys(value, ["binding", "childInstanceId", "executableSha256", "handshakeNonce", "initInstanceId", "kind",
-        "launchFingerprintSha256", "pid", "requestId"], kind);
-      return Object.freeze({binding: observationBinding(value.binding), childInstanceId: digest(value.childInstanceId, "childInstanceId"),
+        "launchFingerprintSha256", "pid", "requestId", ...Object.keys(extension)], kind);
+      return Object.freeze({...extension, binding: observationBinding(value.binding), childInstanceId: digest(value.childInstanceId, "childInstanceId"),
         executableSha256: digest(value.executableSha256, "executableSha256"), handshakeNonce: token(value.handshakeNonce, "handshakeNonce"),
         initInstanceId: digest(value.initInstanceId, "initInstanceId"), kind,
         launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"),
         pid: integer(value.pid, "pid", 2, 2_147_483_647), requestId: token(value.requestId, "requestId")});
+    }
     case "provider-input":
       exactKeys(value, ["bytesBase64", "kind", "requestId"], kind);
       return Object.freeze({bytesBase64: providerBytes(value.bytesBase64, "bytesBase64"), kind,
@@ -299,6 +313,22 @@ const parseProviderIoMessage = (value: JsonObject, kind: string): DockerCustodyP
         signal: literal(value.signal, DOCKER_CUSTODY_HOST_SIGNALS, "signal")});
     default: return undefined;
   }
+};
+
+const kernelInteger = (value: unknown, label: string, minimum: bigint): string => {
+  const result = string(value, label, 20);
+  if (!/^(?:0|[1-9][0-9]*)$/u.test(result) || BigInt(result) < minimum || BigInt(result) > 18_446_744_073_709_551_615n) {
+    return fail(`${label} must be a canonical unsigned kernel integer`);
+  }
+  return result;
+};
+const executableMapping = (input: unknown): DockerCustodyExecutableMapping => {
+  const value = object(input, "executableMapping");
+  exactKeys(value, ["device", "inode", "kind", "scope", "startTimeTicks"], "executableMapping");
+  return Object.freeze({device: kernelInteger(value.device, "device", 0n), inode: kernelInteger(value.inode, "inode", 1n),
+    kind: literal(value.kind, ["linux-procfs-exe-v1"], "executableMapping.kind"),
+    scope: literal(value.scope, ["spawn-observation"], "executableMapping.scope"),
+    startTimeTicks: kernelInteger(value.startTimeTicks, "startTimeTicks", 1n)});
 };
 
 export const parseDockerCustodyIdentity = (input: unknown, label = "identity"): DockerCustodyIdentity => {

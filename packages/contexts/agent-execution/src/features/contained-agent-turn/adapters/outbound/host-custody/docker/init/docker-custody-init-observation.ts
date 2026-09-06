@@ -7,8 +7,8 @@ export interface DockerCustodyHostObservation {
   readonly channelEof: boolean;
   /** Equality at callback settlement; later writes to retained callback arrays cannot alter these hashes. */
   readonly consumerIntegrity: "intact" | "mutated";
-  /** Held-descriptor digest is bound below; native spawn does not read back the kernel executable mapping. */
-  readonly executableMapping: "unproven";
+  /** Sampled mapping of the retained child at native spawn; never whole-lifetime executable or pidfd custody. */
+  readonly executableMapping: "observed" | "unproven";
   readonly executableSha256: string | null;
   readonly providerInstance: {readonly status: "missing"} | {
     readonly identity: DockerCustodyProviderInstance; readonly status: "observed" | "unproven";
@@ -77,7 +77,8 @@ export class DockerCustodyHostObservationWriter {
   #snapshot(rootExit: DockerCustodyInitHostRootExit | undefined,
     status: DockerCustodyHostObservation["status"]): DockerCustodyHostObservation {
     return Object.freeze({authority: this.#authority, channelEof: this.#channelEof, consumerIntegrity: this.#mutated ? "mutated" : "intact",
-      executableMapping: "unproven", executableSha256: this.#request?.executableSha256 ?? null,
+      executableMapping: status !== "incomplete" && this.#instance?.executableMapping !== undefined ? "observed" : "unproven",
+      executableSha256: this.#request?.executableSha256 ?? null,
       providerInstance: this.#instance === undefined ? Object.freeze({status: "missing"})
         : Object.freeze({identity: this.#instance, status: status === "incomplete" ? "unproven" : "observed"}),
       requestId: this.#request?.requestId ?? null, rootExit: rootExit ?? null, status,
