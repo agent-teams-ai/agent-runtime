@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getEventListeners } from "node:events";
+import { DockerHttpNetworkResources } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js";
 import { HostHttpEgressV4Journal } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-journal.js";
 import { v4Decode, v4Hash } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.js";
 import { v4Replay } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-replay.js";
@@ -7,8 +9,8 @@ import type { HostHttpEgressV4Intent, HostHttpEgressV4Observed } from "../../../
 import { MemoryV4Storage, SyntheticV4Owner } from "../../fixtures/host-http-egress-v4-fixture.ts";
 import { call, deferred, networkFixture } from "../../fixtures/docker-operation-network-fixture.ts";
 
-const fixture = (storage = new MemoryV4Storage()) => {
-  const f = networkFixture(); const owner = f.resources();
+const fixture = (storage = new MemoryV4Storage(), cleanupMilliseconds = 5_000) => {
+  const f = networkFixture(); const owner = new DockerHttpNetworkResources({...f.resourceInput, cleanupMilliseconds});
   // Explicit synthetic stand-in for the separately owned Host projector. It is
   // never provided to the production network issuer, which rejects its tokens.
   const other = new SyntheticV4Owner(); let serial = 0;
@@ -140,4 +142,97 @@ test("journal owner drift after allocation closes admission and retains unknown 
   assert.equal(f.owner.signal.aborted, true);
   assert.equal(f.journal.evidence().resourceLedger, "quarantined");
   assert.equal(await f.owner.cleanupNetwork(), "unknown");
+});
+
+
+test("launch abort remains subscribed after successful preparation and cuts admission synchronously", async () => {
+  const f = fixture(); await f.open(); const launch = new AbortController();
+  await f.prepare(launch.signal);
+  assert.equal(f.owner.signal.aborted, false);
+  launch.abort();
+  assert.equal(f.owner.signal.aborted, true);
+  assert.equal(getEventListeners(launch.signal, "abort").length, 0);
+  assert.equal(f.state().retired, false);
+  assert.equal(f.state().container, null);
+  await f.releasePrerequisites();
+  assert.equal(await f.owner.cleanupNetwork(), "absent");
+});
+
+test("cleanup deadline bounds a stuck preparation while retaining the late allocation", async () => {
+  const f = fixture(new MemoryV4Storage(), 40); await f.open();
+  const reached = deferred(); const release = deferred();
+  f.io.after = async label => {
+    if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}
+  };
+  const rejection = assert.rejects(f.prepare()); await reached.promise;
+  assert.equal(await f.owner.cleanupNetwork(), "unknown");
+  assert.ok(f.io.network);
+  assert.equal(f.owner.signal.aborted, true);
+  release.resolve(); await rejection;
+  await f.releasePrerequisites();
+  assert.equal(await f.owner.cleanupNetwork(), "absent");
+  assert.equal(f.io.writes.filter(value => value.method === "POST").length, 1);
+  assert.equal(f.state().retired, false);
+});
+
+test("in-flight membership is retained before cleanup and a late container remains owned", async () => {
+  const f = fixture(); await f.open(); await f.prepare();
+  await f.intent("listener_intent"); await f.external("listener_allocated"); f.attach();
+  const reached = deferred(); const release = deferred();
+  f.io.after = async label => {
+    if (label === `GET /v1.47/containers/${f.container.containerId}/json`) {reached.resolve(); await release.promise;}
+  };
+  const rejection = assert.rejects(f.owner.observeContainer(f.container, call())); await reached.promise;
+  const cleanup = f.owner.cleanupNetwork(); let settled = false;
+  void cleanup.then(() => {settled = true;}); await Promise.resolve();
+  assert.equal(settled, false);
+  assert.equal(f.owner.signal.aborted, true);
+  release.resolve(); await rejection;
+  assert.equal(await cleanup, "unknown");
+  assert.equal(f.state().container, null, "cancelled membership is not attached evidence");
+  await f.releasePrerequisites();
+  await f.intent("listener_release"); await f.external("listener_absent");
+  assert.equal(await f.owner.cleanupNetwork(), "unknown", "real container still exists despite synthetic other-owner claim");
+  f.io.containerPresent = false; f.io.network.Containers = {};
+  assert.equal(await f.owner.cleanupNetwork(), "absent");
+  assert.equal(f.state().retired, false);
+});
+
+for (const boundary of ["intent-ownership", "intent-append", "allocation-observation"] as const) {
+  test(`cancellation at V4 ${boundary} await never grants admission or loses cleanup`, async () => {
+    const storage = new MemoryV4Storage(); const f = fixture(storage); await f.open();
+    const launch = new AbortController();
+    const append = storage.append.bind(storage); const assertOwned = storage.assertOwned.bind(storage);
+    let cancelled = false;
+    storage.assertOwned = async () => {
+      await assertOwned();
+      if (!cancelled && boundary === "intent-ownership") {cancelled = true; launch.abort();}
+    };
+    storage.append = async (expected, bytes) => {
+      await append(expected, bytes);
+      const phase = f.state().network.phase;
+      if (!cancelled && (boundary === "intent-append" && phase === 1 || boundary === "allocation-observation" && phase === 2)) {
+        cancelled = true; launch.abort();
+      }
+    };
+    await assert.rejects(f.prepare(launch.signal));
+    assert.equal(cancelled, true); assert.equal(f.owner.signal.aborted, true);
+    if (boundary !== "allocation-observation") {assert.equal(f.io.writes.length, 0);}
+    else {
+      await f.releasePrerequisites(); assert.equal(await f.owner.cleanupNetwork(), "absent");
+    }
+    assert.equal(f.state().retired, false);
+  });
+}
+
+test("a missing journal observation reader cannot be substituted by matching raw readback", async () => {
+  const f = networkFixture(); const owner = f.resources(); const storage = new MemoryV4Storage();
+  const journal = new HostHttpEgressV4Journal(storage, f.subject, {readObservation: () => undefined});
+  await journal.prepare(`command:${v4Hash("open-without-network-issuer")}`);
+  await assert.rejects(owner.prepare(journal, f.current, call()));
+  assert.equal(owner.signal.aborted, true); assert.ok(f.state.network);
+  assert.equal(journal.evidence().resourceLedger, "open");
+  assert.equal(journal.evidence().admission, "closed");
+  assert.equal(journal.evidence().reconcileRequired, true);
+  assert.equal(await owner.cleanupNetwork(), "unknown");
 });

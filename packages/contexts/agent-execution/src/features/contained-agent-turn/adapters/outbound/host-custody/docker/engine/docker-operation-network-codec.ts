@@ -1,7 +1,8 @@
+import { addAbortListener } from "node:events";
 import { isIPv4 } from "node:net";
 import { canonicalJsonSha256 } from "./docker-canonical-json.js";
 import { snapshotOwnDataObject } from "./docker-boundary-snapshot.js";
-import type { DockerContainerAuthority, DockerEngineIdentity } from "./docker-engine-port.js";
+import type { DockerContainerAuthority, DockerEngineCall, DockerEngineIdentity } from "./docker-engine-port.js";
 
 export const networkFailure = (): Error => new Error("Docker operation network custody is unproven");
 export const networkDigest = (value: unknown): string => {
@@ -77,4 +78,20 @@ export const decodeOperationNetwork = (input: Readonly<{
     endpoint = Object.freeze({containerId, endpointId: networkDigest(member.EndpointID), address});
   }
   return Object.freeze({networkId: id, gateway, endpoint, evidenceSha256: canonicalJsonSha256(value)});
+};
+
+/** A cleanup deadline bounds observation of retained work, never its ownership.
+ * Late work stays retained by its original slot and must be reobserved later. */
+export const awaitNetworkCleanupWork = async (work: Promise<unknown> | undefined, call: DockerEngineCall): Promise<void> => {
+  if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {throw networkFailure();}
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abort: ReturnType<typeof addAbortListener> | undefined;
+  try {
+    await Promise.race([work, new Promise<never>((_resolve, reject) => {
+      const fail = () => reject(networkFailure());
+      abort = addAbortListener(call.signal, fail);
+      timer = setTimeout(fail, Math.min(call.deadlineEpochMs - Date.now(), 120_000));
+    })]);
+    if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {throw networkFailure();}
+  } finally {clearTimeout(timer); abort?.[Symbol.dispose]();}
 };

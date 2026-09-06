@@ -18,12 +18,12 @@ type WireCall = Parameters<Client["buffered"]>[0];
 
 /** Synthetic external Engine IO only. No Unix socket, native namespace, provider,
  * filesystem preparation or host network is used by this fixture. */
-export const networkFixture = () => {
+export const networkFixture = (subjectOverride: Partial<typeof template> = {}) => {
   const policy = basePolicy("/tmp/ar69-r276-synthetic-network");
   const info = {ID: "synthetic-network-daemon", ServerVersion: "29.6.1", Driver: "overlay2", CgroupDriver: "systemd", CgroupVersion: "2"};
   const endpoint = {canonicalSocketPath: policy.socketPath, daemonBootGenerationSha256: DAEMON_BOOT, hostBootGenerationSha256: HOST_BOOT};
   const engine = decodeEngineIdentity(info, policy, endpoint);
-  const subject = Object.freeze({...template, attempt: Object.freeze({...template.attempt,
+  const subject = Object.freeze({...template, ...subjectOverride, attempt: Object.freeze({...template.attempt, ...subjectOverride.attempt,
     daemonIdentitySha256: engine.daemonIdentitySha256, daemonBootGenerationSha256: engine.daemonBootGenerationSha256,
     hostIdentitySha256: engine.hostIdentitySha256, hostBootGenerationSha256: engine.hostBootGenerationSha256})});
   const recipe = dockerHttpOperationNetworkRecipe(subject);

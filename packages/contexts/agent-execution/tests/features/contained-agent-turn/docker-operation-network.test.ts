@@ -12,6 +12,9 @@ test("reservation and fixed network naming are effect-free and snapshot generati
   assert.throws(() => new DockerOperationNetwork({...f.input,
     binding: {...f.input.binding, operationSha256: "a".repeat(64)}}));
   assert.equal(f.state.calls.length, 0);
+  const {client: _client, ...nativeInput} = f.input;
+  const native = new DockerOperationNetwork(nativeInput);
+  assert.equal(native.name, owner.name, "native client construction is inert and accepted by the Engine boundary");
   let getterCalls = 0;
   assert.throws(() => new DockerOperationNetwork({...f.input, get binding() {getterCalls += 1; return f.input.binding;}}));
   assert.equal(getterCalls, 0);
@@ -186,4 +189,165 @@ test("container label drift during network readback is caught by final launch in
   };
   await assert.rejects(owner.inspectMembership(call()));
   assert.equal(owner.reconcileRequired, true);
+});
+
+// An acknowledgement id alone is not provenance for a network never inspected
+// with the retained allocation nonce, including a plausible but unrelated id.
+test("create id followed only by 404 cannot issue physical absence", async () => {
+  const f = networkFixture(); const owner = f.open();
+  f.state.after = async label => {
+    if (label === "POST /v1.47/networks/create") {f.state.network = undefined;}
+  };
+  await assert.rejects(owner.allocate(call()));
+  assert.equal((await owner.remove(call())).state, "unknown");
+  assert.equal(f.state.writes.length, 1);
+});
+
+test("lost POST may allocate after a name-only 404; later exact discovery retains cleanup", async () => {
+  const f = networkFixture(); const owner = f.open();
+  const client = f.input.client; const buffered = client.buffered.bind(client);
+  let delayed: Parameters<typeof buffered>[0] | undefined;
+  client.buffered = async input => {
+    if (input.method === "POST") {
+      input.beforeWrite?.(); const {beforeWrite: _beforeWrite, ...written} = input; delayed = written;
+      throw new Error("synthetic transport lost while Engine request is pending");
+    }
+    return buffered(input);
+  };
+  await assert.rejects(owner.allocate(call()));
+  assert.equal((await owner.remove(call())).state, "unknown");
+  assert.equal(f.state.network, undefined);
+  // Only the server completes the already-written POST; no caller retry occurs.
+  await buffered(delayed!);
+  assert.equal((await owner.remove(call())).state, "absent");
+  assert.equal(owner.reconcileRequired, true);
+  assert.equal(f.state.writes.filter(value => value.method === "POST").length, 1);
+});
+
+test("cleanup deadline does not abandon a pending allocation or permit another POST", async () => {
+  const f = networkFixture(); const owner = f.open(); const reached = deferred(); const release = deferred();
+  f.state.after = async label => {
+    if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}
+  };
+  const preparation = assert.rejects(owner.allocate(call())); await reached.promise;
+  const result = await owner.remove({...call(), deadlineEpochMs: Date.now() + 20});
+  assert.equal(result.state, "unknown");
+  assert.ok(f.state.network);
+  assert.throws(() => owner.allocate(call()));
+  release.resolve(); await preparation;
+  assert.equal((await owner.remove(call())).state, "absent");
+  assert.equal(f.state.writes.filter(value => value.method === "POST").length, 1);
+});
+
+test("cutoff between request entry and actual first POST write forbids allocation", async () => {
+  const f = networkFixture(); const owner = f.open(); const reached = deferred(); const release = deferred();
+  f.state.before = async label => {
+    if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}
+  };
+  const preparation = assert.rejects(owner.allocate(call())); await reached.promise;
+  owner.sealAdmission(); release.resolve(); await preparation;
+  assert.equal(f.state.writes.length, 0);
+  assert.equal(f.state.network, undefined);
+});
+
+for (const drift of ["endpoint", "network", "extra-network", "launch", "engine"] as const) {
+  test(`final container/Engine readback rejects late ${drift} drift`, async () => {
+    const f = networkFixture(); const owner = f.open(); await owner.allocate(call()); owner.retainContainer(f.container); f.attach();
+    let reads = 0;
+    f.state.before = async label => {
+      if (label !== `GET /v1.47/containers/${f.container.containerId}/json` || ++reads !== 3) {return;}
+      const networks = f.state.containerRaw.NetworkSettings.Networks;
+      if (drift === "endpoint") {networks[owner.name].EndpointID = "b".repeat(64);}
+      if (drift === "network") {networks[owner.name].NetworkID = "c".repeat(64);}
+      if (drift === "extra-network") {networks.foreign = {...networks[owner.name]};}
+      if (drift === "launch") {f.state.containerRaw.Config.Labels["com.agent-runtime.launch-fingerprint-sha256"] = "d".repeat(64);}
+      if (drift === "engine") {f.endpoint.daemonBootGenerationSha256 = "e".repeat(64);}
+    };
+    await assert.rejects(owner.inspectMembership(call()));
+    assert.equal(owner.reconcileRequired, true);
+  });
+}
+
+test("DELETE cannot use network provenance from before the container readback", async () => {
+  const f = networkFixture(); const owner = f.open(); await owner.allocate(call()); owner.retainContainer(f.container);
+  f.state.after = async label => {
+    if (label === `GET /v1.47/containers/${f.container.containerId}/json`) {
+      f.state.network.Labels["com.agent-runtime.http.allocation"] = "f".repeat(64);
+    }
+  };
+  assert.equal((await owner.remove(call())).state, "unknown");
+  assert.equal(f.state.writes.length, 1);
+});
+
+test("container appearing during DELETE prevents final network absence evidence", async () => {
+  const f = networkFixture(); const owner = f.open(); await owner.allocate(call()); owner.retainContainer(f.container);
+  f.state.after = async label => {
+    if (label === `DELETE /v1.47/networks/${f.networkId}`) {f.state.containerPresent = true;}
+  };
+  assert.equal((await owner.remove(call())).state, "unknown");
+  assert.equal(f.state.network, undefined);
+  f.state.containerPresent = false;
+  assert.equal((await owner.remove(call())).state, "absent");
+  assert.equal(f.state.writes.filter(value => value.method === "DELETE").length, 1);
+});
+
+test("late retained launch identity at DELETE entry cannot bypass container absence", async () => {
+  const f = networkFixture(); const owner = f.open(); await owner.allocate(call());
+  f.state.before = async label => {
+    if (label === `DELETE /v1.47/networks/${f.networkId}`) {
+      owner.retainContainer(f.container); f.state.containerPresent = true;
+    }
+  };
+  assert.equal((await owner.remove(call())).state, "unknown");
+  assert.equal(f.state.writes.length, 1);
+});
+
+test("cancellation at every membership IO await closes admission without publishing membership", async () => {
+  const baseline = networkFixture(); const baseOwner = baseline.open(); await baseOwner.allocate(call());
+  baseOwner.retainContainer(baseline.container); baseline.attach(); baseline.state.calls.length = 0;
+  await baseOwner.inspectMembership(call());
+  for (let stopAt = 1; stopAt <= baseline.state.calls.length; stopAt += 1) {
+    const f = networkFixture(); const owner = f.open(); await owner.allocate(call()); owner.retainContainer(f.container); f.attach();
+    let index = 0; const abort = new AbortController();
+    f.state.after = async () => {if (++index === stopAt) {abort.abort();}};
+    await assert.rejects(owner.inspectMembership(call(abort.signal)), `membership boundary ${stopAt}`);
+    assert.equal(owner.reconcileRequired, true);
+    f.state.after = async () => {}; f.state.containerPresent = false; f.state.network.Containers = {};
+    assert.equal((await owner.remove(call())).state, "absent");
+  }
+});
+
+for (const malformed of ["media", "json", "status", "container-404"] as const) {
+  test(`malformed cleanup ${malformed} readback is unknown and cannot authorize DELETE`, async () => {
+    const f = networkFixture(); const owner = f.open(); await owner.allocate(call()); owner.retainContainer(f.container);
+    const client = f.input.client; const buffered = client.buffered.bind(client);
+    client.buffered = async input => {
+      const response = await buffered(input);
+      if (input.method === "GET" && input.path.startsWith("/v1.47/networks/")) {
+        if (malformed === "media") {return {...response, contentType: "text/plain"};}
+        if (malformed === "json") {return {...response, body: Buffer.from("{")};}
+        if (malformed === "status") {return {...response, statusCode: 503};}
+      }
+      if (malformed === "container-404" && input.path.startsWith("/v1.47/containers/")) {
+        return {...response, body: Buffer.from('{"unrelated":true}')};
+      }
+      return response;
+    };
+    assert.equal((await owner.remove(call())).state, "unknown");
+    assert.equal(f.state.writes.length, 1);
+  });
+}
+
+test("malformed DELETE acknowledgement reconciles read-only and preserves uncertainty", async () => {
+  const f = networkFixture(); const owner = f.open(); await owner.allocate(call());
+  const client = f.input.client; const buffered = client.buffered.bind(client);
+  client.buffered = async input => {
+    const response = await buffered(input);
+    return input.method === "DELETE" ? {...response, body: Buffer.from("unexpected")} : response;
+  };
+  const result = await owner.remove(call());
+  assert.equal(result.state, "absent");
+  assert.equal(owner.reconcileRequired, true);
+  await owner.remove(call());
+  assert.equal(f.state.writes.filter(value => value.method === "DELETE").length, 1);
 });

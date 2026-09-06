@@ -1,12 +1,13 @@
+import { addAbortListener } from "node:events";
 import { randomBytes } from "node:crypto";
 import { BoundedUnixHttpClient, type UnixHttpResponse } from "./bounded-unix-http.js";
 import { NodeUnixSocketDockerEngine } from "./node-unix-socket-docker-engine.js";
 import { snapshotDockerEngineCall, snapshotDockerEnginePolicy, snapshotOwnDataObject } from "./docker-boundary-snapshot.js";
-import { validateAuthorityShape } from "./docker-engine-codec.js";
+import { decodeInspection, validateAuthorityShape } from "./docker-engine-codec.js";
 import { canonicalJsonSha256 } from "./docker-canonical-json.js";
 import { parseStrictJson } from "./strict-json.js";
-import type { DockerContainerAuthority, DockerEngineCall, DockerEngineIdentity } from "./docker-engine-port.js";
-import { assertNetworkContainer, assertNetworkEngine, decodeOperationNetwork, networkBinding,
+import type { DockerContainerAuthority, DockerEngineCall, DockerEngineIdentity, DockerEnginePolicy } from "./docker-engine-port.js";
+import { assertNetworkContainer, assertNetworkEngine, awaitNetworkCleanupWork, decodeOperationNetwork, networkBinding,
   networkDigest, networkFailure, networkObject, operationNetworkLabels, operationNetworkName,
   type DockerOperationNetworkBinding, type DockerOperationNetworkObservation } from "./docker-operation-network-codec.js";
 
@@ -32,6 +33,7 @@ export class DockerOperationNetwork {
   readonly #binding: DockerOperationNetworkBinding;
   readonly #client: Client;
   readonly #engine: NodeUnixSocketDockerEngine;
+  readonly #policy: DockerEnginePolicy;
   readonly #name: string;
   #engineIdentity: DockerEngineIdentity | undefined;
   #allocation: string | undefined;
@@ -39,6 +41,10 @@ export class DockerOperationNetwork {
   #container: DockerContainerAuthority | undefined;
   #entered = false;
   #createIssued = false;
+  #provenance: string | undefined;
+  #networkAbsence: string | undefined;
+  #containerAbsence: string | undefined;
+  #launchAbort: ReturnType<typeof addAbortListener> | undefined;
   #removeIssued = false;
   #cut = false;
   #uncertain = false;
@@ -51,17 +57,27 @@ export class DockerOperationNetwork {
     this.#binding = networkBinding(construction.binding as DockerOperationNetworkBinding);
     this.#name = operationNetworkName(this.#binding);
     const policy = snapshotDockerEnginePolicy(construction.policy);
+    this.#policy = policy;
     if (policy.allowedNetworkName !== this.#name || policy.hostIdentitySha256 !== this.#binding.hostIdentitySha256) {throw networkFailure();}
     const {daemonPidFileMode, daemonPidFileOwnerGid, daemonPidFileOwnerUid, daemonPidFilePath,
       socketMode, socketOwnerGid, socketOwnerUid, socketPath} = policy;
-    this.#client = (construction.client as Client | undefined) ?? new BoundedUnixHttpClient({daemonPidFileMode, daemonPidFileOwnerGid,
-      daemonPidFileOwnerUid, daemonPidFilePath, socketMode, socketOwnerGid, socketOwnerUid, socketPath});
+    if (construction.client === undefined) {
+      const native = new BoundedUnixHttpClient({daemonPidFileMode, daemonPidFileOwnerGid,
+        daemonPidFileOwnerUid, daemonPidFilePath, socketMode, socketOwnerGid, socketOwnerUid, socketPath});
+      // The Engine boundary accepts an inert own-method record, not a class
+      // instance. Both owners retain the SAME native client's endpoint custody.
+      this.#client = Object.freeze({buffered: native.buffered.bind(native),
+        endpointIdentity: native.endpointIdentity.bind(native), stream: native.stream.bind(native)});
+    } else {this.#client = construction.client as Client;}
     this.#engine = new NodeUnixSocketDockerEngine({client: this.#client, policy});
   }
 
   public get name(): string {return this.#name;}
   public get reconcileRequired(): boolean {return this.#uncertain;}
-  public sealAdmission(): void {this.#cut = true;}
+  public sealAdmission(): void {
+    this.#cut = true;
+    this.#launchAbort?.[Symbol.dispose](); this.#launchAbort = undefined;
+  }
 
   #check(call: DockerEngineCall): void {
     if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {throw networkFailure();}
@@ -80,14 +96,15 @@ export class DockerOperationNetwork {
     }
     this.#engineIdentity ??= Object.freeze({...identity});
   }
-  async #get(path: string, call: DockerEngineCall): Promise<Readonly<{absent: boolean; value: unknown}>> {
+  async #get(path: string, call: DockerEngineCall): Promise<Readonly<{absent: boolean; value: unknown; evidenceSha256: string}>> {
     await this.#identity(call);
     const response = await this.#client.buffered({call, method: "GET", path});
     const value = json(response);
     await this.#identity(call);
     if (response.statusCode !== 200 && response.statusCode !== 404) {throw networkFailure();}
     if (response.statusCode === 404 && typeof networkObject(value).message !== "string") {throw networkFailure();}
-    return {absent: response.statusCode === 404, value};
+    return {absent: response.statusCode === 404, value,
+      evidenceSha256: canonicalJsonSha256({path, statusCode: response.statusCode, value, engine: this.#engineIdentity})};
   }
 
   public allocate(input: DockerEngineCall): Promise<DockerOperationNetworkObservation> {
@@ -95,7 +112,12 @@ export class DockerOperationNetwork {
     this.#entered = true;
     const completion = Promise.withResolvers<DockerOperationNetworkObservation>();
     this.#allocationPending = completion.promise.then(() => {}, () => {});
-    try {void this.#allocate(snapshotDockerEngineCall(input)).then(completion.resolve, completion.reject);}
+    try {
+      const call = snapshotDockerEngineCall(input);
+      this.#admit(call);
+      this.#launchAbort = addAbortListener(call.signal, () => this.sealAdmission());
+      void this.#allocate(call).then(completion.resolve, completion.reject);
+    }
     catch (error) {this.#uncertain = true; this.sealAdmission(); completion.reject(error);}
     return completion.promise;
   }
@@ -141,14 +163,32 @@ export class DockerOperationNetwork {
   async #observe(call: DockerEngineCall): Promise<DockerOperationNetworkObservation | undefined> {
     if (!this.#createIssued || this.#allocation === undefined || this.#foreign) {throw networkFailure();}
     const response = await this.#get(`${API}${this.#networkId ?? this.#name}`, call);
-    if (response.absent) {return undefined;}
+    if (response.absent) {this.#networkAbsence = response.evidenceSha256; return undefined;}
     let observed: DockerOperationNetworkObservation;
     try {
       observed = decodeOperationNetwork({value: response.value, name: this.#name,
         labels: operationNetworkLabels(this.#binding, this.#allocation), networkId: this.#networkId, container: this.#container});
     } catch (error) {this.#foreign = true; throw error;}
     this.#networkId ??= observed.networkId;
+    this.#provenance = observed.evidenceSha256;
     return observed;
+  }
+
+  async #memberContainer(call: DockerEngineCall, observed?: DockerOperationNetworkObservation): Promise<string> {
+    const raw = await this.#get(`/v1.47/containers/${this.#container!.containerId}/json`, call);
+    this.#admit(call);
+    if (raw.absent) {throw networkFailure();}
+    // Validate launch specification AND endpoint on the same readback. A final
+    // Engine.inspect alone ignores NetworkSettings and cannot confirm membership.
+    decodeInspection(raw.value, this.#container!, this.#engineIdentity!, this.#policy);
+    const networks = networkObject(networkObject(networkObject(raw.value).NetworkSettings).Networks);
+    if (Object.keys(networks).length !== 1 || !Object.hasOwn(networks, this.#name)) {throw networkFailure();}
+    const endpoint = networkObject(networks[this.#name]);
+    if (observed !== undefined && (observed.endpoint === null || endpoint.NetworkID !== observed.networkId ||
+      endpoint.EndpointID !== observed.endpoint.endpointId ||
+      `${String(endpoint.IPAddress)}/${String(endpoint.IPPrefixLen)}` !== observed.endpoint.address ||
+      endpoint.GlobalIPv6Address !== "")) {throw networkFailure();}
+    return raw.evidenceSha256;
   }
 
   public async inspectMembership(input: DockerEngineCall): Promise<DockerOperationNetworkObservation> {
@@ -156,30 +196,30 @@ export class DockerOperationNetwork {
     try {
       this.#admit(call);
       if (this.#container === undefined) {throw networkFailure();}
-      // Existing Engine inspection verifies full create specification and launch
-      // labels. NetworkSettings additionally binds the actual network/endpoint.
-      const container = await this.#engine.inspect(this.#container, call);
-      this.#admit(call);
-      if (container.existence !== "present") {throw networkFailure();}
+      await this.#memberContainer(call);
       const observed = await this.#observe(call);
       this.#admit(call);
-      if (observed?.endpoint === null || observed === undefined) {throw networkFailure();}
-      const raw = await this.#get(`/v1.47/containers/${this.#container.containerId}/json`, call);
-      this.#admit(call);
-      if (raw.absent) {throw networkFailure();}
-      const networks = networkObject(networkObject(networkObject(raw.value).NetworkSettings).Networks);
-      if (Object.keys(networks).length !== 1 || !Object.hasOwn(networks, this.#name)) {throw networkFailure();}
-      const endpoint = networkObject(networks[this.#name]);
-      if (endpoint.NetworkID !== observed.networkId || endpoint.EndpointID !== observed.endpoint.endpointId ||
-        `${String(endpoint.IPAddress)}/${String(endpoint.IPPrefixLen)}` !== observed.endpoint.address || endpoint.GlobalIPv6Address !== "") {throw networkFailure();}
+      if (observed === undefined || observed.endpoint === null) {throw networkFailure();}
+      await this.#memberContainer(call, observed);
       const after = await this.#observe(call);
       this.#admit(call);
       if (after === undefined || canonicalJsonSha256(after) !== canonicalJsonSha256(observed)) {throw networkFailure();}
-      const confirmed = await this.#engine.inspect(this.#container, call);
+      const containerReadback = await this.#memberContainer(call, observed);
       this.#admit(call);
-      if (confirmed.existence !== "present") {throw networkFailure();}
-      return observed;
+      return Object.freeze({...observed, evidenceSha256: canonicalJsonSha256({network: observed.evidenceSha256, containerReadback})});
     } catch (error) {this.#uncertain = true; this.sealAdmission(); throw error;}
+  }
+
+  async #containerAbsent(call: DockerEngineCall): Promise<void> {
+    const authority = this.#container;
+    if (authority !== undefined) {
+      const container = await this.#get(`/v1.47/containers/${authority.containerId}/json`, call);
+      this.#check(call);
+      if (!container.absent) {throw networkFailure();}
+      this.#containerAbsence = container.evidenceSha256;
+    }
+    // A late launch handle received during this await invalidates the proof.
+    if (this.#container !== authority) {throw networkFailure();}
   }
 
   /** Caller supplies an independent cleanup deadline/signal. Duplicate calls
@@ -191,31 +231,32 @@ export class DockerOperationNetwork {
     this.#removal = completion.promise;
     this.sealAdmission();
     // Validate inside the owned promise so a malformed call cannot strand it.
-    void this.#remove(input).then(completion.resolve, () => {
-      this.#uncertain = true; completion.resolve(Object.freeze({state: "unknown"}));
-    }).finally(() => {
-      // Only observation may resolve an uncertain DELETE on a later call.
-      this.#removal = undefined;
+    void this.#remove(input).then(result => {
+      this.#removal = undefined; completion.resolve(result);
+    }, () => {
+      this.#uncertain = true; this.#removal = undefined;
+      completion.resolve(Object.freeze({state: "unknown"}));
     });
     return completion.promise;
   }
   async #remove(input: DockerEngineCall): Promise<DockerOperationNetworkRemoval> {
-    await this.#allocationPending;
     const call = snapshotDockerEngineCall(input);
+    await awaitNetworkCleanupWork(this.#allocationPending, call);
+    const boundContainer = this.#container;
     const before = await this.#observe(call);
-    if (this.#container !== undefined) {
-      const container = await this.#engine.inspect(this.#container, call);
-      this.#check(call);
-      if (container.existence !== "absent") {throw networkFailure();}
-    }
+    await this.#containerAbsent(call);
     if (before !== undefined) {
       if (before.endpoint !== null || this.#removeIssued) {throw networkFailure();}
-      await this.#identity(call);
+      const confirmed = await this.#observe(call);
+      if (confirmed === undefined || canonicalJsonSha256(confirmed) !== canonicalJsonSha256(before)) {throw networkFailure();}
       this.#removeIssued = true;
       // Exact id only; never DELETE a name, disconnect a foreign endpoint, or force.
       try {
         const response = await this.#client.buffered({call, method: "DELETE", path: `${API}${before.networkId}`,
-          beforeWrite: () => this.#check(call)});
+          beforeWrite: () => {
+            this.#check(call);
+            if (this.#container !== boundContainer) {throw networkFailure();}
+          }});
         if (response.statusCode !== 204 || response.body.byteLength !== 0 || response.contentType !== "") {this.#uncertain = true;}
       } catch {this.#uncertain = true;}
       const after = await this.#observe(call);
@@ -223,9 +264,16 @@ export class DockerOperationNetwork {
     }
     // A name-only 404 after a lost create response is not proof of absence: the
     // unresolved POST may still allocate. Keep that slot quarantined forever.
-    if (this.#networkId === undefined) {throw networkFailure();}
+    if (this.#networkId === undefined || this.#provenance === undefined) {throw networkFailure();}
+    // Recheck exact container removal after DELETE/network absence, then the
+    // retained Engine before issuing the physical network absence observation.
+    const container = this.#container;
+    await this.#containerAbsent(call);
+    await this.#identity(call);
+    if (this.#container !== container) {throw networkFailure();}
     return Object.freeze({state: "absent", networkId: this.#networkId, reconcileRequired: this.#uncertain,
       evidenceSha256: canonicalJsonSha256({networkId: this.#networkId, engine: this.#engineIdentity, absent: true,
-        container: this.#container ?? null, allocation: this.#allocation})});
+        container: this.#container ?? null, allocation: this.#allocation, provenance: this.#provenance,
+        networkReadback: this.#networkAbsence, containerReadback: this.#containerAbsence ?? null})});
   }
 }
