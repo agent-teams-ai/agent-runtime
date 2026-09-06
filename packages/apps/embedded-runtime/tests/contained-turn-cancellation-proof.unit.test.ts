@@ -47,7 +47,7 @@ test("cancellation proof rejects throwing owner fields and malformed output", ()
     { kind: "contract_violation" });
   for (const output of [
     [{ cursor: 0, kind: "assistant", text: "x".repeat(1_000_001) }],
-    Array(10_001).fill({ cursor: 0, kind: "assistant", text: "" }),
+    Array.from({ length: 10_001 }, () => ({ cursor: 0, kind: "assistant", text: "" })),
     [{ cursor: 0, kind: "assistant", text: "" }, { cursor: 0, kind: "assistant", text: "" }],
   ]) {
     assert.deepEqual(proof({ ...terminal(), output }), { kind: "contract_violation" });

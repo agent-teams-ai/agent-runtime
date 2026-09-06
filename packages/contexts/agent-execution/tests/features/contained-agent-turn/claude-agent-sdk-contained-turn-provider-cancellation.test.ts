@@ -341,6 +341,7 @@ test("acknowledged Claude cancellation with exhausted iterator but no result rem
     async *[Symbol.asyncIterator]() {
       started = true;
       await gate;
+      yield* [];
       drained = true;
     },
   }), { clock });
