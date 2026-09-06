@@ -595,9 +595,9 @@ credentials.
 ## Hosted worker execution model
 
 All heavy research, implementation, fault injection, and E2E work should run on
-subscription-runtime hosted workers in isolated worktrees. Planning and final
-architecture reviews use `gpt-5.6-sol` with `xhigh` reasoning; implementation
-uses `gpt-5.6-sol` with `medium` reasoning; fast mode is enabled as requested.
+subscription-runtime hosted workers in isolated worktrees. For the current
+PR #69 delivery, the owner's accepted setting is `gpt-6-astra`, `xhigh`
+reasoning, and fast service for both writers and independent reviewers.
 
 Parallel ownership:
 
@@ -616,7 +616,8 @@ Parallel ownership:
 Every lane receives the exact accepted decisions, this plan, immutable provider
 evidence, scope exclusions, and test safety rules. Contract changes are proposed
 to the kernel owner rather than silently edited across lanes. Integration happens
-in small dependency-ordered PRs, not one giant merge.
+in dependency-ordered checkpoints. The accepted PR #69 exception below keeps
+this existing delivery in one PR; future deliveries retain the normal PR budget.
 
 Independent reviews occur after Phase 0, after the kernel, after each provider
 adapter, and on the final exact head. Reviewers classify findings as product
@@ -669,6 +670,49 @@ oracle case only when a minimized counterexample demonstrates a missing state or
 transition. Adapter conformance and E2E suites may reuse oracle scenario IDs.
 
 ## Pull request sequence
+
+### PR #69 completion simplification (owner accepted 2026-09-06)
+
+This execution update preserves the approved V1 scope, ADR invariants, required
+tests, and complete Definition of Done. It overrides the replacement-stack
+sequence for the existing PR #69 only. Preserve its branch and review history;
+do not create a late replacement stack or install dependencies to continue.
+
+Deliver three concrete results in order, running independent owners in parallel:
+
+1. Complete one disposable Linux Codex turn through the existing seven ports:
+   committed claim, Host/Provider Access/Runtime Security assembly, enforced
+   provider route, actual output and exit, and cleanup receipts. Connect the
+   existing owners; do not add another lifecycle or application port.
+2. Complete Claude and the existing cooperative macOS path through that same
+   contract. Qualify all four original provider/platform combinations and the
+   required PostgreSQL boundaries using explicitly test-owned credentials and
+   disposable projects. Hosted worker accounts alone are not canary bindings.
+3. Seal the stable code SHA, qualification registry, and L0 evidence; finish
+   independent review, one final full check/required CI cycle, the final push,
+   and normal merge. Verify the merge SHA in main without bypassing checks.
+
+Use focused compiled tests before review. Review related changes that share an
+invariant as one bounded cumulative diff after the producer's focused checks;
+do not queue separate reviews of nearly identical intermediate snapshots. Each
+review records its exact base/head, complete owned paths, dependencies, and
+actual validation limits. An unreviewed dependency cannot become approved by
+being omitted from the diff. Fix concrete P0-P2 findings and re-review the
+remediation; optional generalization does not block delivery.
+
+Reuse passing evidence only when the tested inputs, relevant dependency and
+tool versions, and environment assumptions are unchanged and identifiable by
+SHA or digest. If they change, rerun the affected check. Reconcile the final
+canaries and required CI with the final code SHA. An ordinary infrastructure
+timeout permits a bounded retry of only the unproved phase; an ambiguous
+provider execution must first be reconciled, never blindly repeated.
+
+Docker/V4 journals and helpers are implementation choices, not additional
+product goals. Add code only for a missing accepted invariant or a reproduced
+defect. Do not expand into a general HTTP gateway, resource platform, public
+SDK, Desktop, Module Kit/ADR-0011, Windows production, or production OpenCode.
+The three results above group delivery work; they do not remove acceptance
+gates or change the fixed progress-report denominator.
 
 ### Delivery ratchet
 
