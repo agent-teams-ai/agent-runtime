@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCurrentEgressOwner } from
   "../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
-import { candidate, changed, current, deferred, digest, finalInput, fixture, provisional,
+import { approve, candidate, changed, current, deferred, digest, finalInput, fixture, provisional,
   resolveInput, scope } from "./current-egress-owner.fixture.ts";
 
 const rsDrift: [string, unknown][] = [
@@ -103,7 +103,7 @@ test("replacement supersedes the sole context even for an identical canonical re
 
 test("overlapping resolves never publish the older context or queue another borrowed callback", async t => {
   const { input, state } = fixture(); const gate = deferred<typeof state.head>(); let reads = 0;
-  const owner = createCurrentEgressOwner({ ...input, readRsHead: () => { reads += 1; return gate.promise; } });
+  const owner = createCurrentEgressOwner({ ...input, readRsHead: async () => { reads += 1; return gate.promise; } });
   t.after(() => owner.dispose());
   const first = owner.resolvePolicy(resolveInput());
   assert.equal(reads, 1);
@@ -123,4 +123,22 @@ test("reentrant callback disposal cannot publish late authority", async () => {
   } });
   assert.notEqual((await owner.resolvePolicy(resolveInput())).status, "current");
   assert.deepEqual(state.calls, ["RS"]);
+});
+
+test("committed-turn HTTP authorization outlives the initial claim window", async t => {
+  const f = fixture();
+  const acceptedDispatch = changed(f.input.acceptedDispatch, "authority.claimBeforeControlTime", 1050);
+  f.state.head = structuredClone(acceptedDispatch) as typeof f.state.head;
+  const setup = candidate(approve({...f.input, acceptedDispatch}), () => 1000 + f.state.now - 100); t.after(() => setup.dispose());
+  const decision = await provisional(setup);
+  assert.equal((await setup.gateway.authorizeFirstApplicationByte(finalInput(decision))).status, "authorized");
+  f.state.now = 150; // Claim window closes; operation and HTTP lifetimes remain open.
+  assert.equal((await setup.gateway.authorizeFirstApplicationByte(finalInput(decision))).status, "authorized");
+  assert.equal((await setup.owner.resolvePolicy(resolveInput())).status, "current");
+  const afterClaim = createCurrentEgressOwner(approve({...f.input, acceptedDispatch,
+    timing: {...f.input.timing, controlTimeAtAnchor: 1050, monotonicAtAnchor: 150}}));
+  t.after(() => afterClaim.dispose());
+  assert.equal((await afterClaim.resolvePolicy(resolveInput())).status, "current");
+  f.state.now = 10_100;
+  assert.equal((await setup.owner.resolvePolicy(resolveInput())).status, "denied");
 });

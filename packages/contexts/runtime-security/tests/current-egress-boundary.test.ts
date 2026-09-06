@@ -26,7 +26,7 @@ test("construction is inert and snapshots data and callback identities once", as
 test("a request is captured before waiting for a borrowed read", async t => {
   const { input, state } = fixture(); const gate = deferred<typeof state.head>(); let reads = 0;
   const owner = createCurrentEgressOwner({ ...input,
-    readRsHead: () => ++reads === 1 ? gate.promise : Promise.resolve(state.head) }); t.after(() => owner.dispose());
+    readRsHead: async () => ++reads === 1 ? gate.promise : Promise.resolve(state.head) }); t.after(() => owner.dispose());
   const raw = resolveInput(); const originalDigest = raw.request.body.digest;
   const pending = owner.resolvePolicy(raw);
   raw.request.body.digest = digest("mutation-after-call"); raw.authorizationRequestId = "changed";
@@ -73,7 +73,7 @@ test("malformed current projections and hostile thenables close without retries 
     { headVersion: "1", authority: null, extra: true }]) {
     const { input } = fixture(); let reads = 0;
     const owner = createCurrentEgressOwner({ ...input,
-      readRsHead: (() => {reads += 1; return Promise.resolve(bad);}) as never });
+      readRsHead: (async () => {reads += 1; return Promise.resolve(bad);}) as never });
     t.after(() => owner.dispose());
     assert.notEqual((await owner.resolvePolicy(resolveInput())).status, "current");
     assert.equal((await owner.resolvePolicy(resolveInput())).status, "denied"); assert.equal(reads, 1);
@@ -85,14 +85,12 @@ test("malformed current projections and hostile thenables close without retries 
   assert.notEqual((await owner.resolvePolicy(resolveInput())).status, "current");
   // oxlint-disable-next-line unicorn/no-thenable -- Deliberate hostile getter must never be assimilated.
   const thenable = Object.defineProperty({}, "then", { get() {traps += 1; throw new Error("then getter");} });
-  const other = createCurrentEgressOwner({ ...input, readRsHead: (() => thenable) as never }); t.after(() => other.dispose());
-  assert.notEqual((await other.resolvePolicy(resolveInput())).status, "current");
+  assert.throws(() => createCurrentEgressOwner({ ...input, readRsHead: (() => thenable) as never }), TypeError);
   for (const value of [new Proxy(Promise.resolve(state.head), { get() {traps += 1; throw new Error("trap");} }),
     Object.defineProperty(Promise.resolve(state.head), "constructor", { get() {traps += 1; return Promise;} }),
     // oxlint-disable-next-line unicorn/no-thenable -- Deliberate hostile promise getter must remain unread.
     Object.defineProperty(Promise.resolve(state.head), "then", { get() {traps += 1; throw new Error("then");} })]) {
-    const hostile = createCurrentEgressOwner({ ...input, readRsHead: () => value }); t.after(() => hostile.dispose());
-    assert.notEqual((await hostile.resolvePolicy(resolveInput())).status, "current");
+    assert.throws(() => createCurrentEgressOwner({ ...input, readRsHead: () => value }), TypeError);
   }
   assert.equal(traps, 0);
 });
@@ -122,8 +120,8 @@ for (const stage of [1, 2, 3]) {
       return Promise.resolve(value);
     };
     const owner = createCurrentEgressOwner({ ...input,
-      readRsHead: () => observe(state.head) as Promise<typeof state.head>,
-      readPaEndorsement: () => observe(state.pa) as Promise<typeof state.pa> });
+      readRsHead: async () => observe(state.head) as Promise<typeof state.head>,
+      readPaEndorsement: async () => observe(state.pa) as Promise<typeof state.pa> });
     const pending = owner.resolvePolicy(resolveInput()); await entered.promise;
     owner.dispose(); owner.dispose();
     assert.notEqual((await pending).status, "current");
@@ -136,7 +134,7 @@ for (const stage of [1, 2, 3]) {
 test("a timed-out callback settles locally and a late rejection cannot authorize or retry", async t => {
   const { input } = fixture(); const gate = deferred<never>(); let reads = 0;
   const owner = createCurrentEgressOwner({ ...input, timing: { ...input.timing, readTimeoutMilliseconds: 10 },
-    readRsHead: () => {reads += 1; return gate.promise;} }); t.after(() => owner.dispose());
+    readRsHead: async () => {reads += 1; return gate.promise;} }); t.after(() => owner.dispose());
   const start = performance.now();
   const result = await owner.resolvePolicy(resolveInput());
   assert.equal(result.status, "indeterminate"); assert.ok(performance.now() - start < 1000);
@@ -151,15 +149,14 @@ test("a callback completing beyond its monotonic read deadline is rejected even 
   assert.equal((await owner.resolvePolicy(resolveInput())).status, "denied");
 });
 
-test("context TTL expires; operation/claim deadlines and clock faults are irreversible", async t => {
+test("context TTL expires; operation deadlines and clock faults are irreversible", async t => {
   const { input, state } = fixture(); const owner = createCurrentEgressOwner(input); t.after(() => owner.dispose());
   const before = await current(owner); state.now = 1100;
   assert.equal((await owner.readCurrent({ scope: scope(), authorityRef: before.authorityRef })).status, "denied");
   const after = await current(owner); assert.notEqual(after.authorityRef, before.authorityRef);
-  for (const mode of ["operation", "claim", "regression", "NaN", "throws"]) {
+  for (const mode of ["operation", "regression", "NaN", "throws"]) {
     const f = fixture();
-    const acceptedDispatch = mode === "claim" ? changed(f.input.acceptedDispatch, "authority.claimBeforeControlTime", 1050)
-      : f.input.acceptedDispatch;
+    const acceptedDispatch = f.input.acceptedDispatch;
     f.state.head = structuredClone(acceptedDispatch) as typeof f.state.head;
     let throws = false;
     const bounded = createCurrentEgressOwner(approve({ ...f.input, acceptedDispatch,
@@ -170,5 +167,37 @@ test("context TTL expires; operation/claim deadlines and clock faults are irreve
     assert.equal((await bounded.readCurrent({ scope: scope(), authorityRef: authority.authorityRef })).status, "denied");
     f.state.now = 100; throws = false;
     assert.equal((await bounded.resolvePolicy(resolveInput())).status, "denied");
+  }
+});
+
+test("both private readers reject raw promise suppliers before invocation", () => {
+  const {input} = fixture(); let calls = 0; let getters = 0;
+  const raw = () => {
+    calls += 1;
+    // oxlint-disable-next-line unicorn/no-thenable -- Regression supplier must never be invoked.
+    return Object.defineProperty(Promise.reject(new Error("unhandled if invoked")), "then", {
+      get() {getters += 1; throw new Error("must not be read");},
+    });
+  };
+  const generator = async function* () {calls += 1; yield null;};
+  const revoked = Proxy.revocable(input.readRsHead, {}); revoked.revoke();
+  for (const key of ["readRsHead", "readPaEndorsement"]) {
+    for (const value of [raw, generator, input.readRsHead.bind({}), revoked.proxy]) {
+      assert.throws(() => createCurrentEgressOwner({...input, [key]: value}), TypeError);
+    }
+  }
+  assert.equal(calls, 0); assert.equal(getters, 0);
+});
+
+test("trusted async readers handle immediate rejections at either owner", async t => {
+  for (const key of ["readRsHead", "readPaEndorsement"]) {
+    const {input} = fixture(); let calls = 0;
+    const owner = createCurrentEgressOwner({...input, [key]: async () => {
+      calls += 1; throw new Error("synthetic immediate owner rejection");
+    }}); t.after(() => owner.dispose());
+    assert.equal((await owner.resolvePolicy(resolveInput())).status, "indeterminate");
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    assert.equal((await owner.resolvePolicy(resolveInput())).status, "denied");
+    assert.equal(calls, 1);
   }
 });

@@ -69,12 +69,12 @@ export const current = async (owner: ReturnType<typeof createCurrentEgressOwner>
   if (result.status !== "current") {throw new Error("Expected authorized fixture result");}
   return result.authority;
 };
-export const candidate = (input: CurrentEgressOwnerInput) => {
+export const candidate = (input: CurrentEgressOwnerInput, controlNow: () => number = () => 1000) => {
   const owner = createCurrentEgressOwner(input);
   const signer = createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate({ scope: input.operation.scope,
     hostReservationId: "host-reservation-1", keyRef: "ephemeral-test-key", keyGeneration: "1",
     signerRevision: "candidate-v2", authorityOwner: owner,
-    clock: { read: () => ({ authorityId: "control-authority", epoch: "epoch-1", controlTime: 1000 }) } });
+    clock: { read: () => ({ authorityId: "control-authority", epoch: "epoch-1", controlTime: controlNow() }) } });
   return { owner, signer, gateway: signer.hostEgressAuthorizationV2,
     dispose() { owner.dispose(); signer.dispose(); } };
 };

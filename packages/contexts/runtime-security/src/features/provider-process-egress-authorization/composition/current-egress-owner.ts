@@ -1,4 +1,3 @@
-import { types } from "node:util";
 import { deepFreezeEgress } from "../application/immutable.js";
 import type { EgressAuthorityReadOutcomeV2, EgressCurrentAuthorityV2,
   TrustedHostRequestProjectionV2 } from "../contracts/provider-process-egress-authorization-v2.js";
@@ -7,6 +6,9 @@ import type { CurrentEgressDispatchHead, CurrentEgressEndorsement, CurrentEgress
 import { captureCurrentEgressEndorsement, captureCurrentEgressHead, captureCurrentEgressInput,
   captureCurrentEgressRead, captureCurrentEgressResolve, currentEgressDigest,
   matchesCurrentEgressRequest, requireCurrentEgress, sameCurrentEgress } from "./current-egress-validation.js";
+
+const nativeThen = Promise.prototype.then;
+const nativeApply = Reflect.apply;
 
 type Context = { readonly generation: number; readonly authorityRef: string;
   readonly request: TrustedHostRequestProjectionV2; readonly expiresAt: number };
@@ -43,8 +45,8 @@ export const createCurrentEgressOwner = (value: CurrentEgressOwnerInput):
   ProviderProcessEgressAuthorizationV2AuthorityOwner & { dispose(): void } => {
   const input = captureCurrentEgressInput(value);
   const time = input.timing;
-  const deadline = Math.min(time.operationDeadlineMonotonic, time.monotonicAtAnchor +
-    input.acceptedDispatch.authority!.claimBeforeControlTime - time.controlTimeAtAnchor);
+  // Dispatch owns the already committed claim window; HTTP uses its own lifetime.
+  const deadline = time.operationDeadlineMonotonic;
   let closed = false;
   let generation = 0;
   let lastTime = time.monotonicAtAnchor;
@@ -80,19 +82,16 @@ export const createCurrentEgressOwner = (value: CurrentEgressOwnerInput):
       cancelRead = () => finish(new Error("current read closed"));
       try {
         const pending = callback(input.operation);
-        requireCurrentEgress(!types.isProxy(pending) && types.isPromise(pending));
-        requireCurrentEgress(Object.getPrototypeOf(pending) === Promise.prototype &&
-          !Object.hasOwn(pending, "constructor") && Reflect.ownKeys(pending).every(key =>
-            "value" in Object.getOwnPropertyDescriptor(pending, key)!));
-        // Use the native Promise operation, not a returned object's then accessor.
-        void Promise.prototype.then.call(pending, (raw: unknown) => {
+        // Native async trusted readers return an intrinsic outer promise. Attach
+        // both handlers immediately; raw promise suppliers are rejected before call.
+        void nativeApply(nativeThen, pending, [(raw: unknown) => {
           if (settled) {return;}
           try {
             const detached = capture(raw); assertContext(selected);
             requireCurrentEgress(now() < readDeadline); finish(undefined, detached);
           }
           catch (error) {finish(error);}
-        }, (error: unknown) => finish(error ?? new Error("current read rejected")));
+        }, (error: unknown) => {finish(error ?? new Error("current read rejected"));}]);
       } catch (error) {finish(error);}
     });
   };

@@ -45,6 +45,8 @@ const integer = check(value => typeof value === "number" && Number.isSafeInteger
 const bool = check(value => typeof value === "boolean");
 const literal = (expected: string) => check(value => value === expected);
 const callback = check(value => typeof value === "function" && !types.isProxy(value));
+const readCallback = check(value => typeof value === "function" && !types.isProxy(value) &&
+  types.isAsyncFunction(value) && !types.isGeneratorFunction(value));
 const monotonic = check(value => typeof value === "number" && Number.isFinite(value) && value >= 0);
 const version = check(value => typeof value === "string" && /^[1-9][0-9]{0,18}$/.test(value) &&
   BigInt(value) <= 9_223_372_036_854_775_807n);
@@ -111,7 +113,7 @@ export const captureCurrentEgressInput = (value: unknown): CurrentEgressOwnerInp
   const result = capture(value, { operation, acceptedDispatch: head, rule,
     approval: { ruleRevision: ref, bindingDigest: digest }, timing: { controlTimeAtAnchor: integer,
       monotonicAtAnchor: monotonic, operationDeadlineMonotonic: monotonic, readTimeoutMilliseconds: integer },
-    monotonicNow: callback, readRsHead: callback, readPaEndorsement: callback }) as CurrentEgressOwnerInput;
+    monotonicNow: callback, readRsHead: readCallback, readPaEndorsement: readCallback }) as CurrentEgressOwnerInput;
   const accepted = result.acceptedDispatch.authority;
   requireCurrentEgress(accepted !== null && !accepted.revoked && result.acceptedDispatch.headVersion !== "0");
   requireCurrentEgress(sameCurrentEgress(accepted!.operation, result.operation) &&
@@ -127,8 +129,7 @@ export const captureCurrentEgressInput = (value: unknown): CurrentEgressOwnerInp
   requireCurrentEgress(result.rule.decisionTtlMilliseconds >= 1 && result.rule.decisionTtlMilliseconds <= 300_000);
   const time = result.timing;
   requireCurrentEgress(time.readTimeoutMilliseconds >= 1 && time.readTimeoutMilliseconds <= 60_000 &&
-    time.operationDeadlineMonotonic > time.monotonicAtAnchor &&
-    accepted!.claimBeforeControlTime > time.controlTimeAtAnchor);
+    time.operationDeadlineMonotonic > time.monotonicAtAnchor);
   return deepFreezeEgress(result);
 };
 

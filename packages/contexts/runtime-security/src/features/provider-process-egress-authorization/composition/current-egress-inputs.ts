@@ -83,8 +83,8 @@ export interface CurrentEgressOwnerInput {
   // { domain: "rs-current-egress-rule/v1", operation, acceptedDispatch, rule }.
   // Opaque dispatch constraints are compared, never treated as an HTTP policy.
   readonly approval: { readonly ruleRevision: string; readonly bindingDigest: string };
-  // Trusted root anchors RS control time to this monotonic clock. Claim expiry
-  // uses that anchor; signing control time remains the existing candidate's job.
+  // Trusted root supplies the running operation clock and deadline after claim
+  // commitment. Claim-window checks remain at dispatch; signing time is separate.
   readonly timing: {
     readonly controlTimeAtAnchor: number;
     readonly monotonicAtAnchor: number;
@@ -92,6 +92,10 @@ export interface CurrentEgressOwnerInput {
     readonly readTimeoutMilliseconds: number;
   };
   readonly monotonicNow: () => number;
+  // Trusted native async reader implementations with intact Promise intrinsics.
+  // Their implementations must not create hostile promises/thenables or detached
+  // rejections; the owner validates returned DATA, not arbitrary callback code.
+  // Use explicit async wrappers for repository receivers, not bound functions.
   // Borrowed callbacks: no close/dispose/resource ownership is transferred.
   readonly readRsHead: (operation: CurrentEgressOperation) => Promise<CurrentEgressDispatchHead>;
   readonly readPaEndorsement: (operation: CurrentEgressOperation) =>
