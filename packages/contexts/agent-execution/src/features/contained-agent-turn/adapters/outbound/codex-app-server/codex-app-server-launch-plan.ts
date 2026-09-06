@@ -2,7 +2,7 @@ import { types } from "node:util";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
-import type { HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
+import { createImmutableHostCustodyLaunchPlan, type HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
 import {
   CODEX_PERMISSION_PROFILE_ID,
   validateCodexDirectoryIdentity,
@@ -30,6 +30,13 @@ interface NativeBrokerLaunchInput {
   readonly localCapability: string;
 }
 const nativeLaunches = new WeakMap<HostCustodyLaunchPlan, Readonly<NativeBrokerLaunchInput>>();
+const issuedLaunchPlans = new WeakSet<object>();
+
+/** Private adapter recognition, not route authority. Only this factory can add
+ * an immutable plan; callers cannot register or transfer recognition to copies.
+ */
+export const isIssuedCodexAppServerLaunchPlan = (plan: unknown): plan is CodexAppServerLaunchPlan =>
+  typeof plan === "object" && plan !== null && issuedLaunchPlans.has(plan);
 
 /** Same-object provenance; a cloned plan or Proxy can never recover this mode. */
 export const codexNativeBrokerLaunchInput = (plan: HostCustodyLaunchPlan): Readonly<NativeBrokerLaunchInput> => {
@@ -118,6 +125,14 @@ const isDirectoryIdentity = (value: unknown): value is CodexDirectoryIdentity =>
   } catch {return false;}
 };
 
+const snapshotDirectoryIdentity = (value: CodexDirectoryIdentity): CodexDirectoryIdentity => {
+  const data = snapshotCodexNativeInput(value, ["device", "inode", "path"]);
+  if (typeof data.device !== "number" || typeof data.inode !== "number" || typeof data.path !== "string") {
+    throw new TypeError("Codex launch directory identity must contain inert data");
+  }
+  return Object.freeze({ device: data.device, inode: data.inode, path: data.path });
+};
+
 const validateLaunchEnvironment = (plan: HostCustodyLaunchPlan): void => {
   const native = nativeLaunches.get(plan);
   if (native !== undefined) {validateCodexNativeBrokerFiles(native.files, native.recipe);}
@@ -180,22 +195,32 @@ export const createCodexAppServerLaunchPlan = (
     throw new TypeError("Codex native broker supports only the captured Linux tuple");
   }
   const intentMode = acceptedIntentMode(options.intentMode);
-  if (options.boundary.intentMode !== intentMode) {
+  const boundary = snapshotCodexNativeInput(options.boundary, [
+    "codexHome", "codexHomeIdentity", "effectivePolicyDigest", "permissionProfile",
+    "permissionProfileId", "intentMode", "workspaceRef", "workspaceIdentity",
+  ]) as unknown as CodexAppServerPermissionBoundary;
+  if (typeof options.executablePath !== "string" || typeof boundary.codexHome !== "string"
+    || typeof boundary.workspaceRef !== "string" || typeof boundary.effectivePolicyDigest !== "string") {
+    throw new TypeError("Codex launch roots and executable must contain inert data");
+  }
+  const codexHomeIdentity = snapshotDirectoryIdentity(boundary.codexHomeIdentity);
+  const workspaceIdentity = snapshotDirectoryIdentity(boundary.workspaceIdentity);
+  if (boundary.intentMode !== intentMode) {
     throw new TypeError("Codex launch intent mode does not match the permission boundary");
   }
-  validateCodexDirectoryIdentity("codexHome", options.boundary.codexHomeIdentity);
-  validateCodexDirectoryIdentity("workspaceRef", options.boundary.workspaceIdentity, false);
+  validateCodexDirectoryIdentity("codexHome", codexHomeIdentity);
+  validateCodexDirectoryIdentity("workspaceRef", workspaceIdentity, false);
   const tmpDirIdentity = privateTmpIdentity(options.tmpDir);
-  const privateRootPath = privateRoot(options.privateRootPath, options.boundary.workspaceRef);
+  const privateRootPath = privateRoot(options.privateRootPath, boundary.workspaceRef);
   if (
-    !contains(privateRootPath, options.boundary.codexHome)
-    || privateRootPath === options.boundary.codexHome
+    !contains(privateRootPath, boundary.codexHome)
+    || privateRootPath === boundary.codexHome
     || !contains(privateRootPath, options.tmpDir)
     || privateRootPath === options.tmpDir
   ) {
     throw new TypeError("Codex private home and TMPDIR must be strictly within privateRootPath");
   }
-  const roots = [options.boundary.workspaceRef, options.boundary.codexHome, options.tmpDir] as const;
+  const roots = [boundary.workspaceRef, boundary.codexHome, options.tmpDir] as const;
   for (let left = 0; left < roots.length; left += 1) {
     for (let right = left + 1; right < roots.length; right += 1) {
       if (contains(roots[left]!, roots[right]!) || contains(roots[right]!, roots[left]!)) {
@@ -211,21 +236,21 @@ export const createCodexAppServerLaunchPlan = (
     `default_permissions=${JSON.stringify(CODEX_PERMISSION_PROFILE_ID)}`,
   ];
   for (const feature of native === undefined ? DISABLED_CODEX_FEATURES : CODEX_NATIVE_BROKER_DISABLED_FEATURES) {launchArguments.push("--disable", feature);}
-  const plan = Object.freeze({
-    arguments: Object.freeze(launchArguments),
+  const plan = createImmutableHostCustodyLaunchPlan<CodexAppServerLaunchPlan>({
+    arguments: launchArguments,
     binaryRevision: platformTuple.binaryRevision,
-    codexHome: options.boundary.codexHome,
-    codexHomeIdentity: options.boundary.codexHomeIdentity,
+    codexHome: boundary.codexHome,
+    codexHomeIdentity,
     containmentProfile: platformTuple.containmentProfile,
-    effectivePolicyDigest: options.boundary.effectivePolicyDigest,
-    environment: Object.freeze({
+    effectivePolicyDigest: boundary.effectivePolicyDigest,
+    environment: {
       ...(native === undefined ? {} : { [CODEX_LOCAL_BROKER_CAPABILITY_ENV]: native.localCapability }),
-      CODEX_HOME: options.boundary.codexHome,
-      HOME: options.boundary.codexHome,
+      CODEX_HOME: boundary.codexHome,
+      HOME: boundary.codexHome,
       LANG: "C.UTF-8",
       PATH: "/usr/local/bin:/usr/bin:/bin",
       TMPDIR: options.tmpDir,
-    }),
+    },
     executablePath: options.executablePath,
     executableSha256: platformTuple.binarySha256,
     intentMode,
@@ -235,9 +260,10 @@ export const createCodexAppServerLaunchPlan = (
     spawnMode: "sdk-delegated" as const,
     tmpDir: options.tmpDir,
     tmpDirIdentity,
-    workspaceRef: options.boundary.workspaceRef,
-    workspaceIdentity: options.boundary.workspaceIdentity,
+    workspaceRef: boundary.workspaceRef,
+    workspaceIdentity,
   });
   if (native !== undefined) {nativeLaunches.set(plan, native);}
+  issuedLaunchPlans.add(plan);
   return plan;
 };

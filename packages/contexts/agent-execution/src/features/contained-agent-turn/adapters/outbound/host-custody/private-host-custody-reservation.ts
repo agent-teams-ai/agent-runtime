@@ -7,15 +7,7 @@ import type {
 } from "./custodied-provider-process.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 import type { ProcessCustodyRuntimeProfile } from "./host-custody-runtime-profile.js";
-
-const snapshotPlan = (plan: HostCustodyLaunchPlan): HostCustodyLaunchPlan => Object.freeze({
-  ...plan,
-  arguments: Object.freeze([...plan.arguments]),
-  environment: Object.freeze({ ...plan.environment }),
-  ...(plan.privatePathEnvironmentKeys === undefined ? {} : {
-    privatePathEnvironmentKeys: Object.freeze([...plan.privatePathEnvironmentKeys]),
-  }),
-});
+import { assertInertHostLaunchData, snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 
 export interface RetainedHostCustodyWorkspaceAuthority {
   readonly descriptor: number;
@@ -90,6 +82,8 @@ export const bindPrivateHostCustodyReservation = async (
   readonly plan: HostCustodyLaunchPlan;
   readonly retainedWorkspaceAuthority: RetainedHostCustodyWorkspaceAuthority;
 }>> => {
+  assertInertHostLaunchData(input);
+  const plan = snapshotHostCustodyLaunchPlan(input.launchPlan);
   const authority = input.workspaceAuthority;
   if (authority.canonicalPath !== input.workspaceRef || authority.identity.mountId.length === 0) {
     throw new TypeError("Host Custody workspace authority path mismatch");
@@ -115,7 +109,6 @@ export const bindPrivateHostCustodyReservation = async (
         mountIdentity(owner, "reservation", descriptor) !== authority.identity.mountId) {
       throw new TypeError("Host Custody workspace descriptor identity mismatch");
     }
-    const plan = snapshotPlan(input.launchPlan);
     let consumed = false;
     const launchPlans: HostCustodyLaunchPlanResolver = Object.freeze({
       resolve: (candidate: Parameters<HostCustodyLaunchPlanResolver["resolve"]>[0]) => {

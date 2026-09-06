@@ -1,5 +1,7 @@
 import type { ContainedTurnProviderBinding } from "../../../contracts/contained-agent-turn.js";
 
+export { createImmutableHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
+
 export interface CustodiedProviderProcessExit {
   readonly code: number | null;
   readonly signal: NodeJS.Signals | null;

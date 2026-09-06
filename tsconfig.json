@@ -20,7 +20,8 @@
   "include": [
     "experiments/runtime-profile-behavior/src/**/*.ts",
     "experiments/runtime-profile-behavior/test/**/*.ts",
-    "experiments/rust-system-boundaries/client/**/*.ts"
+    "experiments/rust-system-boundaries/client/**/*.ts",
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/native-plan-provenance-types.ts"
   ],
   "exclude": [
     "experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts",

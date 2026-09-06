@@ -24,6 +24,7 @@ import {
   type HostCustodyLaunchPlanResolver,
   type ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
+import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 
 export interface ExecutableObservation {
   readonly ctimeNs: bigint;
@@ -465,7 +466,7 @@ export const createFingerprint = (
   input: Parameters<ProviderProcessCustodyPort["open"]>[0],
   plan: HostCustodyLaunchPlan,
   canonicalWorkspace: string,
-  arguments_: readonly string[],
+  launchArguments: readonly string[],
 ): HostCustodyLaunchFingerprintEvidence => {
   const environmentKeys = Object.keys(plan.environment).toSorted();
   const effectivePrivateEnvironmentKeys = privateEnvironmentKeys(plan);
@@ -477,7 +478,7 @@ export const createFingerprint = (
       ? `private-root-relative:${relative(plan.privateRootPath, plan.environment[key] ?? "")}`
       : plan.environment[key],
   ]);
-  const argumentsSha256 = sha256(canonicalJson(arguments_));
+  const argumentsSha256 = sha256(canonicalJson(launchArguments));
   const planIdentity = [
     input.providerBinding,
     input.intentMode,
@@ -521,12 +522,13 @@ export const resolveLaunchCandidate = async (
   if (!isAbsolute(input.workspaceRef) || resolvePath(input.workspaceRef) !== input.workspaceRef) {
     throw new Error("Host Custody workspace must be a normalized absolute path");
   }
-  const plan = await launchPlans.resolve({
+  const resolvedPlan = await launchPlans.resolve({
     intentMode,
     providerBinding: input.providerBinding,
     workspaceRef: input.workspaceRef,
   });
-  if (plan === undefined) {throw new HostCustodyUnsupportedError("launch-plan-unavailable");}
+  if (resolvedPlan === undefined) {throw new HostCustodyUnsupportedError("launch-plan-unavailable");}
+  const plan = snapshotHostCustodyLaunchPlan(resolvedPlan);
   if (
     plan.provider !== input.providerBinding.provider ||
     plan.binaryRevision !== input.providerBinding.binaryRevision ||
@@ -546,15 +548,7 @@ export const resolveLaunchCandidate = async (
   return Object.freeze({
     canonicalWorkspace,
     fingerprint: createFingerprint({ ...input, intentMode }, plan, canonicalWorkspace, plan.arguments),
-    plan: Object.freeze({
-      ...plan,
-      arguments: Object.freeze([...plan.arguments]),
-      environment: Object.freeze({ ...plan.environment }),
-      privateRootPath: plan.privateRootPath,
-      ...(plan.privatePathEnvironmentKeys === undefined ? {} : {
-        privatePathEnvironmentKeys: Object.freeze([...plan.privatePathEnvironmentKeys]),
-      }),
-    }),
+    plan,
     privatePaths,
     workspace: Object.freeze({
       ctimeNs: workspaceStats.ctimeNs,
