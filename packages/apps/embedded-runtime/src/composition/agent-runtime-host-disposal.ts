@@ -17,9 +17,8 @@ import {
   type ContainedTurnDisposalDiagnostics,
   projectContainedTurnDisposalDiagnostics,
 } from "./agent-runtime-host-disposal-diagnostics.js";
-import type { ContainedTurnCompositionScope } from "./trusted-runtime-access-scope.js";
 import { unwrapContainedTurnAuthorityOutcome, type AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
-import { copyContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
+import { copyContainedTurnAccessAuthority, type ContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
 
 export type AgentRuntimeHostDisposalStatus =
   | "disposal_incomplete"
@@ -47,7 +46,7 @@ type AgentRuntimeHostContainedTurnStatus =
 
 type ContainedTurnOperation = Readonly<{
   operationId: string;
-  scope: ContainedTurnCompositionScope;
+  scope: ContainedTurnAccessAuthority;
 }>;
 
 interface ActiveContainedTurn {
@@ -170,6 +169,10 @@ class ContainedTurnOwnershipLedger {
     projectContainedTurnDisposalDiagnostics(this.#active);
 
   public readonly register = (operation: ContainedTurnOperation, ownerCall: object): void => {
+    const authority = copyContainedTurnAccessAuthority(operation.scope);
+    if (authority === undefined) {
+      throw new TypeError("Contained-turn access authority is invalid");
+    }
     const knownOwner = this.#owners.get(operation.operationId);
     const existing = this.#active.get(operation.operationId);
     if (knownOwner === ownerCall) {
@@ -179,7 +182,7 @@ class ContainedTurnOwnershipLedger {
       this.#active.set(operation.operationId, Object.freeze(existing === undefined ? {
         operation: Object.freeze({
           operationId: operation.operationId,
-          scope: Object.freeze({ ...operation.scope }),
+          scope: authority,
         }),
         ownerCall: knownOwner,
         status: "contract_violation",
@@ -190,7 +193,7 @@ class ContainedTurnOwnershipLedger {
     this.#active.set(operation.operationId, Object.freeze({
       operation: Object.freeze({
         operationId: operation.operationId,
-        scope: Object.freeze({ ...operation.scope }),
+        scope: authority,
       }),
       ownerCall,
       status: "accepted",
