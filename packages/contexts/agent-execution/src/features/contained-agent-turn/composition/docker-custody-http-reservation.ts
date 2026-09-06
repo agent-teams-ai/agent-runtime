@@ -38,7 +38,7 @@ export class DockerCustodyHttpReservation {
   readonly #preparation;
   #lifetime: HostCustodyHttpResourceLifetime | undefined;
   #cut = false;
-  #subscribed = false;
+  readonly #subscriptions: ReturnType<typeof hostHttpAbortOperations.subscribe>[] = [];
   readonly #abort = () => this.#cutoff();
 
   public constructor(input: DockerCustodyHttpReservationInput) {
@@ -113,9 +113,8 @@ export class DockerCustodyHttpReservation {
       this.#lifetime = Object.freeze({committedDispatchProof: expected.committedDispatchProof,
         underlyingCustodyRef: expected.underlyingCustodyRef, executionSessionIdentity: this.#identity,
         hostLifecycleGenerationSha256: this.#input.hostLifecycleGenerationSha256, signal: this.#signal});
-      this.#subscribed = true;
-      hostHttpAbortOperations.subscribe(this.#signal, this.#abort);
-      hostHttpAbortOperations.subscribe(expected.signal, this.#abort);
+      this.#subscriptions.push(hostHttpAbortOperations.subscribe(this.#signal, this.#abort));
+      this.#subscriptions.push(hostHttpAbortOperations.subscribe(expected.signal, this.#abort));
       return this.#lifetime;
     } catch (error) {this.#cutoff(); throw error;}
   }
@@ -133,10 +132,8 @@ export class DockerCustodyHttpReservation {
       // Ignore caller replacement of signal cleanup properties and stopped
       // propagation. Cleanup still belongs to the same fixed resource slots.
       hostHttpAbortOperations.abort(this.#controller);
-      if (this.#subscribed) {
-        hostHttpAbortOperations.remove(this.#input.claimed.signal, this.#abort);
-        hostHttpAbortOperations.remove(this.#signal, this.#abort);
-        this.#subscribed = false;
+      for (const subscription of this.#subscriptions.splice(0)) {
+        hostHttpAbortOperations.remove(subscription);
       }
     }
   }

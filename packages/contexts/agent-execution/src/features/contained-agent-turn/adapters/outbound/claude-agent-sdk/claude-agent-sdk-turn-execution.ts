@@ -332,6 +332,8 @@ export class ClaudeAgentSdkTurnExecution {
       this.#closeAdmission();
       return ambiguous(this.#input, "sdk-stream-or-shutdown-unproven");
     }
+    // Interrupt acknowledgement and iterator exhaustion do not prove a provider
+    // terminal outcome. Host process closure cannot manufacture the missing result.
     if (this.#result === undefined) {
       this.#closeAdmission();
       return ambiguous(this.#input, "sdk-terminal-result-missing");

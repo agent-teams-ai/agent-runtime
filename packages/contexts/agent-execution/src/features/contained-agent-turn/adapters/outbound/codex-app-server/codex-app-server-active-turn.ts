@@ -114,6 +114,8 @@ const itemShape = (keys: readonly string[], itemType: string, validate: (params:
   itemType, keys, validate,
 });
 
+// Passive payloads are lifecycle evidence only, never canonical output. Shape
+// validation alone does not authorize exposing command, plan, or reasoning text.
 const PASSIVE_SHAPES: Readonly<Record<string, PassiveShape>> = Object.freeze({
   "item/commandExecution/outputDelta": itemShape(["delta", "itemId", "threadId", "turnId"], "commandExecution", p => strings(p, ["delta"])),
   "item/commandExecution/terminalInteraction": itemShape(["itemId", "processId", "stdin", "threadId", "turnId"], "commandExecution", p => strings(p, ["processId", "stdin"])),
@@ -235,6 +237,9 @@ const emitCodexError = async (
   progress.cursor += 1;
 };
 
+// Canonical admission is whole-turn: completed items must reconcile with the
+// full terminal receipt, and sensitive tokens may span item boundaries. Neither
+// raw deltas nor completed items can be emitted independently of that check.
 const emitCodexAssistantDelta = (
   params: JsonRecord,
   admission: {

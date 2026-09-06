@@ -327,3 +327,28 @@ test("owns forced iterator drain and rejects late output before returning", asyn
   assert.equal(drained, true);
   assert.deepEqual(output, []);
 });
+
+test("acknowledged Claude cancellation with exhausted iterator but no result remains ambiguous", async () => {
+  const clock = new ManualClock();
+  let started = false;
+  let drained = false;
+  let interrupted = false;
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const adapter = provider(() => ({
+    close: () => {},
+    interrupt: async () => { interrupted = true; release(); },
+    async *[Symbol.asyncIterator]() {
+      started = true;
+      await gate;
+      drained = true;
+    },
+  }), { clock });
+  const pending = adapter.execute({ ...input(), isCancellationRequested: async () => true });
+  await waitFor(() => started);
+  clock.advance(1);
+  const outcome = await pending;
+  assert.equal(interrupted, true);
+  assert.equal(drained, true);
+  assert.equal(outcome.kind, "ambiguous");
+});
