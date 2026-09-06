@@ -113,10 +113,28 @@ test("PA-M1 PostgreSQL durability and concurrent current-owner contract", {skip:
     assert.deepEqual(await one.authorization.observe(selectorFor(input)), {kind: "indeterminate"});
   });
 
+  await t.test("actual PA resolve reads durable heads without inserting missing operation scopes", async () => {
+    const current = createPostgresCredentialRenderingOwner(a, f.selection);
+    const absent = createPostgresCredentialRenderingOwner(b, {...f.selection,
+      binding: {...binding, scopeDigest: "scope:absent-observation"}});
+    t.after(current.owner.dispose); t.after(absent.owner.dispose);
+    const input = {provider: binding.provider, scope: {tenantId: binding.tenantId, projectId: binding.projectId}};
+    const before = await a.query("SELECT count(*) AS count FROM provider_access.materialization_owner");
+    assert.equal((await current.providerAccess.resolve.execute(input)).kind, "resolved");
+    const missing = await absent.providerAccess.resolve.execute(input);
+    assert.equal(missing.kind, "unavailable");
+    if (missing.kind === "unavailable") {assert.equal(missing.reason, "not_found");}
+    const after = await b.query("SELECT count(*) AS count FROM provider_access.materialization_owner");
+    assert.deepEqual(after.rows, before.rows, "Observation must not create a missing head");
+  });
+
   await t.test("actual durable PA renderer keeps freshness private and rereads revocation before acquisition", async () => {
     const renderFixture = renderingFixture();
     const attached = createPostgresCredentialRenderingOwner(a, renderFixture.selection, renderFixture.acquisition);
     const owner = attached.owner; t.after(owner.dispose);
+    const accessInput = {provider: binding.provider, scope: {tenantId: binding.tenantId, projectId: binding.projectId}};
+    const resolved = await attached.providerAccess.resolve.execute(accessInput);
+    if (resolved.kind !== "resolved") {throw new Error("Expected same-store PA resolution");}
     const input = await renderFixture.request({authorizationRequestId: "request:render-durable"});
     const fresh = await owner.authorization.authorize(input);
     assert.equal(fresh.kind, "authorized");
@@ -140,6 +158,9 @@ test("PA-M1 PostgreSQL durability and concurrent current-owner contract", {skip:
     assert.equal(pending.kind, "authorized");
     if (pending.kind !== "authorized") {throw new Error("Expected fresh pre-revocation receipt");}
     assert.equal(await two.control.replaceBinding({...binding, revocation: "revoked"}, 6), 7);
+    const revalidated = await attached.providerAccess.revalidate.execute({...accessInput, binding: resolved.binding});
+    assert.equal(revalidated.kind, "rejected");
+    if (revalidated.kind === "rejected") {assert.equal(revalidated.reason, "revoked");}
     assert.deepEqual(await owner.rendering.render(pending.receipt), {kind: "denied"});
     assert.equal(renderFixture.requests.length, 1, "Revocation must deny before another acquisition");
     owner.dispose();

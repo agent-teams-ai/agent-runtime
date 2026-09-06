@@ -8,7 +8,8 @@ import { assertMaterializationSchema, migrateMaterializationSchema } from "./mat
 import { MaterializationPostgresTransactions, type MaterializationPostgresClient, type MaterializationPostgresPool,
   type MaterializationPostgresTimeouts } from "./materialization-postgres-transactions.js";
 
-type Owner = Pick<MaterializationAuthorizationBinding, "tenantId" | "projectId" | "provider" | "scopeDigest">;
+export type MaterializationPostgresOwner = Pick<MaterializationAuthorizationBinding, "tenantId" | "projectId" | "provider" | "scopeDigest">;
+type Owner = MaterializationPostgresOwner;
 const ownerWhere = "owner_id = $1 AND tenant_id = $2 AND project_id = $3 AND provider = $4 AND scope_digest = $5";
 const selectorSnapshot = (value: MaterializationAuthorizationRequestSelector): MaterializationAuthorizationRequestSelector => {
   const input = exactDispatchDataRecord("PA database selector", value, ["authorizationRequestId", "tenantId", "projectId", "provider", "scopeDigest"]);
@@ -104,6 +105,21 @@ export const createPostgresMaterializationRepository = (pool: MaterializationPos
   });
   return Object.freeze({
     repository,
+    /** Current PA facts only; an observation never creates a head or grants materialization. */
+    async observeBinding(input: MaterializationPostgresOwner): Promise<MaterializationAuthorizationBinding | undefined> {
+      const values = exactDispatchDataRecord("PA binding owner", input, ["tenantId", "projectId", "provider", "scopeDigest"]);
+      const selector = selectorSnapshot({...values, authorizationRequestId: "database:binding-observation"} as MaterializationAuthorizationRequestSelector);
+      return transactions.write(async client => {
+        await assertMaterializationSchema(client);
+        const result = await client.query(`SELECT binding FROM provider_access.materialization_owner WHERE ${ownerWhere}`, await ownerValues(selector));
+        if (result.rows.length === 0) {return;}
+        if (result.rows.length !== 1) {throw new Error("Invalid PA binding row count");}
+        if (result.rows[0]?.binding === null) {return;}
+        const binding = bindingSnapshot(result.rows[0]?.binding);
+        if (!sameOwner(binding, selector)) {throw new Error("Provider Access binding owner mismatch");}
+        return binding;
+      });
+    },
     migrate: async () => {await migrateMaterializationSchema(transactions);},
     /** Head version is PA persistence CAS authority, distinct from credential/binding generations. */
     async replaceBinding(input: MaterializationAuthorizationBinding, expectedHeadVersion: number): Promise<number | undefined> {

@@ -3,6 +3,9 @@ import type { MaterializationPostgresPool, MaterializationPostgresTimeouts } fro
 import { createSha256DispatchConsumptionDigest } from "../adapters/outbound/sha256-dispatch-consumption-digest.js";
 import type { CredentialGenerationAcquisition, CredentialRenderingOwner, CredentialRenderingSelection } from "../adapters/outbound/credential-rendering-contracts.js";
 import { createContainedTurnCredentialRenderingOwner } from "./credential-rendering-owner-factory.js";
+import { createMaterializationBindingRepository } from "../adapters/outbound/postgres/materialization-binding-repository.js";
+import { createContainedTurnProviderAccessFeature } from "./feature-module-factory.js";
+import type { ContainedTurnProviderAccessFeatureApi } from "../contracts/contained-turn-provider-access.js";
 
 /**
  * Private PA store/render assembly for one operation. PA supplies its exact selection
@@ -13,17 +16,23 @@ export const createPostgresCredentialRenderingOwner = (pool: MaterializationPost
   selection: CredentialRenderingSelection, acquisition?: CredentialGenerationAcquisition,
   timeouts?: Partial<MaterializationPostgresTimeouts>) => {
   const store = createPostgresMaterializationRepository(pool, timeouts);
-  let rendering: CredentialRenderingOwner;
+  let rendering: CredentialRenderingOwner | undefined;
+  let providerAccess: ContainedTurnProviderAccessFeatureApi;
   try {
     rendering = createContainedTurnCredentialRenderingOwner(selection, {
       digest: createSha256DispatchConsumptionDigest(), repository: store.repository,
     }, acquisition);
-  } catch (error) {store.dispose(); throw error;}
+    const {tenantId, projectId, provider, scopeDigest} = selection.binding;
+    providerAccess = createContainedTurnProviderAccessFeature({bindingRepository:
+      createMaterializationBindingRepository(store.observeBinding, {tenantId, projectId, provider, scopeDigest})});
+  } catch (error) {try {rendering?.dispose();} finally {store.dispose();} throw error;}
+  const capturedRendering = rendering;
   return Object.freeze({
+    providerAccess,
     owner: Object.freeze<CredentialRenderingOwner>({
-      authorization: rendering.authorization,
-      rendering: rendering.rendering,
-      dispose() {try {rendering.dispose();} finally {store.dispose();}},
+      authorization: capturedRendering.authorization,
+      rendering: capturedRendering.rendering,
+      dispose() {try {capturedRendering.dispose();} finally {store.dispose();}},
     }),
     control: Object.freeze({migrate: store.migrate, replaceBinding: store.replaceBinding}),
   });
