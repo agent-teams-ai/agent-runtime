@@ -1,4 +1,5 @@
-import "./staged-ingress-safety-fixture.mjs";
+import * as safetyFixture from "./staged-ingress-safety-fixture.mjs";
+void safetyFixture;
 import { registerHooks } from "node:module";
 import { createHostHttpAdmissionGuard as actualGuard } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-admission-guard.js";
 import { createStrictHttpEgressBroker as actualBroker } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
@@ -7,7 +8,7 @@ import type { HttpEgressBrokerPorts } from "../../../dist/features/contained-age
 export const guards: ReturnType<typeof actualGuard>[] = [];
 export const bindings: HttpEgressBrokerPorts[] = [];
 let construct: (() => void) | undefined;
-export const duringConstruction = (action: (() => void) | undefined): void => {construct = action;};
+export const duringConstruction = (action?: () => void): void => {construct = action;};
 export const createHostHttpAdmissionGuard = (identity: unknown) => {
   const guard = actualGuard(identity); guards.push(guard); return guard;
 };

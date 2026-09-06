@@ -1,4 +1,5 @@
-import "./staged-ingress-safety-fixture.mjs";
+import * as safetyFixture from "./staged-ingress-safety-fixture.mjs";
+void safetyFixture;
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
@@ -80,7 +81,7 @@ test("failed broker construction closes the partial guard and retained authoriza
       assert.equal(String(error).includes(token), false);
       assert.match(String(error), /Host HTTP staged session rejected/); return true;
     });
-  } finally {duringConstruction(undefined);}
+  } finally {duringConstruction();}
   assert.equal(bindings.length, count + 1);
   assert.equal(guards.at(-1)?.snapshot().state, "closed");
   assert.throws(staged.nativeBearerToken, /inbound_authentication_denied/);
@@ -115,7 +116,7 @@ test("close or reentrant bind during construction cannot publish or leave a live
       else {staged.close();}
     });
     try {assert.throws(() => staged.bind(f.ports), /Host HTTP staged session rejected/);}
-    finally {duringConstruction(undefined);}
+    finally {duringConstruction();}
     assert.equal(bindings.length, count + 1); assert.equal(guards.at(-1)?.snapshot().state, "closed");
     zeroed(retained);
     assert.throws(staged.nativeBearerToken, /inbound_authentication_denied/);
@@ -128,7 +129,7 @@ test("ordinary open delegates to the same construction and cleanup mechanism", (
   const f = createEgressFixture(); const before = entropy.length; const count = bindings.length;
   duringConstruction(() => {throw new Error("synthetic construction failure");});
   try {assert.throws(() => sessions.openAuthenticatedHostHttpEgressSession(f.ports), /Host HTTP staged session rejected/);}
-  finally {duringConstruction(undefined);}
+  finally {duringConstruction();}
   assert.equal(entropy.length, before + 1); assert.equal(bindings.length, count + 1);
   zeroed(entropy[before]); assert.equal(guards.at(-1)?.snapshot().state, "closed");
 });

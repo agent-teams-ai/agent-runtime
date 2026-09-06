@@ -1,4 +1,5 @@
-import "./staged-ingress-safety-fixture.mjs";
+import * as safetyFixture from "./staged-ingress-safety-fixture.mjs";
+void safetyFixture;
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as sessions from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
@@ -56,7 +57,7 @@ test("early issuance needs only identity; later binding retains the same native 
   const f = createEgressFixture();
   const staged = prepare(f.ports.identity); t.after(staged.close);
   const token = staged.nativeBearerToken();
-  assert.deepEqual(Object.keys(staged).sort(), ["bind", "close", "nativeBearerToken"]);
+  assert.deepEqual(Object.keys(staged).toSorted(), ["bind", "close", "nativeBearerToken"]);
   assert.equal(Object.isFrozen(staged), true);
   noEffects(f);
   // Journal and authenticated container/session dependencies arrive later.
@@ -150,7 +151,7 @@ test("cloned, inherited, proxied, detached and substituted handles cannot bind",
   const f = createEgressFixture();
   type Staged = ReturnType<typeof prepare>;
   for (const clone of [(value: Staged) => ({...value}), (value: Staged) => Object.create(value),
-    (value: Staged) => new Proxy(value, {}), () => undefined]) {
+    (value: Staged) => new Proxy(value, {}), () => {}]) {
     const staged = prepare(f.ports.identity);
     assert.throws(() => Reflect.apply(staged.bind, clone(staged), [f.ports]), rejected);
     assert.throws(staged.nativeBearerToken, denied);
@@ -225,7 +226,7 @@ test("ordinary open still exposes detached methods and allows successive fully c
   const session = sessions.openAuthenticatedHostHttpEgressSession({...f.ports,
     materializer: {render: async () => [{name: "authorization", valueBytes: bytes(`Bearer ${SECRET_MARKER}`)}]}});
   t.after(session.close);
-  assert.deepEqual(Object.keys(session).sort(), ["close", "execute", "nativeBearerToken"]);
+  assert.deepEqual(Object.keys(session).toSorted(), ["close", "execute", "nativeBearerToken"]);
   const {nativeBearerToken, execute, close} = session;
   const token = nativeBearerToken();
   assert.equal((await execute(operation(f, token))).outcome, "completed");
