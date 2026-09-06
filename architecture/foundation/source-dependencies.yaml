@@ -65,6 +65,7 @@ boundaries:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine
     entrypoints:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts
     allow:
       boundaries:
         - adapter.agent-execution.docker-json

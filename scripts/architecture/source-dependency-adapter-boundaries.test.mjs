@@ -24,6 +24,7 @@ const paths = {
   dockerFake: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/fake-docker-engine.ts",
   dockerNode: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/node-unix-socket-docker-engine.ts",
   dockerPort: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts",
+  dockerConstruction: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts",
   dockerJson: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/serialization/strict-json.ts",
   host: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
   hostNode: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
@@ -209,12 +210,12 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.ok(!production.entrypoints.includes(paths.legacy));
 });
 
-test("Docker custody has only the port-only engine entrypoint", () => {
+test("Docker custody uses only the engine port and explicit residue construction entrypoint", () => {
   const engine = boundariesById.get("adapter.agent-execution.docker-engine");
   const custody = boundariesById.get("adapter.agent-execution.docker-custody");
   const json = boundariesById.get("adapter.agent-execution.docker-json");
 
-  assert.deepEqual(engine.entrypoints, [paths.dockerPort]);
+  assert.deepEqual(engine.entrypoints, [paths.dockerConstruction, paths.dockerPort]);
   assert.deepEqual(engine.allowedBoundaries, ["adapter.agent-execution.docker-json"]);
   assert.deepEqual(engine.allowedPackages, []);
   assert.deepEqual(engine.allowedRuntimeReferences, []);
@@ -331,10 +332,15 @@ test("Claude may import only narrow provider-delegation and private-directory po
   }), []);
 });
 
-test("Docker custody may import the port but not concrete engines or the barrel", async () => {
+test("Docker custody may import the port and construction boundary, but not engine internals", async () => {
   assert.deepEqual(await analyzeFixture({
     [paths.docker]: "import type {} from './engine/docker-engine-port.js';\n",
     [paths.dockerPort]: "export {};\n",
+  }), []);
+  assert.deepEqual(await analyzeFixture({
+    [paths.docker]: "import {NodeUnixSocketDockerEngine} from './engine/docker-engine-composition.js';\nvoid NodeUnixSocketDockerEngine;\n",
+    [paths.dockerConstruction]: "export {NodeUnixSocketDockerEngine} from './node-unix-socket-docker-engine.js';\n",
+    [paths.dockerNode]: "export class NodeUnixSocketDockerEngine {}\n",
   }), []);
 
   for (const [targetPath, specifier] of [
