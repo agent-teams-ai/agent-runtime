@@ -83,6 +83,7 @@ describe("NodeTlsHttpEgressTransport trust policy", () => {
     };
     const binding = createBinding(input);
     assert.match(binding.tlsPolicyDigest, /^sha256:[0-9a-f]{64}$/u);
+    assert.equal(transport().tlsPolicyDigest, binding.tlsPolicyDigest);
     assert.equal(createBinding({ ...input }).tlsPolicyDigest, binding.tlsPolicyDigest);
     const policy = (authorities: (string | Uint8Array)[]) => createBinding({
       ...input, trust: fixTrust(authorities),
@@ -98,6 +99,27 @@ describe("NodeTlsHttpEgressTransport trust policy", () => {
     const encoded = JSON.stringify(binding);
     assert.ok(!encoded.includes("CERTIFICATE"));
     assert.ok(!encoded.includes(new X509Certificate(SYNTHETIC_LOOPBACK_CA).raw.toString("base64")));
+  });
+
+  test("exposes fixed policy before dialing without invoking the connector", () => {
+    let connections = 0;
+    const bytes = Buffer.from(SYNTHETIC_LOOPBACK_CA);
+    const authorities: (string | Uint8Array)[] = [bytes, SYNTHETIC_OTHER_CA];
+    const owner = new NodeTlsHttpEgressTransport({ certificateAuthorities: authorities }, () => {
+      connections += 1;
+      throw new Error("unexpected connection");
+    });
+    const expected = new NodeTlsHttpEgressTransport({
+      certificateAuthorities: [SYNTHETIC_OTHER_CA, SYNTHETIC_LOOPBACK_CA, SYNTHETIC_OTHER_CA],
+    }).tlsPolicyDigest;
+    assert.equal(owner.tlsPolicyDigest, expected);
+    bytes.fill(0);
+    authorities.length = 0;
+    assert.equal(owner.tlsPolicyDigest, expected);
+    assert.notEqual(owner.tlsPolicyDigest, transport().tlsPolicyDigest);
+    assert.equal(Reflect.set(owner, "tlsPolicyDigest", "sha256:forged"), false);
+    assert.equal(owner.tlsPolicyDigest, expected);
+    assert.equal(connections, 0);
   });
 
   test("fingerprints the immutable canonical set of effective trust anchors", () => {

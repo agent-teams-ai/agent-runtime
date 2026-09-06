@@ -179,6 +179,10 @@ const TLS_POLICY_MANIFEST = "agent-runtime.node-tls-http-egress-policy/v1\n"
   + "tls-session-reuse=rejected\n"
   + "trust=constructor-owned-fixed-local-context\n";
 
+/** Same fixed policy commitment before dialing and in the observed TLS binding. */
+export const fixedTlsPolicyDigest = (trust: FixedNodeTlsTrust): `sha256:${string}` =>
+  `sha256:${sha256(`${TLS_POLICY_MANIFEST}trust-anchors=${trust.trustAnchorDigest}\n`)}`;
+
 export const createBinding = (input: Readonly<{
   trust: FixedNodeTlsTrust;
   selectedAddress: CanonicalLiteralAddress;
@@ -217,7 +221,7 @@ export const createBinding = (input: Readonly<{
     chainValidated: true,
     dnsIdentity: input.expectedSni,
     certificateDigest: `sha256:${sha256(input.certificate.raw)}` as const,
-    tlsPolicyDigest: `sha256:${sha256(`${TLS_POLICY_MANIFEST}trust-anchors=${input.trust.trustAnchorDigest}\n`)}` as const,
+    tlsPolicyDigest: fixedTlsPolicyDigest(input.trust),
     spkiDigest: `sha256:${sha256(publicKey)}` as const,
     alpn: "http/1.1",
   });

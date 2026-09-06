@@ -9,6 +9,7 @@ import {
 import {
   canonicalLiteralAddress,
   canonicalSni,
+  fixedTlsPolicyDigest,
   fixLimits,
   fixTrust,
   NodeTlsHttpEgressError,
@@ -50,6 +51,11 @@ export class NodeTlsHttpEgressTransport implements HttpEgressUpstreamTransport {
       closeTimeoutMs: options.closeTimeoutMs ?? DEFAULTS.closeTimeoutMs,
     });
     this.#connector = connector;
+  }
+
+  /** Private composition evidence. It does not attest a connected peer or authorize egress. */
+  public get tlsPolicyDigest(): `sha256:${string}` {
+    return fixedTlsPolicyDigest(this.#trust);
   }
 
   public beginOpen(input: Readonly<{
