@@ -185,6 +185,14 @@ importers:
       '@agent-teams/filesystem-custody':
         specifier: workspace:*
         version: link:../../platform/filesystem-custody
+    devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
+
 
   packages/platform/filesystem-custody: {}
 
