@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { Core, fixture as reservationFixture, directory, spawnCount } from "../native-launch-finalization-fixture.ts";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { createCodexCurrentKernelOwner } from "../../../../dist/features/contained-agent-turn/composition/codex-current-kernel-owner.js";
@@ -11,7 +10,7 @@ import { CLAUDE_AGENT_SDK_PRODUCTION_TUPLE as tuple, createClaudeAgentSdkPrivate
 import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import type { ContainedTurnKernelCustodyPort } from "../../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import type { ContainedTurnHostPostClaimPreparation } from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js";
-import { FakeHost, codexCredentialOutputInventory, ids, openInput, privateDirectoryCustody, syntheticCodexEffectCustody } from "./current-provider-owner-fixture.ts";
+import { codexCredentialOutputInventory, ids, openInput, privateDirectoryCustody, syntheticCodexEffectCustody } from "./current-provider-owner-fixture.ts";
 import { createDependencies } from "./contained-agent-turn-fixture.ts";
 import { committedDispatchProofFixture } from "./committed-dispatch-proof-fixture.ts";
 
@@ -25,14 +24,39 @@ export const deferred = <Value>() => {
 export const tick = (): Promise<void> => new Promise(resolve => {setImmediate(resolve);});
 
 export const ownerPreparationFixture = async (t: TestContext, provider: "codex" | "claude") => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), `owner-preparation-${provider}-`)));
-  t.after(() => rm(root, {recursive: true, force: true}));
-  const workspaceRef = join(root, "workspace");
-  const privateRootPath = join(root, "private");
+  // Retain real core branding, reservation, evidence and cleanup. Only low-level
+  // filesystem/executable/residue observations are synthetic; no platform bypass.
+  const reservation = await reservationFixture(false);
+  const workspaceRef = reservation.options.boundary.workspaceRef;
+  const privateRootPath = reservation.options.privateRootPath;
   const [homeRoot, tempRoot, configRoot] = ["home", "temp", "config"].map(name => join(privateRootPath, name));
-  for (const path of [workspaceRef, homeRoot, tempRoot, configRoot]) {await mkdir(path!, {recursive: true, mode: 0o700});}
+  for (const path of [workspaceRef, homeRoot, tempRoot, configRoot]) {directory(path!);}
+  const executablePath = reservation.options.executablePath;
   const events: string[] = [];
-  const host = new FakeHost();
+  const residueAuthorityFactory = {create: async () => ({close: async () => true,
+    proveEmpty: async () => "empty", killAll: async () => true})};
+  const core = new Core({launchPlans: {resolve: async () => {throw new Error("unexpected launch resolver");}},
+    residueAuthorityFactory} as never, {containmentProfile: "strict-linux-cgroup-v2", platform: "linux",
+    residueAuthorityFactory} as never);
+  const host = Object.assign(core, {starts: 0, reserves: 0, releases: 0, containments: 0,
+    refs: new Map<string, string>()});
+  const reserve = core.reserve.bind(core);
+  host.reserve = async input => {
+    host.reserves += 1;
+    const result = await reserve(input);
+    host.refs.set(input.attemptId, result.custodyRef);
+    return result;
+  };
+  const contain = core.requestContainment.bind(core);
+  host.requestContainment = async input => {host.containments += 1; return contain(input);};
+  const release = core.release.bind(core);
+  host.release = async input => {
+    const result = await release(input);
+    if (result.kind === "released") {host.releases += 1;}
+    return result;
+  };
+  const initialSpawns = spawnCount();
+  t.after(() => assert.equal(spawnCount(), initialSpawns, "forwarding never launches a provider"));
   // Tripwires: a test can reach the kernel's synthetic creator, never provider/native creation.
   host.start = () => {events.push("forbidden-provider-start"); throw new Error("provider process creation is forbidden");};
   host.get = () => {events.push("forbidden-provider-get"); throw new Error("provider process access is forbidden");};
@@ -41,8 +65,7 @@ export const ownerPreparationFixture = async (t: TestContext, provider: "codex" 
     platformTarget: {architecture: "x64", platform: "linux"} as const,
     workspaceOwner: {async withLaunchAuthority<Result>(_input: unknown, consume: (authority: any) => Promise<Result>) {
       events.push("workspace");
-      return consume({canonicalPath: workspaceRef, descriptorPath: "/proc/self/fd/99",
-        identity: {dev: 1n, ino: 2n, mountId: "mount:owner-preparation"}});
+      return consume(reservation.workspaceAuthority);
     }},
   };
   const codexOptions: Parameters<typeof createCodexCurrentKernelOwner>[0] = {...common,
@@ -52,14 +75,14 @@ export const ownerPreparationFixture = async (t: TestContext, provider: "codex" 
       if (input.credentialGeneration !== 1) {throw new Error("Unexpected fixture credential generation");}
       return {boundary: createCodexAppServerPermissionBoundary({codexHome: homeRoot!, intentMode: input.intentMode, workspaceRef}),
         credentialOutputInventory: codexCredentialOutputInventory({credentialBindingDigest: input.credentialBindingDigest,
-          credentialGeneration: input.credentialGeneration}), executablePath: "/synthetic/unexecuted-codex",
+          credentialGeneration: input.credentialGeneration}), executablePath,
         privateRootPath, tmpDir: tempRoot!};
     }},
   };
   const claudeOptions: Parameters<typeof createClaudeCurrentKernelOwner>[0] = {...common,
     adapterSnapshot: {provider: "claude", adapterRevision: tuple.adapterRevision, binaryRevision: tuple.binaryRevision,
       capabilityManifestRevision: tuple.manifestRevision},
-    executablePath: "/synthetic/unexecuted-claude", executableSha256: tuple.executableSha256,
+    executablePath, executableSha256: tuple.executableSha256,
     manifest: {effectCardinality: "one_coarse_effect_per_operation", effectClass: "contained_unmediated_effect",
       manifestRevision: tuple.manifestRevision, manifestVersion: 1, provider: "claude", providerAttemptCardinality: "at_most_one",
       requiredProofKinds: CONTAINED_TURN_REQUIRED_PROOF_KINDS, resourceScopeRevision: tuple.resourceScopeRevision,

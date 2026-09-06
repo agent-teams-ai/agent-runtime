@@ -1,8 +1,11 @@
+// Install synthetic observations before dynamically loading the owner fixture.
+import "./native-launch-finalization-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { committedDispatchProofFixture } from "./support/committed-dispatch-proof-fixture.ts";
-import { claimFeature, deferred, openOwner, ownerPreparationFixture, tick,
-  type Preparation, type PrepareInput } from "./support/current-owner-preparation-fixture.ts";
+const {committedDispatchProofFixture} = await import("./support/committed-dispatch-proof-fixture.ts");
+import type { Preparation, PrepareInput } from "./support/current-owner-preparation-fixture.ts";
+const {claimFeature, deferred, openOwner, ownerPreparationFixture, tick} =
+  await import("./support/current-owner-preparation-fixture.ts");
 
 for (const provider of ["codex", "claude"] as const) {
   test(`${provider}: omitted preparation preserves legacy execution through the real owner's custody`, async t => {
@@ -24,7 +27,7 @@ for (const provider of ["codex", "claude"] as const) {
     }
   });
 
-  test(`${provider}: snapshots callback once, preserves receiver and exact claim input, and waits before execution`, async t => {
+  test(`${provider}: snapshots callback once, preserves receiver and exact claim input, and gates kernel execution`, async t => {
     const fixture = await ownerPreparationFixture(t, provider);
     const ready = deferred<{kind: "prepared"}>();
     const entered = deferred<PrepareInput>();
@@ -55,6 +58,9 @@ for (const provider of ["codex", "claude"] as const) {
     assert.ok(received.signal instanceof AbortSignal); assert.equal(received.signal.aborted, false);
     await tick(); assert.deepEqual(fixture.events, ["workspace", "launch-record", "prepare-claimed"]);
     await assert.rejects(owner.custody.start(opened.start), /already consumed/u);
+    // This branch proves the kernel callback contract with a synthetic executor.
+    // Actual Codex provider execution additionally requires the authentic final bundle;
+    // native-launch-finalization.test.ts covers both that success and missing-final rejection.
     ready.resolve({kind: "prepared"}); await tick();
     assert.deepEqual(fixture.events, ["workspace", "launch-record", "prepare-claimed", "execute", "synthetic-creator"]);
     assert.equal(calls, 1); assert.equal(received.signal.aborted, false);
