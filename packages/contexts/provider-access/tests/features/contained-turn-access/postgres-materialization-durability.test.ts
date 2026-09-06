@@ -3,6 +3,8 @@ import test from "node:test";
 import { createPostgresMaterializationAuthorization } from "../../../dist/features/contained-turn-access/composition/postgres-materialization-authorization.js";
 import { createPostgresMaterializationRepository } from "../../../dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js";
 import { createPostgresCredentialRenderingOwner } from "../../../dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js";
+import { createPostgresRouteSelectionOwner } from "../../../dist/features/contained-turn-access/composition/route-selection-owner.js";
+import { selection as routeSelection } from "./route-selection-fixture.ts";
 import { renderingFixture, selectorFor } from "./credential-rendering-test-fixture.ts";
 
 import { validateDisposablePostgresUrl } from "./postgres-materialization-url.fixtures.ts";
@@ -164,5 +166,43 @@ test("PA-M1 PostgreSQL durability and concurrent current-owner contract", {skip:
     assert.equal(renderFixture.requests.length, 1, "Revocation must deny before another acquisition");
     owner.dispose();
     await assert.rejects(attached.control.replaceBinding(binding, 7), /closed/u);
+  });
+
+  await t.test("PA route endorsement is immutable across owners, reconstruction and generic binding replacement", async () => {
+    const routeInput = routeSelection();
+    const selected = {...routeInput, binding: {...routeInput.binding, scopeDigest: "scope:route-durability"}};
+    const store = createPostgresMaterializationRepository(a); t.after(store.dispose);
+    assert.equal(await store.replaceBinding(selected.binding, 0), 1);
+    const routeA = createPostgresRouteSelectionOwner(a, selected);
+    const routeB = createPostgresRouteSelectionOwner(b, selected);
+    t.after(routeA.dispose); t.after(routeB.dispose);
+    await Promise.all([routeA.control.migrate(), routeB.control.migrate()]);
+    assert.equal(await routeA.readCurrent(), undefined);
+    const endorsed = await Promise.all([routeA.control.endorse(1), routeB.control.endorse(1)]);
+    assert.deepEqual(endorsed[0], endorsed[1]);
+    const changed = createPostgresRouteSelectionOwner(b, {...selected, descriptor: {...selected.descriptor,
+      exactValues: {...selected.descriptor.exactValues, version: "0.153.5"}}});
+    t.after(changed.dispose);
+    await assert.rejects(changed.control.endorse(1), /conflicts/u);
+    routeA.dispose(); routeB.dispose();
+    const rebuilt = createPostgresRouteSelectionOwner(pool(), selected); t.after(rebuilt.dispose);
+    assert.deepEqual(await rebuilt.readCurrent(), endorsed[0]);
+    await assert.rejects(a.query("UPDATE provider_access.route_selection SET endorsement = endorsement"), /immutable/u);
+    await assert.rejects(a.query("DELETE FROM provider_access.route_selection"), /immutable/u);
+    await assert.rejects(a.query(`INSERT INTO provider_access.route_selection(owner_id,binding_revision,head_version,endorsement)
+      SELECT owner_id,0,head_version,endorsement FROM provider_access.route_selection`), /check constraint/u);
+    const rotated = {...selected.binding, credentialGeneration: 2};
+    assert.equal(await store.replaceBinding(rotated, 1), 2, "Generic same-revision replacement remains accepted");
+    assert.equal(await rebuilt.readCurrent(), undefined);
+    const sameRevision = createPostgresRouteSelectionOwner(a, {...selected, binding: rotated}); t.after(sameRevision.dispose);
+    await assert.rejects(sameRevision.control.endorse(2), /conflicts/u);
+    const nextInput = {...selected, binding: {...rotated, bindingRevision: 2}};
+    const next = createPostgresRouteSelectionOwner(b, nextInput); t.after(next.dispose);
+    await assert.rejects(next.control.endorse(2), /not current/u);
+    assert.equal(await store.replaceBinding(nextInput.binding, 2), 3);
+    assert.equal((await next.control.endorse(3)).routeGeneration, "2");
+    assert.equal(await store.replaceBinding(selected.binding, 3), 4);
+    assert.equal(await rebuilt.readCurrent(), undefined);
+    await assert.rejects(rebuilt.control.endorse(4), /conflicts/u);
   });
 });

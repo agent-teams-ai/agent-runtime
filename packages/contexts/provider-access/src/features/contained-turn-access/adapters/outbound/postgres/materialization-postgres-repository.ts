@@ -5,6 +5,7 @@ import { snapshotAuthorizationCommand, snapshotAuthorizationOwnerSelector, snaps
   type AuthorizationRecord } from "../../../domain/materialization-authorization.js";
 import { detachedDispatchData, exactDispatchDataRecord } from "../../dispatch-consumption-data.js";
 import { assertMaterializationSchema, migrateMaterializationSchema } from "./materialization-postgres-schema.js";
+import { createRouteSelectionPersistence } from "./route-selection-postgres.js";
 import { MaterializationPostgresTransactions, type MaterializationPostgresClient, type MaterializationPostgresPool,
   type MaterializationPostgresTimeouts } from "./materialization-postgres-transactions.js";
 
@@ -105,6 +106,7 @@ export const createPostgresMaterializationRepository = (pool: MaterializationPos
   });
   return Object.freeze({
     repository,
+    routeSelection: createRouteSelectionPersistence(transactions, {ownerWhere, ownerValues, bindingSnapshot, version}),
     /** Current PA facts only; an observation never creates a head or grants materialization. */
     async observeBinding(input: MaterializationPostgresOwner): Promise<MaterializationAuthorizationBinding | undefined> {
       const values = exactDispatchDataRecord("PA binding owner", input, ["tenantId", "projectId", "provider", "scopeDigest"]);
