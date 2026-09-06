@@ -90,14 +90,16 @@ test("pre-aborted, expired and regressing time never publish an endpoint", { tim
   await assert.rejects(b.recipe.open(async () => {assert.fail();}, b.cutoff));
   const c = fixture(); c.clock.time = 100;
   const opening = c.recipe.open(async () => {assert.fail();}, c.cutoff); c.clock.time = 1;
-  await assert.rejects(opening); assert.equal(c.cutoff.signal.aborted, true); assert.equal(c.clock.pending, 0);
+  await assert.rejects(opening); assert.equal(c.cutoff.signal.aborted, true);
+  assert.deepEqual(await c.recipe.close(), { state: "unknown" }); assert.equal(c.clock.pending, 0);
 });
 
 test("abort while listen is pending cannot resurrect a late endpoint", { timeout: 5_000 }, async () => {
   const f = fixture(); let calls = 0;
   const opening = f.recipe.open(async () => {calls += 1;}, f.cutoff);
   f.cutoff.abort(); await assert.rejects(opening); await tick();
-  assert.equal(calls, 0); assert.equal(f.clock.pending, 0);
+  assert.equal(calls, 0);
+  assert.deepEqual(await f.recipe.close(), { state: "closed" }); assert.equal(f.clock.pending, 0);
 });
 
 test("bind failure is sanitized and retires the one-use recipe", { timeout: 5_000 }, async t => {
@@ -106,7 +108,9 @@ test("bind failure is sanitized and retires the one-use recipe", { timeout: 5_00
   const f = fixture(); const recipe = createNodeHostHttpListener(config, f.clock);
   await assert.rejects(recipe.open(async () => {}, f.cutoff), { message: "host HTTP listener unavailable" });
   await assert.rejects(recipe.open(async () => {}, new AbortController()));
-  assert.equal(f.cutoff.signal.aborted, true); assert.equal(f.clock.pending, 0);
+  assert.equal(f.cutoff.signal.aborted, true);
+  const cleanup = recipe.close(); await f.clock.advance(config.closureDeadline);
+  assert.deepEqual(await cleanup, { state: "unknown" }); assert.equal(f.clock.pending, 0);
 });
 
 test("a second concurrent native socket seals the listener and aborts the active consumer", { timeout: 5_000 }, async () => {
@@ -120,7 +124,7 @@ test("a second concurrent native socket seals the listener and aborts the active
   const second = await client(listener.address.port);
   await Promise.all([closed(first), closed(second)]);
   assert.equal(calls, 1); assert.equal(f.cutoff.signal.aborted, true);
-  assert.deepEqual(await listener.close(), { state: "unknown" }); assert.equal(f.clock.pending, 0);
+  assert.deepEqual(await listener.close(), { state: "closed" }); assert.equal(f.clock.pending, 0);
 });
 
 test("pending consumer prevents clean closure even after every native socket closes", { timeout: 5_000 }, async () => {
@@ -143,7 +147,7 @@ test("physical socket close does not permit overlapping consumers", { timeout: 5
   const first = await client(listener.address.port); await closed(first); await entered.promise;
   const second = await client(listener.address.port); await closed(second);
   assert.equal(calls, 1); assert.equal(f.cutoff.signal.aborted, true);
-  release.resolve(); assert.deepEqual(await listener.close(), { state: "unknown" });
+  release.resolve(); assert.deepEqual(await listener.close(), { state: "closed" });
 });
 
 for (const accept of [async () => {throw new Error("sensitive path");}, async () => {}] satisfies NodeHostHttpAccept[]) {
@@ -152,14 +156,14 @@ for (const accept of [async () => {throw new Error("sensitive path");}, async ()
     const socket = await client(listener.address.port); await closed(socket);
     assert.equal(f.cutoff.signal.aborted, true);
     assert.equal((f.cutoff.signal.reason as Error).message, "host HTTP listener unavailable");
-    assert.deepEqual(await listener.close(), { state: "unknown" }); assert.equal(f.clock.pending, 0);
+    assert.deepEqual(await listener.close(), { state: "closed" }); assert.equal(f.clock.pending, 0);
   });
 }
 
-test("operation deadline automatically seals idle admission and closes its native handle", { timeout: 5_000 }, async () => {
+test("operation deadline seals idle admission; explicit final close releases its native handle", { timeout: 5_000 }, async () => {
   const f = fixture(); const listener = await f.recipe.open(async () => {}, f.cutoff);
   await f.clock.advance(config.deadline);
-  assert.deepEqual(await listener.close(), { state: "unknown" }); assert.equal(f.cutoff.signal.aborted, true);
+  assert.deepEqual(await listener.close(), { state: "closed" }); assert.equal(f.cutoff.signal.aborted, true);
   assert.equal(f.clock.pending, 0); await assert.rejects(client(listener.address.port));
 });
 

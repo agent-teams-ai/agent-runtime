@@ -11,7 +11,9 @@ export type NodeHostHttpListenerConfig = Readonly<{
 export type NodeHostHttpAccept = (socket: Socket, signal: AbortSignal) => Promise<void>;
 type Address = Readonly<{ address: string; family: "IPv4"; port: number }>;
 type Closure = Readonly<{ state: "closed" | "unknown" }>;
-export type NodeHostHttpListener = Readonly<{ address: Address; close(): Promise<Closure> }>;
+export type NodeHostHttpListener = Readonly<{
+  address: Address; sealAdmission(): void; close(): Promise<Closure>;
+}>;
 
 const failure = (): Error => new Error("host HTTP listener unavailable");
 const privateAddress = (host: string): boolean => {
@@ -27,7 +29,9 @@ const closedErrorSink = (): void => {};
  * and no queued exchange. Accepted sockets remain paused and binary for the
  * existing NodeHostHttpConnection adapter. The retained consumer MUST perform
  * ingress authentication and broker authorization using this same cutoff.
- * This owner grants no route/credential authority and is not a V4 proof issuer.
+ * sealAdmission() retains the endpoint; only the trusted V4 coordinator calls
+ * close() after its removal/socket authority checks. Neither operation issues
+ * V4 proof. The recipe retains cleanup even when open() never publishes.
  */
 export const createNodeHostHttpListener = (input: NodeHostHttpListenerConfig, clock: HttpEgressClock) => {
   const config = Object.freeze({ host: input.host, deadline: input.deadline,
@@ -37,12 +41,20 @@ export const createNodeHostHttpListener = (input: NodeHostHttpListenerConfig, cl
     || !Number.isSafeInteger(config.highWaterMark) || config.highWaterMark < 1 || config.highWaterMark > 65_536) {
     throw failure();
   }
-  let opened = false;
+  let opened = false; let sealed = false;
+  let custody: ListenerCustody | undefined;
+  let emptyClose: Promise<Closure> | undefined;
   return Object.freeze({
     open(accept: NodeHostHttpAccept, cutoff: AbortController): Promise<NodeHostHttpListener> {
-      if (opened || typeof accept !== "function" || !(cutoff instanceof AbortController)) {return Promise.reject(failure());}
+      if (opened || sealed || typeof accept !== "function" || !(cutoff instanceof AbortController)) {return Promise.reject(failure());}
       opened = true;
-      return new ListenerCustody(config, retainHttpEgressClock(clock), accept, cutoff).open();
+      custody = new ListenerCustody(config, retainHttpEgressClock(clock), accept, cutoff);
+      return custody.open();
+    },
+    sealAdmission(): void {sealed = true; custody?.sealAdmission();},
+    close(): Promise<Closure> {
+      sealed = true;
+      return custody?.close() ?? (emptyClose ??= Promise.resolve(Object.freeze({ state: "closed" })));
     },
   });
 };
@@ -55,32 +67,37 @@ class ListenerCustody {
   readonly #cutoff: AbortController;
   readonly #ready = Promise.withResolvers<void>();
   readonly #serverClosed = Promise.withResolvers<void>();
-  readonly #sockets = new Set<Socket>();
+  readonly #sockets = new Map<Socket, Promise<void>>();
   #server: Server | undefined;
   #work: Promise<void> | undefined;
   #busy = false;
   #sealed = false;
   #actualClose = false;
-  #uncertain = false;
+  #published = false;
+  #bindPending = false;
+  #closeIssued = false;
   #closePromise: Promise<Closure> | undefined;
   #operationWatch: AbortController | undefined;
 
   public constructor(config: Config, clock: HttpEgressClock, accept: NodeHostHttpAccept, cutoff: AbortController) {
     this.#config = config; this.#clock = clock; this.#accept = accept; this.#cutoff = cutoff;
+    void this.#ready.promise.catch(() => {});
   }
 
   public async open(): Promise<NodeHostHttpListener> {
-    if (this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)) {throw failure();}
-    const server = new Server({ allowHalfOpen: true, pauseOnConnect: true, highWaterMark: this.#config.highWaterMark });
-    this.#server = server;
-    server.maxConnections = 1;
-    server.on("connection", this.#connection).on("drop", this.#failed).on("error", this.#failed)
-      .once("listening", this.#listening).once("close", this.#onClose);
-    this.#cutoff.signal.addEventListener("abort", this.#aborted, { once: true });
-    // Observe rejection even if listen() throws synchronously.
-    void this.#ready.promise.catch(() => {});
+    if (this.#sealed || this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)) {
+      this.sealAdmission(); throw failure();
+    }
     try {
-      server.listen({ host: this.#config.host, port: 0, backlog: 1, exclusive: true, signal: this.#cutoff.signal });
+      const server = new Server({ allowHalfOpen: true, pauseOnConnect: true, highWaterMark: this.#config.highWaterMark });
+      this.#server = server;
+      server.maxConnections = 1;
+      server.on("connection", this.#connection).on("drop", this.#failed).on("error", this.#failed)
+        .on("listening", this.#listening).on("close", this.#onClose);
+      this.#cutoff.signal.addEventListener("abort", this.#aborted, { once: true });
+      // Admission abort must never trigger net.Server's automatic endpoint release.
+      this.#bindPending = true;
+      server.listen({ host: this.#config.host, port: 0, backlog: 1, exclusive: true });
       await this.#clock.within(this.#config.deadline, () => this.#ready.promise, this.#cutoff.signal);
       const address = server.address();
       if (this.#sealed || this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)
@@ -90,10 +107,12 @@ class ListenerCustody {
       this.#operationWatch = new AbortController();
       void this.#clock.within(this.#config.deadline, () => this.#serverClosed.promise, this.#operationWatch.signal)
         .catch(() => {if (!this.#operationWatch!.signal.aborted) {this.#failed();}});
-      return Object.freeze({ address: Object.freeze({ ...address, family: "IPv4" as const }), close: () => this.close() });
+      if (this.#sealed || this.#cutoff.signal.aborted) {throw failure();}
+      this.#published = true;
+      return Object.freeze({ address: Object.freeze({ ...address, family: "IPv4" as const }),
+        sealAdmission: () => this.sealAdmission(), close: () => this.close() });
     } catch {
       this.#failed();
-      await this.close();
       throw failure();
     }
   }
@@ -103,26 +122,31 @@ class ListenerCustody {
   }
 
   readonly #listening = (): void => {
+    if (this.#bindPending) {
+      // An earlier close of an unbound server cannot acknowledge this late bind.
+      this.#bindPending = false; this.#actualClose = false; this.#closeIssued = false;
+    }
+    if (this.#closePromise !== undefined) {this.#releaseEndpoint();}
     if (this.#sealed || this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)) {
-      // A late bind may never republish a retired endpoint.
-      this.#server!.close(); this.#ready.reject(failure()); return;
+      this.sealAdmission(); return;
     }
     this.#ready.resolve();
   };
-  readonly #failed = (): void => {this.#uncertain = true; this.#aborted();};
-  readonly #aborted = (): void => {void this.close();};
+  readonly #failed = (): void => {this.sealAdmission();};
+  readonly #aborted = (): void => {this.sealAdmission();};
   readonly #onClose = (): void => {
-    this.#actualClose = true;
-    this.#serverClosed.resolve();
-    if (!this.#sealed) {this.#failed();}
+    if (!this.#bindPending && this.#server?.listening === false) {
+      this.#actualClose = true; this.#serverClosed.resolve();
+    }
+    this.sealAdmission();
   };
 
   readonly #connection = (socket: Socket): void => {
-    this.#sockets.add(socket);
     const closed = Promise.withResolvers<void>();
+    this.#sockets.set(socket, closed.promise);
     socket.once("close", () => {this.#sockets.delete(socket); closed.resolve();})
       .on("error", closedErrorSink);
-    if (this.#sealed || this.#busy || this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)) {
+    if (!this.#published || this.#sealed || this.#busy || this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)) {
       socket.destroy(); this.#failed(); return;
     }
     this.#busy = true;
@@ -140,35 +164,49 @@ class ListenerCustody {
     await closed;
   }
 
-  public close(): Promise<Closure> {
-    if (this.#closePromise !== undefined) {return this.#closePromise;}
-    const completion = Promise.withResolvers<Closure>();
-    this.#closePromise = completion.promise;
+  public sealAdmission(): void {
+    if (this.#sealed) {return;}
     this.#sealed = true;
     this.#ready.reject(failure());
     this.#operationWatch?.abort();
     this.#cutoff.signal.removeEventListener("abort", this.#aborted);
     if (!this.#cutoff.signal.aborted) {this.#cutoff.abort(failure());}
-    try {this.#server?.close();} catch {this.#uncertain = true;}
-    for (const socket of this.#sockets) {socket.destroy();}
+    for (const socket of this.#sockets.keys()) {socket.destroy();}
+  }
+
+  public close(): Promise<Closure> {
+    if (this.#closePromise !== undefined) {return this.#closePromise;}
+    const completion = Promise.withResolvers<Closure>();
+    this.#closePromise = completion.promise;
+    this.sealAdmission();
+    this.#releaseEndpoint();
     void this.#observeClosure().then(completion.resolve, () => completion.resolve(Object.freeze({ state: "unknown" })));
     return this.#closePromise;
   }
 
+  #releaseEndpoint(): void {
+    if (this.#server === undefined || this.#closeIssued || this.#actualClose) {return;}
+    // A bound handle is observable even before the listening callback runs.
+    if (this.#server.listening) {this.#bindPending = false;}
+    this.#closeIssued = true;
+    try {this.#server.close();} catch { /* No close acknowledgement: retain unknown custody. */ }
+  }
+
   async #observeClosure(): Promise<Closure> {
+    if (this.#server === undefined) {return Object.freeze({ state: "closed" });}
     const watch = new AbortController();
     try {
-      await this.#clock.within(this.#config.closureDeadline,
-        async () => {await this.#serverClosed.promise; await this.#work;}, watch.signal);
-      if (!this.#live(this.#config.closureDeadline)) {this.#uncertain = true;}
-    } catch {this.#uncertain = true;}
+      await this.#clock.within(this.#config.closureDeadline, async () => {
+        await this.#serverClosed.promise;
+        await Promise.all([this.#work, ...this.#sockets.values()]);
+      }, watch.signal);
+      if (!this.#live(this.#config.closureDeadline)) {throw failure();}
+    } catch {return Object.freeze({ state: "unknown" });}
     finally {watch.abort();}
-    const closed = this.#actualClose && this.#server?.listening === false
-      && this.#sockets.size === 0 && !this.#busy && !this.#uncertain;
-    if (this.#actualClose) {
-      this.#server!.off("connection", this.#connection).off("drop", this.#failed)
-        .off("error", this.#failed).off("listening", this.#listening).on("error", closedErrorSink);
-    }
+    const closed = this.#actualClose && !this.#bindPending && this.#server.listening === false
+      && this.#sockets.size === 0 && !this.#busy;
+    // Keep late-bind/close observers even after an unknown receipt. Final release
+    // remains armed, but a late acknowledgement never rewrites that receipt.
     return Object.freeze({ state: closed ? "closed" : "unknown" });
   }
 }
