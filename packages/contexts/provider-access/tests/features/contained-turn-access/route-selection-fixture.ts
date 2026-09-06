@@ -30,9 +30,9 @@ export const selection = (recipe: RouteSelectionInput["recipe"] = "codex-chatgpt
   };
 };
 export const deferred = <T>() => {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>(r => {resolve = r;});
-  return {promise, resolve};
+  let complete!: (value: T) => void;
+  const promise = new Promise<T>(resolve => {complete = resolve;});
+  return {promise, resolve: complete};
 };
 type Row = Record<string, unknown>;
 export const harness = async (input = selection()) => {
@@ -45,6 +45,26 @@ export const harness = async (input = selection()) => {
   let connects = 0;
   let tail = Promise.resolve();
   let hook: ((sql: string) => Promise<void>) | undefined;
+  const statement = (sql: string, values?: unknown[]) => {
+  if (sql.includes("SELECT version")) {
+    const route = sql.includes("pa-route-selection-v1");
+    return {rows: route && !state.migrated ? [] : [{version: state.schemaBad ? 2 : 1, digest: route ? routeDigest : baseDigest}], rowCount: 1};
+  }
+  if (sql.includes("SELECT binding_revision")) {return {rows: structuredClone(state.rows.slice(-1)), rowCount: state.rows.length ? 1 : 0};}
+  if (sql.startsWith("INSERT INTO provider_access.route_selection(")) {
+    if (state.rows.some(row => row.binding_revision === values?.[1])) {throw new Error("Synthetic unique constraint");}
+    state.rows.push({binding_revision: values?.[1], head_version: values?.[2], endorsement: JSON.parse(values?.[3] as string)});
+    return {rows: [], rowCount: state.insertCount};
+  }
+  if (sql.startsWith("UPDATE provider_access.materialization_owner")) {
+    state.binding = JSON.parse(values?.[5] as string); state.headVersion = values?.[6] as string;
+    return {rows: [], rowCount: 1};
+  }
+  if (sql.startsWith("INSERT INTO provider_access.materialization_schema") && sql.includes("pa-route-selection-v1")) {
+    state.migrated = true; return {rows: [], rowCount: state.insertCount};
+  }
+  return {rows: [], rowCount: 0};
+  };
   const pool = {async connect() {
     connects++;
     if (state.unavailable) {throw new Error("Synthetic outage");}
@@ -67,24 +87,7 @@ export const harness = async (input = selection()) => {
           if (sql === "ROLLBACK" && backup) {Object.assign(state, backup);}
           unlock?.(); unlock = undefined;
         }
-        if (sql.includes("SELECT version")) {
-          const route = sql.includes("pa-route-selection-v1");
-          return {rows: route && !state.migrated ? [] : [{version: state.schemaBad ? 2 : 1, digest: route ? routeDigest : baseDigest}], rowCount: 1};
-        }
-        if (sql.includes("SELECT binding_revision")) {return {rows: structuredClone(state.rows.slice(-1)), rowCount: state.rows.length ? 1 : 0};}
-        if (sql.startsWith("INSERT INTO provider_access.route_selection(")) {
-          if (state.rows.some(row => row.binding_revision === values?.[1])) {throw new Error("Synthetic unique constraint");}
-          state.rows.push({binding_revision: values?.[1], head_version: values?.[2], endorsement: JSON.parse(values?.[3] as string)});
-          return {rows: [], rowCount: state.insertCount};
-        }
-        if (sql.startsWith("UPDATE provider_access.materialization_owner")) {
-          state.binding = JSON.parse(values?.[5] as string); state.headVersion = values?.[6] as string;
-          return {rows: [], rowCount: 1};
-        }
-        if (sql.startsWith("INSERT INTO provider_access.materialization_schema") && sql.includes("pa-route-selection-v1")) {
-          state.migrated = true; return {rows: [], rowCount: state.insertCount};
-        }
-        return {rows: [], rowCount: 0};
+        return statement(sql, values);
       },
       release(discard?: boolean) {releases.push(discard === true); unlock?.();},
     };

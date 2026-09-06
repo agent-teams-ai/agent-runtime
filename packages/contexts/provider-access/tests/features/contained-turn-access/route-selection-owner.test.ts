@@ -36,7 +36,7 @@ test("competing descriptors at the same revision have exactly one winner", async
   const changed = {...h.input, descriptor: {...h.input.descriptor, exactValues: {...h.input.descriptor.exactValues, version: "0.153.5"}}};
   const a = h.owner(); const b = h.owner(changed);
   const outcomes = await Promise.allSettled([a.control.endorse(1), b.control.endorse(1)]);
-  assert.deepEqual(outcomes.map(r => r.status).sort(), ["fulfilled", "rejected"]);
+  assert.deepEqual(outcomes.map(r => r.status).toSorted(), ["fulfilled", "rejected"]);
   assert.equal(h.state.rows.length, 1); a.dispose(); b.dispose();
 });
 
@@ -78,7 +78,7 @@ test("current binding identity, credential facts, revocation and availability ar
   for (const [key, value] of Object.entries(mutations)) {
     h.state.binding = {...h.input.binding, [key]: value};
     assert.equal(await owner.readCurrent(), undefined, key);
-    await assert.rejects(owner.control.endorse(1), undefined, key);
+    await assert.rejects(owner.control.endorse(1), key);
   }
   h.state.binding = null; assert.equal(await owner.readCurrent(), undefined); owner.dispose();
 });
@@ -158,7 +158,7 @@ test("canonical SHA256 preimage covers all profile and binding fields with PA do
         exactValues: {...selected.descriptor.exactValues, [name]: "changed"}}}), original, `${recipe}:${name}`);
     }
   }
-  const reversed = Object.fromEntries(Object.entries(base.descriptor).reverse());
+  const reversed = Object.fromEntries(Object.entries(base.descriptor).toReversed());
   assert.equal(await routeSelectionDigest({...base, descriptor: reversed} as never), digest);
 });
 
