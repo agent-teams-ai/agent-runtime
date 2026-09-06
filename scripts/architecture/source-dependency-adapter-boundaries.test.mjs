@@ -257,6 +257,7 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
     "node:buffer",
     "node:child_process",
     "node:crypto",
+    "node:events",
     "node:fs",
     "node:fs/promises",
     "node:net",

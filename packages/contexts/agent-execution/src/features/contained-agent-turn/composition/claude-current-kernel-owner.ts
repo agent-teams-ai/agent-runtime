@@ -1,5 +1,4 @@
 import { capturePostClaimPreparation } from "./host-post-claim-preparation.js";
-import type { ContainedTurnHostPostClaimPreparation } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js";
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
 import type {
   ContainedTurnKernelProviderPort,
@@ -30,6 +29,7 @@ import type {
 import {
   ContainedTurnKernelCustodyAdapter,
   type ContainedTurnHostCustodyPort,
+  type ContainedTurnHostPostClaimPreparation,
   type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner,
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";

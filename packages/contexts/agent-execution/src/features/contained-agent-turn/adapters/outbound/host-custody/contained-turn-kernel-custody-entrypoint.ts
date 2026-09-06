@@ -9,3 +9,4 @@ export {
   type HostHttpEgressSessionDependencies,
 } from "./egress/host-http-egress-session.js";
 export { nativeHttpRequestProfile, type NativeHttpRequestProfileId } from "./egress/native-http-request-profile.js";
+export type { ContainedTurnHostPostClaimPreparation } from "./contained-turn-kernel-custody-contracts.js";

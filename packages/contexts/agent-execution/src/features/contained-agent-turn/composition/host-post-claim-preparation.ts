@@ -1,4 +1,4 @@
-import type { ContainedTurnHostPostClaimPreparation } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js";
+import type { ContainedTurnHostPostClaimPreparation } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 
 const isProxy = process.getBuiltinModule("node:util").types.isProxy;
 const apply = Reflect.apply;
