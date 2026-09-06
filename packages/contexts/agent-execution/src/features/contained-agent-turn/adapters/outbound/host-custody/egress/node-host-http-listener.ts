@@ -11,9 +11,52 @@ export type NodeHostHttpListenerConfig = Readonly<{
 export type NodeHostHttpAccept = (socket: Socket, signal: AbortSignal) => Promise<void>;
 type Address = Readonly<{ address: string; family: "IPv4"; port: number }>;
 type Closure = Readonly<{ state: "closed" | "unknown" }>;
+
+/**
+ * Adapter-private, point-in-time facts from this recipe's retained custody.
+ * `closed` describes only the Server, independently of sockets and consumers.
+ * `not-attempted` means no native listen was attempted; it is not a close ack.
+ * Pending bind stays unresolved after failure until a bound handle is observed.
+ * Socket counts cover every delivered connection, including refused ones. A
+ * native `drop` supplies no Socket and hence no observable socket close event.
+ * Uncertainty lists missing local evidence; even an empty list is no PID,
+ * process, route, Engine or V4 closure proof, nor a kernel-wide socket census.
+ * Observe again for late events; snapshots never revise a prior close receipt.
+ */
+export type NodeHostHttpListenerObservation = Readonly<{
+  scope: "retained-node-server-and-delivered-sockets";
+  openState: "not-attempted" | "pending" | "published" | "failed";
+  listenerState: "not-attempted" | "pending" | "open" | "unknown" | "closed";
+  admissionSealed: boolean;
+  nativeBindPending: boolean;
+  closeRequested: boolean;
+  serverCloseAcknowledged: boolean;
+  sockets: Readonly<{ observed: number; closeEvents: number; awaitingClose: number; droppedWithoutSocket: number }>;
+  /** Set before invoking the consumer; cleared only after its await settles. */
+  consumerPending: boolean;
+  /** Includes the consumer AND its socket's close event, as in close(). */
+  consumerWorkPending: boolean;
+  uncertainty: readonly ("native-bind-unresolved" | "server-close-unacknowledged"
+    | "socket-close-unobserved" | "consumer-unsettled" | "consumer-work-unsettled" | "native-drop-unobserved")[];
+}>;
 export type NodeHostHttpListener = Readonly<{
   address: Address; sealAdmission(): void; close(): Promise<Closure>;
+  observe(): NodeHostHttpListenerObservation;
 }>;
+
+// Only recipe/custody state enters this private formatter. No snapshot ingestion,
+// token issuance, clock sampling, consumer call or native effect occurs on reads.
+const observation = (state: Omit<NodeHostHttpListenerObservation, "scope" | "uncertainty">): NodeHostHttpListenerObservation => {
+  const uncertainty: Array<NodeHostHttpListenerObservation["uncertainty"][number]> = [];
+  if (state.nativeBindPending) {uncertainty.push("native-bind-unresolved");}
+  if (state.listenerState === "unknown") {uncertainty.push("server-close-unacknowledged");}
+  if (state.sockets.awaitingClose > 0) {uncertainty.push("socket-close-unobserved");}
+  if (state.consumerPending) {uncertainty.push("consumer-unsettled");}
+  else if (state.consumerWorkPending) {uncertainty.push("consumer-work-unsettled");}
+  if (state.sockets.droppedWithoutSocket > 0) {uncertainty.push("native-drop-unobserved");}
+  return Object.freeze({ ...state, scope: "retained-node-server-and-delivered-sockets",
+    sockets: Object.freeze({ ...state.sockets }), uncertainty: Object.freeze(uncertainty) });
+};
 
 const failure = (): Error => new Error("host HTTP listener unavailable");
 const privateAddress = (host: string): boolean => {
@@ -52,6 +95,12 @@ export const createNodeHostHttpListener = (input: NodeHostHttpListenerConfig, cl
       return custody.open();
     },
     sealAdmission(): void {sealed = true; custody?.sealAdmission();},
+    observe(): NodeHostHttpListenerObservation {
+      return custody?.observe() ?? observation({ openState: "not-attempted", listenerState: "not-attempted",
+        admissionSealed: sealed, nativeBindPending: false, closeRequested: emptyClose !== undefined,
+        serverCloseAcknowledged: false, sockets: { observed: 0, closeEvents: 0, awaitingClose: 0, droppedWithoutSocket: 0 },
+        consumerPending: false, consumerWorkPending: false });
+    },
     close(): Promise<Closure> {
       sealed = true;
       return custody?.close() ?? (emptyClose ??= Promise.resolve(Object.freeze({ state: "closed" })));
@@ -70,6 +119,10 @@ class ListenerCustody {
   readonly #sockets = new Map<Socket, Promise<void>>();
   #server: Server | undefined;
   #work: Promise<void> | undefined;
+  #openState: NodeHostHttpListenerObservation["openState"] = "pending";
+  #socketCloseEvents = 0;
+  #droppedWithoutSocket = 0;
+  #consumerPending = false;
   #busy = false;
   #sealed = false;
   #actualClose = false;
@@ -86,13 +139,14 @@ class ListenerCustody {
 
   public async open(): Promise<NodeHostHttpListener> {
     if (this.#sealed || this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)) {
+      this.#openState = "failed";
       this.sealAdmission(); throw failure();
     }
     try {
       const server = new Server({ allowHalfOpen: true, pauseOnConnect: true, highWaterMark: this.#config.highWaterMark });
       this.#server = server;
       server.maxConnections = 1;
-      server.on("connection", this.#connection).on("drop", this.#failed).on("error", this.#failed)
+      server.on("connection", this.#connection).on("drop", this.#dropped).on("error", this.#failed)
         .on("listening", this.#listening).on("close", this.#onClose);
       this.#cutoff.signal.addEventListener("abort", this.#aborted, { once: true });
       // Admission abort must never trigger net.Server's automatic endpoint release.
@@ -109,12 +163,28 @@ class ListenerCustody {
         .catch(() => {if (!this.#operationWatch!.signal.aborted) {this.#failed();}});
       if (this.#sealed || this.#cutoff.signal.aborted) {throw failure();}
       this.#published = true;
+      this.#openState = "published";
       return Object.freeze({ address: Object.freeze({ ...address, family: "IPv4" as const }),
-        sealAdmission: () => this.sealAdmission(), close: () => this.close() });
+        sealAdmission: () => this.sealAdmission(), close: () => this.close(), observe: () => this.observe() });
     } catch {
+      this.#openState = "failed";
       this.#failed();
       throw failure();
     }
+  }
+
+  public observe(): NodeHostHttpListenerObservation {
+    let listenerState: NodeHostHttpListenerObservation["listenerState"];
+    if (this.#server === undefined) {listenerState = "not-attempted";}
+    else if (this.#bindPending) {listenerState = this.#openState === "failed" ? "unknown" : "pending";}
+    else if (this.#server.listening) {listenerState = "open";}
+    else {listenerState = this.#actualClose ? "closed" : "unknown";}
+    return observation({ openState: this.#openState, listenerState, admissionSealed: this.#sealed,
+      nativeBindPending: this.#bindPending, closeRequested: this.#closePromise !== undefined,
+      serverCloseAcknowledged: listenerState === "closed",
+      sockets: { observed: this.#socketCloseEvents + this.#sockets.size, closeEvents: this.#socketCloseEvents,
+        awaitingClose: this.#sockets.size, droppedWithoutSocket: this.#droppedWithoutSocket },
+      consumerPending: this.#consumerPending, consumerWorkPending: this.#busy });
   }
 
   #live(deadline: number): boolean {
@@ -133,6 +203,7 @@ class ListenerCustody {
     this.#ready.resolve();
   };
   readonly #failed = (): void => {this.sealAdmission();};
+  readonly #dropped = (): void => {this.#droppedWithoutSocket += 1; this.#failed();};
   readonly #aborted = (): void => {this.sealAdmission();};
   readonly #onClose = (): void => {
     if (!this.#bindPending && this.#server?.listening === false) {
@@ -144,7 +215,7 @@ class ListenerCustody {
   readonly #connection = (socket: Socket): void => {
     const closed = Promise.withResolvers<void>();
     this.#sockets.set(socket, closed.promise);
-    socket.once("close", () => {this.#sockets.delete(socket); closed.resolve();})
+    socket.once("close", () => {this.#socketCloseEvents += 1; this.#sockets.delete(socket); closed.resolve();})
       .on("error", closedErrorSink);
     if (!this.#published || this.#sealed || this.#busy || this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)) {
       socket.destroy(); this.#failed(); return;
@@ -155,11 +226,13 @@ class ListenerCustody {
     // the consumer and the actual native socket have finished.
     const work = Promise.withResolvers<void>();
     this.#work = work.promise;
+    this.#consumerPending = true;
     void this.#consume(socket, closed.promise).then(() => {this.#busy = false; return work.resolve();});
   };
 
   async #consume(socket: Socket, closed: Promise<void>): Promise<void> {
     try {await this.#accept(socket, this.#cutoff.signal);} catch {this.#failed();}
+    finally {this.#consumerPending = false;}
     if (!socket.destroyed) {socket.destroy(); this.#failed();}
     await closed;
   }
