@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createCurrentEgressOwner } from
-  "../src/features/provider-process-egress-authorization/composition/current-egress-owner.js";
+  "../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
 import { createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate } from
-  "../src/features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.js";
+  "../dist/features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.js";
 import { canonicalEgressValue } from
-  "../src/features/provider-process-egress-authorization/application/egress-canonical.js";
+  "../dist/features/provider-process-egress-authorization/application/egress-canonical.js";
 import type { CurrentEgressOwnerInput, CurrentEgressEndorsement } from
-  "../src/features/provider-process-egress-authorization/composition/current-egress-inputs.js";
+  "../dist/features/provider-process-egress-authorization/composition/current-egress-inputs.js";
 import type { ProvisionalEgressAuthorizationV2, RequestFinalEgressAuthorizationV2 } from
-  "../src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.js";
+  "../dist/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.js";
 
 export const digest = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 export const scope = () => ({ tenantId: "tenant-1", projectId: "project-1", operationId: "operation-1",
@@ -66,7 +66,7 @@ export const resolveInput = () => ({ scope: scope(), authorizationRequestId: "au
 export const current = async (owner: ReturnType<typeof createCurrentEgressOwner>) => {
   const result = await owner.resolvePolicy(resolveInput());
   assert.equal(result.status, "current");
-  if (result.status !== "current") {throw new Error(result.reason);}
+  if (result.status !== "current") {throw new Error("Expected authorized fixture result");}
   return result.authority;
 };
 export const candidate = (input: CurrentEgressOwnerInput) => {
@@ -83,7 +83,7 @@ export const provisional = async (setup: ReturnType<typeof candidate>) => {
   const result = await setup.gateway.requestProvisional({
     contractVersion: "provider-process-egress-provisional/v2", ...fields });
   assert.equal(result.status, "authorized");
-  if (result.status !== "authorized") {throw new Error(result.evidence.issueCode);}
+  if (result.status !== "authorized") {throw new Error("Expected authorized fixture result");}
   return result.decision;
 };
 export const finalInput = (decision: ProvisionalEgressAuthorizationV2): RequestFinalEgressAuthorizationV2 => ({
@@ -97,10 +97,10 @@ export const finalInput = (decision: ProvisionalEgressAuthorizationV2): RequestF
   request: decision.request, redirectHop: 0,
 });
 export const deferred = <T>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
+  let complete!: (value: T) => void;
+  let fail!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => { complete = resolve; fail = reject; });
+  return { promise, resolve: complete, reject: fail };
 };
 export const changed = <T>(source: T, path: string, value: unknown): T => {
   const copy = structuredClone(source);

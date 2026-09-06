@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCurrentEgressOwner } from
-  "../src/features/provider-process-egress-authorization/composition/current-egress-owner.js";
+  "../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
 import { candidate, changed, current, deferred, digest, finalInput, fixture, provisional,
   resolveInput, scope } from "./current-egress-owner.fixture.ts";
 
@@ -83,7 +83,7 @@ test("current rebuild preserves new PA facts instead of returning cached authori
     routeAuthorityDigest: digest("new-pa-endorsement") };
   const result = await owner.readCurrent({ scope: scope(), authorityRef: before.authorityRef });
   assert.equal(result.status, "current");
-  if (result.status !== "current") {throw new Error(result.reason);}
+  if (result.status !== "current") {throw new Error("Expected authorized fixture result");}
   assert.equal(result.authority.providerAccess.credentialGeneration, "generation-9");
   assert.equal(result.authority.providerAccess.routeGeneration, "4");
   assert.equal(result.authority.providerAccess.routeAuthorityDigest, digest("new-pa-endorsement"));

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { types } from "node:util";
 import { createCurrentEgressOwner } from
-  "../src/features/provider-process-egress-authorization/composition/current-egress-owner.js";
+  "../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
 import { approve, candidate, changed, current, digest, finalInput, fixture, provisional,
   request, resolveInput, scope } from "./current-egress-owner.fixture.ts";
 
@@ -26,7 +26,7 @@ test("existing V2 candidate signs the exact rule and final match with real Ed255
   const result = await setup.gateway.authorizeFirstApplicationByte(finalInput(decision));
   assert.equal(result.status, "authorized");
   assert.deepEqual(state.calls, ["RS", "PA", "RS", "RS", "PA", "RS"]);
-  if (result.status !== "authorized") {throw new Error(result.evidence.issueCode);}
+  if (result.status !== "authorized") {throw new Error("Expected authorized fixture result");}
   assert.equal(result.grant.signature.algorithm, "ed25519");
   assert.match(result.grant.signature.value, /^[0-9a-f]{128}$/);
   assert.equal(setup.signer.hostEgressVerifierV2.verifyGrant(result.grant), true);
@@ -34,7 +34,7 @@ test("existing V2 candidate signs the exact rule and final match with real Ed255
   assert.deepEqual(result.grant.payload.policy, decision.policy);
   assert.deepEqual(result.grant.payload.providerAccess, decision.providerAccess);
   assert.equal(Object.isFrozen(result.grant.payload.policy.limits), true);
-  assert.deepEqual(Object.keys(setup.owner).sort(), ["dispose", "readCurrent", "resolvePolicy"]);
+  assert.deepEqual(Object.keys(setup.owner).toSorted(), ["dispose", "readCurrent", "resolvePolicy"]);
 });
 
 const requestMismatches: [string, unknown][] = [
@@ -67,7 +67,7 @@ test("body and header content vary within the RS rule; caller cannot choose perm
   modified.request.headers.credentialFields[0]!.valueDigest = digest("different-rendering");
   const result = await owner.resolvePolicy(modified);
   assert.equal(result.status, "current");
-  if (result.status !== "current") {throw new Error(result.reason);}
+  if (result.status !== "current") {throw new Error("Expected authorized fixture result");}
   assert.notEqual(result.authority.policy.authorizedRequestDigest, original.policy.authorizedRequestDigest);
   assert.deepEqual(result.authority.policy.limits, input.rule.limits);
   assert.equal((await owner.resolvePolicy({ ...modified, limits: { requestBytes: 9999 } } as never)).status, "denied");

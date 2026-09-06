@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCurrentEgressOwner } from
-  "../src/features/provider-process-egress-authorization/composition/current-egress-owner.js";
+  "../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
 import { approve, changed, current, deferred, digest, fixture, resolveInput, scope } from
   "./current-egress-owner.fixture.ts";
 
@@ -34,7 +34,7 @@ test("a request is captured before waiting for a borrowed read", async t => {
   gate.resolve(state.head);
   const outcome = await pending; assert.equal(outcome.status, "current");
   assert.notEqual(raw.request.body.digest, originalDigest);
-  if (outcome.status !== "current") {throw new Error(outcome.reason);}
+  if (outcome.status !== "current") {throw new Error("Expected authorized fixture result");}
   assert.equal((await owner.readCurrent({ scope: scope(), authorityRef: outcome.authority.authorityRef })).status, "current");
 });
 
@@ -83,11 +83,13 @@ test("malformed current projections and hostile thenables close without retries 
   Object.defineProperty(accessor.authority, "constraintsDigest", { get() {traps += 1; return digest("getter");} });
   const owner = createCurrentEgressOwner({ ...input, readRsHead: async () => accessor }); t.after(() => owner.dispose());
   assert.notEqual((await owner.resolvePolicy(resolveInput())).status, "current");
+  // oxlint-disable-next-line unicorn/no-thenable -- Deliberate hostile getter must never be assimilated.
   const thenable = Object.defineProperty({}, "then", { get() {traps += 1; throw new Error("then getter");} });
   const other = createCurrentEgressOwner({ ...input, readRsHead: (() => thenable) as never }); t.after(() => other.dispose());
   assert.notEqual((await other.resolvePolicy(resolveInput())).status, "current");
   for (const value of [new Proxy(Promise.resolve(state.head), { get() {traps += 1; throw new Error("trap");} }),
     Object.defineProperty(Promise.resolve(state.head), "constructor", { get() {traps += 1; return Promise;} }),
+    // oxlint-disable-next-line unicorn/no-thenable -- Deliberate hostile promise getter must remain unread.
     Object.defineProperty(Promise.resolve(state.head), "then", { get() {traps += 1; throw new Error("then");} })]) {
     const hostile = createCurrentEgressOwner({ ...input, readRsHead: () => value }); t.after(() => hostile.dispose());
     assert.notEqual((await hostile.resolvePolicy(resolveInput())).status, "current");
@@ -104,7 +106,7 @@ test("malformed PA current data and credential arrays fail closed", async t => {
     t.after(() => owner.dispose()); assert.notEqual((await owner.resolvePolicy(resolveInput())).status, "current");
   }
   const owner = createCurrentEgressOwner(input); t.after(() => owner.dispose());
-  for (const fields of [Array(257).fill({}), Array(2),
+  for (const fields of [Array.from({length: 257}, () => ({})), Array(2),
     [resolveInput().request.headers.credentialFields[0], resolveInput().request.headers.credentialFields[0]]]) {
     const raw = changed(resolveInput(), "request.headers.credentialFields", fields);
     assert.equal((await owner.resolvePolicy(raw)).status, "denied");
