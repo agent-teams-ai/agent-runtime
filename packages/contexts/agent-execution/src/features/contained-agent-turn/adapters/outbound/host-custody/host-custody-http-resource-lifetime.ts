@@ -1,3 +1,4 @@
+import {addAbortListener} from "node:events";
 import { types } from "node:util";
 import { custodyDataRecord } from "./host-custody-inert-record.js";
 import { validateCommittedDispatchProofV1, type CommittedDispatchProofV1 } from "../../../domain/committed-dispatch-proof-v1.js";
@@ -46,3 +47,14 @@ export const readHostCustodyHttpHandoff = (input: HostCustodyHttpHandoff): HostC
     signal, underlyingCustodyRef: record.underlyingCustodyRef });
 };
 
+
+const nativeAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")!.get!;
+const nativeRemove = EventTarget.prototype.removeEventListener;
+const nativeAbort = AbortController.prototype.abort;
+/** Physical abort operations retained for the private resource composition. */
+export const hostHttpAbortOperations = Object.freeze({
+  aborted: (signal: AbortSignal): boolean => nativeAborted.call(signal),
+  subscribe: addAbortListener,
+  remove: (signal: AbortSignal, listener: () => void): void => nativeRemove.call(signal, "abort", listener),
+  abort: (controller: AbortController): void => nativeAbort.call(controller),
+});

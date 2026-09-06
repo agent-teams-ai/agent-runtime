@@ -1,18 +1,11 @@
-import { addAbortListener } from "node:events";
-import { custodyDataRecord } from "../host-custody-inert-record.js";
-import { readHostCustodyHttpHandoff, type HostCustodyHttpHandoff,
-  type HostCustodyHttpResourceLifetime } from "../host-custody-http-resource-lifetime.js";
-import { NodeCustodyHttpResources, type NodeCustodyHttpResourceInput } from "../node-custody-http-resources.js";
-import type { HostHttpEgressSessionDependencies } from "../egress/host-http-egress-session.js";
-import { DockerHostCustodyLifecycle, dockerProviderProcessMountFacts } from "./docker-host-custody-lifecycle.js";
-import type { LaunchedDockerCustody } from "./docker-lifecycle-issued-launch.js";
-import { sameDockerAuthority } from "./docker-host-custody-lifecycle-guards.js";
-import { awaitNetworkCleanupWork } from "./engine/docker-operation-network-codec.js";
-
+import { custodyDataRecord, readHostCustodyHttpHandoff, hostHttpAbortOperations,
+  NodeCustodyHttpResources, type NodeCustodyHttpResourceInput, type HostCustodyHttpHandoff,
+  type HostCustodyHttpResourceLifetime, type HostHttpEgressSessionDependencies
+} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+import { DockerHostCustodyLifecycle, dockerProviderProcessMountFacts, sameDockerAuthority, awaitNetworkCleanupWork,
+  type LaunchedDockerCustody
+} from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 const {observeLaunch} = DockerHostCustodyLifecycle.prototype;
-const nativeAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")!.get!;
-const nativeRemove = EventTarget.prototype.removeEventListener;
-const nativeAbort = AbortController.prototype.abort;
 const rejected = (): TypeError => new TypeError("Docker HTTP custody lifetime unavailable or conflicts");
 const ownerKeys = ["tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId", "hostBootId"] as const;
 
@@ -115,13 +108,13 @@ export class DockerCustodyHttpReservation {
       handoff.underlyingCustodyRef !== expected.underlyingCustodyRef || handoff.signal !== expected.signal) {throw rejected();}
     try {
       this.#assertLaunch();
-      if (nativeAborted.call(expected.signal)) {throw rejected();}
+      if (hostHttpAbortOperations.aborted(expected.signal)) {throw rejected();}
       this.#lifetime = Object.freeze({committedDispatchProof: expected.committedDispatchProof,
         underlyingCustodyRef: expected.underlyingCustodyRef, executionSessionIdentity: this.#identity,
         hostLifecycleGenerationSha256: this.#input.hostLifecycleGenerationSha256, signal: this.#signal});
       this.#subscribed = true;
-      addAbortListener(this.#signal, this.#abort);
-      addAbortListener(expected.signal, this.#abort);
+      hostHttpAbortOperations.subscribe(this.#signal, this.#abort);
+      hostHttpAbortOperations.subscribe(expected.signal, this.#abort);
       return this.#lifetime;
     } catch (error) {this.#cutoff(); throw error;}
   }
@@ -138,10 +131,10 @@ export class DockerCustodyHttpReservation {
     finally {
       // Ignore caller replacement of signal cleanup properties and stopped
       // propagation. Cleanup still belongs to the same fixed resource slots.
-      nativeAbort.call(this.#controller);
+      hostHttpAbortOperations.abort(this.#controller);
       if (this.#subscribed) {
-        nativeRemove.call(this.#input.claimed.signal, "abort", this.#abort);
-        nativeRemove.call(this.#signal, "abort", this.#abort);
+        hostHttpAbortOperations.remove(this.#input.claimed.signal, this.#abort);
+        hostHttpAbortOperations.remove(this.#signal, this.#abort);
         this.#subscribed = false;
       }
     }

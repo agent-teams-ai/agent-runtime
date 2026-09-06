@@ -1,4 +1,5 @@
-import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener, DockerCustodyHttpReservation, DockerHttpNetworkResources, type DockerHttpNetworkResourceInput } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+import {DockerCustodyHttpReservation} from "./docker-custody-http-reservation.js";
+import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener, DockerHttpNetworkResources, type DockerHttpNetworkResourceInput } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import { createV4HostHttpListenerLifecycle } from "./v4-host-http-listener-lifecycle.js";
 
 type Preparation = NonNullable<ReturnType<typeof DockerCustodyHttpReservation.httpPreparation>>;

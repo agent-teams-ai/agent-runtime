@@ -6,7 +6,7 @@ import {committedDispatchProofFixture} from "./committed-dispatch-proof-fixture.
 import {ids, openInput} from "./current-provider-owner-fixture.ts";
 import {DockerHostCustodyLifecycle} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js";
 import {DockerCustodyJournal} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/docker-custody-journal.js";
-import {DockerCustodyHttpReservation} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-custody-http-reservation.js";
+import {DockerCustodyHttpReservation} from "../../../../dist/features/contained-agent-turn/composition/docker-custody-http-reservation.js";
 import {decodeInspection} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-codec.js";
 import {dockerCustodyOwnerIdentitySha256} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/docker-custody-journal-codec.js";
 import type {DockerEngineIdentity, DockerEnginePort} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
@@ -46,7 +46,7 @@ export const fixture = async (t: TestContext) => {
     },
     async attachCustody() {
       calls.push("attach"); state.attached = true;
-      return {output: {async *[Symbol.asyncIterator]() {throw new Error("no init reader in HTTP fixture");}},
+      return {output: {[Symbol.asyncIterator]() {throw new Error("no init reader in HTTP fixture");}},
         async write() {state.writes += 1; throw new Error("no provider/init writes in HTTP fixture");},
         async closeInput() {}, async close() {state.attached = false;}};
     },
@@ -64,7 +64,7 @@ export const fixture = async (t: TestContext) => {
     async kill() {calls.push("kill"); state.running = false;},
     async remove() {calls.push("remove"); state.removed = true;},
     async reconcileCreate() {throw new Error("no recovery in HTTP fixture");},
-    async *logs() {throw new Error("no logs in HTTP fixture");},
+    logs() {throw new Error("no logs in HTTP fixture");},
     async wait() {throw new Error("no wait in HTTP fixture");},
   };
   const storage = new MemoryStorage();

@@ -130,7 +130,7 @@ for (const method of ["read", "within"] as const) {
     // Reuse the acquired lifetime's real identity/proof; no reservation is invented.
     const {NodeCustodyHttpResources} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-custody-http-resources.js");
     const prepare = NodeCustodyHttpResources.prototype.prepare;
-    t.mock.method(NodeCustodyHttpResources.prototype, "prepare", function (this: InstanceType<typeof NodeCustodyHttpResources>, lifetime, input) {
+    t.mock.method(NodeCustodyHttpResources.prototype, "prepare", function (this: InstanceType<typeof NodeCustodyHttpResources>, lifetime: Parameters<typeof prepare>[0], input: Parameters<typeof prepare>[1]) {
       const proof = lifetime.committedDispatchProof;
       owner = createHostHttpLocalCutOwner({...input.localCut,
         claimed: {signal: lifetime.signal, committedDispatchProof: proof, underlyingCustodyRef: lifetime.underlyingCustodyRef},
