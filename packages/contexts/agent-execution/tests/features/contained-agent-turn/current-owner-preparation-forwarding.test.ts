@@ -1,5 +1,5 @@
 // Install synthetic observations before dynamically loading the owner fixture.
-import "./native-launch-finalization-fixture.ts";
+await import("./native-launch-finalization-fixture.ts");
 import assert from "node:assert/strict";
 import test from "node:test";
 const {committedDispatchProofFixture} = await import("./support/committed-dispatch-proof-fixture.ts");

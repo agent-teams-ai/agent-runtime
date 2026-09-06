@@ -26,7 +26,8 @@ test("registration rejects malformed authority before retaining an operation", a
     new Proxy(authority(), { get() { throw new Error("must not read proxy"); } }),
   ];
   for (const scope of invalidScopes) {
-    const lifecycle = createAgentRuntimeHostDisposalLifecycle(undefined);
+    const unavailableCapability: AuthorityBoundContainedTurnCapability | undefined = undefined;
+    const lifecycle = createAgentRuntimeHostDisposalLifecycle(unavailableCapability);
     assert.throws(() => lifecycle.registerContainedTurn({
       operationId: "operation",
       scope: scope as ContainedTurnAccessAuthority,
