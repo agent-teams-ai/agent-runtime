@@ -58,7 +58,8 @@ const captureOptions = (input: CreateDockerCodexCurrentKernelOwnerOptions): Crea
       intent: inert(attempt.intent), providerAccessSnapshot: inert(attempt.providerAccessSnapshot)}),
     process: Object.freeze({...process, call: inert(process.call), exec: inert(process.exec),
       expected: Object.freeze({...expected, authority: inert(expected.authority)}),
-      init: Object.freeze({...init, authority: Object.freeze({...authority, expectedIdentity: inert(authority.expectedIdentity)})}),
+      init: Object.freeze({...init, authority: Object.freeze({...authority, expectedIdentity: inert(authority.expectedIdentity)}),
+        ...(init.isObservationActive === undefined ? {} : {isObservationActive: init.isObservationActive.bind(process.init)})}),
     }),
   });
 };
@@ -82,6 +83,7 @@ const captureProcessInput = (input: DockerProviderProcessInput, plan: CodexAppSe
       maximumStderrBytes: init.maximumStderrBytes, maximumStdoutBytes: init.maximumStdoutBytes,
       authority: Object.freeze({...init.authority, expectedIdentity: Object.freeze({...init.authority.expectedIdentity})}),
       isCurrentGeneration: (generation: string) => isCurrentGeneration(generation) && isAdmitted(),
+      ...(init.isObservationActive === undefined ? {} : {isObservationActive: init.isObservationActive.bind(init)}),
       ...(init.signal === undefined ? {} : {signal: init.signal}),
       ...(init.monotonicNow === undefined ? {} : {monotonicNow: init.monotonicNow.bind(init)}),
     }),
