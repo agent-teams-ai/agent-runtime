@@ -81,7 +81,7 @@ export const readCustodyStartAdmission = (input: StartInput, live: LiveCustody) 
   const fingerprint = createFingerprint({
     attemptId: live.attemptId, intentMode: plan.intentMode, operationId: live.operationId,
     providerBinding: live.providerBinding, workspaceRef: live.workspaceRef,
-  }, plan, live.workspaceRef, snapshot.arguments);
+  }, plan, live.workspaceRef, snapshot.arguments, live.launchBinding?.materialSha256);
   if (live.fingerprint?.fingerprintSha256 !== fingerprint.fingerprintSha256 ||
       (live.startIdentitySha256 !== undefined &&
         (live.startIdentitySha256 !== startIdentitySha256 || live.sdkProcess === undefined || live.exit === undefined))) {

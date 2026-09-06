@@ -60,7 +60,7 @@ interface FilesystemObjectIdentity {
   readonly ino: bigint;
 }
 
-interface LaunchCandidate {
+export interface LaunchCandidate {
   readonly canonicalWorkspace: string;
   readonly fingerprint: HostCustodyLaunchFingerprintEvidence;
   readonly plan: HostCustodyLaunchPlan;
@@ -467,6 +467,7 @@ export const createFingerprint = (
   plan: HostCustodyLaunchPlan,
   canonicalWorkspace: string,
   launchArguments: readonly string[],
+  materialSha256?: string,
 ): HostCustodyLaunchFingerprintEvidence => {
   const environmentKeys = Object.keys(plan.environment).toSorted();
   const effectivePrivateEnvironmentKeys = privateEnvironmentKeys(plan);
@@ -495,7 +496,8 @@ export const createFingerprint = (
     plan.spawnMode ?? "eager",
     plan.containmentProfile,
   ] as const;
-  const planSha256 = sha256(canonicalJson(planIdentity));
+  const planSha256 = sha256(canonicalJson(materialSha256 === undefined
+    ? planIdentity : [...planIdentity, materialSha256]));
   return Object.freeze({
     argumentsSha256,
     binaryRevision: plan.binaryRevision,
@@ -528,7 +530,17 @@ export const resolveLaunchCandidate = async (
     workspaceRef: input.workspaceRef,
   });
   if (resolvedPlan === undefined) {throw new HostCustodyUnsupportedError("launch-plan-unavailable");}
-  const plan = snapshotHostCustodyLaunchPlan(resolvedPlan);
+  return validateSelectedLaunchCandidate(resolvedPlan, input);
+};
+
+/** Validate the already retained selection without consulting a resolver. */
+export const validateSelectedLaunchCandidate = async (
+  selected: HostCustodyLaunchPlan,
+  input: Parameters<ProviderProcessCustodyPort["open"]>[0],
+  materialSha256?: string,
+): Promise<LaunchCandidate> => {
+  const intentMode = input.intentMode;
+  const plan = snapshotHostCustodyLaunchPlan(selected);
   if (
     plan.provider !== input.providerBinding.provider ||
     plan.binaryRevision !== input.providerBinding.binaryRevision ||
@@ -547,7 +559,7 @@ export const resolveLaunchCandidate = async (
   const privatePaths = await verifyPrivateLaunchPaths(plan, input.workspaceRef, workspaceStats);
   return Object.freeze({
     canonicalWorkspace,
-    fingerprint: createFingerprint({ ...input, intentMode }, plan, canonicalWorkspace, plan.arguments),
+    fingerprint: createFingerprint({ ...input, intentMode }, plan, canonicalWorkspace, plan.arguments, materialSha256),
     plan,
     privatePaths,
     workspace: Object.freeze({

@@ -19,7 +19,6 @@ import {
 } from "./custodied-provider-process.js";
 import { containCustody, snapshotEvidence, unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
 import {
-  canonicalJson,
   inputIdentity,
   positiveInteger,
   resolveLaunchCandidate,
@@ -37,7 +36,7 @@ import {
   assertHostCustodyReservationMode,
   openHostCustodyReservation,
 } from "./node-provider-process-custody-open.js";
-import { replayCustody } from "./node-provider-process-custody-replay.js";
+import { assertPrivateReservationReplay, privateReservationIdentity, snapshotPrivateReservationReplayInput, replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
 import { quarantinePrivateRootForReconciliation } from "./host-custody-private-root.js";
 import {
@@ -64,7 +63,11 @@ import {
   custodyDataRecord,
   readNodeCustodyHttpHandoff,
   type NodeCustodyHttpPreparation,
+  type NodeCustodyHttpLifetime,
 } from "./node-provider-process-custody-http-reservation.js";
+import type { FinalHostLaunch } from "./host-launch-finalization.js";
+import { startHostCustodyLaunch } from "./host-custody-start-projection.js";
+import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
 export class NodeProviderProcessCustodyCore implements
   ProviderProcessCustodyPort,
@@ -99,14 +102,45 @@ export class NodeProviderProcessCustodyCore implements
   readonly #tombstonesByAttempt = new Map<string, CustodyTombstone>();
   readonly #tombstonesByRef = new Map<string, CustodyTombstone>();
 
-  readonly #httpPreparation: NodeCustodyHttpPreparation = Object.freeze({
-    acquire: (input: Parameters<NodeCustodyHttpPreparation["acquire"]>[0]) => {
-      const handoff = readNodeCustodyHttpHandoff(input);
-      const live = this.#byRef.get(handoff.underlyingCustodyRef);
-      if (live === undefined) {throw new TypeError("Host Custody HTTP reservation is unavailable");}
-      return live.httpReservation.acquire(live, handoff);
-    },
-  });
+  readonly #preparations = new WeakMap<NodeCustodyHttpLifetime, LiveCustody>();
+  readonly #httpPreparation: NodeCustodyHttpPreparation = (() => {
+    const byRef = this.#byRef;
+    const preparations = this.#preparations;
+    const capability: NodeCustodyHttpPreparation = Object.freeze({
+      acquire(input: Parameters<NodeCustodyHttpPreparation["acquire"]>[0]) {
+        if (this !== capability) {throw new TypeError("Host Custody HTTP preparation receiver conflicts");}
+        const handoff = readNodeCustodyHttpHandoff(input);
+        const live = byRef.get(handoff.underlyingCustodyRef);
+        if (live === undefined) {throw new TypeError("Host Custody HTTP reservation is unavailable");}
+        const lifetime = live.httpReservation.acquire(live, handoff);
+        preparations.set(lifetime, live);
+        return lifetime;
+      },
+      finalize(lifetime: NodeCustodyHttpLifetime) {
+        const live = preparations.get(lifetime);
+        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live) {
+          throw new TypeError("Host Custody HTTP preparation identity conflicts");
+        }
+        return live.launchBinding.bind(live, lifetime);
+      },
+    });
+    return capability;
+  })();
+
+  /** Provider gets a view of the reservation slot, never its mutation owner. */
+  public static launchView(owner: unknown, custodyRef: string) {
+    if (typeof owner !== "object" || owner === null || !(#byRef in owner)) {return;}
+    return owner.#byRef.get(custodyRef)?.launchBinding.view;
+  }
+
+  public static startFinalized(owner: unknown, custodyRef: string, bundle: FinalHostLaunch, signal: AbortSignal) {
+    if (typeof owner !== "object" || owner === null || !(#byRef in owner)) {throw new HostCustodyLaunchRejectedError();}
+    const live = owner.#byRef.get(custodyRef);
+    if (live === undefined) {throw new HostCustodyLaunchRejectedError();}
+    live.launchBinding.assertStart(bundle);
+    if (live.launchBinding.view.readFinal() !== bundle) {throw new HostCustodyLaunchRejectedError();}
+    return startHostCustodyLaunch({start: (reference, input) => owner.#start(reference, input, bundle)}, custodyRef, bundle.plan, signal);
+  }
 
   /** Host-private inspection is inert, including foreign/proxied owners. No package export. */
   public static httpPreparation(owner: unknown): NodeCustodyHttpPreparation | undefined {
@@ -180,6 +214,14 @@ export class NodeProviderProcessCustodyCore implements
   }
 
   public async reserve(input: HostCustodyReservationInput): Promise<ContainedTurnCustodyHandle> {
+    const replayInput = snapshotPrivateReservationReplayInput(input);
+    const prior = this.#byAttempt.get(replayInput.attemptId) ?? this.#tombstonesByAttempt.get(replayInput.attemptId);
+    if (prior !== undefined) {
+      assertPrivateReservationReplay(prior, replayInput);
+      if ("opening" in prior) {await prior.opening;}
+      return Object.freeze({custodyRef: prior.custodyRef});
+    }
+    input = replayInput;
     const reservation = await bindPrivateHostCustodyReservation(input, this, this.#runtimeProfile);
     try {
       const opened = await this.#open(
@@ -201,13 +243,7 @@ export class NodeProviderProcessCustodyCore implements
   ): Promise<ContainedTurnCustodyHandle> {
     const baseIdentitySha256 = inputIdentity(input);
     const identitySha256 = "workspaceAuthority" in input
-      ? sha256(canonicalJson([
-        baseIdentitySha256,
-        input.workspaceAuthority.canonicalPath,
-        input.workspaceAuthority.identity.dev.toString(),
-        input.workspaceAuthority.identity.ino.toString(),
-        input.workspaceAuthority.identity.mountId,
-      ]))
+      ? privateReservationIdentity(input)
       : baseIdentitySha256;
     const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
     const existing = this.#byAttempt.get(input.attemptId);
@@ -215,6 +251,12 @@ export class NodeProviderProcessCustodyCore implements
       assertHostCustodyReservationMode(tombstone.evidence.fingerprint, requiredSpawnMode);
     }
     if (tombstone !== undefined || existing !== undefined) {
+      if ("launchPlan" in input) {
+        const prior = tombstone ?? existing!;
+        assertPrivateReservationReplay(prior, input);
+        if (existing !== undefined) {await existing.opening;}
+        return Object.freeze({custodyRef: prior.custodyRef});
+      }
       const replay = await replayCustody(
         input, identitySha256, tombstone, existing,
         () => this.#resolveCandidate(input, requiredSpawnMode),
@@ -235,6 +277,7 @@ export class NodeProviderProcessCustodyCore implements
       identitySha256,
       {
         containmentProfile: this.#runtimeProfile.containmentProfile,
+        ...("launchPlan" in input ? {privateReservationPlan: snapshotHostCustodyLaunchPlan(input.launchPlan)} : {}),
         opening,
         ...("workspaceAuthority" in input ? { workspaceAuthority: input.workspaceAuthority } : {}),
         ...(retainedWorkspaceAuthority === undefined ? {} : { retainedWorkspaceAuthority }),
@@ -268,17 +311,22 @@ export class NodeProviderProcessCustodyCore implements
     });
   }
 
-  public start(custodyRef: string, input: {
+  public start(custodyRef: string, input: Parameters<CustodiedSdkProcessLauncher["start"]>[1]): CustodiedSdkProcess {
+    return this.#start(custodyRef, input);
+  }
+
+  #start(custodyRef: string, input: {
     readonly arguments: readonly string[];
     readonly command: string;
     readonly cwd: string | undefined;
     readonly environment: Readonly<Record<string, string | undefined>>;
     readonly signal: AbortSignal;
-  }): CustodiedSdkProcess {
+  }, bundle?: FinalHostLaunch): CustodiedSdkProcess {
     const live = this.#byRef.get(custodyRef);
     if (live === undefined) {throw new Error("Host Custody reservation does not exist");}
     live.httpReservation.assertActive();
     if (live.sealed) {throw new Error("Host Custody reservation is sealed");}
+    live.launchBinding.assertStart(bundle);
     const plan = live.plan;
     if (plan === undefined || (plan.spawnMode ?? "eager") !== "sdk-delegated") {
       throw new Error("Host Custody reservation does not permit delegated SDK start");
@@ -294,6 +342,7 @@ export class NodeProviderProcessCustodyCore implements
       disposeAbort();
     };
     try {
+      if (admission.replay === undefined) {live.launchBinding.firstStart(live);}
       // All caller data, both fingerprints and replay eligibility are now fixed.
       // Own the entire admitted phase, including cancellation and return setup.
       live.startIdentitySha256 = admission.startIdentitySha256;

@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import { types } from "node:util";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
-import { createImmutableHostCustodyLaunchPlan, type HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
+import { createImmutableHostCustodyLaunchPlan, createFinalizableHostCustodyLaunchPlan, type HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
 import {
   CODEX_PERMISSION_PROFILE_ID,
   validateCodexDirectoryIdentity,
@@ -19,7 +20,7 @@ import { DISABLED_CODEX_FEATURES } from "./codex-app-server-config-defaults.js";
 
 import {
   assertCodexNativeBrokerBoundary, CODEX_LOCAL_BROKER_CAPABILITY_ENV,
-  CODEX_NATIVE_BROKER_DISABLED_FEATURES, snapshotCodexNativeInput,
+  CODEX_NATIVE_BROKER_DISABLED_FEATURES, renderCodexNativeBrokerConfig, snapshotCodexNativeInput,
   type CodexNativeBrokerRecipe,
 } from "./codex-native-broker-recipe.js";
 import { validateCodexNativeBrokerFiles, type CodexNativeBrokerFiles } from "./codex-native-broker-files.js";
@@ -264,6 +265,45 @@ export const createCodexAppServerLaunchPlan = (
     workspaceIdentity,
   });
   if (native !== undefined) {nativeLaunches.set(plan, native);}
+  issuedLaunchPlans.add(plan);
+  return plan;
+};
+
+/** Selected by the current owner before reservation when post-claim native
+ * preparation is required. Captures original inputs; no later replacement
+ * options or caller-provided capability/digest can complete this plan.
+ */
+export const createCodexAppServerFinalizableLaunchPlan = (
+  input: Omit<CodexAppServerLaunchPlanOptions, "nativeBroker">,
+  providerAccess: Readonly<{provider: string; providerRouteRef: string; credentialGeneration: number;
+    credentialBindingRef: string; ownerAuthorityDigest: string}>,
+): CodexAppServerLaunchPlan => {
+  const options = snapshotCodexNativeInput(input, [
+    "boundary", "executablePath", "intentMode", "platformTarget", "privateRootPath", "tmpDir",
+  ]) as unknown as Omit<CodexAppServerLaunchPlanOptions, "nativeBroker">;
+  const target = snapshotCodexNativeInput(options.platformTarget, ["architecture", "platform"]);
+  const captured = Object.freeze({...options, platformTarget: Object.freeze(target) as unknown as CodexAppServerPlatformTarget});
+  const base = createCodexAppServerLaunchPlan(captured);
+  const plan = createFinalizableHostCustodyLaunchPlan<CodexAppServerLaunchPlan>(base, {
+    providerAccess,
+    build(material, localCapability) {
+      const data = snapshotCodexNativeInput(material, ["recipe", "files"]);
+      const recipe = data.recipe as CodexNativeBrokerRecipe;
+      const files = data.files as CodexNativeBrokerFiles;
+      // WeakMap lookups precede all material property reads (including proxies).
+      assertCodexNativeBrokerBoundary(recipe, captured.boundary);
+      validateCodexNativeBrokerFiles(files, recipe);
+      validateCodexAppServerLaunchPlanRoots(base);
+      const final = createCodexAppServerLaunchPlan({...captured, nativeBroker: {recipe, files, localCapability}});
+      const materialSha256 = createHash("sha256").update(JSON.stringify([
+        recipe.kind, recipe.profile, recipe.endpoint, renderCodexNativeBrokerConfig(recipe), recipe.catalogSha256,
+        recipe.catalogPath, final.workspaceRef, final.codexHome, final.tmpDir, final.executablePath,
+        final.containmentProfile,
+      ])).digest("hex");
+      return Object.freeze({plan: final, materialSha256,
+        validate: () => validateCodexAppServerLaunchPlanRoots(final)});
+    },
+  });
   issuedLaunchPlans.add(plan);
   return plan;
 };

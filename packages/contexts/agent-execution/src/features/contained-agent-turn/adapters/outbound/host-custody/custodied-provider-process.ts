@@ -2,6 +2,10 @@ import type { ContainedTurnProviderBinding } from "../../../contracts/contained-
 
 export { createImmutableHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 
+export { createFinalizableHostCustodyLaunchPlan } from "./host-custody-finalizable-plan.js";
+export { startHostCustodyLaunch } from "./host-custody-start-projection.js";
+export type { FinalHostLaunch, ReservedHostLaunchView } from "./host-launch-finalization.js";
+
 export interface CustodiedProviderProcessExit {
   readonly code: number | null;
   readonly signal: NodeJS.Signals | null;

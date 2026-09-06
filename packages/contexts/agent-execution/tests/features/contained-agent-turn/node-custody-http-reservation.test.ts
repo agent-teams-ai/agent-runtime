@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {readCustodyStartAdmission} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-start-admission.js";
 import {getEventListeners} from "node:events";
 import {Core, Kernel, deferred, fixture, startInput, tick} from "./node-custody-http-reservation-fixture.ts";
 
@@ -45,7 +46,7 @@ test("foreign references and conflicting reservation-owned facts reject without 
   assert.equal(f.core.get(custodyRef), undefined);
   const replay = await f.reserve();
   assert.equal(replay.custodyRef, custodyRef);
-  assert.equal(f.closedPins(), 1);
+  assert.equal(f.closedPins(), 0); // Replay opens no new retained descriptor.
   const lifetime = f.preparation.acquire(handoff);
   assert.deepEqual(lifetime.committedDispatchProof, handoff.committedDispatchProof);
   assert.notEqual(lifetime.committedDispatchProof, handoff.committedDispatchProof);
@@ -455,13 +456,14 @@ for (const started of [false, true]) {
     const first = started ? f.start(custodyRef) : undefined;
     const owner = f.live(); const identity = owner.startIdentitySha256;
     const fingerprint = owner.fingerprint!;
-    owner.fingerprint = {...fingerprint, fingerprintSha256: "synthetic:conflict"};
+    assert.throws(() => {Object.assign(owner, {fingerprint: {...fingerprint, fingerprintSha256: "synthetic:conflict"}});}, TypeError);
     const input = startInput();
-    assert.throws(() => f.core.start(custodyRef, input), /fingerprint conflict/u);
+    assert.throws(() => readCustodyStartAdmission(input, {...owner,
+      fingerprint: {...fingerprint, fingerprintSha256: "synthetic:conflict"}}), /fingerprint conflict/u);
     assert.equal(getEventListeners(input.signal, "abort").length, 0);
     assert.equal(owner.startIdentitySha256, identity); assert.equal(lifetime.signal.aborted, false);
     assert.equal(f.launchCalls(), started ? 1 : 0); assert.equal(f.containmentCalls(), 0);
-    owner.fingerprint = fingerprint;
+    assert.equal(owner.fingerprint, fingerprint);
     const valid = f.start(custodyRef);
     if (started) {assert.equal(valid, first);}
     assert.equal(f.launchCalls(), 1);

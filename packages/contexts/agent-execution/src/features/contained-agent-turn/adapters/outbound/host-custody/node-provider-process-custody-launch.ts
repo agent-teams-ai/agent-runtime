@@ -117,7 +117,7 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
         workspaceDev: live.workspace!.dev.toString(),
         workspaceIno: live.workspace!.ino.toString(),
       } } : {}),
-      launchPermitted: () => !live.sealed,
+      launchPermitted: () => live.launchBinding.executionPermitted(live),
     }, options.spawnAcknowledgementAfterMs);
   } catch {authority.close(); throw new GuardianConstructionError();}
   const child = guardian.child;

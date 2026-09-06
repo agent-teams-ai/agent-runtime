@@ -393,7 +393,7 @@ test("generic root records are copied defensively without Host retention identit
 
 test("source dependency runs Codex -> existing Host entrypoint with no Host -> Codex import", () => {
   assert.match(boundarySources.codex,
-    /import \{ createImmutableHostCustodyLaunchPlan, type HostCustodyLaunchPlan \} from "\.\.\/host-custody\/custodied-provider-process\.js"/u);
+    /import \{ createImmutableHostCustodyLaunchPlan, createFinalizableHostCustodyLaunchPlan, type HostCustodyLaunchPlan \} from "\.\.\/host-custody\/custodied-provider-process\.js"/u);
   assert.match(boundarySources.hostEntrypoint,
     /export \{ createImmutableHostCustodyLaunchPlan \} from "\.\/host-custody-launch-plan-snapshot\.js"/u);
   assert.doesNotMatch(boundarySources.hostSnapshot + boundarySources.hostEntrypoint, /codex-app-server|codexNative|isIssuedCodex/u);

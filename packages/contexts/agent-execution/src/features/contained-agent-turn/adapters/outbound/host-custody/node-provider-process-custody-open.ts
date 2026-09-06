@@ -66,10 +66,7 @@ const bindLaunchCandidate = async (reservation: HostCustodyOpenReservation): Pro
     throw new HostCustodyUnsupportedError("platform-profile-unavailable");
   }
   assertHostCustodyReservationMode(candidate.plan, reservation.requiredSpawnMode);
-  live.fingerprint = candidate.fingerprint;
-  live.plan = candidate.plan;
-  live.privatePaths = candidate.privatePaths;
-  live.workspace = candidate.workspace;
+  live.launchBinding.reserve(candidate);
   reservation.assertBoundReservation?.(live);
   live.privateRootClosure = Object.freeze({
     identitySha256: sha256(canonicalJson([
@@ -79,7 +76,7 @@ const bindLaunchCandidate = async (reservation: HostCustodyOpenReservation): Pro
     status: "active",
   });
   if (live.sealed) {return;}
-  live.executable = await verifyExecutable(candidate.plan);
+  live.executable = Object.freeze(await verifyExecutable(candidate.plan));
   if (live.sealed) {return;}
   live.residueAuthority = await reservation.residueAuthorityFactory.create(live.custodyRef);
 };

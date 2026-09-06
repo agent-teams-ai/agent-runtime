@@ -30,6 +30,7 @@ export interface NodeCustodyHttpLifetime {
  */
 export interface NodeCustodyHttpPreparation {
   acquire(input: Handoff): NodeCustodyHttpLifetime;
+  finalize(lifetime: NodeCustodyHttpLifetime): import("./host-launch-finalization.js").ClaimedHostLaunchFinalizer;
 }
 
 /** Snapshot data without executing proxy traps, accessors or inherited properties. */
@@ -91,6 +92,13 @@ export class NodeProviderProcessCustodyHttpReservation {
 
   public assertActive(): void {
     if (this.#cutoff) {throw new Error("Host Custody reservation is sealed");}
+  }
+
+  public assertPreparation(lifetime: NodeCustodyHttpLifetime): void {
+    this.assertActive();
+    if (this.#lifetime === undefined || this.#lifetime !== lifetime) {
+      throw new TypeError("Host Custody HTTP preparation identity conflicts");
+    }
   }
 
   public acquire(live: LiveCustody, handoff: Handoff): NodeCustodyHttpLifetime {

@@ -31,6 +31,8 @@ import { notStartedIdentity, strictClosure } from "./host-custody-evidence.js";
 import type { RetainedHostCustodyWorkspaceAuthority } from "./private-host-custody-reservation.js";
 import { NodeProviderProcessCustodyHttpReservation } from "./node-provider-process-custody-http-reservation.js";
 
+import { HostLaunchBinding } from "./host-launch-finalization.js";
+
 export const HOST_CUSTODY_LIMITS = Object.freeze({
   maxDiagnosticBytes: 65_536,
   maxStderrBytes: 16 * 1_048_576,
@@ -43,6 +45,8 @@ export interface LiveCustody {
   abortRequested: boolean;
   readonly attemptId: string;
   readonly custodyRef: string;
+  readonly launchBinding: HostLaunchBinding;
+  readonly privateReservationPlan?: HostCustodyLaunchPlan;
   readonly httpReservation: NodeProviderProcessCustodyHttpReservation;
   readonly inputIdentitySha256: string;
   readonly operationId: string;
@@ -58,7 +62,7 @@ export interface LiveCustody {
   evidenceSealed: boolean;
   executable?: ExecutableObservation;
   exit?: Promise<CustodiedProviderProcessExit>;
-  fingerprint?: HostCustodyLaunchFingerprintEvidence;
+  readonly fingerprint?: HostCustodyLaunchFingerprintEvidence;
   guardian?: StableProcessGroupGuardian;
   guardianNoStartAcknowledged?: boolean;
   guardianStartErrorCode?: HostCustodyStartCode;
@@ -68,8 +72,8 @@ export interface LiveCustody {
   opening: Promise<void>;
   cleanupDeadline?: number;
   containmentDeadline?: number;
-  plan?: HostCustodyLaunchPlan;
-  privatePaths?: PrivateLaunchPathObservations;
+  readonly plan?: HostCustodyLaunchPlan;
+  readonly privatePaths?: PrivateLaunchPathObservations;
   privateRootClosure: { identitySha256: string; status: "active" | "deleted" | "quarantined" | "unproven" };
   process?: CustodiedProviderProcess;
   providerPid?: number;
@@ -83,7 +87,7 @@ export interface LiveCustody {
   stdinBytes: number;
   stderr?: HostStderrIngress;
   stdout?: HostStdoutIngress;
-  workspace?: WorkspaceObservation;
+  readonly workspace?: WorkspaceObservation;
 }
 
 /** True only when every sealed observer needed to prove that no provider process started agrees. */
@@ -100,36 +104,50 @@ export const createLiveCustody = (
   hostLifecycleGenerationSha256: string,
   inputIdentitySha256: string,
   options: Readonly<{
+    privateReservationPlan?: HostCustodyLaunchPlan;
     containmentProfile: HostCustodyLaunchPlan["containmentProfile"];
     opening: Promise<void>;
     retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
     workspaceAuthority?: HostCustodyWorkspaceAuthority;
   }>,
-): LiveCustody => ({
-  abortRequested: false,
-  attemptId: input.attemptId,
-  closureEvidence: strictClosure("unproven", options.containmentProfile),
-  custodyRef,
-  evidenceSealed: false,
-  httpReservation: new NodeProviderProcessCustodyHttpReservation(),
-  identity: notStartedIdentity(hostLifecycleGenerationSha256),
-  inputIdentitySha256,
-  opening: options.opening,
-  operationId: input.operationId,
-  providerBinding: Object.freeze({ ...input.providerBinding }),
-  privateRootClosure: Object.freeze({ identitySha256: "", status: "active" }),
-  sealed: false,
-  signalAuthorized: false,
-  spawnStatus: "never-started",
-  stdinBytes: 0,
-  workspaceRef: input.workspaceRef,
-  ...(options.workspaceAuthority === undefined ? {} : { workspaceAuthority: options.workspaceAuthority }),
-  ...(options.retainedWorkspaceAuthority === undefined ? {} : {
-    retainedWorkspaceAuthority: options.retainedWorkspaceAuthority,
-  }),
-});
+): LiveCustody => {
+  const launchBinding = new HostLaunchBinding();
+  const live: LiveCustody = {
+    launchBinding,
+    ...(options.privateReservationPlan === undefined ? {} : {privateReservationPlan: options.privateReservationPlan}),
+    abortRequested: false,
+    attemptId: input.attemptId,
+    closureEvidence: strictClosure("unproven", options.containmentProfile),
+    custodyRef,
+    evidenceSealed: false,
+    httpReservation: new NodeProviderProcessCustodyHttpReservation(),
+    identity: notStartedIdentity(hostLifecycleGenerationSha256),
+    inputIdentitySha256,
+    opening: options.opening,
+    operationId: input.operationId,
+    providerBinding: Object.freeze({ ...input.providerBinding }),
+    privateRootClosure: Object.freeze({ identitySha256: "", status: "active" }),
+    sealed: false,
+    signalAuthorized: false,
+    spawnStatus: "never-started",
+    stdinBytes: 0,
+    workspaceRef: input.workspaceRef,
+    ...(options.workspaceAuthority === undefined ? {} : { workspaceAuthority: options.workspaceAuthority }),
+    ...(options.retainedWorkspaceAuthority === undefined ? {} : {
+      retainedWorkspaceAuthority: options.retainedWorkspaceAuthority,
+    }),
+  };
+  return Object.defineProperties(live, {
+    launchBinding: {value: launchBinding, writable: false, configurable: false},
+    plan: {get: () => launchBinding.current?.plan, enumerable: true},
+    fingerprint: {get: () => launchBinding.current?.fingerprint, enumerable: true},
+    workspace: {get: () => launchBinding.current?.workspace, enumerable: true},
+    privatePaths: {get: () => launchBinding.current?.privatePaths, enumerable: true},
+  });
+};
 
 export interface CustodyTombstone {
+  readonly privateReservationPlan?: HostCustodyLaunchPlan;
   readonly attemptId: string;
   readonly custodyRef: string;
   readonly evidence: HostCustodyEvidence;

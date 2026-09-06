@@ -180,6 +180,7 @@ export const unprovenResult = (
 };
 
 interface ContainmentState extends HostCustodyEvidenceState {
+  readonly launchBinding?: {readonly pending: Promise<void> | undefined};
   child?: ChildProcessWithoutNullStreams;
   closureEvidence: HostCustodyClosureEvidence;
   contained?: Extract<ContainmentResult, { readonly kind: "contained" }>;
@@ -352,6 +353,10 @@ const settleNonAcknowledgedContainment = async (
   );
   if (opened === DEADLINE_EXCEEDED) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
   if (opened !== true) {return { kind: "unproven", reason: "opening-deadline-exceeded" };}
+  const prepared = await awaitWithDeadline(
+    () => (live.launchBinding?.pending ?? Promise.resolve()).then(() => true), containmentDeadline, options,
+  );
+  if (prepared !== true) {return {kind: "unproven", reason: "owner-deadline-exceeded"};}
   const acknowledgementFailure = await spawnAcknowledgementFailure(live, containmentDeadline, options);
   if (!deadlineOpen(containmentDeadline, options)) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
   if (acknowledgementFailure !== undefined) {return { kind: "unproven", reason: acknowledgementFailure };}

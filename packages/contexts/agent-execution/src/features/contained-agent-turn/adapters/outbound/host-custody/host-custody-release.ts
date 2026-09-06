@@ -108,6 +108,7 @@ const closeLiveCustody = async (
     );
   }
   const tombstone: CustodyTombstone = Object.freeze({
+    ...(live.privateReservationPlan === undefined ? {} : {privateReservationPlan: live.privateReservationPlan}),
     attemptId: live.attemptId,
     custodyRef: live.custodyRef,
     evidence: snapshotEvidence(live),
