@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS runtime_security_dispatch_v1.settlement_requests (
   applies boolean NOT NULL,
   fact text NOT NULL
 );
+CREATE INDEX IF NOT EXISTS dispatch_settlement_operation
+  ON runtime_security_dispatch_v1.settlement_requests (operation_key);
 CREATE UNIQUE INDEX IF NOT EXISTS one_dispatch_settlement
   ON runtime_security_dispatch_v1.settlement_requests (operation_key) WHERE applies;
 CREATE OR REPLACE FUNCTION runtime_security_dispatch_v1.immutable_fact() RETURNS trigger
