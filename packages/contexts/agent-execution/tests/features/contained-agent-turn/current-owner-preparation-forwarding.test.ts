@@ -13,9 +13,13 @@ for (const provider of ["codex", "claude"] as const) {
       const opened = await openOwner(fixture, owner);
       assert.deepEqual(fixture.events, ["workspace", "launch-record"]);
       assert.equal(fixture.host.starts, 0);
-      const result = await owner.custody.start(opened.start);
-      assert.equal(result.kind, "indeterminate", "a synthetic creator cannot attest provider execution");
+      const pending = owner.custody.start(opened.start);
+      await tick();
       assert.deepEqual(fixture.events, ["workspace", "launch-record", "execute", "synthetic-creator"]);
+      // The synthetic creator supplies no Host process attestation. End the
+      // observation explicitly once forwarding is proven, without a timeout wait.
+      await owner.custody.requestContainment(opened.identity);
+      assert.equal((await pending).kind, "indeterminate");
       await opened.release(); assert.equal(fixture.host.releases, 1);
     }
   });
@@ -24,9 +28,9 @@ for (const provider of ["codex", "claude"] as const) {
     const fixture = await ownerPreparationFixture(t, provider);
     const ready = deferred<{kind: "prepared"}>();
     const entered = deferred<PrepareInput>();
-    let calls = 0; let receiver: unknown;
+    let calls = 0; const receivers: unknown[] = [];
     const capability: Preparation = {async prepareClaimed(input) {
-      receiver = this; calls += 1;
+      receivers.push(this); calls += 1;
       fixture.events.push("prepare-claimed"); entered.resolve(input); return ready.promise;
     }};
     // Binding/calling the callback must not consult user-owned function properties.
@@ -44,18 +48,19 @@ for (const provider of ["codex", "claude"] as const) {
     assert.equal(calls, 0);
     const pending = owner.custody.start(opened.start);
     const received = await Promise.race([entered.promise, pending.then(() => {throw new Error("start settled without preparation");})]);
-    assert.strictEqual(receiver, capability);
+    assert.deepEqual(receivers, [capability]);
     assert.strictEqual(received.committedDispatchProof, opened.proof);
     assert.equal(received.underlyingCustodyRef, fixture.host.refs.get(opened.identity.attemptId));
     assert.notEqual(received.underlyingCustodyRef, opened.identity.custodyId);
     assert.ok(received.signal instanceof AbortSignal); assert.equal(received.signal.aborted, false);
     await tick(); assert.deepEqual(fixture.events, ["workspace", "launch-record", "prepare-claimed"]);
     await assert.rejects(owner.custody.start(opened.start), /already consumed/u);
-    ready.resolve({kind: "prepared"}); await pending;
+    ready.resolve({kind: "prepared"}); await tick();
     assert.deepEqual(fixture.events, ["workspace", "launch-record", "prepare-claimed", "execute", "synthetic-creator"]);
     assert.equal(calls, 1); assert.equal(received.signal.aborted, false);
     const retainedSignal = received.signal;
     await owner.custody.requestContainment(opened.identity);
+    assert.equal((await pending).kind, "indeterminate");
     assert.strictEqual(received.signal, retainedSignal); assert.equal(retainedSignal.aborted, true);
     await opened.release(); assert.equal(fixture.host.releases, 1);
     await assert.rejects(owner.custody.start(opened.start), /already consumed/u);
@@ -64,8 +69,8 @@ for (const provider of ["codex", "claude"] as const) {
 
   test(`${provider}: unavailable or rejected preparation prevents execution and keeps cleanup`, async t => {
     for (const reason of ["network", "broker", "journal", "owner", "quarantined", "rejected", "throw"] as const) {
-      await t.test(reason, async t => {
-        const fixture = await ownerPreparationFixture(t, provider);
+      await t.test(reason, async child => {
+        const fixture = await ownerPreparationFixture(child, provider);
         let received: PrepareInput | undefined; let calls = 0;
         const {owner} = fixture.create({postClaimPreparation: {prepareClaimed(input) {
           received = input; calls += 1;
@@ -106,8 +111,8 @@ for (const provider of ["codex", "claude"] as const) {
 
   test(`${provider}: actual owner callback follows acknowledged kernel claim; prevention, lost ack and replay never prepare`, async t => {
     for (const mode of ["acknowledged", "prevented", "lost-ack"] as const) {
-      await t.test(mode, async t => {
-        const fixture = await ownerPreparationFixture(t, provider);
+      await t.test(mode, async child => {
+        const fixture = await ownerPreparationFixture(child, provider);
         let calls = 0; let received: PrepareInput | undefined; let claimedAtCallback = false; let abortedAtCallback = true;
         const {owner} = fixture.create({postClaimPreparation: {async prepareClaimed(input) {
           calls += 1; fixture.events.push("prepare-claimed"); received = input;

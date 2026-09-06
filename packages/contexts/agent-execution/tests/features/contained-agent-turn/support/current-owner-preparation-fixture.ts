@@ -18,9 +18,9 @@ import { committedDispatchProofFixture } from "./committed-dispatch-proof-fixtur
 export type Preparation = ContainedTurnHostPostClaimPreparation;
 export type PrepareInput = Parameters<Preparation["prepareClaimed"]>[0];
 export const deferred = <Value>() => {
-  let resolve!: (value: Value) => void;
-  const promise = new Promise<Value>(complete => {resolve = complete;});
-  return {promise, resolve};
+  let complete!: (value: Value) => void;
+  const promise = new Promise<Value>(resolve => {complete = resolve;});
+  return {promise, resolve: complete};
 };
 export const tick = (): Promise<void> => new Promise(resolve => {setImmediate(resolve);});
 
@@ -49,8 +49,10 @@ export const ownerPreparationFixture = async (t: TestContext, provider: "codex" 
     effectCustody: syntheticCodexEffectCustody(),
     launchRecords: {async resolve(input) {
       events.push("launch-record");
+      if (input.credentialGeneration !== 1) {throw new Error("Unexpected fixture credential generation");}
       return {boundary: createCodexAppServerPermissionBoundary({codexHome: homeRoot!, intentMode: input.intentMode, workspaceRef}),
-        credentialOutputInventory: codexCredentialOutputInventory(input), executablePath: "/synthetic/unexecuted-codex",
+        credentialOutputInventory: codexCredentialOutputInventory({credentialBindingDigest: input.credentialBindingDigest,
+          credentialGeneration: input.credentialGeneration}), executablePath: "/synthetic/unexecuted-codex",
         privateRootPath, tmpDir: tempRoot!};
     }},
   };

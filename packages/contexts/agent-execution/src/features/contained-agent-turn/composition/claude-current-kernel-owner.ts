@@ -1,3 +1,4 @@
+import { capturePostClaimPreparation } from "./host-post-claim-preparation.js";
 import type { ContainedTurnHostPostClaimPreparation } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js";
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
 import type {
@@ -132,40 +133,6 @@ const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions) =
     );
   }
   return tuple;
-};
-
-const isProxy = process.getBuiltinModule("node:util").types.isProxy;
-const apply = Reflect.apply;
-const capturePostClaimPreparation = (
-  options: CreateClaudeCurrentKernelOwnerOptions,
-): "current-owner" | ContainedTurnHostPostClaimPreparation => {
-  if (options === null || typeof options !== "object") {
-    throw new TypeError("Host post-claim preparation options must be an object");
-  }
-  let owner: object | null = options;
-  let option: PropertyDescriptor | undefined;
-  while (owner !== null) {
-    if (isProxy(owner)) {throw new TypeError("Host post-claim preparation options must not be a Proxy");}
-    option = Object.getOwnPropertyDescriptor(owner, "postClaimPreparation");
-    if (option !== undefined) {break;}
-    owner = Object.getPrototypeOf(owner);
-  }
-  if (option === undefined) {return "current-owner";}
-  if (!("value" in option)) {throw new TypeError("Host post-claim preparation must be a data property");}
-  const capability: unknown = option.value;
-  if (capability === undefined) {return "current-owner";}
-  if (capability === null || typeof capability !== "object" || isProxy(capability)) {
-    throw new TypeError("Host post-claim preparation capability is unavailable");
-  }
-  const method = Object.getOwnPropertyDescriptor(capability, "prepareClaimed");
-  if (method === undefined || !("value" in method)
-    || typeof method.value !== "function" || isProxy(method.value)) {
-    throw new TypeError("Host post-claim preparation requires an own callable data property");
-  }
-  const prepareClaimed = method.value as ContainedTurnHostPostClaimPreparation["prepareClaimed"];
-  return Object.freeze({
-    prepareClaimed: (input: Parameters<typeof prepareClaimed>[0]) => apply(prepareClaimed, capability, [input]),
-  });
 };
 
 export const createClaudeCurrentKernelOwner = (
