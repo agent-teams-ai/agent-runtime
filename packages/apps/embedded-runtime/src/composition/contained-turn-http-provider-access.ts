@@ -1,5 +1,4 @@
 import type { HostHttpEgressSessionDependencies } from "@agent-teams/agent-execution/composition";
-import type { CredentialMaterializationAuthorizationReceipt } from "@agent-teams/provider-access";
 import { types } from "node:util";
 
 type HostAuthorization = HostHttpEgressSessionDependencies["providerAccess"];
@@ -105,7 +104,8 @@ const denialOutcome = (data: Record<string, unknown>, observation: boolean): Hos
   }
 };
 
-type RetainFresh = (original: CredentialMaterializationAuthorizationReceipt, detached: HostReceipt) => void;
+// The original validated PA receipt is an opaque identity capability in this ACL.
+type RetainFresh = (original: object, detached: HostReceipt) => void;
 
 const outcome = (value: unknown, observation: boolean, retainFresh?: RetainFresh): HostOutcome => {
   const data = dataRecord(value);
@@ -123,7 +123,7 @@ const outcome = (value: unknown, observation: boolean, retainFresh?: RetainFresh
       const projected = Object.freeze({kind: data.kind, receipt: detached});
       if (data.kind === "authorized") {
         // Pair only after the complete projection validates, in this call's closure.
-        retainFresh?.(data.receipt as CredentialMaterializationAuthorizationReceipt, detached);
+        retainFresh?.(data.receipt as object, detached);
       }
       return projected;
     }
@@ -185,7 +185,7 @@ export const createContainedTurnHttpProviderAccessAuthorization = (
 interface CredentialRenderingOwner {
   readonly authorization: ContainedTurnHttpProviderAccessOwner["authorization"];
   readonly rendering: Readonly<{
-    render(receipt: CredentialMaterializationAuthorizationReceipt): Promise<
+    render(receipt: object): Promise<
       | Readonly<{kind: "rendered"; credentials: Readonly<{
           fields: readonly Readonly<{name: "Authorization" | "ChatGPT-Account-ID" | "x-api-key"; valueBytes: Uint8Array}>[];
           release(): void;
@@ -216,7 +216,7 @@ export const createContainedTurnHttpCredentialMaterialization = (
   const disposeOwner = outer.dispose;
   if (typeof disposeOwner !== "function" || types.isProxy(disposeOwner)) {throw invalidOwner();}
   let closed = false;
-  let fresh = new WeakMap<HostReceipt, CredentialMaterializationAuthorizationReceipt>();
+  let fresh = new WeakMap<HostReceipt, object>();
   const authorization = projectAuthorization({authorization: outer.authorization as CredentialRenderingOwner["authorization"],
     createRequestDigest}, (original, detached) => {
     if (closed) {throw renderUnavailable();}

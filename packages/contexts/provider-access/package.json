@@ -8,6 +8,7 @@
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
     "test": "node --test --test-concurrency=1 tests/features/contained-turn-access/*.test.ts",
+    "test:postgres": "node --import ./scripts/require-postgres-qualification.mjs --test --test-concurrency=1 tests/features/contained-turn-access/postgres-materialization-durability.test.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
   },
   "agentTeamsArchitecture": {

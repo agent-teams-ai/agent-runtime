@@ -70,6 +70,19 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
+      provider-access-postgres:
+        image: postgres:18.4-trixie@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_DB: ar69_pa_test_ci
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ar69_pa_test_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -103,6 +116,14 @@ jobs:
         env:
           POSTGRES_DURABILITY_URL: postgresql://postgres:postgres@127.0.0.1:5432/contained_turn_test
         run: pnpm --filter @agent-teams/agent-execution test:postgres
+
+      - name: Build Provider Access PostgreSQL test target
+        run: pnpm --filter @agent-teams/provider-access build
+
+      - name: Run disposable Provider Access PostgreSQL durability gate
+        env:
+          PA_POSTGRES_DISPOSABLE_URL: postgresql://postgres:postgres@127.0.0.1:5433/ar69_pa_test_ci
+        run: pnpm --filter @agent-teams/provider-access test:postgres
 
   runtime-macos:
     name: runtime-macos
