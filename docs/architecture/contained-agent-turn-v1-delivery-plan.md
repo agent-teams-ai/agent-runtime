@@ -597,7 +597,10 @@ credentials.
 All heavy research, implementation, fault injection, and E2E work should run on
 subscription-runtime hosted workers in isolated worktrees. For the current
 PR #69 delivery, the owner's accepted setting is `gpt-6-astra`, `xhigh`
-reasoning, and fast service for both writers and independent reviewers.
+reasoning, and normal service (`--service-tier default`) for both writers and
+independent reviewers. The owner's 2026-09-06 instruction to disable fast mode
+supersedes the earlier fast-service setting. Apply it to all subsequent launches
+and continuations; completed fast runs retain their historical evidence.
 
 Parallel ownership:
 
