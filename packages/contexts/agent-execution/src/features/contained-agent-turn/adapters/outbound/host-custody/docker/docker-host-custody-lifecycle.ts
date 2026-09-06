@@ -92,6 +92,26 @@ export type DockerHostCustodyContainment =
 
 const proved = Object.freeze({ status: "proved" as const });
 
+type LaunchedDockerCustody = Awaited<ReturnType<DockerHostCustodyLifecycle["launch"]>>;
+interface ProviderProcessLaunch {
+  readonly authority: DockerContainerAuthority;
+  readonly custodyRef: string;
+  readonly workspaceAuthorityPath: string;
+  openInitSession(options: DockerContainedTurnInitOptions): DockerContainedTurnInitSession;
+  execute(exec: DockerCustodyInitHostExec, call: DockerEngineCall): Promise<DockerCustodyJournalRecord>;
+}
+// Only successful actual launches issue this capability. It is neither a brand
+// constructor nor a second resource registry: the lifecycle retains the session.
+const providerProcessLaunches = new WeakMap<LaunchedDockerCustody, ProviderProcessLaunch>();
+
+/** Docker-private one-use transfer; never exported through the composition entrypoint. */
+export const claimDockerProviderProcessLaunch = (launch: LaunchedDockerCustody): ProviderProcessLaunch => {
+  const issued = providerProcessLaunches.get(launch);
+  if (issued === undefined) {throw new TypeError("Docker provider process requires an unused actual lifecycle launch");}
+  providerProcessLaunches.delete(launch);
+  return issued;
+};
+
 const journalUnavailable = (error: unknown): boolean =>
   error instanceof DockerCustodyJournalUnavailableError || error instanceof DockerCustodyJournalCorruptionError;
 
@@ -141,6 +161,10 @@ export class DockerHostCustodyLifecycle {
     kind: "launched";
     openInitSession(options: DockerContainedTurnInitOptions): DockerContainedTurnInitSession;
   }>> {
+    input = Object.freeze({call: Object.freeze({...input.call}), owner: Object.freeze({...input.owner}),
+      create: Object.freeze({...input.create, arguments: Object.freeze([...input.create.arguments]),
+        environment: Object.freeze({...input.create.environment})})});
+    const executeProvider = this.executeProvider.bind(this);
     if (input.call.signal.aborted || Date.now() >= input.call.deadlineEpochMs) {
       throw new TypeError("Docker Host Custody launch call is closed");
     }
@@ -169,7 +193,7 @@ export class DockerHostCustodyLifecycle {
       await this.journal.beforeAction({ key, expectedSequence: prepared.sequence, state: "create_requested" });
       this.assertLaunchOpen(key, input.call);
       createInvoked = true; // Even a synchronous throw or lost acknowledgement may hide an effect.
-      const authority = await this.engine.create(create, input.call, confirmedEngineIdentity);
+      const authority = Object.freeze({...await this.engine.create(create, input.call, confirmedEngineIdentity)});
       assertDockerAuthorityBinding(key, authority);
       const authoritySha256 = this.holdAuthority(key, authority);
       this.assertLaunchOpen(key, input.call);
@@ -198,9 +222,14 @@ export class DockerHostCustodyLifecycle {
         throw new TypeError("Docker Host Custody init readiness is unproven");
       }
       // V2 init_ready is a running-container observation, not authenticated protocol readiness.
-      return Object.freeze({ authority, journal, key, kind: "launched" as const,
+      const launched = Object.freeze({ authority, journal, key, kind: "launched" as const,
         openInitSession: (options: DockerContainedTurnInitOptions) => live.openInitSession(options, input.call),
       });
+      providerProcessLaunches.set(launched, Object.freeze({authority, custodyRef: key.custodyId,
+        workspaceAuthorityPath: create.workspaceSource, openInitSession: launched.openInitSession,
+        execute: (exec: DockerCustodyInitHostExec, call: DockerEngineCall) => executeProvider({authority, call, exec, key}),
+      }));
+      return launched;
     } catch (error) {
       if (!createInvoked) {
         this.failedBeforeCreate.add(locator);

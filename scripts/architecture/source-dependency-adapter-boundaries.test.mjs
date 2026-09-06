@@ -365,9 +365,29 @@ test("Docker JSON remains neutral and cannot import its engine consumer", async 
 
 test("V4 listener composition uses one Docker entrypoint; Host still cannot import it", async () => {
   const entry = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.ts";
-  assert.deepEqual(boundariesById.get("adapter.agent-execution.docker-custody").entrypoints, [entry]);
+  assert.deepEqual(boundariesById.get("adapter.agent-execution.docker-custody").entrypoints, [entry,
+    entry.replace("docker-http-listener-entrypoint.ts", "docker-provider-process-entrypoint.ts")]);
   assert.deepEqual(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.js';\n"}), []);
   assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-http-listener-entrypoint.js';\n"})), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
   const internal = entry.replace("docker-http-listener-entrypoint.ts", "docker-http-listener-lifecycle.ts");
   assert.deepEqual(rules(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-lifecycle.js';\n", [internal]: "export {};\n"})), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+});
+
+test("Docker process composition uses its narrow entrypoint and a type-only Host projection", async () => {
+  const base = "packages/contexts/agent-execution/src/features/contained-agent-turn";
+  const composition = `${base}/composition/docker-custodied-provider-process.ts`;
+  const entry = `${base}/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts`;
+  const internal = entry.replace("docker-provider-process-entrypoint.ts", "docker-provider-process-bridge.ts");
+  const source = await readFile(join(repositoryRoot, composition), "utf8");
+  const parsed = new OxcSourceDependencyParser().parse({path: composition, source});
+  assert.equal(parsed.parseErrorCount, 0);
+  assert.deepEqual(parsed.unresolved, []);
+  assert.deepEqual(await analyzeFixture({[composition]: source}), []);
+  assert.match(source, /import type \{CustodiedProviderProcess, CustodiedProviderProcessRegistry\}/u);
+  assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-provider-process-entrypoint.js';\n"})),
+    ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+  assert.deepEqual(rules(await analyzeFixture({[paths.docker]: "import '../custodied-provider-process.js';\n"})),
+    ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+  assert.deepEqual(rules(await analyzeFixture({[composition]: "import '../adapters/outbound/host-custody/docker/docker-provider-process-bridge.js';\n", [internal]: "export {};\n"})),
+    ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
 });
