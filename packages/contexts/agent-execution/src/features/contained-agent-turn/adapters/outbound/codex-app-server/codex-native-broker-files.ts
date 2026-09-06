@@ -59,7 +59,7 @@ export const prepareCodexNativeBrokerFiles = async (recipe: CodexNativeBrokerRec
       await observeFile(boundary.codexHome, `${boundary.codexHome}/config.toml`, {
         size: config.length, sha256: createHash("sha256").update(config).digest("hex"),
       }),
-      await observeFile(boundary.codexHome, recipe.catalogPath, {
+      await observeFile(boundary.codexHome, `${boundary.codexHome}/models.json`, {
         size: CODEX_NATIVE_CATALOG_BYTES, sha256: CODEX_NATIVE_CATALOG_SHA256,
       }),
     ];

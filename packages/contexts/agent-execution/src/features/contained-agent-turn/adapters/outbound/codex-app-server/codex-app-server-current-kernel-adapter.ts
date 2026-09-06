@@ -21,18 +21,21 @@ import {
 type KernelExecutionInput = Parameters<ContainedTurnKernelProviderPort["execute"]>[0];
 const executeReviewedCodexProtocol = CodexAppServerContainedTurnProvider.prototype.execute;
 
+interface CodexAppServerKernelProcess {
+  readonly custody: ContainedTurnCustodyHandle;
+  readonly kernelCustodyId: KernelExecutionInput["custodyId"];
+  readonly provider: CodexAppServerContainedTurnProvider;
+  readonly workspaceRef: string;
+}
+
 export interface PreparedCodexAppServerKernelAttempt {
   /**
    * Called exactly once through the Host-owned delegated-start wrapper. It is
    * the only seam allowed to create the fresh provider process and to resolve
    * the owner-private raw workspace path.
    */
-  createProcess(): Readonly<{
-    custody: ContainedTurnCustodyHandle;
-    kernelCustodyId: KernelExecutionInput["custodyId"];
-    provider: CodexAppServerContainedTurnProvider;
-    workspaceRef: string;
-  }>;
+  createProcess(isCancellationRequested: KernelExecutionInput["isCancellationRequested"]):
+    CodexAppServerKernelProcess | Promise<CodexAppServerKernelProcess>;
 }
 
 export interface CodexAppServerKernelAttemptFactory {
@@ -162,9 +165,9 @@ export class CodexAppServerCurrentKernelAdapter implements ContainedTurnKernelPr
       return indeterminate(input, "attempt-preparation-unknown");
     }
 
-    let attempt: ReturnType<PreparedCodexAppServerKernelAttempt["createProcess"]>;
+    let attempt: Awaited<ReturnType<PreparedCodexAppServerKernelAttempt["createProcess"]>>;
     try {
-      attempt = input.start.createProcess(() => prepared.createProcess());
+      attempt = await input.start.createProcess(() => prepared.createProcess(() => input.isCancellationRequested()));
     } catch {
       return indeterminate(input, "delegated-process-start-unknown");
     }
@@ -208,3 +211,5 @@ export class CodexAppServerCurrentKernelAdapter implements ContainedTurnKernelPr
     }
   }
 }
+export {createCodexDockerPathProjection, codexDockerProjectionSource, projectCodexDockerExecutable,
+  projectCodexDockerPrivatePath, type CodexDockerPathProjection} from "./codex-docker-path-projection.js";

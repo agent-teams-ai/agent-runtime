@@ -97,12 +97,20 @@ interface ProviderProcessLaunch {
   readonly authority: DockerContainerAuthority;
   readonly custodyRef: string;
   readonly workspaceAuthorityPath: string;
+  readonly mountFacts: Readonly<{workspaceSource: string; privateRootSource: string; imageDigest: string}>;
   openInitSession(options: DockerContainedTurnInitOptions): DockerContainedTurnInitSession;
   execute(exec: DockerCustodyInitHostExec, call: DockerEngineCall): Promise<DockerCustodyJournalRecord>;
 }
 // Only successful actual launches issue this capability. It is neither a brand
 // constructor nor a second resource registry: the lifecycle retains the session.
 const providerProcessLaunches = new WeakMap<LaunchedDockerCustody, ProviderProcessLaunch>();
+
+/** Read-only mount facts of an unused actual launch; this does not consume IO custody. */
+export const dockerProviderProcessMountFacts = (launch: LaunchedDockerCustody) => {
+  const issued = providerProcessLaunches.get(launch);
+  if (issued === undefined) {throw new TypeError("Docker mount projection requires an unused actual launch");}
+  return issued.mountFacts;
+};
 
 /** Docker-private one-use transfer; never exported through the composition entrypoint. */
 export const claimDockerProviderProcessLaunch = (launch: LaunchedDockerCustody): ProviderProcessLaunch => {
@@ -226,6 +234,8 @@ export class DockerHostCustodyLifecycle {
         openInitSession: (options: DockerContainedTurnInitOptions) => live.openInitSession(options, input.call),
       });
       providerProcessLaunches.set(launched, Object.freeze({authority, custodyRef: key.custodyId,
+        mountFacts: Object.freeze({workspaceSource: create.workspaceSource,
+          privateRootSource: create.privateRootSource, imageDigest: authority.imageDigest}),
         workspaceAuthorityPath: create.workspaceSource, openInitSession: launched.openInitSession,
         execute: (exec: DockerCustodyInitHostExec, call: DockerEngineCall) => executeProvider({authority, call, exec, key}),
       }));

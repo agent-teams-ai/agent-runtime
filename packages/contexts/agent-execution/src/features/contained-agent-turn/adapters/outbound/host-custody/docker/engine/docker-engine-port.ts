@@ -113,7 +113,8 @@ export interface DockerCustodyDuplexChannel {
   readonly output: AsyncIterable<Uint8Array>;
   close(): Promise<void>;
   closeInput(): Promise<void>;
-  write(bytes: Uint8Array): Promise<void>;
+  /** Revalidate queued provider admission immediately before the underlying write. */
+  write(bytes: Uint8Array, assertAdmission?: () => void): Promise<void>;
 }
 
 export interface DockerEnginePort {

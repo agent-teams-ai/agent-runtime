@@ -1,3 +1,4 @@
+import {bindCodexDockerProtocolBoundary, codexProtocolPaths, type CodexDockerPathProjection} from "./codex-docker-path-projection.js";
 import { isAbsolute, relative, resolve } from "node:path";
 
 import type {
@@ -89,6 +90,7 @@ interface CodexPreTurnNotificationBudget {
 export interface CodexAppServerContainedTurnProviderOptions {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly cancellationPollMs?: number;
+  readonly dockerProjection?: CodexDockerPathProjection;
   readonly effectCustody?: CodexEffectCustodyAuthority;
   readonly manifest: ContainedTurnAdapterCapabilityManifest;
   readonly nativeBrokerLaunchPlan?: CodexAppServerLaunchPlan;
@@ -180,7 +182,8 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       || options.privateRootPath === "/") {
       throw new TypeError("Codex App Server adapter requires a normalized absolute private root");
     }
-    this.#boundary = options.boundary;
+    this.#boundary = options.dockerProjection === undefined ? options.boundary
+      : bindCodexDockerProtocolBoundary(options.boundary, options.dockerProjection);
     this.#nativeBrokerRecipe = options.nativeBrokerLaunchPlan === undefined
       ? undefined : codexNativeBrokerLaunchInput(options.nativeBrokerLaunchPlan).recipe;
     this.manifest = manifest;
@@ -362,6 +365,18 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       ], input.protocolTerminalObserved);
   }
 
+  #privateOutputPaths(): readonly string[] {
+    return Object.freeze([...new Set([
+        this.#boundary.codexHome,
+        codexProtocolPaths(this.#boundary).privateRootPath,
+        codexProtocolPaths(this.#boundary).codexHome,
+        codexProtocolPaths(this.#boundary).workspaceRef,
+        this.#privateRootPath,
+        this.#tmpDir,
+        this.#boundary.workspaceRef,
+    ].filter((path): path is string => typeof path === "string" && path.length > 0))]);
+  }
+
   public async execute(input: Parameters<ContainedTurnProviderPort["execute"]>[0]): Promise<CodexAppServerExecutionOutcome> {
     input = detachCodexExecutionInput(input);
     const identity = Object.freeze({
@@ -397,12 +412,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       privatePathPlatform: this.#platformTuple.platform,
     });
     try {
-      const privatePaths = Object.freeze([...new Set([
-        this.#boundary.codexHome,
-        this.#privateRootPath,
-        this.#tmpDir,
-        this.#boundary.workspaceRef,
-      ].filter((path): path is string => typeof path === "string" && path.length > 0))]);
+      const privatePaths = this.#privateOutputPaths();
       outputPolicy = Object.freeze({
         exactSensitiveTokens: this.#additionalSensitiveOutputTokens,
         privatePaths,
@@ -439,13 +449,13 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       const configResult = await this.#request(process, reader, {
         id: `${input.attemptId}:config-read`,
         method: "config/read",
-        params: { cwd: input.workspaceRef, includeLayers: true },
+        params: { cwd: codexProtocolPaths(this.#boundary).workspaceRef, includeLayers: true },
       }, false, preTurnNotifications, preTurnBudget);
       validateCodexConfigEvidence(configResult, this.#boundary, this.#nativeBrokerRecipe);
       const profileResult = await this.#request(process, reader, {
         id: `${input.attemptId}:permission-profiles`,
         method: "permissionProfile/list",
-        params: { cwd: input.workspaceRef },
+        params: { cwd: codexProtocolPaths(this.#boundary).workspaceRef },
       }, false, preTurnNotifications, preTurnBudget);
       validateCodexPermissionProfileEvidence(profileResult, this.#boundary);
       const threadResult = await this.#request(process, reader, {
@@ -455,7 +465,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
           approvalPolicy: "never",
           config: this.#nativeBrokerRecipe === undefined ? codexContainedThreadConfig()
             : codexNativeBrokerThreadConfig(this.#nativeBrokerRecipe),
-          cwd: input.workspaceRef,
+          cwd: codexProtocolPaths(this.#boundary).workspaceRef,
           ephemeral: true,
           permissions: this.#boundary.permissionProfileId,
         },
@@ -471,7 +481,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
         method: "turn/start",
         params: {
           approvalPolicy: "never",
-          cwd: input.workspaceRef,
+          cwd: codexProtocolPaths(this.#boundary).workspaceRef,
           input: [{ text: input.intent.prompt, text_elements: [], type: "text" }],
           permissions: this.#boundary.permissionProfileId,
           threadId,

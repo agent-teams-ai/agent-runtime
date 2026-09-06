@@ -1,3 +1,5 @@
+import {createCodexDockerPathProjection, codexProtocolHostBoundary,
+  type CodexDockerPathProjection} from "./codex-docker-path-projection.js";
 import { types } from "node:util";
 import type { CodexAppServerPermissionBoundary } from "./codex-app-server-permission-boundary.js";
 import { assertIssuedCodexPermissionBoundary } from "./codex-native-broker-boundary.js";
@@ -23,23 +25,29 @@ export interface CodexNativeBrokerRecipe {
   readonly catalogSha256: typeof CODEX_NATIVE_CATALOG_SHA256;
 }
 const boundaries = new WeakMap<CodexNativeBrokerRecipe, CodexAppServerPermissionBoundary>();
+const dockerPaths = new WeakMap<CodexNativeBrokerRecipe, CodexDockerPathProjection>();
+export const codexNativeBrokerDockerPaths = (recipe: CodexNativeBrokerRecipe) => dockerPaths.get(recipe);
 const rejected = (): TypeError => new TypeError("Codex native broker recipe rejected");
 
 /** Descriptor-only reading, never serialization of inputs that may hold secrets. */
-export const snapshotCodexNativeInput = (input: unknown, keys: readonly string[], optional: readonly string[] = []): Record<string, unknown> => {
+export const snapshotCodexDataRecord = (input: unknown): Record<string, unknown> => {
   if (typeof input !== "object" || input === null || types.isProxy(input)
     || Object.getPrototypeOf(input) !== Object.prototype) {throw rejected();}
   const descriptors = Object.getOwnPropertyDescriptors(input);
   const actual = Reflect.ownKeys(descriptors);
-  if (keys.some(key => !Object.hasOwn(descriptors, key))
-    || actual.some(key => typeof key !== "string" || (!keys.includes(key) && !optional.includes(key)))) {
-    throw rejected();
-  }
+  if (actual.some(key => typeof key !== "string")) {throw rejected();}
   return Object.fromEntries((actual as string[]).map(key => {
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {throw rejected();}
     return [key, descriptor.value];
   }));
+};
+
+export const snapshotCodexNativeInput = (input: unknown, keys: readonly string[], optional: readonly string[] = []): Record<string, unknown> => {
+  const data = snapshotCodexDataRecord(input);
+  if (keys.some(key => !Object.hasOwn(data, key))
+    || Object.keys(data).some(key => !keys.includes(key) && !optional.includes(key))) {throw rejected();}
+  return data;
 };
 
 const endpoint = (input: unknown): string => {
@@ -63,17 +71,21 @@ export const createCodexNativeBrokerRecipe = (input: {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly endpoint: string;
   readonly profile: "codex-chatgpt";
+  readonly dockerMounts?: Parameters<typeof createCodexDockerPathProjection>[0];
 }): CodexNativeBrokerRecipe => {
-  const data = snapshotCodexNativeInput(input, ["boundary", "endpoint", "profile"]);
+  const data = snapshotCodexNativeInput(input, ["boundary", "endpoint", "profile"], ["dockerMounts"]);
   const boundary = data.boundary as CodexAppServerPermissionBoundary;
   assertIssuedCodexPermissionBoundary(boundary);
   if (data.profile !== "codex-chatgpt") {throw rejected();}
+  const paths = data.dockerMounts === undefined ? undefined
+    : createCodexDockerPathProjection(data.dockerMounts as Parameters<typeof createCodexDockerPathProjection>[0], boundary);
   const recipe: CodexNativeBrokerRecipe = Object.freeze({
     kind: "codex-native-broker-config/v1", profile: "codex-chatgpt",
-    endpoint: endpoint(data.endpoint), catalogPath: `${boundary.codexHome}/models.json`,
+    endpoint: endpoint(data.endpoint), catalogPath: `${(paths ?? boundary).codexHome}/models.json`,
     catalogSha256: CODEX_NATIVE_CATALOG_SHA256,
   });
   boundaries.set(recipe, boundary);
+  if (paths !== undefined) {dockerPaths.set(recipe, paths);}
   return recipe;
 };
 
@@ -85,7 +97,7 @@ export const codexNativeBrokerBoundary = (recipe: CodexNativeBrokerRecipe): Code
 export const assertCodexNativeBrokerBoundary = (
   recipe: CodexNativeBrokerRecipe, boundary: CodexAppServerPermissionBoundary,
 ): void => {
-  if (codexNativeBrokerBoundary(recipe) !== boundary) {throw rejected();}
+  if (codexNativeBrokerBoundary(recipe) !== codexProtocolHostBoundary(boundary)) {throw rejected();}
 };
 
 export const codexNativeBrokerUserOverrides = (recipe: CodexNativeBrokerRecipe) => {
@@ -163,7 +175,7 @@ metrics_exporter = "none"
 [permissions.agent-runtime-contained-v1]
 extends = ${quote(boundary.permissionProfile.extends)}
 [permissions.agent-runtime-contained-v1.filesystem]
-${quote(boundary.codexHome)} = "deny"
+${quote((dockerPaths.get(recipe) ?? boundary).codexHome)} = "deny"
 ":tmpdir" = "read"
 ":slash_tmp" = "read"
 [permissions.agent-runtime-contained-v1.network]

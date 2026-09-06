@@ -1,3 +1,4 @@
+import {codexDockerProjectionSource, type CodexDockerPathProjection} from "./codex-docker-path-projection.js";
 import { createHash } from "node:crypto";
 
 import type { ContainedTurnAdapterCapabilityManifest } from "../legacy/legacy-contained-turn-ports.js";
@@ -17,6 +18,7 @@ import { codexNativeBrokerLaunchInput, type CodexAppServerLaunchPlan } from "./c
 interface CodexProviderOptionsInput {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly cancellationPollMs?: number;
+  readonly dockerProjection?: CodexDockerPathProjection;
   readonly effectCustody?: CodexEffectCustodyAuthority;
   readonly manifest: ContainedTurnAdapterCapabilityManifest;
   readonly nativeBrokerLaunchPlan?: CodexAppServerLaunchPlan;
@@ -209,14 +211,27 @@ const snapshotSensitiveOutputTokens = (input: unknown, localCapability: string |
   return Object.freeze(sensitiveOutputTokens);
 };
 
+const detachProtocolBinding = (options: DataSnapshot) => {
+  const nativePlan = options.nativeBrokerLaunchPlan as CodexAppServerLaunchPlan | undefined;
+  const native = nativePlan === undefined ? undefined : codexNativeBrokerLaunchInput(nativePlan);
+  const projection = options.dockerProjection as CodexDockerPathProjection | undefined;
+  if (projection !== undefined && codexDockerProjectionSource(projection).boundary !== options.boundary) {
+    throw new TypeError("Codex Docker provider boundary does not match projection");
+  }
+  const boundary = native === undefined && projection === undefined ? snapshotBoundary(options.boundary)
+    : options.boundary as CodexAppServerPermissionBoundary;
+  if (native !== undefined && codexNativeBrokerBoundary(native.recipe) !== boundary) {
+    throw new TypeError("Codex native broker boundary does not match the launch");
+  }
+  return {nativePlan, native, projection, boundary};
+};
+
 export const detachCodexProviderOptions = (input: CodexProviderOptionsInput): CodexProviderOptionsInput => {
   const options = snapshotRecord(input, "Codex provider constructor options", ["boundary", "manifest", "privateRootPath", "processes", "tmpDir"], [
     "cancellationPollMs", "effectCustody", "maxActiveNotificationBytes", "maxActiveNotifications",
-    "maxLineBytes", "requestTimeoutMs", "sensitiveOutputTokens", "turnTimeoutMs", "nativeBrokerLaunchPlan",
+    "maxLineBytes", "requestTimeoutMs", "sensitiveOutputTokens", "turnTimeoutMs", "nativeBrokerLaunchPlan", "dockerProjection",
   ]);
-  const nativePlan = options.nativeBrokerLaunchPlan as CodexAppServerLaunchPlan | undefined;
-  const native = nativePlan === undefined ? undefined : codexNativeBrokerLaunchInput(nativePlan);
-  const boundary = native === undefined ? snapshotBoundary(options.boundary) : codexNativeBrokerBoundary(native.recipe);
+  const {nativePlan, native, projection, boundary} = detachProtocolBinding(options);
   const manifest = detachCodexManifest(options.manifest as ContainedTurnAdapterCapabilityManifest);
   if (nativePlan !== undefined && (options.boundary !== boundary
     || nativePlan.privateRootPath !== options.privateRootPath || nativePlan.tmpDir !== options.tmpDir
@@ -233,6 +248,7 @@ export const detachCodexProviderOptions = (input: CodexProviderOptionsInput): Co
     })) as CodexEffectCustodyAuthority;
   return Object.freeze({
     boundary,
+    ...(projection === undefined ? {} : {dockerProjection: projection}),
     ...(nativePlan === undefined ? {} : { nativeBrokerLaunchPlan: nativePlan }),
     ...(options.cancellationPollMs === undefined ? {} : { cancellationPollMs: options.cancellationPollMs as number }),
     ...(effectCustody === undefined ? {} : { effectCustody }),

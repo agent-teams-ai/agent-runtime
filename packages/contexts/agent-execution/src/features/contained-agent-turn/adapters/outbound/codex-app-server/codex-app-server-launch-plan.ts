@@ -33,6 +33,9 @@ interface NativeBrokerLaunchInput {
 const nativeLaunches = new WeakMap<HostCustodyLaunchPlan, Readonly<NativeBrokerLaunchInput>>();
 const issuedLaunchPlans = new WeakSet<object>();
 
+/** Same-object native protocol selection; the provider rechecks retained material. */
+export const isCodexNativeBrokerLaunchPlan = (plan: HostCustodyLaunchPlan): boolean => nativeLaunches.has(plan);
+
 /** Private adapter recognition, not route authority. Only this factory can add
  * an immutable plan; callers cannot register or transfer recognition to copies.
  */
@@ -306,3 +309,4 @@ export const createCodexAppServerFinalizableLaunchPlan = (
   issuedLaunchPlans.add(plan);
   return plan;
 };
+export {codexNativeBrokerDockerPaths, snapshotCodexDataRecord} from "./codex-native-broker-recipe.js";

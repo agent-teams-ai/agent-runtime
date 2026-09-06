@@ -1,3 +1,4 @@
+import {codexProtocolPaths} from "./codex-docker-path-projection.js";
 import { createHash } from "node:crypto";
 import { types as utilTypes } from "node:util";
 
@@ -110,7 +111,7 @@ const version = (config: unknown): string =>
 
 const userProfile = (boundary: CodexAppServerPermissionBoundary) => ({
   extends: boundary.intentMode === "analysis" ? ":read-only" : ":workspace",
-  filesystem: { [boundary.codexHome]: "deny", ":tmpdir": "read", ":slash_tmp": "read" },
+  filesystem: { [codexProtocolPaths(boundary).codexHome]: "deny", ":tmpdir": "read", ":slash_tmp": "read" },
   network: { enabled: false },
 });
 
@@ -164,7 +165,7 @@ export const validateCodexConfigEvidence = (
   };
   const session = { name: { type: "sessionFlags" }, version: version(sessionConfig) };
   const user = {
-    name: { type: "user", file: `${boundary.codexHome}/config.toml`, profile: null },
+    name: { type: "user", file: `${codexProtocolPaths(boundary).codexHome}/config.toml`, profile: null },
     version: version(userConfig),
   };
   // Native all_layers_high_to_low order; exact cardinality also rejects duplicates.
@@ -187,7 +188,7 @@ export const validateCodexConfigEvidence = (
   const userLeaves = [
     ...(nativeBrokerRecipe === undefined ? [] : CODEX_NATIVE_BROKER_USER_LEAVES),
     `${permissionPrefix}.extends`, `${permissionPrefix}.network.enabled`,
-    ...[boundary.codexHome, ":tmpdir", ":slash_tmp"].map(path => `${permissionPrefix}.filesystem.${path}`),
+    ...[codexProtocolPaths(boundary).codexHome, ":tmpdir", ":slash_tmp"].map(path => `${permissionPrefix}.filesystem.${path}`),
   ];
   const sessionLeaves = ["default_permissions", ...disabledFeatures.map(feature =>
     feature === "multi_agent_v2" ? "features.multi_agent_v2.enabled" : `features.${feature}`)];

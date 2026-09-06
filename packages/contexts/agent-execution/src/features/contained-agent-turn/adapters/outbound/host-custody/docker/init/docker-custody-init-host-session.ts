@@ -222,7 +222,10 @@ export class DockerCustodyInitHostSession {
       if (this.#settled !== undefined || this.#inputEof || !this.#started) {return {committedBytes: 0, kind: "closed"};}
       if (await this.#rejectStaleWrite()) {return {committedBytes: 0, kind: "closed"};}
       try {
-        await this.#channel.write(encodeDockerCustodyFrame({bytesBase64: Buffer.from(bytes).toString("base64"), kind: "provider-input", requestId: this.#exec.requestId}));
+        // The stale check above awaits cleanup. Recheck at the actual write,
+        // after every queue/publication microtask and before the first byte.
+        this.#assertActive();
+        await this.#channel.write(encodeDockerCustodyFrame({bytesBase64: Buffer.from(bytes).toString("base64"), kind: "provider-input", requestId: this.#exec.requestId}), () => this.#assertActive());
         return {committedBytes: bytes.byteLength, kind: "committed"};
       } catch {
         await this.#settle(this.#unknown("exec-write-unknown"));

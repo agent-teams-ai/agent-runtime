@@ -1,3 +1,4 @@
+import {codexProtocolPaths} from "./codex-docker-path-projection.js";
 import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
@@ -217,7 +218,7 @@ export const validateCodexInitializeEvidence = (
 ): void => {
   if (!isCodexRecord(result)
     || !hasExactKeys(result, ["codexHome", "platformFamily", "platformOs", "userAgent"])
-    || result.codexHome !== boundary.codexHome
+    || result.codexHome !== codexProtocolPaths(boundary).codexHome
     || result.platformFamily !== platformTuple.platformFamily
     || result.platformOs !== platformTuple.platformOs) {
     throw evidenceError("initialization does not match the pinned candidate runtime tuple");
@@ -284,7 +285,7 @@ export const validateCodexThreadStartEvidence = (
   const active = result.activePermissionProfile;
   if (threadId === undefined || threadId.length === 0 || !isCodexRecord(active) || !hasExactKeys(active, ["extends", "id"])
     || active.id !== boundary.permissionProfileId || active.extends !== boundary.permissionProfile.extends
-    || result.cwd !== boundary.workspaceRef || result.approvalPolicy !== "never"
+    || result.cwd !== codexProtocolPaths(boundary).workspaceRef || result.approvalPolicy !== "never"
     || canonicalCodexJson(result.sandbox) !== canonicalCodexJson(codexTurnSandboxPolicy(mode, boundary.workspaceRef))) {
     throw evidenceError("thread/start permission provenance does not match the qualified profile");
   }
