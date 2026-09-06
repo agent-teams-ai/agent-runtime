@@ -1,12 +1,11 @@
-import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener, DockerHttpNetworkResources, type DockerHttpNetworkResourceInput } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
-import { NodeProviderProcessCustody } from "../adapters/outbound/host-custody/node-provider-process-custody.js";
+import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener, DockerCustodyHttpReservation, DockerHttpNetworkResources, type DockerHttpNetworkResourceInput } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import { createV4HostHttpListenerLifecycle } from "./v4-host-http-listener-lifecycle.js";
 
-type Preparation = NonNullable<ReturnType<typeof NodeProviderProcessCustody.httpPreparation>>;
+type Preparation = NonNullable<ReturnType<typeof DockerCustodyHttpReservation.httpPreparation>>;
 type Handoff = Parameters<Preparation["acquire"]>[0];
 type Resources = Parameters<Preparation["prepareResources"]>[1];
 type Journal = Parameters<DockerHttpNetworkResources["prepare"]>[0];
-const {httpPreparation} = NodeProviderProcessCustody;
+const {httpPreparation} = DockerCustodyHttpReservation;
 
 
 /** Private post-claim assembly. Native listener/accepted-connection/TLS/local-cut
@@ -20,10 +19,15 @@ export const createDockerHostHttpResources = (input: Readonly<{
   input = data(input);
   const host = httpPreparation(input.host);
   if (host === undefined) {throw new TypeError("Host HTTP resource preparation unavailable");}
-  const network = new DockerHttpNetworkResources(input.network);
   const expectedGeneration = input.hostLifecycleGenerationSha256;
-  if (!/^[a-f0-9]{64}$/u.test(expectedGeneration)) {throw new TypeError("Host generation unavailable");}
+  if (expectedGeneration !== host.binding.hostLifecycleGenerationSha256) {throw new TypeError("Host generation changed");}
+  const network = new DockerHttpNetworkResources(input.network);
   const subject = network.subject;
+  if (subject.imageDigest !== host.binding.imageDigest ||
+    (Object.keys(host.binding.attempt) as Array<keyof typeof subject.attempt>)
+      .some(key => subject.attempt[key] !== host.binding.attempt[key])) {
+    throw new TypeError("Docker HTTP network launch binding conflicts");
+  }
   let entered = false;
   let sealListener: (() => void) | undefined;
   let lifetimeAbort: ReturnType<typeof addAbortListener> | undefined;
@@ -34,11 +38,13 @@ export const createDockerHostHttpResources = (input: Readonly<{
   };
   const cutoff = () => {
     // Always fence the allocation slot, including a failed native listener cut.
+    host.cutoff();
     network.cutoff();
     lifetimeAbort?.[Symbol.dispose](); lifetimeAbort = undefined;
     cutListener();
   };
   addAbortListener(network.signal, () => {
+    host.cutoff();
     lifetimeAbort?.[Symbol.dispose](); lifetimeAbort = undefined;
     cutListener();
   });
@@ -50,7 +56,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
       if (entered) {throw new TypeError("Host HTTP resource preparation already entered");}
       entered = true;
       try {
-        // Native Host reservation identity is acquired before any journal/Engine IO.
+        // Actual Docker HTTP lifetime is acquired before any journal/Engine IO.
         const lifetime = host.acquire(handoff);
         if (lifetime.hostLifecycleGenerationSha256 !== expectedGeneration) {cutoff(); throw new TypeError("Host generation changed");}
         const proof = lifetime.committedDispatchProof;
@@ -87,6 +93,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
       } catch (error) {cutoff(); throw error;}
     },
     observeContainer: (...args: Parameters<DockerHttpNetworkResources["observeContainer"]>) => network.observeContainer(...args),
+    cleanupResources: (deadlineEpochMs: number) => {cutoff(); return host.cleanup(deadlineEpochMs);},
     cleanupNetwork: () => {cutoff(); return network.cleanupNetwork();},
   });
 };

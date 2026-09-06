@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { fixture as hostFixture } from "./node-custody-http-reservation-fixture.ts";
+import test, {type TestContext} from "node:test";
+import {fixture as hostFixture, generation, DockerCustodyHttpReservation} from "./support/docker-http-lifetime-fixture.ts";
 import { networkFixture } from "../../fixtures/docker-operation-network-fixture.ts";
 const {createDockerHostHttpResources} = await import("../../../dist/features/contained-agent-turn/composition/docker-host-http-resources.js");
 const {createHostHttpLocalCutOwner} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-local-cut-owner.js");
@@ -12,23 +12,22 @@ test("composition rejects structural Host preparation suppliers before any Engin
   assert.deepEqual(network.state.calls, []);
 });
 
-test("composition is inert and genuine Host reservation acquisition precedes network preparation", async () => {
-  const host = hostFixture(); const network = networkFixture();
-  const product = createDockerHostHttpResources({host: host.core, network: network.resourceInput,
-    hostLifecycleGenerationSha256: "a".repeat(64)});
-  assert.deepEqual(network.state.calls, []);
+test("composition is inert and actual Docker lifetime acquisition precedes network preparation", async t => {
+  const host = await hostFixture(t); const owner = host.createOwner(); const calls = [...host.calls];
+  const product = createDockerHostHttpResources({host: owner, network: host.network.resourceInput,
+    hostLifecycleGenerationSha256: generation});
+  assert.deepEqual(host.network.state.calls, []); assert.deepEqual(host.calls, calls);
   assert.equal(product.observationOwner.readObservation({kind: "listener_allocated"}), undefined);
-  await assert.rejects(product.prepare({} as never, host.handoff("foreign-reservation") as never, {} as never, Date.now() + 5_000));
-  assert.deepEqual(network.state.calls, []);
+  await assert.rejects(product.prepare({} as never, {...host.handoff, underlyingCustodyRef: "foreign-reservation"},
+    {} as never, Date.now() + 5_000));
+  assert.deepEqual(host.network.state.calls, []);
 });
 
-test("current Host lifecycle generation mismatch prevents allocation after a real reservation claim", async () => {
-  const host = hostFixture(); const network = networkFixture(); const reservation = await host.reserve();
-  const product = createDockerHostHttpResources({host: host.core, network: network.resourceInput,
-    hostLifecycleGenerationSha256: "a".repeat(64)});
-  await assert.rejects(product.prepare({} as never, host.handoff(reservation.custodyRef) as never,
-    {} as never, Date.now() + 5_000), /generation changed/u);
-  assert.deepEqual(network.state.calls, []);
+test("current Host lifecycle generation mismatch prevents allocation", async t => {
+  const host = await hostFixture(t); const owner = host.createOwner();
+  assert.throws(() => createDockerHostHttpResources({host: owner, network: host.network.resourceInput,
+    hostLifecycleGenerationSha256: "b".repeat(64)}), /generation changed/u);
+  assert.deepEqual(host.network.state.calls, []); assert.equal(owner.signal.aborted, false);
 });
 
 // Concrete Host reservation/resources and Docker owners, with explicit synthetic
@@ -41,23 +40,12 @@ const {v4Hash, v4Decode, v4Replay} = {
 const {MemoryV4Storage} = await import("../../fixtures/host-http-egress-v4-fixture.ts");
 const {deferred} = await import("../../fixtures/docker-operation-network-fixture.ts");
 
-const preparedFixture = async (address = "172.30.0.1") => {
-  const host = hostFixture(); const template = networkFixture().subject;
-  const reservation = await host.core.reserve({...host.reservation,
-    operationId: template.attempt.operationId, attemptId: template.attempt.attemptId} as never);
-  const proof = host.proofFor({hostBootId: template.attempt.hostBootId, hostInstanceId: template.attempt.hostInstanceId,
-    hostCustodyProof: {proofId: "proof:synthetic-composition"}}, {
-    tenantId: template.attempt.tenantId, projectId: template.attempt.projectId, operationId: template.attempt.operationId,
-    attemptId: template.attempt.attemptId, custodyId: template.attempt.custodyId, effectId: template.effectId,
-    workspaceId: template.workspaceId, executionGenerationId: template.executionGenerationId});
-  const handoff = {underlyingCustodyRef: reservation.custodyRef, signal: host.signal.signal, committedDispatchProof: proof};
-  const network = networkFixture({...template, attempt: {...template.attempt, tenantId: proof.tenantId,
-    projectId: proof.projectId, operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
-    hostInstanceId: proof.hostInstanceId, hostBootId: proof.hostBootId},
-    effectId: proof.effectId, workspaceId: proof.workspaceId, executionGenerationId: proof.executionGenerationId,
-    committedClaimSha256: proof.proofDigest.slice(7), acceptedAuthoritySha256: proof.acceptedAuthorityVectorDigest.slice(7)});
-  const product = createDockerHostHttpResources({host: host.core, network: network.resourceInput,
-    hostLifecycleGenerationSha256: host.live().identity.hostLifecycleGenerationSha256});
+const preparedFixture = async (t: TestContext, address = "172.30.0.1") => {
+  const host = await hostFixture(t); const {network, handoff} = host;
+  const owner = host.createOwner();
+  const preparation = DockerCustodyHttpReservation.httpPreparation(owner)!;
+  const product = createDockerHostHttpResources({host: owner, network: network.resourceInput,
+    hostLifecycleGenerationSha256: generation});
   const storage = new MemoryV4Storage(); const journal = new HostHttpEgressV4Journal(storage, network.subject, product.observationOwner);
   await journal.prepare(`command:${v4Hash("open-composition")}`);
   const physical = {opens: 0, seals: 0, closes: 0, consumption: 0, firstWrites: 0, sealed: false};
@@ -80,12 +68,12 @@ const preparedFixture = async (address = "172.30.0.1") => {
       clock: {read: () => ({authorityId: "synthetic-clock", epoch: "1", controlTime: 1}),
         within: async (_deadline: number, action: () => Promise<unknown>) => action()}, operationDeadline: 20_000},
   };
-  return {host, handoff, network, product, storage, journal, physical, resources,
+  return {host, owner, preparation, handoff, network, product, storage, journal, physical, resources,
     prepare: () => product.prepare(journal, handoff as never, resources as never, Date.now() + 5_000)};
 };
 
-test("real post-claim composition prepares the existing Host resources without inventing V4 observations", async () => {
-  const f = await preparedFixture(); const result = await f.prepare();
+test("actual Docker facade prepares the shared Host resources without inventing V4 observations", async t => {
+  const f = await preparedFixture(t); const result = await f.prepare();
   assert.equal(result.kind, "prepared"); assert.equal(f.physical.opens, 1); assert.equal(f.physical.consumption, 1);
   assert.deepEqual(v4Decode(f.storage.journal!).map(record => record.event.kind),
     ["opened", "network_intent", "network_allocated", "listener_intent"]);
@@ -97,8 +85,8 @@ test("real post-claim composition prepares the existing Host resources without i
   assert.equal(f.journal.evidence().resourceLedger, "open");
 });
 
-test("composition captures resource methods before delayed network IO and fences on gateway mismatch", async () => {
-  const f = await preparedFixture("172.31.0.1"); const reached = deferred(); const release = deferred();
+test("composition captures resource methods before delayed network IO and fences on gateway mismatch", async t => {
+  const f = await preparedFixture(t, "172.31.0.1"); const reached = deferred(); const release = deferred();
   f.network.state.after = async label => {
     if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}
   };
@@ -111,8 +99,8 @@ test("composition captures resource methods before delayed network IO and fences
   assert.equal(await f.product.cleanupNetwork(), "unknown");
 });
 
-test("composition cutoff during delayed POST prevents Host listener and consumption allocation", async () => {
-  const f = await preparedFixture(); const reached = deferred(); const release = deferred();
+test("composition cutoff during delayed POST prevents Host listener and consumption allocation", async t => {
+  const f = await preparedFixture(t); const reached = deferred(); const release = deferred();
   f.network.state.after = async label => {
     if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}
   };
@@ -125,8 +113,8 @@ test("composition cutoff during delayed POST prevents Host listener and consumpt
 });
 
 for (const method of ["read", "within"] as const) {
-  test(`composition clock ${method} retains the original mutable receiver across network IO`, async () => {
-    const f = await preparedFixture(); const reached = deferred(); const release = deferred();
+  test(`composition clock ${method} retains the original mutable receiver across network IO`, async t => {
+    const f = await preparedFixture(t); const reached = deferred(); const release = deferred();
     const clock = {
       controlTime: 0, withinCalls: 0,
       read() {return {authorityId: "synthetic-clock", epoch: "1", controlTime: this.controlTime};},
@@ -140,15 +128,16 @@ for (const method of ["read", "within"] as const) {
     let owner: ReturnType<typeof createHostHttpLocalCutOwner> | undefined;
     // Inspect the actual projection delivered to the existing Host consumer.
     // Reuse the acquired lifetime's real identity/proof; no reservation is invented.
-    const reservation = f.host.live().httpReservation; const prepare = reservation.prepareResources;
-    reservation.prepareResources = (lifetime, input) => {
+    const {NodeCustodyHttpResources} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-custody-http-resources.js");
+    const prepare = NodeCustodyHttpResources.prototype.prepare;
+    t.mock.method(NodeCustodyHttpResources.prototype, "prepare", function (this: InstanceType<typeof NodeCustodyHttpResources>, lifetime, input) {
       const proof = lifetime.committedDispatchProof;
       owner = createHostHttpLocalCutOwner({...input.localCut,
         claimed: {signal: lifetime.signal, committedDispatchProof: proof, underlyingCustodyRef: lifetime.underlyingCustodyRef},
         identity: {operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
           hostBootId: proof.hostBootId, liveProcessSessionIdentity: lifetime.executionSessionIdentity}});
-      return prepare.call(reservation, lifetime, input);
-    };
+      return prepare.call(this, lifetime, input);
+    });
     f.network.state.after = async label => {
       if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}
     };

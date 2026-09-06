@@ -1,11 +1,5 @@
-import { custodyDataRecord } from "./host-custody-inert-record.js";
 import { addAbortListener } from "node:events";
-import { types } from "node:util";
-import {
-  validateCommittedDispatchProofV1,
-  type CommittedDispatchProofV1,
-} from "../../../domain/committed-dispatch-proof-v1.js";
-import type { ContainedTurnHostPostClaimPreparation } from "./contained-turn-kernel-custody-contracts.js";
+import type { HostCustodyHttpHandoff as Handoff, HostCustodyHttpResourceLifetime } from "./host-custody-http-resource-lifetime.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 
 import { NodeCustodyHttpResources, type NodeCustodyHttpResourceInput } from "./node-custody-http-resources.js";
@@ -13,17 +7,11 @@ import type { HostHttpEgressSessionDependencies } from "./egress/host-http-egres
 
 const nativeRemove = EventTarget.prototype.removeEventListener;
 
-type Handoff = Parameters<ContainedTurnHostPostClaimPreparation["prepareClaimed"]>[0];
-
 /** Private identity of a reserved execution session, never evidence of a PID or start. */
 declare const executionSession: unique symbol;
 export type NodeCustodyExecutionSessionIdentity = Readonly<{ [executionSession]: true }>;
-export interface NodeCustodyHttpLifetime {
+export interface NodeCustodyHttpLifetime extends HostCustodyHttpResourceLifetime {
   readonly executionSessionIdentity: NodeCustodyExecutionSessionIdentity;
-  readonly committedDispatchProof: CommittedDispatchProofV1;
-  readonly underlyingCustodyRef: string;
-  readonly hostLifecycleGenerationSha256: string;
-  readonly signal: AbortSignal;
 }
 
 /** Only trusted Host wiring inside the actual kernel prepareClaimed may call acquire.
@@ -41,31 +29,7 @@ export interface NodeCustodyHttpPreparation {
 
 export { custodyDataRecord } from "./host-custody-inert-record.js";
 
-export const readNodeCustodyHttpHandoff = (input: Handoff): Handoff => {
-  const record = custodyDataRecord(input);
-  if (Reflect.ownKeys(record).length !== 3 || typeof record.underlyingCustodyRef !== "string" ||
-      record.underlyingCustodyRef.length === 0) {
-    throw new TypeError("Host Custody HTTP preparation handoff is unavailable");
-  }
-  const proof = custodyDataRecord(record.committedDispatchProof);
-  // Every proof field is scalar; reject nested executable values before validation.
-  for (const key of Reflect.ownKeys(proof)) {
-    const value: unknown = Object.getOwnPropertyDescriptor(proof, key)!.value;
-    if (typeof value !== "string" && typeof value !== "number") {
-      throw new TypeError("Host Custody HTTP preparation proof is unavailable");
-    }
-  }
-  const signal = record.signal;
-  if (signal === null || typeof signal !== "object" || types.isProxy(signal) ||
-      Object.getPrototypeOf(signal) !== AbortSignal.prototype ||
-      Reflect.ownKeys(signal).some(key => typeof key === "string" ||
-        !("value" in Object.getOwnPropertyDescriptor(signal, key)!))) {
-    throw new TypeError("Host Custody HTTP preparation signal is unavailable");
-  }
-  Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")!.get!.call(signal);
-  return Object.freeze({ committedDispatchProof: validateCommittedDispatchProofV1({ ...proof }),
-    signal, underlyingCustodyRef: record.underlyingCustodyRef });
-};
+export { readHostCustodyHttpHandoff as readNodeCustodyHttpHandoff } from "./host-custody-http-resource-lifetime.js";
 
 /** Retained directly by LiveCustody from reservation creation through release.
  * Acquisition supplies identity/cutoff only, never HTTP readiness. Concrete HTTP

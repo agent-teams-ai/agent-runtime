@@ -3,3 +3,5 @@ export type {DockerProviderProcessInput} from "./docker-provider-process-bridge.
 export {dockerProviderProcessMountFacts} from "./docker-host-custody-lifecycle.js";
 export {captureDockerHttpResourceRecord, subscribeDockerHttpAbort, DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} from "./docker-http-network-resources.js";
 export type {DockerHttpNetworkResourceInput} from "./docker-http-network-resources.js";
+export {DockerCustodyHttpReservation} from "./docker-custody-http-reservation.js";
+export type {DockerCustodyHttpReservationInput} from "./docker-custody-http-reservation.js";

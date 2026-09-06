@@ -1,5 +1,5 @@
 import { addAbortListener } from "node:events";
-import type { NodeCustodyHttpLifetime, NodeProviderProcessCustodyHttpReservation } from "./node-provider-process-custody-http-reservation.js";
+import type { HostCustodyHttpResourceLifetime, HostCustodyHttpResourceOwner } from "./host-custody-http-resource-lifetime.js";
 import { custodyDataRecord } from "./host-custody-inert-record.js";
 import type { createNodeHostHttpListener, NodeHostHttpAccept, NodeHostHttpListener } from "./egress/node-host-http-listener.js";
 import type { createNodeHostHttpConsumptionJournal, PreparedHostHttpConsumptionJournal } from "./egress/node-host-http-consumption-journal.js";
@@ -13,7 +13,7 @@ type Session = ReturnType<Ingress["bind"]>;
 /** Host-owned private consumer contract. An acknowledged intent permits a
  * listener effect; it is never physical closure or qualification evidence. */
 export interface NodeCustodyHttpListenerLifecycle {
-  bind(lifetime: NodeCustodyHttpLifetime): Readonly<{
+  bind(lifetime: HostCustodyHttpResourceLifetime): Readonly<{
     recordOpen(): Promise<Readonly<{kind: "recorded" | "duplicate"}>>;
     recordRelease(): Promise<Readonly<{kind: "recorded" | "duplicate"}>>;
   }>;
@@ -29,13 +29,13 @@ export type NodeCustodyHttpResourcePreparation =
   | Readonly<{kind: "prepared"; address: NodeHostHttpListener["address"]; journal: PreparedHostHttpConsumptionJournal["journal"]}>
   | Readonly<{kind: "unsupported" | "unproven"}>;
 const rejected = (): TypeError => new TypeError("Host HTTP resource custody unavailable or conflicts");
-const identity = (lifetime: NodeCustodyHttpLifetime) => {
+const identity = (lifetime: HostCustodyHttpResourceLifetime) => {
   const proof = lifetime.committedDispatchProof;
   return {operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
     hostBootId: proof.hostBootId, liveProcessSessionIdentity: lifetime.executionSessionIdentity};
 };
 
-const capture = (input: NodeCustodyHttpResourceInput, lifetime: NodeCustodyHttpLifetime) => {
+const capture = (input: NodeCustodyHttpResourceInput, lifetime: HostCustodyHttpResourceLifetime) => {
   const data = custodyDataRecord(input);
   const lifecycle = custodyDataRecord(data.listenerLifecycle);
   if (typeof lifecycle.bind !== "function") {throw rejected();}
@@ -62,7 +62,7 @@ const capture = (input: NodeCustodyHttpResourceInput, lifetime: NodeCustodyHttpL
  * V4 is borrowed and never closed here; its actual observation owner remains
  * responsible for network/container/socket evidence and ledger reconciliation. */
 export class NodeCustodyHttpResources {
-  readonly #reservation: NodeProviderProcessCustodyHttpReservation;
+  readonly #reservation: HostCustodyHttpResourceOwner;
   readonly #listenerCut: AbortController;
   #input: ReturnType<typeof capture> | undefined;
   #entered = false;
@@ -83,13 +83,13 @@ export class NodeCustodyHttpResources {
   #listenerClosed = false;
   #cleanup: Promise<boolean> | undefined;
 
-  public constructor(reservation: NodeProviderProcessCustodyHttpReservation, controller: AbortController) {
+  public constructor(reservation: HostCustodyHttpResourceOwner, controller: AbortController) {
     this.#reservation = reservation; this.#listenerCut = controller;
   }
 
   public get pending(): Promise<void> | undefined {return this.#preparation;}
 
-  public openIngress(lifetime: NodeCustodyHttpLifetime): Ingress {
+  public openIngress(lifetime: HostCustodyHttpResourceLifetime): Ingress {
     if (this.#cut || this.#ingress !== undefined || this.#binding) {throw rejected();}
     // Reserve before entropy issuance, including a synchronous throw/reentrant cut.
     this.#binding = true;
@@ -116,7 +116,7 @@ export class NodeCustodyHttpResources {
     finally {this.#binding = false;}
   }
 
-  public prepare(lifetime: NodeCustodyHttpLifetime, input: NodeCustodyHttpResourceInput): Promise<NodeCustodyHttpResourcePreparation> {
+  public prepare(lifetime: HostCustodyHttpResourceLifetime, input: NodeCustodyHttpResourceInput): Promise<NodeCustodyHttpResourcePreparation> {
     if (this.#entered || this.#cut || this.#session !== undefined || this.#binding) {throw rejected();}
     this.#entered = true;
     // Publish completion before reading recipes or invoking any async effect.
