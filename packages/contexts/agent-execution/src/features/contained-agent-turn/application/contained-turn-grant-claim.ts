@@ -55,13 +55,14 @@ const unavailableGrantConsumptionEvidenceId = (
 );
 
 export type ClaimContainedTurnWithConsumedGrantsOutcome =
+  | { readonly kind: "stopped"; readonly operation: ContainedTurnKernelOperation }
   | { readonly committedDispatchProof: CommittedDispatchProofV1; readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation }
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation })
   | (UnclaimedGrantOutcomeEvidence & { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" })
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId })
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "unavailable" });
 
-const settleConsumedGrantReceipts = async (
+const grantSettlementFailed = async (
   dependencies: ContainedTurnKernelDependencies,
   receipts: UnclaimedGrantOutcomeEvidence["consumedGrantReceipts"],
   disposition: "abandoned_without_claim" | "claim_committed",
@@ -172,21 +173,28 @@ export const claimContainedTurnWithConsumedGrants = async (
         const committedDispatchProof = validateCommittedDispatchClaimV1(
           outcome.committedDispatchProof, outcome.operation, subject, hostCustodyProof,
         );
-        if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
+        if (await grantSettlementFailed(dependencies, consumedGrantReceipts, "claim_committed")) {
+          // The claim remains committed, but debt closes the dispatch cutoff.
+          // Settlement replay cannot restore this one-shot start authority.
+          const indebted = await recordContainedTurnRejectedDebt(
+            dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority",
+          );
+          return Object.freeze({ kind: "stopped", operation: indebted });
+        }
         return Object.freeze({
           kind: "claimed",
           operation: outcome.operation,
           committedDispatchProof,
         });
       }
-      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
+      if (await grantSettlementFailed(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.operation });
     }
     if (outcome.kind === "stale") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
         return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
       }
-      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) {
+      if (await grantSettlementFailed(dependencies, consumedGrantReceipts, "claim_committed")) {
         await recordContainedTurnRejectedDebt(dependencies, outcome.current, trustedScope, "grant_settlement_rejected", "dispatch_authority");
       }
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.current });
@@ -254,7 +262,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
   const claim = await claimContainedTurnWithConsumedGrants(
     dependencies, operation, trustedScope, subject, custody.hostCustodyProof,
   );
-  if (claim.kind === "claimed") {return claim;}
+  if (claim.kind === "claimed" || claim.kind === "stopped") {return claim;}
   if (claim.kind === "observed_claim") {
     const cleanup = await retireAndCleanupContainedTurnPreparation(
       dependencies, operation, trustedScope, subject, "claim_lost", claim.consumedGrantRequestIds,
@@ -269,7 +277,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     claim.consumptionEvidenceIds,
   );
   if (cleanup.kind === "claimed") {
-    if (await settleConsumedGrantReceipts(dependencies, claim.consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, cleanup.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
+    if (await grantSettlementFailed(dependencies, claim.consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, cleanup.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
     return { kind: "observed", operation: cleanup.operation };
   }
   // No-dispatch closure also asserts that Host custody is no longer required.

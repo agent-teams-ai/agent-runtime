@@ -383,7 +383,12 @@ const recordProcessStartUnknown: MutationHandler<"record_process_start_unknown">
     operationCutoff: closeOperationCutoffForContinuity(operation, mutation.evidenceId),
     physicalContainment: { evidenceId: mutation.evidenceId, kind: "uncertain" },
     providerProcessStart: { evidenceId: mutation.evidenceId, kind: "unknown" },
-    reconciliation: { evidenceIds: [mutation.evidenceId], kind: "required" },
+    reconciliation: {
+      evidenceIds: operation.reconciliation.kind === "required"
+        ? [...new Set([...operation.reconciliation.evidenceIds, mutation.evidenceId])]
+        : [mutation.evidenceId],
+      kind: "required",
+    },
     revision: operation.revision + 1,
   };
 };
