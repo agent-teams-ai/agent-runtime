@@ -6,7 +6,7 @@ import type {
 import { AUTHORIZATION_COMMAND_KEYS, snapshotAuthorizationCommand, snapshotAuthorizationOwnerSelector } from "../../domain/materialization-authorization.js";
 import { detachedDispatchData } from "../dispatch-consumption-data.js";
 import type {
-  CredentialGenerationAcquisition, CredentialGenerationRequest, CredentialRenderingOutcome, CredentialRenderingOwner,
+  CredentialGenerationAcquisition, CredentialGenerationMaterialLifetime, CredentialGenerationRequest, CredentialRenderingOutcome, CredentialRenderingOwner,
   CredentialRenderingSelection, RenderedCredentialFields,
 } from "./credential-rendering-contracts.js";
 import { CredentialRenderingLifetime, signalAborted } from "./credential-rendering-lifetime.js";
@@ -27,26 +27,32 @@ class CredentialRenderingAdapter {
   readonly #selection: CredentialRenderingSelection;
   readonly #authorization: CredentialMaterializationAuthorizationV1;
   readonly #acquisition: CredentialGenerationAcquisition | undefined;
+  readonly #material: CredentialGenerationMaterialLifetime | undefined;
   readonly #fresh = new Set<CredentialMaterializationAuthorizationReceipt>();
   readonly #pending = new Set<CredentialRenderingLifetime>();
   #admissions = 0;
   #closed = false;
 
   constructor(selection: CredentialRenderingSelection, authorization: CredentialMaterializationAuthorizationV1,
-    acquisition: CredentialGenerationAcquisition | undefined) {
+    acquisition: CredentialGenerationAcquisition | undefined, material: CredentialGenerationMaterialLifetime | undefined) {
     this.#selection = selection;
     this.#authorization = authorization;
     this.#acquisition = acquisition;
+    this.#material = material;
   }
   dispose(): void {
     this.#closed = true;
+    this.#material?.dispose();
     this.#fresh.clear();
     for (const pending of this.#pending) {pending.close();}
     this.#pending.clear();
   }
   #open(): boolean {
     try {
-      if (!this.#closed && !signalAborted(this.#selection.operationAbortSignal) && performance.now() < this.#selection.deadline) {return true;}
+      if (!this.#closed && !signalAborted(this.#selection.operationAbortSignal)) {
+        const remaining = this.#selection.deadline - performance.now();
+        if (remaining > 0 && remaining <= 2_147_483_647) {return true;}
+      }
     } catch { /* A mutated signal is unavailable authority, without invoking shadows. */ }
     this.dispose(); return false;
   }
@@ -124,6 +130,7 @@ class CredentialRenderingAdapter {
       const request: CredentialGenerationRequest = Object.freeze({
         operationRef: this.#selection.operationRef, recipe: this.#selection.recipe, authorization: receipt,
       });
+      this.#material?.acceptRequest(request);
       received = lifetime.receive(this.#acquisition.acquire(request, lifetime.signal), request);
       // Always retain a cleanup observer before racing an abort/deadline.
       void received.then(value => {if (!this.#open()) {value?.release();} return null;}, () => null);
@@ -147,8 +154,9 @@ class CredentialRenderingAdapter {
 
 export const createCredentialRenderingAdapter = (selection: CredentialRenderingSelection,
   authorization: CredentialMaterializationAuthorizationV1, acquisition: CredentialGenerationAcquisition | undefined,
+  material?: CredentialGenerationMaterialLifetime,
 ): CredentialRenderingOwner => {
-  const owner = new CredentialRenderingAdapter(selection, authorization, acquisition);
+  const owner = new CredentialRenderingAdapter(selection, authorization, acquisition, material);
   return Object.freeze({
     authorization: Object.freeze({
       authorize: async (input: AuthorizeCredentialMaterializationInput) => owner.authorize(input),

@@ -41,6 +41,26 @@ export interface CredentialGenerationAcquisition {
   acquire(request: CredentialGenerationRequest, signal: AbortSignal): Promise<CredentialGenerationOutcome>;
 }
 
+/** Trusted PA bootstrap input, never an ACL dependency or authorization receipt. */
+export interface OperationCredentialMaterial {
+  readonly operationRef: string;
+  readonly binding: CredentialRenderingBinding;
+  readonly recipe: CredentialRecipe;
+  readonly fields: readonly PrivateCredentialField[];
+}
+export interface OperationCredentialMaterialAdmission {
+  /**
+   * One attempt. Acknowledges local custody only. Producer cleans any buffers still
+   * attached on rejection; PA erases every transferred buffer, including partial failure.
+   */
+  admit(material: OperationCredentialMaterial): { readonly kind: "admitted" | "rejected" };
+}
+/** Private companion, wired only to the rendering owner, never to the bootstrap/ACL. */
+export interface CredentialGenerationMaterialLifetime {
+  acceptRequest(request: CredentialGenerationRequest): void;
+  dispose(): void;
+}
+
 export interface RenderedCredentialField {
   readonly name: "Authorization" | "ChatGPT-Account-ID" | "x-api-key";
   readonly valueBytes: Uint8Array;
@@ -48,7 +68,8 @@ export interface RenderedCredentialField {
 /**
  * On success these exclusive buffers transfer to the recipient (later broker ACL).
  * It must call release() in finally after copying/consuming, including on cutoff.
- * PA has already erased raw material; owner disposal cannot erase transferred bytes.
+ * PA has erased per-call raw copies; an admitted operation seed remains until retirement.
+ * Owner disposal cannot erase these transferred bytes.
  * Any recipient copy has a separate zeroization owner. Never serialize this object.
  */
 export interface RenderedCredentialFields {
