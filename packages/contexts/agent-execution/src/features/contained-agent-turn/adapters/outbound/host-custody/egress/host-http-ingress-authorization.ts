@@ -16,7 +16,7 @@ export class HostHttpIngressDeniedError extends Error {
 export const issueHostHttpIngressAuthorization = () => {
   const entropy = randomBytes(32);
   let token: Uint8Array;
-  try {token = encoder.encode(entropy.toString("base64url"));}
+  try {token = encoder.encode(entropy.toString("hex"));}
   finally {zeroHttpBytes(entropy);}
   let closed = false;
   const close = (): void => {closed = true; zeroHttpBytes(token);};

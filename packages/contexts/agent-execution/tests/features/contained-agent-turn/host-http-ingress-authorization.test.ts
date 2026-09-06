@@ -22,7 +22,7 @@ test("authenticated ingress strips only its local bearer and retains raw byte ac
     materializer: {render: async () => [{name: "authorization", valueBytes: bytes(`Bearer ${SECRET_MARKER}`)}]},
   });
   t.after(session.close);
-  const token = session.nativeBearerToken(); assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+  const token = session.nativeBearerToken(); assert.equal(/^[a-f0-9]{64}$/.test(token), true);
   const request = wire(`aUtHoRiZaTiOn: Bearer ${token}\r\n`);
   const receipt = await session.execute(operation(f, request));
   assert.equal(receipt.outcome, "completed");
