@@ -81,7 +81,7 @@ test("launch rejects forged recipes/files, mismatched boundary/intent, unsupport
   const other = brokerFixture(t);
   const differentEndpoint = createCodexNativeBrokerRecipe({ boundary: f.boundary, endpoint: fixtureEndpoint.replace("43129", "43130"), profile: "codex-chatgpt" });
   for (const bad of [
-    { boundary: other.boundary }, { intentMode: "workspace-write" }, { platformTarget: { architecture: "arm64", platform: "darwin" } },
+    { boundary: other.boundary }, { intentMode: "workspace-write" }, { platformTarget: { architecture: "x64", platform: "darwin" } },
     { nativeBroker: { ...native, recipe: { ...f.recipe } } }, { nativeBroker: { ...native, files: { ...files } } },
     { nativeBroker: { ...native, recipe: differentEndpoint } }, { nativeBroker: { ...native, extra: true } },
   ]) {assert.throws(() => create(bad));}

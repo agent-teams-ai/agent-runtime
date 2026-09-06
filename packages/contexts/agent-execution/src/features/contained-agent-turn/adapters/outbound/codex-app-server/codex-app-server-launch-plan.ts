@@ -192,9 +192,8 @@ export const createCodexAppServerLaunchPlan = (
   const platformTarget = snapshotCodexNativeInput(options.platformTarget, ["architecture", "platform"]);
   const platformTuple = selectCodexAppServerPlatformTuple(platformTarget as unknown as CodexAppServerPlatformTarget);
   const native = nativeLaunchInput(options);
-  if (native !== undefined && platformTuple.platform !== "linux") {
-    throw new TypeError("Codex native broker supports only the captured Linux tuple");
-  }
+  // Both selected 0.153.4 tuples use the captured native config. Darwin keeps
+  // canonical paths and cooperative custody; Host selects its execution material.
   const intentMode = acceptedIntentMode(options.intentMode);
   const boundary = snapshotCodexNativeInput(options.boundary, [
     "codexHome", "codexHomeIdentity", "effectivePolicyDigest", "permissionProfile",

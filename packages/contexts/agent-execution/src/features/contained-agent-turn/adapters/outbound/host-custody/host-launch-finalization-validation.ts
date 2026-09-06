@@ -1,7 +1,7 @@
 import { types } from "node:util";
 import { fstatSync, lstatSync } from "node:fs";
 import {
-  canonicalJson, createFingerprint, sha256, validateSelectedLaunchCandidate, verifyExecutable,
+  createFingerprint, validateSelectedLaunchCandidate, verifyExecutable,
   type ExecutableObservation, type LaunchCandidate, type WorkspaceObservation,
 } from "./host-custody-launch.js";
 import type { HostCustodyLaunchPlan } from "./custodied-provider-process.js";
@@ -11,6 +11,7 @@ import { snapshotHostHttpRoute } from "./egress/http-egress-session-authority.js
 import type { HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 import { assertRetainedWorkspaceAuthority } from "./private-host-custody-reservation.js";
+import { finalHostExecutionMaterialSha256 } from "./host-launch-platform-material.js";
 
 const reject = (): never => {throw new TypeError("Host launch finalization identity rejected");};
 const sameDirectory = (a: WorkspaceObservation, b: WorkspaceObservation, refresh = false): void => {
@@ -31,6 +32,8 @@ export const validateFinalHostLaunch = async (live: LiveCustody, plan: HostCusto
     attemptId: live.attemptId, operationId: live.operationId, providerBinding: live.providerBinding,
     workspaceRef: live.workspaceRef, intentMode: original.plan.intentMode,
   }, materialSha256);
+  if (candidate.plan.containmentProfile !== original.plan.containmentProfile ||
+      candidate.plan.executablePath !== original.plan.executablePath) {return reject();}
   sameDirectory(original.workspace, candidate.workspace);
   sameDirectory(original.privatePaths.root, candidate.privatePaths.root);
   if (original.privatePaths.environmentKeys.join() !== candidate.privatePaths.environmentKeys.join()) {reject();}
@@ -44,14 +47,7 @@ export const validateFinalHostLaunch = async (live: LiveCustody, plan: HostCusto
   const verifiedExecutable = Object.freeze(await verifyExecutable(plan));
   sameExecutable(executable, verifiedExecutable);
   assertRetainedWorkspaceAuthority(live);
-  const privateDescriptors = new Map<string, number>();
-  const environmentProjection = candidate.privatePaths.environmentKeys.map(key => {
-    const path = candidate.privatePaths.byEnvironmentKey[key]!.path;
-    if (!privateDescriptors.has(path)) {privateDescriptors.set(path, 6 + privateDescriptors.size);}
-    return [key, path, `/proc/self/fd/${privateDescriptors.get(path)}`];
-  });
-  const executionMaterialSha256 = sha256(canonicalJson([materialSha256, "/proc/self/fd/4", "/proc/self/fd/5",
-    `/proc/self/fd/${6 + privateDescriptors.size}`, environmentProjection]));
+  const executionMaterialSha256 = finalHostExecutionMaterialSha256(candidate, verifiedExecutable, materialSha256);
   const fingerprint = createFingerprint({attemptId: live.attemptId, operationId: live.operationId,
     providerBinding: live.providerBinding, workspaceRef: live.workspaceRef, intentMode: plan.intentMode},
     plan, live.workspaceRef, plan.arguments, executionMaterialSha256);
@@ -60,6 +56,7 @@ export const validateFinalHostLaunch = async (live: LiveCustody, plan: HostCusto
 
 /** Synchronous final checks immediately before publication and first execution. */
 export const recheckFinalHostLaunch = (live: LiveCustody, launch: LaunchCandidate & {readonly executable: ExecutableObservation}): void => {
+  const sealedLinuxRoot = live.launchAuthority !== undefined && launch.plan.containmentProfile === "strict-linux-cgroup-v2";
   if (live.launchAuthority === undefined) {assertRetainedWorkspaceAuthority(live);}
   else {
     live.retainedWorkspaceAuthority!.assertLaunchDescriptor(live.launchAuthority.workspaceDescriptor.parentDescriptor);
@@ -67,7 +64,7 @@ export const recheckFinalHostLaunch = (live: LiveCustody, launch: LaunchCandidat
     // Only the same already-acquired root descriptor may account for that change.
     const root = fstatSync(live.launchAuthority.privateRootDescriptor.parentDescriptor, {bigint: true});
     if (!root.isDirectory()) {reject();}
-    sameDirectory(launch.privatePaths.root, root, true);
+    sameDirectory(launch.privatePaths.root, root, sealedLinuxRoot);
   }
   for (const [path, observation] of [
     [live.workspaceRef, launch.workspace], [launch.plan.privateRootPath, launch.privatePaths.root],
@@ -75,7 +72,7 @@ export const recheckFinalHostLaunch = (live: LiveCustody, launch: LaunchCandidat
   ] as const) {
     const stats = lstatSync(path, {bigint: true});
     if (!stats.isDirectory() || stats.isSymbolicLink()) {reject();}
-    sameDirectory(observation, stats, live.launchAuthority !== undefined && path === launch.plan.privateRootPath);
+    sameDirectory(observation, stats, sealedLinuxRoot && path === launch.plan.privateRootPath);
   }
   const stats = lstatSync(launch.plan.executablePath, {bigint: true});
   if (!stats.isFile() || stats.isSymbolicLink()) {reject();}
