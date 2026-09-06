@@ -184,7 +184,7 @@ test("in-flight membership is retained before cleanup and a late container remai
   };
   const rejection = assert.rejects(f.owner.observeContainer(f.container, call())); await reached.promise;
   const cleanup = f.owner.cleanupNetwork(); let settled = false;
-  void cleanup.then(() => {settled = true;}); await Promise.resolve();
+  void cleanup.then(() => {settled = true; return settled;}); await Promise.resolve();
   assert.equal(settled, false);
   assert.equal(f.owner.signal.aborted, true);
   release.resolve(); await rejection;
@@ -227,7 +227,8 @@ for (const boundary of ["intent-ownership", "intent-append", "allocation-observa
 
 test("a missing journal observation reader cannot be substituted by matching raw readback", async () => {
   const f = networkFixture(); const owner = f.resources(); const storage = new MemoryV4Storage();
-  const journal = new HostHttpEgressV4Journal(storage, f.subject, {readObservation: () => undefined});
+  const observations = new WeakMap<object, never>();
+  const journal = new HostHttpEgressV4Journal(storage, f.subject, {readObservation: token => observations.get(token)});
   await journal.prepare(`command:${v4Hash("open-without-network-issuer")}`);
   await assert.rejects(owner.prepare(journal, f.current, call()));
   assert.equal(owner.signal.aborted, true); assert.ok(f.state.network);

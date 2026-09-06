@@ -1,3 +1,4 @@
+import { types } from "node:util";
 import { addAbortListener } from "node:events";
 import { DockerOperationNetwork, operationNetworkName, awaitNetworkCleanupWork, validateAuthorityShape, snapshotDockerEngineCall,
   type DockerOperationNetworkInput, type DockerOperationNetworkBinding } from "./engine/docker-engine-composition.js";
@@ -7,6 +8,15 @@ import { HostHttpEgressV4Journal } from "./journal/host-http-egress-v4-journal.j
 import { v4Digest, v4Exact, v4Hash, v4Subject } from "./journal/host-http-egress-v4-codec.js";
 import type { HostHttpEgressV4Intent, HostHttpEgressV4Observation, HostHttpEgressV4ObservationOwner,
   HostHttpEgressV4Subject } from "./journal/host-http-egress-v4-types.js";
+
+/** Adapter-private resource capture and native abort subscription used by outer composition. */
+export const captureDockerHttpResourceRecord = <T extends object>(input: T): T => {
+  if (input === null || typeof input !== "object" || types.isProxy(input) ||
+    Object.getPrototypeOf(input) !== Object.prototype || Reflect.ownKeys(input).some(key =>
+      !("value" in Object.getOwnPropertyDescriptor(input, key)!))) {throw new TypeError("Host resource recipe unavailable");}
+  return Object.freeze({...input});
+};
+export const subscribeDockerHttpAbort = addAbortListener;
 
 const rejected = (): Error => new Error("Docker HTTP operation resource ownership is unproven");
 const {evidence, recordIntent, target, recordObservation} = HostHttpEgressV4Journal.prototype;
@@ -171,8 +181,8 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
     const completion = Promise.withResolvers<"absent" | "unknown">(); this.#cleanup = completion.promise;
     this.cutoff();
     void this.#clean().then(result => {
-      this.#cleanup = undefined; completion.resolve(result);
-    }, () => {this.#cleanup = undefined; completion.resolve("unknown");});
+      this.#cleanup = undefined; return completion.resolve(result);
+    }, () => {this.#cleanup = undefined; return completion.resolve("unknown");});
     return completion.promise;
   }
   async #clean(): Promise<"absent" | "unknown"> {

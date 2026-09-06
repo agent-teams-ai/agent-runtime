@@ -154,7 +154,7 @@ test("cleanup waits for a late successful POST and seals the allocation slot fir
   f.state.after = async label => {if (label === "POST /v1.47/networks/create") {reached.resolve(); await release.promise;}};
   const opening = owner.allocate(call()); const rejected = assert.rejects(opening); await reached.promise;
   const cleanup = owner.remove(call());
-  let settled = false; void cleanup.then(() => {settled = true;});
+  let settled = false; void cleanup.then(() => {settled = true; return settled;});
   await Promise.resolve(); assert.equal(settled, false);
   release.resolve(); await rejected;
   assert.equal((await cleanup).state, "absent");

@@ -72,6 +72,8 @@ boundaries:
       packages: []
       builtins:
         - node:crypto
+        # Native abort subscriptions retain cancellation despite stopped event propagation.
+        - node:events
         - node:fs
         - node:fs/promises
         - node:http
@@ -95,6 +97,8 @@ boundaries:
       builtins:
         - node:child_process
         - node:crypto
+        # Native abort subscriptions retain cancellation despite stopped event propagation.
+        - node:events
         - node:fs
         - node:fs/promises
         - node:path

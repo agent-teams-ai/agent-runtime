@@ -49,7 +49,7 @@ export class DockerOperationNetwork {
   #cut = false;
   #uncertain = false;
   #foreign = false;
-  #allocationPending: Promise<void> | undefined;
+  #allocationPending: Promise<unknown> | undefined;
   #removal: Promise<DockerOperationNetworkRemoval> | undefined;
 
   public constructor(input: DockerOperationNetworkInput) {
@@ -111,7 +111,7 @@ export class DockerOperationNetwork {
     if (this.#entered) {throw networkFailure();}
     this.#entered = true;
     const completion = Promise.withResolvers<DockerOperationNetworkObservation>();
-    this.#allocationPending = completion.promise.then(() => {}, () => {});
+    this.#allocationPending = completion.promise.then(() => null, () => null);
     try {
       const call = snapshotDockerEngineCall(input);
       this.#admit(call);
@@ -232,10 +232,10 @@ export class DockerOperationNetwork {
     this.sealAdmission();
     // Validate inside the owned promise so a malformed call cannot strand it.
     void this.#remove(input).then(result => {
-      this.#removal = undefined; completion.resolve(result);
+      this.#removal = undefined; return completion.resolve(result);
     }, () => {
       this.#uncertain = true; this.#removal = undefined;
-      completion.resolve(Object.freeze({state: "unknown"}));
+      return completion.resolve(Object.freeze({state: "unknown"}));
     });
     return completion.promise;
   }

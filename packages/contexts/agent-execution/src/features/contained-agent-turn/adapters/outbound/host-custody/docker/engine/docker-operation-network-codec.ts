@@ -42,6 +42,33 @@ export type DockerOperationNetworkObservation = Readonly<{
   networkId: string; gateway: string; evidenceSha256: string;
   endpoint: Readonly<{containerId: string; endpointId: string; address: string}> | null;
 }>;
+const operationNetworkGateway = (value: unknown): string => {
+  const ipam = networkObject(value);
+  const configs = ipam.Config;
+  if (ipam.Driver !== "default" || !Array.isArray(configs) || configs.length !== 1 ||
+    ipam.Options !== null && canonicalJsonSha256(networkObject(ipam.Options)) !== canonicalJsonSha256({})) {throw networkFailure();}
+  const gateway = networkObject(configs[0]).Gateway;
+  if (typeof gateway !== "string" || !isIPv4(gateway)) {throw networkFailure();}
+  const [a, b] = gateway.split(".").map(Number);
+  if (!(a === 10 || a === 172 && b! >= 16 && b! <= 31 || a === 192 && b === 168)) {throw networkFailure();}
+  return gateway;
+};
+
+const operationNetworkEndpoint = (value: unknown, container: DockerContainerAuthority | undefined): DockerOperationNetworkObservation["endpoint"] => {
+  const members = Object.entries(networkObject(value));
+  if (members.length > 1 || members.length === 1 && members[0]![0] !== container?.containerId) {throw networkFailure();}
+  let endpoint: DockerOperationNetworkObservation["endpoint"] = null;
+  if (members.length === 1) {
+    const [containerId, raw] = members[0]!;
+    const member = networkObject(raw);
+    const address = member.IPv4Address;
+    if (typeof address !== "string" || !/^.+\/(?:[1-9]|[12][0-9]|3[0-2])$/u.test(address) ||
+      !isIPv4(address.split("/")[0]!) || member.IPv6Address !== "") {throw networkFailure();}
+    endpoint = Object.freeze({containerId, endpointId: networkDigest(member.EndpointID), address});
+  }
+  return endpoint;
+};
+
 /** Strict values for the fixed internal bridge recipe; descriptive Engine fields
  * (Created, IPAM subnet, bridge MAC) are observed but never ownership authority. */
 export const decodeOperationNetwork = (input: Readonly<{
@@ -58,25 +85,8 @@ export const decodeOperationNetwork = (input: Readonly<{
     canonicalJsonSha256(networkObject(value.Options)) !== canonicalJsonSha256({"com.docker.network.bridge.enable_icc": "false"})) {
     throw networkFailure();
   }
-  const ipam = networkObject(value.IPAM);
-  const configs = ipam.Config;
-  if (ipam.Driver !== "default" || !Array.isArray(configs) || configs.length !== 1 ||
-    ipam.Options !== null && canonicalJsonSha256(networkObject(ipam.Options)) !== canonicalJsonSha256({})) {throw networkFailure();}
-  const gateway = networkObject(configs[0]).Gateway;
-  if (typeof gateway !== "string" || !isIPv4(gateway)) {throw networkFailure();}
-  const [a, b] = gateway.split(".").map(Number);
-  if (!(a === 10 || a === 172 && b! >= 16 && b! <= 31 || a === 192 && b === 168)) {throw networkFailure();}
-  const members = Object.entries(networkObject(value.Containers));
-  if (members.length > 1 || members.length === 1 && members[0]![0] !== input.container?.containerId) {throw networkFailure();}
-  let endpoint: DockerOperationNetworkObservation["endpoint"] = null;
-  if (members.length === 1) {
-    const [containerId, raw] = members[0]!;
-    const member = networkObject(raw);
-    const address = member.IPv4Address;
-    if (typeof address !== "string" || !/^.+\/(?:[1-9]|[12][0-9]|3[0-2])$/u.test(address) ||
-      !isIPv4(address.split("/")[0]!) || member.IPv6Address !== "") {throw networkFailure();}
-    endpoint = Object.freeze({containerId, endpointId: networkDigest(member.EndpointID), address});
-  }
+  const gateway = operationNetworkGateway(value.IPAM);
+  const endpoint = operationNetworkEndpoint(value.Containers, input.container);
   return Object.freeze({networkId: id, gateway, endpoint, evidenceSha256: canonicalJsonSha256(value)});
 };
 

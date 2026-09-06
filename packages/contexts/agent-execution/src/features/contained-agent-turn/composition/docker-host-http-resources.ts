@@ -1,6 +1,4 @@
-import { types } from "node:util";
-import { addAbortListener } from "node:events";
-import { DockerHttpNetworkResources, type DockerHttpNetworkResourceInput } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener, DockerHttpNetworkResources, type DockerHttpNetworkResourceInput } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import { NodeProviderProcessCustody } from "../adapters/outbound/host-custody/node-provider-process-custody.js";
 import { createV4HostHttpListenerLifecycle } from "./v4-host-http-listener-lifecycle.js";
 
@@ -9,12 +7,7 @@ type Handoff = Parameters<Preparation["acquire"]>[0];
 type Resources = Parameters<Preparation["prepareResources"]>[1];
 type Journal = Parameters<DockerHttpNetworkResources["prepare"]>[0];
 const {httpPreparation} = NodeProviderProcessCustody;
-const data = <T extends object>(input: T): T => {
-  if (input === null || typeof input !== "object" || types.isProxy(input) ||
-    Object.getPrototypeOf(input) !== Object.prototype || Reflect.ownKeys(input).some(key =>
-      !("value" in Object.getOwnPropertyDescriptor(input, key)!))) {throw new TypeError("Host resource recipe unavailable");}
-  return Object.freeze({...input});
-};
+
 
 /** Private post-claim assembly. Native listener/accepted-connection/TLS/local-cut
  * implementations stay under Host custody; Engine operations stay under Docker.

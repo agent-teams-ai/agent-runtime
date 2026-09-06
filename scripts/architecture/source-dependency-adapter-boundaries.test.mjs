@@ -397,3 +397,14 @@ test("Docker process composition uses its narrow entrypoint and a type-only Host
   assert.deepEqual(rules(await analyzeFixture({[composition]: "import '../adapters/outbound/host-custody/docker/docker-provider-process-bridge.js';\n", [internal]: "export {};\n"})),
     ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
 });
+
+
+test("native abort subscriptions stay in physical adapters, never core or outer composition", async () => {
+  for (const path of [paths.docker, paths.dockerNode, paths.hostNode]) {
+    assert.deepEqual(await analyzeFixture({[path]: 'import {addAbortListener} from "node:events";\n'}), [], path);
+  }
+  for (const path of [paths.core, paths.composition]) {
+    assert.deepEqual(rules(await analyzeFixture({[path]: 'import {addAbortListener} from "node:events";\n'})),
+      ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
+  }
+});
