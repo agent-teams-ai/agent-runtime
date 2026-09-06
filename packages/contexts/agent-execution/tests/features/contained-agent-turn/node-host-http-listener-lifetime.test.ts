@@ -83,7 +83,7 @@ test("explicit close while bind is pending cannot mistake unbound close for fina
   const f = fixture(t, { autoListen: false });
   const opening = f.recipe.open(async () => {assert.fail();}, f.cutoff);
   const rejected = assert.rejects(opening); const closing = f.recipe.close();
-  let settled = false; void closing.then(() => {settled = true;});
+  let settled = false; void closing.then(() => {settled = true; return null;});
   await rejected; await flush();
   assert.equal(f.server.closeCalls, 1); assert.equal(settled, false);
   f.server.bind(); await flush();
@@ -157,7 +157,7 @@ for (const missing of ["native close", "socket close", "consumer", "close throws
     socket.autoClose = missing !== "socket close";
     const listener = await f.recipe.open(async () => {await work.promise;}, f.cutoff);
     f.server.connection(socket);
-    const closing = listener.close(); let settled = false; void closing.then(() => {settled = true;});
+    const closing = listener.close(); let settled = false; void closing.then(() => {settled = true; return null;});
     if (missing !== "consumer") {work.resolve();}
     await flush(); assert.equal(settled, false);
     await f.clock.advance(config.closureDeadline);
@@ -173,7 +173,7 @@ test("close waits for actual native and refused socket acknowledgement, independ
   const listener = await f.recipe.open(async () => {assert.fail();}, f.cutoff);
   listener.sealAdmission();
   const refused = new SyntheticSocket(); refused.autoClose = false; f.server.connection(refused);
-  const closing = listener.close(); let settled = false; void closing.then(() => {settled = true;});
+  const closing = listener.close(); let settled = false; void closing.then(() => {settled = true; return null;});
   assert.equal(f.cutoff.signal.aborted, true);
   await flush(); assert.equal(settled, false); f.server.ackClose();
   await flush(); assert.equal(settled, false); refused.actualClose();
@@ -184,7 +184,7 @@ test("consumer reentrant close retains its own pending work before invoking the 
   const f = fixture(t); const work = Promise.withResolvers<void>(); let closing: ReturnType<typeof f.recipe.close> | undefined;
   const listener = await f.recipe.open(async () => {closing = f.recipe.close(); await work.promise;}, f.cutoff);
   f.server.connection(); assert.ok(closing); assert.equal(listener.close(), closing);
-  let settled = false; void closing.then(() => {settled = true;});
+  let settled = false; void closing.then(() => {settled = true; return null;});
   await flush(); assert.equal(settled, false); work.resolve();
   assert.deepEqual(await closing, { state: "closed" }); assert.equal(f.server.closeCalls, 1);
 });

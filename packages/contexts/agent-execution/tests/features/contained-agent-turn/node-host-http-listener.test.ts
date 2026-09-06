@@ -188,3 +188,30 @@ test("synchronous consumer cancellation keeps pending work in closure accounting
   release.resolve(); assert.deepEqual(await listener.close(), { state: "closed" });
   assert.equal(f.clock.pending, 0);
 });
+
+
+test("sealed admission retains the native port until explicit final release", { timeout: 5_000 }, async () => {
+  const f = fixture(); let calls = 0;
+  const listener = await f.recipe.open(async () => {calls += 1;}, f.cutoff);
+  const contender = new Server();
+  try {
+    listener.sealAdmission();
+    assert.equal(f.cutoff.signal.aborted, true);
+    const collision = once(contender, "error");
+    contender.listen({ host: listener.address.address, port: listener.address.port, exclusive: true });
+    const [error] = await collision;
+    assert.equal((error as NodeJS.ErrnoException).code, "EADDRINUSE");
+    const rejected = await client(listener.address.port);
+    await closed(rejected); assert.equal(calls, 0);
+    assert.deepEqual(await listener.close(), { state: "closed" });
+    const rebound = once(contender, "listening");
+    contender.listen({ host: listener.address.address, port: listener.address.port, exclusive: true });
+    await rebound; assert.equal(contender.listening, true);
+  } finally {
+    await listener.close();
+    if (contender.listening) {
+      await new Promise<void>((resolve, reject) => {contender.close(error => {if (error) {reject(error);} else {resolve();}});});
+    }
+  }
+  assert.equal(f.clock.pending, 0);
+});
