@@ -50,7 +50,9 @@ test("foreign lifecycle, structural launch, proxies and replaced observation met
 
 test("one owner and one acquisition retain exact original proof, handoff and distinct opaque session identity", async t => {
   const f = await fixture(t); const other = await fixture(t);
+  assert.notEqual(f.handoff.underlyingCustodyRef, f.launched.key.custodyId);
   const owner = f.createOwner(); const preparation = preparationFor(owner);
+  assert.throws(() => preparation.acquire({...f.handoff, underlyingCustodyRef: f.launched.key.custodyId}), /conflicts/u);
   const foreign = preparationFor(other.createOwner()).acquire(other.handoff);
   assert.throws(() => f.createOwner(), /conflicts/u);
   assert.throws(() => preparation.acquire({...f.handoff, committedDispatchProof: {...f.proof}}), /conflicts/u);

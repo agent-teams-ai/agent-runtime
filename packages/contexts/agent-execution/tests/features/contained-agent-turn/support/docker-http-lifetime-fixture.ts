@@ -75,7 +75,7 @@ export const fixture = async (t: TestContext) => {
     create: {...createInput("/synthetic/docker-http-no-files"), imageDigest: subject.imageDigest,
       launchFingerprintSha256: subject.attempt.launchFingerprintSha256, operationNonceSha256: subject.attempt.operationNonceSha256}});
   const signal = new AbortController();
-  const handoff = {committedDispatchProof: proof, underlyingCustodyRef: launched.key.custodyId, signal: signal.signal};
+  const handoff = {committedDispatchProof: proof, underlyingCustodyRef: `urn:agent-runtime:docker-host-reservation:${"b".repeat(64)}`, signal: signal.signal};
   const reservationInput = {lifecycle, launch: launched, hostLifecycleGenerationSha256: generation, claimed: handoff};
   const createOwner = () => new DockerCustodyHttpReservation(reservationInput);
   const contain = () => lifecycle.contain({...launched, call: engineCall()});

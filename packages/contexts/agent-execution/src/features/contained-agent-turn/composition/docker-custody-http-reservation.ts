@@ -51,8 +51,9 @@ export class DockerCustodyHttpReservation {
     const original = custodyDataRecord(input.claimed);
     const checked = readHostCustodyHttpHandoff(original);
     const key = this.#observed.key;
-    if (ownerKeys.some(field => checked.committedDispatchProof[field] !== key[field]) ||
-      checked.underlyingCustodyRef !== key.custodyId) {throw rejected();}
+    // The opaque Host reservation reference is distinct from the operation custodyId.
+    // Retain the trusted handoff reference; acquire must present exactly the same one.
+    if (ownerKeys.some(field => checked.committedDispatchProof[field] !== key[field])) {throw rejected();}
     // Validation above read only inert scalars. Preserve the exact capability
     // received from the trusted caller, including identity-based provenance.
     const claimed = Object.freeze({...checked, committedDispatchProof: Object.freeze(original.committedDispatchProof)});
