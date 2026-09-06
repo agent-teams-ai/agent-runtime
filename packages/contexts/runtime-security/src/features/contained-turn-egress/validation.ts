@@ -44,6 +44,7 @@ export const isDigest = (value: unknown): value is string => typeof value === "s
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 const normalizedPath = (value: unknown): value is string => typeof value === "string" && value.length > 0 &&
   value.length <= 2_048 && value.startsWith("/") && !value.includes("\\") && !value.includes("#") &&
+  !/(?:^|\/)\.{1,2}(?:\/|$)/u.test(value.split("?", 1)[0]!) &&
   !value.includes("//") && ![...value].some(character => (character.codePointAt(0) ?? 0) <= 32 ||
     character.codePointAt(0) === 127) && !/%(?:2e|2f|5c|25|0[0-9a-f]|7f)/iu.test(value) && !/%(?![0-9a-f]{2})/iu.test(value);
 const dangerousHeaders = new Set(["authorization", "connection", "content-length", "cookie", "forwarded", "host",
@@ -149,10 +150,12 @@ const createRequestValidation = (tools: ValidationTools) => {
   const snapshotHeaders = (value: unknown) => {
     const candidates = dense(value, 64); if (candidates === undefined) {return;}
     const result: Readonly<{name: string; value: string}>[] = [];
+    const seenNames = new Set<string>();
     for (let index = 0; index < candidates.length; index += 1) {const header = exact(candidates[index], ["name", "value"]);
       if (header === undefined || typeof header.name !== "string" || typeof header.value !== "string" ||
           header.name !== header.name.toLowerCase() || !/^[a-z0-9-]{1,64}$/u.test(header.name) ||
-          dangerousHeaders.has(header.name) || header.value.length > 8_192 || /[\r\n\0]/u.test(header.value)) {return;}
+          dangerousHeaders.has(header.name) || seenNames.has(header.name) || header.value.length > 8_192 || /[\r\n\0]/u.test(header.value)) {return;}
+      seenNames.add(header.name);
       result.push(Object.freeze({name: header.name, value: header.value}));}
     return Object.freeze(result);
   };
