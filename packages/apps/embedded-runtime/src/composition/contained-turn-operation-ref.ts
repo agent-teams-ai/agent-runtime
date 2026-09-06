@@ -1,6 +1,6 @@
 import type { ContainedTurnCompositionScope } from "./trusted-runtime-access-scope.js";
 
-export interface ContainedTurnCompositionOperationRef {
+export interface ContainedTurnCompositionOperationRef<Scope extends ContainedTurnCompositionScope = ContainedTurnCompositionScope> {
   readonly operationId: string;
-  readonly scope: ContainedTurnCompositionScope;
+  readonly scope: Scope;
 }

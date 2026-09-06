@@ -72,14 +72,14 @@ export interface ContainedTurnRuntimeAccessDependencies {
   readonly hostSignal: AbortSignal;
   readonly isDisposed: () => boolean;
   readonly onAccepted: (
-    operation: ContainedTurnCompositionOperationRef,
+    operation: ContainedTurnCompositionOperationRef<ContainedTurnAccessAuthority>,
     ownerCall: object,
   ) => void;
   readonly onObserved: (
     operationId: string,
     status: ContainedTurnOwnerStatus | "contract_violation",
   ) => void;
-  readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef) => Promise<unknown>;
+  readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef<ContainedTurnAccessAuthority>) => Promise<unknown>;
   readonly scope: ContainedTurnAccessAuthority | undefined;
   readonly submissionCoordinator: ContainedTurnSubmissionCoordinator | undefined;
   readonly executeCall: <T>(operation: () => Promise<T>) => Promise<T>;
@@ -92,14 +92,14 @@ interface ContainedTurnSubmissionOwnerDependencies {
   readonly hostSignal: AbortSignal;
   readonly isDisposed: () => boolean;
   readonly onAccepted: (
-    operation: ContainedTurnCompositionOperationRef,
+    operation: ContainedTurnCompositionOperationRef<ContainedTurnAccessAuthority>,
     ownerCall: object,
   ) => void;
   readonly onObserved: (
     operationId: string,
     status: ContainedTurnOwnerStatus | "contract_violation",
   ) => void;
-  readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef) => Promise<unknown>;
+  readonly requestCancellation: (operation: ContainedTurnCompositionOperationRef<ContainedTurnAccessAuthority>) => Promise<unknown>;
   readonly scope: ContainedTurnAccessAuthority;
   readonly executeCall: <T>(operation: () => Promise<T>) => Promise<T>;
 }

@@ -263,11 +263,11 @@ export const copyInput = (
   }
 };
 
-export const copyAcceptedOperation = (
+export const copyAcceptedOperation = <Scope extends ContainedTurnCompositionScope>(
   operation: ContainedTurnCompositionOperationRef,
-  boundScope: ContainedTurnCompositionScope,
+  boundScope: Scope,
   onOperationId?: (operationId: unknown) => void,
-): ContainedTurnCompositionOperationRef => {
+): ContainedTurnCompositionOperationRef<Scope> => {
   let snapshot: OwnerSnapshot<Readonly<{
     operationId: unknown;
     projectId: unknown;
