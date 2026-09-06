@@ -72,6 +72,10 @@ const closeLiveCustody = async (
   live: LiveCustody,
   input: HostCustodyReleaseInput,
 ): Promise<HostCustodyReleaseOutcome> => {
+  // HTTP closure is resource custody only. Never remove its reconciliation owner
+  // or private root while preparation/retirement/endpoint release is unresolved.
+  const httpClosed = await boundedPromise(live.httpReservation.cleanup(), state.cleanupAfterMs);
+  if (httpClosed !== true) {return unprovenResult("http-resources-release-unproven", input, live);}
   const cooperativeDarwin = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group";
   const provedNoStart = isCompleteProvedNoStart(live);
   if (cooperativeDarwin && !provedNoStart) {

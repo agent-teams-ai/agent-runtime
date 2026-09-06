@@ -29,6 +29,7 @@ export type ContainmentResult =
 export type HostCustodyUnprovenReason =
   | "containment-deadline-unavailable"
   | "darwin-cooperative-reconciliation-required"
+  | "http-resources-release-unproven"
   | "ingress-incomplete"
   | "ingress-overflow"
   | "launch-fingerprint-unavailable"
@@ -181,6 +182,7 @@ export const unprovenResult = (
 
 interface ContainmentState extends HostCustodyEvidenceState {
   readonly launchBinding?: {readonly pending: Promise<void> | undefined};
+  readonly httpReservation?: {readonly pending: Promise<void> | undefined};
   child?: ChildProcessWithoutNullStreams;
   closureEvidence: HostCustodyClosureEvidence;
   contained?: Extract<ContainmentResult, { readonly kind: "contained" }>;
@@ -354,7 +356,7 @@ const settleNonAcknowledgedContainment = async (
   if (opened === DEADLINE_EXCEEDED) {return { kind: "unproven", reason: "owner-deadline-exceeded" };}
   if (opened !== true) {return { kind: "unproven", reason: "opening-deadline-exceeded" };}
   const prepared = await awaitWithDeadline(
-    () => (live.launchBinding?.pending ?? Promise.resolve()).then(() => true), containmentDeadline, options,
+    () => Promise.all([live.launchBinding?.pending, live.httpReservation?.pending]).then(() => true), containmentDeadline, options,
   );
   if (prepared !== true) {return {kind: "unproven", reason: "owner-deadline-exceeded"};}
   const acknowledgementFailure = await spawnAcknowledgementFailure(live, containmentDeadline, options);

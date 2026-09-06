@@ -1,11 +1,10 @@
-import { addAbortListener } from "node:events";
 import { hostLaunchFinalizationRecipe, type HostLaunchFinalizationRecipe } from "./host-custody-finalizable-plan.js";
 import type { ExecutableObservation, LaunchCandidate } from "./host-custody-launch.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 import type { NodeCustodyHttpLifetime } from "./node-provider-process-custody-http-reservation.js";
 import { recheckFinalHostLaunch, retainFinalizationHttpResources, validateFinalHostLaunch } from "./host-launch-finalization-validation.js";
 import {
-  prepareAuthenticatedHostHttpEgressSession, type HostHttpEgressSessionDependencies,
+  type prepareAuthenticatedHostHttpEgressSession, type HostHttpEgressSessionDependencies,
 } from "./egress/host-http-egress-session.js";
 
 export interface FinalHostLaunch extends LaunchCandidate {
@@ -81,12 +80,7 @@ export class HostLaunchBinding {
     live.httpReservation.assertPreparation(lifetime);
     if (this.#entered || this.#recipe === undefined || live.launchBinding !== this) {throw rejected();}
     this.#entered = true;
-    const proof = lifetime.committedDispatchProof;
-    const ingress = prepareAuthenticatedHostHttpEgressSession({
-      operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
-      hostBootId: proof.hostBootId, liveProcessSessionIdentity: lifetime.executionSessionIdentity,
-    });
-    addAbortListener(lifetime.signal, () => ingress.close());
+    const ingress = live.httpReservation.openIngress(lifetime);
     let stageUsed = false;
     let staged: StagedHostLaunch | undefined;
     let launch: FinalHostLaunch | undefined;
@@ -129,7 +123,7 @@ export class HostLaunchBinding {
         try {
           active(this);
           if (staged === undefined || session !== undefined) {throw rejected();}
-          session = ingress.bind(retainFinalizationHttpResources(dependencies, recipe.providerAccess));
+          session = live.httpReservation.bindSession(lifetime, retainFinalizationHttpResources(dependencies, recipe.providerAccess));
           active(this);
           return session;
         } catch {return fail();}

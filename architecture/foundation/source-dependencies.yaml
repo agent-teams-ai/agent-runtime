@@ -82,7 +82,8 @@ boundaries:
     dependencyMode: runtime
     roots:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker
-    entrypoints: []
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.ts
     allow:
       boundaries:
         - adapter.agent-execution.docker-engine
@@ -212,6 +213,7 @@ boundaries:
       boundaries:
         - adapter.agent-execution.claude-agent-sdk
         - adapter.agent-execution.codex-app-server
+        - adapter.agent-execution.docker-custody
         - adapter.agent-execution.host-custody
         - adapter.agent-execution.legacy-contained-turn-ports
         - adapter.agent-execution.provider-delegation-ports

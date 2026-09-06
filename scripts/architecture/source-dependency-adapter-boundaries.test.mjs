@@ -200,6 +200,7 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.deepEqual(production.allowedBoundaries, [
     "adapter.agent-execution.claude-agent-sdk",
     "adapter.agent-execution.codex-app-server",
+    "adapter.agent-execution.docker-custody",
     "adapter.agent-execution.host-custody",
     "adapter.agent-execution.legacy-contained-turn-ports",
     "adapter.agent-execution.provider-delegation-ports",
@@ -359,4 +360,14 @@ test("Docker JSON remains neutral and cannot import its engine consumer", async 
     [paths.dockerPort]: "export {};\n",
   });
   assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+});
+
+
+test("V4 listener composition uses one Docker entrypoint; Host still cannot import it", async () => {
+  const entry = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.ts";
+  assert.deepEqual(boundariesById.get("adapter.agent-execution.docker-custody").entrypoints, [entry]);
+  assert.deepEqual(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.js';\n"}), []);
+  assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-http-listener-entrypoint.js';\n"})), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+  const internal = entry.replace("docker-http-listener-entrypoint.ts", "docker-http-listener-lifecycle.ts");
+  assert.deepEqual(rules(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-lifecycle.js';\n", [internal]: "export {};\n"})), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
 });

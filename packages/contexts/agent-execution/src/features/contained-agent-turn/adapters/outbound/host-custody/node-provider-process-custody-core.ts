@@ -116,6 +116,13 @@ export class NodeProviderProcessCustodyCore implements
         preparations.set(lifetime, live);
         return lifetime;
       },
+      prepareResources(lifetime: NodeCustodyHttpLifetime, input: Parameters<NodeCustodyHttpPreparation["prepareResources"]>[1]) {
+        const live = preparations.get(lifetime);
+        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live) {
+          throw new TypeError("Host Custody HTTP preparation identity conflicts");
+        }
+        return live.httpReservation.prepareResources(lifetime, input);
+      },
       finalize(lifetime: NodeCustodyHttpLifetime) {
         const live = preparations.get(lifetime);
         if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live) {

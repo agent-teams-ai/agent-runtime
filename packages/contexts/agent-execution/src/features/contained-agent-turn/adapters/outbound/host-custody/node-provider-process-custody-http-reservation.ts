@@ -1,3 +1,4 @@
+import { custodyDataRecord } from "./host-custody-inert-record.js";
 import { addAbortListener } from "node:events";
 import { types } from "node:util";
 import {
@@ -6,6 +7,9 @@ import {
 } from "../../../domain/committed-dispatch-proof-v1.js";
 import type { ContainedTurnHostPostClaimPreparation } from "./contained-turn-kernel-custody-contracts.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
+
+import { NodeCustodyHttpResources, type NodeCustodyHttpResourceInput } from "./node-custody-http-resources.js";
+import type { HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
 
 const nativeRemove = EventTarget.prototype.removeEventListener;
 
@@ -30,22 +34,12 @@ export interface NodeCustodyHttpLifetime {
  */
 export interface NodeCustodyHttpPreparation {
   acquire(input: Handoff): NodeCustodyHttpLifetime;
+  prepareResources(lifetime: NodeCustodyHttpLifetime, input: NodeCustodyHttpResourceInput):
+    ReturnType<NodeCustodyHttpResources["prepare"]>;
   finalize(lifetime: NodeCustodyHttpLifetime): import("./host-launch-finalization.js").ClaimedHostLaunchFinalizer;
 }
 
-/** Snapshot data without executing proxy traps, accessors or inherited properties. */
-export const custodyDataRecord = <Value extends object>(value: Value): Value => {
-  if (value === null || typeof value !== "object" || types.isProxy(value)) {
-    throw new TypeError("Host Custody requires an inert data record");
-  }
-  const result = Object.create(null) as Value;
-  for (const key of Reflect.ownKeys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-    if (!("value" in descriptor)) {throw new TypeError("Host Custody accessors are unavailable");}
-    Object.defineProperty(result, key, descriptor);
-  }
-  return Object.freeze(result);
-};
+export { custodyDataRecord } from "./host-custody-inert-record.js";
 
 export const readNodeCustodyHttpHandoff = (input: Handoff): Handoff => {
   const record = custodyDataRecord(input);
@@ -74,17 +68,37 @@ export const readNodeCustodyHttpHandoff = (input: Handoff): Handoff => {
 };
 
 /** Retained directly by LiveCustody from reservation creation through release.
- * Acquisition supplies identity/cutoff only, never HTTP readiness. Listener/journal
- * retention and post-claim launch finalization remain separate prerequisites.
+ * Acquisition supplies identity/cutoff only, never HTTP readiness. Concrete HTTP
+ * preparation and finalization use fixed slots on this same reservation.
  * No cleanup registry or physical-containment claim lives here.
  */
 export class NodeProviderProcessCustodyHttpReservation {
   readonly #controller = new AbortController();
+  readonly #resources = new NodeCustodyHttpResources(this, this.#controller);
   readonly #identity = Object.freeze(Object.create(null)) as NodeCustodyExecutionSessionIdentity;
   #claimed = false;
   #cutoff = false;
   #preparationAbort: {readonly signal: AbortSignal; readonly listener: () => void} | undefined;
   #lifetime: NodeCustodyHttpLifetime | undefined;
+
+  public get pending(): Promise<void> | undefined {return this.#resources.pending;}
+
+  public cleanup(): Promise<boolean> {this.cutoff(); return this.#resources.cleanup();}
+
+  public prepareResources(lifetime: NodeCustodyHttpLifetime, input: NodeCustodyHttpResourceInput) {
+    this.assertPreparation(lifetime);
+    return this.#resources.prepare(lifetime, input);
+  }
+
+  public openIngress(lifetime: NodeCustodyHttpLifetime) {
+    this.assertPreparation(lifetime);
+    return this.#resources.openIngress(lifetime);
+  }
+
+  public bindSession(lifetime: NodeCustodyHttpLifetime, dependencies: HostHttpEgressSessionDependencies) {
+    this.assertPreparation(lifetime);
+    return this.#resources.bindSession(dependencies);
+  }
 
   public get executionSessionIdentity(): NodeCustodyExecutionSessionIdentity {return this.#identity;}
 
@@ -124,6 +138,7 @@ export class NodeProviderProcessCustodyHttpReservation {
       signal: this.#controller.signal, underlyingCustodyRef: live.custodyRef });
     const listener = () => {this.cutoff();};
     this.#preparationAbort = {signal: handoff.signal, listener};
+    addAbortListener(this.#controller.signal, listener);
     addAbortListener(handoff.signal, listener);
     return this.#lifetime;
   }
@@ -134,7 +149,7 @@ export class NodeProviderProcessCustodyHttpReservation {
     this.#cutoff = true;
     const preparation = this.#preparationAbort;
     this.#preparationAbort = undefined;
-    try {this.#controller.abort();}
+    try {this.#resources.cutoff(); this.#controller.abort();}
     finally {
       // Node's disposable consults a mutable signal property. Retire only our
       // retained listener through the native operation, even during reentrancy.
