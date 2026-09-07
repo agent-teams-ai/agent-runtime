@@ -184,4 +184,50 @@ test("PA dispatch disposable PostgreSQL durability", {skip: !databaseUrl, timeou
       requestDigest: input.requestDigest, ...selected}), {kind: "not_found"});
   });
 
+  await t.test("matching CAS cannot overwrite independently revoked or rotated materialization authority", async () => {
+    const materialization = createPostgresMaterializationRepository(b); t.after(materialization.dispose);
+    const cases = [
+      {name: "revocation", current: {revocation: "revoked" as const}, proposed: {}, error: /revived/u},
+      {name: "availability", current: {availability: "unavailable" as const}, proposed: {}, error: /revived/u},
+      {name: "same-revision-credential", current: {credentialGeneration: 2}, proposed: {}, error: /rebound/u},
+      {name: "revision", current: {bindingRevision: 3}, proposed: {bindingRevision: 2, authorityHeadDigest: "head:revision:2"}, error: /advance/u},
+      {name: "credential", current: {bindingRevision: 2, credentialGeneration: 2, credentialBindingRef: "credential:rotated"},
+        proposed: {bindingRevision: 3, authorityHeadDigest: "head:credential:3"}, error: /advance/u},
+    ];
+    for (const scenario of cases) {
+      const initial = {...head, scopeDigest: `scope:publication-${scenario.name}`};
+      const selected = {provider: initial.provider, scope: {tenantId: initial.tenantId, projectId: initial.projectId, scopeDigest: initial.scopeDigest}};
+      const original = {head: initial, publicationRequestId: "publish:initial", expectedHeadVersion: 0, expectedMaterializationHeadVersion: 0};
+      assert.deepEqual(await one.control.publishHead(original), {headVersion: 1, materializationHeadVersion: 1});
+      const binding = await materialization.observeBinding({...selected.scope, provider: selected.provider}); assert.ok(binding);
+      const independent = {...binding, ...scenario.current};
+      assert.equal(await materialization.replaceBinding(independent, 1), 2);
+      const proposed = {...initial, ...scenario.proposed};
+      const rejected = {head: proposed, publicationRequestId: "publish:rejected", expectedHeadVersion: 1, expectedMaterializationHeadVersion: 2};
+      await assert.rejects(two.control.publishHead(rejected), scenario.error);
+      assert.deepEqual(await materialization.observeBinding({...selected.scope, provider: selected.provider}), independent);
+      const observed = await one.control.observeHead(selected);
+      assert.equal(observed.headVersion, 1); assert.deepEqual(observed.head, initial);
+      const journal = await a.query(`SELECT count(*) AS n FROM provider_access.dispatch_publication p
+        JOIN provider_access.dispatch_owner o USING(owner_id) WHERE o.owner=$1::jsonb AND p.request_id=$2`,
+        [JSON.stringify(selected), rejected.publicationRequestId]);
+      assert.equal(journal.rows[0].n, "0");
+      const input = await inputFor(initial);
+      assert.deepEqual(await one.dispatchConsumption.consumeForDispatch(input), {kind: "indeterminate"});
+      // Acknowledged history stays replayable, without undoing independent changes.
+      assert.deepEqual(await two.control.publishHead(original), {headVersion: 1, materializationHeadVersion: 1});
+      assert.deepEqual(await materialization.observeBinding({...selected.scope, provider: selected.provider}), independent);
+      // Only genuinely advancing authority may replace the independent binding.
+      const next = {...initial, bindingRevision: 4, credentialGeneration: 2, credentialBindingRef: "credential:rotated",
+        authorityHeadDigest: proposed.authorityHeadDigest === initial.authorityHeadDigest ? "head:advanced" : proposed.authorityHeadDigest};
+      assert.deepEqual(await one.control.publishHead({head: next, publicationRequestId: "publish:advanced",
+        expectedHeadVersion: 1, expectedMaterializationHeadVersion: 2}), {headVersion: 2, materializationHeadVersion: 3});
+      const advanced = await materialization.observeBinding({...selected.scope, provider: selected.provider});
+      assert.equal(advanced?.bindingRevision, 4); assert.equal(advanced?.credentialGeneration, 2);
+      assert.deepEqual(await two.control.publishHead(original), {headVersion: 1, materializationHeadVersion: 1});
+      assert.deepEqual((await one.control.observeHead(selected)).head, next);
+      assert.deepEqual(await materialization.observeBinding({...selected.scope, provider: selected.provider}), advanced);
+    }
+  });
+
 });

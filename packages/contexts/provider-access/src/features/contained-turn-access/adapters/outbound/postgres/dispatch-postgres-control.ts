@@ -1,5 +1,6 @@
 import { canonicalJson, snapshotDispatchBindingHead, snapshotDispatchControlTime, snapshotDispatchId,
   type DispatchBindingHead } from "../../../domain/dispatch-consumption.js";
+import { snapshotAuthorizationCommand } from "../../../domain/materialization-authorization.js";
 import { detachedDispatchData, exactDispatchDataRecord } from "../../dispatch-consumption-data.js";
 import { createSha256DispatchConsumptionDigest } from "../sha256-dispatch-consumption-digest.js";
 import { assertMaterializationSchema } from "./materialization-postgres-schema.js";
@@ -18,11 +19,11 @@ export interface DispatchHeadPublicationResult { readonly headVersion: number; r
 
 // Status changes retain the one-use identity. New authority requires a strictly
 // newer binding revision; an old digest can never be republished as fresh use.
-export const validateDispatchHeadAdvance = (previous: DispatchBindingHead | undefined, next: DispatchBindingHead): void => {
-  if (!previous) {return;}
-  if (next.authorityHeadDigest === previous.authorityHeadDigest) {
-    const identity = (head: DispatchBindingHead) => {
-      const {availability: _availability, revocation: _revocation, ...rest} = head; return rest;
+type AuthorityBinding = ReturnType<typeof materializationProjection>;
+const validateAuthorityAdvance = <T extends AuthorityBinding>(previous: T, next: T, sameIdentity: boolean): void => {
+  if (sameIdentity) {
+    const identity = (binding: T) => {
+      const {availability: _availability, revocation: _revocation, ...rest} = binding; return rest;
     };
     if (canonicalJson(identity(previous)) !== canonicalJson(identity(next)) ||
       (previous.revocation === "revoked" && next.revocation !== "revoked") ||
@@ -33,6 +34,9 @@ export const validateDispatchHeadAdvance = (previous: DispatchBindingHead | unde
     throw new Error("PA dispatch authority generation must advance");
   }
 };
+export const validateDispatchHeadAdvance = (previous: DispatchBindingHead | undefined, next: DispatchBindingHead): void => {
+  if (previous) {validateAuthorityAdvance(previous, next, next.authorityHeadDigest === previous.authorityHeadDigest);}
+};
 
 const publishMaterialization = async (client: MaterializationPostgresClient, head: DispatchBindingHead, expected: number): Promise<void> => {
   await assertMaterializationSchema(client);
@@ -42,8 +46,20 @@ const publishMaterialization = async (client: MaterializationPostgresClient, hea
   await client.query(`INSERT INTO provider_access.materialization_owner(owner_id,tenant_id,project_id,provider,scope_digest)
     VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, [id, ...values]);
   const where = "owner_id=$1 AND tenant_id=$2 AND project_id=$3 AND provider=$4 AND scope_digest=$5";
-  const {rows} = await client.query(`SELECT head_version FROM provider_access.materialization_owner WHERE ${where} FOR UPDATE`, [id, ...values]);
+  const {rows} = await client.query(`SELECT head_version, binding FROM provider_access.materialization_owner WHERE ${where} FOR UPDATE`, [id, ...values]);
   if (rows.length !== 1 || integer(rows[0]?.head_version) !== expected) {throw new Error("PA materialization head CAS conflict");}
+  // CAS serializes writers; the locked binding independently owns monotonic
+  // authority. A dispatch head cannot undo a materialization-only revocation.
+  if (rows[0]?.binding !== null) {
+    const stored = exactDispatchDataRecord("stored materialization binding", rows[0]?.binding, Object.keys(binding));
+    const previous = snapshotAuthorizationCommand({...stored, authorizationRequestId: "database:binding",
+      requestDigest: "database:binding", purpose: "contained-turn.credential-materialization-authorization/v1", schemaVersion: 1});
+    const {authorizationRequestId: _id, requestDigest: _digest, purpose: _purpose, schemaVersion: _schema, ...projection} = previous;
+    if (canonicalJson([projection.tenantId, projection.projectId, projection.provider, projection.scopeDigest]) !== canonicalJson(values)) {
+      throw new Error("PA materialization binding owner mismatch");
+    }
+    validateAuthorityAdvance(projection, binding, projection.bindingRevision === binding.bindingRevision);
+  }
   const result = await client.query(`UPDATE provider_access.materialization_owner SET binding=$6::jsonb,head_version=$7 WHERE ${where} AND head_version=$8`,
     [id, ...values, JSON.stringify(binding), String(expected + 1), String(expected)]);
   if (result.rowCount !== 1) {throw new Error("PA materialization publication acknowledgement mismatch");}

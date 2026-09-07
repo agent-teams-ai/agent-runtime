@@ -14,7 +14,7 @@ const owner = {provider: head.provider, scope: {tenantId: head.tenantId, project
 const dispatchSchema = {version: 1, digest: await dispatchPostgresSchemaDigest()};
 const materializationSchema = {version: 1, digest: await materializationPostgresSchemaDigest()};
 // Scripted SQL boundary, not a PostgreSQL emulator or durability evidence.
-const harness = (options: {absent?: boolean; loseCommit?: boolean; badSchema?: boolean; badOwner?: boolean; divergentMaterialization?: boolean; failGrant?: boolean; materialVersion?: string} = {}) => {
+const harness = (options: {absent?: boolean; loseCommit?: boolean; badSchema?: boolean; badOwner?: boolean; divergentMaterialization?: boolean; failGrant?: boolean; materialVersion?: string; materialBinding?: unknown} = {}) => {
   const calls: {sql: string; values?: unknown[]}[] = []; const releases: boolean[] = [];
   let consumption: unknown; let grant: unknown; let settlement: unknown;
   return {calls, releases, pool: {async connect() {return {
@@ -24,7 +24,7 @@ const harness = (options: {absent?: boolean; loseCommit?: boolean; badSchema?: b
       if (sql.includes("FROM provider_access.dispatch_schema")) {return {rows: [{...dispatchSchema, version: options.badSchema ? 9 : 1}], rowCount: 1};}
       if (sql.includes("FROM provider_access.materialization_schema")) {return {rows: [materializationSchema], rowCount: 1};}
       if (sql.includes("FOR UPDATE")) {return sql.includes("materialization_owner") ?
-        {rows: [{head_version: options.materialVersion ?? "0", binding: {...materializationProjection(head), revocation: options.divergentMaterialization ? "revoked" : "active"}}], rowCount: 1} :
+        {rows: [{head_version: options.materialVersion ?? "0", binding: options.materialBinding ?? (options.absent ? null : {...materializationProjection(head), revocation: options.divergentMaterialization ? "revoked" : "active"})}], rowCount: 1} :
         {rows: [{owner: options.badOwner ? {...owner, provider: "claude"} : owner, version: options.absent ? "0" : "1", control_time: "100", head: options.absent ? null : head}], rowCount: 1};}
       if (sql.includes("RETURNING control_time")) {return {rows: [{control_time: "100"}], rowCount: 1};}
       if (sql.startsWith("SELECT record FROM provider_access.dispatch_consumption") || sql.startsWith("SELECT c.record")) {return {rows: consumption ? [{record: consumption}] : [], rowCount: consumption ? 1 : 0};}
@@ -139,4 +139,18 @@ test("owner time is sampled after row lock acquisition, and low-water updates fa
   assert.ok(sample > lock); assert.ok(h.calls[sample]?.sql.includes("GREATEST(control_time"));
   await assert.rejects(pa.control.advanceControlTime(owner, 99), /regress/u);
   assert.equal(h.calls.at(-1)?.sql, "ROLLBACK"); pa.dispose();
+});
+
+// Matching persistence versions must not authorize overwriting newer PA facts.
+test("publication validates the locked materialization authority before any head update", async () => {
+  for (const change of [{revocation: "revoked"}, {availability: "unavailable"},
+    {bindingRevision: 2}, {credentialGeneration: 2}, {credentialBindingRef: "credential:rotated"}]) {
+    const h = harness({materialVersion: "2", materialBinding: {...materializationProjection(head), ...change}});
+    const pa = createPostgresDispatchConsumption(h.pool);
+    await assert.rejects(pa.control.publishHead({head, publicationRequestId: "publish:stale-materialization",
+      expectedHeadVersion: 1, expectedMaterializationHeadVersion: 2}), /rebound|revived|advance/u);
+    assert.ok(h.calls.some(call => call.sql.includes("SELECT head_version, binding") && call.sql.includes("FOR UPDATE")));
+    assert.equal(h.calls.some(call => call.sql.startsWith("UPDATE provider_access.materialization_owner") || call.sql.includes("SET head=")), false);
+    assert.equal(h.calls.at(-1)?.sql, "ROLLBACK"); pa.dispose();
+  }
 });
