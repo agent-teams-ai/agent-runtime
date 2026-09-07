@@ -143,10 +143,18 @@ const createPlatformCustody = async (platformTarget, launchPlans, candidateBuild
   throw new Error("unsupported Claude canary Host Custody target");
 };
 
+/** The invoking deployment's own Provider Access owner and Runtime Security
+ * dispatch authority. Nothing in this repository produces them yet, so it stays
+ * undefined and the authority gate below refuses. */
+const canaryProviderAuthorities = undefined;
+
 const run = async () => {
-  // This current checkout has no qualified enforced route. Resolve authority
-  // before inspecting credential paths, allocating custody, or connecting to PG.
-  const authorities = requireContainedTurnLiveCanaryAuthorities();
+  // Resolve authority before inspecting credential paths, allocating custody,
+  // or connecting to PG. The gate now binds real Provider Access and Runtime
+  // Security owners, and this checkout has no producer for them, so the call
+  // still refuses with route-enforcement-unqualified rather than minting a
+  // synthetic grant receipt for the canary.
+  const authorities = requireContainedTurnLiveCanaryAuthorities(canaryProviderAuthorities);
   const platformTarget = exactPlatformTarget();
   const executionProvenance = await resolveCandidateExecution();
   const candidateBuild = await loadCandidateBuild();

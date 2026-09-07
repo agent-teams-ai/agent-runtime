@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runContainedTurnLiveCanaryLifecycle } from "../../live/contained-turn-live-canary-lifecycle.mjs";
+import {
+  requireContainedTurnLiveCanaryAuthorities,
+  runContainedTurnLiveCanaryLifecycle,
+} from "../../live/contained-turn-live-canary-lifecycle.mjs";
 
 test("failure before kernel open preserves the primary error without inventing containment", async () => {
   const primary = new Error("secret provider open failure");
@@ -101,4 +104,74 @@ test("disposal failure remains visible after successful execution and containmen
   }), error => error === disposalFailure);
 
   assert.deepEqual(events, ["open", "execute", "contain", "dispose"]);
+});
+
+const providerAccessOwner = Object.freeze({
+  dispatchConsumptionV1: Object.freeze({
+    async consumeForDispatch() {return Object.freeze({kind: "indeterminate"});},
+    async observeDispatchConsumption() {return Object.freeze({kind: "indeterminate"});},
+    async settleDispatchConsumption() {return Object.freeze({kind: "indeterminate"});},
+  }),
+  resolve: Object.freeze({async execute() {throw new Error("unused Provider Access resolve");}}),
+  revalidate: Object.freeze({async execute() {throw new Error("unused Provider Access revalidate");}}),
+});
+const dispatchAuthorityV1 = Object.freeze({
+  async consumeForDispatch() {return Object.freeze({status: "indeterminate"});},
+  async observeDispatchConsumption() {return Object.freeze({status: "indeterminate"});},
+  async settleDispatchConsumption() {return Object.freeze({status: "indeterminate"});},
+});
+const legacy = Object.freeze({
+  async authorizeForAcceptance() {throw new Error("unused acceptance authority");},
+  async revalidateForDispatch() {throw new Error("unused dispatch revalidation");},
+});
+const authorities = Object.freeze({
+  providerAccess: providerAccessOwner,
+  security: Object.freeze({dispatchAuthorityV1, legacy}),
+});
+const refused = error => error instanceof Error &&
+  error.message === "route-enforcement-unqualified" && error.reason === "route-enforcement-unqualified";
+
+test("the canary authority gate refuses an absent or caller-shaped grant", () => {
+  let reads = 0;
+  const trap = {
+    get() {reads += 1; throw new Error("must never consult caller authority");},
+    getOwnPropertyDescriptor() {reads += 1; throw new Error("must never inspect caller authority");},
+    ownKeys() {reads += 1; throw new Error("must never enumerate caller authority");},
+  };
+  for (const candidate of [undefined, null, "authorities", 7, () => authorities,
+    new Proxy({...authorities}, trap)]) {
+    assert.throws(() => requireContainedTurnLiveCanaryAuthorities(candidate), refused);
+  }
+  assert.equal(reads, 0);
+  // A proxied or mutable owner inside an otherwise plain bundle is refused too.
+  for (const providerAccess of [undefined, {}, {...providerAccessOwner},
+    new Proxy(providerAccessOwner, trap)]) {
+    assert.throws(() => requireContainedTurnLiveCanaryAuthorities(
+      Object.freeze({...authorities, providerAccess})), refused);
+  }
+  assert.equal(reads, 0);
+});
+
+test("the canary authority gate refuses a Runtime Security authority that is not the exact owner", () => {
+  for (const security of [undefined, Object.freeze({legacy}), Object.freeze({dispatchAuthorityV1}),
+    Object.freeze({dispatchAuthorityV1, legacy: Object.freeze({async authorizeForAcceptance() {}})}),
+    Object.freeze({dispatchAuthorityV1: Object.freeze({...dispatchAuthorityV1, extra() {}}), legacy}),
+    Object.freeze({dispatchAuthorityV1: Object.freeze({consumeForDispatch: 1,
+      observeDispatchConsumption: 2, settleDispatchConsumption: 3}), legacy}),
+  ]) {
+    assert.throws(() => requireContainedTurnLiveCanaryAuthorities(
+      Object.freeze({...authorities, security})), refused);
+  }
+});
+
+test("real owners are bound through the production ports and returned as the exact two", () => {
+  const bound = requireContainedTurnLiveCanaryAuthorities(authorities);
+  assert.deepEqual(Reflect.ownKeys(bound).toSorted(), ["providerAccess", "security"]);
+  assert.equal(Object.isFrozen(bound), true);
+  // The canary receives the anti-corruption ports, never the caller's objects.
+  assert.notEqual(bound.providerAccess, providerAccessOwner);
+  assert.notEqual(bound.security, authorities.security);
+  for (const method of ["authorizeForAcceptance", "revalidateForDispatch", "consumeForDispatch"]) {
+    assert.equal(typeof bound.security[method], "function", method);
+  }
 });
