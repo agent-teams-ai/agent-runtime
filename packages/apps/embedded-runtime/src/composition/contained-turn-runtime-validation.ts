@@ -17,8 +17,8 @@ export const unavailableOutcome = Object.freeze({
   status: "unsupported" as const,
 });
 
-export const providerUnsupportedOutcome = Object.freeze({
-  code: "provider_unsupported" as const,
+export const callerInvalidOutcome = Object.freeze({
+  code: "caller_invalid" as const,
   status: "unsupported" as const,
 });
 

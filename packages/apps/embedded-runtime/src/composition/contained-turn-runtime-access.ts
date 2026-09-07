@@ -12,6 +12,7 @@ import {
   ContainedTurnOwnerContractError,
 } from "./agent-runtime-host-disposal.js";
 import {
+  callerInvalidOutcome,
   contractViolation,
   copyAcceptedOperation,
   copyInput,
@@ -19,7 +20,6 @@ import {
   copySubmitOutcome,
   isBoundedIdentity,
   isTerminalTurnStatus,
-  providerUnsupportedOutcome,
   unavailableOutcome,
   type CopiedSubmitOutcome,
 } from "./contained-turn-runtime-validation.js";
@@ -441,7 +441,7 @@ export const createContainedTurnRuntimeAccess = (
     dependencies.assertActive();
     const input = copyInput(rawInput);
     if (input === undefined) {
-      return providerUnsupportedOutcome;
+      return callerInvalidOutcome;
     }
     const submissionCoordinator = dependencies.submissionCoordinator;
     if (dependencies.capability === undefined || dependencies.scope === undefined ||

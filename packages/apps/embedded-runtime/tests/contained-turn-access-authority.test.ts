@@ -299,7 +299,7 @@ test("private authority identities cannot escape through owner identities or cal
         assert.deepEqual(result, { code: "capability_unavailable", status: "unsupported" });
       } catch (error) { assertSafeError(error); }
       assert.deepEqual(await access.submit({ ...input(), commandId: value }), {
-        code: "provider_unsupported", status: "unsupported",
+        code: "caller_invalid", status: "unsupported",
       });
       await assert.rejects(access.observe(value), assertSafeError);
       await host.dispose();
