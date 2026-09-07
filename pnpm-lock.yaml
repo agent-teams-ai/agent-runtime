@@ -138,6 +138,10 @@ importers:
       '@agent-teams/runtime-security':
         specifier: workspace:*
         version: link:../../contexts/runtime-security
+    devDependencies:
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
 
   packages/contexts/agent-execution:
     dependencies:

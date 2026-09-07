@@ -32,5 +32,8 @@
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
     }
+  },
+  "devDependencies": {
+    "pg": "catalog:"
   }
 }
