@@ -203,6 +203,16 @@ export const prepareDockerProviderProcessIo = (value: PreparationInput): Prepare
   return prepareIo(input, prepareDockerProviderProcessLaunch(input.launch));
 };
 
+// Private composition capability, deliberately absent from the process DTO.
+// Claiming removes the lookup; either stream's first iterator fences both streams.
+const unpublished = new WeakMap<object, () => void>();
+export const takeDockerProviderProcessAbandonment = (process: object): (() => void) => {
+  const abandon = unpublished.get(process);
+  if (abandon === undefined) {throw new TypeError("Docker publication capability is unavailable");}
+  unpublished.delete(process);
+  return abandon;
+};
+
 /** The only async creation path consumes an actual lifecycle-issued launch. */
 export const createDockerProviderProcessBridge = () => Object.freeze({
   async open(value: DockerProviderProcessInput) {
@@ -245,11 +255,25 @@ export const createDockerProviderProcessBridge = () => Object.freeze({
       const executed = await issued.execute(exec, call);
       assertAdmitted();
       if (executed.evidence.status !== "proved") {throw new DockerProviderProcessIoError("provider-exec-unproven");}
-      return Object.freeze({custodyRef: process.custodyRef, workspaceAuthorityPath: process.workspaceAuthorityPath,
-        stdout: Object.freeze({[Symbol.asyncIterator]: process.stdout[Symbol.asyncIterator].bind(process.stdout)}),
-        stderr: Object.freeze({[Symbol.asyncIterator]: process.stderr[Symbol.asyncIterator].bind(process.stderr)}),
+      let publication: "pending" | "owned" | "abandoned" = "pending";
+      const stream = (output: DockerProviderOutput) => Object.freeze({[Symbol.asyncIterator]: () => {
+        if (publication === "abandoned") {throw new TypeError("Docker process publication was abandoned");}
+        publication = "owned";
+        unpublished.delete(opened);
+        return output[Symbol.asyncIterator]();
+      }});
+      const opened = Object.freeze({custodyRef: process.custodyRef, workspaceAuthorityPath: process.workspaceAuthorityPath,
+        stdout: stream(process.stdout), stderr: stream(process.stderr),
         write: process.write.bind(process),
         closeInput: process.closeInput.bind(process), waitForExit: process.waitForExit.bind(process)});
+      unpublished.set(opened, () => {
+        if (publication !== "pending") {return;}
+        publication = "abandoned";
+        unpublished.delete(opened);
+        if (joined) {process.stdout.drainUnpublished(); process.stderr.drainUnpublished();}
+        else {process.fail(new DockerProviderProcessIoError("publication-abandoned"));}
+      });
+      return opened;
     } catch (error) {
       // Joined preparation retains observation custody across admission cutoff
       // and late acknowledgement. Host containment owns its bounded drain.

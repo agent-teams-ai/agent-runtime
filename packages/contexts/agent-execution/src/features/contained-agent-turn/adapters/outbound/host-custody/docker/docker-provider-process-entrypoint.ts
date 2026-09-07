@@ -1,4 +1,4 @@
-export {createDockerProviderProcessBridge, prepareDockerProviderProcessIo} from "./docker-provider-process-bridge.js";
+export {createDockerProviderProcessBridge, prepareDockerProviderProcessIo, takeDockerProviderProcessAbandonment} from "./docker-provider-process-bridge.js";
 export type {DockerProviderProcessInput, PreparedDockerProviderIo} from "./docker-provider-process-bridge.js";
 export {DockerHostCustodyLifecycle, dockerProviderProcessMountFacts} from "./docker-host-custody-lifecycle.js";
 export {captureDockerHttpResourceRecord, subscribeDockerHttpAbort, DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} from "./docker-http-network-resources.js";

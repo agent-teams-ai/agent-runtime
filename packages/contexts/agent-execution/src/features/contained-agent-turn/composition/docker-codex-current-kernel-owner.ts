@@ -12,7 +12,7 @@ import {selectCodexAppServerPlatformTuple, type CodexAppServerPlatformTarget}
   from "../adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 import type {CodexEffectCustodyAuthority} from "../adapters/outbound/codex-app-server/codex-app-server-effect-custody.js";
 import type {CodexAppServerPermissionBoundary} from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
-import {dockerProviderProcessMountFacts, type DockerProviderProcessInput} from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+import {takeDockerProviderProcessAbandonment, dockerProviderProcessMountFacts, type DockerProviderProcessInput} from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import type {CodexCurrentKernelLaunchRecord} from "./codex-current-kernel-owner.js";
 import {snapshotCodexCredentialOutputTokens} from "./codex-credential-output-inventory.js";
 import {createDockerCustodiedProviderProcessRegistry} from "./docker-custodied-provider-process.js";
@@ -150,6 +150,7 @@ export const createDockerCodexCurrentKernelOwner = (
     }
   }
   let disposed = false;
+  let abandonPublication: (() => void) | undefined;
   const admission = new AbortController();
   const processInput = captureProcessInput(options.process, plan, paths, admission.signal, () => !disposed
     && !processInput.call.signal.aborted && processInput.init.signal?.aborted !== true
@@ -188,16 +189,19 @@ export const createDockerCodexCurrentKernelOwner = (
           assertOpen();
           validateCodexAppServerLaunchPlanRoots(plan);
           const opened = await registry.open(processInput);
-          // A late acknowledged launch cannot start protocol after cutoff. The
-          // actual lifecycle retains the session even when this creator rejects.
-          if (await isCancellationRequested()) {throw new TypeError("Docker Codex start is cancelled");}
-          assertOpen();
-          return Object.freeze({custody: Object.freeze({custodyRef: opened.custodyRef}),
-            kernelCustodyId, provider: protocol, workspaceRef: plan.workspaceRef});
+          abandonPublication = takeDockerProviderProcessAbandonment(opened);
+          try {
+            // Keep abandonment through the final await and creator handoff.
+            // The first protocol iterator, not registry.open(), transfers custody.
+            if (await isCancellationRequested()) {throw new TypeError("Docker Codex start is cancelled");}
+            assertOpen();
+            return Object.freeze({custody: Object.freeze({custodyRef: opened.custodyRef}),
+              kernelCustodyId, provider: protocol, workspaceRef: plan.workspaceRef});
+          } catch (error) {abandonPublication(); throw error;}
         },
       });
     },
   });
   return Object.freeze({provider: new CodexAppServerCurrentKernelAdapter({attempts, platformTarget}),
-    dispose() {disposed = true; admission.abort();}});
+    dispose() {disposed = true; abandonPublication?.(); admission.abort();}});
 };
