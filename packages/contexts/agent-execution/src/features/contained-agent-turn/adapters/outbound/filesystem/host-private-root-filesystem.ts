@@ -16,10 +16,26 @@ const LINUX_O_PATH = 0x200000;
 export interface PrivateRootTraversal {
   remaining: number;
   readonly maximumDepth: number;
+  readonly directoryIdentities: Set<string>;
+  readonly forbiddenDirectoryIdentities: ReadonlySet<string>;
   check(): void;
   retain(handle: FileHandle): FileHandle;
   close(handle: FileHandle): Promise<void>;
 }
+
+// Mount IDs qualify descriptor custody, but cannot distinguish bind aliases of
+// the same inode. Separation must compare device/inode pairs across mounts.
+export const privateRootDirectoryIdentity = (identity: Pick<BigIntStats, "dev" | "ino">): string =>
+  `${identity.dev}:${identity.ino}`;
+
+const inspectTraversalDirectory = async (root: FileHandle, budget: PrivateRootTraversal): Promise<void> => {
+  const observed = await inspectFileHandle(root);
+  const identity = privateRootDirectoryIdentity(observed);
+  if (!observed.isDirectory || observed.nlink === 0n || budget.forbiddenDirectoryIdentities.has(identity)) {
+    throw new Error("Private root directory identity overlaps protected parent or workspace");
+  }
+  budget.directoryIdentities.add(identity);
+};
 
 export const assertPrivateRootHandle = async (handle: FileHandle, root: BoundContainedTurnRoot): Promise<void> => {
   const observed = await inspectFileHandle(handle);
@@ -110,8 +126,10 @@ export const traversePrivateRoot = async (
 ): Promise<void> => {
   budget.check();
   if (input.depth > budget.maximumDepth) {throw new Error("Private root traversal depth exceeded");}
+  await inspectTraversalDirectory(root, budget);
   const names = await readDirectoryNamesBounded(root, budget.remaining);
   budget.remaining -= names.length;
+  await inspectTraversalDirectory(root, budget);
   for (const name of names) {
     budget.check();
     const observed = await lstat(descriptorChildPath(root, name), { bigint: true });

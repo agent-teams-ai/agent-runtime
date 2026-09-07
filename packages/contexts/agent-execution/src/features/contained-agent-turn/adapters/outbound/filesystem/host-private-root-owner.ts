@@ -6,13 +6,14 @@ import { publishStableDirectoryNoReplace } from "@agent-teams/filesystem-custody
 import {
   assertDisjointNonAncestorRoots, bindContainedTurnRoot, descriptorChildPath,
   fsyncDirectoryHandle, inspectFileHandle, openBoundDirectory, openDirectoryEntry,
+  sameFilesystemIdentity,
   type BoundContainedTurnRoot,
 } from "./contained-turn-filesystem-custody.js";
 import { readDirectoryNamesBounded } from "./contained-turn-filesystem-reads.js";
 import type { HostCustodyPrivateRootClosureEvidence } from "../host-custody/custodied-provider-process.js";
 import {
   assertPrivateRootAbsent, assertPrivateRootEntry, assertPrivateRootHandle,
-  traversePrivateRoot, type PrivateRootTraversal,
+  privateRootDirectoryIdentity, traversePrivateRoot, type PrivateRootTraversal,
 } from "./host-private-root-filesystem.js";
 
 export interface HostPrivateRootBinding {
@@ -117,9 +118,25 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
   private check = (): void => {
     if (performance.now() >= this.#deadline) {throw new Error("Private root deadline exceeded");}
   };
-  private budget(): PrivateRootTraversal {
+  private budget(forbiddenDirectoryIdentities: ReadonlySet<string> = new Set(), directoryIdentities = new Set<string>()): PrivateRootTraversal {
     return { remaining: this.options.maximumEntries, maximumDepth: this.options.maximumDepth,
+      forbiddenDirectoryIdentities, directoryIdentities,
       check: this.check, retain: this.retain, close: this.close };
+  }
+
+  private async validateSeparation(
+    parent: BoundContainedTurnRoot, rootHandle: FileHandle, workspaceHandle: FileHandle,
+  ): Promise<ReadonlySet<string>> {
+    const parentIdentity = privateRootDirectoryIdentity(parent.identity);
+    const workspaceIdentities = new Set([privateRootDirectoryIdentity(await inspectFileHandle(workspaceHandle))]);
+    const protectedIdentities = new Set([parentIdentity]);
+    // Collect only the private subtree, never the parent's siblings. A workspace
+    // sibling under the protected parent remains supported. Check every visited
+    // directory so aliases of nested private/workspace directories also fail.
+    await traversePrivateRoot(rootHandle, this.budget(new Set([parentIdentity, ...workspaceIdentities]), protectedIdentities));
+    await traversePrivateRoot(workspaceHandle, this.budget(protectedIdentities, workspaceIdentities));
+    workspaceIdentities.add(parentIdentity);
+    return workspaceIdentities;
   }
 
   private async bootIdentity(): Promise<string> {
@@ -157,14 +174,14 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
     assertDisjointNonAncestorRoots(root, workspace);
     // The retained parent is outside the provider workspace mount. It is also
     // necessarily outside its direct private-root child mount.
-    if (parent.canonicalPath === workspace.canonicalPath ||
+    if (sameFilesystemIdentity(parent.identity, workspace.identity) ||
+        parent.canonicalPath === workspace.canonicalPath ||
         parent.canonicalPath.startsWith(`${workspace.canonicalPath}${sep}`)) {
       throw new Error("Private root containing parent is exposed by the workspace mount");
     }
     await assertPrivateRootHandle(parentHandle, parent);
     await assertPrivateRootHandle(rootHandle, root);
-    await traversePrivateRoot(rootHandle, this.budget());
-    await traversePrivateRoot(workspaceHandle, this.budget());
+    await this.validateSeparation(parent, rootHandle, workspaceHandle);
     const physicalHostBootId = await this.bootIdentity();
     const generation = this.options.generation();
     const binding: HostPrivateRootBinding = Object.freeze({ canonicalBindSourcePath: root.canonicalPath,
@@ -194,8 +211,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
     await assertPrivateRootHandle(parentHandle, parent);
     await assertPrivateRootHandle(rootHandle, root);
     await assertPrivateRootEntry(parentHandle, basename(root.canonicalPath), root, this.budget());
-    await traversePrivateRoot(rootHandle, this.budget());
-    await traversePrivateRoot(retained.workspaceHandle, this.budget());
+    await this.validateSeparation(parent, rootHandle, retained.workspaceHandle);
     this.check();
     return retained.binding;
   }
@@ -265,7 +281,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
   }
 
   private async removeCapturedRoot(): Promise<void> {
-    const { parent, root, parentHandle, rootHandle } = this.#retained!;
+    const { parent, root, workspace, parentHandle, rootHandle, workspaceHandle } = this.#retained!;
     const sourceName = basename(root.canonicalPath);
     const quarantineName = `.ar-private-root-${randomUUID()}`;
     // Retain the exact attempted name even when the native acknowledgement fails.
@@ -279,7 +295,11 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
     await fsyncDirectoryHandle(parentHandle);
     this.#status = "quarantined";
     this.#history.push("quarantine-identity-readback");
-    await traversePrivateRoot(rootHandle, this.budget(), { depth: 0, remove: true });
+    // Quarantine publication and its readbacks are asynchronous. Refresh the
+    // separation proof before deleting, and carry it into each directory open.
+    await this.close(this.retain(await openBoundDirectory(workspace)));
+    const forbidden = await this.validateSeparation(parent, rootHandle, workspaceHandle);
+    await traversePrivateRoot(rootHandle, this.budget(forbidden), { depth: 0, remove: true });
     await assertPrivateRootHandle(parentHandle, parent);
     await assertPrivateRootEntry(parentHandle, quarantineName, root, this.budget());
     if ((await readDirectoryNamesBounded(rootHandle, 0)).length !== 0) {throw new Error("Private root not empty");}
