@@ -148,6 +148,16 @@ jobs:
           PA_POSTGRES_DISPOSABLE_URL: postgresql://postgres:postgres@127.0.0.1:5433/ar69_pa_test_dispatchci
         run: pnpm --filter @agent-teams/provider-access test:postgres:dispatch
 
+      - name: Create disposable Provider Access operation dispatch database
+        env:
+          PA_POSTGRES_CONTAINER: ${{ job.services.provider-access-postgres.id }}
+        run: docker exec "$PA_POSTGRES_CONTAINER" createdb -U postgres ar69_pa_test_operationdispatchci
+
+      - name: Run disposable Provider Access operation dispatch durability gate
+        env:
+          PA_POSTGRES_DISPOSABLE_URL: postgresql://postgres:postgres@127.0.0.1:5433/ar69_pa_test_operationdispatchci
+        run: pnpm --filter @agent-teams/provider-access test:postgres:operation-dispatch
+
       - name: Build Runtime Security PostgreSQL test target
         run: pnpm --filter @agent-teams/runtime-security... build
 
