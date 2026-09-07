@@ -317,8 +317,9 @@ export class BoundedUnixHttpClient {
     return this.#open({ ...input, stream: true });
   }
 
-  public async hijack(input: Pick<RequestInput, "call" | "path">): Promise<UnixHijackChannel> {
+  public async hijack(input: Pick<RequestInput, "call" | "path"> & {readonly observationCall?: DockerEngineCall}): Promise<UnixHijackChannel> {
     const call = snapshotDockerEngineCall(input.call);
+    const observationCall = snapshotDockerEngineCall(input.observationCall ?? call);
     this.#checkCall(call);
     if (!input.path.startsWith("/") || input.path.length > 4096 || /[\0\r\n]/u.test(input.path)) {
       throw new DockerEngineError("protocol-violation");
@@ -333,11 +334,10 @@ export class BoundedUnixHttpClient {
     }
     const effectiveMs = Math.min(call.deadlineEpochMs - Date.now(), MAX_CALL_MS);
     return openBoundedUnixHijack({
-      call, effectiveMs, path: input.path, release: connection.release, request: this.#request,
+      call, observationCall, effectiveMs, path: input.path, release: connection.release, request: this.#request,
       socket: connection.socket,
       verifyCustody: async () => {
         const current = await this.#observeCustody();
-        this.#checkCall(call);
         if (current.token !== custody.token) {throw new DockerEngineError("endpoint-custody-lost");}
       },
     });

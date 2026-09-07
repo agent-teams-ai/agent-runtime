@@ -31,16 +31,12 @@ import type {
   DockerCustodyOwnerIdentity,
   DockerCustodyRecoveryObservation,
 } from "./journal/docker-custody-journal-types.js";
-
 export interface DockerHostCustodyJournalPort extends DockerCustodyJournalWriter, DockerCustodyJournalRecoveryReader {}
-
 export interface DockerHostCustodyResiduePort {
   proveEmpty(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<"empty" | "residue" | "unknown">;
 }
-
 /** Outer composition supplies launch facts only; the lifecycle derives and seals ownerIdentitySha256. */
 export type DockerHostCustodyContainerCreate = DockerHostCustodyContainerCreateInput;
-
 export interface DockerHostCustodyRecoveryResolver {
   resolve(key: DockerCustodyAttemptKey): Promise<Readonly<{
     /** Optional durable authority permits exact absence proof after a remove acknowledgement was lost. */
@@ -49,14 +45,12 @@ export interface DockerHostCustodyRecoveryResolver {
     create: DockerHostCustodyContainerCreate;
   }> | undefined>;
 }
-
 export interface DockerHostCustodyCompositionDependencies {
   readonly engine: DockerEnginePort;
   readonly journalLimits?: Partial<DockerCustodyJournalLimits>;
   readonly journalStorage: DockerCustodyJournalStorage;
   readonly residue: DockerHostCustodyResiduePort;
 }
-
 export type DockerHostCustodyRecovery =
   | { readonly journal: DockerCustodyRecoveryObservation; readonly kind: "journal_unproven"; readonly containment?: "closed" | "indeterminate" }
   | { readonly journal: DockerCustodyJournalRecord; readonly kind: "closed" }
@@ -65,7 +59,6 @@ export type DockerHostCustodyRecovery =
     readonly kind: "indeterminate";
     readonly reason: "authority_unavailable" | "engine_observation_unavailable" | "containment_unproven";
   };
-
 export type DockerHostCustodyContainment =
   | Readonly<{ journal: DockerCustodyJournalRecord; kind: "closed" }>
   | Readonly<{ journal: DockerCustodyJournalRecord; kind: "indeterminate"; reason: "containment_unproven" }>
@@ -81,16 +74,14 @@ export type DockerHostCustodyContainment =
       kind: "indeterminate";
       reason: "authority_mismatch" | "authority_unavailable";
     }>;
-
 const launchIssuer = createDockerProviderProcessLaunchIssuer();
 export const prepareDockerProviderProcessLaunch = launchIssuer.prepare;
 export const claimDockerProviderProcessLaunch = launchIssuer.claim;
+export const assertDockerProviderProcessClaimActive = launchIssuer.assertClaimActive;
 export const dockerProviderProcessMountFacts = launchIssuer.mountFacts;
-
 const proved = Object.freeze({ status: "proved" as const });
 const journalUnavailable = (error: unknown): boolean =>
   error instanceof DockerCustodyJournalUnavailableError || error instanceof DockerCustodyJournalCorruptionError;
-
 /** Coordinates Docker effects only after their exact journal authority is durable. */
 export class DockerHostCustodyLifecycle {
   public readonly removalObservation: ReturnType<typeof createDockerRemovalObservationOwner>;
@@ -101,13 +92,11 @@ export class DockerHostCustodyLifecycle {
   private readonly journal: DockerHostCustodyJournalPort;
   /** One-use fences outlive zero-effect volatile capacity release. Journal capacity is separate. */
   private readonly failedBeforeCreate = new Set<string>();
-
   private assertLaunchOpen(key: DockerCustodyAttemptKey, call: DockerEngineCall): void {
     const launch = this.liveLaunches.get(dockerCustodyAttemptLocator(key));
     if (launch === undefined) {throw new TypeError("Docker Host Custody live launch is unavailable");}
     launch.assertOpen(call);
   }
-
   public constructor(
     private readonly engine: DockerEnginePort,
     journal: DockerHostCustodyJournalPort,
@@ -120,6 +109,15 @@ export class DockerHostCustodyLifecycle {
 
   /** Historical Host-readable evidence; possession never supplies new execution authority. */
   public observeLaunch(launch: LaunchedDockerCustody): DockerLifecycleObservation {return this.#observations.read(launch);}
+
+  /** Cleanup-only retained identity after a launch acknowledgement crosses cutoff.
+   * This does not issue a launch, readiness, or provider-execution capability. */
+  public retainedAuthority(key: DockerCustodyAttemptKey): DockerContainerAuthority | undefined {
+    const authority = this.liveLaunches.get(dockerCustodyAttemptLocator(key))?.retainedAuthority;
+    if (authority === undefined || this.authorityMatch(key, authority) !== "match") {return undefined;}
+    assertDockerAuthorityBinding(key, authority);
+    return authority;
+  }
 
   private async inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation> {
     return this.#observations.engine(authority, await this.engine.inspect(authority, call));
@@ -150,7 +148,7 @@ export class DockerHostCustodyLifecycle {
   }>> {
     const lifetime = input.lifetime === undefined ? undefined : Object.freeze({
       admission: Object.freeze({...input.lifetime.admission}),
-      observation: Object.freeze({isActive: input.lifetime.observation.isActive.bind(input.lifetime.observation)}),
+      observation: Object.freeze({...input.lifetime.observation, isActive: input.lifetime.observation.isActive.bind(input.lifetime.observation)}),
     });
     input = Object.freeze({call: Object.freeze({...input.call}), owner: Object.freeze({...input.owner}),
       create: Object.freeze({...input.create, arguments: Object.freeze([...input.create.arguments]),
@@ -194,9 +192,11 @@ export class DockerHostCustodyLifecycle {
       this.assertLaunchOpen(key, input.call);
       await this.journal.beforeAction({ key, expectedSequence: created.sequence, state: "init_start_requested" });
       this.assertLaunchOpen(key, input.call);
-      live.retain(authority, await this.engine.attachCustody(authority, input.call));
+      live.retain(authority, await this.engine.attachCustody(authority, input.call, lifetime === undefined ? input.call : {
+        signal: lifetime.observation.signal, deadlineEpochMs: lifetime.observation.deadlineEpochMs}));
       this.assertLaunchOpen(key, input.call);
       await this.engine.start(authority, live.startCall(input.call));
+      live.acknowledgeStart();
       this.assertLaunchOpen(key, input.call);
       const observation = await this.inspect(authority, input.call);
       this.assertLaunchOpen(key, input.call);

@@ -51,6 +51,7 @@ type EngineClient = {
   }): Promise<UnixHttpResponse<Uint8Array>>;
   endpointIdentity(call: DockerEngineCall): Promise<DockerEndpointIdentity>;
   hijack?(input: {
+    readonly observationCall?: DockerEngineCall;
     readonly call: DockerEngineCall;
     readonly path: string;
   }): Promise<UnixHijackChannel>;
@@ -255,7 +256,9 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
   public async attachCustody(
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
+    observationCall: DockerEngineCall = call,
   ): Promise<DockerCustodyDuplexChannel> {
+    const observationSnapshot = snapshotDockerEngineCall(observationCall);
     const authoritySnapshot = validateAuthorityShape(authority);
     const callSnapshot = snapshotDockerEngineCall(call);
     const id = authoritySnapshot.containerId;
@@ -272,7 +275,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       }
       if (this.#client.hijack === undefined) {throw new DockerEngineError("protocol-violation");}
       hijack = await this.#client.hijack({
-        call: callSnapshot,
+        call: callSnapshot, observationCall: observationSnapshot,
         path: `${API}/containers/${authoritySnapshot.containerId}/attach?stream=1&stdin=1&stdout=1&stderr=1`,
       });
       session.hijack = hijack;
@@ -283,16 +286,16 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       }
       const invalidate = (error: DockerEngineError): void => {this.#invalidateSession(session, error);};
       const abort = (): void => {invalidate(new DockerEngineError("aborted"));};
-      const delay = Math.max(0, callSnapshot.deadlineEpochMs - Date.now());
+      const delay = Math.max(0, Math.min(2_147_483_647, observationSnapshot.deadlineEpochMs - Date.now()));
       const timer = setTimeout(() => {invalidate(new DockerEngineError("deadline-exceeded"));}, delay);
       timer.unref();
       const cleanup = (): void => {
         clearTimeout(timer);
-        callSnapshot.signal.removeEventListener("abort", abort);
+        observationSnapshot.signal.removeEventListener("abort", abort);
       };
       session.cleanup = cleanup;
-      callSnapshot.signal.addEventListener("abort", abort, {once: true});
-      if (callSnapshot.signal.aborted) {abort();}
+      observationSnapshot.signal.addEventListener("abort", abort, {once: true});
+      if (observationSnapshot.signal.aborted) {abort();}
       if (session.state !== "opening") {throw session.failure ?? new DockerEngineError("daemon-disconnected");}
       session.state = "open";
       return createDockerCustodyChannel(hijack, invalidate);

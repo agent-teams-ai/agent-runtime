@@ -472,3 +472,44 @@ test("attach rejects malformed status, stderr, oversized frames, abort, and dead
     });
   }
 });
+
+for (const termination of ["abort", "deadline"] as const) {
+  test(`production Unix channel keeps observation lifetime after stage cutoff, bounded by ${termination}`, async t => {
+    let peer: Socket | undefined;
+    const current = await fixture(socket => {peer = socket; socket.write(upgrade);});
+    const stage = new AbortController(); const observation = new AbortController();
+    const now = Date.now();
+    t.mock.timers.enable({apis: ["Date", "setTimeout"], now});
+    try {
+      const raw = await current.client.hijack({call: call(stage.signal, 1000),
+        observationCall: call(observation.signal, 10_000),
+        path: "/v1.47/containers/id/attach?stream=1&stdin=1&stdout=1&stderr=1"});
+      const channel = createDockerCustodyChannel(raw);
+      stage.abort(); t.mock.timers.tick(1001);
+      const reader = channel.output[Symbol.asyncIterator]();
+      peer!.write(multiplex(1, Buffer.from("authenticated-observation-tail")));
+      assert.equal(Buffer.from((await reader.next()).value!).toString(), "authenticated-observation-tail");
+      await channel.write(Buffer.from("host-control"));
+      assert.equal(current.releaseCount, 0);
+      const pending = assert.rejects(reader.next(), {code: termination === "abort" ? "aborted" : "deadline-exceeded"});
+      if (termination === "abort") {observation.abort();} else {t.mock.timers.tick(9000);}
+      await pending; await current.releaseSettled();
+      assert.equal(current.releaseCount, 1);
+      await channel.close();
+    } finally {t.mock.timers.reset(); await current.close();}
+  });
+}
+
+test("long observation custody cannot extend pending attach establishment", async t => {
+  const entered = Promise.withResolvers<void>();
+  const current = await fixture(() => {entered.resolve();});
+  t.mock.timers.enable({apis: ["Date", "setTimeout"], now: Date.now()});
+  try {
+    const opening = current.client.hijack({call: call(new AbortController().signal, 1000),
+      observationCall: call(new AbortController().signal, 10_000),
+      path: "/v1.47/containers/id/attach?stream=1&stdin=1&stdout=1&stderr=1"});
+    const rejected = assert.rejects(opening, {code: "deadline-exceeded"});
+    await entered.promise; t.mock.timers.tick(1001); await rejected;
+    await current.releaseSettled(); assert.equal(current.releaseCount, 1);
+  } finally {t.mock.timers.reset(); await current.close();}
+});

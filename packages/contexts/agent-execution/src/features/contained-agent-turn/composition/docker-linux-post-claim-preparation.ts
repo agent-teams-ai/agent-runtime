@@ -168,7 +168,12 @@ export const createDockerLinuxPostClaimPreparation = (
 const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   dependencies: DockerLinuxPostClaimDependencies, join?: DockerLinuxClaimedJoin<Io>,
 ): DockerLinuxPostClaimOwner<Io> => {
-  const deadlines = dependencies.deadlines;
+  const deadlines = Object.freeze({...dependencies.deadlines});
+  // Capture the supplied remaining operation lease once; no stage can renew it.
+  const admissionDeadline = Date.now() + deadlines.routeLifetimeMs;
+  const admissionAbort = new AbortController();
+  const observationAbort = new AbortController();
+  const observationDeadline = admissionDeadline + deadlines.cleanupMs;
   let entered = false;
   let cut = false;
   let retainedClaim: Claimed | undefined;
@@ -179,7 +184,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   let cleanupResources: (() => Promise<boolean>) | undefined;
   let cleanupFlight: Promise<boolean> | undefined;
   let preparationFlight: Promise<Outcome> | undefined;
-  const cutoff = () => {cut = true; cutResources();};
+  const cutoff = () => {cut = true; admissionAbort.abort(); cutResources();};
   const settleResources = () => cleanupFlight ??= Promise.resolve().then(() => cleanupResources?.() ?? true)
     .catch(() => false);
   const prepareClaimed = async (input: Claimed): Promise<Outcome> => {
@@ -195,7 +200,8 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       cut || input.signal.aborted) {return unsupported("owner");}
 
     const call = (milliseconds: number): EngineCall =>
-      Object.freeze({signal: input.signal, deadlineEpochMs: Date.now() + milliseconds});
+      Object.freeze({signal: AbortSignal.any([input.signal, admissionAbort.signal]),
+        deadlineEpochMs: Math.min(admissionDeadline, Date.now() + milliseconds)});
     // Release is not admission: an irreversible caller cutoff must not stop the
     // Engine and journal work that proves these resources actually went away.
     const cleanupCall = (): EngineCall =>
@@ -209,6 +215,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     let lifecycle: DockerHostCustodyLifecycle | undefined;
     let launched: Launched | undefined;
     let launchAttempted = false;
+    let launchKey: Launched["key"] | undefined;
     let routeAttempted = false;
     let routeInstalled = false;
     let routeOwner: LinuxExclusiveRouteOwner | undefined;
@@ -235,11 +242,13 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     };
     const proveContainerAbsent = async (): Promise<boolean> => {
       if (!launchAttempted) {return true;}
-      // A launch that never returned an authority leaves no handle to contain;
-      // its fate belongs to the lifecycle's own fencing, not to a claim here.
-      if (launched === undefined || lifecycle === undefined || observers === undefined) {return false;}
+      if (lifecycle === undefined || observers === undefined || launchKey === undefined) {return false;}
+      // A late start acknowledgement can cross cutoff before launch publication.
+      // Only the lifecycle's retained exact identity can support cleanup then.
+      const authority = launched?.authority ?? lifecycle.retainedAuthority(launchKey);
+      if (authority === undefined) {return false;}
       const token = await lifecycle.removalObservation
-        .containAndObserve({authority: launched.authority, key: launched.key, call: cleanupCall()})
+        .containAndObserve({authority, key: launchKey, call: cleanupCall()})
         .then(issued => issued ?? null, () => null);
       if (token === null) {return false;}
       return observers.observeContainerAbsent(token).then(() => true, () => false);
@@ -267,6 +276,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
         const removed = await network?.cleanupNetwork().catch(() => "unknown" as const);
         proven = removed === "absent" && proven;
       }
+      observationAbort.abort();
       return proven;
     };
     const settle = async (reason: UnsupportedReason): Promise<Outcome> => {
@@ -277,7 +287,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     // Irreversible caller cutoff is honored between every step, so a cut signal
     // can never let the next resource effect start.
     const assertOpen = (): void => {
-      if (cut || input.signal.aborted) {throw new TypeError("Host post-claim preparation was cut off");}
+      if (cut || input.signal.aborted || Date.now() >= admissionDeadline) {throw new TypeError("Host post-claim preparation was cut off");}
     };
     try {
       const proof = input.committedDispatchProof;
@@ -331,8 +341,13 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
 
       stage = "launch";
       const launchCall = call(deadlines.launchMs);
+      launchKey = subject.attempt;
       launchAttempted = true;
-      launched = await lifecycle.launch({call: launchCall, create, owner});
+      launched = await lifecycle.launch({call: launchCall, create, owner, lifetime: {
+        admission: {signal: AbortSignal.any([input.signal, admissionAbort.signal]), deadlineEpochMs: admissionDeadline},
+        observation: {signal: observationAbort.signal, deadlineEpochMs: observationDeadline,
+          isActive: () => !observationAbort.signal.aborted && Date.now() < observationDeadline},
+      }});
 
       assertOpen();
 
@@ -371,8 +386,8 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       await observers.recordRouteIntent();
       routeAttempted = true;
       const admitted = await routeAdmission.admit({authority: launched.authority, endpoint,
-        signal: input.signal, deadlineEpochMs: Date.now() + deadlines.routeMs,
-        lifetimeMs: deadlines.routeLifetimeMs});
+        ...call(deadlines.routeMs),
+        lifetimeMs: Math.max(0, admissionDeadline - Date.now())});
       if (admitted.kind !== "installed") {return await settle(admitted.reason);}
       routeOwner = admitted.owner;
       await observers.observeRouteInstalled(admitted.owner, endpoint);

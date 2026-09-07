@@ -14,7 +14,7 @@ export type DockerContainedTurnInitOptions = Omit<DockerCustodyInitHostOptions, 
 
 export interface DockerHostCustodyLifetime {
   readonly admission: Readonly<{signal: AbortSignal; deadlineEpochMs: number}>;
-  readonly observation: Readonly<{isActive(): boolean}>;
+  readonly observation: DockerEngineCall & Readonly<{isActive(): boolean}>;
 }
 
 /** Sole attach-channel custody for one lifecycle launch. No network/route readiness is inferred here. */
@@ -27,6 +27,7 @@ export class DockerContainedTurnHostCustody {
   #executeUsed = false;
   #executionCall: DockerEngineCall | undefined;
   #launchFinished = false;
+  #startAcknowledged = false;
   #closing: Promise<void> | undefined;
   #channelClosed = false;
 
@@ -59,6 +60,9 @@ export class DockerContainedTurnHostCustody {
     return this.#launchFinished && this.#cutoff && (this.#session !== undefined
       ? this.#session.cleanupComplete : this.#channel === undefined || this.#channelClosed);
   }
+
+  public acknowledgeStart(): void {this.#startAcknowledged = true;}
+  public get retainedAuthority(): DockerContainerAuthority | undefined {return this.#startAcknowledged ? this.#authority : undefined;}
 
   public owns(authority: DockerContainerAuthority): boolean {
     return this.#authority !== undefined && sameDockerAuthority(this.#authority, authority);
@@ -113,14 +117,15 @@ export class DockerContainedTurnHostCustody {
     this.#session = new DockerCustodyInitHostSession({...observationOptions,
       ...(this.lifetime === undefined && signal !== undefined ? {signal} : {}), channel: retainedChannel,
       isObservationActive: () => this.lifetime !== undefined
-        ? this.lifetime.observation.isActive() && (options.isObservationActive?.() ?? true)
+        ? !this.lifetime.observation.signal.aborted && Date.now() < this.lifetime.observation.deadlineEpochMs &&
+          this.lifetime.observation.isActive() && (options.isObservationActive?.() ?? true)
         : !call.signal.aborted &&
         (this.#executionCall === undefined || !this.#executionCall.signal.aborted && Date.now() < this.#executionCall.deadlineEpochMs) &&
         (options.isObservationActive?.() ?? true), isCurrentGeneration});
     if (this.#cutoff) {this.#session.cutOffAdmission();}
     this.#channel = undefined;
     const session = this.#session;
-    void session.completion.then(() => {for (const cleanup of this.#admissionCleanup.splice(0)) {cleanup();}});
+    void session.completion.then(() => {for (const cleanup of this.#admissionCleanup.splice(0)) {cleanup();} return;});
     return Object.freeze({get observation() {return session.observation;}, ready: session.ready.bind(session), completion: session.completion,
       writeInput: session.writeInput.bind(session), closeProviderInput: session.closeProviderInput.bind(session),
       signal: session.signal.bind(session), cancel: session.cancel.bind(session), close: session.close.bind(session)});

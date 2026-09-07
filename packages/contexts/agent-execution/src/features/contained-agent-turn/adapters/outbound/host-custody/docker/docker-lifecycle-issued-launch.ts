@@ -16,6 +16,7 @@ export interface ProviderProcessLaunch {
 /** Each factory call has independent custody; consumers cannot reach the lifecycle's issuer. */
 export const createDockerProviderProcessLaunchIssuer = () => {
   const issued = new WeakMap<LaunchedDockerCustody, Readonly<{process: ProviderProcessLaunch; assertActive(): void}>>();
+  const claimed = new WeakMap<ProviderProcessLaunch, () => void>();
   const seen = new WeakSet<LaunchedDockerCustody>();
   return Object.freeze({
     issue(launch: LaunchedDockerCustody, process: ProviderProcessLaunch, assertActive: () => void): void {
@@ -36,11 +37,18 @@ export const createDockerProviderProcessLaunchIssuer = () => {
       if (entry === undefined) {throw new TypeError("Docker mount projection requires an unused actual launch");}
       entry.assertActive(); return entry.process.mountFacts;
     },
+    /** Retained admission check cannot mint another execution claim. */
+    assertClaimActive(process: ProviderProcessLaunch): void {
+      const assertActive = claimed.get(process);
+      if (assertActive === undefined) {throw new TypeError("Docker process claim is not owned by this issuer");}
+      assertActive();
+    },
     /** Historical observation never grants fresh dispatch authority. */
     claim(launch: LaunchedDockerCustody): ProviderProcessLaunch {
       const entry = issued.get(launch);
       if (entry === undefined) {throw new TypeError("Docker provider process requires an unused actual lifecycle launch");}
-      entry.assertActive(); issued.delete(launch); return entry.process;
+      entry.assertActive(); issued.delete(launch);
+      claimed.set(entry.process, entry.assertActive); return entry.process;
     },
   });
 };

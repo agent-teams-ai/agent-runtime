@@ -130,6 +130,8 @@ export interface DockerEnginePort {
   attachCustody(
     authority: DockerContainerAuthority,
     call: DockerEngineCall,
+    /** Host-owned bounded lifetime after establishment; defaults to call. */
+    observationCall?: DockerEngineCall,
   ): Promise<DockerCustodyDuplexChannel>;
   /** Read-only exact-name/spec reconciliation after a journaled create request. */
   reconcileCreate(input: DockerContainerCreate, call: DockerEngineCall): Promise<DockerContainerAuthority>;

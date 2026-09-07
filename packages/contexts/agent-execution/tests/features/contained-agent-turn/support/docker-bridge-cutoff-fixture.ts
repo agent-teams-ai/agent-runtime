@@ -52,7 +52,7 @@ export const cutoffFixture = async (t: TestContext, joined = false) => {
     f.events.push("stop-entered"); await controls.onStop(); await stop(authority); f.events.push("stopped");
   };
   const a = await f.launch(joined ? {admission: {signal: abort.signal, deadlineEpochMs: Date.now() + 30_000},
-    observation: {isActive: () => true}} : undefined); a.input.init.isCurrentGeneration = () => controls.current;
+    observation: {signal: new AbortController().signal, deadlineEpochMs: Date.now() + 60_000, isActive: () => true}} : undefined); a.input.init.isCurrentGeneration = () => controls.current;
   a.input.call = {...a.input.call, signal: abort.signal};
   t.after(async () => {for (const release of releases) {release();} await a.contain(); await channel.close();});
   const preparedIo = joined ? prepareDockerProviderProcessIo(a.input) : undefined;

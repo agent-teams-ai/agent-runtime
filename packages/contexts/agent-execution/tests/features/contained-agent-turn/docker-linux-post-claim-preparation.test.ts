@@ -235,7 +235,7 @@ for (const step of ["engine-identity", "resource-journal", "create", "start", "h
       // Release is not admission: a cut caller still gets its resources released,
       // and only what cannot be proven absent stays quarantined.
       assert.ok(f.network.state.calls.includes("POST /v1.47/networks/create"));
-      assert.equal(result.kind, step === "host-handshake" ? "unsupported" : "quarantined");
+      assert.equal(result.kind, step === "host-handshake" || step === "start" ? "unsupported" : "quarantined");
     }
   });
 }
@@ -439,4 +439,27 @@ test("caller cancellation during finalization cannot publish a late success", as
   assert.throws(() => owner.takePrepared(f.claimed));
   assert.equal(f.events.filter(e => e === "remove").length, 1);
   assert.equal(f.events.filter(e => e === "route-release").length, 1);
+});
+
+test("post-claim launch retains immutable admission and independent bounded observation calls", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const launch = f.lifecycle.launch.bind(f.lifecycle);
+  let captured: Parameters<typeof launch>[0] | undefined;
+  f.lifecycle.launch = async input => {captured = input; return launch(input);};
+  const before = Date.now();
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "prepared"});
+  assert.ok(captured?.lifetime);
+  const {admission, observation} = captured.lifetime;
+  assert.ok(admission.deadlineEpochMs >= before + f.dependencies.deadlines.routeLifetimeMs);
+  assert.equal(observation.deadlineEpochMs, admission.deadlineEpochMs + f.dependencies.deadlines.cleanupMs);
+  const original = admission.deadlineEpochMs;
+  owner.cutoff();
+  assert.equal(admission.signal.aborted, true);
+  assert.equal(observation.signal.aborted, false);
+  assert.equal(observation.isActive(), true);
+  assert.equal(admission.deadlineEpochMs, original);
+  await owner.cleanup({deadlineEpochMs: Date.now() + 5000});
+  assert.equal(observation.signal.aborted, true);
+  assert.equal(observation.isActive(), false);
 });

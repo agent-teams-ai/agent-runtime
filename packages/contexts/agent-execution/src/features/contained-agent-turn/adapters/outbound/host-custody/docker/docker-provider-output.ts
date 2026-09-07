@@ -2,6 +2,7 @@
  * The session awaits push, so at most one output chunk is held across both streams. */
 export class DockerProviderOutput implements AsyncIterable<Uint8Array> {
   #claimed = false;
+  #unpublishedDrain = false;
   #ended = false;
   #error: Error | undefined;
   #slot: {bytes: Uint8Array; consumed: () => void} | undefined;
@@ -10,6 +11,7 @@ export class DockerProviderOutput implements AsyncIterable<Uint8Array> {
   public constructor(private readonly cancel: (error: Error) => void) {}
 
   public push(bytes: Uint8Array): Promise<void> {
+    if (this.#unpublishedDrain) {return Promise.resolve();}
     if (this.#error !== undefined) {return Promise.reject(this.#error);}
     if (this.#ended || this.#slot !== undefined) {throw new TypeError("Docker output rendezvous is unavailable");}
     if (this.#reader !== undefined) {
@@ -18,6 +20,14 @@ export class DockerProviderOutput implements AsyncIterable<Uint8Array> {
       return Promise.resolve();
     }
     return new Promise(resolve => {this.#slot = {bytes, consumed: resolve};});
+  }
+
+  /** Failed publication has no operation reader. Release its slot while the
+   * Host's bounded session continues authenticating output and final frames. */
+  public drainUnpublished(): void {
+    if (this.#claimed) {throw new TypeError("Published Docker output cannot be discarded");}
+    this.#unpublishedDrain = true;
+    this.#slot?.consumed(); this.#slot = undefined;
   }
 
   public finish(error?: Error): void {

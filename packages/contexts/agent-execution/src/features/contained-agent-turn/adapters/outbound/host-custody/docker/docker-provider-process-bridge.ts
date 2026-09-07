@@ -1,5 +1,6 @@
+import {custodyDataRecord} from "../host-custody-inert-record.js";
 import {isDeepStrictEqual} from "node:util";
-import {prepareDockerProviderProcessLaunch, claimDockerProviderProcessLaunch, type DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.js";
+import {assertDockerProviderProcessClaimActive, prepareDockerProviderProcessLaunch, claimDockerProviderProcessLaunch, type DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.js";
 import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
 import type {DockerContainedTurnInitOptions, DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
 import type {DockerContainerAuthority, DockerEngineCall} from "./engine/docker-engine-port.js";
@@ -156,9 +157,19 @@ const prepared = new WeakMap<PreparedDockerProviderIo, Readonly<{
   launch: DockerProviderProcessInput["launch"]; expected: DockerProviderProcessInput["expected"];
   isAdmitted(): boolean; init: DockerProviderProcessInput["init"]; process: DockerProviderProcess; session: DockerContainedTurnInitSession;
 }>>();
-const captureInit = (options: DockerProviderProcessInput["init"]): DockerProviderProcessInput["init"] => Object.freeze({
-  ...options, authority: Object.freeze({...options.authority, expectedIdentity: Object.freeze({...options.authority.expectedIdentity})}),
-});
+const captureInit = (value: DockerProviderProcessInput["init"]): DockerProviderProcessInput["init"] => {
+  const options = custodyDataRecord(value);
+  const authority = custodyDataRecord(options.authority);
+  return Object.freeze({...options, authority: Object.freeze({...authority,
+    expectedIdentity: custodyDataRecord(authority.expectedIdentity)})});
+};
+const capturePreparation = <T extends PreparationInput>(value: T): T => {
+  const input = custodyDataRecord(value);
+  const expected = custodyDataRecord(input.expected);
+  captureInit(input.init); // Reject nested traps/accessors before claiming; retain callback receivers.
+  return Object.freeze({...input, expected: Object.freeze({...expected,
+    authority: Object.freeze({...custodyDataRecord(expected.authority)})})});
+};
 
 /** Installs bounded output custody before the sole session can become ready.
  * Does not consume the lifecycle's provider-execution claim or mount facts. */
@@ -187,18 +198,24 @@ const prepareIo = (input: PreparationInput, issued: ReturnType<typeof prepareDoc
   return capability;
 };
 
-export const prepareDockerProviderProcessIo = (input: PreparationInput): PreparedDockerProviderIo =>
-  prepareIo(input, prepareDockerProviderProcessLaunch(input.launch));
+export const prepareDockerProviderProcessIo = (value: PreparationInput): PreparedDockerProviderIo => {
+  const input = capturePreparation(value);
+  return prepareIo(input, prepareDockerProviderProcessLaunch(input.launch));
+};
 
 /** The only async creation path consumes an actual lifecycle-issued launch. */
 export const createDockerProviderProcessBridge = () => Object.freeze({
-  async open(input: DockerProviderProcessInput) {
+  async open(value: DockerProviderProcessInput) {
+    const input = capturePreparation(value);
     // The absent optional capability preserves standalone consumers only. A
     // supplied invalid capability never falls back to another attach/session.
     const issued = claimDockerProviderProcessLaunch(input.launch);
     const capability = input.preparedIo === undefined ? prepareIo(input, issued) : input.preparedIo;
     const retained = prepared.get(capability);
     if (retained === undefined || retained.launch !== input.launch ||
+        !sameDockerAuthority(retained.expected.authority, issued.authority) ||
+        retained.expected.custodyRef !== issued.custodyRef ||
+        retained.expected.workspaceAuthorityPath !== issued.workspaceAuthorityPath ||
         !isDeepStrictEqual(retained.expected, input.expected) || !isDeepStrictEqual(retained.init, captureInit(input.init))) {
       throw new TypeError("Docker prepared IO requires the exact unused launch and captured configuration");
     }
@@ -209,6 +226,7 @@ export const createDockerProviderProcessBridge = () => Object.freeze({
       environment: Object.freeze(input.exec.environment.map(item => Object.freeze({...item})))});
     const joined = input.preparedIo !== undefined;
     const assertAdmitted = () => {
+      assertDockerProviderProcessClaimActive(issued);
       if (call.signal.aborted || Date.now() >= call.deadlineEpochMs || !retained.isAdmitted()) {throw new DockerProviderProcessIoError("execution-call-aborted");}
     };
     try {
@@ -235,7 +253,8 @@ export const createDockerProviderProcessBridge = () => Object.freeze({
     } catch (error) {
       // Joined preparation retains observation custody across admission cutoff
       // and late acknowledgement. Host containment owns its bounded drain.
-      if (!joined) {process.fail(error instanceof Error ? error : new DockerProviderProcessIoError("creation-failed"));}
+      if (joined) {process.stdout.drainUnpublished(); process.stderr.drainUnpublished();}
+      else {process.fail(error instanceof Error ? error : new DockerProviderProcessIoError("creation-failed"));}
       throw error;
     }
   },

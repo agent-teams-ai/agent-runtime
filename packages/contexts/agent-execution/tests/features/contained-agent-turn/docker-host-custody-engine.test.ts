@@ -945,3 +945,35 @@ test("lost create reconciles omitted defaults but never a read-only workspace do
     assert.equal(daemon.bodies.length, 1);
   }
 });
+
+test("production Engine attach transfers stage ownership to bounded observations", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const daemon = syntheticDaemon();
+  let raw: Awaited<ReturnType<typeof daemon.client.hijack>> | undefined;
+  let retainedCall: DockerEngineCall | undefined;
+  const client = {...daemon.client, async hijack(input: Parameters<typeof daemon.client.hijack>[0] & {observationCall?: DockerEngineCall}) {
+    retainedCall = input.observationCall;
+    raw = await daemon.client.hijack(input); return raw;
+  }};
+  const engine = new NodeUnixSocketDockerEngine({client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  const now = Date.now(); const stage = new AbortController(); const observations = new AbortController();
+  t.mock.timers.enable({apis: ["Date", "setTimeout"], now});
+  try {
+    const observationCall = {signal: observations.signal, deadlineEpochMs: now + 10_000};
+    const channel = await engine.attachCustody(authority, {signal: stage.signal, deadlineEpochMs: now + 1000}, observationCall);
+    assert.equal(retainedCall?.deadlineEpochMs, observationCall.deadlineEpochMs);
+    assert.equal(retainedCall?.signal.aborted, false);
+    stage.abort(); t.mock.timers.tick(1001);
+    await engine.start(authority, call());
+    const reader = channel.output[Symbol.asyncIterator]();
+    (raw!.output as PassThrough).write(multiplex(1, Buffer.from("tail")));
+    assert.equal(Buffer.from((await reader.next()).value!).toString(), "tail");
+    assert.equal(daemon.hijackCloseCount, 0);
+    t.mock.timers.tick(9000);
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    assert.equal(daemon.hijackCloseCount, 1);
+    await channel.close();
+  } finally {t.mock.timers.reset();}
+});
