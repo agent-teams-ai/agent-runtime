@@ -48,6 +48,8 @@ test('adopted slice, unchanged FMS and declared legacy metadata pass', () => {
   assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
 });
 const mutations = [
+  ['active profile cannot classify everything as legacy', p => { p.boundaries.forEach(b => { b.status = 'not-adopted'; }); p.compositions = []; }, /requires a materialized composition/],
+  ['active profile requires a composition mapping', p => { p.compositions = []; }, /requires a materialized composition/],
   ['unknown profile key', p => { p.conformant = true; }, /schema/],
   ['wildcard exception', p => { p.exceptions = [{ boundary: 'composition.test', rule: 'wiring', paths: ['packages/**'], authority: 'decision.md', owner: 'Test', rationale: 'test', reviewTrigger: 'test' }]; }, /schema/],
   ['central commit drift', (_p, e) => { e.standard.commit = 'b'.repeat(40); }, /commit drift/],

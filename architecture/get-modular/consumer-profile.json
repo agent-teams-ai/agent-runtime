@@ -3,10 +3,8 @@
   "schemaVersion": 1,
   "status": "pending",
   "pending": [
-    "Immutable central ADR-0026 document pin",
-    "Accepted local ADR-0015 path",
     "Reviewed package archive identities",
-    "Declared Foundation policy census and exact composition mappings",
+    "Review direct relationships and complete passive setup composition mapping against this Foundation census",
     "Root command chain integration"
   ],
   "standard": {
@@ -14,13 +12,13 @@
     "path": "docs/architecture/common-assembly.md",
     "anchor": "consumer-module-standard",
     "decision": "ADR-0026",
-    "commit": null,
-    "sha256": null,
-    "evidencePath": null
+    "commit": "a05f2cb51553e1efc5ba89be352e4aba04675088",
+    "sha256": "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d",
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
   },
   "authority": {
     "id": "ADR-0015",
-    "path": null,
+    "path": "docs/decisions/0015-passive-setup-static-assembly-adoption.md",
     "owner": "Embedded Runtime",
     "scope": "embedded-runtime passive setup"
   },
@@ -33,8 +31,289 @@
       "contained-turn-access"
     ]
   },
-  "productionRoots": [],
-  "boundaries": [],
+  "productionRoots": [
+    "packages/apps/embedded-runtime/src",
+    "packages/contexts/agent-execution/src",
+    "packages/contexts/provider-access/src",
+    "packages/contexts/runtime-configuration/src",
+    "packages/contexts/runtime-security/src",
+    "packages/platform/filesystem-custody/src"
+  ],
+  "boundaries": [
+    {
+      "id": "adapter.agent-execution.claude-agent-sdk",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "adapter.agent-execution.codex-app-server",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "adapter.agent-execution.docker-custody",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "adapter.agent-execution.docker-engine",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "adapter.agent-execution.docker-json",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/serialization"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/serialization/strict-json.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "adapter.agent-execution.host-custody",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "adapter.agent-execution.legacy-contained-turn-ports",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "adapter.agent-execution.provider-delegation-ports",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/contained-turn-provider-delegation-port.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/private-directory-custody-port.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "composition.embedded-runtime",
+      "owner": "embedded-runtime",
+      "roots": [
+        "packages/apps/embedded-runtime/src/composition",
+        "packages/apps/embedded-runtime/src/composition.ts"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/composition.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Passive setup Assembly cutover is under implementation; retained contained-turn composition remains outside this adoption.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "core.agent-execution.contained-turn",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-intent-cancellation.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-cleanup.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-recovery.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-operation-store.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-intent-guard.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-kernel-model.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-limits.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-output-authority.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-output-transitions.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-proofs.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-satisfaction.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-transitions.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "production.agent-execution",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/composition.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts",
+        "packages/contexts/agent-execution/src/index.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "production.embedded-runtime",
+      "owner": "embedded-runtime",
+      "roots": [
+        "packages/apps/embedded-runtime/src"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
+        "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
+        "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
+        "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
+        "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+        "packages/apps/embedded-runtime/src/index.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "production.filesystem-custody",
+      "owner": "filesystem-custody",
+      "roots": [
+        "packages/platform/filesystem-custody/src"
+      ],
+      "entrypoints": [
+        "packages/platform/filesystem-custody/src/index.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "production.provider-access",
+      "owner": "provider-access",
+      "roots": [
+        "packages/contexts/provider-access/src"
+      ],
+      "entrypoints": [
+        "packages/contexts/provider-access/src/composition.ts",
+        "packages/contexts/provider-access/src/index.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "production.runtime-configuration",
+      "owner": "runtime-configuration",
+      "roots": [
+        "packages/contexts/runtime-configuration/src"
+      ],
+      "entrypoints": [
+        "packages/contexts/runtime-configuration/src/composition.ts",
+        "packages/contexts/runtime-configuration/src/index.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "production.runtime-security",
+      "owner": "runtime-security",
+      "roots": [
+        "packages/contexts/runtime-security/src"
+      ],
+      "entrypoints": [
+        "packages/contexts/runtime-security/src/composition.ts",
+        "packages/contexts/runtime-security/src/index.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    }
+  ],
   "compositions": [],
   "exceptions": [],
   "packages": [],

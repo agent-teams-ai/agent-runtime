@@ -17,22 +17,15 @@ benefit evidence are not established by this document.
 bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
-The central authority is Get Modular's
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/e6568398d08eaebe9fe2af1bb6fcc54f4e15f704/docs/architecture/common-assembly.md#consumer-module-standard)
-and a pending central consumer-standard decision. The original candidate
-used ADR-0024, but that ID conflicts with merged upstream authority. It must be
-replaced by the reviewed successor candidate (planned ADR-0026) before pin
-activation. Retained original candidate identity, not the final activation pin:
+The central authority is Get Modular's accepted ADR-0026 and
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/a05f2cb51553e1efc5ba89be352e4aba04675088/docs/architecture/common-assembly.md#consumer-module-standard).
+The merged revision supersedes the earlier unmerged candidate reference:
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `e6568398d08eaebe9fe2af1bb6fcc54f4e15f704`.
+- Commit: `a05f2cb51553e1efc5ba89be352e4aba04675088`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete UTF-8 file SHA-256: `c2b48470112f2b809ab1d1b65ad6006f159acde7ef99cffd9b9495c6df62fbd7`.
-- Pin activation: unresolved; the original candidate is superseded for
-  integration. Replace its commit/digest with the reviewed successor after
-  the central decision is merged and the
-  consumer profile verifies the accepted immutable bytes. This candidate is not
-  an assertion of an already merged upstream standard.
+- Complete document SHA-256: `ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+- Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. Publication and approved artifact
@@ -110,3 +103,14 @@ qualification claim follows from documentation acceptance.
 
 The scoped [consumer profile](../../architecture/get-modular/consumer-profile.json)
 records the activation inputs for ADR-0015. A pending profile does not prove adoption.
+
+## Keeping the standard current
+
+Changes to shared module contracts or recommended composition patterns must update
+the central standard and affected consumer guidance in the same delivery. Changes
+to local boundaries must update the profile, ownership mapping and positive and
+rejecting gate fixtures. Before implementation, compare the pinned standard with
+upstream, review its delta and update the exact pin and retained bytes together.
+Never silently follow moving main, rewrite accepted ADRs, or mark a pending
+profile active before its real blocking checks pass. Stale documentation or
+unverified adoption is unfinished work.
