@@ -377,24 +377,48 @@ export const traces = Object.freeze({
   }),
 });
 
+// The embedded-runtime check consumes these packages and their build inputs.
+// Add a package here when that bounded build/test closure changes.
+export const evidencePackages = Object.freeze([
+  "packages/apps/embedded-runtime",
+  "packages/contexts/agent-execution",
+  "packages/contexts/provider-access",
+  "packages/contexts/runtime-configuration",
+  "packages/contexts/runtime-security",
+  "packages/platform/filesystem-custody",
+]);
+
+// Directory roots also feed the architecture walk; keep file inputs separate.
 export const evidenceRoots = Object.freeze({
   fixtures: Object.freeze([
     "packages/contexts/agent-execution/tests/fixtures",
     "packages/contexts/runtime-configuration/tests/fixtures",
     "packages/contexts/runtime-security/tests/fixtures",
   ]),
+  sources: Object.freeze(evidencePackages.map(path => `${path}/src`)),
+  tests: Object.freeze(evidencePackages.map(path => `${path}/tests`)),
+});
+
+// Retain the existing digest categories and path/mode/content encoding.
+// These are exact tracked inputs, never installed packages or generated output.
+export const evidenceFiles = Object.freeze({
+  fixtures: Object.freeze([
+    // Read directly by the embedded-runtime route qualification tests.
+    "docs/architecture/qualification-registry.json",
+    "docs/architecture/readiness.md",
+  ]),
   sources: Object.freeze([
-    "packages/apps/embedded-runtime/src",
-    "packages/contexts/agent-execution/src",
-    "packages/contexts/runtime-configuration/src",
-    "packages/contexts/runtime-security/src",
-    "packages/platform/filesystem-custody/src",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    ".npmrc",
+    "architecture/foundation/scaffold-tsconfig.json",
+    ...evidencePackages.flatMap(path => [`${path}/package.json`, `${path}/tsconfig.json`]),
+    "packages/platform/filesystem-custody/scripts/build-native-helper.mjs",
+    "packages/platform/filesystem-custody/native/rename-no-replace.c",
   ]),
   tests: Object.freeze([
-    "packages/apps/embedded-runtime/tests",
-    "packages/contexts/agent-execution/tests",
-    "packages/contexts/runtime-configuration/tests",
-    "packages/contexts/runtime-security/tests",
-    "packages/platform/filesystem-custody/tests",
+    // Imported by claude-code-setup.e2e.test.ts.
+    "scripts/architecture/ar2-evidence-custody.mjs",
   ]),
 });

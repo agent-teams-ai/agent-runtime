@@ -137,3 +137,24 @@ export const validateStoredReportShape = (report, changes) => {
   assert.equal(report.historicalChanges.length, changes.length);
   report.historicalChanges.forEach(validateHistoricalChangeShape);
 };
+
+export const validateCurrentEvidenceIdentity = (report, {
+  changes, currentArtifactDigests, sourceRevisionArtifactDigests,
+}) => {
+  assert.match(report.sourceRevision, /^[a-f0-9]{40}$/u);
+  assert.equal(
+    report.sourceRevision,
+    changes.at(-1)?.revision,
+    "captured source revision must be the latest retained product change",
+  );
+  assert.deepEqual(
+    currentArtifactDigests,
+    sourceRevisionArtifactDigests,
+    "current product roots no longer match the pinned source revision",
+  );
+  assert.deepEqual(
+    report.artifactDigests,
+    currentArtifactDigests,
+    "captured product source, tests, fixtures, or build inputs drifted",
+  );
+};

@@ -19,9 +19,11 @@ import {
 import {
   GitCommandFailure,
   isHistoricalObjectClosureUnavailable,
-  parseTrackedEvidenceEntries,
+  validateCurrentEvidenceIdentity,
   validateStoredReportShape,
 } from "./runtime-setup-l0-evidence-validation.mjs";
+
+import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const evidencePath = join(
@@ -136,15 +138,7 @@ const loadHistoricalChanges = (summarize = summarizeChange) => {
 
 const walkFiles = async directory => {
   const files = [];
-  let entries;
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch (error) {
-    if (error?.code === "ENOENT") {
-      return files;
-    }
-    throw error;
-  }
+  const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
@@ -161,24 +155,11 @@ const collectEvidenceFiles = async roots => {
   return files.flat().toSorted();
 };
 
-const trackedEvidenceFiles = roots => parseTrackedEvidenceEntries(
-  git("ls-files", "--stage", "-z", "--", ...roots),
-);
-
-const hashFileSet = async roots => {
-  const files = trackedEvidenceFiles(roots);
-  const digest = createHash("sha256");
-  for (const { mode, path } of files) {
-    const content = await readFile(join(repositoryRoot, path));
-    digest.update(path);
-    digest.update("\0");
-    digest.update(mode);
-    digest.update("\0");
-    digest.update(createHash("sha256").update(content).digest("hex"));
-    digest.update("\n");
-  }
-  return { fileCount: files.length, sha256: digest.digest("hex") };
-};
+const {
+  artifactDigests,
+  assertEvidenceRootsClean,
+  assertEvidenceRootsMatchRevision,
+} = createEvidenceInputs({ repositoryRoot, git });
 
 const importSpecifiers = (source, path) => {
   const parsed = parseSync(path, source);
@@ -279,30 +260,6 @@ const verifyCurrentArchitecture = async () => {
       `module runtime or outward layer leaked into ${relative(repositoryRoot, path)}`,
     );
   }
-};
-
-const artifactDigests = async () => ({
-  fixtures: await hashFileSet(evidenceRoots.fixtures),
-  sources: await hashFileSet(evidenceRoots.sources),
-  tests: await hashFileSet(evidenceRoots.tests),
-});
-
-const assertEvidenceRootsClean = () => {
-  const roots = [...evidenceRoots.fixtures, ...evidenceRoots.sources, ...evidenceRoots.tests];
-  assert.equal(
-    git("status", "--porcelain=v1", "--untracked-files=all", "--", ...roots).trim(),
-    "",
-    "captured product source, tests, and fixtures must match the source revision",
-  );
-};
-
-const assertEvidenceRootsMatchRevision = revision => {
-  const roots = [...evidenceRoots.fixtures, ...evidenceRoots.sources, ...evidenceRoots.tests];
-  assert.equal(
-    git("diff", "--name-only", revision, "HEAD", "--", ...roots).trim(),
-    "",
-    "captured product source, tests, and fixtures must match the retained product revision",
-  );
 };
 
 const captureProductCheck = () => {
@@ -414,23 +371,11 @@ const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
 const validateStoredReport = async report => {
   validateStoredReportShape(report, changes);
   assert.equal(report.schemaVersion, 3);
-  assert.match(report.sourceRevision, /^[a-f0-9]{40}$/u);
-  assert.equal(
-    report.sourceRevision,
-    changes.at(-1)?.revision,
-    "captured source revision must be the latest retained product change",
-  );
-  const currentArtifactDigests = await artifactDigests();
-  assert.deepEqual(
-    currentArtifactDigests,
+  validateCurrentEvidenceIdentity(report, {
+    changes,
+    currentArtifactDigests: await artifactDigests(),
     sourceRevisionArtifactDigests,
-    "current product roots no longer match the pinned source revision",
-  );
-  assert.deepEqual(
-    report.artifactDigests,
-    currentArtifactDigests,
-    "captured product source, tests, or fixtures drifted",
-  );
+  });
   assert.deepEqual(report.ownership, ownership);
   assert.deepEqual(report.traces, traces);
   assert.equal(report.taxonomyAuthority, "experiment-local-non-qualification-rubric");

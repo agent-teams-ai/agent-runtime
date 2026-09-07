@@ -41,7 +41,7 @@
     "architecture:feature-modules:candidate": "node scripts/architecture/check-feature-modules.mjs --allow-diagnostics",
     "architecture:feature-modules:active": "node scripts/architecture/check-feature-modules.mjs --require-active",
     "test:feature-modules": "node --test scripts/architecture/check-feature-modules.test.mjs",
-    "architecture:runtime-setup-l0-evidence": "node --test scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs && node scripts/architecture/runtime-setup-l0-evidence.mjs --check",
+    "architecture:runtime-setup-l0-evidence": "node --test scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs scripts/architecture/runtime-setup-l0-evidence-inputs.test.mjs && node scripts/architecture/runtime-setup-l0-evidence.mjs --check",
     "architecture:runtime-setup-l0-evidence:capture": "node scripts/architecture/runtime-setup-l0-evidence.mjs --capture",
     "architecture:ar2-contract": "node scripts/architecture/validate-ar2-contract-artifacts.mjs",
     "test:ar2-contract": "node --test scripts/architecture/validate-ar2-contract-artifacts.test.mjs",
