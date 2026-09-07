@@ -29,7 +29,8 @@ test("construction cleanup failure exposes only its fixed diagnostic without ins
     assert.ok(error instanceof ContainedTurnConstructionCleanupError);
     assert.equal(error.code, "contained_turn_construction_cleanup_failed");
     assert.equal(error.message, "Contained turn construction cleanup failed");
-    assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["code", "message", "name"]);
+    assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["cause", "code", "message", "name"]);
+    assert.equal((error as { cause: unknown }).cause, hostile);
     assert.ok(Object.isFrozen(error));
     return true;
   });
