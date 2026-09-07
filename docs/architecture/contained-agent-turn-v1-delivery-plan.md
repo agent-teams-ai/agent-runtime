@@ -168,7 +168,12 @@ Included:
   workspace;
 - durable PostgreSQL-backed operation, command, effect, output, and receipt
   records for the hosted path;
-- streaming observations with bounded backpressure and cursor continuity;
+- streaming observations with bounded backpressure and cursor continuity,
+  except the Codex App Server admission path, which accepts each turn as a
+  whole-turn buffered unit rather than incremental per-item streaming with
+  backpressure; Claude Agent SDK admission remains incremental. This is an
+  accepted provider-specific admission design, not an unmet streaming
+  requirement;
 - cancellation request, process-tree stop, complete drain, and honest ambiguous
   state;
 - deterministic result manifest and content-addressed artifact capture;
@@ -655,7 +660,10 @@ test pass rate, tests added, review defects, and iterations to stable head.
 - PostgreSQL restart, lease expiry, split-brain claimant, and projection rebuild;
 - adapter reports each unsupported capability without emulation;
 - packed package has no forbidden dependency or private DTO export;
-- Codex and Claude conformance fixtures produce the same product-level outcomes;
+- Codex and Claude conformance fixtures produce the same product-level outcomes,
+  except cancellation-during-stream on Claude, which closes as
+  `reconcile_required` instead of `cancelled`, because the Claude Agent SDK
+  does not expose a cancelled/aborted terminal state distinct from failed;
 - OpenCode ACP fixture validates the neutral contract without production launch.
 - direct composition rejects missing, unknown, duplicate, or ambiguous provider
   selection before factory invocation, handle publication, or effects;
