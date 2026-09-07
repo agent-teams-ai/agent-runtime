@@ -1,3 +1,4 @@
+import { parseDockerImageReference } from "./docker-image-reference.js";
 import { createHash } from "node:crypto";
 
 import { DockerEngineError } from "./docker-engine-error.js";
@@ -26,7 +27,6 @@ import {
 } from "./docker-api-v1.47-fields.js";
 
 const SHA256 = /^[a-f0-9]{64}$/u;
-const FULL_IMAGE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$/u;
 const LABEL_KEYS = Object.freeze([
   "com.agent-runtime.contained-turn",
   "com.agent-runtime.host-identity-sha256",
@@ -385,7 +385,7 @@ export const validateAuthorityShape = (value: DockerContainerAuthority): DockerC
       !SHA256.test(authority.createSpecificationSha256) ||
       !SHA256.test(authority.hostIdentitySha256) || !SHA256.test(authority.launchFingerprintSha256) ||
       !SHA256.test(authority.operationNonceSha256) || !SHA256.test(authority.ownerIdentitySha256) ||
-      !FULL_IMAGE.test(authority.imageDigest)) {
+      parseDockerImageReference(authority.imageDigest) === undefined) {
     throw new DockerEngineError("invalid-authority");
   }
   return authority;

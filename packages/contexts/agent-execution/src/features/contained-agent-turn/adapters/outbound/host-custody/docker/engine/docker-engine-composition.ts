@@ -8,3 +8,10 @@ export type {DockerOperationNetworkInput, DockerOperationNetworkRemoval} from ".
 export type {DockerOperationNetworkBinding, DockerOperationNetworkObservation} from "./docker-operation-network-codec.js";
 
 export {canonicalJsonSha256} from "./docker-canonical-json.js";
+
+export {DockerEngineError} from "./docker-engine-error.js";
+export {snapshotOwnDataObject} from "./docker-boundary-snapshot.js";
+export {parseDockerImageReference} from "./docker-image-reference.js";
+export type {DockerImageReference} from "./docker-image-reference.js";
+export {snapshotDockerImageInitLock, DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS} from "./docker-image-init-lock.js";
+export type {DockerImageInitLock} from "./docker-image-init-lock.js";

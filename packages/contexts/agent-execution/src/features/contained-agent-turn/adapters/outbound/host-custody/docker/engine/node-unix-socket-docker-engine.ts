@@ -1,3 +1,6 @@
+import type { DockerEngineClient } from "./docker-engine-client.js";
+import { readCreatedDockerImageInit } from "./docker-image-init-readback.js";
+import type { DockerImageInitLock } from "./docker-image-init-lock.js";
 import { DockerEngineError } from "./docker-engine-error.js";
 import {
   decodeEngineIdentity,
@@ -28,7 +31,7 @@ import type {
 import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_STREAM_BYTES } from "./docker-engine-port.js";
 import { parseDockerMultiplexedStream } from "./docker-multiplexed-stream.js";
 import { BoundedUnixHttpClient } from "./bounded-unix-http.js";
-import type { DockerEndpointIdentity, UnixHttpResponse } from "./bounded-unix-http.js";
+import type { UnixHttpResponse } from "./bounded-unix-http.js";
 import type { UnixHijackChannel } from "./bounded-unix-hijack.js";
 import { createDockerCustodyChannel } from "./docker-custody-channel.js";
 import { parseStrictJson } from "./strict-json.js";
@@ -41,26 +44,6 @@ interface JsonResponse {
   readonly value: unknown;
 }
 
-type EngineClient = {
-  buffered(input: {
-    readonly beforeWrite?: () => void;
-    readonly body?: Uint8Array;
-    readonly call: DockerEngineCall;
-    readonly method: "DELETE" | "GET" | "POST";
-    readonly path: string;
-  }): Promise<UnixHttpResponse<Uint8Array>>;
-  endpointIdentity(call: DockerEngineCall): Promise<DockerEndpointIdentity>;
-  hijack?(input: {
-    readonly observationCall?: DockerEngineCall;
-    readonly call: DockerEngineCall;
-    readonly path: string;
-  }): Promise<UnixHijackChannel>;
-  stream(input: {
-    readonly call: DockerEngineCall;
-    readonly method: "DELETE" | "GET" | "POST";
-    readonly path: string;
-  }): Promise<UnixHttpResponse<AsyncIterable<Uint8Array>>>;
-};
 
 type CustodySessionState = "opening" | "open" | "starting" | "started" | "invalid";
 
@@ -102,13 +85,13 @@ const statusFailure = (operation: string, statusCode: number): DockerEngineError
 };
 
 export class NodeUnixSocketDockerEngine implements DockerEnginePort {
-  readonly #client: EngineClient;
+  readonly #client: DockerEngineClient;
   readonly #custodySessions = new Map<string, CustodySession>();
   readonly #policy: DockerEnginePolicy;
 
   public constructor(input: {
     /** Internal protocol-test seam. It must supply the same boot-generation observations as production. */
-    readonly client?: EngineClient;
+    readonly client?: DockerEngineClient;
     readonly policy: DockerEnginePolicy;
   }) {
     const construction = snapshotOwnDataObject(input, ["client", "policy"], ["policy"], "invalid-create-request");
@@ -135,7 +118,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
           typeof client.stream !== "function") {
         throw new DockerEngineError("invalid-create-request");
       }
-      this.#client = construction.client as EngineClient;
+      this.#client = construction.client as DockerEngineClient;
     }
     this.#policy = policy;
     encodeCreateRequest({
@@ -150,6 +133,12 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       workspaceSource: `${policy.workspaceSourceRoot}/validation`,
       workspaceWritable: false,
     }, this.#policy);
+  }
+
+  /** Pre-start image and fixed init readback. Kept off the generic lifecycle port. */
+  public verifyCreatedImageInit(authority: DockerContainerAuthority, lock: DockerImageInitLock, call: DockerEngineCall): Promise<void> {
+    return readCreatedDockerImageInit({client: this.#client, policy: this.#policy,
+      identity: next => this.#identity(next)}, authority, lock, call);
   }
 
   public identity(call: DockerEngineCall): Promise<DockerEngineIdentity> {

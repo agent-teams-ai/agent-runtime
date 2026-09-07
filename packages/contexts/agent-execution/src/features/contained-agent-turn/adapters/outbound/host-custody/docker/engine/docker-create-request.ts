@@ -1,3 +1,4 @@
+import { parseDockerImageReference } from "./docker-image-reference.js";
 import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
@@ -7,7 +8,6 @@ import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerContainerCreate, DockerEnginePolicy } from "./docker-engine-port.js";
 
 const SHA256 = /^[a-f0-9]{64}$/u;
-const FULL_IMAGE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$/u;
 const SAFE_REF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u;
 const ENV_KEY = /^[A-Z_][A-Z0-9_]{0,63}$/u;
 const RESERVED_ENV = new Set(["DOCKER_CONFIG", "DOCKER_CONTEXT", "DOCKER_HOST", "HOME", "PATH", "TMPDIR"]);
@@ -154,7 +154,7 @@ export const labelsFor = (
 });
 
 const invalidCreateInput = (input: DockerContainerCreate, policy: DockerEnginePolicy): boolean => [
-  !FULL_IMAGE.test(input.imageDigest),
+  parseDockerImageReference(input.imageDigest) === undefined,
   !SHA256.test(input.launchFingerprintSha256),
   !SHA256.test(input.operationNonceSha256),
   !SHA256.test(input.ownerIdentitySha256),

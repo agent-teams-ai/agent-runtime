@@ -352,7 +352,7 @@ const imageCases: readonly (readonly [unknown, boolean])[] = [
   [`runtime@sha256:${imageSha256}`, true], [`registry.invalid:5443/team/runtime@sha256:${imageSha256}`, true],
   [`registry.invalid:00001/team-a/runtime_b.v1:Release_1.2-3@sha256:${imageSha256}`, true],
   [`runtime:tag@sha256:${imageSha256}`, true], [`runtime:123456@sha256:${imageSha256}`, true],
-  [`sha256:${imageSha256}`, false], [`@sha256:${imageSha256}`, false], ["runtime:latest", false],
+  [`sha256:${imageSha256}`, true], [`@sha256:${imageSha256}`, false], ["runtime:latest", false],
   [`https://registry.invalid/runtime@sha256:${imageSha256}`, false],
   [`user@registry.invalid/runtime@sha256:${imageSha256}`, false],
   [`Registry.invalid/runtime@sha256:${imageSha256}`, false], [`registry.invalid/Runtime@sha256:${imageSha256}`, false],
@@ -362,6 +362,8 @@ const imageCases: readonly (readonly [unknown, boolean])[] = [
   [`runtime@sha256:${imageSha256.slice(1)}`, false], [`runtime@sha256:${imageSha256}a`, false],
   [`runtime@sha512:${imageSha256}`, false], [` runtime@sha256:${imageSha256}`, false],
   [`runtime@sha256:${imageSha256}\n`, false], [`runtime@sha256:${imageSha256}?tag=x`, false],
+  [`sha256:${imageSha256.slice(1)}`, false], [`sha256:${imageSha256}a`, false],
+  [`sha256:${imageSha256.toUpperCase()}`, false], [`sha256:${imageSha256}\n`, false],
   [`runtime@sha256:${imageSha256}#fragment`, false], [null, false], [undefined, false], [1, false], [{}, false],
 ];
 for (const [index, [imageDigest, valid]] of imageCases.entries()) {

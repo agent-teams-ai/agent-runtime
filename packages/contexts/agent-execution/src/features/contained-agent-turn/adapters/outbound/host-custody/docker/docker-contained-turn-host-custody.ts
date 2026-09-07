@@ -1,3 +1,4 @@
+import { parseDockerImageReference } from "./engine/docker-engine-composition.js";
 import {createHash} from "node:crypto";
 import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
 import type {DockerContainerAuthority, DockerCustodyDuplexChannel, DockerEngineCall} from "./engine/docker-engine-port.js";
@@ -94,7 +95,7 @@ export class DockerContainedTurnHostCustody {
     }
     if (options.authority.launchFingerprintSha256 !== authority.launchFingerprintSha256 ||
         createHash("sha256").update(options.authority.operationNonce).digest("hex") !== authority.operationNonceSha256 ||
-        !authority.imageDigest.endsWith(`@sha256:${options.authority.expectedIdentity.containerImageSha256}`)) {
+        parseDockerImageReference(authority.imageDigest)?.sha256 !== options.authority.expectedIdentity.containerImageSha256) {
       throw new TypeError("Docker init session does not match retained launch authority");
     }
     const isCurrentGeneration = options.isCurrentGeneration;

@@ -1,3 +1,4 @@
+import { parseDockerImageReference } from "../engine/docker-engine-composition.js";
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 import type { DockerContainerAuthority } from "../engine/docker-engine-port.js";
@@ -29,13 +30,10 @@ const fixed = (value: unknown, prefix: string): string => {
   if (typeof value !== "string" || !value.startsWith(`${prefix}:`)) { throw new HostHttpEgressV4Error("conflict"); }
   v4Digest(value.slice(prefix.length + 1)); return value;
 };
-// Same FULL_IMAGE grammar as docker-engine-codec/create-request; retain the exact
-// repository, optional registry port/tag and digest. Engine differential tests bind it.
 const imageDigest = (value: unknown): string => {
-  if (typeof value !== "string" || !/^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$/u.test(value)) {
-    throw new HostHttpEgressV4Error("conflict");
-  }
-  return value;
+  const parsed = parseDockerImageReference(value);
+  if (parsed === undefined) {throw new HostHttpEgressV4Error("conflict");}
+  return parsed.reference;
 };
 export const v4Subject = (value: unknown): HostHttpEgressV4Subject => {
   v4Exact(value, ["attempt", "effectId", "workspaceId", "executionGenerationId", "scopeSha256",

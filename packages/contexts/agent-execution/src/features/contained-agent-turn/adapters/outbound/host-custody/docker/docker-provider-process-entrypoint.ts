@@ -19,3 +19,10 @@ export type {DockerHostCustodyLifetime, DockerContainedTurnInitSession} from "./
 export {isConcreteLinuxDockerLifecycle} from "./node-linux-docker-residue-custody.js";
 
 export {canonicalJsonSha256} from "./engine/docker-engine-composition.js";
+
+/** Curated private handoff for later kernel wiring; no ordinary caller proof writer. */
+export {createDockerImageInitOwner} from "./docker-image-init-owner.js";
+export type {DockerImageInitOwner, DockerImageInitWitness, DockerImageInitHostBinding} from "./docker-image-init-owner.js";
+export {DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS} from "./engine/docker-engine-composition.js";
+export type {DockerImageInitLock} from "./engine/docker-engine-composition.js";
+export {parseDockerImageReference} from "./engine/docker-engine-composition.js";
