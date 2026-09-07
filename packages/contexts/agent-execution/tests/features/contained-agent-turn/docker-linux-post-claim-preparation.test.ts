@@ -517,7 +517,7 @@ test("failed cleanup recovers with fresh observations and concurrent retries sha
   assert.deepEqual(f.network.state.calls, completedCalls);
 });
 
-test("allocated beforeLaunch failure retries cleanup but cannot invent V2 no-creation evidence", async t => {
+test("allocated beforeLaunch failure releases through actual V2 no-creation and exact network deletion", async t => {
   const f = await postClaimFixture(t);
   const cleanup = DockerHttpNetworkResources.prototype.cleanupNetwork;
   let attempts = 0; let launchPreparations = 0; let lateEffects = 0;
@@ -538,20 +538,23 @@ test("allocated beforeLaunch failure retries cleanup but cannot invent V2 no-cre
     prepareProviderIo: forbidden,
     finishClaimed: forbidden,
   });
-  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "quarantined"});
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "unsupported", reason: "broker"});
   assert.equal(attempts, 1);
-  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "quarantined"});
-  assert.equal(attempts, 2, "a settled failure must reach the actual network owner again");
-  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "quarantined"});
-  assert.equal(attempts, 3);
-  // The supplied V2 issuer has no no-creation port. V4 must reject release
-  // before Engine deletion, even though composition never invoked launch.
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.equal(attempts, 1);
+  const closure = await f.custodyJournal.lookup(f.subject.attempt);
+  assert.equal(closure.state, "closed");
+  assert.equal(closure.sequence, 1);
+  assert.equal(closure.authoritySha256, null);
   const ledger = v4Replay(v4Decode(f.v4Storage.journal!), f.subject);
-  assert.equal(ledger.containerAbsent, false);
-  assert.equal(ledger.network.phase, 2);
-  assert.equal(kinds(f.v4Storage.journal).includes("network_release"), false);
-  assert.equal(f.network.state.calls.some(call => call.startsWith("DELETE ")), false);
-  assert.notEqual(f.network.state.network, undefined);
+  assert.equal(ledger.containerAbsent, true);
+  assert.equal(ledger.container, null);
+  assert.equal(ledger.network.phase, 4);
+  assert.equal(kinds(f.v4Storage.journal).includes("network_release"), true);
+  assert.deepEqual(f.network.state.calls.filter(call => call.startsWith("DELETE ")),
+    [`DELETE /v1.47/networks/${f.network.networkId}`]);
+  assert.equal(f.network.state.network, undefined);
   assert.equal(launchPreparations, 1);
   assert.equal(lateEffects, 0);
   assert.equal(f.events.includes("create"), false);

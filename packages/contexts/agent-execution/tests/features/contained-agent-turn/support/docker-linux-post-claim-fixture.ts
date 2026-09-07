@@ -132,7 +132,9 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
   const state = {running: false, removed: false, attached: false, initReady: true};
   const faults = {identity: false, journal: false, launch: false, listener: false};
   const engine = syntheticEngine({record, faults, state, network, engineIdentity});
-  const lifecycle = new DockerHostCustodyLifecycle(engine, new DockerCustodyJournal(new MemoryStorage()),
+  const custodyStorage = new MemoryStorage();
+  const custodyJournal = new DockerCustodyJournal(custodyStorage);
+  const lifecycle = new DockerHostCustodyLifecycle(engine, custodyJournal,
     {async proveEmpty() {return "empty";}});
 
   const v4Storage = new MemoryV4Storage();
@@ -219,6 +221,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
     underlyingCustodyRef: `urn:agent-runtime:docker-host-reservation:${"b".repeat(64)}`});
   t.after(() => {controller.abort();});
   return {engine, network, subject, proof, claimed, controller, dependencies, events, faults, hooks, state, v4Storage,
+    custodyStorage, custodyJournal,
     physical, policies, routeAdmissions, route, publishedFirstWrites, syntheticLease, readback, lifecycle, engineCall,
     get journal() {return journal;}};
 };

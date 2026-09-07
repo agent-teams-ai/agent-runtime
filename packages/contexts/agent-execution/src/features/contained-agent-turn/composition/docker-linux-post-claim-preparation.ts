@@ -278,9 +278,15 @@ const createResourceCleanup = (
     return resources.observers.observeCutoff(resources.network.signal, resources.product?.listener ?? null).then(() => proven, () => false);
   });
   const proveContainerAbsent = retainProof(async (): Promise<boolean> => {
-    // This skips lifecycle removal only. It issues no V4 no-creation proof:
-    // the network ledger still decides whether network release is authorized.
-    if (!resources.launchAttempted) {return true;}
+    if (!resources.launchAttempted) {
+      if (!resources.networkAttempted) {return true;}
+      if (resources.lifecycle === undefined || resources.observers === undefined || resources.launchKey === undefined) {return false;}
+      const token = await resources.lifecycle.removalObservation
+        .observeNoCreation({key: resources.launchKey, call: cleanupCall()})
+        .catch(() => null);
+      if (token === undefined || token === null) {return false;}
+      return resources.observers.observeContainerAbsent(token).then(() => true, () => false);
+    }
     if (resources.lifecycle === undefined || resources.observers === undefined || resources.launchKey === undefined) {return false;}
     // A late start acknowledgement can cross cutoff before launch publication.
     // Only the lifecycle's retained exact identity can support cleanup then.
@@ -426,6 +432,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       // holds is the only issuer of this attempt's exact container absence.
       stage = "lifecycle";
       resources.lifecycle = dependencies.openLifecycle(policy);
+      resources.launchKey = subject.attempt;
       resources.observers = createDockerHostHttpEgressObservers({subject, removal: resources.lifecycle.removalObservation});
 
       assertOpen();
@@ -448,7 +455,6 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       stage = "launch";
       const launch = await hostPreparation.beforeLaunch({identity, policy}, call(deadlines.launchMs));
       assertOpen();
-      resources.launchKey = subject.attempt;
       resources.launchAttempted = true;
       resources.launched = await resources.lifecycle.launch({...launch, create, owner, lifetime: {
         admission: {signal: AbortSignal.any([input.signal, admissionAbort.signal]), deadlineEpochMs: admissionDeadline},

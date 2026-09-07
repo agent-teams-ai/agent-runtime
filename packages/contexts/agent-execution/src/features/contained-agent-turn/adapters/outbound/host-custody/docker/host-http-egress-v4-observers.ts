@@ -77,7 +77,8 @@ const listenerAddress = (input: unknown): Readonly<{address: string; port: numbe
 export type DockerHostHttpEgressObserverInput = Readonly<{
   subject: HostHttpEgressV4Subject;
   /** The lifecycle-owned container removal issuer; absence proof stays with it. */
-  removal: Pick<ReturnType<typeof createDockerRemovalObservationOwner>, "readObservation">;
+  removal: Pick<ReturnType<typeof createDockerRemovalObservationOwner>, "readObservation"> &
+    Partial<Pick<ReturnType<typeof createDockerRemovalObservationOwner>, "readNoCreationObservation">>;
 }>;
 
 /**
@@ -97,6 +98,10 @@ export const createDockerHostHttpEgressObservers = (input: DockerHostHttpEgressO
   if (removal === null || typeof removal !== "object" || types.isProxy(removal) ||
     typeof removal.readObservation !== "function") {throw rejected();}
   const readRemoval = removal.readObservation.bind(removal);
+  if (removal.readNoCreationObservation !== undefined && typeof removal.readNoCreationObservation !== "function") {
+    throw rejected();
+  }
+  const readNoCreation = removal.readNoCreationObservation?.bind(removal);
   const tokens = new WeakMap<object, HostHttpEgressV4Observation>();
   let journal: HostHttpEgressV4Journal | undefined;
   let routeIntent = false;
@@ -163,6 +168,15 @@ export const createDockerHostHttpEgressObservers = (input: DockerHostHttpEgressO
      * removal owner. A token it does not recognise mints nothing. */
     async observeContainerAbsent(token: object): Promise<void> {
       const proof = readRemoval(token);
+      if (proof === undefined) {
+        const noCreation = readNoCreation?.(token);
+        if (noCreation === undefined ||
+          canonicalDockerCustodyJson(validateDockerCustodyAttemptKey(noCreation.attemptKey)) !==
+            canonicalDockerCustodyJson(subject.attempt)) {throw rejected();}
+        await publish("container_absent", {container: null,
+          journalChecksumSha256: v4Digest(noCreation.journalChecksumSha256)}, noCreation);
+        return;
+      }
       if (proof === undefined ||
         canonicalDockerCustodyJson(validateDockerCustodyAttemptKey(proof.attemptKey)) !== canonicalDockerCustodyJson(subject.attempt) ||
         proof.authority.imageDigest !== subject.imageDigest) {throw rejected();}

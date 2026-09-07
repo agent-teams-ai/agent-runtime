@@ -1,4 +1,5 @@
 import {DockerLifecycleAuthority, type DockerLifecycleImageSelection} from "./docker-lifecycle-authority.js";
+import {createDockerNoCreationObservationOwner, sealDockerNoCreationAttempt} from "./docker-no-creation-observation-owner.js";
 import {DockerLifecycleObservations, createDockerLifecycleJournal, type DockerLifecycleObservation} from "./docker-lifecycle-observations.js";
 import {createDockerProviderProcessLaunchIssuer, type LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
 import {DockerContainedTurnHostCustody, type DockerHostCustodyLifetime, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
@@ -89,6 +90,7 @@ export class DockerHostCustodyLifecycle {
   /** Volatile exact binding permits safe cleanup after same-instance journal loss, but is not restart authority. */
   readonly #authority: DockerLifecycleAuthority;
   private readonly liveLaunches = new Map<string, DockerContainedTurnHostCustody>();
+  private readonly launchAttempts = new Map<string, string>();
   readonly #observations = new DockerLifecycleObservations();
   private readonly journal: DockerHostCustodyJournalPort;
   /** One-use fences outlive zero-effect volatile capacity release. Journal capacity is separate. */
@@ -106,7 +108,11 @@ export class DockerHostCustodyLifecycle {
   ) {
     this.#authority = new DockerLifecycleAuthority(maxLiveAuthorityBindings);
     this.journal = this.#observations.journal(journal);
-    this.removalObservation = createDockerRemovalObservationOwner(engine, this.contain.bind(this));
+    this.removalObservation = createDockerRemovalObservationOwner(engine, this.contain.bind(this),
+      createDockerNoCreationObservationOwner(engine, this.journal,
+        key => sealDockerNoCreationAttempt(key, {liveLaunches: this.liveLaunches, launchAttempts: this.launchAttempts,
+          retainedAuthority: this.#authority.retained(key), failedBeforeCreate: this.failedBeforeCreate,
+          maximum: this.maxLiveAuthorityBindings}), maxLiveAuthorityBindings));
   }
   /** Historical Host-readable evidence; possession never supplies new execution authority. */
   public observeLaunch(launch: LaunchedDockerCustody): DockerLifecycleObservation {return this.#observations.read(launch);}
@@ -158,11 +164,13 @@ export class DockerHostCustodyLifecycle {
     const locator = dockerCustodyAttemptLocator(key);
     const attemptFence = JSON.stringify([key.tenantId, key.projectId, key.operationId, key.attemptId]);
     if (this.failedBeforeCreate.has(locator) || this.failedBeforeCreate.has(attemptFence) ||
+        this.failedBeforeCreate.size >= this.maxLiveAuthorityBindings * 2 ||
         this.liveLaunches.has(locator) || this.liveLaunches.size >= this.maxLiveAuthorityBindings) {
       throw new TypeError("Docker Host Custody requires unused launch capacity");
     }
     const live = new DockerContainedTurnHostCustody(lifetime);
     this.liveLaunches.set(locator, live);
+    this.launchAttempts.set(locator, attemptFence);
     let createInvoked = false;
     try {
       this.assertLaunchOpen(key, input.call);
@@ -227,6 +235,7 @@ export class DockerHostCustodyLifecycle {
         this.failedBeforeCreate.add(locator);
         this.failedBeforeCreate.add(attemptFence);
         this.liveLaunches.delete(locator);
+        this.launchAttempts.delete(locator);
       }
       void live.close();
       throw error;
@@ -576,6 +585,7 @@ export class DockerHostCustodyLifecycle {
     await this.journal.retire(input);
     this.#authority.retire(input.key);
     this.liveLaunches.delete(dockerCustodyAttemptLocator(input.key));
+    this.launchAttempts.delete(dockerCustodyAttemptLocator(input.key));
   }
 }
 
