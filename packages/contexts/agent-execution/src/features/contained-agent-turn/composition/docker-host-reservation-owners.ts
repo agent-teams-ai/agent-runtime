@@ -1,8 +1,7 @@
 import {createHash} from "node:crypto";
 import type {createHostPrivateRootOwnerFactory, HostPrivateRootOwner} from "./host-private-root-owner.js";
-import {createDockerImageInitOwner, type DockerImageInitLock, type PreparedDockerProviderIo}
+import {createDockerImageInitOwner, NodeUnixSocketDockerEngine, type DockerImageInitLock, type PreparedDockerProviderIo}
   from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
-import {NodeUnixSocketDockerEngine} from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import type {DockerLinuxClaimedJoin, DockerLinuxPostClaimDependencies, DockerLinuxPostClaimOwner}
   from "./docker-linux-post-claim-preparation.js";
 import type {DockerKernelHostCustody} from "./docker-kernel-host-custody.js";

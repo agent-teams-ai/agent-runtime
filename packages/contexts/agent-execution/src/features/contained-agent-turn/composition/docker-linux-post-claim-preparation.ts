@@ -192,6 +192,29 @@ const createPreparationResources = (): PreparationResources => ({
   routeInstalled: false, routeOwner: undefined, product: undefined,
 });
 
+/** Host capture and image selection run inside the retained preparation flight.
+ * The caller checks admission again after each operation before any effect. */
+const createHostLaunchPreparation = <Io extends DockerLinuxPreparedProviderIo>(
+  dependencies: DockerLinuxPostClaimDependencies, join: DockerLinuxClaimedJoin<Io> | undefined,
+  assertOpen: () => void,
+) => ({
+  async captureHost(proof: Claimed["committedDispatchProof"]) {
+    const owner: LaunchInput["owner"] = Object.freeze({tenantId: proof.tenantId, projectId: proof.projectId,
+      operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
+      hostInstanceId: proof.hostInstanceId, hostBootId: proof.hostBootId});
+    assertOpen();
+    const host = await join?.captureHost?.();
+    assertOpen();
+    return {owner, create: host?.create ?? dependencies.create,
+      hostLifecycleGenerationSha256: host?.hostLifecycleGenerationSha256 ?? dependencies.hostLifecycleGenerationSha256};
+  },
+  async beforeLaunch(input: Readonly<{identity: EngineIdentity; policy: EnginePolicy}>, call: EngineCall) {
+    const imageInit = await join?.beforeLaunch?.(input);
+    assertOpen();
+    return {call, ...(imageInit === undefined ? {} : {imageInit})};
+  },
+});
+
 const prepareOperationNetwork = (
   dependencies: DockerLinuxPostClaimDependencies, resources: PreparationResources,
   input: Readonly<{proof: Claimed["committedDispatchProof"]; owner: LaunchInput["owner"];
@@ -342,16 +365,11 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     const assertOpen = (): void => {
       if (cut || input.signal.aborted || Date.now() >= admissionDeadline) {throw new TypeError("Host post-claim preparation was cut off");}
     };
+    const hostPreparation = createHostLaunchPreparation(dependencies, join, assertOpen);
     try {
       const proof = input.committedDispatchProof;
-      const owner: LaunchInput["owner"] = Object.freeze({tenantId: proof.tenantId, projectId: proof.projectId,
-        operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
-        hostInstanceId: proof.hostInstanceId, hostBootId: proof.hostBootId});
+      const {owner, create, hostLifecycleGenerationSha256} = await hostPreparation.captureHost(proof);
       assertOpen();
-      const host = await join?.captureHost?.();
-      assertOpen();
-      const create = host?.create ?? dependencies.create;
-      const hostLifecycleGenerationSha256 = host?.hostLifecycleGenerationSha256 ?? dependencies.hostLifecycleGenerationSha256;
       const identity = await dependencies.engineIdentity(call(deadlines.engineIdentityMs));
       const {subject, policy, claim, network} = prepareOperationNetwork(dependencies, resources, {proof, owner, create, identity});
 
@@ -381,12 +399,11 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       assertOpen();
 
       stage = "launch";
-      const launchCall = call(deadlines.launchMs);
-      const imageInit = await join?.beforeLaunch?.({identity, policy});
+      const launch = await hostPreparation.beforeLaunch({identity, policy}, call(deadlines.launchMs));
       assertOpen();
       resources.launchKey = subject.attempt;
       resources.launchAttempted = true;
-      resources.launched = await resources.lifecycle.launch({call: launchCall, create, owner, ...(imageInit === undefined ? {} : {imageInit}), lifetime: {
+      resources.launched = await resources.lifecycle.launch({...launch, create, owner, lifetime: {
         admission: {signal: AbortSignal.any([input.signal, admissionAbort.signal]), deadlineEpochMs: admissionDeadline},
         observation: {signal: observationAbort.signal, deadlineEpochMs: observationDeadline,
           isActive: () => !observationAbort.signal.aborted && Date.now() < observationDeadline},

@@ -25,10 +25,12 @@ const input = (operationId: string, attemptId: string, workspaceRef: string, pri
     intentMode: "analysis", provider: "codex", spawnMode: "sdk-delegated"},
 });
 
+const linux = {skip: process.platform !== "linux" ? "Requires Linux descriptor custody" : false, timeout: 30_000};
 const retainedRoots = new Set<object>();
+const unexpected = () => {throw new Error("no late preparation effect");};
 
 for (const debt of [false, true]) {
-  test(`containment joins concrete physical cleanup and private root before receipt without release: debt=${debt}`, async t => {
+  test(`containment joins concrete physical cleanup and private root before receipt without release: debt=${debt}`, linux, async t => {
     const f = await residueFixture(t); installSyntheticInit(f.fake);
     const create = createInput(f.root);
     await fs.chmod(dirname(create.privateRootSource), 0o700);
@@ -75,7 +77,7 @@ for (const debt of [false, true]) {
   });
 }
 
-test("cancel during real root capture retains preparation and cleanup flights; no late network/create", async t => {
+test("cancel during real root capture retains preparation and cleanup flights; no late network/create", linux, async t => {
   const f = await postClaimFixture(t);
   const base = await fs.mkdtemp("/tmp/ar69-host-root-join-");
   t.after(() => fs.rm(base, {recursive: true, force: true}));
@@ -89,7 +91,6 @@ test("cancel during real root capture retains preparation and cleanup flights; n
   let providerCut = false;
   const resources = createDockerHostReservationOwners({roots, raw, custodyRef: handle.custodyRef, dependencies,
     cutoffProvider() {providerCut = true;}, lock: imageLock(dependencies.create.imageDigest)});
-  const unexpected = () => {throw new Error("no late preparation effect");};
   const preparation = createDockerLinuxPostClaimOwner(dependencies, {...resources.hooks,
     prepareProviderIo: unexpected, finishClaimed: unexpected});
   resources.attach(preparation);
@@ -107,7 +108,7 @@ test("cancel during real root capture retains preparation and cleanup flights; n
   assert.ok(root.snapshot().retainedHandles > 0);
   f.controller.abort();
   const containing = raw.requestContainment({...handle, operationId: reservation.operationId, attemptId: reservation.attemptId});
-  await new Promise<void>(resolve => setImmediate(resolve));
+  await new Promise<void>(resolve => {setImmediate(resolve);});
   assert.equal(root.snapshot().history.includes("exact-entry-remove-attempt"), false);
   assert.equal(providerCut, true);
   gate.resolve();
@@ -117,7 +118,7 @@ test("cancel during real root capture retains preparation and cleanup flights; n
   assert.throws(() => raw.installPrivateRoot(handle.custodyRef, {...root}));
 });
 
-test("normal kernel terminal-attestation entrypoint deletes the owned root before observing final evidence", async t => {
+test("normal kernel terminal-attestation entrypoint deletes the owned root before observing final evidence", linux, async t => {
   const {ContainedTurnKernelCustodyAdapter} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js");
   const ids = await import("../../contained-turn-kernel-fixtures.ts");
   const {containedTurnOperationCutoffRevision} = await import("../../../dist/features/contained-agent-turn/domain/contained-turn-output-authority.js");
@@ -165,4 +166,35 @@ test("normal kernel terminal-attestation entrypoint deletes the owned root befor
   // Cleanup cannot invent the missing independent provider-start/completion proof.
   assert.equal(result.kind, "indeterminate"); assert.equal(releases, 0);
   await assert.rejects(fs.stat(create.privateRootSource), {code: "ENOENT"});
+});
+
+test("cleanup timeout during beforeLaunch retains the original preparation and network until the hook settles", async t => {
+  const f = await postClaimFixture(t);
+  const entered = Promise.withResolvers<void>(); const gate = Promise.withResolvers<void>();
+  t.after(() => {gate.resolve();});
+  let selections = 0;
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {
+    async beforeLaunch() {
+      selections += 1; entered.resolve(); await gate.promise;
+      throw new TypeError("image selection unavailable after cutoff");
+    },
+    prepareProviderIo: unexpected, finishClaimed: unexpected,
+  });
+  const preparing = owner.preparation.prepareClaimed(f.claimed);
+  let settled = false;
+  void preparing.then(() => {settled = true; return null;});
+  await entered.promise;
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 10}), {kind: "quarantined"});
+  assert.equal(settled, false);
+  assert.equal(f.network.state.calls.some(call => call.startsWith("DELETE ")), false);
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "unsupported", reason: "owner"});
+  gate.resolve();
+  // The ledger has no container-absence observation yet. Its existing release
+  // precondition keeps the allocated network quarantined after this refusal.
+  assert.deepEqual(await preparing, {kind: "quarantined"});
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "quarantined"});
+  assert.equal(selections, 1);
+  assert.equal(f.network.state.calls.filter(call => call.startsWith("DELETE ")).length, 0);
+  assert.equal(f.events.includes("create"), false);
+  assert.throws(() => owner.takePrepared(f.claimed));
 });
