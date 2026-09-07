@@ -1,17 +1,14 @@
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
-import { pathToFileURL } from "node:url";
+import { test } from "node:test";
 
-import { configuration, invalidConfigurations, prepareBootstrapProject } from "./docker-custody-init-bootstrap-fixture.ts";
-
-const root = await prepareBootstrapProject({after});
-const {parseDockerCustodyInitConfiguration: parse, DOCKER_CUSTODY_INIT_CONFIGURATION_MAX_BYTES: maximum} =
-  await import(pathToFileURL(`${root}/init/docker-custody-init-configuration.js`).href);
+import { configuration, invalidConfigurations } from "./docker-custody-init-bootstrap-fixture.ts";
+import {parseDockerCustodyInitConfiguration as parse, DOCKER_CUSTODY_INIT_CONFIGURATION_MAX_BYTES as maximum}
+  from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-configuration.js";
 const reject = (input: unknown): void => {
   assert.throws(() => parse(input), {name: "Error", message: "invalid custody init configuration"});
 };
 
-test("source-loaded decoder preserves exactly the nine options and freezes nested data", () => {
+test("built decoder preserves exactly the nine options and freezes nested data", () => {
   const parsed = parse(JSON.stringify(configuration));
   assert.deepEqual(parsed, configuration);
   for (const value of [parsed, parsed.observedIdentity, parsed.allowedEnvironmentNames]) {assert.ok(Object.isFrozen(value));}
