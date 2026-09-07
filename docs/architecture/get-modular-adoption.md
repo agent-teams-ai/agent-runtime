@@ -107,3 +107,6 @@ Delivery remains pending until focused gates, fast/full integrated-source checks
 independent review, exact artifacts, and before/after benefit measurements pass.
 Negative or inconclusive benefit must be reported honestly. No readiness or
 qualification claim follows from documentation acceptance.
+
+The scoped [consumer profile](../../architecture/get-modular/consumer-profile.json)
+records the activation inputs for ADR-0015. A pending profile does not prove adoption.

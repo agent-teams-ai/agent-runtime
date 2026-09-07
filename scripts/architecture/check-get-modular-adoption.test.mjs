@@ -134,3 +134,12 @@ for (const [name, mutate, pattern] of [
     await assert.rejects(checkAdoption(f.root), pattern);
   });
 }
+
+ test('accepts ADR adoption-record reciprocity without rewriting accepted authority', () => {
+  const { profile, evidence } = fixture();
+  evidence.files.set(profile.authority.path, '[record](../architecture/get-modular-adoption.md)');
+  evidence.files.set('docs/architecture/get-modular-adoption.md', 'ADR-0015 architecture/get-modular/consumer-profile.json');
+  assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
+  evidence.files.set('docs/architecture/get-modular-adoption.md', 'ADR-0015 unrelated');
+  assert.throws(() => verifyAdoption(profile, evidence), /reciprocal/);
+});

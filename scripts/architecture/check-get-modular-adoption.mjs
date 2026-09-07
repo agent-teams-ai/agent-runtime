@@ -43,7 +43,12 @@ export function verifyAdoption(profile, evidence) {
   assert.ok(decisions.some(d => d.id === profile.authority.id && d.path === profile.authority.path), 'accepted ADR missing');
   const get = path => { assert.ok(files.has(path), `stale or missing path: ${path}`); return files.get(path); };
   const authority = get(profile.authority.path);
-  assert.ok(authority.includes('architecture/get-modular/consumer-profile.json'), 'authority reciprocal profile link missing');
+  const recordPath = 'docs/architecture/get-modular-adoption.md';
+  const directLink = authority.includes('architecture/get-modular/consumer-profile.json');
+  const recordLink = authority.includes('../architecture/get-modular-adoption.md')
+    && get(recordPath).includes('architecture/get-modular/consumer-profile.json')
+    && get(recordPath).includes(profile.authority.id);
+  assert.ok(directLink || recordLink, 'authority reciprocal profile link missing');
   assert.equal(digest(get(profile.fms.profile)), profile.fms.sha256, 'FMS profile changed');
   const fms = JSON.parse(get(profile.fms.profile));
   assert.equal(fms.status, 'active', 'FMS activation changed');
@@ -135,6 +140,9 @@ export async function checkAdoption(root) {
   const lock = await loadStrictYamlFile(consumerRoot, 'pnpm-lock.yaml', 'consumer-adoption-lock');
   const artifacts = await Promise.all(profile.packages.map(pkg => readPackageArtifact(pkg, embedded, lock, bytes)));
   const paths = new Set([profile.authority.path, profile.fms.profile]);
+  if ((await bytes(profile.authority.path)).toString('utf8').includes('../architecture/get-modular-adoption.md')) {
+    paths.add('docs/architecture/get-modular-adoption.md');
+  }
   for (const boundary of profile.boundaries) {
     for (const path of boundary.roots) { await stat(await local(path)); }
     boundary.entrypoints.forEach(path => paths.add(path));
