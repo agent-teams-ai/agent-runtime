@@ -315,6 +315,7 @@ boundaries:
         - "@agent-teams/runtime-security"
       builtins:
         - node:crypto
+        - node:fs
         - node:timers/promises
         - node:util
       runtimeReferences: []

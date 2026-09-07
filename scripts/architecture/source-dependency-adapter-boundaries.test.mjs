@@ -116,6 +116,7 @@ test("the real parser observes every retained Node import in composition and TLS
     [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
     [`${composition}/contained-turn-access-authority.ts`, ["node:util"]],
     [`${composition}/contained-turn-authority-capability.ts`, ["node:util"]],
+    [`${composition}/contained-turn-route-qualification.ts`, ["node:fs"]],
     [`${composition}/trusted-runtime-access-scope.ts`, ["node:util"]],
     [`${host.roots[0]}/egress/node-tls-http-egress-transport-support.ts`,
       ["node:buffer", "node:crypto", "node:net", "node:tls"]],
@@ -161,7 +162,7 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
     "packages/apps/embedded-runtime/src/composition.ts",
   ]);
   assert.deepEqual(composition.allowedBoundaries, ["production.embedded-runtime"]);
-  assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:timers/promises", "node:util"]);
+  assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:timers/promises", "node:util"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
   assert.deepEqual(production.allowedBoundaries, []);
