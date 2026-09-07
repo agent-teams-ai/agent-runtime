@@ -250,3 +250,33 @@ test('hostile policy and publication record accessors never run', async () => {
   assert.equal((await feature.publishAndConsumeForDispatch(f.prepared, f.request)).status, 'indeterminate');
   assert.equal(invoked, false);
 });
+
+for (const target of ['policy.read', 'decisions.read', 'decisions.retain',
+  'repository.observe', 'repository.readAuthority', 'repository.replaceAuthority'] as const) {
+  for (const kind of ['then accessor', 'proxy'] as const) {
+    test(`${target} rejects an owner ${kind} before promise assimilation`, async () => {
+      const f = await fixture();
+      let invoked = 0; let calls = 0;
+      const hostile = kind === 'then accessor' ? {
+        get then() {invoked += 1; throw new Error('hostile then');},
+      } : new Proxy(Promise.resolve(undefined), {
+        get() {invoked += 1; throw new Error('hostile get');},
+        getPrototypeOf() {invoked += 1; throw new Error('hostile prototype');},
+      });
+      const [owner, method] = target.split('.') as
+        ['policy' | 'decisions' | 'repository', string];
+      const deps = { ...f.deps, [owner]: { ...f.deps[owner],
+        [method]: () => {calls += 1; return hostile;} } };
+      const api = createDispatchAcceptanceFeature(deps);
+      const result = target === 'policy.read' || target === 'decisions.retain' ?
+        await api.evaluateForAcceptance(intent) :
+        await api.publishAndConsumeForDispatch(f.prepared, f.request);
+      assert.equal(result.status, 'indeterminate');
+      assert.ok(calls > 0, 'the targeted owner boundary must be reached');
+      assert.equal(invoked, 0);
+      assert.equal(f.db.tables.authority_heads.size, 0);
+      assert.equal(f.db.tables.consumptions.size, 0);
+      f.db.assertReleased();
+    });
+  }
+}

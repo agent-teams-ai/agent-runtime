@@ -210,6 +210,34 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
     assert.equal(results[0]!.status, "consumed");
     assert.deepEqual(results[0], results[1]);
     assert.equal((await two.repository.readAuthority(operation(intent.operationId))).headVersion, "1");
+    await t.test("maximum 512-character Unicode acceptance selectors persist through actual SQL", async () => {
+      let seed = 69;
+      const identifier = () => Array.from({ length: 512 }, () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return String.fromCharCode(0x800 + (seed >>> 8) % 0xd000);
+      }).join('');
+      const unicodeIntent = { ...intent, operationId: identifier(),
+        scope: { tenantId: identifier(), projectId: identifier(), scopeDigest: identifier() } };
+      assert.ok(Buffer.byteLength(JSON.stringify({ operationId: unicodeIntent.operationId,
+        scope: unicodeIntent.scope })) > 6000);
+      const unicodeDeps = { ...deps, policy: { async read() {
+        return { ...policy, scope: unicodeIntent.scope };
+      } } };
+      const firstOwner = createDispatchAcceptanceFeature({ ...unicodeDeps,
+        repository: one.repository, decisions: decisionsA });
+      const otherOwner = createDispatchAcceptanceFeature({ ...unicodeDeps,
+        repository: two.repository, decisions: decisionsB });
+      const first = await firstOwner.evaluateForAcceptance(unicodeIntent);
+      assert.equal(first.status, "allowed");
+      if (first.status !== "allowed") {throw new Error("expected Unicode acceptance");}
+      assert.deepEqual(await otherOwner.evaluateForAcceptance(unicodeIntent), first);
+      assert.deepEqual(await decisionsB.read(unicodeIntent), first.decision);
+      const rows = await a.query("SELECT operation_key, decision FROM runtime_security_dispatch_acceptance_v1.decisions");
+      const row = rows.rows.find(row => JSON.parse(row.decision).operationId === unicodeIntent.operationId);
+      assert.ok(row, "actual SQL retained the complete Unicode selector");
+      assert.match(row.operation_key, /^[a-f0-9]{64}$/u);
+      assert.deepEqual(JSON.parse(row.decision), first.decision);
+    });
     await assert.rejects(a.query("UPDATE runtime_security_dispatch_acceptance_v1.decisions SET decision = decision"));
     await assert.rejects(a.query("DELETE FROM runtime_security_dispatch_acceptance_v1.decisions"));
     await one.repository.revokeAuthority(operation(intent.operationId), "1");

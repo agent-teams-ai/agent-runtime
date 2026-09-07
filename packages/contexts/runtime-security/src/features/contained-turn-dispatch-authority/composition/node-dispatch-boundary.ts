@@ -41,7 +41,7 @@ export const exactOwnerMethods = <Name extends string>(
   return Object.freeze(methods);
 };
 
-const ownerPromise = async (value: unknown): Promise<unknown> => {
+export const ownerPromise = async <T>(value: T | Promise<T>): Promise<T> => {
   if (isNodeDispatchProxy(value) || !(value instanceof Promise)) {return invalidBoundary();}
   return value;
 };

@@ -8,7 +8,7 @@ import type { ConsumeForDispatchInput } from '../contracts/contained-turn-dispat
 import { evaluateDispatchAcceptance } from '../application/dispatch-acceptance.js';
 import { publishAndConsumeForDispatch } from '../application/publish-dispatch-authority.js';
 import { createContainedTurnDispatchAuthorityFeature } from './feature-module-factory.js';
-import { detachDispatchBoundaryValue, exactOwnerMethods } from './node-dispatch-boundary.js';
+import { detachDispatchBoundaryValue, exactOwnerMethods, ownerPromise } from './node-dispatch-boundary.js';
 
 export interface DispatchAcceptanceDependencies {
   readonly decisions: DispatchAcceptanceStore;
@@ -34,15 +34,15 @@ export const createDispatchAcceptanceFeature = (dependencies: DispatchAcceptance
   }) as unknown as DispatchAcceptanceDependencies;
   const publication: DispatchPublicationRepository = Object.freeze({ ...deps.repository,
     async readAuthority(key: Parameters<DispatchPublicationRepository['readAuthority']>[0]) {
-      return detachDispatchBoundaryValue(await deps.repository.readAuthority(key)) as
+      return detachDispatchBoundaryValue(await ownerPromise(deps.repository.readAuthority(key))) as
         Awaited<ReturnType<DispatchPublicationRepository['readAuthority']>>;
     },
     async replaceAuthority(head: Parameters<DispatchPublicationRepository['replaceAuthority']>[0], version: string) {
-      return detachDispatchBoundaryValue(await deps.repository.replaceAuthority(head, version)) as
+      return detachDispatchBoundaryValue(await ownerPromise(deps.repository.replaceAuthority(head, version))) as
         Awaited<ReturnType<DispatchPublicationRepository['replaceAuthority']>>;
     },
     async observe(key: Parameters<DispatchPublicationRepository['observe']>[0]) {
-      const value = await deps.repository.observe(key);
+      const value = await ownerPromise(deps.repository.observe(key));
       return value === undefined ? undefined : detachDispatchBoundaryValue(value) as typeof value;
     },
   });
@@ -51,15 +51,15 @@ export const createDispatchAcceptanceFeature = (dependencies: DispatchAcceptance
   const ops = {
     decisions: {
       async read(input: DispatchAcceptanceIntent) {
-        const value = await deps.decisions.read(input);
+        const value = await ownerPromise(deps.decisions.read(input));
         return value === undefined ? undefined : detachDispatchBoundaryValue(value) as NonNullable<typeof value>;
       },
       async retain(input: Parameters<DispatchAcceptanceStore['retain']>[0]) {
-        return detachDispatchBoundaryValue(await deps.decisions.retain(input)) as typeof input;
+        return detachDispatchBoundaryValue(await ownerPromise(deps.decisions.retain(input))) as typeof input;
       },
     },
     policy: { async read(input: DispatchAcceptanceIntent) {
-      const value = await deps.policy.read(input);
+      const value = await ownerPromise(deps.policy.read(input));
       return value === undefined ? undefined : detachDispatchBoundaryValue(value) as NonNullable<typeof value>;
     } },
     now: () => deps.clock.now(), digestCanonical: (value: string) => deps.digest.digestCanonical(value),
