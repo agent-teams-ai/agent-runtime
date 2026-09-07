@@ -95,3 +95,7 @@ export {
   type DockerLinuxPostClaimDependencies,
   type DockerLinuxPostClaimSubjectFacts,
 } from "./composition/docker-linux-post-claim-preparation.js";
+export {
+  createDockerLinuxExclusiveRouteAdmission,
+  type DockerLinuxExclusiveRouteAdmissionInput,
+} from "./composition/docker-linux-exclusive-route-admission.js";

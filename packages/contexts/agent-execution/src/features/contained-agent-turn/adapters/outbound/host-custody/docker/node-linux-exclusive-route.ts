@@ -59,9 +59,12 @@ const openPinnedTool = (pin: LinuxRouteToolPin): number => {
  * composition, never process.env or a canary report. The existing Docker owner
  * supplies its inspection port. No command runner is injectable; this adapter
  * invokes only descriptor-bound tools in the descriptor-bound
- * container network namespace. This adapter is intentionally not yet exported
- * as live-canary authority: composition must own fresh init-before-exec ordering,
- * the broker listener, PA/RS binding, and independent campaign teardown.
+ * container network namespace. Its consumer is the Docker/Linux post-claim
+ * preparation, which owns fresh init-before-exec ordering, the broker listener
+ * and independent campaign teardown. This lease is still not live-canary
+ * authority on its own: the broker session's Provider Access and Runtime
+ * Security ports remain bound by outer composition, and the 21-field route
+ * binding below carries PA facts this adapter never derives.
  */
 export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
   authority: DockerContainerAuthority;
