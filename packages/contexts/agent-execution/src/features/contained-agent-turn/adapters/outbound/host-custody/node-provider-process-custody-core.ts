@@ -31,6 +31,7 @@ import {
 } from "./host-custody-process-tree.js";
 import type { OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import { bindCooperativeProcessGroupGuardian } from "./host-custody-posix-process-group.js";
+import { DescriptorAuthorityAcquisitionError } from "./host-custody-launch-failure.js";
 import { launchGuardedProvider } from "./node-provider-process-custody-launch.js";
 import {
   assertHostCustodyReservationMode,
@@ -420,6 +421,7 @@ export class NodeProviderProcessCustodyCore implements
     }
     if (live.retainedWorkspaceAuthority !== undefined) {assertRetainedWorkspaceAuthority(live);}
     // A thrown delegated launch cannot itself prove that no process started.
+    const spawnStatusBeforeLaunch = live.spawnStatus;
     if (live.plan.spawnMode === "sdk-delegated") {live.spawnStatus = "ambiguous";}
     let launched: ReturnType<typeof launchGuardedProvider>;
     try {
@@ -452,6 +454,13 @@ export class NodeProviderProcessCustodyCore implements
       live.stderr = launched.stderr;
       live.stdout = launched.stdout;
       live.spawnStatus = "ambiguous";
+    } catch (error) {
+      // Descriptor authority acquisition refuses before the guardian constructor,
+      // whose first statement spawns. Only that class proves no process exists,
+      // so only it retracts the mark, back to the classification the reservation
+      // already held. Every other refusal keeps the honest ambiguous evidence.
+      if (error instanceof DescriptorAuthorityAcquisitionError) {live.spawnStatus = spawnStatusBeforeLaunch;}
+      throw error;
     } finally {
       closeRetainedWorkspaceAuthority(live);
     }

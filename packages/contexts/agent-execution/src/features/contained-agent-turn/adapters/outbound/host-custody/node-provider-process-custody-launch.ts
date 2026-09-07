@@ -12,6 +12,10 @@ import {
   descriptorBoundEnvironment,
 } from "./host-custody-descriptor-launch.js";
 import { acquireDarwinLaunchAuthority } from "./host-custody-darwin-launch.js";
+import {
+  DescriptorAuthorityAcquisitionError,
+  GuardianConstructionError,
+} from "./host-custody-launch-failure.js";
 import type { VerifiedLaunchDescriptors } from "./host-custody-launch.js";
 import { NodeCustodiedSdkProcess } from "./host-custody-process-tree.js";
 import { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
@@ -52,9 +56,6 @@ export interface GuardedProviderLaunch {
   readonly stderr: HostStderrIngress;
   readonly stdout: HostStdoutIngress;
 }
-
-class DescriptorAuthorityAcquisitionError extends Error {}
-class GuardianConstructionError extends Error {}
 
 const descriptorFailureClass = (error: unknown): string => {
   if (!(error instanceof Error)) {return "UnknownDescriptorFailure";}
