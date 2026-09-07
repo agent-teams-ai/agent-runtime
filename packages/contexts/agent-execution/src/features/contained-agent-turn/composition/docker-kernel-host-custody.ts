@@ -1,8 +1,7 @@
-import {custodyDataRecord} from "../host-custody-inert-record.js";
+import {custodyDataRecord, createImmutableHostCustodyLaunchPlan, type ContainedTurnHostCustodyPort}
+  from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {randomUUID, createHash} from "node:crypto";
-import type {ContainedTurnHostCustodyPort} from "../contained-turn-kernel-custody-contracts.js";
-import {HostCustodyUnsupportedError, type HostCustodyReservationInput} from "../custodied-provider-process.js";
-import {createImmutableHostCustodyLaunchPlan} from "../host-custody-launch-plan-snapshot.js";
+import {HostCustodyUnsupportedError, type HostCustodyReservationInput} from "../adapters/outbound/host-custody/custodied-provider-process.js";
 import {DockerKernelEvidence} from "./docker-kernel-evidence.js";
 
 type Containment = Awaited<ReturnType<ContainedTurnHostCustodyPort["requestContainment"]>>;
@@ -13,6 +12,7 @@ export interface DockerKernelReservation {
 }
 export interface DockerKernelReservationCleanup {
   cutoff(): void;
+  /** Observe the retained cleanup flight; repeated calls must never repeat destructive effects. */
   cleanup(input: Readonly<{deadlineEpochMs: number}>): Promise<Readonly<{kind: "released" | "quarantined"}>>;
 }
 interface Retained extends DockerKernelReservation {
@@ -20,6 +20,8 @@ interface Retained extends DockerKernelReservation {
   containment?: Promise<Containment>;
   receipt?: string;
   resourcesReleased: boolean;
+  cutoffFailed?: boolean;
+  containmentStarted?: boolean;
 }
 
 /** Raw Host port, inert reservations only. Private composition installs the
@@ -55,7 +57,7 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
   }
   public installCleanup(custodyRef: string, cleanup: DockerKernelReservationCleanup): void {
     const record = this.#records.get(custodyRef);
-    if (this.#disposed || record === undefined || record.cleanup !== undefined || record.containment !== undefined) {
+    if (this.#disposed || record === undefined || record.cleanup !== undefined || record.containmentStarted) {
       throw new TypeError("Docker cleanup ownership cannot be replaced");
     }
     record.cleanup = Object.freeze({cutoff: cleanup.cutoff.bind(cleanup), cleanup: cleanup.cleanup.bind(cleanup)});
@@ -71,21 +73,28 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
   public requestContainment(input: Parameters<ContainedTurnHostCustodyPort["requestContainment"]>[0]): Promise<Containment> {
     const record = this.match(input);
     if (record === undefined) {return Promise.resolve(this.unproven(input.custodyRef ?? "missing"));}
-    // Publish before any external callbacks. Uncertainty never resets this flight.
+    // Share each observation; the preparation owner retains the single destructive
+    // cleanup flight across bounded observations. A timeout is not its result.
     if (record.containment !== undefined) {return record.containment;}
-    let cutoffFailed = false;
+    const first = !record.containmentStarted;
+    record.containmentStarted = true;
     record.containment = Promise.resolve().then(async () => {
       try {
-        const result = await record.cleanup?.cleanup({deadlineEpochMs: Date.now() + this.cleanupMilliseconds});
-        record.resourcesReleased = result?.kind === "released";
+        if (!record.resourcesReleased) {
+          const result = await record.cleanup?.cleanup({deadlineEpochMs: Date.now() + this.cleanupMilliseconds});
+          record.resourcesReleased = result?.kind === "released";
+        }
         const evidence = record.evidence.snapshot();
-        if (cutoffFailed || !record.resourcesReleased || !evidence.sealed || evidence.closure.status !== "closed") {return this.unproven(record.custodyRef);}
+        if (record.cutoffFailed || !record.resourcesReleased || !evidence.sealed || evidence.closure.status !== "closed") {return this.unproven(record.custodyRef);}
         record.receipt = `urn:agent-runtime:docker-containment:${createHash("sha256")
           .update(JSON.stringify([record.custodyRef, record.input.operationId, record.input.attemptId, evidence])).digest("hex")}`;
         return Object.freeze({kind: "contained" as const, receiptRef: record.receipt});
       } catch {return this.unproven(record.custodyRef);}
+    }).finally(() => {
+      // Keep proved receipts stable; uncertain observations may join late work.
+      if (record.receipt === undefined) {delete record.containment;}
     });
-    try {record.cleanup?.cutoff();} catch {cutoffFailed = true;}
+    if (first) {try {record.cleanup?.cutoff();} catch {record.cutoffFailed = true;}}
     return record.containment;
   }
   public async release(input: Parameters<ContainedTurnHostCustodyPort["release"]>[0]): ReturnType<ContainedTurnHostCustodyPort["release"]> {

@@ -16,7 +16,9 @@ export type { HttpEgressRouteFirstWrite,
   HttpEgressRouteFirstWriteReservation } from "./egress/http-egress-ports.js";
 export type { ContainedTurnHostPostClaimPreparation } from "./contained-turn-kernel-custody-contracts.js";
 
-export {custodyDataRecord} from "./host-custody-inert-record.js";
+export {custodyDataRecord, sameHostCustodyBinding} from "./host-custody-inert-record.js";
 export {NodeCustodyHttpResources, type NodeCustodyHttpResourceInput} from "./node-custody-http-resources.js";
 export {readHostCustodyHttpHandoff, hostHttpAbortOperations, type HostCustodyHttpHandoff,
   type HostCustodyHttpResourceLifetime} from "./host-custody-http-resource-lifetime.js";
+
+export {createImmutableHostCustodyLaunchPlan} from "./host-custody-launch-plan-snapshot.js";

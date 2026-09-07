@@ -106,7 +106,6 @@ export class DockerHostCustodyLifecycle {
     this.journal = this.#observations.journal(journal);
     this.removalObservation = createDockerRemovalObservationOwner(engine, this.contain.bind(this));
   }
-
   /** Historical Host-readable evidence; possession never supplies new execution authority. */
   public observeLaunch(launch: LaunchedDockerCustody): DockerLifecycleObservation {return this.#observations.read(launch);}
 
@@ -118,7 +117,6 @@ export class DockerHostCustodyLifecycle {
     assertDockerAuthorityBinding(key, authority);
     return authority;
   }
-
   private async inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation> {
     return this.#observations.engine(authority, await this.engine.inspect(authority, call));
   }
@@ -258,8 +256,7 @@ export class DockerHostCustodyLifecycle {
       key: input.key, expectedSequence: current.sequence,
       state: "provider_exec_requested",
     });
-    let evidence: DockerCustodyJournalEvidence;
-    let start: Awaited<ReturnType<typeof live.execute>> | null = null;
+    let evidence: DockerCustodyJournalEvidence; let start: Awaited<ReturnType<typeof live.execute>> | null = null;
     this.#observations.execution(input.authority, input.exec, null, null);
     try {
       this.assertLaunchOpen(input.key, input.call);
@@ -275,11 +272,15 @@ export class DockerHostCustodyLifecycle {
     } catch {
       evidence = { status: "unproven", reason: "provider_execution_unproven" };
     }
-    const acknowledged = await this.journal.observe({
-      key: input.key, expectedSequence: requested.sequence, state: "provider_exec_observed", evidence,
-    });
-    this.#observations.execution(input.authority, live.executionRequest ?? input.exec, start, acknowledged);
-    return acknowledged;
+    let acknowledged: DockerCustodyJournalRecord | null = null;
+    try {
+      acknowledged = await this.journal.observe({key: input.key,
+        expectedSequence: requested.sequence, state: "provider_exec_observed", evidence});
+      return acknowledged;
+    } finally {
+      // Settlement survives a containment sequence conflict; it never supplies acknowledgement.
+      this.#observations.execution(input.authority, live.executionRequest ?? input.exec, start, acknowledged, true);
+    }
   }
   public async contain(input: DockerHostCustodyContainmentInput): Promise<DockerHostCustodyContainment> {
     assertDockerAuthorityBinding(input.key, input.authority);

@@ -1,13 +1,12 @@
-import {renderCodexNativeBrokerConfig} from "../../codex-app-server/codex-native-broker-recipe.js";
-import {canonicalJsonSha256} from "./engine/docker-canonical-json.js";
-import {isIssuedCodexAppServerLaunchPlan, isCodexNativeBrokerLaunchPlan, codexNativeBrokerLaunchInput} from "../../codex-app-server/codex-app-server-launch-plan.js";
-import {isDeepStrictEqual} from "node:util";
+import {renderCodexNativeBrokerConfig, isIssuedCodexAppServerLaunchPlan, isCodexNativeBrokerLaunchPlan,
+  codexNativeBrokerLaunchInput} from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
+import {sameHostCustodyBinding} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {createHash} from "node:crypto";
-import type {HostCustodyEvidence, HostCustodyReservationInput, HostCustodyLaunchFingerprintEvidence} from "../custodied-provider-process.js";
-import {assertDockerPreparedIoLaunch, type PreparedDockerProviderIo} from "./docker-provider-process-bridge.js";
-import {dockerProviderProcessMountFacts, DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.js";
-import type {LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
-import {isConcreteLinuxDockerLifecycle} from "./node-linux-docker-residue-custody.js";
+import type {HostCustodyEvidence, HostCustodyReservationInput, HostCustodyLaunchFingerprintEvidence}
+  from "../adapters/outbound/host-custody/custodied-provider-process.js";
+import {assertDockerPreparedIoLaunch, canonicalJsonSha256, dockerProviderProcessMountFacts,
+  DockerHostCustodyLifecycle, isConcreteLinuxDockerLifecycle, type PreparedDockerProviderIo, type LaunchedDockerCustody}
+  from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 
 const hash = (value: unknown): string => typeof value === "string"
   ? createHash("sha256").update(value).digest("hex") : canonicalJsonSha256(value);
@@ -72,8 +71,8 @@ export class DockerKernelEvidence {
     const execution = source === undefined ? undefined : retainedObservation(source.lifecycle, source.launch).execution;
     const instance = observation?.providerInstance;
     const conflicting = this.#finalExec !== undefined && execution !== undefined && execution !== null &&
-      (!isDeepStrictEqual(execution.exec.argv, this.#finalExec.argv) ||
-        !isDeepStrictEqual(execution.exec.environment, this.#finalExec.environment) ||
+      (!sameHostCustodyBinding(execution.exec.argv, this.#finalExec.argv) ||
+        !sameHostCustodyBinding(execution.exec.environment, this.#finalExec.environment) ||
         execution.exec.executableSha256 !== this.#finalExec.executableSha256);
     return Object.freeze({binarySha256: this.#fingerprint.executableSha256,
       childProcessInstanceSha256: instance === undefined || instance.status === "missing" ? empty : hash([source?.launch.authority, instance.identity]),
@@ -131,4 +130,4 @@ const physicalClosure = (owner: DockerHostCustodyLifecycle, lifecycle: Lifecycle
   lifecycle.journal.evidence.status === "proved";
 
 const observationSettled = (lifecycle: Lifecycle): boolean => lifecycle !== undefined && lifecycle.attachCleanup === "complete" &&
-  (lifecycle.execution === null || lifecycle.execution.journal !== null);
+  (lifecycle.execution === null || lifecycle.execution.settled);

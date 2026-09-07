@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {DockerKernelHostCustody} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-kernel-host-custody.js";
+import {DockerKernelHostCustody} from "../../../dist/features/contained-agent-turn/composition/docker-kernel-host-custody.js";
 import {prepareDockerProviderProcessIo, createDockerProviderProcessBridge} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-bridge.js";
 import {executionEvidenceIsClosed, physicalEvidenceIsClosed, noStartEvidenceIsClosed, observeHostStart}
   from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-projections.js";
@@ -232,4 +232,90 @@ test("retained evidence cannot be replaced by caller-authored snapshots or a sub
   Object.defineProperty(f.lifecycle, "observeLaunch", {value() {throw new Error("substituted readback must not run");}});
   assert.equal(f.read().closure.status, "unproven");
   assert.equal(f.read().identity.status, "unproven");
+});
+
+const concreteJoined = async (t: import("node:test").TestContext, cleanupMilliseconds = 1000) => {
+  const f = await residueFixture(t); const channel = installSyntheticInit(f.fake);
+  const launch = await f.launch(); const raw = new DockerKernelHostCustody(cleanupMilliseconds);
+  const {createInput} = await import("./support/docker-host-custody-lifecycle-fixture.ts");
+  const create = createInput(f.root); const input = reservation(launch, create.workspaceSource, create.privateRootSource);
+  const handle = await raw.reserve(input); const init = initOptions();
+  const io = prepareDockerProviderProcessIo({launch, init, expected: {authority: launch.authority,
+    custodyRef: launch.key.custodyId, generation: init.authority.generation, workspaceAuthorityPath: create.workspaceSource}});
+  raw.reservation(handle.custodyRef).evidence.attach(f.lifecycle, launch, io); await io.ready();
+  return {...f, launch, raw, io, channel, handle,
+    containment: {...handle, operationId: input.operationId, attemptId: input.attemptId},
+    read: () => raw.evidence(handle.custodyRef)!};
+};
+
+test("cleanup observation timeout rejoins the sole destructive flight and later proves concrete containment", async t => {
+  const f = await concreteJoined(t, 25);
+  const {awaitNetworkCleanupWork} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js");
+  const entered = deferred(); const gate = deferred(); t.after(() => gate.resolve());
+  const remove = f.engine.remove.bind(f.engine); let removals = 0; let cutoffs = 0; let observations = 0;
+  f.engine.remove = async (...args) => {removals += 1; entered.resolve(); await gate.promise; return remove(...args);};
+  // Same retained-work/bounded-wait contract as the production preparation owner.
+  let work: ReturnType<typeof f.contain> | undefined;
+  f.raw.installCleanup(f.handle.custodyRef, {cutoff() {cutoffs += 1;}, async cleanup(input) {
+    observations += 1; work ??= f.contain(f.launch);
+    try {
+      await awaitNetworkCleanupWork(work, {...input, signal: new AbortController().signal});
+      return {kind: (await work).kind === "closed" ? "released" : "quarantined"};
+    } catch {return {kind: "quarantined"};}
+  }});
+  const first = f.raw.requestContainment(f.containment);
+  assert.strictEqual(f.raw.requestContainment(f.containment), first);
+  await entered.promise; assert.equal((await first).kind, "unproven");
+  assert.equal(f.read().closure.status, "unproven"); assert.equal(removals, 1);
+  assert.throws(() => f.raw.installCleanup(f.handle.custodyRef, {cutoff() {}, async cleanup() {return {kind: "released"};}}));
+  assert.equal((await f.raw.release({...f.containment, receiptRef: "forged"})).kind, "unproven");
+  gate.resolve(); await work; // The original effect finishes after its first observer timed out.
+  const second = f.raw.requestContainment(f.containment);
+  assert.notStrictEqual(second, first); assert.strictEqual(f.raw.requestContainment(f.containment), second);
+  assert.equal((await second).kind, "contained");
+  assert.equal(f.read().closure.status, "closed"); assert.equal(f.read().sealed, true);
+  assert.equal(observations, 2); assert.equal(cutoffs, 1); assert.equal(removals, 1);
+  assert.equal(f.channel.closes, 1); assert.equal(f.io.observation.supervisorFinality, "unproven");
+  assert.equal(f.read().identity.status, "unproven"); assert.equal(f.read().privateRoot.status, "unproven");
+  const receipt = await second;
+  assert.strictEqual(await f.raw.requestContainment(f.containment), receipt);
+  assert.equal((await f.raw.release({...f.containment, receiptRef: receipt.kind === "contained" ? receipt.receiptRef : "missing"})).kind, "unproven");
+});
+
+test("containment wins the execution journal race; rejected acknowledgement settles without inventing spawn proof", async t => {
+  const f = await concreteJoined(t);
+  const entered = deferred(); const gate = deferred(); t.after(() => gate.resolve());
+  const exclusive = f.storage.exclusive.bind(f.storage); let held = false;
+  f.storage.exclusive = async operation => {
+    // Pause the real acknowledgement before it acquires the journal lock.
+    // Containment can now commit a later sequence while this observation waits.
+    if (!held && f.lifecycle.observeLaunch(f.launch).execution?.result?.kind === "started") {
+      held = true; entered.resolve(); await gate.promise;
+    }
+    return exclusive(operation);
+  };
+  const {providerExec} = await import("./support/docker-claim-init-fixture.ts");
+  const {DockerCustodyJournalConflictError} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/index.js");
+  const executing = f.lifecycle.executeProvider({authority: f.launch.authority, key: f.launch.key,
+    exec: providerExec, call: engineCall()});
+  const rejected = assert.rejects(executing, DockerCustodyJournalConflictError);
+  await entered.promise;
+  const pending = f.lifecycle.observeLaunch(f.launch).execution!;
+  assert.equal(pending.settled, false); assert.equal(pending.journal, null);
+  let cleanups = 0;
+  f.raw.installCleanup(f.handle.custodyRef, {cutoff() {}, async cleanup() {
+    cleanups += 1; return {kind: (await f.contain(f.launch)).kind === "closed" ? "released" : "quarantined"};
+  }});
+  assert.equal((await f.raw.requestContainment(f.containment)).kind, "unproven");
+  assert.equal(f.lifecycle.observeLaunch(f.launch).journal.state, "closed");
+  assert.equal(f.read().closure.status, "closed"); assert.equal(f.read().sealed, false);
+  gate.resolve(); await rejected;
+  const settled = f.lifecycle.observeLaunch(f.launch).execution!;
+  assert.equal(settled.settled, true); assert.equal(settled.journal, null); assert.equal(pending.settled, false);
+  assert.equal(f.read().sealed, true); assert.equal(f.read().spawn, "ambiguous");
+  assert.equal(f.read().identity.status, "unproven"); assert.equal(f.read().providerExit.status, "unobserved");
+  assert.equal(f.read().stdout.status, "incomplete"); assert.equal(f.read().stderr.status, "incomplete");
+  assert.equal(executionEvidenceIsClosed(f.read()), false); assert.equal(noStartEvidenceIsClosed(f.read()), false);
+  assert.equal((await f.raw.requestContainment(f.containment)).kind, "contained"); assert.equal(cleanups, 1);
+  assert.equal(f.channel.attaches, 1); assert.equal(f.channel.closes, 1);
 });

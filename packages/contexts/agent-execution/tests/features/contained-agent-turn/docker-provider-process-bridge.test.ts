@@ -369,3 +369,25 @@ test("prepared IO enforces its original output bound before bridge publication",
   await assert.rejects(process.stdout[Symbol.asyncIterator]().next());
   assert.equal(f.channel.readers, 1);
 });
+
+test("Docker inert capture rejects proxies and accessors before executing traps or opening a reader", async t => {
+  const {captureDockerHttpResourceRecord} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js");
+  const {custodyDataRecord} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js");
+  let invoked = 0;
+  const proxy = new Proxy({}, {ownKeys() {invoked += 1; return [];}, getPrototypeOf() {invoked += 1; return Object.prototype;},
+    get() {invoked += 1; throw new Error("proxy invoked");}});
+  const accessor = Object.defineProperty({}, "value", {get() {invoked += 1; return "value";}});
+  const symbolAccessor = Object.defineProperty({}, Symbol("hidden"), {get() {invoked += 1; return "value";}});
+  for (const bad of [proxy, accessor, symbolAccessor]) {
+    assert.throws(() => custodyDataRecord(bad)); assert.throws(() => captureDockerHttpResourceRecord(bad));
+  }
+  const f = fixture(); const a = await f.launch(); t.after(() => a.contain());
+  for (const bad of [proxy, accessor, symbolAccessor]) {
+    for (const input of [bad, {...a.input, expected: bad}, {...a.input, init: bad},
+      {...a.input, expected: {...a.input.expected, authority: bad}},
+      {...a.input, init: {...a.input.init, authority: bad}}]) {
+      assert.throws(() => prepareDockerProviderProcessIo(input as never));
+    }
+  }
+  assert.equal(invoked, 0); assert.equal(f.channel.readers, 0); assert.equal(f.events.includes("provider-exec"), false);
+});

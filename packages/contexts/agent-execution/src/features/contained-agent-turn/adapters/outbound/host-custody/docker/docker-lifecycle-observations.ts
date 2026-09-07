@@ -16,7 +16,7 @@ export interface DockerLifecycleObservation {
   readonly journal: DockerCustodyJournalRecord;
   readonly initial: Present;
   readonly execution: Readonly<{exec: DockerCustodyInitHostExec; result: DockerCustodyInitHostStart | null;
-    journal: DockerCustodyJournalRecord | null}> | null;
+    journal: DockerCustodyJournalRecord | null; settled: boolean}> | null;
   readonly terminal: Readonly<{observation: Present; journal: DockerCustodyJournalRecord}> | null;
   readonly recursiveEmpty: Readonly<{journal: DockerCustodyJournalRecord}> | null;
   readonly removal: Readonly<{observation: Absent; journal: DockerCustodyJournalRecord}> | null;
@@ -80,14 +80,14 @@ export class DockerLifecycleObservations {
   }
 
   public execution(authority: DockerContainerAuthority, exec: DockerCustodyInitHostExec,
-    result: DockerCustodyInitHostStart | null, journal: DockerCustodyJournalRecord | null): void {
+    result: DockerCustodyInitHostStart | null, journal: DockerCustodyJournalRecord | null, settled = false): void {
     const retained = this.#active.get(dockerCustodyAuthoritySha256(authority));
     if (retained === undefined) {return;}
     retained.snapshot = Object.freeze({...retained.snapshot, execution: Object.freeze({
       exec: Object.freeze({...exec, argv: Object.freeze([...exec.argv]),
         environment: Object.freeze(exec.environment.map(item => Object.freeze({...item})))}),
       result: result === null ? null : Object.freeze({...result}),
-      journal: journal === null ? null : freezeJournal(journal),
+      journal: journal === null ? null : freezeJournal(journal), settled,
     })});
   }
 

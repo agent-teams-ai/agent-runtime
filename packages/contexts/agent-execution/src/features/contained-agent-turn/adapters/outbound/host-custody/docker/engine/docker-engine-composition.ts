@@ -6,3 +6,5 @@ export {DockerOperationNetwork} from "./docker-operation-network.js";
 export {operationNetworkName, awaitNetworkCleanupWork} from "./docker-operation-network-codec.js";
 export type {DockerOperationNetworkInput, DockerOperationNetworkRemoval} from "./docker-operation-network.js";
 export type {DockerOperationNetworkBinding, DockerOperationNetworkObservation} from "./docker-operation-network-codec.js";
+
+export {canonicalJsonSha256} from "./docker-canonical-json.js";

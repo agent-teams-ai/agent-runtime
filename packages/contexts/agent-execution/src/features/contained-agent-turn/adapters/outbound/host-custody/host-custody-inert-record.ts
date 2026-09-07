@@ -1,4 +1,4 @@
-import { types } from "node:util";
+import { isDeepStrictEqual, types } from "node:util";
 
 /** Snapshot data without executing proxy traps, accessors or inherited properties. */
 export const custodyDataRecord = <Value extends object>(value: Value): Value => {
@@ -13,3 +13,6 @@ export const custodyDataRecord = <Value extends object>(value: Value): Value => 
   }
   return Object.freeze(result);
 };
+
+/** Compare retained Host reservation and execution binding data without coercion. */
+export const sameHostCustodyBinding = (left: unknown, right: unknown): boolean => isDeepStrictEqual(left, right);

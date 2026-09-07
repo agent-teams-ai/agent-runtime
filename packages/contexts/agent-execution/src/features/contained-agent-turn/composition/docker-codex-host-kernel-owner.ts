@@ -1,10 +1,8 @@
-import {custodyDataRecord} from "../adapters/outbound/host-custody/host-custody-inert-record.js";
 import {createCodexDockerPathProjection, CodexAppServerCurrentKernelAdapter} from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {randomUUID} from "node:crypto";
-import {isDeepStrictEqual} from "node:util";
-import {ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
+import {custodyDataRecord, sameHostCustodyBinding, ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
-import {DockerKernelHostCustody} from "../adapters/outbound/host-custody/docker/docker-kernel-host-custody.js";
+import {DockerKernelHostCustody} from "./docker-kernel-host-custody.js";
 import {prepareDockerProviderProcessIo, type PreparedDockerProviderIo, type DockerProviderProcessInput,
   dockerProviderProcessMountFacts, isConcreteLinuxDockerLifecycle, type DockerHostCustodyLifecycle} from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {createCodexAppServerFinalizableLaunchPlan, isCodexNativeBrokerLaunchPlan}
@@ -76,7 +74,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
     },
     retain(input: Parameters<ContainedTurnKernelCustodyAttemptOwner["retain"]>[0]) {
       const retained = records.get(input.kernel.custodyId);
-      if (disposed || retained === undefined || retained.ref !== undefined || !isDeepStrictEqual(retained.kernel, input.kernel)) {
+      if (disposed || retained === undefined || retained.ref !== undefined || !sameHostCustodyBinding(retained.kernel, input.kernel)) {
         throw new TypeError("Docker reservation binding conflict");
       }
       retained.ref = input.underlyingCustodyRef;
@@ -141,8 +139,8 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
       retained.process === undefined || retained.kernel.operationId !== input.operationId || retained.kernel.attemptId !== input.attemptId ||
       retained.kernel.effectId !== input.effectId || retained.kernel.workspaceId !== input.workspaceId ||
       retained.kernel.authorityVectorDigest !== input.authorityVectorDigest || retained.kernel.intentMode !== input.intent.mode ||
-      !isDeepStrictEqual(retained.kernel.adapterSnapshot, input.adapterSnapshot) ||
-      !isDeepStrictEqual(retained.kernel.providerAccessSnapshot, input.providerAccessSnapshot)) {throw new TypeError("Docker prepared attempt conflict");}
+      !sameHostCustodyBinding(retained.kernel.adapterSnapshot, input.adapterSnapshot) ||
+      !sameHostCustodyBinding(retained.kernel.providerAccessSnapshot, input.providerAccessSnapshot)) {throw new TypeError("Docker prepared attempt conflict");}
     retained.used = true;
     const prepared = retained.owner.takePrepared(retained.claimed);
     const owner = createDockerCodexCurrentKernelOwner({attempt: input, boundary: retained.record.boundary,

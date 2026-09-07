@@ -1,4 +1,4 @@
-import {custodyDataRecord} from "../host-custody-inert-record.js";
+import {captureDockerHttpResourceRecord} from "./docker-http-network-resources.js";
 import {isDeepStrictEqual} from "node:util";
 import {assertDockerProviderProcessClaimActive, prepareDockerProviderProcessLaunch, claimDockerProviderProcessLaunch, type DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.js";
 import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
@@ -163,17 +163,17 @@ const prepared = new WeakMap<PreparedDockerProviderIo, Readonly<{
   isAdmitted(): boolean; init: DockerProviderProcessInput["init"]; process: DockerProviderProcess; session: DockerContainedTurnInitSession;
 }>>();
 const captureInit = (value: DockerProviderProcessInput["init"]): DockerProviderProcessInput["init"] => {
-  const options = custodyDataRecord(value);
-  const authority = custodyDataRecord(options.authority);
+  const options = captureDockerHttpResourceRecord(value);
+  const authority = captureDockerHttpResourceRecord(options.authority);
   return Object.freeze({...options, authority: Object.freeze({...authority,
-    expectedIdentity: custodyDataRecord(authority.expectedIdentity)})});
+    expectedIdentity: captureDockerHttpResourceRecord(authority.expectedIdentity)})});
 };
 const capturePreparation = <T extends PreparationInput>(value: T): T => {
-  const input = custodyDataRecord(value);
-  const expected = custodyDataRecord(input.expected);
+  const input = captureDockerHttpResourceRecord(value);
+  const expected = captureDockerHttpResourceRecord(input.expected);
   captureInit(input.init); // Reject nested traps/accessors before claiming; retain callback receivers.
   return Object.freeze({...input, expected: Object.freeze({...expected,
-    authority: Object.freeze({...custodyDataRecord(expected.authority)})})});
+    authority: Object.freeze({...captureDockerHttpResourceRecord(expected.authority)})})});
 };
 
 /** Installs bounded output custody before the sole session can become ready.
