@@ -2,6 +2,7 @@ import {
   createClaudeCurrentKernelOwner,
   createCodexCurrentKernelOwner,
   createContainedTurnFeature,
+  readContainedTurnRouteEnforcementTarget,
   createContainedTurnProviderAccessPort,
   createContainedTurnRuntimeSecurityPort,
   type ClaudeCurrentKernelOwner,
@@ -9,9 +10,15 @@ import {
   type ContainedTurnFeatureDependencies,
   type CreateClaudeCurrentKernelOwnerOptions,
   type CreateCodexCurrentKernelOwnerOptions,
+  type ContainedTurnRouteEnforcementCapability,
+  type ContainedTurnRouteQualificationTarget,
   type OuterContainedTurnProviderAccess,
   type OuterContainedTurnRuntimeSecurityAuthority,
 } from "@agent-teams/agent-execution/composition";
+import {
+  PRODUCT_QUALIFICATION_REGISTRY,
+  registryQualifiesRouteTarget,
+} from "./contained-turn-route-qualification.js";
 import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
 import {
   ContainedTurnOwnerDisposalError,
@@ -49,6 +56,14 @@ export interface HostCustodiedContainedTurnDependencies
   /** One operation-scoped authority shared by the custody and provider adapters. */
   readonly hostCustody: HostCustodyAuthority;
   readonly selectedProvider: ContainedTurnHostProviderSelection;
+  /**
+   * The enforced-route capability, obtainable only from Agent Execution's
+   * Linux exclusive route owner factory. It is optional in this type because
+   * absence is a normal, honest state of this repository, not a caller
+   * convenience: the product entrypoint refuses every dependency set without
+   * an authentic one.
+   */
+  readonly routeEnforcement?: ContainedTurnRouteEnforcementCapability;
 }
 
 export interface HostCustodiedContainedTurnComposition {
@@ -250,21 +265,87 @@ export const composeHostCustodiedContainedTurn = (
   });
 };
 
+const productOwnerFactories: ContainedTurnProviderOwnerFactories = Object.freeze({
+  claude: createClaudeCurrentKernelOwner, codex: createCodexCurrentKernelOwner,
+});
+
 /** @internal Candidate-only assembly for repository-owned synthetic evidence. */
 export const composeCandidateHostCustodiedContainedTurnForImplementationEvidence = (
   dependencies: HostCustodiedContainedTurnDependencies,
 ): HostCustodiedContainedTurnComposition => composeHostCustodiedContainedTurn(
   dependencies,
-  Object.freeze({claude: createClaudeCurrentKernelOwner, codex: createCodexCurrentKernelOwner}),
+  productOwnerFactories,
   createContainedTurnFeatureFromProviderAccess,
 );
 
+/** The observed Host platform tuple. The exclusive route is a Linux namespace
+ * effect, so a registry tuple promoted for another platform never matches here
+ * and Darwin stays refused without a platform special case. */
+const observedPlatformTarget = (): string => `${process.platform}-${process.arch}`;
+
+/**
+ * Resolves the promoted target of an authentic route-enforcement capability.
+ * Nothing is read from the dependency set before it is known not to be a
+ * Proxy, and nothing at all is read from the candidate capability: an
+ * unminted, structural or proxied value resolves to no target.
+ */
+const requireRouteEnforcementTarget = (
+  dependencies: HostCustodiedContainedTurnDependencies,
+): ContainedTurnRouteQualificationTarget => {
+  if (dependencies === null || typeof dependencies !== "object" || trustedIsProxy(dependencies)) {
+    throw new ProviderRouteEnforcementUnsupportedError();
+  }
+  const descriptor = trustedGetOwnPropertyDescriptor(dependencies, "routeEnforcement");
+  if (descriptor === undefined || !("value" in descriptor)) {
+    throw new ProviderRouteEnforcementUnsupportedError();
+  }
+  const target = readContainedTurnRouteEnforcementTarget(descriptor.value);
+  if (target === undefined || target.platform !== observedPlatformTarget()) {
+    throw new ProviderRouteEnforcementUnsupportedError();
+  }
+  return target;
+};
+
+/**
+ * @internal Registry-gated assembly. Two independent facts admit a product
+ * composition, and neither is a caller boolean: an authentic route-enforcement
+ * capability, which only the Linux exclusive route owner factory mints, and an
+ * exact whole-tuple promotion in the supplied qualification registry. Every
+ * other outcome, including any failure while establishing either fact, is the
+ * same stable construction refusal. The registry is a parameter so that the
+ * positive path can be exercised against a fixture registry without claiming a
+ * promotion the repository has not made.
+ */
+export const composeQualifiedHostCustodiedContainedTurn = (
+  dependencies: HostCustodiedContainedTurnDependencies,
+  ownerFactories: ContainedTurnProviderOwnerFactories,
+  featureFactory: typeof createContainedTurnFeatureFromProviderAccess,
+  qualificationRegistry: URL,
+): HostCustodiedContainedTurnComposition => {
+  let qualified = false;
+  try {
+    qualified = registryQualifiesRouteTarget(
+      qualificationRegistry, requireRouteEnforcementTarget(dependencies),
+    );
+  } catch {
+    throw new ProviderRouteEnforcementUnsupportedError();
+  }
+  if (!qualified) {throw new ProviderRouteEnforcementUnsupportedError();}
+  return composeHostCustodiedContainedTurn(dependencies, ownerFactories, featureFactory);
+};
+
 /**
  * Product/default composition. Codex and Claude remain candidate
- * implementations until an exact enforced-egress route is promoted.
+ * implementations until an exact enforced-egress route is promoted: this
+ * repository's registry holds no such promotion, so this entrypoint still
+ * refuses every dependency set today, now because the exact target tuple is
+ * unqualified rather than because construction was never attempted.
  */
 export const createHostCustodiedContainedTurn = (
-  _dependencies: HostCustodiedContainedTurnDependencies,
-): HostCustodiedContainedTurnComposition => {
-  throw new ProviderRouteEnforcementUnsupportedError();
-};
+  dependencies: HostCustodiedContainedTurnDependencies,
+): HostCustodiedContainedTurnComposition => composeQualifiedHostCustodiedContainedTurn(
+  dependencies,
+  productOwnerFactories,
+  createContainedTurnFeatureFromProviderAccess,
+  PRODUCT_QUALIFICATION_REGISTRY,
+);
