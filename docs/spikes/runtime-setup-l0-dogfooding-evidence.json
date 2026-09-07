@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "1b9baa9bb3c323f4feb4c617b2706fc62e197adb",
+  "sourceRevision": "51aa81a9185d80db11e765e6ceb6190359ca1a9c",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "8e47c34ef3dc7da72aa6bfc610cea15dd70ead711a8672f9ec7e03b971278aee",
+    "outputSha256": "631ea191e4afe8908c7da8ad047723d7ca5079be188744753a1b80d48d80b173",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -58,12 +58,12 @@
       "sha256": "eac8c866ebb03e4f46ea55586d0468466c535e413cefcdb6d2c454e900278ff7"
     },
     "sources": {
-      "fileCount": 455,
-      "sha256": "4fe54b25c574fe2f3b611f82177bb589deaa549c5770281307e0eca313a762fe"
+      "fileCount": 456,
+      "sha256": "98ba6f04addd89af9bf28b648431d515bc10e8b34f25166d56c12978c041d164"
     },
     "tests": {
-      "fileCount": 402,
-      "sha256": "8577c102c95acffe53cb2acd73e1047783907155fe5b28d24e00ba2136a47d1a"
+      "fileCount": 404,
+      "sha256": "43239889826baee95acc185421eef184e2bf5133efaa28156b2e021fe48e115c"
     }
   },
   "historicalChanges": [
@@ -1229,10 +1229,10 @@
     },
     {
       "id": "route-enforcement-v1-current-history-anchor",
-      "revision": "1b9baa9bb3c323f4feb4c617b2706fc62e197adb",
-      "files": 0,
-      "additions": 0,
-      "deletions": 0,
+      "revision": "51aa81a9185d80db11e765e6ceb6190359ca1a9c",
+      "files": 1,
+      "additions": 23,
+      "deletions": 8,
       "binaryFiles": 0,
       "composition": {
         "files": 0,
@@ -1245,14 +1245,14 @@
         "deletions": 0
       },
       "tests": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
+        "files": 1,
+        "additions": 23,
+        "deletions": 8
       },
       "behaviorFixtures": {
-        "before": 227,
+        "before": 231,
         "after": 231,
-        "retained": 227,
+        "retained": 231,
         "reusePercent": 100
       }
     }

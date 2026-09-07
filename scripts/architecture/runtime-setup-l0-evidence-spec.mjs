@@ -161,7 +161,7 @@ export const changes = Object.freeze([
   }),
   Object.freeze({
     id: "route-enforcement-v1-current-history-anchor",
-    revision: "1b9baa9bb3c323f4feb4c617b2706fc62e197adb",
+    revision: "51aa81a9185d80db11e765e6ceb6190359ca1a9c",
   }),
 ]);
 
@@ -173,12 +173,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "eac8c866ebb03e4f46ea55586d0468466c535e413cefcdb6d2c454e900278ff7",
   }),
   sources: Object.freeze({
-    fileCount: 455,
-    sha256: "4fe54b25c574fe2f3b611f82177bb589deaa549c5770281307e0eca313a762fe",
+    fileCount: 456,
+    sha256: "98ba6f04addd89af9bf28b648431d515bc10e8b34f25166d56c12978c041d164",
   }),
   tests: Object.freeze({
-    fileCount: 402,
-    sha256: "8577c102c95acffe53cb2acd73e1047783907155fe5b28d24e00ba2136a47d1a",
+    fileCount: 404,
+    sha256: "43239889826baee95acc185421eef184e2bf5133efaa28156b2e021fe48e115c",
   }),
 });
 
