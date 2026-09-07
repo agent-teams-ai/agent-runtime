@@ -8,3 +8,9 @@ export type {DockerHostCustodyContainerCreateInput} from "./docker-host-custody-
 export type {DockerCustodyAttemptKey, DockerCustodyOwnerIdentity} from "./journal/docker-custody-journal-types.js";
 export type {LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
 export {awaitNetworkCleanupWork} from "./engine/docker-engine-composition.js";
+export {createDockerHostHttpEgressObservers, joinHostHttpEgressV4Observers} from "./host-http-egress-v4-observers.js";
+export type {DockerHostHttpEgressObserverInput, DockerHttpListenerReadback} from "./host-http-egress-v4-observers.js";
+export {openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError} from "./node-linux-exclusive-route.js";
+export type {LinuxRouteToolPin} from "./node-linux-exclusive-route.js";
+export type {LinuxExclusiveRouteBinding, LinuxExclusiveRouteOwner} from "./linux-exclusive-route-owner.js";
+export type {LinuxExclusiveRouteEndpoint} from "./linux-exclusive-route-policy.js";
