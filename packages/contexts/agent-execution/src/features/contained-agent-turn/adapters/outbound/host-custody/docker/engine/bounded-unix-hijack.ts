@@ -46,8 +46,11 @@ const validateUpgrade = (response: IncomingMessage): void => {
     if (headers.has(name)) {throw new DockerEngineError("protocol-violation");}
     headers.set(name, rawValue.trim().toLowerCase());
   }
+  // Non-TTY attach uses multiplexed frames under either supported Docker media type.
+  const contentType = headers.get("content-type");
   if (headers.get("connection") !== "upgrade" || headers.get("upgrade") !== "tcp" ||
-      headers.get("content-type") !== "application/vnd.docker.raw-stream" ||
+      (contentType !== "application/vnd.docker.raw-stream" &&
+       contentType !== "application/vnd.docker.multiplexed-stream") ||
       headers.has("content-length") || headers.has("transfer-encoding")) {
     throw new DockerEngineError("protocol-violation");
   }
