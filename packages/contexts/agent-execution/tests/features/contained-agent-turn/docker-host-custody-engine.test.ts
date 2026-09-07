@@ -116,7 +116,7 @@ const syntheticDaemon = (): SyntheticDaemon => {
         CapDrop: ["ALL"],
         CgroupParent: host?.CgroupParent,
         CgroupnsMode: "private",
-        CpuPeriod: 100_000,
+        CpuPeriod: 0,
         Init: true,
         IpcMode: "private",
         Memory: 100_663_296,
@@ -125,7 +125,7 @@ const syntheticDaemon = (): SyntheticDaemon => {
         NanoCpus: 500_000_000,
         NetworkMode: "ar-operation-gateway",
         OomKillDisable: false,
-        PidMode: "private",
+        PidMode: "",
         PidsLimit: 32,
         Privileged: false,
         ReadonlyRootfs: true,
@@ -325,7 +325,7 @@ test("Node adapter emits the closed schema and completes lifecycle only by exact
     .every(route => route.includes(CONTAINER)));
 });
 
-test("API v1.47 decoders accept a synthetic owner-binding projection of the retained Engine 29.6.1 fixture", async t => {
+test("API v1.47 fixture rejects unproven OOM null; explicit false permits the synthetic owner-binding projection", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
   const fixtureUrl = new URL("../../fixtures/docker-engine-api-v1.47-engine-29.6.1-redacted.json", import.meta.url);
@@ -334,10 +334,10 @@ test("API v1.47 decoders accept a synthetic owner-binding projection of the reta
     .replaceAll("__PRIVATE_SOURCE__", join(root, "private", "operation"));
   const fixture = JSON.parse(fixtureSource) as {
     readonly info: unknown;
-    readonly inspect: { readonly Config: { readonly Labels: Record<string, string>; OpenStdin: boolean; StdinOnce: boolean } };
+    readonly inspect: { readonly HostConfig: { OomKillDisable: unknown }; readonly Config: { readonly Labels: Record<string, string>; OpenStdin: boolean; StdinOnce: boolean } };
   };
-  // The captured fixture predates owner binding. Project only this synthetic test
-  // response; preserve the historical capture bytes and their original evidence.
+  // This corrected diagnostic fixture is not a fresh capture. Project the current
+  // owner/stdin contract only in this synthetic test.
   fixture.inspect.Config.Labels["com.agent-runtime.owner-identity-sha256"] = createInput(root).ownerIdentitySha256;
   fixture.inspect.Config.OpenStdin = true;
   fixture.inspect.Config.StdinOnce = true;
@@ -364,6 +364,8 @@ test("API v1.47 decoders accept a synthetic owner-binding projection of the reta
     async stream() {throw new DockerEngineError("protocol-violation");},
   };
   const engine = new NodeUnixSocketDockerEngine({ client, policy: policy(root) });
+  await assert.rejects(engine.create(createInput(root), call()), {code: "authority-conflict"});
+  fixture.inspect.HostConfig.OomKillDisable = false;
   const authority = await engine.create(createInput(root), call());
   assert.equal(authority.containerId, CONTAINER);
   assert.equal((await engine.inspect(authority, call())).existence, "present");
@@ -784,5 +786,128 @@ test("inspection state decoding enforces bounded values, Docker timestamps, and 
       createInput(root, createHash("sha256").update(`state-${index}`).digest("hex")),
       call(),
     ), { code: "malformed-response" });
+  }
+});
+
+test("Docker wire defaults preserve exact create authority and mount access", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  for (const workspaceWritable of [true, false]) {
+    const daemon = syntheticDaemon();
+    daemon.inspectTransform = value => {
+      const config = value.Config as Record<string, unknown>;
+      delete config.NetworkDisabled;
+      const host = value.HostConfig as Record<string, unknown>;
+      for (const mount of host.Mounts as Array<Record<string, unknown>>) {
+        if (mount.ReadOnly === false) {delete mount.ReadOnly;}
+      }
+      // Informational inspect metadata, never a replacement for StorageOpt.
+      value.Storage = {RootFS: {Snapshot: {Name: "redacted"}}};
+    };
+    const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+    const authority = await engine.create({...createInput(root), workspaceWritable}, call());
+    const request = daemon.bodies[0] as {HostConfig: Record<string, unknown>};
+    assert.equal(request.HostConfig.NanoCpus, policy(root).cpuNanoCpus);
+    assert.equal(request.HostConfig.CpuPeriod, 0);
+    assert.equal(request.HostConfig.PidMode, "");
+    assert.equal(request.HostConfig.OomKillDisable, false);
+    const observed = await engine.inspect(authority, call());
+    assert.equal(observed.existence, "present");
+    if (observed.existence === "present") {
+      assert.equal(observed.resources.workspaceWritable, workspaceWritable);
+      assert.equal(observed.resources.pidNamespaceMode, "private");
+      assert.equal(observed.resources.cpuNanoCpus, policy(root).cpuNanoCpus);
+    }
+  }
+});
+
+test("wire compatibility never normalizes null, unsafe modes, or foreign resource authority", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const changes: Array<(value: Record<string, unknown>) => void> = [];
+  for (const [key, values] of [
+    ["CpuPeriod", [100_000, null, "0"]],
+    ["NanoCpus", [0, 250_000_000, null]],
+    ["PidMode", ["private", "host", "container:foreign", null]],
+    ["OomKillDisable", [null, true, "false"]],
+    ["Memory", [null, 1]],
+    ["NetworkMode", ["host", "none"]],
+  ] as const) {
+    for (const value of values) {
+      changes.push(inspect => {(inspect.HostConfig as Record<string, unknown>)[key] = value;});
+    }
+  }
+  for (const value of [null, true, "false"]) {
+    changes.push(inspect => {(inspect.Config as Record<string, unknown>).NetworkDisabled = value;});
+    for (const index of [0, 1]) {
+      changes.push(inspect => {
+        const host = inspect.HostConfig as Record<string, unknown>;
+        (host.Mounts as Array<Record<string, unknown>>)[index]!.ReadOnly = value;
+      });
+    }
+  }
+  changes.push(inspect => {inspect.UnknownStorage = {};});
+  changes.push(inspect => {
+    const host = inspect.HostConfig as Record<string, unknown>;
+    delete host.OomKillDisable;
+  });
+  changes.push(inspect => {
+    const host = inspect.HostConfig as Record<string, unknown>;
+    delete (host.Mounts as Array<Record<string, unknown>>)[0]!.ReadOnly;
+    (inspect.Mounts as Array<Record<string, unknown>>)[0]!.RW = false;
+  });
+  for (const [index, change] of changes.entries()) {
+    await t.test(String(index), async () => {
+      const daemon = syntheticDaemon();
+      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+      const authority = await engine.create(createInput(root), call());
+      daemon.inspectTransform = change;
+      await assert.rejects(engine.inspect(authority, call()), error =>
+        error instanceof DockerEngineError &&
+        ["authority-conflict", "malformed-response"].includes(error.code));
+    });
+  }
+  // A cgroup version claim alone does not prove that null means OOM killing enabled.
+  for (const version of ["1", "2"]) {
+    const daemon = syntheticDaemon();
+    daemon.infoCgroupVersion = version;
+    const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+    const authority = await engine.create(createInput(root), call());
+    daemon.inspectTransform = value => {
+      (value.HostConfig as Record<string, unknown>).OomKillDisable = null;
+    };
+    await assert.rejects(engine.inspect(authority, call()), {code: "authority-conflict"});
+  }
+});
+
+test("lost create reconciles omitted defaults but never a read-only workspace downgrade", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  for (const downgrade of [false, true]) {
+    const daemon = syntheticDaemon();
+    daemon.loseNextCreate = true;
+    daemon.inspectTransform = value => {
+      delete (value.Config as Record<string, unknown>).NetworkDisabled;
+      const host = value.HostConfig as Record<string, unknown>;
+      const mounts = host.Mounts as Array<Record<string, unknown>>;
+      delete mounts[1]!.ReadOnly;
+      if (downgrade) {
+        // Even agreeing configured/observed RW cannot replace the requested authority.
+        delete mounts[0]!.ReadOnly;
+        (value.Mounts as Array<Record<string, unknown>>)[0]!.RW = true;
+      }
+    };
+    const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+    const creating = engine.create({...createInput(root), workspaceWritable: false}, call());
+    if (downgrade) {
+      await assert.rejects(creating, {code: "create-acknowledgement-unknown"});
+    } else {
+      const authority = await creating;
+      const observed = await engine.inspect(authority, call());
+      assert.equal(observed.existence, "present");
+      if (observed.existence === "present") {assert.equal(observed.resources.workspaceWritable, false);}
+    }
+    assert.ok(daemon.routes.includes(`GET /v1.47/containers/ar-turn-${NONCE}/json`));
+    assert.equal(daemon.bodies.length, 1);
   }
 });

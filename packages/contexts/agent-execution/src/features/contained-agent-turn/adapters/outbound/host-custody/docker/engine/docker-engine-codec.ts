@@ -83,6 +83,10 @@ const boolean = (value: unknown): boolean => {
   return value;
 };
 
+// Only an absent omitempty boolean has the Docker default; null is invalid.
+const omittedFalse = (record: Record<string, unknown>, key: string): boolean =>
+  Object.hasOwn(record, key) ? boolean(record[key]) : false;
+
 const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 export const decodeEngineIdentity = (
@@ -157,7 +161,7 @@ const configuredMountFacts = (value: unknown, policy: DockerEnginePolicy): Mount
   const mounts = value.map(entry => versionedObject(
     entry,
     CONFIGURED_MOUNT_FIELDS,
-    ["BindOptions", "ReadOnly", "Source", "Target", "Type"],
+    ["BindOptions", "Source", "Target", "Type"],
     "authority-conflict",
   ));
   const workspace = mounts.find(mount => mount.Target === "/workspace");
@@ -173,12 +177,12 @@ const configuredMountFacts = (value: unknown, policy: DockerEnginePolicy): Mount
       throw new DockerEngineError("authority-conflict");
     }
   }
-  if (workspace === undefined || privateRoot === undefined || privateRoot.ReadOnly !== false) {
+  if (workspace === undefined || privateRoot === undefined || omittedFalse(privateRoot, "ReadOnly") !== false) {
     throw new DockerEngineError("authority-conflict");
   }
   const workspaceSource = string(workspace.Source);
   const privateRootSource = string(privateRoot.Source);
-  return checkedMountSources(workspaceSource, privateRootSource, !boolean(workspace.ReadOnly), policy);
+  return checkedMountSources(workspaceSource, privateRootSource, !omittedFalse(workspace, "ReadOnly"), policy);
 };
 
 const observedMountFacts = (value: unknown, policy: DockerEnginePolicy): MountFacts => {
@@ -225,12 +229,13 @@ const resourceFacts = (
     cgroupNamespaceMode !== "private",
     hostConfig.AutoRemove !== false,
     hostConfig.Privileged !== false,
-    hostConfig.PidMode !== "private",
+    hostConfig.PidMode !== "",
     hostConfig.Init !== true,
     hostConfig.IpcMode !== "private",
+    // Null on cgroup v2 is not proof of the required OOM invariant.
     hostConfig.OomKillDisable !== false,
     hostConfig.CgroupParent !== policy.cgroupParent,
-    hostConfig.CpuPeriod !== 100_000,
+    hostConfig.CpuPeriod !== 0,
     hostConfig.NetworkMode !== policy.allowedNetworkName,
     !exactStrings(hostConfig.CapDrop, ["ALL"]),
     !exactStrings(hostConfig.SecurityOpt, security),
@@ -284,13 +289,13 @@ const projectedConfiguredMounts = (value: unknown): readonly Record<string, unkn
     const mount = versionedObject(
       entry,
       CONFIGURED_MOUNT_FIELDS,
-      ["BindOptions", "ReadOnly", "Source", "Target", "Type"],
+      ["BindOptions", "Source", "Target", "Type"],
       "authority-conflict",
     );
     const bind = versionedObject(mount.BindOptions, BIND_OPTIONS_FIELDS, ["Propagation"], "authority-conflict");
     return {
       BindOptions: { Propagation: bind.Propagation },
-      ReadOnly: mount.ReadOnly,
+      ReadOnly: omittedFalse(mount, "ReadOnly"),
       Source: mount.Source,
       Target: mount.Target,
       Type: mount.Type,
@@ -314,6 +319,7 @@ const observedCreateSpecificationSha256 = (
   projectedHost.Tmpfs = { "/tmp": tmpfs["/tmp"] };
   const request: Record<string, unknown> = { HostConfig: projectedHost };
   for (const key of CREATE_CONFIG_FIELDS) {request[key] = config[key];}
+  request.NetworkDisabled = omittedFalse(config, "NetworkDisabled");
   return canonicalJsonSha256({ Name: string(name).replace(/^\//u, ""), Request: request });
 };
 
@@ -329,7 +335,9 @@ export const decodeInspection = (
     ["AppArmorProfile", "Config", "HostConfig", "Id", "Mounts", "Name", "State"],
   );
   const id = string(inspect.Id);
-  const config = versionedObject(inspect.Config, CONFIG_FIELDS, CREATE_CONFIG_FIELDS);
+  const config = versionedObject(
+    inspect.Config, CONFIG_FIELDS, CREATE_CONFIG_FIELDS.filter(key => key !== "NetworkDisabled"),
+  );
   const hostConfig = versionedObject(inspect.HostConfig, HOST_CONFIG_FIELDS, CREATE_HOST_FIELDS);
   const expectedLabels = labelsFor(
     authority.operationNonceSha256,

@@ -191,7 +191,8 @@ export const encodeCreateRequest = (input: DockerContainerCreate, policy: Docker
       CapDrop: ["ALL"],
       CgroupParent: policy.cgroupParent,
       CgroupnsMode: "private",
-      CpuPeriod: 100_000,
+      // NanoCpus supplies the CPU cap; a nonzero period conflicts with it.
+      CpuPeriod: 0,
       Init: true,
       IpcMode: "private",
       Memory: policy.memoryBytes,
@@ -203,7 +204,8 @@ export const encodeCreateRequest = (input: DockerContainerCreate, policy: Docker
       NanoCpus: policy.cpuNanoCpus,
       NetworkMode: policy.allowedNetworkName,
       OomKillDisable: false,
-      PidMode: "private",
+      // Docker represents an isolated PID namespace with the empty mode.
+      PidMode: "",
       PidsLimit: policy.pidsLimit,
       Privileged: false,
       ReadonlyRootfs: true,
