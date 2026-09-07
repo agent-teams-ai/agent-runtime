@@ -39,8 +39,9 @@ test("the provider route gate does not alter the exact seven composition ports",
 });
 
 test("the product entrypoint still refuses today, and refuses for a registry reason", async () => {
-  // The gate is conditional, but this checkout promotes no enforced route, so
-  // the exact same construction refusal is still the only product outcome.
+  // The gate is conditional, and this dependency set carries no authentic
+  // route-enforcement capability, so the exact same construction refusal is
+  // still the only product outcome for it.
   assert.throws(() => createHostCustodiedContainedTurn(Object.freeze({
     artifacts: Object.freeze({}), hostCustody: Object.freeze({}), operationStore: Object.freeze({}),
     providerAccess: Object.freeze({}), routeEnforcement: Object.freeze({admission: Object.freeze({})}),
@@ -50,8 +51,17 @@ test("the product entrypoint still refuses today, and refuses for a registry rea
     error.reason === "route-enforcement-unqualified");
   const registry = JSON.parse(await readFile(new URL(
     "../../../../docs/architecture/qualification-registry.json", import.meta.url,
-  ), "utf8")) as {entries: readonly {qualification: string}[]};
-  assert.equal(registry.entries.every(entry => entry.qualification === "scoped"), true);
+  ), "utf8")) as {entries: readonly {id: string; qualification: string;
+    targets: readonly Readonly<Record<string, string>>[]}[]};
+  // Promotion above `scoped` stays confined to the one enforced-network-route
+  // target. Even for that target a registry row is only the second of the two
+  // facts the gate requires, which is why the refusal above is unchanged.
+  for (const promoted of registry.entries.filter(item => item.qualification !== "scoped")) {
+    assert.equal(promoted.id, "docker-linux-codex-enforced-network-route");
+    assert.equal(promoted.qualification, "implementation");
+    assert.deepEqual(promoted.targets.map(target => target.provider), ["codex"]);
+    assert.deepEqual(promoted.targets.map(target => target.platform), ["linux-x64"]);
+  }
   const readiness = await readFile(new URL(
     "../../../../docs/architecture/readiness.md", import.meta.url,
   ), "utf8");

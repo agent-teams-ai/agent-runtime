@@ -85,9 +85,20 @@ test("an unreadable registry throws rather than qualifying the target", async ()
   });
 });
 
-test("today's shipped registry promotes no enforced route target at all", async () => {
+test("the shipped registry promotes at most the exact enforced route target", async () => {
   const registry = JSON.parse(await (await import("node:fs/promises"))
-    .readFile(PRODUCT_QUALIFICATION_REGISTRY, "utf8")) as {entries: readonly {qualification: string}[]};
+    .readFile(PRODUCT_QUALIFICATION_REGISTRY, "utf8")) as {entries: readonly {
+      id: string; qualification: string; targets: readonly Readonly<Record<string, string>>[];
+    }[]};
   assert.equal(registry.entries.length > 0, true);
-  assert.deepEqual([...new Set(registry.entries.map(item => item.qualification))], ["scoped"]);
+  // Every other shipped target stays `scoped`; only the Docker/Linux Codex
+  // enforced-network-route target may sit above it, and only for this exact
+  // provider and platform pair.
+  const promoted = registry.entries.filter(item => item.qualification !== "scoped");
+  assert.equal(promoted.length <= 1, true);
+  for (const row of promoted) {
+    assert.equal(row.id, "docker-linux-codex-enforced-network-route");
+    assert.equal(row.qualification, "implementation");
+    assert.deepEqual(row.targets.map(item => `${item.provider}:${item.platform}`), ["codex:linux-x64"]);
+  }
 });
