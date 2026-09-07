@@ -16,6 +16,9 @@ Start here:
 Use [.agents/skills/docs-authoring/SKILL.md](.agents/skills/docs-authoring/SKILL.md) for documentation.
 <!-- agent-teams-docs:route/v1 end -->
 
+- Planned passive Assembly adoption and outstanding gates:
+  [Get Modular adoption](docs/architecture/get-modular-adoption.md)
+
 Guardrails:
 
 - Treat accepted ADRs and promoted architecture rules as normative. Evidence

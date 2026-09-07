@@ -21,6 +21,9 @@ independent competing source of truth.
 
 Documents:
 
+- [Get Modular adoption](get-modular-adoption.md): planned passive setup scope,
+  ADR-0015 authority, unresolved artifact/pin gates, and L0 transition contract.
+
 - [Feature Module Standard v1 scoped active adoption](feature-module-standard-v1-candidate.md):
   exact immutable authority binding, narrow Agent Execution and Provider Access
   active scope, deterministic gates, and zero-diagnostic evidence. This is not

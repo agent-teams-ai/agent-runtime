@@ -17,6 +17,7 @@ related:
   - ADR-0012
   - ADR-0013
   - ADR-0014
+  - ADR-0015
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -67,6 +68,10 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0014: Darwin provider candidate platform qualification](0014-darwin-provider-candidate-platform-qualification.md)
   accepts exact Codex and Claude Darwin arm64 revisions as unqualified
   candidates without changing Linux authority or ADR-0010 operation semantics.
+
+- [ADR-0015: Passive setup static Assembly adoption](0015-passive-setup-static-assembly-adoption.md)
+  accepts only the static passive construction contract, narrowly amending
+  ADR-0008 while preserving historical HOLD evidence and all other invariants.
 
 ## Superseded
 

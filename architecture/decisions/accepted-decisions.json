@@ -61,6 +61,11 @@
       "id": "ADR-0014",
       "path": "docs/decisions/0014-darwin-provider-candidate-platform-qualification.md",
       "immutableDigest": "sha256:b923c5f780461715861e829391fd7a01f7f7cb81586760655f5f8218c6d9b7e3"
+    },
+    {
+      "id": "ADR-0015",
+      "path": "docs/decisions/0015-passive-setup-static-assembly-adoption.md",
+      "immutableDigest": "sha256:f8bd0ab5f9d7a4937095b45fd533da34f83964b8da6b766dc2a93d459396e9df"
     }
   ]
 }

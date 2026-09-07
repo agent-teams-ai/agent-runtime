@@ -202,3 +202,7 @@ shapes, duplicate/conflicting tuples, readiness links, evidence files, and
 pinned SHA-256 identities. The same command accepts `--target-json
 '<eight-dimension JSON object>'` for an exact whole-tuple lookup; an unmatched
 target returns `unqualified`.
+
+Current passive composition adoption: [ADR-0015](decisions/0015-passive-setup-static-assembly-adoption.md)
+and [Get Modular adoption](architecture/get-modular-adoption.md). This is authority
+groundwork, not delivered adoption or provider qualification.
