@@ -257,7 +257,7 @@ export type SubmitRuntimeContainedTurnOutcome =
     }
   | { readonly code: "capability_unavailable"; readonly status: "unsupported" }
   | { readonly code: "command_fingerprint_conflict"; readonly status: "conflict" }
-  | { readonly code: "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
+  | { readonly code: "caller_invalid" | "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
   | { readonly status: "denied" }
   | { readonly operationId: string; readonly status: "accepted" };
 

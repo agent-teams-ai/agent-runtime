@@ -8,6 +8,7 @@ import {
   type ClaudeCurrentKernelOwner,
   type CodexCurrentKernelOwner,
   type ContainedTurnFeatureDependencies,
+  type ContainedTurnProviderAccessPort,
   type CreateClaudeCurrentKernelOwnerOptions,
   type CreateCodexCurrentKernelOwnerOptions,
   type ContainedTurnRouteEnforcementCapability,
@@ -162,7 +163,7 @@ const captureProviderOwner = (
 
 const captureProviderAccessDependency = (
   dependencies: ContainedTurnOuterCompositionDependencies,
-): OuterContainedTurnProviderAccess => {
+): ContainedTurnProviderAccessPort => {
   let owner: OuterContainedTurnProviderAccess;
   try {
     if (trustedIsProxy(dependencies)) {
@@ -176,8 +177,7 @@ const captureProviderAccessDependency = (
   } catch {
     throw invalidProviderAccessDependency();
   }
-  createContainedTurnProviderAccessPort(owner);
-  return owner;
+  return createContainedTurnProviderAccessPort(owner);
 };
 
 const createSelectedProviderOwner = (
@@ -207,9 +207,7 @@ export const createContainedTurnFeatureFromProviderAccess = (
 ): ContainedTurnCapabilityBundle => {
   // Product composition gates unqualified candidates before this exact seven-port
   // binding. Candidate evidence still closes Route C before publishing a handle.
-  const providerAccess = createContainedTurnProviderAccessPort(
-    captureProviderAccessDependency(dependencies),
-  );
+  const providerAccess = captureProviderAccessDependency(dependencies);
   return createContainedTurnFeature(Object.freeze({
     operationStore: dependencies.operationStore,
     security: createContainedTurnRuntimeSecurityPort(
@@ -229,7 +227,10 @@ export const composeHostCustodiedContainedTurn = (
   ownerFactories: ContainedTurnProviderOwnerFactories,
   featureFactory: typeof createContainedTurnFeatureFromProviderAccess,
 ): HostCustodiedContainedTurnComposition => {
-  const providerAccess = captureProviderAccessDependency(
+  // Fail closed on Provider Access before the selected owner is constructed; the
+  // resulting port is discarded here and rebuilt once inside featureFactory so the
+  // raw dependency, not this validation-only port, is what featureFactory captures.
+  captureProviderAccessDependency(
     dependencies as unknown as ContainedTurnOuterCompositionDependencies,
   );
   const selectedProvider = snapshotContainedTurnProviderSelection(dependencies);
@@ -241,7 +242,7 @@ export const composeHostCustodiedContainedTurn = (
     feature = featureFactory(Object.freeze({
       operationStore: dependencies.operationStore,
       security: dependencies.security,
-      providerAccess,
+      providerAccess: dependencies.providerAccess,
       workspace: dependencies.workspace,
       artifacts: dependencies.artifacts,
       custody: owner.custody,

@@ -19,6 +19,7 @@ import {
 } from "./agent-runtime-host-disposal-diagnostics.js";
 import { unwrapContainedTurnAuthorityOutcome, type AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
 import { copyContainedTurnAccessAuthority, type ContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
+import { isTerminalTurnStatus } from "./contained-turn-runtime-validation.js";
 
 // Bounds the caller wait only; expiry proves neither call settlement nor termination.
 const HOST_DISPOSAL_WAIT_DEADLINE_MS = 1_000;
@@ -71,11 +72,6 @@ export interface AgentRuntimeHostDisposalLifecycle {
   requestContainedTurnCancellation(operation: ContainedTurnOperation): Promise<unknown>;
   executeCall<T>(operation: () => Promise<T>): Promise<T>;
 }
-
-const isTerminalContainedTurnStatus = (
-  status: AgentRuntimeHostContainedTurnStatus,
-): status is "cancelled" | "failed" | "succeeded" =>
-  status === "cancelled" || status === "failed" || status === "succeeded";
 
 export class AgentRuntimeHostDisposalIncompleteError extends Error {
   public readonly activeCallCount: number;
@@ -214,7 +210,7 @@ class ContainedTurnOwnershipLedger {
     if (active === undefined) {
       return;
     }
-    if (isTerminalContainedTurnStatus(status)) {
+    if (isTerminalTurnStatus(status)) {
       this.#active.delete(operationId);
       return;
     }
