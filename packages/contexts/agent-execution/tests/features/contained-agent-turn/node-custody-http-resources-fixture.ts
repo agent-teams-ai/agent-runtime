@@ -23,7 +23,18 @@ class MemoryServer extends EventEmitter {
   public close() {this.closeCalls += 1; if (behavior.autoClose) {queueMicrotask(() => this.ackClose());} return this;}
   public ackClose() {this.listening = false; this.emit("close");}
 }
-modules.set("node:net", {Server: MemoryServer, isIPv4: (value: string) => value === "10.203.0.1"});
+// The retained V4 lifecycle also links the Docker Unix peer connector. Export
+// its native dependencies without granting this resource fixture any I/O.
+const forbidConnection = (): never => {throw new Error("network connections forbidden in resource fixture");};
+function ForbiddenSocket(): never {return forbidConnection();}
+modules.set("node:net", {Server: MemoryServer, Socket: ForbiddenSocket, createConnection: forbidConnection,
+  isIPv4: (value: string) => value === "10.203.0.1"});
+const forbidFilesystem = async (): Promise<never> => {throw new Error("filesystem access forbidden in resource fixture");};
+// The base fixture's fs/promises module is already cached. Keep its memory
+// observations, but use a fresh module identity for the newly required exports.
+modules.set("resource-fs-promises", {...modules.get("node:fs/promises"),
+  open: forbidFilesystem, readdir: forbidFilesystem, readlink: forbidFilesystem,
+});
 let storageGate: Promise<void> | undefined;
 let storageOpen: (() => void) | undefined;
 const storage = {opens: 0, closes: 0, locks: 0, tombstones: 0, created: 0, retiredUnknown: false,
@@ -47,6 +58,9 @@ modules.set("./host-http-consumption-storage.js", {
   },
 });
 const lockHook = registerHooks({resolve(specifier, context, next) {
+  if (specifier === "node:fs/promises") {
+    return {url: "native-finalization-fixture:resource-fs-promises", shortCircuit: true};
+  }
   if (specifier === "@agent-teams/filesystem-custody" && context.parentURL?.includes("node-host-http-consumption-journal")) {
     return {url: "native-finalization-fixture:retention-lock", shortCircuit: true};
   }

@@ -4,6 +4,22 @@ import { createV4HostHttpListenerLifecycle, fixture, deferred, tick, liveFor, Co
 
 const burn = (f: Awaited<ReturnType<typeof fixture>>) => f.controller.abort();
 
+test("loaded resource fixture rejects native sockets and Docker filesystem access", async () => {
+  // Import after fixture setup so these are the bindings seen by its adapters.
+  const {createConnection, Socket} = await import("node:net");
+  const {open, readdir, readlink} = await import("node:fs/promises");
+  let connected = false;
+  const onConnect = () => {connected = true;};
+  assert.throws(() => createConnection({path: "/synthetic/docker.sock"}, onConnect), /network connections forbidden/u);
+  assert.throws(() => createConnection({host: "10.203.0.1", port: 43129}, onConnect), /network connections forbidden/u);
+  assert.throws(() => new Socket(), /network connections forbidden/u);
+  await assert.rejects(open("/synthetic/docker.sock", "r"), /filesystem access forbidden/u);
+  await assert.rejects(readdir("/synthetic"), /filesystem access forbidden/u);
+  await assert.rejects(readlink("/synthetic/docker.sock"), /filesystem access forbidden/u);
+  await tick();
+  assert.equal(connected, false);
+});
+
 test("trusted actual kernel claim acquires and prepares fixed resources on its underlying reservation", async () => {
   const f = await nodeFixture();
   let resources: Awaited<ReturnType<typeof fixture>> | undefined;
