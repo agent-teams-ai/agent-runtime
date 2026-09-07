@@ -88,3 +88,10 @@ export type {
   ContainedTurnIntentCancellationInput,
   ContainedTurnIntentCancellationOutcome,
 } from "./composition/contained-turn-intent-cancellation.js";
+export {
+  createDockerLinuxPostClaimPreparation,
+  type DockerLinuxOperationRouteAdmission,
+  type DockerLinuxPostClaimDeadlines,
+  type DockerLinuxPostClaimDependencies,
+  type DockerLinuxPostClaimSubjectFacts,
+} from "./composition/docker-linux-post-claim-preparation.js";
