@@ -14,3 +14,9 @@ export {
   type StaticIndeterminateProviderAccessAuthority,
   type StaticProviderAccessAuthority,
 } from "./composition/package-composition.js";
+export { createPostgresDispatchConsumption } from "./composition/postgres-dispatch-consumption.js";
+export type { DispatchHeadPublication, DispatchHeadPublicationResult } from "./adapters/outbound/postgres/dispatch-postgres-control.js";
+export type { DispatchPostgresOwner } from "./adapters/outbound/postgres/dispatch-postgres-data.js";
+export { createPostgresCredentialRenderingOwner } from "./composition/postgres-credential-rendering-owner.js";
+export type { MaterializationPostgresPool, MaterializationPostgresTimeouts } from "./adapters/outbound/postgres/materialization-postgres-transactions.js";
+export type { CredentialRenderingSelection, CredentialGenerationAcquisition } from "./adapters/outbound/credential-rendering-contracts.js";
