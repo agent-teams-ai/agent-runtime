@@ -232,7 +232,6 @@ const resourceFacts = (
     hostConfig.PidMode !== "",
     hostConfig.Init !== true,
     hostConfig.IpcMode !== "private",
-    // Null on cgroup v2 is not proof of the required OOM invariant.
     hostConfig.OomKillDisable !== false,
     hostConfig.CgroupParent !== policy.cgroupParent,
     hostConfig.CpuPeriod !== 0,
@@ -338,7 +337,17 @@ export const decodeInspection = (
   const config = versionedObject(
     inspect.Config, CONFIG_FIELDS, CREATE_CONFIG_FIELDS.filter(key => key !== "NetworkDisabled"),
   );
-  const hostConfig = versionedObject(inspect.HostConfig, HOST_CONFIG_FIELDS, CREATE_HOST_FIELDS);
+  const wireHostConfig = versionedObject(inspect.HostConfig, HOST_CONFIG_FIELDS, CREATE_HOST_FIELDS);
+  // Moby 8ec5ab355a34b2a0e2b3238d67bdefe77fefa982 daemon_unix.go:366-368,
+  // 447-454 defaults the toggle to false, then discards it when unsupported.
+  // Docker documents --oom-kill-disable as discarded on cgroup v2, where the
+  // default OOM killer remains enabled. Limit this representation to the observed
+  // Engine version and current cgroup identity; missing/other values stay invalid.
+  // Share the projection between resource validation and create authority hashing.
+  const hostConfig = wireHostConfig.OomKillDisable === null &&
+      engine.engineVersion === "29.6.1" && engine.cgroupVersion === "2"
+    ? { ...wireHostConfig, OomKillDisable: false }
+    : wireHostConfig;
   const expectedLabels = labelsFor(
     authority.operationNonceSha256,
     authority.launchFingerprintSha256,

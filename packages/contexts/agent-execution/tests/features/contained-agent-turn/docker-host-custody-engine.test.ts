@@ -51,6 +51,7 @@ interface SyntheticDaemon {
   daemonBoot: string;
   extraInfoField: boolean;
   infoCgroupVersion: unknown;
+  infoEngineVersion: unknown;
   inspectTransform: ((value: Record<string, unknown>) => void) | undefined;
   readonly hijackCloseCount: number;
   logLeavesRunning: boolean;
@@ -70,6 +71,7 @@ const syntheticDaemon = (): SyntheticDaemon => {
     daemonBoot: DAEMON_BOOT,
     extraInfoField: false,
     infoCgroupVersion: "2" as unknown,
+    infoEngineVersion: "29.6.1" as unknown,
     inspectTransform: undefined as ((value: Record<string, unknown>) => void) | undefined,
     logLeavesRunning: false,
     loseNextCreate: false,
@@ -183,7 +185,7 @@ const syntheticDaemon = (): SyntheticDaemon => {
           CgroupVersion: state.infoCgroupVersion,
           Driver: "overlay2",
           ID: "persistent-synthetic-daemon",
-          ServerVersion: "29.6.1",
+          ServerVersion: state.infoEngineVersion,
         };
         if (state.extraInfoField) {value.Unexpected = true;}
         return jsonResponse(200, value);
@@ -264,6 +266,8 @@ const syntheticDaemon = (): SyntheticDaemon => {
     set daemonBoot(value: string) {state.daemonBoot = value;},
     get extraInfoField() {return state.extraInfoField;},
     set extraInfoField(value: boolean) {state.extraInfoField = value;},
+    get infoEngineVersion() {return state.infoEngineVersion;},
+    set infoEngineVersion(value: unknown) {state.infoEngineVersion = value;},
     get infoCgroupVersion() {return state.infoCgroupVersion;},
     set infoCgroupVersion(value: unknown) {state.infoCgroupVersion = value;},
     get hijackCloseCount() {return hijackCloseCount;},
@@ -325,7 +329,7 @@ test("Node adapter emits the closed schema and completes lifecycle only by exact
     .every(route => route.includes(CONTAINER)));
 });
 
-test("API v1.47 fixture rejects unproven OOM null; explicit false permits the synthetic owner-binding projection", async t => {
+test("API v1.47 fixture accepts evidenced OOM null with the synthetic owner-binding projection", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
   const fixtureUrl = new URL("../../fixtures/docker-engine-api-v1.47-engine-29.6.1-redacted.json", import.meta.url);
@@ -364,10 +368,11 @@ test("API v1.47 fixture rejects unproven OOM null; explicit false permits the sy
     async stream() {throw new DockerEngineError("protocol-violation");},
   };
   const engine = new NodeUnixSocketDockerEngine({ client, policy: policy(root) });
-  await assert.rejects(engine.create(createInput(root), call()), {code: "authority-conflict"});
-  fixture.inspect.HostConfig.OomKillDisable = false;
+  assert.equal(fixture.inspect.HostConfig.OomKillDisable, null);
   const authority = await engine.create(createInput(root), call());
   assert.equal(authority.containerId, CONTAINER);
+  assert.equal((await engine.inspect(authority, call())).existence, "present");
+  fixture.inspect.HostConfig.OomKillDisable = false;
   assert.equal((await engine.inspect(authority, call())).existence, "present");
 });
 
@@ -821,7 +826,7 @@ test("Docker wire defaults preserve exact create authority and mount access", as
   }
 });
 
-test("wire compatibility never normalizes null, unsafe modes, or foreign resource authority", async t => {
+test("wire compatibility rejects unrelated nulls, unsafe modes, and foreign resource authority", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, {force: true, recursive: true});});
   const changes: Array<(value: Record<string, unknown>) => void> = [];
@@ -829,7 +834,7 @@ test("wire compatibility never normalizes null, unsafe modes, or foreign resourc
     ["CpuPeriod", [100_000, null, "0"]],
     ["NanoCpus", [0, 250_000_000, null]],
     ["PidMode", ["private", "host", "container:foreign", null]],
-    ["OomKillDisable", [null, true, "false"]],
+    ["OomKillDisable", [true, "false", 0, {}, []]],
     ["Memory", [null, 1]],
     ["NetworkMode", ["host", "none"]],
   ] as const) {
@@ -867,17 +872,46 @@ test("wire compatibility never normalizes null, unsafe modes, or foreign resourc
         ["authority-conflict", "malformed-response"].includes(error.code));
     });
   }
-  // A cgroup version claim alone does not prove that null means OOM killing enabled.
-  for (const version of ["1", "2"]) {
-    const daemon = syntheticDaemon();
-    daemon.infoCgroupVersion = version;
-    const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
-    const authority = await engine.create(createInput(root), call());
-    daemon.inspectTransform = value => {
-      (value.HostConfig as Record<string, unknown>).OomKillDisable = null;
-    };
-    await assert.rejects(engine.inspect(authority, call()), {code: "authority-conflict"});
+
+});
+
+test("OOM null requires the evidenced current engine and cgroup identity", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  for (const [engineVersion, cgroupVersion] of [
+    ["29.6.1", "1"], ["29.6.0", "2"], ["29.6.2", "2"],
+    ["29.6.1-custom", "2"], ["", "2"], [null, "2"], [undefined, "2"],
+    ["29.6.1", "3"], ["29.6.1", null], ["29.6.1", undefined], ["29.6.1", 2],
+  ]) {
+    await t.test(`${engineVersion}/${cgroupVersion}`, async () => {
+      const daemon = syntheticDaemon();
+      daemon.infoEngineVersion = engineVersion;
+      daemon.infoCgroupVersion = cgroupVersion;
+      daemon.inspectTransform = value => {
+        (value.HostConfig as Record<string, unknown>).OomKillDisable = null;
+      };
+      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+      await assert.rejects(engine.create(createInput(root), call()), error =>
+        error instanceof DockerEngineError &&
+        ["authority-conflict", "malformed-response"].includes(error.code));
+    });
   }
+});
+
+test("OOM null preserves create authority during lost-response reconciliation", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const daemon = syntheticDaemon();
+  daemon.loseNextCreate = true;
+  daemon.inspectTransform = value => {
+    (value.HostConfig as Record<string, unknown>).OomKillDisable = null;
+  };
+  const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  assert.equal((daemon.bodies[0] as {HostConfig: {OomKillDisable: unknown}}).HostConfig.OomKillDisable, false);
+  assert.equal((await engine.inspect(authority, call())).existence, "present");
+  daemon.inspectTransform = undefined;
+  assert.equal((await engine.inspect(authority, call())).existence, "present");
 });
 
 test("lost create reconciles omitted defaults but never a read-only workspace downgrade", async t => {
