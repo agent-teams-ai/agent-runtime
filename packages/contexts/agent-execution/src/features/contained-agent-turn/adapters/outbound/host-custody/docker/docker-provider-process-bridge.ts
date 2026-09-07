@@ -151,8 +151,13 @@ class DockerProviderProcess {
 export interface PreparedDockerProviderIo {
   ready(): ReturnType<DockerContainedTurnInitSession["ready"]>;
   readonly observation: DockerContainedTurnInitSession["observation"];
+  readonly completion: DockerContainedTurnInitSession["completion"];
 }
 type PreparationInput = Readonly<Pick<DockerProviderProcessInput, "launch" | "expected" | "init">>;
+const observed = new WeakMap<PreparedDockerProviderIo, PreparationInput["launch"]>();
+export const assertDockerPreparedIoLaunch = (io: PreparedDockerProviderIo, launch: PreparationInput["launch"]): void => {
+  if (observed.get(io) !== launch) {throw new TypeError("Docker evidence requires the actual prepared IO launch");}
+};
 const prepared = new WeakMap<PreparedDockerProviderIo, Readonly<{
   launch: DockerProviderProcessInput["launch"]; expected: DockerProviderProcessInput["expected"];
   isAdmitted(): boolean; init: DockerProviderProcessInput["init"]; process: DockerProviderProcess; session: DockerContainedTurnInitSession;
@@ -192,7 +197,8 @@ const prepareIo = (input: PreparationInput, issued: ReturnType<typeof prepareDoc
   const process = new DockerProviderProcess(issued.custodyRef, issued.workspaceAuthorityPath);
   const session = issued.openInitSession({...init, onOutput: chunk => process[chunk.stream].push(chunk.bytes)});
   process.bind(session, expected.generation);
-  const capability = Object.freeze({ready: session.ready.bind(session), get observation() {return session.observation;}});
+  const capability = Object.freeze({ready: session.ready.bind(session), completion: session.completion, get observation() {return session.observation;}});
+  observed.set(capability, input.launch);
   prepared.set(capability, Object.freeze({isAdmitted: () => !init.signal?.aborted && init.isCurrentGeneration(expected.generation),
     launch: input.launch, expected, init: captureInit(options), process, session}));
   return capability;

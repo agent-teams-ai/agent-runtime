@@ -11,6 +11,10 @@ import {compareResidueTrees, openResidueTree, pinResidueProcess, requireLeafMemb
   scanResidueTree, verifyResidueProcess, type ResidueProcess, type ResidueTree} from "./linux-docker-residue-kernel.js";
 import {recursivePopulation, residueFault, residueLeaf, residueParent, sameResidueEngine} from "./linux-docker-residue-parsers.js";
 
+const concreteLifecycles = new WeakSet<object>();
+/** Provenance readback only; no caller-supplied empty callback qualifies. */
+export const isConcreteLinuxDockerLifecycle = (lifecycle: object): boolean => concreteLifecycles.has(lifecycle);
+
 type Present = Extract<DockerContainerObservation, {existence: "present"}>;
 interface RetainedResidue {
   readonly authority: DockerContainerAuthority;
@@ -303,9 +307,11 @@ export const composeLinuxDockerResidueCustody = (
     start: owner.start.bind(owner), inspect: owner.inspect.bind(owner), remove: owner.remove.bind(owner),
     stop: engine.stop.bind(engine), kill: engine.kill.bind(engine), wait: engine.wait.bind(engine), logs: engine.logs.bind(engine),
   });
+  const lifecycle = createDockerHostCustodyLifecycle({engine: decorated, residue: owner, journalStorage: input.journalStorage,
+    ...(input.journalLimits === undefined ? {} : {journalLimits: input.journalLimits})});
+  concreteLifecycles.add(lifecycle);
   return Object.freeze({
-    lifecycle: createDockerHostCustodyLifecycle({engine: decorated, residue: owner, journalStorage: input.journalStorage,
-      ...(input.journalLimits === undefined ? {} : {journalLimits: input.journalLimits})}),
+    lifecycle,
     // Local residue FD disposal only; this does not stop a container, close the
     // lifecycle's sole attach reader, or manufacture containment/shutdown truth.
     disposeResidue: owner.dispose.bind(owner),

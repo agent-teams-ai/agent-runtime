@@ -1,3 +1,4 @@
+import type {DockerCustodyInitHostExec, DockerCustodyInitHostStart} from "./init/docker-custody-init-host-session.js";
 import type {DockerContainedTurnHostCustody} from "./docker-contained-turn-host-custody.js";
 import type {DockerHostCustodyJournalPort} from "./docker-host-custody-lifecycle.js";
 import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
@@ -14,6 +15,8 @@ export interface DockerLifecycleObservation {
   readonly key: DockerCustodyAttemptKey;
   readonly journal: DockerCustodyJournalRecord;
   readonly initial: Present;
+  readonly execution: Readonly<{exec: DockerCustodyInitHostExec; result: DockerCustodyInitHostStart | null;
+    journal: DockerCustodyJournalRecord | null}> | null;
   readonly terminal: Readonly<{observation: Present; journal: DockerCustodyJournalRecord}> | null;
   readonly recursiveEmpty: Readonly<{journal: DockerCustodyJournalRecord}> | null;
   readonly removal: Readonly<{observation: Absent; journal: DockerCustodyJournalRecord}> | null;
@@ -65,7 +68,7 @@ export class DockerLifecycleObservations {
     const digest = dockerCustodyAuthoritySha256(authority);
     if (this.#issued.has(launch) || this.#active.has(digest)) {throw new TypeError("Docker observation launch already issued");}
     const retained: Retained = {live, snapshot: Object.freeze({authority, key: Object.freeze({...binding.key}),
-      journal: freezeJournal(binding.journal), initial: freezePresent(initial), terminal: null, recursiveEmpty: null, removal: null,
+      journal: freezeJournal(binding.journal), initial: freezePresent(initial), execution: null, terminal: null, recursiveEmpty: null, removal: null,
       attachCleanup: "pending", retired: false})};
     this.#issued.set(launch, retained); this.#active.set(digest, retained);
   }
@@ -74,6 +77,18 @@ export class DockerLifecycleObservations {
     const retained = this.#issued.get(launch);
     if (retained === undefined) {throw new TypeError("Docker observation requires this lifecycle's actual issued launch");}
     return Object.freeze({...retained.snapshot, attachCleanup: retained.live.cleanupComplete ? "complete" : "pending"});
+  }
+
+  public execution(authority: DockerContainerAuthority, exec: DockerCustodyInitHostExec,
+    result: DockerCustodyInitHostStart | null, journal: DockerCustodyJournalRecord | null): void {
+    const retained = this.#active.get(dockerCustodyAuthoritySha256(authority));
+    if (retained === undefined) {return;}
+    retained.snapshot = Object.freeze({...retained.snapshot, execution: Object.freeze({
+      exec: Object.freeze({...exec, argv: Object.freeze([...exec.argv]),
+        environment: Object.freeze(exec.environment.map(item => Object.freeze({...item})))}),
+      result: result === null ? null : Object.freeze({...result}),
+      journal: journal === null ? null : freezeJournal(journal),
+    })});
   }
 
   public engine(authority: DockerContainerAuthority, observation: DockerContainerObservation): DockerContainerObservation {

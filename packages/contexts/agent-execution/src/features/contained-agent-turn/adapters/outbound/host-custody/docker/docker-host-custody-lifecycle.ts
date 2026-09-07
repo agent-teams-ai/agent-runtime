@@ -234,7 +234,6 @@ export class DockerHostCustodyLifecycle {
       throw error;
     } finally {live.finishLaunch();}
   }
-
   public async executeProvider(input: Readonly<{
     authority: DockerContainerAuthority;
     call: DockerEngineCall;
@@ -260,12 +259,15 @@ export class DockerHostCustodyLifecycle {
       state: "provider_exec_requested",
     });
     let evidence: DockerCustodyJournalEvidence;
+    let start: Awaited<ReturnType<typeof live.execute>> | null = null;
+    this.#observations.execution(input.authority, input.exec, null, null);
     try {
       this.assertLaunchOpen(input.key, input.call);
       const observation = await this.inspect(input.authority, input.call);
       this.assertLaunchOpen(input.key, input.call);
       if (!isRunningDockerObservation(observation)) {throw new TypeError("Docker init identity is no longer live");}
-      const start = await live.execute(input.exec);
+      start = await live.execute(input.exec);
+      this.#observations.execution(input.authority, live.executionRequest ?? input.exec, start, null);
       this.assertLaunchOpen(input.key, input.call);
       evidence = start.kind === "started"
         ? proved
@@ -273,14 +275,12 @@ export class DockerHostCustodyLifecycle {
     } catch {
       evidence = { status: "unproven", reason: "provider_execution_unproven" };
     }
-    return this.journal.observe({
-      key: input.key,
-      expectedSequence: requested.sequence,
-      state: "provider_exec_observed",
-      evidence,
+    const acknowledged = await this.journal.observe({
+      key: input.key, expectedSequence: requested.sequence, state: "provider_exec_observed", evidence,
     });
+    this.#observations.execution(input.authority, live.executionRequest ?? input.exec, start, acknowledged);
+    return acknowledged;
   }
-
   public async contain(input: DockerHostCustodyContainmentInput): Promise<DockerHostCustodyContainment> {
     assertDockerAuthorityBinding(input.key, input.authority);
     const candidate = this.liveLaunches.get(dockerCustodyAttemptLocator(input.key));

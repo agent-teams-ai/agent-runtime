@@ -15,3 +15,5 @@ export type {LinuxRouteToolPin} from "./node-linux-exclusive-route.js";
 export type {LinuxExclusiveRouteBinding, LinuxExclusiveRouteOwner} from "./linux-exclusive-route-owner.js";
 export type {LinuxExclusiveRouteEndpoint} from "./linux-exclusive-route-policy.js";
 export type {DockerHostCustodyLifetime, DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
+
+export {isConcreteLinuxDockerLifecycle} from "./node-linux-docker-residue-custody.js";

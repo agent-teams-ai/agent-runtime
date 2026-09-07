@@ -111,3 +111,5 @@ export {
   type ContainedTurnRouteEnforcementInput,
   type ContainedTurnRouteQualificationTarget,
 } from "./composition/contained-turn-route-enforcement-capability.js";
+
+export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions} from "./composition/docker-codex-host-kernel-owner.js";

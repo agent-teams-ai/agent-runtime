@@ -82,3 +82,5 @@ export {
   type OuterContainedTurnRuntimeSecurityAuthority,
   type PostgresContainedTurnOperationStoreOptions,
 } from "./features/contained-agent-turn/internal.js";
+
+export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions} from "./features/contained-agent-turn/internal.js";

@@ -25,6 +25,8 @@ export class DockerContainedTurnHostCustody {
   #cutoff = false;
   readonly #startAbort = new AbortController();
   #executeUsed = false;
+  #executionRequest: DockerCustodyInitHostExec | undefined;
+  public get executionRequest(): DockerCustodyInitHostExec | undefined {return this.#executionRequest;}
   #executionCall: DockerEngineCall | undefined;
   #launchFinished = false;
   #startAcknowledged = false;
@@ -147,8 +149,11 @@ export class DockerContainedTurnHostCustody {
       throw new TypeError("Docker provider execution is unavailable");
     }
     if (this.#executionCall !== undefined) {this.assertOpen(this.#executionCall);}
-    return this.#session.execute({...exec, wallDeadlineUnixMs: Math.min(exec.wallDeadlineUnixMs,
-      this.#executionCall?.deadlineEpochMs ?? Infinity, this.lifetime?.admission.deadlineEpochMs ?? Infinity)});
+    this.#executionRequest = Object.freeze({...exec, argv: Object.freeze([...exec.argv]),
+      environment: Object.freeze(exec.environment.map(item => Object.freeze({...item}))),
+      wallDeadlineUnixMs: Math.min(exec.wallDeadlineUnixMs, this.#executionCall?.deadlineEpochMs ?? Infinity,
+        this.lifetime?.admission.deadlineEpochMs ?? Infinity)});
+    return this.#session.execute(this.#executionRequest);
   }
 
   public close(): Promise<void> {

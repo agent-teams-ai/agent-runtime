@@ -64,7 +64,7 @@ const captureOptions = (input: CreateDockerCodexCurrentKernelOwnerOptions): Crea
   });
 };
 
-const captureProcessInput = (input: DockerProviderProcessInput, plan: CodexAppServerLaunchPlan,
+export const captureDockerCodexProcessInput = (input: DockerProviderProcessInput, plan: CodexAppServerLaunchPlan,
   paths: CodexDockerPathProjection, admissionSignal: AbortSignal, isAdmitted: () => boolean): DockerProviderProcessInput => {
   const init = input.init;
   const isCurrentGeneration = init.isCurrentGeneration.bind(init);
@@ -152,7 +152,7 @@ export const createDockerCodexCurrentKernelOwner = (
   let disposed = false;
   let abandonPublication: (() => void) | undefined;
   const admission = new AbortController();
-  const processInput = captureProcessInput(options.process, plan, paths, admission.signal, () => !disposed
+  const processInput = captureDockerCodexProcessInput(options.process, plan, paths, admission.signal, () => !disposed
     && !processInput.call.signal.aborted && processInput.init.signal?.aborted !== true
     && Date.now() < processInput.call.deadlineEpochMs);
   const registry = createDockerCustodiedProviderProcessRegistry();
