@@ -10,6 +10,7 @@ type Journal = Parameters<typeof createV4HostHttpListenerLifecycle>[0]["v4"];
 /** The listener recipe is built from the observed gateway, never from a guess. */
 export type DockerHostHttpListenerResources = Omit<Resources, "listener" | "listenerLifecycle"> &
   Readonly<{listenerFor: (host: string) => Resources["listener"]}>;
+export type DockerHostHttpResources = ReturnType<typeof createDockerHostHttpResources>;
 const {httpPreparation} = DockerCustodyHttpReservation;
 
 
@@ -45,6 +46,17 @@ export const createDockerHostHttpResources = (input: Readonly<{
     throw new TypeError("Docker HTTP operation network allocation is unproven");
   }
   let entered = false;
+  let cut = false;
+  let ready = false;
+  let ingressEntered = false;
+  let sessionEntered = false;
+  let retainedLifetime: ReturnType<Preparation["acquire"]> | undefined;
+  const requireReady = () => {
+    if (cut || !ready || retainedLifetime === undefined || retainedLifetime.signal.aborted || network.signal.aborted) {
+      throw new TypeError("Host HTTP resources are not ready or admission is closed");
+    }
+    return retainedLifetime;
+  };
   let listenerReadback: Readonly<{observe: () => unknown}> | undefined;
   let sealListener: (() => void) | undefined;
   let lifetimeAbort: ReturnType<typeof addAbortListener> | undefined;
@@ -54,6 +66,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
     try {sealListener?.();} catch {}
   };
   const cutoff = () => {
+    cut = true;
     // Always fence the allocation slot, including a failed native listener cut.
     host.cutoff();
     network.cutoff();
@@ -61,6 +74,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
     cutListener();
   };
   addAbortListener(network.signal, () => {
+    cut = true;
     host.cutoff();
     lifetimeAbort?.[Symbol.dispose](); lifetimeAbort = undefined;
     cutListener();
@@ -74,12 +88,25 @@ export const createDockerHostHttpResources = (input: Readonly<{
     get listener(): Readonly<{observe: () => unknown}> | undefined {return listenerReadback;},
     observationOwner: network.observationOwner,
     cutoff,
+    openIngress(): ReturnType<Preparation["openIngress"]> {
+      const lifetime = requireReady();
+      if (ingressEntered) {throw new TypeError("Host HTTP ingress already entered");}
+      ingressEntered = true;
+      return host.openIngress(lifetime);
+    },
+    bindSession(dependencies: Parameters<Preparation["bindSession"]>[1]): ReturnType<Preparation["bindSession"]> {
+      const lifetime = requireReady();
+      if (!ingressEntered || sessionEntered) {throw new TypeError("Host HTTP session unavailable or already entered");}
+      sessionEntered = true;
+      return host.bindSession(lifetime, dependencies);
+    },
     async prepare(journal: Journal, handoff: Handoff, resources: DockerHostHttpListenerResources) {
       if (entered) {throw new TypeError("Host HTTP resource preparation already entered");}
       entered = true;
       try {
         // Actual Docker HTTP lifetime is acquired before any journal/Engine IO.
         const lifetime = host.acquire(handoff);
+        retainedLifetime = lifetime;
         if (lifetime.hostLifecycleGenerationSha256 !== expectedGeneration) {cutoff(); throw new TypeError("Host generation changed");}
         const proof = lifetime.committedDispatchProof;
         const current = {tenantId: proof.tenantId, projectId: proof.projectId, operationId: proof.operationId,
@@ -116,6 +143,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
           lifetime.signal.aborted || network.signal.aborted) {
           throw new TypeError("Host listener preparation is unproven");
         }
+        ready = true;
         return result;
       } catch (error) {cutoff(); throw error;}
     },

@@ -9,8 +9,13 @@ import {
 } from "./init/docker-custody-init-host-session.js";
 
 export type DockerContainedTurnInitSession = Pick<DockerCustodyInitHostSession,
-  "ready" | "completion" | "writeInput" | "closeProviderInput" | "signal" | "cancel" | "close">;
+  "observation" | "ready" | "completion" | "writeInput" | "closeProviderInput" | "signal" | "cancel" | "close">;
 export type DockerContainedTurnInitOptions = Omit<DockerCustodyInitHostOptions, "channel">;
+
+export interface DockerHostCustodyLifetime {
+  readonly admission: Readonly<{signal: AbortSignal; deadlineEpochMs: number}>;
+  readonly observation: Readonly<{isActive(): boolean}>;
+}
 
 /** Sole attach-channel custody for one lifecycle launch. No network/route readiness is inferred here. */
 export class DockerContainedTurnHostCustody {
@@ -24,6 +29,20 @@ export class DockerContainedTurnHostCustody {
   #launchFinished = false;
   #closing: Promise<void> | undefined;
   #channelClosed = false;
+
+  readonly #admissionCleanup: (() => void)[] = [];
+  public constructor(private readonly lifetime?: DockerHostCustodyLifetime) {
+    if (lifetime !== undefined) {this.watchAdmission(lifetime.admission);}
+  }
+
+  private watchAdmission(call: DockerEngineCall): void {
+    const cutoff = () => this.cutOffAdmission();
+    call.signal.addEventListener("abort", cutoff, {once: true});
+    const timer = setTimeout(cutoff, Math.max(0, Math.min(2_147_483_647, call.deadlineEpochMs - Date.now())));
+    timer.unref();
+    this.#admissionCleanup.push(() => {clearTimeout(timer); call.signal.removeEventListener("abort", cutoff);});
+    if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {cutoff();}
+  }
 
   public finishLaunch(): void {this.#launchFinished = true;}
 
@@ -46,7 +65,8 @@ export class DockerContainedTurnHostCustody {
   }
 
   public assertOpen(call: DockerEngineCall): void {
-    if (this.#cutoff || call.signal.aborted || Date.now() >= call.deadlineEpochMs) {
+    if (this.#cutoff || call.signal.aborted || Date.now() >= call.deadlineEpochMs ||
+        this.lifetime?.admission.signal.aborted || Date.now() >= (this.lifetime?.admission.deadlineEpochMs ?? Infinity)) {
       this.cutOffAdmission();
       throw new TypeError("Docker Host Custody launch authority is cut off");
     }
@@ -72,13 +92,36 @@ export class DockerContainedTurnHostCustody {
       throw new TypeError("Docker init session does not match retained launch authority");
     }
     const isCurrentGeneration = options.isCurrentGeneration;
-    this.#session = new DockerCustodyInitHostSession({...options, channel: this.#channel,
-      isObservationActive: () => !call.signal.aborted &&
+    const {signal, ...observationOptions} = options;
+    if (this.lifetime !== undefined && signal !== undefined) {
+      this.watchAdmission({signal, deadlineEpochMs: this.lifetime.admission.deadlineEpochMs});
+    }
+    const channel = this.#channel;
+    const retainedChannel: DockerCustodyDuplexChannel = this.lifetime === undefined ? channel : {
+      output: channel.output, close: channel.close.bind(channel), closeInput: channel.closeInput.bind(channel),
+      write: (bytes, assertAdmission) => channel.write(bytes, () => {
+        // Recheck at the transport's actual commit, including after a queue wait.
+        const admission = this.lifetime!.admission;
+        const execution = this.#executionCall;
+        if (admission.signal.aborted || Date.now() >= admission.deadlineEpochMs ||
+            execution !== undefined && (execution.signal.aborted || Date.now() >= execution.deadlineEpochMs)) {
+          this.cutOffAdmission();
+        }
+        assertAdmission?.();
+      }),
+    };
+    this.#session = new DockerCustodyInitHostSession({...observationOptions,
+      ...(this.lifetime === undefined && signal !== undefined ? {signal} : {}), channel: retainedChannel,
+      isObservationActive: () => this.lifetime !== undefined
+        ? this.lifetime.observation.isActive() && (options.isObservationActive?.() ?? true)
+        : !call.signal.aborted &&
         (this.#executionCall === undefined || !this.#executionCall.signal.aborted && Date.now() < this.#executionCall.deadlineEpochMs) &&
         (options.isObservationActive?.() ?? true), isCurrentGeneration});
+    if (this.#cutoff) {this.#session.cutOffAdmission();}
     this.#channel = undefined;
     const session = this.#session;
-    return Object.freeze({ready: session.ready.bind(session), completion: session.completion,
+    void session.completion.then(() => {for (const cleanup of this.#admissionCleanup.splice(0)) {cleanup();}});
+    return Object.freeze({get observation() {return session.observation;}, ready: session.ready.bind(session), completion: session.completion,
       writeInput: session.writeInput.bind(session), closeProviderInput: session.closeProviderInput.bind(session),
       signal: session.signal.bind(session), cancel: session.cancel.bind(session), close: session.close.bind(session)});
   }
@@ -87,6 +130,7 @@ export class DockerContainedTurnHostCustody {
     this.assertOpen(call);
     if (this.#executeUsed) {throw new TypeError("Docker Host Custody provider execution is one-use");}
     this.#executeUsed = true;
+    if (this.lifetime !== undefined) {this.watchAdmission(call);}
     this.#executionCall = Object.freeze({deadlineEpochMs: call.deadlineEpochMs, signal: call.signal});
     if (this.#session === undefined) {throw new TypeError("Docker init session is unavailable");}
     this.#session.assertReadyForExecution();
@@ -97,11 +141,14 @@ export class DockerContainedTurnHostCustody {
     if (!this.#executeUsed || this.#cutoff || this.#session === undefined) {
       throw new TypeError("Docker provider execution is unavailable");
     }
-    return this.#session.execute(exec);
+    if (this.#executionCall !== undefined) {this.assertOpen(this.#executionCall);}
+    return this.#session.execute({...exec, wallDeadlineUnixMs: Math.min(exec.wallDeadlineUnixMs,
+      this.#executionCall?.deadlineEpochMs ?? Infinity, this.lifetime?.admission.deadlineEpochMs ?? Infinity)});
   }
 
   public close(): Promise<void> {
     this.cutOffAdmission();
+    for (const cleanup of this.#admissionCleanup.splice(0)) {cleanup();}
     if (this.#closing !== undefined) {return this.#closing;}
     if (this.#session === undefined && this.#channel === undefined) {return Promise.resolve();}
     // Publish the shared cleanup before calling external code; retain handles on stall or rejection.

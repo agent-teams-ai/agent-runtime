@@ -1,6 +1,6 @@
 import {DockerLifecycleObservations, createDockerLifecycleJournal, type DockerLifecycleObservation} from "./docker-lifecycle-observations.js";
 import {createDockerProviderProcessLaunchIssuer, type LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
-import {DockerContainedTurnHostCustody, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
+import {DockerContainedTurnHostCustody, type DockerHostCustodyLifetime, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
 import type {DockerCustodyInitHostExec} from "./init/docker-custody-init-host-session.js";
 import { createDockerRemovalObservationOwner, type DockerHostCustodyContainmentInput } from "./docker-removal-observation-owner.js";
 import type {DockerContainerAuthority, DockerContainerObservation, DockerEngineCall, DockerEnginePort} from "./engine/docker-engine-port.js";
@@ -83,6 +83,7 @@ export type DockerHostCustodyContainment =
     }>;
 
 const launchIssuer = createDockerProviderProcessLaunchIssuer();
+export const prepareDockerProviderProcessLaunch = launchIssuer.prepare;
 export const claimDockerProviderProcessLaunch = launchIssuer.claim;
 export const dockerProviderProcessMountFacts = launchIssuer.mountFacts;
 
@@ -137,6 +138,7 @@ export class DockerHostCustodyLifecycle {
 
   public async launch(input: Readonly<{
     call: DockerEngineCall;
+    lifetime?: DockerHostCustodyLifetime;
     create: DockerHostCustodyContainerCreate;
     owner: DockerCustodyOwnerIdentity;
   }>): Promise<Readonly<{
@@ -146,6 +148,10 @@ export class DockerHostCustodyLifecycle {
     kind: "launched";
     openInitSession(options: DockerContainedTurnInitOptions): DockerContainedTurnInitSession;
   }>> {
+    const lifetime = input.lifetime === undefined ? undefined : Object.freeze({
+      admission: Object.freeze({...input.lifetime.admission}),
+      observation: Object.freeze({isActive: input.lifetime.observation.isActive.bind(input.lifetime.observation)}),
+    });
     input = Object.freeze({call: Object.freeze({...input.call}), owner: Object.freeze({...input.owner}),
       create: Object.freeze({...input.create, arguments: Object.freeze([...input.create.arguments]),
         environment: Object.freeze({...input.create.environment})})});
@@ -161,7 +167,7 @@ export class DockerHostCustodyLifecycle {
         this.liveLaunches.has(locator) || this.liveLaunches.size >= this.maxLiveAuthorityBindings) {
       throw new TypeError("Docker Host Custody requires unused launch capacity");
     }
-    const live = new DockerContainedTurnHostCustody();
+    const live = new DockerContainedTurnHostCustody(lifetime);
     this.liveLaunches.set(locator, live);
     let createInvoked = false;
     try {
@@ -208,7 +214,7 @@ export class DockerHostCustodyLifecycle {
       }
       // V2 init_ready is a running-container observation, not authenticated protocol readiness.
       const launched = Object.freeze({ authority, journal, key, kind: "launched" as const,
-        openInitSession: (options: DockerContainedTurnInitOptions) => live.openInitSession(options, input.call),
+        openInitSession: (options: DockerContainedTurnInitOptions) => live.openInitSession(options, lifetime?.admission ?? input.call),
       });
       this.#observations.issue(launched, launched, live, observation);
       launchIssuer.issue(launched, {authority, custodyRef: key.custodyId,
@@ -216,7 +222,7 @@ export class DockerHostCustodyLifecycle {
           privateRootSource: create.privateRootSource, imageDigest: authority.imageDigest}),
         workspaceAuthorityPath: create.workspaceSource, openInitSession: launched.openInitSession,
         execute: (exec: DockerCustodyInitHostExec, call: DockerEngineCall) => executeProvider({authority, call, exec, key}),
-      }, () => live.assertOpen(input.call));
+      }, () => live.assertOpen(lifetime?.admission ?? input.call));
       return launched;
     } catch (error) {
       if (!createInvoked) {

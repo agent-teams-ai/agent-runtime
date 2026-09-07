@@ -50,7 +50,8 @@ export class MemoryInitChannel implements DockerCustodyDuplexChannel {
       return: async () => {this.returns += 1; return {done: true, value: undefined};},
     };
   }};
-  async write(bytes: Uint8Array): Promise<void> {
+  async write(bytes: Uint8Array, assertAdmission?: () => void): Promise<void> {
+    assertAdmission?.();
     for (const message of new DockerCustodyFrameDecoder().push(bytes)) {
       this.messages.push(message); this.events.push(message.kind);
       if (this.onMessage !== undefined) {await this.onMessage(message);}
@@ -132,8 +133,8 @@ export const fixture = () => {
   const lifecycle = createDockerHostCustodyLifecycle({engine, journalStorage: storage, residue: {async proveEmpty() {return "empty";}}});
   const registry = createDockerCustodiedProviderProcessRegistry();
   const launchInput = {call: engineCall(), create: createInput("/synthetic/disposable"), owner};
-  const launch = async () => {
-    const launched = await lifecycle.launch(launchInput);
+  const launch = async (lifetime?: Parameters<typeof lifecycle.launch>[0]["lifetime"]) => {
+    const launched = await lifecycle.launch({...launchInput, ...(lifetime === undefined ? {} : {lifetime})});
     const input = {launch: launched, call: engineCall(), exec: providerExec, init: {...initOptions(),
       acknowledgementTimeoutMs: 250, readyTimeoutMs: 250, maximumStderrBytes: 1_000_000, maximumStdoutBytes: 1_000_000},
       expected: {authority: launched.authority, custodyRef: launched.key.custodyId,

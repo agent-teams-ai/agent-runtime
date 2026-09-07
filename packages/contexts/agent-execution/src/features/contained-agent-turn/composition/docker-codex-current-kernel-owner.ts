@@ -59,27 +59,28 @@ const captureOptions = (input: CreateDockerCodexCurrentKernelOwnerOptions): Crea
     process: Object.freeze({...process, call: inert(process.call), exec: inert(process.exec),
       expected: Object.freeze({...expected, authority: inert(expected.authority)}),
       init: Object.freeze({...init, authority: Object.freeze({...authority, expectedIdentity: inert(authority.expectedIdentity)}),
-        ...(init.isObservationActive === undefined ? {} : {isObservationActive: init.isObservationActive.bind(process.init)})}),
+        ...(process.preparedIo !== undefined || init.isObservationActive === undefined ? {} : {isObservationActive: init.isObservationActive.bind(process.init)})}),
     }),
   });
 };
 
 const captureProcessInput = (input: DockerProviderProcessInput, plan: CodexAppServerLaunchPlan,
-  paths: CodexDockerPathProjection, isAdmitted: () => boolean): DockerProviderProcessInput => {
+  paths: CodexDockerPathProjection, admissionSignal: AbortSignal, isAdmitted: () => boolean): DockerProviderProcessInput => {
   const init = input.init;
   const isCurrentGeneration = init.isCurrentGeneration.bind(init);
   const environment = {...plan.environment, HOME: paths.codexHome, CODEX_HOME: paths.codexHome,
     TMPDIR: projectCodexDockerPrivatePath(paths, plan.tmpDir)};
   return Object.freeze({
+    ...(input.preparedIo === undefined ? {} : {preparedIo: input.preparedIo}),
     launch: input.launch, // Never copy or fabricate the actual lifecycle capability.
-    call: Object.freeze({...input.call}),
+    call: Object.freeze({...input.call, signal: AbortSignal.any([input.call.signal, admissionSignal])}),
     expected: Object.freeze({...input.expected, authority: Object.freeze({...input.expected.authority})}),
     exec: Object.freeze({gid: input.exec.gid, uid: input.exec.uid, requestId: input.exec.requestId,
       wallDeadlineUnixMs: input.exec.wallDeadlineUnixMs, executableSha256: plan.executableSha256,
       argv: Object.freeze([projectCodexDockerExecutable(paths, plan.executablePath), ...plan.arguments]),
       environment: Object.freeze(Object.entries(environment).map(([name, value]) => Object.freeze({name, value}))),
     }),
-    init: Object.freeze({acknowledgementTimeoutMs: init.acknowledgementTimeoutMs, readyTimeoutMs: init.readyTimeoutMs,
+    init: input.preparedIo !== undefined ? init : Object.freeze({acknowledgementTimeoutMs: init.acknowledgementTimeoutMs, readyTimeoutMs: init.readyTimeoutMs,
       maximumStderrBytes: init.maximumStderrBytes, maximumStdoutBytes: init.maximumStdoutBytes,
       authority: Object.freeze({...init.authority, expectedIdentity: Object.freeze({...init.authority.expectedIdentity})}),
       isCurrentGeneration: (generation: string) => isCurrentGeneration(generation) && isAdmitted(),
@@ -149,7 +150,8 @@ export const createDockerCodexCurrentKernelOwner = (
     }
   }
   let disposed = false;
-  const processInput = captureProcessInput(options.process, plan, paths, () => !disposed
+  const admission = new AbortController();
+  const processInput = captureProcessInput(options.process, plan, paths, admission.signal, () => !disposed
     && !processInput.call.signal.aborted && processInput.init.signal?.aborted !== true
     && Date.now() < processInput.call.deadlineEpochMs);
   const registry = createDockerCustodiedProviderProcessRegistry();
@@ -197,5 +199,5 @@ export const createDockerCodexCurrentKernelOwner = (
     },
   });
   return Object.freeze({provider: new CodexAppServerCurrentKernelAdapter({attempts, platformTarget}),
-    dispose() {disposed = true;}});
+    dispose() {disposed = true; admission.abort();}});
 };

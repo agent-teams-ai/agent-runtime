@@ -1,4 +1,5 @@
-import {claimDockerProviderProcessLaunch, type DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.js";
+import {isDeepStrictEqual} from "node:util";
+import {prepareDockerProviderProcessLaunch, claimDockerProviderProcessLaunch, type DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.js";
 import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
 import type {DockerContainedTurnInitOptions, DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
 import type {DockerContainerAuthority, DockerEngineCall} from "./engine/docker-engine-port.js";
@@ -14,6 +15,7 @@ export interface DockerProviderProcessInput {
   readonly launch: Awaited<ReturnType<DockerHostCustodyLifecycle["launch"]>>;
   readonly expected: Readonly<{authority: DockerContainerAuthority; custodyRef: string;
     generation: string; workspaceAuthorityPath: string}>;
+  readonly preparedIo?: PreparedDockerProviderIo;
   readonly call: DockerEngineCall;
   readonly exec: DockerCustodyInitHostExec;
   readonly init: Omit<DockerContainedTurnInitOptions, "onOutput" | "onRootExit" | "onDrainComplete">;
@@ -144,42 +146,86 @@ class DockerProviderProcess {
   }
 }
 
-/** The only async creation path consumes an actual lifecycle-issued launch.
- * No synchronous SDK spawn acknowledgement or alternate process exists here. */
+/** Same-object private handoff; readiness is init readiness, never provider execution. */
+export interface PreparedDockerProviderIo {
+  ready(): ReturnType<DockerContainedTurnInitSession["ready"]>;
+  readonly observation: DockerContainedTurnInitSession["observation"];
+}
+type PreparationInput = Readonly<Pick<DockerProviderProcessInput, "launch" | "expected" | "init">>;
+const prepared = new WeakMap<PreparedDockerProviderIo, Readonly<{
+  launch: DockerProviderProcessInput["launch"]; expected: DockerProviderProcessInput["expected"];
+  isAdmitted(): boolean; init: DockerProviderProcessInput["init"]; process: DockerProviderProcess; session: DockerContainedTurnInitSession;
+}>>();
+const captureInit = (options: DockerProviderProcessInput["init"]): DockerProviderProcessInput["init"] => Object.freeze({
+  ...options, authority: Object.freeze({...options.authority, expectedIdentity: Object.freeze({...options.authority.expectedIdentity})}),
+});
+
+/** Installs bounded output custody before the sole session can become ready.
+ * Does not consume the lifecycle's provider-execution claim or mount facts. */
+const prepareIo = (input: PreparationInput, issued: ReturnType<typeof prepareDockerProviderProcessLaunch>): PreparedDockerProviderIo => {
+  const expected = Object.freeze({...input.expected, authority: Object.freeze({...input.expected.authority})});
+  const options = input.init;
+  const init = Object.freeze({acknowledgementTimeoutMs: options.acknowledgementTimeoutMs,
+    maximumStderrBytes: options.maximumStderrBytes, maximumStdoutBytes: options.maximumStdoutBytes,
+    readyTimeoutMs: options.readyTimeoutMs,
+    ...(options.signal === undefined ? {} : {signal: options.signal}),
+    authority: Object.freeze({...options.authority,
+    expectedIdentity: Object.freeze({...options.authority.expectedIdentity})}),
+    isCurrentGeneration: options.isCurrentGeneration.bind(options),
+    ...(options.isObservationActive === undefined ? {} : {isObservationActive: options.isObservationActive.bind(options)}),
+    ...(options.monotonicNow === undefined ? {} : {monotonicNow: options.monotonicNow.bind(options)})});
+  if (!sameDockerAuthority(expected.authority, issued.authority) || expected.custodyRef !== issued.custodyRef ||
+      expected.workspaceAuthorityPath !== issued.workspaceAuthorityPath || expected.generation !== init.authority.generation) {
+    throw new TypeError("Docker provider process does not match exact launch authority");
+  }
+  const process = new DockerProviderProcess(issued.custodyRef, issued.workspaceAuthorityPath);
+  const session = issued.openInitSession({...init, onOutput: chunk => process[chunk.stream].push(chunk.bytes)});
+  process.bind(session, expected.generation);
+  const capability = Object.freeze({ready: session.ready.bind(session), get observation() {return session.observation;}});
+  prepared.set(capability, Object.freeze({isAdmitted: () => !init.signal?.aborted && init.isCurrentGeneration(expected.generation),
+    launch: input.launch, expected, init: captureInit(options), process, session}));
+  return capability;
+};
+
+export const prepareDockerProviderProcessIo = (input: PreparationInput): PreparedDockerProviderIo =>
+  prepareIo(input, prepareDockerProviderProcessLaunch(input.launch));
+
+/** The only async creation path consumes an actual lifecycle-issued launch. */
 export const createDockerProviderProcessBridge = () => Object.freeze({
   async open(input: DockerProviderProcessInput) {
+    // The absent optional capability preserves standalone consumers only. A
+    // supplied invalid capability never falls back to another attach/session.
     const issued = claimDockerProviderProcessLaunch(input.launch);
-    const expected = Object.freeze({...input.expected, authority: Object.freeze({...input.expected.authority})});
+    const capability = input.preparedIo === undefined ? prepareIo(input, issued) : input.preparedIo;
+    const retained = prepared.get(capability);
+    if (retained === undefined || retained.launch !== input.launch ||
+        !isDeepStrictEqual(retained.expected, input.expected) || !isDeepStrictEqual(retained.init, captureInit(input.init))) {
+      throw new TypeError("Docker prepared IO requires the exact unused launch and captured configuration");
+    }
+    prepared.delete(capability); // Fence before readiness or journal effects.
+    const {process, session, expected} = retained;
     const call = Object.freeze({...input.call});
     const exec = Object.freeze({...input.exec, argv: Object.freeze([...input.exec.argv]),
       environment: Object.freeze(input.exec.environment.map(item => Object.freeze({...item})))});
-    const options = input.init;
-    const init = Object.freeze({acknowledgementTimeoutMs: options.acknowledgementTimeoutMs,
-      maximumStderrBytes: options.maximumStderrBytes, maximumStdoutBytes: options.maximumStdoutBytes,
-      readyTimeoutMs: options.readyTimeoutMs,
-      ...(options.signal === undefined ? {} : {signal: options.signal}),
-      authority: Object.freeze({...options.authority,
-      expectedIdentity: Object.freeze({...options.authority.expectedIdentity})}),
-      isCurrentGeneration: options.isCurrentGeneration.bind(options),
-      ...(options.isObservationActive === undefined ? {} : {isObservationActive: options.isObservationActive.bind(options)}),
-      ...(options.monotonicNow === undefined ? {} : {monotonicNow: options.monotonicNow.bind(options)})});
-    if (!sameDockerAuthority(expected.authority, issued.authority) || expected.custodyRef !== issued.custodyRef ||
-        expected.workspaceAuthorityPath !== issued.workspaceAuthorityPath || expected.generation !== init.authority.generation) {
-      throw new TypeError("Docker provider process does not match exact launch authority");
-    }
-    const process = new DockerProviderProcess(issued.custodyRef, issued.workspaceAuthorityPath);
+    const joined = input.preparedIo !== undefined;
+    const assertAdmitted = () => {
+      if (call.signal.aborted || Date.now() >= call.deadlineEpochMs || !retained.isAdmitted()) {throw new DockerProviderProcessIoError("execution-call-aborted");}
+    };
     try {
-      const session = issued.openInitSession({...init, onOutput: chunk => process[chunk.stream].push(chunk.bytes)});
-      process.bind(session, expected.generation);
-      const abort = () => process.fail(new DockerProviderProcessIoError("execution-call-aborted"));
-      call.signal.addEventListener("abort", abort, {once: true});
-      void session.completion.then(() => call.signal.removeEventListener("abort", abort));
-      if (call.signal.aborted) {abort();}
+      if (!joined) {
+        const abort = () => process.fail(new DockerProviderProcessIoError("execution-call-aborted"));
+        call.signal.addEventListener("abort", abort, {once: true});
+        void session.completion.then(() => call.signal.removeEventListener("abort", abort));
+        if (call.signal.aborted) {abort();}
+      }
+      assertAdmitted();
       const ready = await session.ready();
       if (ready.kind !== "ready" || ready.generation !== expected.generation) {
         throw new DockerProviderProcessIoError("authenticated-readiness-unproven");
       }
+      assertAdmitted();
       const executed = await issued.execute(exec, call);
+      assertAdmitted();
       if (executed.evidence.status !== "proved") {throw new DockerProviderProcessIoError("provider-exec-unproven");}
       return Object.freeze({custodyRef: process.custodyRef, workspaceAuthorityPath: process.workspaceAuthorityPath,
         stdout: Object.freeze({[Symbol.asyncIterator]: process.stdout[Symbol.asyncIterator].bind(process.stdout)}),
@@ -187,7 +233,10 @@ export const createDockerProviderProcessBridge = () => Object.freeze({
         write: process.write.bind(process),
         closeInput: process.closeInput.bind(process), waitForExit: process.waitForExit.bind(process)});
     } catch (error) {
-      process.fail(error instanceof Error ? error : new DockerProviderProcessIoError("creation-failed")); throw error;
+      // Joined preparation retains observation custody across admission cutoff
+      // and late acknowledgement. Host containment owns its bounded drain.
+      if (!joined) {process.fail(error instanceof Error ? error : new DockerProviderProcessIoError("creation-failed"));}
+      throw error;
     }
   },
 });

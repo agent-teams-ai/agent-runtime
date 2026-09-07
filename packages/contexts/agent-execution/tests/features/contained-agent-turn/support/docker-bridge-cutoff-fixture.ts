@@ -1,3 +1,4 @@
+import {prepareDockerProviderProcessIo} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import assert from "node:assert/strict";
 import type {TestContext} from "node:test";
 import {DockerCustodyInitRuntime} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-runtime.js";
@@ -19,7 +20,7 @@ const collect = async (stream: AsyncIterable<Uint8Array>) => {
 
 /** Actual bridge, lifecycle, journal, Docker channel and init runtime. Only the
  * Engine, unconnected socket peer and provider syscalls are disposable fakes. */
-export const cutoffFixture = async (t: TestContext) => {
+export const cutoffFixture = async (t: TestContext, joined = false) => {
   const f = fixture(); const syscalls = new FakeSyscalls(); const releases: Array<() => void> = [];
   const abort = new AbortController();
   const controls = {current: true, beforeWrite: undefined as WriteHook | undefined,
@@ -50,10 +51,13 @@ export const cutoffFixture = async (t: TestContext) => {
   f.engine.stop = async authority => {
     f.events.push("stop-entered"); await controls.onStop(); await stop(authority); f.events.push("stopped");
   };
-  const a = await f.launch(); a.input.init.isCurrentGeneration = () => controls.current;
+  const a = await f.launch(joined ? {admission: {signal: abort.signal, deadlineEpochMs: Date.now() + 30_000},
+    observation: {isActive: () => true}} : undefined); a.input.init.isCurrentGeneration = () => controls.current;
   a.input.call = {...a.input.call, signal: abort.signal};
   t.after(async () => {for (const release of releases) {release();} await a.contain(); await channel.close();});
-  const process = await f.registry.open(a.input);
+  const preparedIo = joined ? prepareDockerProviderProcessIo(a.input) : undefined;
+  if (preparedIo !== undefined) {await preparedIo.ready();}
+  const process = await f.registry.open({...a.input, ...(preparedIo === undefined ? {} : {preparedIo})});
   let settled = false;
   const observations = Promise.allSettled([collect(process.stdout), collect(process.stderr), process.waitForExit()]);
   void observations.then(() => {settled = true; return;});

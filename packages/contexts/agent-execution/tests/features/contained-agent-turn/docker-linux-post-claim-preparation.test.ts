@@ -282,3 +282,161 @@ test("the custody adapter never calls execute for the default production wiring"
   assert.deepEqual(calls, ["contain"]);
   assert.deepEqual(f.network.state.calls, []);
 });
+
+// The seam's test owner opens the actual retained init once. It stands in for
+// the separate bridge IO issuer; these tests make no bridge-output proof.
+const {createDockerLinuxPostClaimOwner} = await import("../../../dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js");
+const {createCodexAppServerLaunchPlan} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js");
+const {brokerFixture} = await import("../../fixtures/codex-native-broker-0.153.4/fixture.ts");
+const {deferred} = await import("../../fixtures/docker-operation-network-fixture.ts");
+const joinedFixture = async (t: import("node:test").TestContext) => {
+  const f = await postClaimFixture(t);
+  f.route.lease = f.syntheticLease();
+  const plan = createCodexAppServerLaunchPlan(brokerFixture(t).launchOptions);
+  let io: unknown; let launch: unknown; let opens = 0; let finishes = 0;
+  const join = {
+    prepareProviderIo(input: Parameters<import("../../../dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js").DockerLinuxClaimedJoin<import("../../../dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js").DockerLinuxPreparedProviderIo>["prepareProviderIo"]>[0]) {
+      opens += 1; launch = input.launch;
+      const session = input.launch.openInitSession(input.init);
+      const result = Object.freeze({ready: () => session.ready()}); io = result; return result;
+    },
+    async finishClaimed(input: {providerIo: unknown; launch: unknown}) {
+      finishes += 1;
+      assert.equal(input.providerIo, io); assert.equal(input.launch, launch);
+      assert.equal(kinds(f.v4Storage.journal).at(-1), "route_installed");
+      return {plan};
+    },
+  };
+  return {f, plan, join, get io() {return io;}, get launch() {return launch;},
+    counts: () => ({opens, finishes})};
+};
+
+test("joined owners are required before allocation", async t => {
+  const f = await postClaimFixture(t);
+  for (const join of [undefined, {}, {prepareProviderIo() {}}]) {
+    assert.throws(() => createDockerLinuxPostClaimOwner(f.dependencies, join as never), /requires IO and finalization/u);
+  }
+  assert.deepEqual(f.events, []); assert.deepEqual(f.network.state.calls, []);
+});
+
+test("success retains exact one-use handoff and cleanup after take", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  assert.throws(() => owner.takePrepared(f.claimed));
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "prepared"});
+  assert.throws(() => owner.takePrepared({...f.claimed}));
+  const handoff = owner.takePrepared(f.claimed);
+  assert.equal(handoff.providerIo, j.io); assert.equal(handoff.launch, j.launch); assert.equal(handoff.plan, j.plan);
+  assert.throws(() => owner.takePrepared(f.claimed));
+  assert.deepEqual(j.counts(), {opens: 1, finishes: 1});
+  assert.equal(f.publishedFirstWrites.length, 0);
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.equal(f.events.filter(e => e === "remove").length, 1);
+  assert.equal(f.events.filter(e => e === "route-release").length, 1);
+  assert.equal(f.physical.closes, 1);
+});
+
+test("unknown container absence keeps route ownership sticky", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "prepared"});
+  t.mock.method(f.engine, "remove", async () => {throw new Error("lost removal acknowledgement");});
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "quarantined"});
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "quarantined"});
+  assert.equal(f.events.includes("route-release"), false);
+  assert.throws(() => owner.takePrepared(f.claimed));
+});
+
+for (const failure of ["throw", "unissued-plan"] as const) {
+  test(`finish hook ${failure} prevents publication and retains cleanup`, async t => {
+    const j = await joinedFixture(t); const {f} = j;
+    const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async finishClaimed() {
+      if (failure === "throw") {throw new Error("lost finalization acknowledgement");}
+      return {plan: {...j.plan}};
+    }});
+    assert.notEqual((await owner.preparation.prepareClaimed(f.claimed)).kind, "prepared");
+    assert.throws(() => owner.takePrepared(f.claimed));
+    assert.equal(f.events.filter(e => e === "remove").length, 1);
+    await owner.cleanup({deadlineEpochMs: Date.now() + 5000});
+    assert.equal(f.events.filter(e => e === "remove").length, 1);
+  });
+}
+
+test("cleanup timeout detaches its waiter while late finalization remains owned", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const entered = deferred(); const release = deferred();
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async finishClaimed(input) {
+    entered.resolve(); await release.promise; return j.join.finishClaimed(input);
+  }});
+  const preparing = owner.preparation.prepareClaimed(f.claimed);
+  await entered.promise;
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 10}), {kind: "quarantined"});
+  assert.equal(f.events.includes("remove"), false, "pending finalizer is joined before resource release");
+  release.resolve();
+  assert.notEqual((await preparing).kind, "prepared");
+  assert.throws(() => owner.takePrepared(f.claimed));
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.equal(f.events.filter(e => e === "remove").length, 1);
+});
+
+test("a retained cleanup flight survives a waiter timing out during removal", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  await owner.preparation.prepareClaimed(f.claimed);
+  const entered = deferred(); const release = deferred();
+  const removal = f.engine.remove.bind(f.engine);
+  let calls = 0;
+  t.mock.method(f.engine, "remove", async (...args) => {
+    calls += 1; entered.resolve(); await release.promise; return removal(...args);
+  });
+  const waiting = owner.cleanup({deadlineEpochMs: Date.now() + 10});
+  await entered.promise; assert.deepEqual(await waiting, {kind: "quarantined"});
+  const next = owner.cleanup({deadlineEpochMs: Date.now() + 5000});
+  release.resolve(); assert.deepEqual(await next, {kind: "released"}); assert.equal(calls, 1);
+});
+
+test("late launch acknowledgement after cleanup timeout remains owned", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const entered = deferred(); const release = deferred();
+  const start = f.engine.start.bind(f.engine);
+  t.mock.method(f.engine, "start", async (...args) => {
+    await start(...args); entered.resolve(); await release.promise;
+  });
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  const preparing = owner.preparation.prepareClaimed(f.claimed);
+  await entered.promise;
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 10}), {kind: "quarantined"});
+  release.resolve();
+  assert.notEqual((await preparing).kind, "prepared");
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.equal(f.events.filter(e => e === "create").length, 1);
+  assert.equal(f.events.filter(e => e === "remove").length, 1);
+  assert.deepEqual(j.counts(), {opens: 0, finishes: 0});
+});
+
+test("lost launch acknowledgement retains quarantine and never retries launch", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const start = f.engine.start.bind(f.engine);
+  t.mock.method(f.engine, "start", async (...args) => {await start(...args); throw new Error("lost start acknowledgement");});
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  assert.equal((await owner.preparation.prepareClaimed(f.claimed)).kind, "quarantined");
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "quarantined"});
+  assert.equal((await owner.preparation.prepareClaimed(f.claimed)).kind, "unsupported");
+  assert.equal(f.events.filter(e => e === "create").length, 1);
+  assert.equal(f.events.includes("route-release"), false);
+});
+
+test("caller cancellation during finalization cannot publish a late success", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const entered = deferred(); const release = deferred();
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async finishClaimed(input) {
+    entered.resolve(); await release.promise; return j.join.finishClaimed(input);
+  }});
+  const preparing = owner.preparation.prepareClaimed(f.claimed);
+  await entered.promise; f.controller.abort(); release.resolve();
+  assert.notEqual((await preparing).kind, "prepared");
+  assert.throws(() => owner.takePrepared(f.claimed));
+  assert.equal(f.events.filter(e => e === "remove").length, 1);
+  assert.equal(f.events.filter(e => e === "route-release").length, 1);
+});

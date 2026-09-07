@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {createDockerProviderProcessBridge} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+import {prepareDockerProviderProcessIo, dockerProviderProcessMountFacts, createDockerProviderProcessBridge} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {DOCKER_PROVIDER_MAX_WRITE_BYTES} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-bridge.js";
 import {DOCKER_CUSTODY_PROVIDER_IO_MAX_BYTES} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-protocol.js";
 import {fixture, tick, deferred, engineCall, providerExec} from "./support/docker-provider-process-fixture.ts";
@@ -60,6 +60,7 @@ test("structural launch, ready flag and exact identity mismatches cannot acquire
       if (mismatch === "generation") {input.expected.generation = "generation:foreign";}
       if (mismatch === "nonce") {input.init.authority = {...input.init.authority, operationNonce: "foreign"};}
       await assert.rejects(f.registry.open(Object.assign(input, {ready: true})));
+      if (mismatch !== "lookalike") {await assert.rejects(createDockerProviderProcessBridge().open(a.input), /unused actual/);}
       assert.equal(f.events.includes("provider-exec"), false);
     });
   }
@@ -312,4 +313,59 @@ test("unknown second frame permanently fails the logical write without sending i
   await assert.rejects(process.write(Buffer.alloc(144_000)), unknownWrite);
   await assert.rejects(process.write(Buffer.from("retry"))); await assert.rejects(process.closeInput());
   assert.equal(frames, 2); await assert.rejects(process.waitForExit());
+});
+
+
+test("prepared IO keeps one attach/reader and bounded early output through the later claim", async t => {
+  const f = fixture(); const a = await f.launch(); t.after(() => a.contain());
+  const preparedIo = prepareDockerProviderProcessIo(a.input);
+  assert.equal((await preparedIo.ready()).kind, "ready");
+  assert.equal(f.events.includes("provider-exec"), false);
+  assert.equal(dockerProviderProcessMountFacts(a.launched).workspaceSource, a.input.expected.workspaceAuthorityPath);
+  assert.throws(() => prepareDockerProviderProcessIo(a.input), /one-use/);
+  f.channel.onMessage = message => {
+    f.channel.respond(message);
+    if (message.kind === "provider-exec") {f.channel.outputBytes("stdout", "early");}
+  };
+  const process = await createDockerProviderProcessBridge().open({...a.input, preparedIo});
+  await tick(); const reads = f.channel.reads; await tick();
+  assert.equal(f.channel.reads, reads, "early output waits in bounded custody for its sole consumer");
+  assert.equal(Buffer.from((await process.stdout[Symbol.asyncIterator]().next()).value!).toString(), "early");
+  f.channel.rootExit(); f.channel.drain(); await process.waitForExit();
+  assert.equal(f.channel.readers, 1); assert.equal(f.events.filter(event => event === "attach").length, 1);
+  assert.equal(f.events.filter(event => event === "provider-exec").length, 1);
+  await assert.rejects(createDockerProviderProcessBridge().open({...a.input, preparedIo}), /unused actual/);
+});
+
+for (const mismatch of ["copy", "cross-launch", "configuration", "authority", "generation"] as const) {
+  test(`prepared IO rejects ${mismatch} without a second session or fallback`, async t => {
+    const f = fixture(); const a = await f.launch(); t.after(() => a.contain());
+    const preparedIo = prepareDockerProviderProcessIo(a.input); await preparedIo.ready();
+    let input = {...a.input, preparedIo};
+    if (mismatch === "copy") {input.preparedIo = {...preparedIo};}
+    if (mismatch === "cross-launch") {
+      const other = fixture(); const b = await other.launch(); t.after(() => b.contain());
+      input = {...b.input, preparedIo};
+    }
+    if (mismatch === "configuration") {input.init = {...input.init, maximumStdoutBytes: 7};}
+    if (mismatch === "authority") {input.expected = {...input.expected, custodyRef: "foreign"};}
+    if (mismatch === "generation") {input.init = {...input.init, isCurrentGeneration: () => true};}
+    await assert.rejects(createDockerProviderProcessBridge().open(input), /exact unused launch/);
+    await assert.rejects(createDockerProviderProcessBridge().open(input), /unused actual/);
+    assert.equal(f.events.includes("provider-exec"), false); assert.equal(f.channel.readers, 1);
+  });
+}
+
+test("prepared IO enforces its original output bound before bridge publication", async t => {
+  const f = fixture(); const a = await f.launch(); t.after(() => a.contain());
+  a.input.init.maximumStdoutBytes = 1;
+  const preparedIo = prepareDockerProviderProcessIo(a.input); await preparedIo.ready();
+  f.channel.onMessage = message => {
+    f.channel.respond(message);
+    if (message.kind === "provider-exec") {f.channel.outputBytes("stdout", "overflow");}
+  };
+  const process = await createDockerProviderProcessBridge().open({...a.input, preparedIo});
+  await assert.rejects(process.waitForExit());
+  await assert.rejects(process.stdout[Symbol.asyncIterator]().next());
+  assert.equal(f.channel.readers, 1);
 });

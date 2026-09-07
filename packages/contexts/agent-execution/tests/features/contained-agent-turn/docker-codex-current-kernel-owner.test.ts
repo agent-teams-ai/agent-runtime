@@ -134,3 +134,17 @@ test("Docker Codex consumes the native broker launch through the same protocol",
   assert.equal(f.events.filter(event => event === "provider-exec").length, 1);
   assert.equal((await f.contain()).kind, "closed");
 });
+
+
+test("Docker Codex preserves the same prepared IO through both capture layers", async t => {
+  const f = await connectionFixture(); t.after(() => f.contain());
+  const {prepareDockerProviderProcessIo} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js");
+  const preparedIo = prepareDockerProviderProcessIo(f.options.process); await preparedIo.ready();
+  const requests = installProtocol(f);
+  const {createDockerCodexCurrentKernelOwner} = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.js");
+  const owner = createDockerCodexCurrentKernelOwner({...f.options, process: {...f.options.process, preparedIo}});
+  assert.deepEqual(await owner.provider.execute(f.input), {kind: "completed", outcome: "succeeded"});
+  assert.ok(requests.includes("turn/start")); assert.equal(f.channel.readers, 1);
+  assert.equal(f.events.filter(event => event === "provider-exec").length, 1);
+  owner.dispose();
+});

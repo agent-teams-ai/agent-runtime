@@ -22,6 +22,14 @@ export const createDockerProviderProcessLaunchIssuer = () => {
       if (seen.has(launch)) {throw new TypeError("Docker launch capability cannot be reissued");}
       seen.add(launch); issued.set(launch, Object.freeze({process: Object.freeze(process), assertActive}));
     },
+    /** Validate preparation without consuming the later provider execution claim. */
+    prepare(launch: LaunchedDockerCustody): Omit<ProviderProcessLaunch, "execute"> {
+      const entry = issued.get(launch);
+      if (entry === undefined) {throw new TypeError("Docker provider process requires an unused actual lifecycle launch");}
+      entry.assertActive();
+      const {authority, custodyRef, workspaceAuthorityPath, mountFacts, openInitSession} = entry.process;
+      return Object.freeze({authority, custodyRef, workspaceAuthorityPath, mountFacts, openInitSession});
+    },
     /** Read-only facts of an unused actual launch; this does not consume IO custody. */
     mountFacts(launch: LaunchedDockerCustody) {
       const entry = issued.get(launch);

@@ -194,3 +194,30 @@ for (const method of ["read", "within"] as const) {
     } finally {owner.dispose(); f.product.cutoff();}
   });
 }
+
+test("ingress and session use the one acquired lifetime with strict one-use fences", async t => {
+  const f = await preparedFixture(t);
+  assert.throws(() => f.product.openIngress(), /not ready/u);
+  assert.throws(() => f.product.bindSession({} as never), /not ready/u);
+  const {NodeCustodyHttpResources} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-custody-http-resources.js");
+  let retainedLifetime: unknown;
+  const prepare = NodeCustodyHttpResources.prototype.prepare;
+  t.mock.method(NodeCustodyHttpResources.prototype, "prepare", function(lifetime, resources) {
+    retainedLifetime = lifetime; return prepare.call(this, lifetime, resources);
+  });
+  await f.prepare();
+  assert.throws(() => f.preparation.acquire(f.handoff), /lifetime unavailable/u);
+  let ingress = 0; let binds = 0;
+  t.mock.method(NodeCustodyHttpResources.prototype, "openIngress", lifetime => {
+    assert.equal(lifetime, retainedLifetime); ingress += 1; return {kind: "synthetic"};
+  });
+  t.mock.method(NodeCustodyHttpResources.prototype, "bindSession", () => {binds += 1; throw new Error("synthetic binding refusal");});
+  f.product.openIngress();
+  assert.throws(() => f.product.openIngress(), /already entered/u);
+  assert.throws(() => f.product.bindSession({} as never), /synthetic binding refusal/u);
+  assert.throws(() => f.product.bindSession({} as never), /already entered/u);
+  assert.equal(ingress, 1); assert.equal(binds, 1);
+  f.product.cutoff();
+  assert.throws(() => f.product.openIngress(), /admission is closed/u);
+  assert.throws(() => f.product.bindSession({} as never), /admission is closed/u);
+});

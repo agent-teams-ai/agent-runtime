@@ -218,7 +218,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
   const claimed = Object.freeze({committedDispatchProof: proof, signal: controller.signal,
     underlyingCustodyRef: `urn:agent-runtime:docker-host-reservation:${"b".repeat(64)}`});
   t.after(() => {controller.abort();});
-  return {network, subject, proof, claimed, controller, dependencies, events, faults, hooks, state, v4Storage,
+  return {engine, network, subject, proof, claimed, controller, dependencies, events, faults, hooks, state, v4Storage,
     physical, policies, routeAdmissions, route, publishedFirstWrites, syntheticLease, readback, lifecycle, engineCall,
     get journal() {return journal;}};
 };

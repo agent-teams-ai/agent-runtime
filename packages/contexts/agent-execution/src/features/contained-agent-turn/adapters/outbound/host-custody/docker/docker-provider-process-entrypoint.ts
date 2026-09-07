@@ -1,5 +1,5 @@
-export {createDockerProviderProcessBridge} from "./docker-provider-process-bridge.js";
-export type {DockerProviderProcessInput} from "./docker-provider-process-bridge.js";
+export {createDockerProviderProcessBridge, prepareDockerProviderProcessIo} from "./docker-provider-process-bridge.js";
+export type {DockerProviderProcessInput, PreparedDockerProviderIo} from "./docker-provider-process-bridge.js";
 export {DockerHostCustodyLifecycle, dockerProviderProcessMountFacts} from "./docker-host-custody-lifecycle.js";
 export {captureDockerHttpResourceRecord, subscribeDockerHttpAbort, DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} from "./docker-http-network-resources.js";
 export type {DockerHttpNetworkResourceInput} from "./docker-http-network-resources.js";
@@ -14,3 +14,4 @@ export {openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError} from "./no
 export type {LinuxRouteToolPin} from "./node-linux-exclusive-route.js";
 export type {LinuxExclusiveRouteBinding, LinuxExclusiveRouteOwner} from "./linux-exclusive-route-owner.js";
 export type {LinuxExclusiveRouteEndpoint} from "./linux-exclusive-route-policy.js";
+export type {DockerHostCustodyLifetime, DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";

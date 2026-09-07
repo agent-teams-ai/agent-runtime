@@ -110,3 +110,15 @@ for (const fault of ["stale", "abort"] as const) {
     stopRelease.resolve(); assert.equal((await contained).kind, "closed"); assert.equal(f.engine.removed, true);
   });
 }
+
+
+test("joined admission abort fences queued transport input while retaining stop-tail drain", {timeout: 5_000}, async t => {
+  const f = await cutoffFixture(t, true); const gate = f.holdWrite();
+  const writing = f.process.write(Buffer.from("queued before cutoff"));
+  const rejected = assert.rejects(writing, zeroEffect); await gate.entered.promise;
+  f.abort.abort(); gate.release.resolve(); await rejected;
+  assert.equal(inputFrames(f).length, 0); assert.equal(f.channel.closes, 0);
+  assert.equal(f.settled(), false);
+  f.controls.onStop = async () => {f.tail();};
+  assert.equal((await f.contain()).kind, "closed"); await assertTail(f);
+});
