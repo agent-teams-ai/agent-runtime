@@ -178,7 +178,7 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
     } finally {await blocker.query("ROLLBACK"); blocker.release();}
     assert.deepEqual(await two.repository.readAuthority(key), { headVersion: "0" });
   });
-  await t.test("real acceptance persistence and publication before consumption across owners", async () => {
+  await t.test("real acceptance persistence and publication before consumption across owners", async t => {
     const options = { connectTimeoutMs: 5_000, queryTimeoutMs: 10_000, transactionTimeoutMs: 20_000 };
     const decisionsA = createPostgresDispatchAcceptanceStore({ pool: a, ...options });
     const decisionsB = createPostgresDispatchAcceptanceStore({ pool: b, ...options });
