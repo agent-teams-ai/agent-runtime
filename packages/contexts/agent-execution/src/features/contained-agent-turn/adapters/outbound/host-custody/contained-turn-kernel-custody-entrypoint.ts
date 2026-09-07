@@ -22,3 +22,6 @@ export {readHostCustodyHttpHandoff, hostHttpAbortOperations, type HostCustodyHtt
   type HostCustodyHttpResourceLifetime} from "./host-custody-http-resource-lifetime.js";
 
 export {createImmutableHostCustodyLaunchPlan} from "./host-custody-launch-plan-snapshot.js";
+
+export {hostLaunchFinalizationRecipe} from "./host-custody-finalizable-plan.js";
+export {retainFinalizationHttpResources} from "./host-launch-finalization-validation.js";
