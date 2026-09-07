@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { createContainedTurnFeature, type ContainedTurnFeatureDependencies } from "../../../../dist/composition.js";
-import { containedTurnIdentity } from "../../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { createDependencies } from "./contained-agent-turn-fixture.ts";
+import { createContainedTurnFeature, type ContainedTurnFeatureDependencies } from "../../../../contexts/agent-execution/dist/composition.js";
+import { containedTurnIdentity } from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { createDependencies } from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 export const joinedAeSubmit = (providerAccess: ContainedTurnFeatureDependencies["providerAccess"], security: ContainedTurnFeatureDependencies["security"], scope: {projectId: string; tenantId: string}, intent: {mode: "analysis"; prompt: string}) => {
   return async (id: string, beforeConsume?: (input: Parameters<ContainedTurnFeatureDependencies["providerAccess"]["consumeForDispatch"]>[0]) => Promise<void>, potentialAcceptance = false) => {

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort } from "../../../dist/composition.js";
-import { createPostgresCurrentProviderAccess, createPostgresOperationDispatchConsumption } from "../../../../provider-access/dist/composition.js";
-import { createPostgresMaterializationRepository } from "../../../../provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js";
-import { issuanceFixture, fixtureHash } from "../../../../provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
-import { validateDisposablePostgresUrl } from "../../../../provider-access/tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
-import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore } from "../../../../runtime-security/dist/composition.js";
-import { createPostgresDispatchConsumptionRepository } from "../../../../runtime-security/dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
-import { adapterSnapshot, manifest } from "./support/contained-turn-fixture-snapshots.ts";
+import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort } from "../../../contexts/agent-execution/dist/composition.js";
+import { createPostgresCurrentProviderAccess, createPostgresOperationDispatchConsumption } from "../../../contexts/provider-access/dist/composition.js";
+import { createPostgresMaterializationRepository } from "../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js";
+import { issuanceFixture, fixtureHash } from "../../../contexts/provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
+import { validateDisposablePostgresUrl } from "../../../contexts/provider-access/tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
+import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore } from "../../../contexts/runtime-security/dist/composition.js";
+import { createPostgresDispatchConsumptionRepository } from "../../../contexts/runtime-security/dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
+import { adapterSnapshot, manifest } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
 import { joinedAeSubmit } from "./support/joined-authority-fixture.ts";
 
 const databaseUrl = process.env.AE_ACL_POSTGRES_DISPOSABLE_URL;

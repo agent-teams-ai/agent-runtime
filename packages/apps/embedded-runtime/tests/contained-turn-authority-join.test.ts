@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort } from "../../../dist/composition.js";
-import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { acceptedProviderPreparation } from "../../../dist/features/contained-agent-turn/composition/accepted-authority-anti-corruption.js";
-import { operationHarness, fixtureHash } from "../../../../provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
-import { createHarness } from "../../../../runtime-security/tests/postgres-dispatch.fixtures.ts";
-import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore } from "../../../../runtime-security/dist/composition.js";
+import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort } from "../../../contexts/agent-execution/dist/composition.js";
+import { containedTurnIdentity } from "../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { acceptedProviderPreparation } from "../../../contexts/agent-execution/dist/features/contained-agent-turn/composition/accepted-authority-anti-corruption.js";
+import { operationHarness, fixtureHash } from "../../../contexts/provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
+import { createHarness } from "../../../contexts/runtime-security/tests/postgres-dispatch.fixtures.ts";
+import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore } from "../../../contexts/runtime-security/dist/composition.js";
 import { joinedAeSubmit } from "./support/joined-authority-fixture.ts";
-import { adapterSnapshot, manifest } from "./support/contained-turn-fixture-snapshots.ts";
+import { adapterSnapshot, manifest } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
 
 const intent = Object.freeze({mode: "analysis" as const, prompt: "Independently approved synthetic joined turn"});
 const fixture = async (policyConstraints?: string) => {
