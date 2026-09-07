@@ -250,23 +250,36 @@ const createResourceCutoff = (resources: PreparationResources): (() => void) => 
 const createResourceCleanup = (
   resources: PreparationResources,
   input: Readonly<{routeAdmission: DockerLinuxOperationRouteAdmission; cleanupCall(): EngineCall;
-    cleanupMs: number; observationAbort: AbortController}>,
+    cleanupMs: number; observationDeadline: number}>,
 ): (() => Promise<boolean>) => {
-  const {routeAdmission, cleanupCall, cleanupMs, observationAbort} = input;
+  const {routeAdmission, cleanupCall, cleanupMs, observationDeadline} = input;
+  // Only acknowledged proofs survive a failed attempt. Replaying a successful
+  // observation with a changed target is not fresh V4 evidence.
+  const retainProof = (prove: () => Promise<boolean>): (() => Promise<boolean>) => {
+    let proven = false;
+    return async () => {
+      if (proven) {return true;}
+      if (!Number.isSafeInteger(observationDeadline) || Date.now() >= observationDeadline) {return false;}
+      proven = await prove();
+      return proven;
+    };
+  };
   /** Release in the reverse of allocation, in the order the ledger encodes:
    * local admission is cut and observed, the exact container is contained and
    * proven absent, the route lease releases its namespace, then the listener
    * endpoint, then the operation network. Anything this cannot prove keeps its
    * ownership and quarantines instead of reporting a clean refusal. */
-  const proveCutoff = async (): Promise<boolean> => {
+  const proveCutoff = retainProof(async (): Promise<boolean> => {
     let proven = true;
     try {if (resources.routeOwner?.revoke() === "quarantined") {proven = false;}} catch {proven = false;}
     try {resources.product?.cutoff();} catch {proven = false;}
     try {resources.network?.cutoff();} catch {proven = false;}
     if (resources.network === undefined || resources.observers === undefined || resources.journal === undefined) {return proven;}
     return resources.observers.observeCutoff(resources.network.signal, resources.product?.listener ?? null).then(() => proven, () => false);
-  };
-  const proveContainerAbsent = async (): Promise<boolean> => {
+  });
+  const proveContainerAbsent = retainProof(async (): Promise<boolean> => {
+    // This skips lifecycle removal only. It issues no V4 no-creation proof:
+    // the network ledger still decides whether network release is authorized.
     if (!resources.launchAttempted) {return true;}
     if (resources.lifecycle === undefined || resources.observers === undefined || resources.launchKey === undefined) {return false;}
     // A late start acknowledgement can cross cutoff before launch publication.
@@ -278,14 +291,17 @@ const createResourceCleanup = (
       .then(issued => issued ?? null, () => null);
     if (token === null) {return false;}
     return resources.observers.observeContainerAbsent(token).then(() => true, () => false);
-  };
-  const proveListenerAbsent = async (): Promise<boolean> => {
+  });
+  const proveListenerAbsent = retainProof(async (): Promise<boolean> => {
     if (resources.product === undefined) {return true;}
-    const released = await resources.product.cleanupResources(Date.now() + cleanupMs).catch(() => false);
+    const released = await resources.product.cleanupResources(Math.min(observationDeadline, Date.now() + cleanupMs))
+      .catch(() => false);
     const readback = resources.product.listener;
     if (!released || readback === undefined || resources.observers === undefined) {return false;}
     return resources.observers.observeListenerAbsent(readback).then(() => true, () => false);
-  };
+  });
+  const releaseRoute = retainProof(async () =>
+    await routeAdmission.releaseAfterContainerRemoval().catch(() => "quarantined" as const) !== "quarantined");
   return async (): Promise<boolean> => {
     // An acknowledged route intent without an observed installation may still
     // have left a kernel table behind; that is uncertainty, not a refusal.
@@ -294,17 +310,49 @@ const createResourceCleanup = (
     const containerAbsent = await proveContainerAbsent();
     proven = containerAbsent && proven;
     if (resources.routeAttempted && containerAbsent) {
-      const released = await routeAdmission.releaseAfterContainerRemoval().catch(() => "quarantined" as const);
-      proven = released !== "quarantined" && proven;
+      proven = await releaseRoute() && proven;
     }
     proven = await proveListenerAbsent() && proven;
     if (resources.networkAttempted) {
+      if (Date.now() >= observationDeadline) {return false;}
       const removed = await resources.network?.cleanupNetwork().catch(() => "unknown" as const);
       proven = removed === "absent" && proven;
     }
-    observationAbort.abort();
     return proven;
   };
+};
+
+/** Keep one retained cleanup flight; only a settled failure can be retried. */
+const createCleanupSettlement = (cleanup: () => boolean | Promise<boolean>,
+  observationAbort: AbortController, observationDeadline: number): (() => Promise<boolean>) => {
+  let cleanupFlight: Promise<boolean> | undefined;
+  return (): Promise<boolean> => {
+    if (cleanupFlight !== undefined) {return cleanupFlight;}
+    cleanupFlight = Promise.resolve().then(() => {
+      if (!Number.isSafeInteger(observationDeadline) || Date.now() >= observationDeadline) {return false;}
+      return cleanup();
+    }).catch(() => false).then(proven => {
+      if (proven) {observationAbort.abort();}
+      else {cleanupFlight = undefined;}
+      return proven;
+    });
+    return cleanupFlight;
+  };
+};
+
+const awaitPreparationCleanup = async (deadlineEpochMs: number, preparationFlight: Promise<Outcome> | undefined,
+  settleResources: () => Promise<boolean>): Promise<Readonly<{kind: "released" | "quarantined"}>> => {
+  try {
+    if (!Number.isSafeInteger(deadlineEpochMs) || Date.now() >= deadlineEpochMs) {
+      throw new TypeError("Invalid cleanup deadline");
+    }
+    const work = (preparationFlight ?? Promise.resolve()).then(() => {
+      if (Date.now() >= deadlineEpochMs) {return false;}
+      return settleResources();
+    });
+    await awaitNetworkCleanupWork(work, {signal: new AbortController().signal, deadlineEpochMs});
+    return Object.freeze({kind: await work ? "released" as const : "quarantined" as const});
+  } catch {return Object.freeze({kind: "quarantined" as const});}
 };
 
 const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
@@ -324,11 +372,9 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   let taken = false;
   let cutResources: (() => void) | undefined;
   let cleanupResources: (() => Promise<boolean>) | undefined;
-  let cleanupFlight: Promise<boolean> | undefined;
   let preparationFlight: Promise<Outcome> | undefined;
   const cutoff = () => {cut = true; admissionAbort.abort(); cutResources?.();};
-  const settleResources = () => cleanupFlight ??= Promise.resolve().then(() => cleanupResources?.() ?? true)
-    .catch(() => false);
+  const settleResources = createCleanupSettlement(() => cleanupResources?.() ?? true, observationAbort, observationDeadline);
   const prepareClaimed = async (input: Claimed): Promise<Outcome> => {
     if (entered) {return unsupported("owner");}
     entered = true;
@@ -347,13 +393,14 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     // Release is not admission: an irreversible caller cutoff must not stop the
     // Engine and journal work that proves these resources actually went away.
     const cleanupCall = (): EngineCall =>
-      Object.freeze({signal: new AbortController().signal, deadlineEpochMs: Date.now() + deadlines.cleanupMs});
+      Object.freeze({signal: observationAbort.signal,
+        deadlineEpochMs: Math.min(observationDeadline, Date.now() + deadlines.cleanupMs)});
     let stage: Stage = "subject";
     const resources = createPreparationResources();
 
     cutResources = createResourceCutoff(resources);
     cleanupResources = createResourceCleanup(resources, {routeAdmission, cleanupCall,
-      cleanupMs: deadlines.cleanupMs, observationAbort});
+      cleanupMs: deadlines.cleanupMs, observationDeadline});
 
     const settle = async (reason: UnsupportedReason): Promise<Outcome> => {
       try {cutoff();} catch { /* Continue retained cleanup after failed admission cut. */ }
@@ -487,12 +534,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     },
     async cleanup(input: Readonly<{deadlineEpochMs: number}>) {
       try {cutoff();} catch { /* Cleanup still owns every retained slot. */ }
-      const work = (preparationFlight ?? Promise.resolve()).then(() => settleResources());
-      try {
-        if (!Number.isSafeInteger(input.deadlineEpochMs)) {throw new TypeError("Invalid cleanup deadline");}
-        await awaitNetworkCleanupWork(work, {signal: new AbortController().signal, deadlineEpochMs: input.deadlineEpochMs});
-        return Object.freeze({kind: await work ? "released" as const : "quarantined" as const});
-      } catch {return Object.freeze({kind: "quarantined" as const});}
+      return awaitPreparationCleanup(input.deadlineEpochMs, preparationFlight, settleResources);
     },
   });
 };
