@@ -1,3 +1,4 @@
+import {retainedHostPrivateRootBinding, type HostPrivateRootOwner} from "./host-private-root-owner.js";
 import {custodyDataRecord, createImmutableHostCustodyLaunchPlan, type ContainedTurnHostCustodyPort}
   from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {randomUUID, createHash} from "node:crypto";
@@ -17,6 +18,7 @@ export interface DockerKernelReservationCleanup {
 }
 interface Retained extends DockerKernelReservation {
   cleanup?: DockerKernelReservationCleanup;
+  root?: HostPrivateRootOwner;
   containment?: Promise<Containment>;
   receipt?: string;
   resourcesReleased: boolean;
@@ -62,6 +64,15 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
     }
     record.cleanup = Object.freeze({cutoff: cleanup.cutoff.bind(cleanup), cleanup: cleanup.cleanup.bind(cleanup)});
   }
+  public installPrivateRoot(custodyRef: string, root: HostPrivateRootOwner): void {
+    const record = this.#records.get(custodyRef);
+    retainedHostPrivateRootBinding(root);
+    if (this.#disposed || record === undefined || record.cleanup === undefined || record.root !== undefined || record.containmentStarted) {
+      throw new TypeError("Docker private root cannot be replaced");
+    }
+    record.evidence.attachPrivateRoot(root);
+    record.root = root;
+  }
   public evidence(custodyRef: string) {return this.#records.get(custodyRef)?.evidence.snapshot();}
   private match(input: Parameters<ContainedTurnHostCustodyPort["requestContainment"]>[0]): Retained | undefined {
     const record = input.custodyRef === undefined ? undefined : this.#records.get(input.custodyRef);
@@ -84,8 +95,12 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
           const result = await record.cleanup?.cleanup({deadlineEpochMs: Date.now() + this.cleanupMilliseconds});
           record.resourcesReleased = result?.kind === "released";
         }
+        if (record.resourcesReleased && record.root !== undefined) {
+          await record.root.quarantineAndDelete({deadlineEpochMs: Date.now() + this.cleanupMilliseconds});
+        }
         const evidence = record.evidence.snapshot();
-        if (record.cutoffFailed || !record.resourcesReleased || !evidence.sealed || evidence.closure.status !== "closed") {return this.unproven(record.custodyRef);}
+        if (record.cutoffFailed || !record.resourcesReleased || !evidence.sealed || evidence.closure.status !== "closed" ||
+          record.root !== undefined && evidence.privateRoot.status !== "deleted") {return this.unproven(record.custodyRef);}
         record.receipt = `urn:agent-runtime:docker-containment:${createHash("sha256")
           .update(JSON.stringify([record.custodyRef, record.input.operationId, record.input.attemptId, evidence])).digest("hex")}`;
         return Object.freeze({kind: "contained" as const, receiptRef: record.receipt});

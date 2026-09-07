@@ -1,3 +1,4 @@
+import {DockerLifecycleAuthority, type DockerLifecycleImageSelection} from "./docker-lifecycle-authority.js";
 import {DockerLifecycleObservations, createDockerLifecycleJournal, type DockerLifecycleObservation} from "./docker-lifecycle-observations.js";
 import {createDockerProviderProcessLaunchIssuer, type LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
 import {DockerContainedTurnHostCustody, type DockerHostCustodyLifetime, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
@@ -86,7 +87,7 @@ const journalUnavailable = (error: unknown): boolean =>
 export class DockerHostCustodyLifecycle {
   public readonly removalObservation: ReturnType<typeof createDockerRemovalObservationOwner>;
   /** Volatile exact binding permits safe cleanup after same-instance journal loss, but is not restart authority. */
-  private readonly liveAuthorityBindings = new Map<string, string>();
+  readonly #authority: DockerLifecycleAuthority;
   private readonly liveLaunches = new Map<string, DockerContainedTurnHostCustody>();
   readonly #observations = new DockerLifecycleObservations();
   private readonly journal: DockerHostCustodyJournalPort;
@@ -103,6 +104,7 @@ export class DockerHostCustodyLifecycle {
     private readonly residue: DockerHostCustodyResiduePort,
     private readonly maxLiveAuthorityBindings = DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS.maxJournalFiles,
   ) {
+    this.#authority = new DockerLifecycleAuthority(maxLiveAuthorityBindings);
     this.journal = this.#observations.journal(journal);
     this.removalObservation = createDockerRemovalObservationOwner(engine, this.contain.bind(this));
   }
@@ -112,8 +114,8 @@ export class DockerHostCustodyLifecycle {
   /** Cleanup-only retained identity after a launch acknowledgement crosses cutoff.
    * This does not issue a launch, readiness, or provider-execution capability. */
   public retainedAuthority(key: DockerCustodyAttemptKey): DockerContainerAuthority | undefined {
-    const authority = this.liveLaunches.get(dockerCustodyAttemptLocator(key))?.retainedAuthority;
-    if (authority === undefined || this.authorityMatch(key, authority) !== "match") {return undefined;}
+    const authority = this.#authority.retained(key);
+    if (authority === undefined || this.#authority.match(key, authority) !== "match") {return undefined;}
     assertDockerAuthorityBinding(key, authority);
     return authority;
   }
@@ -121,20 +123,15 @@ export class DockerHostCustodyLifecycle {
     return this.#observations.engine(authority, await this.engine.inspect(authority, call));
   }
 
-  private holdAuthority(key: DockerCustodyAttemptKey, authority: DockerContainerAuthority): string {
-    const locator = dockerCustodyAttemptLocator(key);
-    const authoritySha256 = dockerCustodyAuthoritySha256(authority);
-    if (!this.liveAuthorityBindings.has(locator) && this.liveAuthorityBindings.size >= this.maxLiveAuthorityBindings) {
-      const oldest = this.liveAuthorityBindings.keys().next().value as string | undefined;
-      if (oldest !== undefined) {this.liveAuthorityBindings.delete(oldest);}
-    }
-    this.liveAuthorityBindings.set(locator, authoritySha256);
-    return authoritySha256;
+  public imageInitWitness(launch: LaunchedDockerCustody, host: DockerLifecycleImageSelection["host"]) {
+    this.#observations.read(launch);
+    return this.#authority.image(launch.authority, host);
   }
 
   public async launch(input: Readonly<{
     call: DockerEngineCall;
     lifetime?: DockerHostCustodyLifetime;
+    imageInit?: DockerLifecycleImageSelection;
     create: DockerHostCustodyContainerCreate;
     owner: DockerCustodyOwnerIdentity;
   }>): Promise<Readonly<{
@@ -144,6 +141,7 @@ export class DockerHostCustodyLifecycle {
     kind: "launched";
     openInitSession(options: DockerContainedTurnInitOptions): DockerContainedTurnInitSession;
   }>> {
+    const imageInit = input.imageInit === undefined ? undefined : Object.freeze({...input.imageInit, host: Object.freeze({...input.imageInit.host})});
     const lifetime = input.lifetime === undefined ? undefined : Object.freeze({
       admission: Object.freeze({...input.lifetime.admission}),
       observation: Object.freeze({...input.lifetime.observation, isActive: input.lifetime.observation.isActive.bind(input.lifetime.observation)}),
@@ -180,13 +178,15 @@ export class DockerHostCustodyLifecycle {
       await this.journal.beforeAction({ key, expectedSequence: prepared.sequence, state: "create_requested" });
       this.assertLaunchOpen(key, input.call);
       createInvoked = true; // Even a synchronous throw or lost acknowledgement may hide an effect.
-      const authority = Object.freeze({...await this.engine.create(create, input.call, confirmedEngineIdentity)});
+      const authority = await this.engine.create(create, input.call, confirmedEngineIdentity);
       assertDockerAuthorityBinding(key, authority);
-      const authoritySha256 = this.holdAuthority(key, authority);
+      const authoritySha256 = this.#authority.hold(key, authority);
       this.assertLaunchOpen(key, input.call);
       const created = await this.journal.observe({
         authoritySha256, key, expectedSequence: 1, state: "created", evidence: proved,
       });
+      this.assertLaunchOpen(key, input.call);
+      if (imageInit !== undefined) {await this.#authority.verify(imageInit, authority, input.call);}
       this.assertLaunchOpen(key, input.call);
       await this.journal.beforeAction({ key, expectedSequence: created.sequence, state: "init_start_requested" });
       this.assertLaunchOpen(key, input.call);
@@ -244,7 +244,7 @@ export class DockerHostCustodyLifecycle {
     live.beginExecute(input.call);
     const current = await this.journal.lookup(input.key);
     this.assertLaunchOpen(input.key, input.call);
-    if (this.authorityMatch(input.key, input.authority, current) !== "match") {
+    if (this.#authority.match(input.key, input.authority, current) !== "match") {
       throw new TypeError("Docker Host Custody provider execution requires exact created authority");
     }
     if (current.state !== "init_ready" || current.evidence.status !== "proved" ||
@@ -285,7 +285,7 @@ export class DockerHostCustodyLifecycle {
   public async contain(input: DockerHostCustodyContainmentInput): Promise<DockerHostCustodyContainment> {
     assertDockerAuthorityBinding(input.key, input.authority);
     const candidate = this.liveLaunches.get(dockerCustodyAttemptLocator(input.key));
-    const live = candidate !== undefined && (candidate.owns(input.authority) || this.authorityMatch(input.key, input.authority) === "match")
+    const live = candidate !== undefined && (candidate.owns(input.authority) || this.#authority.match(input.key, input.authority) === "match")
       ? candidate : undefined;
     // Seal before the first await, preserving the sole reader through physical stop.
     live?.cutOffAdmission();
@@ -294,7 +294,7 @@ export class DockerHostCustodyLifecycle {
     try {
       try {result = await this.containJournalled(input, live);} catch (error) {
         if (!journalUnavailable(error)) {throw error;}
-        const match = this.authorityMatch(input.key, input.authority);
+        const match = this.#authority.match(input.key, input.authority);
         result = match !== "match" ? this.authorityIndeterminate(input.authority, match) : Object.freeze({
           authority: input.authority, containment: await this.containWithoutJournal(input.authority, input.call, live),
           kind: "indeterminate", reason: "journal_unavailable",
@@ -314,7 +314,7 @@ export class DockerHostCustodyLifecycle {
   private async containJournalled(input: DockerHostCustodyContainmentInput, live?: DockerContainedTurnHostCustody): Promise<DockerHostCustodyContainment> {
     for (let transition = 0; transition < 16; transition += 1) {
       const current = await this.journal.lookup(input.key);
-      const match = this.authorityMatch(input.key, input.authority, current);
+      const match = this.#authority.match(input.key, input.authority, current);
       if (match !== "match") {return this.authorityIndeterminate(input.authority, match);}
       try {
         if (current.state === "remove_requested") {await live?.drainWithin(input.call);}
@@ -326,16 +326,6 @@ export class DockerHostCustodyLifecycle {
       }
     }
     throw new TypeError("Docker Host Custody containment exceeded its bounded transition count");
-  }
-
-  private authorityMatch(
-    key: DockerCustodyAttemptKey,
-    authority: DockerContainerAuthority,
-    journal?: DockerCustodyJournalRecord,
-  ): "match" | "mismatch" | "unavailable" {
-    const expected = journal?.authoritySha256 ?? this.liveAuthorityBindings.get(dockerCustodyAttemptLocator(key));
-    if (expected === undefined || expected === null) {return "unavailable";}
-    return expected === dockerCustodyAuthoritySha256(authority) ? "match" : "mismatch";
   }
 
   private authorityIndeterminate(
@@ -488,7 +478,7 @@ export class DockerHostCustodyLifecycle {
       assertDockerAuthorityBinding(key, resolved.authority);
       let canonical: DockerContainerAuthority;
       try {canonical = await this.engine.reconcileCreate(create, resolved.call);} catch {
-        if (this.authorityMatch(key, resolved.authority, journal) !== "match") {return undefined;}
+        if (this.#authority.match(key, resolved.authority, journal) !== "match") {return undefined;}
         try {
           return (await this.inspect(resolved.authority, resolved.call)).existence === "absent"
             ? resolved.authority
@@ -496,13 +486,13 @@ export class DockerHostCustodyLifecycle {
         } catch {return undefined;}
       }
       if (!sameDockerAuthority(canonical, resolved.authority)) {return undefined;}
-      this.holdAuthority(key, resolved.authority);
+      this.#authority.hold(key, resolved.authority);
       return resolved.authority;
     }
     try {
       const authority = await this.engine.reconcileCreate(create, resolved.call);
       assertDockerAuthorityBinding(key, authority);
-      this.holdAuthority(key, authority);
+      this.#authority.hold(key, authority);
       return authority;
     } catch {
       return undefined;
@@ -584,7 +574,7 @@ export class DockerHostCustodyLifecycle {
       throw new DockerCustodyJournalConflictError("Docker attach cleanup remains unproven");
     }
     await this.journal.retire(input);
-    this.liveAuthorityBindings.delete(dockerCustodyAttemptLocator(input.key));
+    this.#authority.retire(input.key);
     this.liveLaunches.delete(dockerCustodyAttemptLocator(input.key));
   }
 }

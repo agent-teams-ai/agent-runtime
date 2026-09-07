@@ -1,3 +1,7 @@
+import {createHostPrivateRootOwnerFactory} from "./host-private-root-owner.js";
+import {createDockerHostReservationOwners} from "./docker-host-reservation-owners.js";
+import {snapshotDockerImageInitLock, type DockerImageInitLock}
+  from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {createCodexDockerPathProjection, CodexAppServerCurrentKernelAdapter} from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {randomUUID} from "node:crypto";
 import {custodyDataRecord, sameHostCustodyBinding, isHostCustodyDataCallback, ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
@@ -26,6 +30,9 @@ export interface CreateDockerCodexHostKernelOwnerOptions {
   readonly platformTarget: CreateDockerCodexCurrentKernelOwnerOptions["platformTarget"];
   readonly effectCustody: CreateDockerCodexCurrentKernelOwnerOptions["effectCustody"];
   readonly cleanupMilliseconds: number;
+  /** Independently selected immutable image/interpreter/closed init bundle lock.
+   * Missing selection refuses before allocation; observed bytes cannot select it. */
+  readonly imageInitLock?: DockerImageInitLock;
   /** Trusted, operation-scoped resource selection. No effects during selection. */
   preparation(input: Readonly<{kernel: Kernel; record: CodexCurrentKernelLaunchRecord}>): DockerLinuxPostClaimDependencies;
   /** Unavailable until the native broker owner binds this HTTP reservation,
@@ -56,6 +63,8 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   if (finishClaimed !== undefined && !isHostCustodyDataCallback(finishClaimed)) {
     throw new TypeError("Docker native finalizer must be a callable data property");
   }
+  const imageInitLock = options.imageInitLock === undefined ? undefined : snapshotDockerImageInitLock(options.imageInitLock);
+  const roots = createHostPrivateRootOwnerFactory({hostInstanceId: options.hostInstanceId, hostBootId: options.hostBootId});
   const records = new Map<string, Retained>();
   const raw = new DockerKernelHostCustody(options.cleanupMilliseconds);
   let disposed = false;
@@ -93,12 +102,14 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   });
   const preparation = Object.freeze({async prepareClaimed(claimed: DockerLinuxClaimedPreparation) {
     const retained = [...records.values()].find(record => record.ref === claimed.underlyingCustodyRef);
-    if (disposed || retained === undefined || retained.claimed !== undefined || finishClaimed === undefined) {
+    if (disposed || retained === undefined || retained.claimed !== undefined || finishClaimed === undefined || imageInitLock === undefined) {
       return Object.freeze({kind: "unsupported" as const, reason: "broker" as const});
     }
     retained.claimed = claimed; // One-use before calling resource selection.
     const dependencies = options.preparation({kernel: retained.kernel, record: retained.record});
     const deadlineEpochMs = Date.now() + dependencies.deadlines.routeLifetimeMs;
+    const hostOwners = createDockerHostReservationOwners({roots, raw, custodyRef: claimed.underlyingCustodyRef,
+      dependencies, lock: imageInitLock, cutoffProvider: () => retained.provider?.dispose()});
     let lifecycle: DockerHostCustodyLifecycle | undefined;
     const owner = createDockerLinuxPostClaimOwner({...dependencies,
       openLifecycle(policy) {
@@ -107,6 +118,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
         if (!isConcreteLinuxDockerLifecycle(lifecycle)) {throw new TypeError("Docker requires the concrete Linux residue owner");}
         return lifecycle;
       }}, {
+      ...hostOwners.hooks,
       prepareProviderIo({launch, init}) {
         if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
         const process = {launch, init, expected: Object.freeze({authority: launch.authority, custodyRef: launch.key.custodyId,
@@ -131,7 +143,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
       },
     });
     retained.owner = owner;
-    raw.installCleanup(claimed.underlyingCustodyRef, owner);
+    hostOwners.attach(owner);
     return owner.preparation.prepareClaimed(claimed);
   }});
   const custody = new ContainedTurnKernelCustodyAdapter(raw, {attemptOwner, workspaceOwner: options.workspaceOwner,
