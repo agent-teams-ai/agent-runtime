@@ -2,36 +2,42 @@ import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:f
 import { release, tmpdir, version } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { commit, sourceFixture } from "./provider-candidate-source-fixture.mjs";
+import { commit, git, sourceFixture } from "./provider-candidate-source-fixture.mjs";
 import { digestTree, sha256 } from "../../../live/provider-candidate-build-tree.mjs";
 import { sourceSnapshot } from "../../../live/provider-candidate-source.mjs";
 import { nativeInvocation, NATIVE_SOURCE } from "../../../live/provider-candidate-native-build.mjs";
 import { NATIVE_HELPER } from "../../../live/provider-candidate-toolchain.mjs";
-import { git } from "./provider-candidate-source-fixture.mjs";
 
 export const freeze = value => Object.freeze(value);
 export const artifact = "synthetic independently expected native artifact\n";
-export const nativeFixture = async t => {
+export const nativeFixture = async (t, gcc = false) => {
   const fixture = await sourceFixture(t);
   const tools = await realpath(await mkdtemp(join(tmpdir(), "ar-native-approved-fixture-")));
   t.after(() => rm(tools, {recursive: true, force: true}));
   const marker = join(tools, "invocation.json");
   // Operator-authored synthetic tool bytes, never qualified from candidate output.
   const compiler = `#!${process.execPath}
-import {writeFileSync} from 'node:fs';
-writeFileSync(${JSON.stringify(marker)}, JSON.stringify({args:process.argv.slice(2),env:process.env}));
+import {writeFileSync, readlinkSync} from 'node:fs';
+const prefix = process.argv.find(arg => arg.startsWith('-B'));
+const tools = prefix ? Object.fromEntries(['as', 'ld', 'ld.bfd'].map(name => [name, readlinkSync(prefix.slice(2) + name)])) : undefined;
+writeFileSync(${JSON.stringify(marker)}, JSON.stringify({args:process.argv.slice(2),env:process.env,tools}));
 writeFileSync('dist/rename-no-replace.node', ${JSON.stringify(artifact)});
 `;
   const inputs = {};
-  for (const role of ["compiler", "linker", "resources", "nodeHeaders", "sysroot"]) {
+  for (const role of ["compiler", "linker", "resources", "nodeHeaders", "sysroot", ...(gcc ? ["assembler"] : [])]) {
     const path = join(tools, role);
-    if (["compiler", "linker"].includes(role)) {
+    if (["compiler", "linker", "assembler"].includes(role)) {
       const bytes = role === "compiler" ? compiler : "#!/bin/sh\nexit 1\n";
       await writeFile(path, bytes); await chmod(path, 0o755);
       inputs[role] = freeze({path, digest: sha256(bytes)});
     } else {
       await mkdir(path);
       await writeFile(join(path, role === "nodeHeaders" ? "node_api.h" : "approved-input"), `synthetic ${role}\n`);
+      if (gcc && role === "resources") {
+        for (const name of ["cc1", "collect2"]) {
+          await writeFile(join(path, name), "#!/bin/sh\nexit 1\n", {mode: 0o755});
+        }
+      }
       inputs[role] = freeze({path, digest: (await digestTree(path, path)).treeDigest});
     }
   }
@@ -44,7 +50,7 @@ writeFileSync('dist/rename-no-replace.node', ${JSON.stringify(artifact)});
   const snapshot = await sourceSnapshot(pathToFileURL(fixture.canaryPath).href, await git(fixture.root, "rev-parse", "HEAD"));
   const native = {
     sourceSha: snapshot.head, sourceTreeDigest: snapshot.treeDigest, cSourceDigest: sha256(cSource),
-    recipe: process.platform === "linux" ? "linux-x64-clang-shared/v1" : "darwin-arm64-clang-bundle/v1",
+    recipe: gcc ? "linux-x64-gcc-shared/v1" : process.platform === "linux" ? "linux-x64-clang-shared/v1" : "darwin-arm64-clang-bundle/v1",
     recipeDigest: "0".repeat(64), epoch: "0", deploymentTarget: process.platform === "linux" ? "none" : "13.0",
     environment: freeze({release: release(), version: version(), identityDigest: sha256("synthetic host"),
       installationProvenanceDigest: sha256("synthetic installation"), defaultResolutionDigest: sha256("synthetic defaults")}),

@@ -1,14 +1,25 @@
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, symlink, rm } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
 import { nativeFixture, freeze, artifact } from "./support/provider-candidate-native-fixture.mjs";
 import { evidenceInput } from "./support/provider-candidate-source-fixture.mjs";
-import { captureNativeQualification, nativeInvocation } from "../../live/provider-candidate-native-build.mjs";
+import { captureNativeQualification, nativeInvocation, matchNativeOutput } from "../../live/provider-candidate-native-build.mjs";
 import { trustedToolchainQualification, matchTrustedToolchain } from "../../live/provider-candidate-toolchain.mjs";
 import { sha256 } from "../../live/provider-candidate-build-tree.mjs";
 import { execFileAsync } from "../../live/provider-candidate-source.mjs";
+
+// Retain the actual observation; tolerate exactly the documented Darwin spawn
+// addition, never arbitrary search-path/loader flags or a supplied inherited value.
+const assertEnvironment = (actual, expected, platform = process.platform) => {
+  const {__CF_USER_TEXT_ENCODING: encoding, ...controlled} = actual;
+  if (encoding !== undefined) {
+    assert.equal(platform, "darwin");
+    assert.match(encoding, /^0x[0-9A-Fa-f]+:0x[0-9A-Fa-f]+:0x[0-9A-Fa-f]+$/u);
+  }
+  assert.deepEqual(controlled, expected);
+};
 
 const changedNative = (q, patch) => freeze({...q, native: freeze({...q.native, ...patch})});
 const missingMarker = marker => assert.rejects(readFile(marker), {code: "ENOENT"});
@@ -17,7 +28,7 @@ test("native independent output and fresh BOTH-package rebuild bind a private re
   const f = await nativeFixture(t);
   const execution = await f.resolve({}, f.qualification);
   const invocation = JSON.parse(await readFile(f.marker, "utf8"));
-  assert.deepEqual(invocation.env, {LC_ALL: "C", TZ: "UTC", SOURCE_DATE_EPOCH: "0"});
+  assertEnvironment(invocation.env, {LC_ALL: "C", TZ: "UTC", SOURCE_DATE_EPOCH: "0"});
   assert.ok(invocation.args.includes(`--ld-path=${f.qualification.native.inputs.linker.path}`));
   assert.ok(invocation.args.includes(f.qualification.native.inputs.resources.path));
   assert.ok(invocation.args.includes(`--sysroot=${f.qualification.native.inputs.sysroot.path}`));
@@ -133,10 +144,19 @@ Object.defineProperty(process, 'arch', {value:${JSON.stringify(arch)}});`);
       "--qualified", "node-only-offline-toolchain/v1"], options), /qualified native recipe inputs/u);
     await execFileAsync(process.execPath, ["--import", preload, ...invocation.args], options);
     const actual = JSON.parse(await readFile(f.marker, "utf8"));
+    const inputs = native.inputs;
+    assert.deepEqual(actual.args, ["-O2", "-Wall", "-Wextra", "-Werror", "-fPIC", "-nostdinc",
+      `--ld-path=${inputs.linker.path}`, "-resource-dir", inputs.resources.path,
+      `--sysroot=${inputs.sysroot.path}`, "-isystem", join(inputs.resources.path, "include"),
+      "-isystem", join(inputs.sysroot.path, "usr/include"), `-I${inputs.nodeHeaders.path}`,
+      ...(platform === "linux" ? ["--target=x86_64-unknown-linux-gnu", "-shared"] :
+        ["--target=arm64-apple-darwin", "-arch", "arm64", "-mmacosx-version-min=13.0",
+          "-bundle", "-undefined", "dynamic_lookup"]),
+      "native/rename-no-replace.c", "-o", "dist/rename-no-replace.node"]);
     assert.equal(actual.args.includes("-shared"), platform === "linux");
     assert.equal(actual.args.includes("-bundle"), platform === "darwin");
     assert.equal(actual.args.includes("dynamic_lookup"), platform === "darwin");
-    assert.deepEqual(actual.env, invocation.environment);
+    assertEnvironment(actual.env, invocation.environment);
   }
 });
 
@@ -160,4 +180,73 @@ test("live imports are inert and missing separately trusted data causes zero can
       await assert.rejects(execFileAsync(process.execPath, [entry.pathname], {env: {}}), /separate trusted composition required/u);
     }
   } finally {hook.deregister();}
+});
+
+test("Darwin spawn allowance is bounded and never hides compiler or loader injection", () => {
+  const env = {LC_ALL: "C", TZ: "UTC", SOURCE_DATE_EPOCH: "0"};
+  assertEnvironment({...env, __CF_USER_TEXT_ENCODING: "0x1F5:0x7:0x31"}, env, "darwin");
+  for (const platform of ["linux", "darwin"]) {
+    for (const key of ["PATH", "CPATH", "LIBRARY_PATH", "GCC_EXEC_PREFIX", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES"]) {
+      assert.throws(() => assertEnvironment({...env, [key]: "unapproved"}, env, platform));
+    }
+  }
+  assert.throws(() => assertEnvironment({...env, __CF_USER_TEXT_ENCODING: "arbitrary"}, env, "darwin"));
+  assert.throws(() => assertEnvironment({...env, __CF_USER_TEXT_ENCODING: "0x1:0x0:0x0"}, env, "linux"));
+});
+
+test("native output still rejects aliased parents and symlinked artifact", async t => {
+  const f = await nativeFixture(t);
+  const alias = join(f.root, "package-alias");
+  await symlink(join(f.root, "packages/platform/filesystem-custody"), alias, "dir");
+  await assert.rejects(matchNativeOutput(alias, f.qualification.native), /unaliased/u);
+  const target = join(f.root, "artifact");
+  await writeFile(target, artifact);
+  await rm(f.output);
+  await symlink(target, f.output);
+  await assert.rejects(matchNativeOutput(join(f.root, "packages/platform/filesystem-custody"), f.qualification.native), /unaliased/u);
+});
+
+test("GCC recipe selects real driver argv and absolute assembler/linker without Clang flags", async t => {
+  const f = await nativeFixture(t, true);
+  const native = f.qualification.native;
+  const captured = captureNativeQualification(freeze({...native, deploymentTarget: "none"}), "linux", "x64");
+  assert.throws(() => captureNativeQualification(freeze({...captured,
+    environment: freeze({...captured.environment, defaultResolutionDigest: undefined})}), "linux", "x64"), TypeError);
+  const preload = join(f.root, "gcc-platform.mjs");
+  await writeFile(preload, `Object.defineProperty(process, 'platform', {value:'linux'});
+Object.defineProperty(process, 'arch', {value:'x64'});`);
+  const invocation = nativeInvocation(captured);
+  await execFileAsync(process.execPath, ["--import", preload, ...invocation.args], {
+    cwd: join(f.root, "packages/platform/filesystem-custody"),
+    env: {...invocation.environment, CPATH: "unapproved", GCC_EXEC_PREFIX: "unapproved",
+      LIBRARY_PATH: "unapproved", COMPILER_PATH: "unapproved"},
+  });
+  const actual = JSON.parse(await readFile(f.marker, "utf8"));
+  const inputs = captured.inputs;
+  assert.deepEqual(actual.tools, {as: inputs.assembler.path, ld: inputs.linker.path, "ld.bfd": inputs.linker.path});
+  const toolPrefix = actual.args[6];
+  assert.match(toolPrefix, /^-B\/.+\/dist\/\.gcc-tools-[^/]+\/$/u);
+  assert.deepEqual(actual.args, ["-O2", "-Wall", "-Wextra", "-Werror", "-fPIC", "-nostdinc",
+    toolPrefix, `-B${inputs.resources.path}/`, "-fuse-ld=bfd", "-fno-use-linker-plugin", "-m64",
+    `--sysroot=${inputs.sysroot.path}`, "-isystem", join(inputs.resources.path, "include"),
+    "-isystem", join(inputs.sysroot.path, "usr/include"), "-isystem", join(inputs.sysroot.path, "usr/include/x86_64-linux-gnu"),
+    `-I${inputs.nodeHeaders.path}`,
+    "-shared", "native/rename-no-replace.c", "-o", "dist/rename-no-replace.node"]);
+  assertEnvironment(actual.env, invocation.environment);
+  await assert.rejects(readFile(join(toolPrefix.slice(2), "as")), {code: "ENOENT"});
+  await rm(preload);
+  if (process.platform === "linux" && process.arch === "x64") {
+    await f.resolve({}, f.qualification);
+    await writeFile(join(inputs.resources.path, "cc1"), "changed driver");
+    await assert.rejects(f.resolve({}, f.qualification), /native input differs/u);
+  }
+});
+
+test("fresh build canonicalizes its own root beneath an aliased temporary parent", async t => {
+  const f = await nativeFixture(t);
+  const alias = join(f.root, "temporary-parent");
+  await symlink(f.root, alias, "dir");
+  await execFileAsync(process.execPath, ["--test", "--test-name-pattern=^native independent output",
+    new URL(import.meta.url).pathname], {env: {...process.env, TMPDIR: alias, TMP: alias, TEMP: alias},
+    timeout: 120_000, maxBuffer: 1024 ** 2});
 });

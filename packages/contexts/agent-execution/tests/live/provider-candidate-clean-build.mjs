@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, lstat } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, lstat, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { digestTree, sha256 } from "./provider-candidate-build-tree.mjs";
@@ -79,7 +79,8 @@ export const verifyCleanBuild = async (snapshot, qualification) => {
   const executed = await executedBuildIdentity(snapshot.root);
   const native = qualification.native && nativeInvocation(qualification.native);
   const nodeDigest = sha256(await readFile(process.execPath));
-  const root = await mkdtemp(join(tmpdir(), "ar-provider-clean-build-"));
+  // Canonicalize only the newly owned root (Darwin temporary parents may alias).
+  const root = await realpath(await mkdtemp(join(tmpdir(), "ar-provider-clean-build-")));
   try {
     await copyBuildSources(snapshot, root);
     for (const [index, command] of COMMANDS.entries()) {
