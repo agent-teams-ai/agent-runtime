@@ -61,7 +61,10 @@ export const createDockerLinuxExclusiveRouteAdmission = (
       owner = opened;
       // A cutoff during installation revokes the lease it can no longer use.
       if (request.signal.aborted) {opened.revoke(); return refused;}
-      return Object.freeze({kind: "installed" as const, owner: opened});
+      // The first-write port closes over this factory's own binding: reservation
+      // authority stays with the lease and is never mintable from a caller fact.
+      return Object.freeze({kind: "installed" as const, owner: opened,
+        firstWrite: Object.freeze({reserve: (requestId: string) => opened.reserveFirstWrite(binding, requestId)})});
     },
     async releaseAfterContainerRemoval(): Promise<"closed" | "quarantined" | "none"> {
       if (owner !== undefined) {return owner.releaseAfterContainerRemoval();}

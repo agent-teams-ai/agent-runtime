@@ -114,6 +114,35 @@ test("an installed exclusive route is the only thing that prepares the turn", as
   assert.equal(ledger.network.phase, 2);
 });
 
+test("the installed lease publishes its first-write authority once, after the ledger observed it", async t => {
+  const f = await postClaimFixture(t);
+  const reservations: string[] = [];
+  f.route.lease = Object.freeze({...f.syntheticLease(),
+    reserveFirstWrite: (_binding: unknown, requestId: string) => {
+      reservations.push(requestId); return {consume: () => false};}});
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  assert.deepEqual(await preparation.prepareClaimed(f.claimed), {kind: "prepared"});
+  assert.equal(f.publishedFirstWrites.length, 1);
+  // The broker's gate is handed over only after the installation was observed.
+  const observed = f.events.indexOf("route-first-write");
+  assert.ok(observed > f.events.indexOf("route-admission"));
+  assert.deepEqual(kinds(f.v4Storage.journal).at(-1), "route_installed");
+  // Reservation stays with the lease: the published port only forwards the id.
+  const port = f.publishedFirstWrites[0] as {reserve(requestId: string): {consume(): boolean}};
+  assert.equal(port.reserve("request:1").consume(), false);
+  assert.deepEqual(reservations, ["request:1"]);
+});
+
+test("a refused first-write publication fails the preparation instead of admitting the turn", async t => {
+  const f = await postClaimFixture(t);
+  f.route.lease = f.syntheticLease();
+  f.hooks["route-first-write"] = () => {throw new TypeError("synthetic broker session refusal");};
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  const result = await preparation.prepareClaimed(f.claimed);
+  assert.notEqual(result.kind, "prepared");
+  assert.deepEqual(f.events.filter(event => ["remove", "route-release"].includes(event)), ["remove", "route-release"]);
+});
+
 test("the route lease releases its namespace only after the container is gone", async t => {
   const f = await postClaimFixture(t);
   f.route.lease = f.syntheticLease();

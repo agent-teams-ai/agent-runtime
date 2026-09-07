@@ -164,6 +164,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
   };
   const routeAdmissions: unknown[] = [];
   const route: {lease: unknown; release: "closed" | "quarantined" | "none"} = {lease: undefined, release: "none"};
+  const publishedFirstWrites: unknown[] = [];
   const {allowedNetworkName: _bound, ...enginePolicy} = network.input.policy;
   const policies: string[] = [];
   const dependencies: Dependencies = {
@@ -205,16 +206,19 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
       async admit(input) {
         record("route-admission"); routeAdmissions.push(input);
         if (route.lease === undefined) {return {kind: "unsupported", reason: "owner"};}
-        return {kind: "installed", owner: route.lease as never};
+        const lease = route.lease as {reserveFirstWrite: (binding: unknown, id: string) => {consume(): boolean}};
+        return {kind: "installed", owner: route.lease as never,
+          firstWrite: {reserve: (requestId: string) => lease.reserveFirstWrite(undefined, requestId)}};
       },
       async releaseAfterContainerRemoval() {record("route-release"); return route.release;},
     },
+    publishRouteFirstWrite(port) {record("route-first-write"); publishedFirstWrites.push(port);},
   };
   const controller = new AbortController();
   const claimed = Object.freeze({committedDispatchProof: proof, signal: controller.signal,
     underlyingCustodyRef: `urn:agent-runtime:docker-host-reservation:${"b".repeat(64)}`});
   t.after(() => {controller.abort();});
   return {network, subject, proof, claimed, controller, dependencies, events, faults, hooks, state, v4Storage,
-    physical, policies, routeAdmissions, route, syntheticLease, readback, lifecycle, engineCall,
+    physical, policies, routeAdmissions, route, publishedFirstWrites, syntheticLease, readback, lifecycle, engineCall,
     get journal() {return journal;}};
 };

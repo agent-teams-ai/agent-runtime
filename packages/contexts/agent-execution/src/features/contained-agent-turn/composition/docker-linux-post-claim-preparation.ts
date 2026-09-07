@@ -24,6 +24,14 @@ type ResourceJournal = Parameters<ReturnType<typeof createDockerHostHttpResource
 type ObservationOwner = ReturnType<typeof createDockerOperationNetworkOwner>["observationOwner"];
 type Observers = ReturnType<typeof createDockerHostHttpEgressObservers>;
 
+/** The installed lease's first-write authority, in the exact shape the broker's
+ * internal `routeFirstWrite` port takes. It is minted by the admission owner
+ * from its own route binding, so no caller can reserve against a binding the
+ * lease never installed. */
+export type DockerLinuxOperationRouteFirstWrite = Readonly<{
+  reserve(requestId: string): Readonly<{consume(): boolean}>;
+}>;
+
 /** The last admission gate before provider execution. Only an installed exclusive
  * route lease admits the operation; every other outcome refuses it. The lease
  * owner keeps its own namespace custody, so release is a second method here and
@@ -36,7 +44,8 @@ export interface DockerLinuxOperationRouteAdmission {
     deadlineEpochMs: number;
     lifetimeMs: number;
   }>): Promise<
-    | Readonly<{kind: "installed"; owner: LinuxExclusiveRouteOwner}>
+    | Readonly<{kind: "installed"; owner: LinuxExclusiveRouteOwner;
+      firstWrite: DockerLinuxOperationRouteFirstWrite}>
     | Readonly<{kind: "unsupported"; reason: "owner"}>>;
   /** Called only after the exact container was proven absent. "none" means no
    * namespace or pinned tool was ever opened for this attempt. */
@@ -80,6 +89,11 @@ export type DockerLinuxPostClaimDependencies = Readonly<{
   deadlines: DockerLinuxPostClaimDeadlines;
   /** Absent until the route owner is wired. Absence is refused before allocation. */
   routeAdmission?: DockerLinuxOperationRouteAdmission;
+  /** Receives the installed lease's first-write authority once, after the ledger
+   * observed the installation and before preparation reports success. Absence
+   * leaves the broker session without a route cut; a refusal here fails the
+   * preparation rather than admitting an unenforced turn. */
+  publishRouteFirstWrite?(port: DockerLinuxOperationRouteFirstWrite): void;
 }>;
 
 type Stage = "owner" | "subject" | "lifecycle" | "journal" | "network" | "launch" | "listener"
@@ -288,6 +302,9 @@ export const createDockerLinuxPostClaimPreparation = (
       if (admitted.kind !== "installed") {return await settle(admitted.reason);}
       await observers.observeRouteInstalled(admitted.owner, endpoint);
       routeInstalled = true;
+      // The broker's first-write gate is handed over only after the ledger has
+      // observed the installation, so no session can hold an unobserved lease.
+      dependencies.publishRouteFirstWrite?.(admitted.firstWrite);
       assertOpen();
       return prepared();
     } catch {
