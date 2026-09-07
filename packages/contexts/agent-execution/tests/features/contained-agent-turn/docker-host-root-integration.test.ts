@@ -189,12 +189,12 @@ test("cleanup timeout during beforeLaunch retains the original preparation and n
   assert.equal(f.network.state.calls.some(call => call.startsWith("DELETE ")), false);
   assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "unsupported", reason: "owner"});
   gate.resolve();
-  // The ledger has no container-absence observation yet. Its existing release
-  // precondition keeps the allocated network quarantined after this refusal.
-  assert.deepEqual(await preparing, {kind: "quarantined"});
-  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "quarantined"});
+  // Once the hook settles, durable no-creation evidence permits exact network
+  // release. The earlier timeout must not permanently cache quarantine.
+  assert.deepEqual(await preparing, {kind: "unsupported", reason: "broker"});
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
   assert.equal(selections, 1);
-  assert.equal(f.network.state.calls.filter(call => call.startsWith("DELETE ")).length, 0);
+  assert.equal(f.network.state.calls.filter(call => call.startsWith("DELETE ")).length, 1);
   assert.equal(f.events.includes("create"), false);
   assert.throws(() => owner.takePrepared(f.claimed));
 });

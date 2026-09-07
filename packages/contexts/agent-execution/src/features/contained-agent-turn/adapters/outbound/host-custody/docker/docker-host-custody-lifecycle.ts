@@ -164,7 +164,6 @@ export class DockerHostCustodyLifecycle {
     const locator = dockerCustodyAttemptLocator(key);
     const attemptFence = JSON.stringify([key.tenantId, key.projectId, key.operationId, key.attemptId]);
     if (this.failedBeforeCreate.has(locator) || this.failedBeforeCreate.has(attemptFence) ||
-        this.failedBeforeCreate.size >= this.maxLiveAuthorityBindings * 2 ||
         this.liveLaunches.has(locator) || this.liveLaunches.size >= this.maxLiveAuthorityBindings) {
       throw new TypeError("Docker Host Custody requires unused launch capacity");
     }
