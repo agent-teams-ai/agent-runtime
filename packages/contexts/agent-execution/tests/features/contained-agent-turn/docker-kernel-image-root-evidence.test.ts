@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import {dirname, join} from "node:path";
 import test from "node:test";
 import {DockerKernelHostCustody} from "../../../dist/features/contained-agent-turn/composition/docker-kernel-host-custody.js";
+import {DockerKernelEvidence} from "../../../dist/features/contained-agent-turn/composition/docker-kernel-evidence.js";
 import {createHostPrivateRootOwnerFactory} from "../../../dist/features/contained-agent-turn/composition/host-private-root-owner.js";
 import {DockerHostCustodyLifecycle} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js";
 import {DockerCustodyJournal} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/docker-custody-journal.js";
@@ -20,7 +21,7 @@ import {call, disposable} from "../../fixtures/docker-engine-test-fixture.ts";
 const retainedRoots = new Set<object>();
 
 for (const image of ["same-generation", "wrong-generation", "missing"] as const) {
-  test(`kernel identity joins factory root, exact image witness and finalized native spawn sample: ${image}`, async t => {
+  test(`kernel identity joins factory root, exact image witness and finalized native spawn sample: ${image}`, {skip: process.platform !== "linux" ? "Requires Linux descriptor custody" : false, timeout: 30_000}, async t => {
     const directory = await disposable(); t.after(() => fs.rm(directory, {recursive: true, force: true}));
     const f = await imageInitFixture(directory);
     const create = {...f.input, operationNonceSha256: digest("operation"), launchFingerprintSha256: digest("launch")};
@@ -76,6 +77,10 @@ for (const image of ["same-generation", "wrong-generation", "missing"] as const)
       exec: {...providerExec, executableSha256: plan.executableSha256}, call: call()};
     const io = prepareDockerProviderProcessIo(processInput);
     evidence.attach(lifecycle, launch, io); evidence.finalize(plan, processInput.exec);
+    const conflicting = new DockerKernelEvidence(raw.reservation(handle.custodyRef).input);
+    conflicting.attachPrivateRoot(root);
+    conflicting.attach(lifecycle, launch, io);
+    conflicting.finalize(plan, {...processInput.exec, argv: [...processInput.exec.argv, "conflicting-argument"]});
     await createDockerProviderProcessBridge().open({...processInput, preparedIo: io}); await tick();
     const snapshot = evidence.snapshot();
     assert.equal(snapshot.spawn, "acknowledged");
@@ -84,6 +89,10 @@ for (const image of ["same-generation", "wrong-generation", "missing"] as const)
     assert.equal(snapshot.privateRoot.status, "active");
     assert.equal(snapshot.closure.status, "unproven");
     assert.equal(channel.readers, 1);
+    // A conflicting finalized execution stays ambiguous with either a proved
+    // image witness or an absent/foreign one; image proof cannot override it.
+    assert.equal(conflicting.snapshot().identity.status, "ambiguous");
+    assert.equal(conflicting.snapshot().identity.hostLifecycleGenerationSha256, binding.hostLifecycleGenerationSha256);
     await channel.close();
   });
 }

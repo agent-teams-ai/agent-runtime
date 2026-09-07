@@ -1,14 +1,13 @@
 import {createHostPrivateRootOwnerFactory} from "./host-private-root-owner.js";
 import {createDockerHostReservationOwners} from "./docker-host-reservation-owners.js";
-import {snapshotDockerImageInitLock, type DockerImageInitLock}
+import {snapshotDockerImageInitLock, prepareDockerProviderProcessIo, dockerProviderProcessMountFacts, isConcreteLinuxDockerLifecycle,
+  type DockerImageInitLock, type PreparedDockerProviderIo, type DockerProviderProcessInput, type DockerHostCustodyLifecycle}
   from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {createCodexDockerPathProjection, CodexAppServerCurrentKernelAdapter} from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {randomUUID} from "node:crypto";
 import {custodyDataRecord, sameHostCustodyBinding, isHostCustodyDataCallback, ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {DockerKernelHostCustody} from "./docker-kernel-host-custody.js";
-import {prepareDockerProviderProcessIo, type PreparedDockerProviderIo, type DockerProviderProcessInput,
-  dockerProviderProcessMountFacts, isConcreteLinuxDockerLifecycle, type DockerHostCustodyLifecycle} from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {createCodexAppServerFinalizableLaunchPlan, isCodexNativeBrokerLaunchPlan, type CodexAppServerLaunchPlan}
   from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import type {ContainedTurnKernelProviderPort} from "../application/ports/outbound/contained-turn-ports.js";

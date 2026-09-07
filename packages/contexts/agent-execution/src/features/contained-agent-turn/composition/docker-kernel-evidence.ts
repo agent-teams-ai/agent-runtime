@@ -83,15 +83,8 @@ export class DockerKernelEvidence {
       planSha256, fingerprintSha256: planSha256});
   }
 
-  private identity(): HostCustodyEvidence["identity"] {
+  private imageRootProof() {
     const source = this.#source;
-    const observation = source?.io.observation;
-    const execution = source === undefined ? undefined : retainedObservation(source.lifecycle, source.launch).execution;
-    const instance = observation?.providerInstance;
-    const conflicting = this.#finalExec !== undefined && execution !== undefined && execution !== null &&
-      (!sameHostCustodyBinding(execution.exec.argv, this.#finalExec.argv) ||
-        !sameHostCustodyBinding(execution.exec.environment, this.#finalExec.environment) ||
-        execution.exec.executableSha256 !== this.#finalExec.executableSha256);
     const root = this.rootBinding();
     let imageProved = false;
     if (source !== undefined && root !== undefined) {
@@ -103,11 +96,24 @@ export class DockerKernelEvidence {
         imageProved = witness.scope === "created-image-init-readback";
       } catch { /* Missing or foreign readback remains unproven. */ }
     }
+    return {imageProved, hostLifecycleGenerationSha256: root?.hostLifecycleGenerationSha256 ?? empty};
+  }
+
+  private identity(): HostCustodyEvidence["identity"] {
+    const source = this.#source;
+    const observation = source?.io.observation;
+    const execution = source === undefined ? undefined : retainedObservation(source.lifecycle, source.launch).execution;
+    const instance = observation?.providerInstance;
+    const conflicting = this.#finalExec !== undefined && execution !== undefined && execution !== null &&
+      (!sameHostCustodyBinding(execution.exec.argv, this.#finalExec.argv) ||
+        !sameHostCustodyBinding(execution.exec.environment, this.#finalExec.environment) ||
+        execution.exec.executableSha256 !== this.#finalExec.executableSha256);
+    const {imageProved, hostLifecycleGenerationSha256} = this.imageRootProof();
     const proved = imageProved && this.#finalExec !== undefined && executionAcknowledged(execution, observation) &&
       instance?.status === "observed" && observation?.executableMapping === "observed";
     return Object.freeze({binarySha256: this.#fingerprint.executableSha256,
       childProcessInstanceSha256: instance === undefined || instance.status === "missing" ? empty : hash([source?.launch.authority, instance.identity]),
-      hostLifecycleGenerationSha256: root?.hostLifecycleGenerationSha256 ?? empty, planSha256: this.#fingerprint.planSha256,
+      hostLifecycleGenerationSha256, planSha256: this.#fingerprint.planSha256,
       status: conflicting ? "ambiguous" : proved ? "proved" : "unproven"});
   }
 
