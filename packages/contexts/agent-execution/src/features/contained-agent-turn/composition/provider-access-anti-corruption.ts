@@ -316,6 +316,7 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
         exactFrozenDataRecord(outcome, ["kind", "receipt"]);
         const receipt = outcome.receipt;
         exactFrozenDataRecord(receipt, ["acceptedAuthorityDigest", "accessRef", "authorityHeadDigestAtConsumption", "bindingDigest", "bindingRevision", "claimBeforeControlTime", "claimBindingDigest", "consumedAtControlTime", "consumptionDigest", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "grantRequestId", "opaqueOwnerEvidenceRef", "operationId", "provider", "providerAccountRef", "providerRouteRef", "purpose", "requestDigest", "scope", ...(publish === undefined && Object.hasOwn(receipt, "authorityHeadDigest") ? ["authorityHeadDigest"] : [])]);
+        if (!scopeMatches(receipt.scope, scope)) {throw new TypeError("PA consumed scope mismatch");}
         return { kind: "consumed", receipt: normalizeContainedTurnConsumedGrantReceipt("provider_access", subject, {
           authorityFacts: Object.freeze({
             acceptedAuthorityDigest: receipt.acceptedAuthorityDigest, accessRef: receipt.accessRef,
@@ -332,6 +333,7 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
         }) };
       }
       if (outcome.kind === "prevented") {
+        exactFrozenDataRecord(outcome, ["kind", "prevention"]);
         const prevention = snapshotBoundPrevention(outcome.prevention, request);
         return { kind: "prevented", preventionProofId: containedTurnIdentity("proof", `proof:provider-access:dispatch:${digestContainedTurnCanonicalValue(prevention as never)}`) };
       }
@@ -359,6 +361,9 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
       const outcome = await ownerOutputValue(owner.resolve(request));
       if (outcome.evidence.purpose !== "acceptance") {return { evidenceId: evidenceId(outcome.evidence, "acceptance"), kind: "indeterminate", reason: "authority_unknown" };}
       if (outcome.kind === "resolved") {exactFrozenDataRecord(outcome, ["kind", "binding", "evidence"]); const binding = snapshot(outcome.binding, outcome.evidence); if (binding.provider !== input.provider || binding.tenantId !== input.scope.tenantId || binding.projectId !== input.scope.projectId) {throw new TypeError("PA current selector mismatch");} return { acceptanceProofId: proofId(outcome.evidence, "acceptance"), acceptanceResolutionDigest: resolutionDigest(binding, outcome.evidence, "acceptance"), kind: "resolved", snapshot: binding };}
+      if (outcome.kind !== "unavailable") {throw new TypeError("PA invalid resolution kind");}
+      exactFrozenDataRecord(outcome, ["kind", "reason", "evidence"]);
+      exactFrozenDataRecord(outcome.evidence, ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
       if (outcome.reason === "revoked" || outcome.reason === "not_found") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "acceptance"), reason: "access_denied" };}
       return { evidenceId: boundaryFailureEvidenceId("resolve", request), kind: "indeterminate", reason: "authority_unknown" };
     } catch {
@@ -372,6 +377,9 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
       const outcome = await ownerOutputValue(owner.revalidate(request));
       if (outcome.evidence.purpose !== "dispatch") {return { evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate", reason: "authority_unknown" };}
       if (outcome.kind === "valid") {exactFrozenDataRecord(outcome, ["kind", "binding", "evidence"]); const binding = snapshot(outcome.binding, outcome.evidence); if (containedTurnProviderAccessSnapshotDigest(binding) !== containedTurnProviderAccessSnapshotDigest(input.acceptedSnapshot)) {throw new TypeError("PA current binding changed");} return { dispatchProofId: proofId(outcome.evidence, "dispatch"), dispatchResolutionDigest: resolutionDigest(binding, outcome.evidence, "dispatch"), kind: "current", snapshot: binding };}
+      if (outcome.kind !== "rejected") {throw new TypeError("PA invalid revalidation kind");}
+      exactFrozenDataRecord(outcome, ["kind", "reason", "evidence"]);
+      exactFrozenDataRecord(outcome.evidence, ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
       if (outcome.reason === "revoked" || outcome.reason.endsWith("_changed") || outcome.reason === "credential_rotated" || outcome.reason === "revision_changed") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "dispatch"), reason: "access_revoked" };}
       return { evidenceId: boundaryFailureEvidenceId("revalidate", request), kind: "indeterminate", reason: "authority_unknown" };
     } catch {
