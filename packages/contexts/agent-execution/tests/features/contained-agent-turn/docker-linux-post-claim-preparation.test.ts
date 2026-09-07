@@ -125,13 +125,21 @@ test("the route lease releases its namespace only after the container is gone", 
   assert.deepEqual(order, ["remove", "route-release"]);
 });
 
-test("a quarantined route release keeps the whole preparation quarantined", async t => {
-  const f = await postClaimFixture(t);
-  f.route.release = "quarantined";
-  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
-  assert.deepEqual(await preparation.prepareClaimed(f.claimed), {kind: "quarantined"});
-  assert.ok(f.events.includes("route-release"));
-});
+for (const [release, expected] of [["closed", {kind: "unsupported", reason: "owner"}],
+  ["quarantined", {kind: "quarantined"}]] as const) {
+  test(`a ${release} route release decides the verdict of an installed but cut off route`, async t => {
+    const f = await postClaimFixture(t);
+    f.route.lease = f.syntheticLease();
+    f.route.release = release;
+    // The route is installed and observed, then the caller cuts off. Everything
+    // else releases cleanly, so only the lease's own outcome is left to decide.
+    f.hooks["route-admission"] = () => {f.controller.abort();};
+    const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+    assert.deepEqual(await preparation.prepareClaimed(f.claimed), expected);
+    assert.ok(kinds(f.v4Storage.journal).includes("route_installed"));
+    assert.ok(f.events.includes("route-release"));
+  });
+}
 
 for (const [fault, expected] of [["identity", {kind: "unsupported", reason: "network"}],
   ["journal", {kind: "unsupported", reason: "journal"}]] as const) {
