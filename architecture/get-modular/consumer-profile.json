@@ -1,0 +1,47 @@
+{
+  "$schema": "./consumer-profile.schema.json",
+  "schemaVersion": 1,
+  "status": "pending",
+  "pending": [
+    "Immutable central ADR-0026 document pin",
+    "Accepted local ADR-0015 path",
+    "Reviewed package archive identities",
+    "Declared Foundation policy census and exact composition mappings",
+    "Root command chain integration"
+  ],
+  "standard": {
+    "repository": "agent-teams-ai/get-modular",
+    "path": "docs/architecture/common-assembly.md",
+    "anchor": "consumer-module-standard",
+    "decision": "ADR-0026",
+    "commit": null,
+    "sha256": null
+  },
+  "authority": {
+    "id": "ADR-0015",
+    "path": null,
+    "owner": "Embedded Runtime",
+    "scope": "embedded-runtime passive setup"
+  },
+  "fms": {
+    "profile": "architecture/feature-module-standard/candidate-profile.json",
+    "sha256": "0cad5566f768567e6186dc8ae5768bfba5f2bc3edf18c85c5e668fad3dde7aad",
+    "features": [
+      "runtime-installation-discovery",
+      "contained-agent-turn",
+      "contained-turn-access"
+    ]
+  },
+  "productionRoots": [],
+  "boundaries": [],
+  "compositions": [],
+  "exceptions": [],
+  "packages": [],
+  "enforcement": {
+    "commands": {},
+    "roots": [
+      "check:fast",
+      "check"
+    ]
+  }
+}
