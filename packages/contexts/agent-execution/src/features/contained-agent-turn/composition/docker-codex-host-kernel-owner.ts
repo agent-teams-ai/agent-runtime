@@ -1,7 +1,6 @@
 import {createCodexDockerPathProjection, CodexAppServerCurrentKernelAdapter} from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {randomUUID} from "node:crypto";
-import {types} from "node:util";
-import {custodyDataRecord, sameHostCustodyBinding, ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
+import {custodyDataRecord, sameHostCustodyBinding, isHostCustodyDataCallback, ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {DockerKernelHostCustody} from "./docker-kernel-host-custody.js";
 import {prepareDockerProviderProcessIo, type PreparedDockerProviderIo, type DockerProviderProcessInput,
@@ -19,7 +18,6 @@ type Prepare = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0];
 type Kernel = Prepare["kernel"];
 type FinalizeInput = Parameters<DockerLinuxClaimedJoin<PreparedDockerProviderIo>["finishClaimed"]>[0];
 const apply = Reflect.apply;
-const isProxy = types.isProxy;
 export interface CreateDockerCodexHostKernelOwnerOptions {
   readonly hostBootId: string;
   readonly hostInstanceId: string;
@@ -55,7 +53,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   const options = Object.freeze({...data, platformTarget: Object.freeze({...custodyDataRecord(data.platformTarget)})});
   if (options.platformTarget.platform !== "linux") {throw new TypeError("Docker requires Linux");}
   const finishClaimed = options.finishClaimed;
-  if (finishClaimed !== undefined && (typeof finishClaimed !== "function" || isProxy(finishClaimed))) {
+  if (finishClaimed !== undefined && !isHostCustodyDataCallback(finishClaimed)) {
     throw new TypeError("Docker native finalizer must be a callable data property");
   }
   const records = new Map<string, Retained>();

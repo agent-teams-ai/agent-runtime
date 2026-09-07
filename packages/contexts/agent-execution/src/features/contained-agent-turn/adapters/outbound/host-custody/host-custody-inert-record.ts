@@ -16,3 +16,7 @@ export const custodyDataRecord = <Value extends object>(value: Value): Value => 
 
 /** Compare retained Host reservation and execution binding data without coercion. */
 export const sameHostCustodyBinding = (left: unknown, right: unknown): boolean => isDeepStrictEqual(left, right);
+
+/** Inspect callback identity without reading callable properties or proxy traps. */
+export const isHostCustodyDataCallback = (value: unknown): value is (...args: never[]) => unknown =>
+  typeof value === "function" && !types.isProxy(value);
