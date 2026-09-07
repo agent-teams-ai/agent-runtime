@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions}
   from "../../../dist/features/contained-agent-turn/composition/docker-codex-host-kernel-owner.js";
+import {imageLock} from "../../fixtures/docker-image-init-fixture.ts";
 import {connectionFixture} from "./support/docker-codex-kernel-fixture.ts";
 import {committedDispatchProofFixture} from "./support/committed-dispatch-proof-fixture.ts";
 import {containedTurnIdentity as id} from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
@@ -65,6 +66,7 @@ test(`actual kernel custody refuses missing ${missing} before Docker allocation 
   const f = await connectionFixture(); t.after(() => f.contain());
   let allocations = 0; let executions = 0;
   const owner = createDockerCodexHostKernelOwner({cleanupMilliseconds: 100,
+    ...(missing === "image" ? {finishClaimed: async () => unused()} : {imageInitLock: imageLock()}),
     hostBootId: "host-boot:docker", hostInstanceId: "host-instance:docker", platformTarget: f.options.platformTarget,
     effectCustody: f.options.effectCustody,
     launchRecords: {async resolve() {return {boundary: f.options.boundary, executablePath: f.options.plan.executablePath,
