@@ -9,8 +9,8 @@ import {fixture} from "./contained-turn-current-egress-owners.fixture.ts";
 const AUTHORITIES = ["providerAccess", "materializer", "runtimeSecurity", "verifier"] as const;
 /** Every remaining member of the broker session record. `identity`, `clock`,
  * `localAuthorityCut` and `journal` are replaced by the Host owners at bind
- * time; the other six have no production owner and are supplied by whoever
- * does own them. Nothing here is a real resolver, transport or route. */
+ * time; the other six are supplied by whoever owns them. Nothing here is a real
+ * resolver, transport or route: this suite pins the record, not its producers. */
 const PORTS = ["identity", "ids", "providerAccessSnapshot", "route", "localAuthorityCut", "journal",
   "resolver", "transport", "clock", "evidence"] as const;
 const ports = (): ContainedTurnHttpEgressBrokerPorts =>

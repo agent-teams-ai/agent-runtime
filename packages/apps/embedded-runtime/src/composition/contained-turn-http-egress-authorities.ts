@@ -21,10 +21,13 @@ export type ContainedTurnHttpEgressAuthorities =
  * `identity`, `clock` and `localAuthorityCut` are replaced by the Host local cut
  * owner when it activates the session, and `journal` by the Host reservation's
  * own consumption journal, so whatever is supplied for them here never reaches
- * the broker. `ids`, `providerAccessSnapshot`, `route`, `resolver`, `transport`
- * and `evidence` have no production owner anywhere in this repository yet: they
- * must come from the trusted composition root that owns them, and this module
- * deliberately fabricates none of them.
+ * the broker. `route`, `providerAccessSnapshot` and `transport` do have owners:
+ * `createContainedTurnHttpEgressRoute` projects the first two from a Provider
+ * Access endorsement and `createContainedTurnHttpUpstreamTransport` binds the
+ * implemented Node TLS adapter, but the trusted root decides when to use them,
+ * so they arrive here as ordinary supplied ports. `ids`, `resolver` and
+ * `evidence` have no production owner anywhere in this repository: they must
+ * come from whoever owns them, and this module fabricates none of them.
  *
  * `routeFirstWrite` is the one optional member: it exists only when an installed
  * exclusive route lease published its first-write authority for this operation.

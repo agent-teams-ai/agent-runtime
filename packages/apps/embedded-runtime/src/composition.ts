@@ -65,6 +65,10 @@ export {
   type ContainedTurnHttpEgressBrokerPorts,
 } from "./composition/contained-turn-http-egress-authorities.js";
 export {
+  createContainedTurnHttpEgressRoute,
+  createContainedTurnHttpUpstreamTransport,
+} from "./composition/contained-turn-http-egress-upstream.js";
+export {
   createContainedTurnLinuxRouteBinding,
   type ContainedTurnLinuxRouteCampaign,
 } from "./composition/contained-turn-linux-route-binding.js";
