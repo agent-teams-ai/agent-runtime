@@ -116,3 +116,8 @@ export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerO
 export { createContainedTurnOperationProviderAccessPort, type OuterContainedTurnProviderAccessOperation } from "./composition/provider-access-anti-corruption.js";
 export { createContainedTurnSecurityAcceptancePort, type OuterContainedTurnSecurityAcceptance, type ContainedTurnSecurityAcceptanceProfile } from "./composition/runtime-security-acceptance-anti-corruption.js";
 export {createDockerCodexNativeBrokerFinalizer, type DockerCodexNativeBrokerFinalizerInput} from "./composition/docker-codex-native-broker-finalizer.js";
+export {
+  createHostPrivateRootOwnerFactory,
+  type HostPrivateRootBinding, type HostPrivateRootCaptureOptions,
+  type HostPrivateRootOwner, type HostPrivateRootReadback,
+} from "./composition/host-private-root-owner.js";
