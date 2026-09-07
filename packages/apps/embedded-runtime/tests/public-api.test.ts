@@ -169,3 +169,15 @@ test("application and contracts stay independent from adapters and runtime frame
     );
   }
 });
+
+
+test("private default composition is async and synchronous leaf is internal", async () => {
+  const composition = await import("../dist/composition.js");
+  assert.equal("createAgentRuntimeHost" in composition, false);
+  assert.equal("createRuntimeSetupAttempt" in composition, false);
+  const pending = composition.createDefaultAgentRuntimeHost();
+  assert.ok(pending instanceof Promise);
+  await (await pending).dispose();
+  const ordinary = await readDeclarationClosure(join(packageRoot, "dist", "index.d.ts"));
+  assert.doesNotMatch(ordinary, /@get-modular|CapabilityContract|FactoryHandle/u);
+});

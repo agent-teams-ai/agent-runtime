@@ -1,6 +1,6 @@
+export { createDefaultAgentRuntimeHost, type DefaultAgentRuntimeHostOptions } from "./composition/default-agent-runtime-host.js";
+export { AgentRuntimeHostCreationError, type AgentRuntimeHostCreationErrorCode, type AgentRuntimeHostCreationPhase } from "./composition/agent-runtime-host-creation-error.js";
 export {
-  createAgentRuntimeHost,
-  createDefaultAgentRuntimeHost,
   AgentRuntimeHostDisposalIncompleteError,
   AgentRuntimeHostLifecycleError,
   ContainedTurnOwnerContractError,

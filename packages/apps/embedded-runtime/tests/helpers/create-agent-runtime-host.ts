@@ -1,5 +1,5 @@
+import { createAgentRuntimeHost as createClosedAgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
 import {
-  createAgentRuntimeHost as createClosedAgentRuntimeHost,
   type BuildClaudeCodeSetupViewDependencies,
   type BuildCodexSetupViewDependencies,
 } from "../../dist/composition.js";

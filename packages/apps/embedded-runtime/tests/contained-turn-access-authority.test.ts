@@ -1,3 +1,4 @@
+import { createAgentRuntimeHost } from "../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -92,7 +93,6 @@ import {
   AgentRuntimeHostDisposalIncompleteError,
   bindContainedTurnCapabilityAuthority,
   ContainedTurnOwnerContractError,
-  createAgentRuntimeHost,
   type AuthorityBoundContainedTurnCapability,
   type ContainedTurnCapabilityBundle,
 } from "../dist/composition.js";
