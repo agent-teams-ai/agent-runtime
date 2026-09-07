@@ -48,3 +48,23 @@ export type {
 } from "./application/ports/outbound/claude-code-setup-inspection-planner.js";
 
 export { bindContainedTurnCapabilityAuthority, type AuthorityBoundContainedTurnCapability } from "./composition/contained-turn-authority-capability.js";
+export {
+  createContainedTurnHttpProviderAccessAuthorization,
+  createContainedTurnHttpCredentialMaterialization,
+  type ContainedTurnHttpProviderAccessOwner,
+} from "./composition/contained-turn-http-provider-access.js";
+export { bindContainedTurnHttpRuntimeSecurity } from "./composition/contained-turn-http-runtime-security.js";
+export {
+  createContainedTurnCurrentEgressOwners,
+  type ContainedTurnCurrentEgressOwnersInput,
+} from "./composition/contained-turn-current-egress-owners.js";
+export {
+  bindContainedTurnHttpEgressAuthorities,
+  composeContainedTurnHttpEgressSession,
+  type ContainedTurnHttpEgressAuthorities,
+  type ContainedTurnHttpEgressBrokerPorts,
+} from "./composition/contained-turn-http-egress-authorities.js";
+export {
+  createContainedTurnLinuxRouteBinding,
+  type ContainedTurnLinuxRouteCampaign,
+} from "./composition/contained-turn-linux-route-binding.js";
