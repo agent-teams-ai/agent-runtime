@@ -9,7 +9,7 @@ export { authority, input, scope };
 
 type Row = Record<string, unknown>;
 type Result = { rows: Row[]; rowCount: number | null };
-type Table = "authority_heads" | "consume_requests" | "consumptions" | "settlement_requests";
+type Table = "decisions" | "authority_heads" | "consume_requests" | "consumptions" | "settlement_requests";
 type Write = { table: Table; key: string; row: Row };
 export const deferred = <Value = void>() => {
   let complete!: (value: Value | PromiseLike<Value>) => void;
@@ -26,7 +26,7 @@ const storedText = (value: unknown): string => String(value);
 export class DispatchDatabase implements DispatchPgPool {
   version: number | undefined;
   readonly tables: Record<Table, Map<string, Row>> = {
-    authority_heads: new Map(), consume_requests: new Map(),
+    decisions: new Map(), authority_heads: new Map(), consume_requests: new Map(),
     consumptions: new Map(), settlement_requests: new Map(),
   };
   readonly clients: DispatchClient[] = [];
@@ -127,6 +127,15 @@ export class DispatchClient implements DispatchPgClient {
     if (sql.startsWith("SELECT c.operation_key")) {return this.readConsumption(values);}
     if (sql.includes("FROM runtime_security_dispatch_v1.settlement_requests WHERE operation_key")) {
       return result([...this.rows("settlement_requests").values()].filter(row => row.operation_key === values[0]).map(row => structuredClone(row)));
+    }
+    if (sql.includes('runtime_security_dispatch_acceptance_v1.decisions')) {
+      const key = String(values[0]);
+      const current = this.rows('decisions').get(key);
+      if (sql.startsWith('SELECT')) {return result(current === undefined ? [] : [structuredClone(current)]);}
+      assert.ok(sql.startsWith('INSERT') && sql.includes('ON CONFLICT'));
+      if (current !== undefined) {return result([], 0);}
+      this.writes.push({ table: 'decisions', key, row: { decision: values[1] } });
+      return result([], 1);
     }
     const table = sql.match(/runtime_security_dispatch_v1\.(authority_heads|consume_requests|consumptions|settlement_requests)/u)?.[1] as Table;
     assert.ok(table, `unsupported synthetic SQL: ${sql}`);

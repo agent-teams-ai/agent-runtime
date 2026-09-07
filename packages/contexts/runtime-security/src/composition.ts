@@ -189,3 +189,13 @@ export type {
   TrustedEgressCompositionScopeV2,
   TrustedHostRequestProjectionV2,
 } from "./features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.js";
+export { createDispatchAcceptanceFeature, type DispatchAcceptanceDependencies } from
+  './features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.js';
+export type { DispatchAcceptanceIntent, DispatchAcceptancePolicy, DispatchAcceptanceDecision,
+  DispatchAcceptanceStore, DispatchPolicyReadPort, DispatchPublicationRepository,
+  DispatchAcceptedPreparation } from
+  './features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-acceptance-owner.js';
+export { createPostgresDispatchAcceptanceStore } from
+  './features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-acceptance-store.js';
+export { createPostgresDispatchConsumptionRepository } from
+  './features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js';

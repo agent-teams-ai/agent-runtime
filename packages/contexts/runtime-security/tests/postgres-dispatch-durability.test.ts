@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createContainedTurnDispatchAuthorityFeature, createNodeSha256DispatchDigest } from "../dist/composition.js";
+import { createContainedTurnDispatchAuthorityFeature, createNodeSha256DispatchDigest,
+  createDispatchAcceptanceFeature, createPostgresDispatchAcceptanceStore } from "../dist/composition.js";
 import { createPostgresDispatchConsumptionRepository } from
   "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
 import { lockId } from "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.js";
@@ -26,7 +27,7 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
   const a = pool(); const b = pool();
   const version = await a.query("SHOW server_version_num");
   assert.ok(Number(version.rows[0]?.server_version_num) >= 180000, "Requires PostgreSQL 18 or newer");
-  const existing = await a.query("SELECT 1 FROM pg_namespace WHERE nspname = 'runtime_security_dispatch_v1'");
+  const existing = await a.query("SELECT 1 FROM pg_namespace WHERE nspname IN ('runtime_security_dispatch_v1', 'runtime_security_dispatch_acceptance_v1')");
   assert.equal(existing.rowCount, 0, "Refuse an existing RS schema; orchestration owns the new database");
   const owners: ReturnType<typeof createPostgresDispatchConsumptionRepository>[] = [];
   t.after(() => {for (const owner of owners) {owner.close();}});
@@ -177,4 +178,43 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
     } finally {await blocker.query("ROLLBACK"); blocker.release();}
     assert.deepEqual(await two.repository.readAuthority(key), { headVersion: "0" });
   });
+  await t.test("real acceptance persistence and publication before consumption across owners", async () => {
+    const options = { connectTimeoutMs: 5_000, queryTimeoutMs: 10_000, transactionTimeoutMs: 20_000 };
+    const decisionsA = createPostgresDispatchAcceptanceStore({ pool: a, ...options });
+    const decisionsB = createPostgresDispatchAcceptanceStore({ pool: b, ...options });
+    t.after(() => {decisionsA.close(); decisionsB.close();});
+    await decisionsA.migrate();
+    const intent = { scope, operationId: "accepted-publication", providerId: "provider-a",
+      intentDigest: "intent-a", policyRevision: "authority-revision-7" };
+    const policy = { scope, providerId: intent.providerId, intentDigest: intent.intentDigest,
+      policyRevision: intent.policyRevision, enabled: true, revoked: false,
+      constraintsDigest: "constraints-digest-a", containmentPolicyDigest: "containment-policy-digest-a",
+      validFromControlTime: 0, claimBeforeControlTime: 200 };
+    const deps = { policy: { async read() {return policy;} }, clock: { now: () => 100 },
+      digest: createNodeSha256DispatchDigest() };
+    const ownerA = createDispatchAcceptanceFeature({ ...deps, repository: one.repository, decisions: decisionsA });
+    const ownerB = createDispatchAcceptanceFeature({ ...deps, repository: two.repository, decisions: decisionsB });
+    const accepted = await ownerA.evaluateForAcceptance(intent);
+    assert.equal(accepted.status, "allowed");
+    if (accepted.status !== "allowed") {throw new Error("expected scoped decision");}
+    assert.deepEqual(await ownerB.evaluateForAcceptance(intent), accepted);
+    const request = input({ operationId: intent.operationId,
+      acceptedAuthorityDigest: accepted.decision.decisionDigest,
+      expectedAuthorityHeadDigest: accepted.decision.decisionDigest });
+    const projection = { acceptance: intent, decisionDigest: accepted.decision.decisionDigest,
+      authorityGeneration: request.authorityGeneration, providerBindingDigest: request.providerBindingDigest,
+      claimBindingDigest: request.claimBindingDigest, requestDigest: request.requestDigest,
+      grantRequestId: request.grantRequestId };
+    const results = await Promise.all([ownerA.publishAndConsumeForDispatch(projection, request),
+      ownerB.publishAndConsumeForDispatch(projection, request)]);
+    assert.equal(results[0]!.status, "consumed");
+    assert.deepEqual(results[0], results[1]);
+    assert.equal((await two.repository.readAuthority(operation(intent.operationId))).headVersion, "1");
+    await assert.rejects(a.query("UPDATE runtime_security_dispatch_acceptance_v1.decisions SET decision = decision"));
+    await assert.rejects(a.query("DELETE FROM runtime_security_dispatch_acceptance_v1.decisions"));
+    await one.repository.revokeAuthority(operation(intent.operationId), "1");
+    assert.deepEqual(await ownerB.publishAndConsumeForDispatch(projection, request), results[0]);
+  });
+
+
 });
