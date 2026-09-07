@@ -56,8 +56,10 @@ product.
 - `deployment qualified`: the exact release topology passes operational,
   security, upgrade, rollback, and disaster-recovery gates.
 
-No current domain slice is `implementation qualified`. No current target is
-`deployment qualified`.
+One exact target is `implementation qualified`: the Docker/Linux Codex enforced
+network route registered as `docker-linux-codex-enforced-network-route`. Every
+other registered target remains at most `scoped qualified`, no domain slice is
+qualified as a whole, and no current target is `deployment qualified`.
 
 ## Cross-cutting authority invariants
 
@@ -357,22 +359,40 @@ Contained Agent Turn V1 accepted:
   attempt, workspace, custody, receipt, Host, and authority identities. V1 has
   no Module Kit dependency.
 
-Contained Agent Turn V1 implementation present; qualification remains open:
+Contained Agent Turn V1 implementation present; one exact route target is
+implementation qualified and everything else remains open:
 
 - Codex `@openai/codex@0.153.4` and Claude Agent SDK `0.3.251` are current
-  candidate implementations only. As of candidate
+  candidate implementations. As of candidate
   `32c639e396a6c1f886545c33d45bfead865d42da`, `0.153.4` supersedes `0.150.1`
   here to match the source-pinned platform tuples and protocol fixtures; this
   revision sync does not transfer historical evidence or promote live qualification.
-  The production/default Embedded Runtime selection path
-  fails closed with `route-enforcement-unqualified` before provider-owner or
-  seven-port feature construction because no exact Provider Access enforced
-  network-route target is registered. A route reference, authority digest,
-  canary receipt, or provider manifest is identity or implementation evidence,
-  not proof of enforced egress. Successor qualification requires independent
-  evidence for the exact package/binary, platform, credential route, and
-  enforced network boundary, followed by explicit qualification-registry and
-  readiness promotion. Native Darwin physical and composite containment remain
+  The production/default Embedded Runtime selection path is conditional rather
+  than a fixed refusal: it constructs the provider owner and the seven-port
+  feature only when two independent facts hold — an authentic route-enforcement
+  capability minted from the complete Linux exclusive route binding, and a
+  qualification-registry row at `implementation` or `deployment` for the exact
+  eight-dimension target. Everything else, including a structural twin of that
+  capability, a single drifted dimension, a promotion for another platform, a
+  weakened registry matching policy or an unreadable registry, still fails
+  closed with `route-enforcement-unqualified` before either construction. The
+  registry now carries exactly one such row,
+  `docker-linux-codex-enforced-network-route`, at `implementation` for the
+  Docker/Linux Codex tuple `@openai/codex:0.153.4+linux-x64` on `linux-x64`
+  (`docs/spikes/docker-linux-enforced-network-route-results.md`). That row is
+  necessary and not sufficient: it is source-level evidence, no kernel route has
+  been installed in it, no live credentialed turn has run, and no composition
+  root can mint the required capability beside a live broker session while the
+  `ids`, `resolver` and `evidence` broker session ports have no production
+  owner. The Claude path is neither promoted nor separately refused: it has no
+  broker seam, and today it fails closed only because its tuple is absent from
+  the registry rather than through an explicit typed `unsupported`. A route
+  reference, authority digest, canary receipt, or provider manifest is identity
+  or implementation evidence, not proof of enforced egress. Deployment
+  qualification of this target additionally requires kernel-installed route
+  evidence on a Linux x64 root host with the pinned tool digests, a live
+  credentialed turn, and explicit qualification-registry and readiness
+  promotion. Native Darwin physical and composite containment remain
   `indeterminate` under ADR-0014;
 
 - Agent Execution implements one provider-neutral operation kernel with
