@@ -80,15 +80,36 @@ export const PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON =
   "route-enforcement-unqualified" as const;
 
 /**
+ * Why a Claude candidate is refused, carried beside the unchanged `reason`
+ * rather than instead of it. `readiness.md`, the runtime-security egress test
+ * and both live canaries pin the single reason token, so a second reason value
+ * would quietly widen a contract they read as one string; a separate optional
+ * detail tells a reader which of the two refusals they are looking at without
+ * touching that token. The distinction is not cosmetic: a registry promotion
+ * lifts the unqualified-target refusal, and nothing in the registry can lift
+ * this one.
+ */
+export const CLAUDE_ROUTE_ENFORCEMENT_UNSUPPORTED_DETAIL = "claude-broker-seam-absent" as const;
+
+export type ProviderRouteEnforcementUnsupportedDetail =
+  typeof CLAUDE_ROUTE_ENFORCEMENT_UNSUPPORTED_DETAIL;
+
+/**
  * Stable construction failure for provider candidates whose exact Provider
- * Access network route has not been promoted in the qualification registry.
+ * Access network route has not been promoted in the qualification registry, or
+ * whose provider has no seam that could enforce such a route at all. `detail`
+ * is present only for the second, provider-level case.
  */
 export class ProviderRouteEnforcementUnsupportedError extends Error {
   public readonly reason = PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON;
+  public readonly detail: ProviderRouteEnforcementUnsupportedDetail | undefined;
 
-  public constructor() {
-    super(PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON);
+  public constructor(detail?: ProviderRouteEnforcementUnsupportedDetail) {
+    super(detail === undefined
+      ? PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON
+      : `${PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON}: ${detail}`);
     this.name = "ProviderRouteEnforcementUnsupportedError";
+    this.detail = detail;
     Object.freeze(this);
   }
 }
@@ -307,14 +328,51 @@ const requireRouteEnforcementTarget = (
 };
 
 /**
+ * Whether the dependency set selects Claude, read only as exact own data.
+ *
+ * Why Claude is refused here, ahead of both route-enforcement facts, and not
+ * left to the registry: enforcing the exclusive network route is a property of
+ * the Host-custodied broker seam, and only the Codex path has one. The Claude
+ * adapter has no broker seam at all, so a Claude turn has nothing that could
+ * open, hold or release the route the two facts below are about. Until the
+ * registry promoted its first target, that was invisible — Claude and Codex
+ * were both refused by the same absent row, so the honest provider-level
+ * statement looked like a property of an empty registry. It is not, and this
+ * check makes the statement in its own right.
+ *
+ * Why it must survive a hypothetical Claude capability and Claude registry
+ * row: both would attest a route that no Claude code path can install, which
+ * is a worse failure than this refusal — an enforcement claim with nothing
+ * enforcing it. This check is therefore removed only by whoever builds the
+ * Claude broker seam, as part of that work and deliberately. It is never
+ * removed to let a registry row take effect.
+ *
+ * An unreadable, accessor-backed or proxied dependency set is not observed
+ * here at all: it falls through to the two facts below, which refuse it
+ * without reading it, exactly as they did before this check existed.
+ */
+const selectsClaudeProvider = (dependencies: HostCustodiedContainedTurnDependencies): boolean => {
+  if (dependencies === null || typeof dependencies !== "object" || trustedIsProxy(dependencies)) {
+    return false;
+  }
+  try {
+    return snapshotContainedTurnProviderSelection(dependencies).selection.kind === "claude";
+  } catch {
+    return false;
+  }
+};
+
+/**
  * @internal Registry-gated assembly. Two independent facts admit a product
  * composition, and neither is a caller boolean: an authentic route-enforcement
  * capability, which only the Linux exclusive route owner factory mints, and an
  * exact whole-tuple promotion in the supplied qualification registry. Every
  * other outcome, including any failure while establishing either fact, is the
- * same stable construction refusal. The registry is a parameter so that the
- * positive path can be exercised against a fixture registry without claiming a
- * promotion the repository has not made.
+ * same stable construction refusal. Ahead of both, a provider whose adapter has
+ * no broker seam is refused outright, because for it no pair of facts could be
+ * the truth. The registry is a parameter so that the positive path can be
+ * exercised against a fixture registry without claiming a promotion the
+ * repository has not made.
  */
 export const composeQualifiedHostCustodiedContainedTurn = (
   dependencies: HostCustodiedContainedTurnDependencies,
@@ -322,6 +380,9 @@ export const composeQualifiedHostCustodiedContainedTurn = (
   featureFactory: typeof createContainedTurnFeatureFromProviderAccess,
   qualificationRegistry: URL,
 ): HostCustodiedContainedTurnComposition => {
+  if (selectsClaudeProvider(dependencies)) {
+    throw new ProviderRouteEnforcementUnsupportedError(CLAUDE_ROUTE_ENFORCEMENT_UNSUPPORTED_DETAIL);
+  }
   let qualified = false;
   try {
     qualified = registryQualifiesRouteTarget(
@@ -335,11 +396,12 @@ export const composeQualifiedHostCustodiedContainedTurn = (
 };
 
 /**
- * Product/default composition. Codex and Claude remain candidate
- * implementations until an exact enforced-egress route is promoted: this
- * repository's registry holds no such promotion, so this entrypoint still
- * refuses every dependency set today, now because the exact target tuple is
- * unqualified rather than because construction was never attempted.
+ * Product/default composition. The Claude path is refused outright while its
+ * adapter has no broker seam, and never reaches the two facts. The Codex path
+ * is conditional: this repository's registry now promotes exactly one Docker
+ * Linux Codex target, so a dependency set carrying an authentic capability for
+ * that exact tuple is admitted, and every other one — including every Codex
+ * candidate without such a capability — is still refused as unqualified.
  */
 export const createHostCustodiedContainedTurn = (
   dependencies: HostCustodiedContainedTurnDependencies,

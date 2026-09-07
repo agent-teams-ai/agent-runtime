@@ -16,6 +16,7 @@ export {
 } from "./composition/agent-runtime-host.js";
 export type { ContainedTurnCapabilityBundle } from "./composition/contained-turn-runtime-access.js";
 export {
+  CLAUDE_ROUTE_ENFORCEMENT_UNSUPPORTED_DETAIL,
   createContainedTurnFeatureFromProviderAccess,
   createHostCustodiedContainedTurn,
   PROVIDER_ROUTE_ENFORCEMENT_UNQUALIFIED_REASON,
@@ -24,6 +25,7 @@ export {
   type ContainedTurnOuterCompositionDependencies,
   type HostCustodiedContainedTurnComposition,
   type HostCustodiedContainedTurnDependencies,
+  type ProviderRouteEnforcementUnsupportedDetail,
 } from "./composition/contained-turn-feature-composition.js";
 export { ContainedTurnConstructionCleanupError } from
   "./composition/contained-turn-construction-failure.js";
