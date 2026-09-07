@@ -86,3 +86,5 @@ export {
 export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions} from "./features/contained-agent-turn/internal.js";
 export { createContainedTurnOperationProviderAccessPort, type OuterContainedTurnProviderAccessOperation, createContainedTurnSecurityAcceptancePort, type OuterContainedTurnSecurityAcceptance, type ContainedTurnSecurityAcceptanceProfile } from "./features/contained-agent-turn/internal.js";
 export {createDockerCodexNativeBrokerFinalizer, type DockerCodexNativeBrokerFinalizerInput} from "./features/contained-agent-turn/internal.js";
+
+export {createNodeHostHttpListener, createNodeHostHttpConnection, hostHttpAbortOperations} from "./features/contained-agent-turn/internal.js";

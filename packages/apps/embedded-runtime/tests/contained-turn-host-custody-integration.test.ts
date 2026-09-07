@@ -1,10 +1,11 @@
+import { imageLock } from "../../../contexts/agent-execution/tests/fixtures/docker-image-init-fixture.ts";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createCodexAppServerPermissionBoundary } from "@agent-teams/agent-execution/composition";
+import { createCodexAppServerPermissionBoundary, createContainedTurnRouteEnforcement } from "@agent-teams/agent-execution/composition";
 import {
   createHostCustodiedAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
@@ -390,3 +391,100 @@ test("rejects tampered IPv6 grants and peer drift before the first byte", async 
     assert.equal(result.fixture.observations.dispatches, 0);
   }
 });
+
+// Compiled PRODUCT path: synthetic operation owners, actual production selector,
+// Docker kernel custody and private RuntimeAccessHandle. No daemon/provider IO.
+const dockerProductRoute = async () => {
+  const registry = JSON.parse(await readFile(new URL("../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
+  const target = registry.entries.find((entry: {id: string}) => entry.id === "docker-linux-codex-enforced-network-route").targets[0];
+  const pin = {path: "/synthetic/unavailable-route-tool", sha256: "a".repeat(64)};
+  return createContainedTurnRouteEnforcement({qualificationTarget: target,
+    engine: {inspect: unavailable}, nsenter: pin, nft: pin,
+    binding: {tenantId: "tenant:one", projectId: "project:one", scopeDigest: "scope:synthetic",
+      operationId: "operation:one", attemptId: "attempt:one", custodyId: "custody:one",
+      sourceRevision: "62d1863868d54f0337a6c60f02274ef96659ef47", binaryRevision: target.binaryClosure,
+      hostBootId: "host-boot:embedded-custody", executionGenerationId: "generation:synthetic",
+      adapterRevision: target.providerAdapter, capabilityManifestRevision: "manifest:synthetic",
+      authorityVectorDigest: "authority:synthetic", providerAccountRef: "account:synthetic",
+      accessRef: "access:synthetic", bindingRevision: 1, credentialBindingRef: "credential-binding:synthetic",
+      providerRouteRef: "route:synthetic", routeRevision: "route-revision:synthetic",
+      credentialBindingDigest: "binding:synthetic", credentialGeneration: 1},
+  } as never);
+};
+
+const assertNoLegacyEffects = (custody: DeterministicCurrentOwnerHost) =>
+  assert.deepEqual([custody.reserves, custody.starts, custody.containments, custody.releases], [0, 0, 0, 0]);
+
+test("Linux product refuses absent trusted Docker resources without constructing legacy custody", async () => {
+  const root = await mkdtemp(join(tmpdir(), "embedded-docker-product-"));
+  const custody = new DeterministicCurrentOwnerHost();
+  try {
+    const composed = await createCompositionInput(custody, root);
+    const input = {...composed.input, routeEnforcement: await dockerProductRoute()};
+    assert.throws(() => createHostCustodiedAgentRuntimeHost({authorityRevision: "runtime-access-authority:fixture",
+      capabilities: setupCapabilities, containedTurn: input}), process.platform === "linux" && process.arch === "x64"
+      ? /Linux Codex composition input unavailable: trusted-resources/u : /route-enforcement-unqualified/u);
+    assertNoLegacyEffects(custody);
+    assert.equal(composed.fixture.current(), undefined);
+  } finally {await rm(root, {recursive: true, force: true});}
+});
+
+for (const absent of ["route", "nativeFiles", "currentAuthority"] as const) {
+  test(`private Linux Docker handle retains one committed claim and cleanup debt with missing ${absent}`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "embedded-docker-product-claim-"));
+    const custody = new DeterministicCurrentOwnerHost();
+    let selectionCount = 0; let resourceEffects = 0;
+    const resourceEffect = () => {resourceEffects += 1; throw new Error("resource effect before admission");};
+    try {
+      const composed = await createCompositionInput(custody, root);
+      const input = {...composed.input, routeEnforcement: await dockerProductRoute(), linuxCodex: {
+        imageInitLock: imageLock(), cleanupMilliseconds: 100,
+        select() {
+          selectionCount += 1;
+          // The real Docker owner is the only factory that invokes this callback.
+          // The kernel's actual synthetic store must already acknowledge its claim.
+          assert.equal(composed.fixture.current()?.dispatch.kind, "claimed");
+          return {
+            preparation: {resources: {consumption: {prepare: resourceEffect}},
+              engineIdentity: resourceEffect, openLifecycle: resourceEffect, openResourceJournal: resourceEffect},
+            route: {}, nativeFiles: {install: resourceEffect}, broker: {}, connection: {},
+            [absent]: undefined,
+          } as never;
+        },
+      }};
+      const build = () => createHostCustodiedAgentRuntimeHost({authorityRevision: "runtime-access-authority:fixture",
+        capabilities: setupCapabilities, containedTurn: input});
+      if (process.platform !== "linux" || process.arch !== "x64") {
+        assert.throws(build, /route-enforcement-unqualified/u);
+        assert.equal(selectionCount, 0); assert.equal(resourceEffects, 0); assertNoLegacyEffects(custody);
+        return;
+      }
+      const host = build();
+      assert.equal(selectionCount, 0); assert.equal(resourceEffects, 0); assertNoLegacyEffects(custody);
+      const access = host.bindAccess({containedTurn: submit.scope});
+      assert.deepEqual(Object.keys(access.containedTurn).toSorted(), ["cancel", "observe", "submit"]);
+      assert.equal("dispose" in access, false); assert.equal("linuxCodex" in access, false);
+      const accepted = await access.containedTurn.submit({commandId: submit.commandId,
+        expectedProvider: submit.expectedProvider, intent: submit.intent});
+      assert.equal(accepted.status, "accepted");
+      if (accepted.status !== "accepted") {throw new Error("expected durable acceptance");}
+      let observed = await access.containedTurn.observe(accepted.operationId);
+      for (let turn = 0; turn < 100 && !(observed.status === "observed" && observed.turn.status === "reconcile_required"); turn += 1) {
+        await new Promise<void>(resolve => {setImmediate(resolve);});
+        observed = await access.containedTurn.observe(accepted.operationId);
+      }
+      assert.equal(observed.status === "observed" && observed.turn.status, "reconcile_required");
+      assert.equal(selectionCount, 1); assert.equal(composed.fixture.claimAuthorities.length, 1);
+      assert.equal(resourceEffects, 0); assertNoLegacyEffects(custody);
+      await access.containedTurn.submit({commandId: submit.commandId,
+        expectedProvider: submit.expectedProvider, intent: submit.intent});
+      assert.equal(selectionCount, 1); assert.equal(composed.fixture.claimAuthorities.length, 1);
+      assert.equal(composed.fixture.providerCalls.value, 0);
+      assert.equal(composed.fixture.custodyReleases.length, 0);
+      assert.equal(composed.fixture.workspaceQuarantines.length, 0);
+      // Missing physical receipts remain owned by the existing Host shutdown contract.
+      await assert.rejects(host.dispose());
+      assert.equal(resourceEffects, 0); assertNoLegacyEffects(custody);
+    } finally {await rm(root, {recursive: true, force: true});}
+  });
+}

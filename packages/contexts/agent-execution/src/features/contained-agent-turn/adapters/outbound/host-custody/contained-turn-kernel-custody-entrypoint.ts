@@ -25,3 +25,6 @@ export {createImmutableHostCustodyLaunchPlan} from "./host-custody-launch-plan-s
 
 export {hostLaunchFinalizationRecipe} from "./host-custody-finalizable-plan.js";
 export {retainFinalizationHttpResources} from "./host-launch-finalization-validation.js";
+
+export {createNodeHostHttpListener} from "./egress/node-host-http-listener.js";
+export {createNodeHostHttpConnection} from "./egress/node-host-http-connection.js";

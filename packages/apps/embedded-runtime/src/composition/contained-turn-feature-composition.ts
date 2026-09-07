@@ -1,3 +1,5 @@
+import { createLinuxCodexContainedTurnOwner, type LinuxCodexContainedTurnResources }
+  from "./linux-codex-contained-turn-owner.js";
 import {
   createClaudeCurrentKernelOwner,
   createCodexCurrentKernelOwner,
@@ -65,6 +67,8 @@ export interface HostCustodiedContainedTurnDependencies
    * an authentic one.
    */
   readonly routeEnforcement?: ContainedTurnRouteEnforcementCapability;
+  /** Trusted private deployment composition only; never read from workspace configuration. */
+  readonly linuxCodex?: LinuxCodexContainedTurnResources;
 }
 
 export interface HostCustodiedContainedTurnComposition {
@@ -408,7 +412,15 @@ export const createHostCustodiedContainedTurn = (
   dependencies: HostCustodiedContainedTurnDependencies,
 ): HostCustodiedContainedTurnComposition => composeQualifiedHostCustodiedContainedTurn(
   dependencies,
-  productOwnerFactories,
+  Object.freeze({
+    claude: createClaudeCurrentKernelOwner,
+    codex: (options: CreateCodexCurrentKernelOwnerOptions) => {
+      if (options.platformTarget.platform !== "linux") {return createCodexCurrentKernelOwner(options);}
+      const descriptor = trustedGetOwnPropertyDescriptor(dependencies, "linuxCodex");
+      return createLinuxCodexContainedTurnOwner(options,
+        descriptor !== undefined && "value" in descriptor ? descriptor.value as LinuxCodexContainedTurnResources : undefined);
+    },
+  }),
   createContainedTurnFeatureFromProviderAccess,
   PRODUCT_QUALIFICATION_REGISTRY,
 );

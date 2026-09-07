@@ -121,3 +121,6 @@ export {
   type HostPrivateRootBinding, type HostPrivateRootCaptureOptions,
   type HostPrivateRootOwner, type HostPrivateRootReadback,
 } from "./composition/host-private-root-owner.js";
+
+export {createNodeHostHttpListener, createNodeHostHttpConnection, hostHttpAbortOperations}
+  from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
