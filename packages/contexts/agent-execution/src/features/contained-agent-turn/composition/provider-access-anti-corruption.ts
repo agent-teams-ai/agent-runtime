@@ -75,7 +75,6 @@ type CapturedOwner = Readonly<{
 }>;
 
 const trustedApply = Reflect.apply;
-const trustedBind = Function.prototype.bind;
 const trustedFreeze = Object.freeze;
 const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
@@ -143,11 +142,8 @@ export const capturedMethod = <Method>(owner: object, value: unknown): Method =>
         trustedGetOwnPropertyDescriptor(value, "bind") !== undefined) {
       throw new ProviderAccessRouteCOwnerError("invalid_method");
     }
-    const bound = trustedApply(trustedBind, value, [owner]) as unknown;
-    if (typeof bound !== "function") {
-      throw new ProviderAccessRouteCOwnerError("invalid_method");
-    }
-    return trustedFreeze(bound) as unknown as Method;
+    // Native bind reads callable name/length accessors even on frozen methods.
+    return trustedFreeze((...args: unknown[]) => trustedApply(value, owner, args)) as unknown as Method;
   } catch {
     throw new ProviderAccessRouteCOwnerError("invalid_method");
   }

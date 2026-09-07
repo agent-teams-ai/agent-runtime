@@ -147,3 +147,31 @@ test("production exports expose one kernel authority and isolate only non-author
   assert.match(composition, /createContainedTurnFeature/u);
   assert.match(composition, /createContainedTurnProviderAccessPort/u);
 });
+
+for (const metadata of ["name", "length"] as const) {
+  test(`existing Provider Access capture preserves receiver and behavior with a ${metadata} getter`, async () => {
+    let touched = 0; let calls = 0;
+    const resolve = Object.seal({async execute() {
+      assert.equal(this, resolve); calls++;
+      return Object.freeze({binding, evidence: evidence("acceptance"), kind: "resolved" as const});
+    }});
+    const method = resolve.execute;
+    const accessor = {configurable: true, get() {touched++; throw new Error("must not read metadata");}};
+    Object.defineProperty(method, metadata, accessor);
+    const port = createContainedTurnProviderAccessPort(Object.freeze({
+      dispatchConsumptionV1: unusedDispatch, resolve,
+      revalidate: Object.freeze({async execute() {throw new Error("unused revalidate");}}),
+    }));
+    assert.ok(Object.isFrozen(port)); assert.equal(port instanceof Promise, false);
+    assert.equal(touched, 0); assert.equal(calls, 0);
+    Object.defineProperties(method, {name: accessor, length: accessor, bind: accessor, apply: accessor});
+    Object.freeze(method);
+    resolve.execute = async () => {throw new Error("replacement must not be captured");};
+    const input = {operationId: containedTurnIdentity("operation", "operation:metadata"),
+      intent: {mode: "analysis" as const, prompt: "Synthetic capture check"}, provider: "codex" as const, scope};
+    const outcome = await port.resolveForAcceptance(input);
+    assert.equal(outcome.kind, "resolved");
+    assert.deepEqual(await port.resolveForAcceptance(input), outcome);
+    assert.equal(calls, 2); assert.equal(touched, 0);
+  });
+}

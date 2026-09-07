@@ -194,3 +194,102 @@ test("RS independently issued constraints must equal the actual AE constraints",
   assert.equal(h.pa.records("publication").length, 0);
   assert.equal(h.rs.db.tables.authority_heads.size, 0);
 });
+
+for (const metadata of ["name", "length"] as const) {
+  for (const freezeBeforeCapture of [true, false]) {
+    test(`PA/RS capture ignores ${metadata} accessors with methods frozen ${freezeBeforeCapture ? "before" : "after"} construction`, async () => {
+      const h = await fixture();
+      let touched = 0;
+      const calls: string[] = [];
+      const mutations: (() => void)[] = [];
+      const instrument = <Owner extends object>(original: Owner, label: string): Owner => {
+        const owner: Record<string, unknown> = {};
+        for (const [key, method] of Object.entries(original)) {
+          const forwarded = function(this: unknown, ...args: unknown[]) {
+            assert.equal(this, owner, `${label}.${key} receiver`);
+            calls.push(`${label}.${key}`);
+            return Reflect.apply(method, original, args);
+          };
+          const accessor = {configurable: true, get() {touched++; throw new Error("callable metadata must be inert");}};
+          Object.defineProperty(forwarded, metadata, accessor);
+          if (freezeBeforeCapture) {Object.freeze(forwarded);}
+          owner[key] = forwarded;
+          mutations.push(() => {
+            if (!freezeBeforeCapture) {
+              Object.defineProperties(forwarded, {name: accessor, length: accessor, apply: accessor, bind: accessor});
+              Object.freeze(forwarded);
+              owner[key] = () => {throw new Error("replacement method must not be captured");};
+            }
+          });
+        }
+        return (freezeBeforeCapture ? Object.freeze(owner) : Object.seal(owner)) as Owner;
+      };
+      const providerAccess = createContainedTurnOperationProviderAccessPort(Object.freeze({
+        resolve: instrument(h.pa.current.resolve, "pa.resolve"),
+        revalidate: instrument(h.pa.current.revalidate, "pa.revalidate"),
+        dispatchConsumption: instrument(h.dispatch.dispatchConsumption, "pa.dispatch"),
+      }));
+      const security = createContainedTurnSecurityAcceptancePort(instrument(h.owner, "rs"), Object.freeze({policyRevision: h.rule.policyRevision}));
+      assert.ok(Object.isFrozen(providerAccess)); assert.ok(Object.isFrozen(security));
+      assert.equal(providerAccess instanceof Promise, false); assert.equal(security instanceof Promise, false);
+      assert.equal(touched, 0); assert.equal(calls.length, 0, "construction invokes no owner methods");
+      for (const mutate of mutations) {mutate();}
+      const submit = joinedAeSubmit(providerAccess, security, h.scope, intent);
+      const a = await submit(`metadata-${metadata}-${freezeBeforeCapture}`);
+      assert.ok(a.handoff); assert.equal(a.ae.providerCalls.value, 1);
+      assert.equal((await providerAccess.consumeForDispatch(a.handoff)).kind, "consumed");
+      assert.equal((await security.consumeForDispatch(a.handoff)).kind, "consumed");
+      const accepted = a.handoff.accepted;
+      assert.equal((await providerAccess.revalidateForDispatch({operationId: accepted.operationId, scope: accepted.scope,
+        acceptedSnapshot: accepted.acceptedAuthorityVector.providerAccessSnapshot})).kind, "current");
+      assert.equal((await security.revalidateForDispatch({operationId: accepted.operationId, scope: accepted.scope,
+        decisionDigest: accepted.acceptedAuthorityVector.securityDecisionDigest,
+        securityAuthorityRevision: accepted.acceptedAuthorityVector.securityAuthorityRevision})).kind, "current");
+      assert.equal(h.pa.records("consumption").length, 1); assert.equal(h.rs.db.tables.consumptions.size, 1);
+      for (const method of ["pa.resolve.execute", "pa.revalidate.execute", "pa.dispatch.publishAndConsumeForDispatch", "rs.evaluateForAcceptance", "rs.publishAndConsumeForDispatch"]) {
+        assert.ok(calls.includes(method), method);
+      }
+      assert.equal(touched, 0, "operation and replay never read callable metadata");
+      h.rs.db.assertReleased();
+    });
+  }
+
+  test(`RS acceptance independently ignores a frozen method's ${metadata} accessor`, async () => {
+    const h = await fixture(); let touched = 0; let calls = 0;
+    const owner = Object.freeze({...h.owner, async evaluateForAcceptance(input: Parameters<typeof h.owner.evaluateForAcceptance>[0]) {
+      assert.equal(this, owner); calls++; return h.owner.evaluateForAcceptance(input);
+    }});
+    Object.defineProperty(owner.evaluateForAcceptance, metadata, {get() {touched++; throw new Error("must not read metadata");}});
+    Object.freeze(owner.evaluateForAcceptance);
+    const port = createContainedTurnSecurityAcceptancePort(owner, Object.freeze({policyRevision: h.rule.policyRevision}));
+    assert.ok(Object.isFrozen(port)); assert.equal(port instanceof Promise, false);
+    assert.equal(touched, 0); assert.equal(calls, 0);
+    assert.equal((await port.authorizeForAcceptance({operationId: containedTurnIdentity("operation", "operation:rs-metadata"),
+      constraintsDigest: h.rule.constraintsDigest as never, intent, provider: "codex", scope: h.scope})).kind, "allowed");
+    assert.equal(calls, 1); assert.equal(touched, 0);
+    h.rs.db.assertReleased();
+  });
+
+  test(`both new factories reject callable proxies without ${metadata}, get or prototype traps`, async () => {
+    const h = await fixture(); let touched = 0;
+    const hostile = <Method extends object>(method: Method): Method => new Proxy(method, {
+      get() {touched++; throw new Error("must not get callable metadata");},
+      getOwnPropertyDescriptor() {touched++; throw new Error("must not inspect callable metadata");},
+      getPrototypeOf() {touched++; throw new Error("must not get callable prototype");},
+      apply() {touched++; throw new Error("must not invoke owner");},
+    });
+    const paMethod = h.dispatch.dispatchConsumption.publishAndConsumeForDispatch;
+    const rsMethod = h.owner.evaluateForAcceptance;
+    for (const method of [paMethod, rsMethod]) {
+      Object.defineProperty(method, metadata, {get() {touched++; throw new Error("must not read metadata");}});
+      Object.freeze(method);
+    }
+    assert.throws(() => createContainedTurnOperationProviderAccessPort(Object.freeze({...h.pa.current,
+      dispatchConsumption: Object.freeze({...h.dispatch.dispatchConsumption, publishAndConsumeForDispatch: hostile(paMethod)})})),
+    {code: "ERR_PROVIDER_ACCESS_ROUTE_C_OWNER", diagnostic: "invalid_method"});
+    assert.throws(() => createContainedTurnSecurityAcceptancePort(Object.freeze({...h.owner,
+      evaluateForAcceptance: hostile(rsMethod)}), Object.freeze({policyRevision: h.rule.policyRevision})),
+    {code: "ERR_PROVIDER_ACCESS_ROUTE_C_OWNER", diagnostic: "invalid_method"});
+    assert.equal(touched, 0);
+  });
+}
