@@ -13,13 +13,13 @@ const rule: DispatchAcceptancePolicy = { scope, providerId: intent.providerId,
   enabled: true, revoked: false, constraintsDigest: 'constraints-digest-a',
   containmentPolicyDigest: 'containment-policy-digest-a', validFromControlTime: 50,
   claimBeforeControlTime: 200 };
+const key = (value: DispatchAcceptanceIntent) => JSON.stringify([value.scope, value.operationId]);
 const fixture = async () => {
   const pg = createHarness();
   await pg.repository.migrate();
   let now = 100;
   let policy: DispatchAcceptancePolicy | undefined = rule;
   const retained = new Map<string, DispatchAcceptanceDecision>();
-  const key = (value: DispatchAcceptanceIntent) => JSON.stringify([value.scope, value.operationId]);
   const decisions: DispatchAcceptanceStore = {
     async read(value) {return retained.get(key(value));},
     async retain(value) {

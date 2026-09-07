@@ -178,11 +178,11 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
     } finally {await blocker.query("ROLLBACK"); blocker.release();}
     assert.deepEqual(await two.repository.readAuthority(key), { headVersion: "0" });
   });
-  await t.test("real acceptance persistence and publication before consumption across owners", async t => {
+  await t.test("real acceptance persistence and publication before consumption across owners", async acceptanceTest => {
     const options = { connectTimeoutMs: 5_000, queryTimeoutMs: 10_000, transactionTimeoutMs: 20_000 };
     const decisionsA = createPostgresDispatchAcceptanceStore({ pool: a, ...options });
     const decisionsB = createPostgresDispatchAcceptanceStore({ pool: b, ...options });
-    t.after(() => {decisionsA.close(); decisionsB.close();});
+    acceptanceTest.after(() => {decisionsA.close(); decisionsB.close();});
     await decisionsA.migrate();
     const intent = { scope, operationId: "accepted-publication", providerId: "provider-a",
       intentDigest: "intent-a", policyRevision: "authority-revision-7" };
@@ -210,11 +210,11 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
     assert.equal(results[0]!.status, "consumed");
     assert.deepEqual(results[0], results[1]);
     assert.equal((await two.repository.readAuthority(operation(intent.operationId))).headVersion, "1");
-    await t.test("maximum 512-character Unicode acceptance selectors persist through actual SQL", async () => {
-      let seed = 69;
+    await acceptanceTest.test("maximum 512-character Unicode acceptance selectors persist through actual SQL", async () => {
+      let unicodeSeed = 69;
       const identifier = () => Array.from({ length: 512 }, () => {
-        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-        return String.fromCharCode(0x800 + (seed >>> 8) % 0xd000);
+        unicodeSeed = (Math.imul(unicodeSeed, 1664525) + 1013904223) >>> 0;
+        return String.fromCharCode(0x800 + (unicodeSeed >>> 8) % 0xd000);
       }).join('');
       const unicodeIntent = { ...intent, operationId: identifier(),
         scope: { tenantId: identifier(), projectId: identifier(), scopeDigest: identifier() } };
@@ -233,7 +233,7 @@ test("RS PostgreSQL 18 durable dispatch owner contract", { skip: !databaseUrl, t
       assert.deepEqual(await otherOwner.evaluateForAcceptance(unicodeIntent), first);
       assert.deepEqual(await decisionsB.read(unicodeIntent), first.decision);
       const rows = await a.query("SELECT operation_key, decision FROM runtime_security_dispatch_acceptance_v1.decisions");
-      const row = rows.rows.find(row => JSON.parse(row.decision).operationId === unicodeIntent.operationId);
+      const row = rows.rows.find(candidate => JSON.parse(candidate.decision).operationId === unicodeIntent.operationId);
       assert.ok(row, "actual SQL retained the complete Unicode selector");
       assert.match(row.operation_key, /^[a-f0-9]{64}$/u);
       assert.deepEqual(JSON.parse(row.decision), first.decision);

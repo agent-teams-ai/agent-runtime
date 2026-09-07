@@ -10,7 +10,7 @@ export const acceptanceCanonical = (value: unknown): string => {
     if (encoded === undefined) {throw new TypeError('invalid acceptance value');}
     return encoded;
   }
-  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${acceptanceCanonical(
+  return `{${Object.keys(value).toSorted().map(key => `${JSON.stringify(key)}:${acceptanceCanonical(
     (value as Record<string, unknown>)[key])}`).join(',')}}`;
 };
 export const sameAcceptance = (left: unknown, right: unknown): boolean =>

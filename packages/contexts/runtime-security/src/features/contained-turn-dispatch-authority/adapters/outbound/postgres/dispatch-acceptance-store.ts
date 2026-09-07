@@ -13,23 +13,23 @@ const selectorOf = (intent: DispatchAcceptanceIntent) => {
 };
 const keyOf = (intent: DispatchAcceptanceIntent) =>
   createHash('sha256').update(selectorOf(intent), 'utf8').digest('hex');
+const capture = (value: unknown) => detachDispatchBoundaryValue(value) as DispatchAcceptanceDecision;
+const captureRetained = (value: unknown, intent: DispatchAcceptanceIntent) => {
+  const decision = capture(value);
+  const retainedIntent = { operationId: decision.operationId, scope: decision.scope,
+    providerId: decision.providerId, intentDigest: decision.intentDigest,
+    policyRevision: decision.policyRevision };
+  if (selectorOf(retainedIntent) !== selectorOf(intent)) {
+    throw new TypeError('retained acceptance selector mismatch');
+  }
+  return decision;
+};
 /** RS-owned insert-only evidence, using the same transaction/borrowed-pool rules
  * as dispatch persistence. Explicit migration; no effects during construction. */
 export const createPostgresDispatchAcceptanceStore = (options: DispatchPgDeadlines & {
   readonly pool: DispatchPgPool;
 }): DispatchAcceptanceStore & { migrate(): Promise<void>; close(): void } => {
   const transactions = createDispatchPgTransactions(options.pool, options);
-  const capture = (value: unknown) => detachDispatchBoundaryValue(value) as DispatchAcceptanceDecision;
-  const captureRetained = (value: unknown, intent: DispatchAcceptanceIntent) => {
-    const decision = capture(value);
-    const retainedIntent = { operationId: decision.operationId, scope: decision.scope,
-      providerId: decision.providerId, intentDigest: decision.intentDigest,
-      policyRevision: decision.policyRevision };
-    if (selectorOf(retainedIntent) !== selectorOf(intent)) {
-      throw new TypeError('retained acceptance selector mismatch');
-    }
-    return decision;
-  };
   return Object.freeze({
     close: transactions.close,
     async migrate() {
@@ -51,7 +51,7 @@ export const createPostgresDispatchAcceptanceStore = (options: DispatchPgDeadlin
       return transactions.run(async tx => {
         await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [keyOf(intent)]);
         const result = await tx.query(`SELECT decision FROM ${table} WHERE operation_key = $1`, [keyOf(intent)]);
-        if (result.rows.length === 0) {return undefined;}
+        if (result.rows.length === 0) {return;}
         if (result.rows.length !== 1 || typeof result.rows[0]?.decision !== 'string') {
           throw new TypeError('invalid retained acceptance');
         }

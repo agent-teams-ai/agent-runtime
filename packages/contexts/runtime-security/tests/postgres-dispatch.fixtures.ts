@@ -103,14 +103,7 @@ export class DispatchClient implements DispatchPgClient {
     if (sql.startsWith("BEGIN")) {assert.equal(this.begun, false); this.begun = true; return result();}
     assert.equal(this.begun, true);
     if (sql === "COMMIT" || sql === "ROLLBACK") {
-      if (sql === "COMMIT") {
-        for (const { table, key, row } of this.writes) {this.db.tables[table].set(key, row);}
-        if (this.migrated) {this.db.version ??= 1;}
-      }
-      this.writes = [];
-      this.begun = false;
-      this.db.unlock(this);
-      return result();
+      return this.finishTransaction(sql);
     }
     if (sql.includes("set_config(")) {return result();}
     if (sql.includes("pg_advisory_xact_lock")) {
@@ -129,13 +122,7 @@ export class DispatchClient implements DispatchPgClient {
       return result([...this.rows("settlement_requests").values()].filter(row => row.operation_key === values[0]).map(row => structuredClone(row)));
     }
     if (sql.includes('runtime_security_dispatch_acceptance_v1.decisions')) {
-      const key = String(values[0]);
-      const current = this.rows('decisions').get(key);
-      if (sql.startsWith('SELECT')) {return result(current === undefined ? [] : [structuredClone(current)]);}
-      assert.ok(sql.startsWith('INSERT') && sql.includes('ON CONFLICT'));
-      if (current !== undefined) {return result([], 0);}
-      this.writes.push({ table: 'decisions', key, row: { decision: values[1] } });
-      return result([], 1);
+      return this.acceptanceDecision(sql, values);
     }
     const table = sql.match(/runtime_security_dispatch_v1\.(authority_heads|consume_requests|consumptions|settlement_requests)/u)?.[1] as Table;
     assert.ok(table, `unsupported synthetic SQL: ${sql}`);
@@ -144,6 +131,25 @@ export class DispatchClient implements DispatchPgClient {
       return result(row === undefined ? [] : [structuredClone(row)]);
     }
     return this.writeRow(sql, values, table);
+  }
+  private finishTransaction(sql: string): Result {
+    if (sql === "COMMIT") {
+      for (const { table, key, row } of this.writes) {this.db.tables[table].set(key, row);}
+      if (this.migrated) {this.db.version ??= 1;}
+    }
+    this.writes = [];
+    this.begun = false;
+    this.db.unlock(this);
+    return result();
+  }
+  private acceptanceDecision(sql: string, values: unknown[]): Result {
+    const key = String(values[0]);
+    const current = this.rows('decisions').get(key);
+    if (sql.startsWith('SELECT')) {return result(current === undefined ? [] : [structuredClone(current)]);}
+    assert.ok(sql.startsWith('INSERT') && sql.includes('ON CONFLICT'));
+    if (current !== undefined) {return result([], 0);}
+    this.writes.push({ table: 'decisions', key, row: { decision: values[1] } });
+    return result([], 1);
   }
   private writeRow(sql: string, values: unknown[], table: Table): Result {
     const key = String(values[0]);
