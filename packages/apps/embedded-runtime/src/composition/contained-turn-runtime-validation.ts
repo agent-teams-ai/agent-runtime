@@ -161,8 +161,9 @@ const snapshotOwnerObservationOutcome = (
   }
 };
 
+/** Shared terminal-status predicate; accepts any status-shaped string so host-lifecycle callers with wider status unions can reuse it. */
 export const isTerminalTurnStatus = (
-  status: OwnerTurnObservation["status"],
+  status: string,
 ): status is "cancelled" | "failed" | "succeeded" =>
   status === "cancelled" || status === "failed" || status === "succeeded";
 
